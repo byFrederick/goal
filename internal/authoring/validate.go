@@ -58,9 +58,10 @@ type Validation struct {
 const (
 	CheckName  = "name"
 	CheckItems = "items"
-	// CheckConnections is the Credentials check: what a definition signs in with exists in the
-	// organization and fits (spec 4 §4.4).
-	CheckConnections = "connections"
+	// CheckSecrets is the Credentials check: the secrets and knowledge sources a definition names
+	// exist in the organization and are open to it, and its environments hold no key in plain
+	// text (ADR 0037).
+	CheckSecrets = "secrets"
 )
 
 // Problem codes of this package's checks.
@@ -85,13 +86,14 @@ const (
 	checkSchema = "schema"
 )
 
-var configChecks = []string{"line", "references", "tools", "contracts", "removed", "availability"}
+var configChecks = []string{"line", "references", "tools", "contracts", "removed", "moved", "environments", "availability"}
 
 var checkSections = map[string]string{
 	checkYAML: domain.SectionFiles, checkSchema: domain.SectionFiles, "line": domain.SectionLine,
 	"references": domain.SectionAgents, CheckName: domain.SectionBasics, CheckItems: domain.SectionLine,
 	"tools": domain.SectionBasics, "contracts": domain.SectionFiles, "removed": domain.SectionBasics,
-	"availability": domain.SectionConnections, CheckConnections: domain.SectionConnections,
+	"moved": domain.SectionBasics, "environments": domain.SectionEnvironments,
+	"availability": domain.SectionConnections, CheckSecrets: domain.SectionEnvironments,
 	config.CheckPolicy: domain.SectionAgents,
 }
 
@@ -120,7 +122,7 @@ type checked struct {
 }
 
 // validate runs every check, in order: config's (yaml, schema, line, references, tools,
-// removed, availability), name, items, then credentials (connections).
+// removed, moved, environments, availability), name, items, then credentials (secrets).
 func (s *Service) validate(ctx context.Context, c candidate) (checked, error) {
 	f, problems := config.Check(c.files)
 	if c.files.err != nil {
@@ -235,10 +237,10 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 	if s.credentials != nil {
 		p, err := s.credentials.Check(ctx, f)
 		if err != nil {
-			return ownResult{}, fmt.Errorf("check connections: %w", err)
+			return ownResult{}, fmt.Errorf("check secrets: %w", err)
 		}
 
-		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckConnections)
+		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckSecrets)
 	}
 
 	if s.policies != nil {
@@ -247,7 +249,8 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 			return ownResult{}, fmt.Errorf("read the organization policy: %w", err)
 		}
 
-		out.problems, out.ran = append(out.problems, config.ModelProblems(f, pol.AllowedModels)...), append(out.ran, config.CheckPolicy)
+		out.problems = append(out.problems, config.ModelProblems(f, pol.AllowedModels)...)
+		out.problems, out.ran = append(out.problems, config.MCPCapProblems(f, pol.MCPToolModes)...), append(out.ran, config.CheckPolicy)
 	}
 
 	return out, nil
@@ -460,6 +463,8 @@ var staticSummaries = map[string]string{
 	"references":       "Every agent, skill, contract, connection and prompt it names exists",
 	"tools":            "Every tool is a mise tool spec",
 	"removed":          "Uses none of the removed forms",
+	"moved":            "Uses none of the keys moved to environment files",
+	"environments":     "Every environment file is well formed and every secret reference is in its place",
 	CheckItems:         "No open items at a removed station",
 	"availability":     "Everything it declares is available on this install",
 	config.CheckPolicy: "Every model it names is one the organization allows",
@@ -482,21 +487,27 @@ func passedSummary(id string, f *config.Factory, m Model) string {
 			plural(len(ids), "station", "stations"), ids[len(ids)-1])
 	case CheckName:
 		return fmt.Sprintf("The name %s is free", f.Metadata.Name)
-	case CheckConnections:
-		return connectionsSummary(f)
+	case CheckSecrets:
+		return secretsSummary(f)
 	}
 
 	return "Passed"
 }
 
-// connectionsSummary counts what the connections check found: the organization's connections
-// and knowledge sources the definition names.
-func connectionsSummary(f *config.Factory) string {
-	names := f.ConnectionNames()
+// secretsSummary counts what the secrets check found: the organization's secrets and knowledge
+// sources the definition names.
+func secretsSummary(f *config.Factory) string {
+	var names []string
+
+	for _, r := range f.SecretRefs() {
+		if !slices.Contains(names, r.Name) {
+			names = append(names, r.Name)
+		}
+	}
 
 	var parts []string
 	if len(names) > 0 {
-		parts = append(parts, plural(len(names), "connection exists", "connections exist"))
+		parts = append(parts, plural(len(names), "secret exists", "secrets exist"))
 	}
 
 	if k := f.Spec.Knowledge; k != nil && len(k.Sources) > 0 {
@@ -504,7 +515,7 @@ func connectionsSummary(f *config.Factory) string {
 	}
 
 	if len(parts) == 0 {
-		return "Names no connection"
+		return "Names no secret"
 	}
 
 	return strings.Join(parts, ", ")

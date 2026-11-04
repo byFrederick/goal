@@ -100,7 +100,7 @@ export function NewTriggerDialog() {
                       <SourceButton
                         key={s.key}
                         source={s}
-                        connectHref={`/o/${params.org}/connections`}
+                        connectHref={`/o/${params.org}/access`}
                         showConnect={group.title === 'Not connected' && s.available}
                         pressed={source === s.key}
                         onPick={() => {

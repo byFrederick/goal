@@ -18,6 +18,8 @@ export interface StepRow {
   tool: string;
   failed: boolean;
   segments: Segment[];
+  /** The knowledge source this step read or searched under /knowledge, for the Knowledge tag. */
+  knowledge?: string | undefined;
   /** A short status for the right column: "failed", or "3 of 6 failed". */
   right?: string | undefined;
   /** The raw output of the failed calls, shown behind a disclosure and never as the right label. */
@@ -34,6 +36,19 @@ function kindOf(tool: string): 'read' | 'edit' | 'search' | undefined {
   if (searchTools.has(tool)) return 'search';
   return undefined;
 }
+
+const knowledgePrefix = '/knowledge/';
+
+/** The knowledge source a Read, Grep or Glob call names under /knowledge/<source>/ (ADR 0038 decision 10). */
+export function knowledgeSource(call: ToolCall): string | undefined {
+  if (kindOf(call.tool) !== 'read' && kindOf(call.tool) !== 'search') return undefined;
+  const path = call.path ?? call.argument;
+  if (!path.startsWith(knowledgePrefix)) return undefined;
+  return path.slice(knowledgePrefix.length).split('/')[0] || undefined;
+}
+
+/** A knowledge path without the /knowledge/ prefix: "handbook/leave.md". */
+const inKnowledge = (call: ToolCall) => (call.path ?? call.argument).slice(knowledgePrefix.length);
 
 const code = (text: string): Segment => ({ text, code: true });
 
@@ -61,6 +76,13 @@ function sentenceOf(calls: ToolCall[]): Segment[] {
   if (!first) return [];
   const n = calls.length;
   const args = calls.map((c) => c.argument).filter(Boolean);
+  const source = knowledgeSource(first);
+  if (source) {
+    if (kindOf(first.tool) === 'read') {
+      return n === 1 ? [{ text: 'Read ' }, code(inKnowledge(first))] : [{ text: `Read ${n} files in ` }, code(source)];
+    }
+    return n === 1 ? [{ text: `Searched ${source}` }] : [{ text: `Ran ${n} searches in ${source}` }];
+  }
 
   if (first.tool === 'Bash') {
     const command = oneLine(first.argument);
@@ -96,7 +118,9 @@ export function groupCalls(calls: ToolCall[]): ToolCall[][] {
     const kind = kindOf(call.tool);
     const last = groups.at(-1);
     const lastKind = last?.[0] ? kindOf(last[0].tool) : undefined;
-    if (kind && last && lastKind === kind) last.push(call);
+    // Reads and searches under /knowledge are their own steps, one per source, so the tag is true of the step.
+    const sameSource = last?.[0] ? knowledgeSource(last[0]) === knowledgeSource(call) : false;
+    if (kind && last && lastKind === kind && sameSource) last.push(call);
     else groups.push([call]);
   }
   return groups;
@@ -116,6 +140,7 @@ export function toolSteps(calls: ToolCall[]): StepRow[] {
         at: first.at,
         tool: first.tool,
         failed: failed.length > 0,
+        knowledge: knowledgeSource(first),
         segments: sentenceOf(group),
         right,
         output: failed.flatMap((c) => (c.summary ? [c.summary] : [])),

@@ -232,7 +232,7 @@ describe('the Webhooks page states', () => {
 
     const card = await screen.findByRole('region', { name: 'acme-deploys' });
     expect(within(card).getByText('2 refused this week')).toBeTruthy();
-    expect(within(card).getByText('in Credentials, HMAC SHA-256')).toBeTruthy();
+    expect(within(card).getByText('in Secrets, HMAC SHA-256')).toBeTruthy();
     expect(within(card).getByText('acme-deploys-hook-secret')).toBeTruthy();
     expect(within(card).getByText('Deploy failed')).toBeTruthy();
     expect(within(card).getByText('7 delivered, 2 refused')).toBeTruthy();
@@ -304,7 +304,7 @@ describe('the Webhooks page states', () => {
 
     const card = await screen.findByRole('region', { name: 'uptime' });
     expect(within(card).getByText('uptime-hook-secret')).toBeTruthy();
-    expect(within(card).getByText('in Credentials, HMAC SHA-256')).toBeTruthy();
+    expect(within(card).getByText('in Secrets, HMAC SHA-256')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/[0-9a-f]{64}/);
   });
 });

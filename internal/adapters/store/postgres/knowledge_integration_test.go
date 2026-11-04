@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -27,37 +26,66 @@ func TestKnowledge_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return knowledgetest.Harness{
-			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")), Audit: d.store,
+			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")),
+			Secrets: NewSecrets(d.store, testKey(t, "k1")), Audit: d.store,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
+			Pin: func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID) {
+				t.Helper()
+				pinSnapshot(t, d, org, snap)
+			},
 		}
 	})
 }
 
-// knowledgeDoc gives org a synced source "runbooks" (on a connection "docs" of a kind that
-// syncs) with one document of one chunk embedded along dimension dim.
-func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string, dim int) {
+// pinSnapshot gives org a running agent run whose knowledge_pinned event names snap, as the
+// bootstrap superuser with key checks off: the run needs no factory or item for retention.
+func pinSnapshot(t *testing.T, d connectionsDB, org domain.OrgID, snap domain.KnowledgeSnapshotID) {
 	t.Helper()
 
-	ctx := domain.WithOrg(t.Context(), org)
-	c := NewConnections(d.store, testKey(t, "k1"))
-	k := NewKnowledge(d.store)
-
-	if _, err := c.Create(ctx, domain.NewConnection{Name: "docs", Kind: "kb-docs", Fields: map[string]string{}}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-
-	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceSynced, Connection: "docs"}, domain.LocalUser)
+	data, err := json.Marshal(map[string]any{"snapshots": []map[string]string{{"source": "pinned", "snapshot": string(snap)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	vec := make([]float32, domain.EmbeddingDimensions)
-	vec[dim] = 1
+	err = pgx.BeginFunc(t.Context(), d.admin, func(tx pgx.Tx) error {
+		for _, stmt := range []string{
+			"SET LOCAL session_replication_role = replica",
+			`WITH r AS (
+			   INSERT INTO agent_runs (org_id, factory_id, item_id, station, agent, model, status)
+			   VALUES ($1::uuid, uuidv7(), gen_random_uuid(), 'work', 'worker', 'model-a', 'running')
+			   RETURNING id, factory_id, item_id)
+			 INSERT INTO item_events (org_id, factory_id, item_id, run_id, kind, station, actor, data)
+			 SELECT $1::uuid, r.factory_id, r.item_id, r.id, 'knowledge_pinned', 'work', 'worker', $2::jsonb FROM r`,
+		} {
+			args := []any{string(org), data}
+			if !strings.Contains(stmt, "$1") {
+				args = nil
+			}
 
-	if err := k.PutDocument(ctx, domain.KnowledgeDocument{
-		Source: src.ID, ExternalID: "docs/a.md", Version: "v1", Title: "A", MIME: "text/markdown", Status: domain.DocumentIndexed,
-		SeenAt: time.Now(), CreatedBy: domain.EngineActor, EmbedModel: "acme-embed-1",
-	}, []domain.Chunk{{Text: text, Embedding: vec}}); err != nil {
+			if _, err := tx.Exec(t.Context(), stmt, args...); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("pin snapshot %s: %v", snap, err)
+	}
+}
+
+// knowledgeDoc gives org an upload source "runbooks" with one file whose name is text.
+func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), org)
+	k := NewKnowledge(d.store)
+
+	if _, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceUpload}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := k.AddUpload(ctx, "runbooks", domain.KnowledgeUpload{Name: text, MIME: "text/markdown", Bytes: 3, Blob: domain.HashBlob([]byte(text))}, domain.LocalUser, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -72,33 +100,24 @@ func syncingKind(t *testing.T, d connectionsDB) {
 	}
 }
 
-// Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks, even when the
-// nearest-neighbour scan walks the HNSW index past them; nor does it see A's sources or
-// documents, or write into them.
-func TestKnowledge_RLSAcrossOrgsWithVectorScan(t *testing.T) {
+// Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks; nor does it see A's
+// sources or documents, or write into them.
+func TestKnowledge_RLSAcrossOrgs(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
 	syncingKind(t, d)
 
 	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
-	knowledgeDoc(t, d, acme, "acme's secret runbook", 0)
-	knowledgeDoc(t, d, labs, "labs' own runbook", 7)
+	knowledgeDoc(t, d, acme, "acme's secret runbook")
+	knowledgeDoc(t, d, labs, "labs' own runbook")
 
-	along := make([]float32, domain.EmbeddingDimensions)
-	along[0] = 1 // acme's chunk is the nearest there is
-
-	query, err := vectorText(along)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error { return seesOnlyItsKnowledge(t, tx, acme, query) }); err != nil {
+	if err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error { return seesOnlyItsKnowledge(t, tx, acme) }); err != nil {
 		t.Fatal(err)
 	}
 
 	// Nor writes into them: a source claiming acme's organization is refused by the policy.
-	err = inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
+	err := inOrgTx(t, d.store.pool, labs, func(tx pgx.Tx) error {
 		_, err := tx.Exec(t.Context(), `INSERT INTO knowledge_sources (id, org_id, name, title, kind, next_sync_at, created_by)
 			VALUES (gen_random_uuid(), '`+string(acme)+`', 'forged', 'x', 'upload', now(), 'user:x')`)
 
@@ -109,36 +128,12 @@ func TestKnowledge_RLSAcrossOrgsWithVectorScan(t *testing.T) {
 	}
 }
 
-// seesOnlyItsKnowledge checks, in a transaction of another organization than acme, that the HNSW
-// scan nearest to query returns that organization's chunk only, and that no row of acme's
-// knowledge base is visible.
-func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query string) error {
+// seesOnlyItsKnowledge checks, in a transaction of another organization than acme, that its
+// uploads are that organization's only, and that no row of acme's knowledge base is visible.
+func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID) error {
 	t.Helper()
 
-	// The HNSW index, not a scan of the table or of the org index and a sort, so the test sees
-	// what HNSW returns under the policy.
-	if _, err := tx.Exec(t.Context(), "SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off; SET LOCAL enable_sort = off; "+
-		"SET LOCAL hnsw.iterative_scan = relaxed_order"); err != nil {
-		return err
-	}
-
-	const nearest = `SELECT text FROM knowledge_chunks ORDER BY embedding <=> $1::halfvec(1024) LIMIT 5`
-
-	rows, err := tx.Query(t.Context(), "EXPLAIN "+nearest, query)
-	if err != nil {
-		return err
-	}
-
-	plan, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return err
-	}
-
-	if !strings.Contains(strings.Join(plan, "\n"), "knowledge_chunks_embedding_idx") {
-		t.Errorf("the nearest-neighbour query does not use the HNSW index:\n%s", strings.Join(plan, "\n"))
-	}
-
-	rows, err = tx.Query(t.Context(), nearest, query)
+	rows, err := tx.Query(t.Context(), `SELECT name FROM knowledge_uploads`)
 	if err != nil {
 		return err
 	}
@@ -149,10 +144,10 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query stri
 	}
 
 	if len(texts) != 1 || texts[0] != "labs' own runbook" {
-		t.Errorf("labs' nearest chunks = %q, want its own only", texts)
+		t.Errorf("labs' uploads = %q, want its own only", texts)
 	}
 
-	for _, table := range []string{"knowledge_sources", "knowledge_documents", "knowledge_chunks"} {
+	for _, table := range []string{"knowledge_sources", "knowledge_uploads"} {
 		var n int
 		if err := tx.QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE org_id = $1", string(acme)).Scan(&n); err != nil || n != 0 {
 			t.Errorf("labs sees %d rows of acme's %s, %v", n, table, err)
@@ -160,71 +155,6 @@ func seesOnlyItsKnowledge(t *testing.T, tx pgx.Tx, acme domain.OrgID, query stri
 	}
 
 	return nil
-}
-
-// Review 4 SQL M2: one HNSW index holds every organization's chunks, and the organization and
-// source filters apply after it. When the planner walks that index (a large table, which a test
-// cannot build in time, so this one makes the other plans dear), and more of other
-// organizations' chunks are nearer to the query than pgvector's iterative scan visits by default
-// (hnsw.max_scan_tuples, 20,000), the nearest list came back empty and the search fell back to
-// keywords. The scan is sized to the table, so an organization still finds its own nearest chunk
-// past every other's.
-func TestKnowledge_VectorSearchFindsPastOtherOrganizationsNearerChunks(t *testing.T) {
-	t.Parallel()
-
-	d := newConnectionsDB(t)
-	syncingKind(t, d)
-
-	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
-	knowledgeDoc(t, d, acme, "acme's runbook", 0)
-	knowledgeDoc(t, d, labs, "labs' own runbook", 7)
-
-	// 30,000 more chunks of acme's, each nearer to the query (along dimension 0) than labs' one,
-	// added before the HNSW index is built, as one build is far faster than as many inserts.
-	execSQL(t, d.db.admin, `DROP INDEX knowledge_chunks_embedding_idx;
-		INSERT INTO knowledge_chunks (org_id, source_id, document_id, ord, text, embedding, embed_model)
-		SELECT c.org_id, c.source_id, c.document_id, g, 'decoy',
-		       ('[1,' || array_to_string(array_fill(0, ARRAY[g % 1000]), ',') || CASE WHEN g % 1000 > 0 THEN ',' ELSE '' END
-		        || '0.05,' || array_to_string(array_fill(0, ARRAY[1022 - g % 1000]), ',') || ']')::halfvec(1024), c.embed_model
-		FROM knowledge_chunks c, generate_series(1, 30000) g WHERE c.org_id = '`+string(acme)+`';
-		CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks USING hnsw (embedding halfvec_cosine_ops);
-		ANALYZE knowledge_chunks`)
-
-	u, err := url.Parse(d.db.app)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	q := u.Query()
-	q.Set("options", "-c enable_seqscan=off -c enable_bitmapscan=off -c enable_sort=off")
-	u.RawQuery = strings.ReplaceAll(q.Encode(), "+", "%20") // a space, which pgx reads only so
-
-	query := make([]float32, domain.EmbeddingDimensions)
-	query[0], query[7] = 1, 0.3
-
-	forced := NewKnowledge(New(openPool(t, u.String())))
-
-	search := func(org domain.OrgID) []domain.KnowledgeHit {
-		t.Helper()
-
-		hits, err := forced.Search(domain.WithOrg(t.Context(), org), domain.KnowledgeQuery{
-			Text: "zebra", Sources: []string{"runbooks"}, Embedding: query, Model: "acme-embed-1", Limit: 5,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		return hits
-	}
-
-	if hits := search(labs); len(hits) != 1 || hits[0].Text != "labs' own runbook" {
-		t.Errorf("labs' vector search = %+v, want its own runbook", hits)
-	}
-
-	// acme's source of 30,001 chunks walks the index (approximate: any five of its near ones).
-	if hits := search(acme); len(hits) != 5 {
-		t.Errorf("acme's vector search = %+v, want five of its chunks", hits)
-	}
 }
 
 // Review 4 SQL L1: a deletion holds the content it drops until it commits, so an upload of the
@@ -244,8 +174,7 @@ func TestKnowledge_AnUploadWaitsForTheDropOfItsContent(t *testing.T) {
 		}
 	}
 
-	doc, err := k.AddUpload(ctx, "policies", domain.KnowledgeDocument{Title: "policy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser)
-	if err != nil {
+	if _, err := k.AddUpload(ctx, "policies", domain.KnowledgeUpload{Name: "policy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -254,13 +183,13 @@ func TestKnowledge_AnUploadWaitsForTheDropOfItsContent(t *testing.T) {
 	go func() {
 		<-dropping
 
-		_, err := k.AddUpload(ctx, "archive", domain.KnowledgeDocument{Title: "copy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser)
+		_, err := k.AddUpload(ctx, "archive", domain.KnowledgeUpload{Name: "copy.md", MIME: domain.MediaMarkdown, Bytes: 8, Blob: h}, domain.LocalUser, nil)
 		added <- err
 	}()
 
 	early := false
 
-	err = k.DeleteDocument(ctx, doc.ID, domain.LocalUser, func(context.Context, []domain.BlobHash) error {
+	err := k.DeleteUpload(ctx, "policies", "policy.md", domain.LocalUser, func(context.Context, []domain.BlobHash) error {
 		close(dropping)
 
 		select {
@@ -305,12 +234,12 @@ func TestKnowledge_ClaimSkipsDeletedOrganizations(t *testing.T) {
 
 	now := time.Now().Add(time.Minute)
 
-	c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute), "")
+	c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute))
 	if err != nil || c == nil || c.Org != live {
 		t.Fatalf("claim = %+v, %v; want the live organization's archive", c, err)
 	}
 
-	if c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute), ""); err != nil || c != nil {
+	if c, err := k.ClaimSource(t.Context(), now, now.Add(time.Minute)); err != nil || c != nil {
 		t.Errorf("second claim = %+v, %v; want none (the deleted organization's is left)", c, err)
 	}
 }
@@ -325,7 +254,7 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 
 	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 	org := newOrgID(t, d.store)
-	knowledgeDoc(t, d, org, "a runbook", 0)
+	knowledgeDoc(t, d, org, "a runbook")
 
 	if err := d.store.DeleteOrg(domain.WithOrg(t.Context(), org), domain.LocalUser, deleted); err != nil {
 		t.Fatal(err)
@@ -336,8 +265,7 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	}
 
 	var n int
-	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_documents)
-		+ (SELECT count(*) FROM knowledge_chunks) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_uploads) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("%d knowledge and connection rows left, %v; want none", n, err)
 	}
 }
@@ -397,7 +325,7 @@ func TestNotices_SyncStartAndEndAreKnowledgeEvents(t *testing.T) {
 
 	now := time.Now().Add(time.Second)
 
-	claimed, err := k.ClaimSource(ctx, now, now.Add(time.Minute), "")
+	claimed, err := k.ClaimSource(ctx, now, now.Add(time.Minute))
 	if err != nil || claimed == nil || claimed.Source.ID != src.ID {
 		t.Fatalf("claim = %+v, %v; want handbook", claimed, err)
 	}
@@ -441,48 +369,4 @@ func nextKnowledgeEvent(t *testing.T, notices <-chan ports.ItemNotice, org domai
 	}
 
 	return got
-}
-
-// noticeSource is the source the verdict's notice test judges a document of.
-const noticeSource = "handbook"
-
-// A verdict commits with its audit entry and sends its source's knowledge event, so the
-// stream's clients read the usage again.
-func TestNotices_VerdictIsAKnowledgeEvent(t *testing.T) {
-	t.Parallel()
-
-	d := newConnectionsDB(t)
-	k := NewKnowledge(d.store)
-	acme := newOrgID(t, d.store)
-	ctx := domain.WithOrg(t.Context(), acme)
-
-	src, err := k.CreateSource(ctx, domain.NewKnowledgeSource{Name: noticeSource, Title: "Handbook", Kind: domain.SourceUpload}, domain.LocalUser)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	doc, err := k.AddUpload(ctx, noticeSource, domain.KnowledgeDocument{
-		Title: "leave.md", MIME: domain.MediaMarkdown, Bytes: 3, Blob: domain.BlobHash(strings.Repeat("ab", 32)),
-	}, domain.LocalUser)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	notices := listening(t, NewNotices(d.store, nil), "") // the database is this test's: only its events
-	if n := next(t, notices); !n.Resync {
-		t.Fatalf("first notice = %+v; want Resync", n)
-	}
-
-	if _, err := k.GiveVerdict(ctx, domain.KnowledgeVerdict{Document: doc.ID, Verdict: domain.KnowledgeMisled, Note: "old", By: domain.LocalUser}); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := nextKnowledgeEvent(t, notices, acme); got != (knowledgeEvent{SourceID: string(src.ID), Name: noticeSource, Status: "idle"}) {
-		t.Errorf("the verdict's event = %+v; want handbook's", got)
-	}
-
-	entries, err := d.store.AuditLog(ctx, ports.AuditQuery{Limit: 10, Action: domain.AuditKnowledgeVerdictGiven})
-	if err != nil || len(entries) != 1 || entries[0].TargetID != string(doc.ID) || entries[0].Data["verdict"] != "misled" {
-		t.Errorf("audit = %+v, %v; want the one knowledge_verdict.given on the document", entries, err)
-	}
 }

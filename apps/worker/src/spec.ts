@@ -11,8 +11,12 @@ export const paths = {
   factorySchema: '/goal/definition/factory.schema.json',
   agent: '/goal/agent',
   workspace: '/workspace',
+  /** The run's knowledge: each pinned snapshot unpacked, read-only, into /knowledge/<source>/ (ADR 0038). */
+  knowledge: '/knowledge',
   /** Claude Code's config dir for this run, in the sandbox's throwaway home; never the host's. */
   claudeConfig: '/home/node/.claude',
+  /** The sandbox's throwaway home, where git's global config and credential store go. */
+  home: '/home/node',
 } as const;
 
 /** A variable name; never an option or a shell word. */
@@ -44,6 +48,50 @@ export const Connection = z.object({
 });
 export type Connection = z.infer<typeof Connection>;
 
+/** One entry of an environment server's tool modes: a tool name or glob (as Go's path.Match) and its mode. */
+export const ToolMode = z.object({ tool: z.string().min(1), mode: z.enum(['allow', 'ask', 'off']) });
+export type ToolMode = z.infer<typeof ToolMode>;
+
+/**
+ * One MCP server of the agent's environment file (ADR 0037): remote (url and headers) or stdio
+ * (command and env), each secret in them as ${GOAL_SECRET_<NAME>} for Claude Code to expand, and
+ * its tool modes, most specific first.
+ */
+export const EnvironmentServer = z.object({
+  /** As environment.schema.json names servers: an MCP server name and the mcp__<name>__ tool prefix. */
+  name: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+  url: z.url().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  command: z.array(z.string()).min(1).optional(),
+  env: z.record(envName, z.string()).optional(),
+  tool_modes: z.array(ToolMode).default([]),
+});
+export type EnvironmentServer = z.infer<typeof EnvironmentServer>;
+
+/**
+ * The agent's environment file on a version on secrets (ADR 0037 decisions 5, 8 and 11), without a
+ * value: goal-agent run's env holds the variables, each file's content in the variable its env
+ * names (GOAL_FILE_<n>) and the servers' secrets (GOAL_SECRET_<NAME>).
+ */
+export const Environment = z.object({
+  name: z.string().min(1),
+  mcp_servers: z.array(EnvironmentServer).default([]),
+  /** Shell commands run in /workspace, in order, before the agent starts. */
+  setup: z.array(z.string().min(1)).default([]),
+  /** Files written before setup with mode 0600: an absolute path or one that starts with ~/. */
+  files: z.array(z.object({ path: z.string().regex(/^(\/|~\/).+$/), env: envName })).default([]),
+  /** The names of the file's variables. */
+  env: z.array(envName).default([]),
+  /** The names of the file's tools, without their versions. */
+  clis: z.array(z.string()).default([]),
+  /**
+   * A try of a past item's (ADR 0039 decision 9): env is for setup alone, and goal-agent run
+   * removes its variables before the agent starts.
+   */
+  setup_only: z.boolean().optional(),
+});
+export type Environment = z.infer<typeof Environment>;
+
 /**
  * One of the factory rules that apply to the run (ADR 0014): its name, the sha256 of its rule
  * file in the run's definition version, its paths and the markdown file to write (frontmatter
@@ -58,6 +106,23 @@ export const Rule = z.object({
 });
 export type Rule = z.infer<typeof Rule>;
 
+/**
+ * The run's knowledge (ADR 0038 decisions 7 and 8): its prompt's Knowledge section, and each pinned
+ * snapshot prepare downloads (a URL resolved against the gateway's, which the task token authorizes)
+ * and unpacks into /knowledge/<source>/. A draft request's has the section and no snapshot.
+ */
+export const Knowledge = z.object({
+  section: z.string(),
+  snapshots: z.array(
+    z.object({
+      /** A source's name, a slug: its folder under /knowledge, so it never holds a separator. */
+      source: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+      url: z.string().min(1),
+    }),
+  ),
+});
+export type Knowledge = z.infer<typeof Knowledge>;
+
 /** A draft request (ADR 0021): what a person asked to change in the factory's draft, and the agent it is about. */
 export const DraftRequest = z.object({
   id: z.string().min(1),
@@ -66,86 +131,36 @@ export const DraftRequest = z.object({
 });
 export type DraftRequest = z.infer<typeof DraftRequest>;
 
-/** A judge's outcome (ADR 0025): its score from 0 to 1, its label and what it means. */
-export const JudgeOutcome = z.object({
-  score: z.number().min(0).max(1),
-  label: z.string().min(1).max(40),
-  meaning: z.string().min(1).max(300),
-});
-export type JudgeOutcome = z.infer<typeof JudgeOutcome>;
-
 /**
- * What a judge reads: a finished run (its events, its spec and its pull request diff) or an eval
- * try (the case's brief, the agent's output and the git diff), each as text.
+ * Jonah mode (ADR 0034, ADR 0039 decision 4): the review's policy. Everything it reads is a file
+ * of the bundle under /goal (definition/, evidence/, proposals/, files.md, events.md, observations.md).
  */
-export const JudgeMaterial = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('run'), events: z.string(), spec: z.string(), diff: z.string() }),
-  z.object({ kind: z.literal('eval_try'), brief: z.string(), output: z.string(), diff: z.string() }),
-]);
-export type JudgeMaterial = z.infer<typeof JudgeMaterial>;
-
-/**
- * Judge mode (ADR 0025): the judge evals/judges/<slug>.md, its rubric (the file's Markdown body),
- * its outcomes and pass mark, and the material it scores.
- */
-export const Judge = z.object({
-  slug: z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/),
-  rubric: z.string().min(1),
-  outcomes: z
-    .array(JudgeOutcome)
-    .min(1)
-    .refine((os) => new Set(os.map((o) => o.label)).size === os.length, 'outcome labels are unique')
-    .refine((os) => new Set(os.map((o) => o.score)).size === os.length, 'outcome scores are unique'),
-  pass_mark: z.number().min(0).max(1),
-  material: JudgeMaterial,
-});
-export type Judge = z.infer<typeof Judge>;
-
-/** A factory definition file as a Jonah review reads it: its path in the definition, its sha256 and its text. */
-export const JonahFile = z.object({
-  path: z.string().min(1),
-  sha256: z.string().regex(/^[0-9a-f]{64}$/),
-  content: z.string(),
-});
-export type JonahFile = z.infer<typeof JonahFile>;
-
-/** A sent-back event in the review's window: an item's touch that a station or a gate sent back, with its reason. */
-export const JonahEvent = z.object({
-  /** Names the event in the review's evidence; a proposal's evidence points at this id. */
-  id: z.string().min(1),
-  item_ref: z.string(),
-  title: z.string(),
-  station: z.string(),
-  agent: z.string(),
-  kind: z.string(),
-  reason: z.string(),
-});
-export type JonahEvent = z.infer<typeof JonahEvent>;
-
-/** A proposal the factory rejected in the last 90 days, with the reason a person gave: a later review does not repeat it. */
-export const JonahRejected = z.object({
-  title: z.string(),
-  summary: z.string(),
-  paths: z.array(z.string()),
-  reason: z.string(),
-});
-export type JonahRejected = z.infer<typeof JonahRejected>;
-
-/** Jonah mode (ADR 0034): the factory's definition, its sent-back events and its rejected proposals, read in one model call. */
 export const Jonah = z.object({
-  files: z.array(JonahFile),
-  events: z.array(JonahEvent),
-  rejected: z.array(JonahRejected),
-  /** The policy's proposeAfter: a threshold review proposes an observation only when its count reaches it. */
+  /** The policy's proposeAfter: a daily review proposes an observation only when its count reaches it. */
   propose_after: z.number().int().min(1),
   /** Whether a person asked for this review, which may propose below the threshold. */
   manual: z.boolean(),
 });
 export type Jonah = z.infer<typeof Jonah>;
 
+/**
+ * Grade mode (ADR 0039 decision 10): the reason an item went back and the result to grade, a try's
+ * output and diff or the item's original or final result. The run answers fixed, not fixed or unknown.
+ */
+export const Grade = z.object({
+  /** Why the item went back to an earlier station. */
+  reason: z.string().min(1),
+  result: z.object({
+    kind: z.enum(['try', 'original', 'final']),
+    output: z.string(),
+    diff: z.string(),
+  }),
+});
+export type Grade = z.infer<typeof Grade>;
+
 const taskFields = z.object({
   factory_id: z.string().min(1),
-  /** Empty only in definition mode, judge mode and Jonah mode, which need no item. */
+  /** Empty only in definition mode, Jonah mode and grade mode, which need no item. */
   item_id: z.string(),
   run_id: z.string().min(1),
   station: z.string(),
@@ -163,8 +178,10 @@ const taskFields = z.object({
   max_usd: z.number().positive().optional(),
   /** The agent's organization connections its token grants; absent from a goald before connections. */
   connections: z.array(Connection).default([]),
-  /** The knowledge sources the gateway's knowledge tools search for this run. */
-  knowledge_sources: z.array(z.string()).optional(),
+  /** The agent's environment file on a version on secrets (ADR 0037); absent on a version on connections. */
+  environment: Environment.optional(),
+  /** The run's Knowledge section and snapshots; absent when it has none, or from a goald before them. */
+  knowledge: Knowledge.optional(),
   /** The factory rules that apply to the run; absent from a goald before factory rules. */
   rules: z.array(Rule).optional(),
   /**
@@ -179,34 +196,36 @@ const taskFields = z.object({
   base_conflicts: z.array(z.string()).optional(),
   /** The branch those files conflict with when the bundle named a base; absent means the default branch. */
   base_branch: z.string().optional(),
+  /** The item's branch prepare checked out in /workspace; absent without a repository. */
+  branch: z.string().optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
-  /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
-  judge: Judge.optional(),
-  /** Jonah mode (ADR 0034): the run reviews the factory and returns observations and proposals, in one model call without tools. */
+  /** Jonah mode (ADR 0039 decision 4): the run reads its box with Read, Grep and Glob and returns observations and proposals. */
   jonah: Jonah.optional(),
+  /** Grade mode (ADR 0039 decision 10): the run grades this result against the reason, in one model call without tools. */
+  grade: Grade.optional(),
 });
 
 type ModeFields = {
   item_id: string;
   draft_request?: DraftRequest | undefined;
-  judge?: Judge | undefined;
   jonah?: Jonah | undefined;
+  grade?: Grade | undefined;
 };
 
-/** An item's run names its item; only definition, judge and Jonah mode may leave it empty. */
+/** An item's run names its item; only definition, Jonah and grade mode may leave it empty. */
 const itemNamed = (s: ModeFields) =>
-  s.draft_request !== undefined || s.judge !== undefined || s.jonah !== undefined || s.item_id.length > 0;
+  s.draft_request !== undefined || s.jonah !== undefined || s.grade !== undefined || s.item_id.length > 0;
 const itemMessage = {
-  message: 'item_id is required outside definition mode, judge mode and Jonah mode',
+  message: 'item_id is required outside definition, Jonah and grade mode',
   path: ['item_id'],
 };
 
-/** A run is in one mode at most: a draft request's, a judge's or a Jonah review's. */
-const oneMode = (s: ModeFields) => [s.draft_request, s.judge, s.jonah].filter((m) => m !== undefined).length <= 1;
+/** A run is in one mode at most: a draft request's, a Jonah review's or a grade's. */
+const oneMode = (s: ModeFields) => [s.draft_request, s.jonah, s.grade].filter((m) => m !== undefined).length <= 1;
 const modeMessage = {
-  message: 'a spec has at most one mode: a draft_request, a judge or a jonah (not both)',
-  path: ['judge'],
+  message: 'a spec has at most one mode: a draft_request, a jonah or a grade (not both)',
+  path: ['jonah'],
 };
 
 /** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
@@ -236,11 +255,16 @@ const bundlePath = relativePath
   .refine((p) => p !== 'spec.json', 'spec.json is the spec')
   .refine((p) => p !== 'definition.json', 'definition.json is the definition baseline');
 
-/** A git login for https://<host>: the user name and the variable that holds the password. */
+/**
+ * A git login for https://<host>: the user name and the variable that holds the password. With
+ * store (the repository token's login, ADR 0037 decision 7), prepare keeps it in git's credential
+ * store, so git commands after prepare sign in without the variable.
+ */
 export const GitCredential = z.object({
   host: z.string().regex(/^[A-Za-z0-9.-]+(:\d{1,5})?$/),
   username: z.string().regex(/^[A-Za-z0-9._@+-]+$/),
   password_env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  store: z.boolean().optional(),
 });
 export type GitCredential = z.infer<typeof GitCredential>;
 
@@ -254,7 +278,7 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
 export const Bundle = z
   .object({
     spec: taskFields
-      .omit({ gateway_url: true, base_conflicts: true, base_branch: true })
+      .omit({ gateway_url: true, base_conflicts: true, base_branch: true, branch: true })
       .refine(itemNamed, itemMessage)
       .refine(oneMode, modeMessage),
     /** Files under /goal by path, base64. */
@@ -272,6 +296,19 @@ export const Bundle = z
          * means the default branch. Prepare creates it from the default branch when the remote has none.
          */
         base: z.string().optional(),
+        /**
+         * A try of a past item (ADR 0039 decision 9): the commit its original run started from, and
+         * its base's commit then. Prepare makes a full clone, fetches them by SHA, checks branch out
+         * at commit, brings it up to date with base_commit and drops every git login.
+         */
+        commit: z
+          .string()
+          .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)
+          .optional(),
+        base_commit: z
+          .string()
+          .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/)
+          .optional(),
       })
       .optional(),
     git_credentials: z.array(GitCredential).default([]),
@@ -291,12 +328,12 @@ export const Bundle = z
     message: "a bundle's definition and its spec's draft_request come together",
     path: ['definition'],
   })
-  .refine((b) => !(b.spec.judge && (b.repository || b.definition)), {
-    message: "a judge's bundle has no repository and no definition",
-    path: ['spec', 'judge'],
-  })
   .refine((b) => !(b.spec.jonah && (b.repository || b.definition)), {
     message: "a jonah's bundle has no repository and no definition",
     path: ['spec', 'jonah'],
+  })
+  .refine((b) => !(b.spec.grade && (b.repository || b.definition)), {
+    message: "a grade's bundle has no repository and no definition",
+    path: ['spec', 'grade'],
   });
 export type Bundle = z.infer<typeof Bundle>;

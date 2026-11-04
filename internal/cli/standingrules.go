@@ -18,7 +18,8 @@ const (
 )
 
 // standingRulesCommand is goal standing-rules list|revoke: the organization's standing rules,
-// each letting one agent role call one connection tool without asking (ADR 0031 decision 7).
+// each letting one agent role call one connection or MCP server tool without asking (ADR 0031
+// decision 7, ADR 0037 decision 8).
 // They are made by Always allow on a tool call, never here.
 func standingRulesCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
@@ -92,18 +93,24 @@ func standingRulesList(ctx context.Context, out *printer, getenv func(string) st
 	return nil
 }
 
-// ruleText is what a rule lets: "<agent> may call <connection> <tool>", with "(deleted)" for a
-// connection that no longer exists.
+// ruleText is what a rule lets: "<agent> may call <source> <tool>", the source named by
+// ruleSource.
 func ruleText(r gen.StandingRule) string {
-	return fmt.Sprintf("%s may call %s %s", r.Agent, connectionName(r), r.Tool)
+	return fmt.Sprintf("%s may call %s %s", r.Agent, ruleSource(r), r.Tool)
 }
 
-func connectionName(r gen.StandingRule) string {
-	if r.Connection == nil {
+// ruleSource names what a rule's tool belongs to: "<environment>/<server>" for a rule keyed by an
+// environment's MCP server (ADR 0037 decision 8), else the connection's name, with "(deleted)"
+// for a connection that no longer exists.
+func ruleSource(r gen.StandingRule) string {
+	switch {
+	case r.Server != nil && r.Environment != nil:
+		return *r.Environment + "/" + *r.Server
+	case r.Connection != nil:
+		return *r.Connection
+	default:
 		return "(deleted)"
 	}
-
-	return *r.Connection
 }
 
 // standingRuleRevoke is goal standing-rules revoke <rule>: the agent asks first again for the
@@ -128,7 +135,7 @@ func standingRuleRevoke(ctx context.Context, out *printer, getenv func(string) s
 	}
 
 	if r := res.JSON200; r != nil {
-		out.printf("✓ revoked %s: %s asks again before calling %s %s\n", r.Id, r.Agent, connectionName(*r), r.Tool)
+		out.printf("✓ revoked %s: %s asks again before calling %s %s\n", r.Id, r.Agent, ruleSource(*r), r.Tool)
 
 		return nil
 	}

@@ -193,7 +193,6 @@ function definitionCache() {
   client.setQueryData(defKeys.compare(acme, goal, 'base', 'draft', 42), {});
   client.setQueryData(defKeys.versionFile(acme, 'a1b2'), '');
   client.setQueryData(defKeys.templates(acme), []);
-  client.setQueryData([...keys.evals(acme, goal), 'cases'], {});
   client.setQueryData(defKeys.draft(acme, sre), {});
   return client;
 }
@@ -257,24 +256,6 @@ describe('definitionInvalidations', () => {
     );
     expect(stale).not.toContainEqual(keys.metrics(acme, goal, {}));
     expect(stale).not.toContainEqual(defKeys.versionFile(acme, 'a1b2'));
-  });
-
-  test('a publish re-reads the eval cases, since it starts their run', async () => {
-    const stale = await staleAfter(
-      definitionCache(),
-      definitionInvalidations(acme, definition({ kind: 'current', number: 9 })),
-    );
-
-    expect(stale).toContainEqual([...keys.evals(acme, goal), 'cases']);
-  });
-
-  test('a draft saved elsewhere re-reads no eval case', async () => {
-    const stale = await staleAfter(
-      definitionCache(),
-      definitionInvalidations(acme, definition({ revision: saved.revision + 1, by: 'user:local' })),
-    );
-
-    expect(stale).not.toContainEqual([...keys.evals(acme, goal), 'cases']);
   });
 
   test('a factory created or deleted re-reads the list, attention and overviews', async () => {
@@ -350,7 +331,7 @@ describe('Jonah reads', () => {
     client.setQueryData([...keys.jonah(acme, goal), 'overview'], {});
     client.setQueryData([...keys.jonah(acme, goal), 'proposals', { state: 'proposed' }], []);
     client.setQueryData([...keys.jonah(acme, sre), 'overview'], {});
-    client.setQueryData(keys.judges(acme, goal), {});
+    client.setQueryData(defKeys.versions(acme, sre), {});
 
     const stale = await staleAfter(client, learningInvalidations(acme, { factory_id: goal }));
 
@@ -369,16 +350,14 @@ describe('Jonah reads', () => {
 });
 
 describe('knowledgeInvalidations', () => {
-  test("re-reads the organization's sources and their documents, never a search or anything else", async () => {
+  test("re-reads the organization's sources, their files and the read counts, nothing else", async () => {
     const client = definitionCache();
     client.setQueryData(keys.knowledgeSources(acme, {}), []);
     client.setQueryData(keys.knowledgeSources(acme, { factory: goal }), []);
     client.setQueryData(keys.knowledgeSource(acme, 'handbook'), {});
-    client.setQueryData([...keys.knowledgeDocuments(acme, 'handbook'), 100], {});
-    client.setQueryData(keys.knowledgeDocument(acme, 'd1'), {});
-    client.setQueryData(keys.knowledgeSearch(acme, { q: 'deploy' }), []);
-    client.setQueryData(keys.knowledgeUsage(acme, 'handbook', 7), {});
-    client.setQueryData(keys.knowledgeDocumentUses(acme, 'd1'), {});
+    client.setQueryData(keys.knowledgeFiles(acme, 'handbook', ''), {});
+    client.setQueryData(keys.knowledgeFind(acme, 'deploy'), []);
+    client.setQueryData(keys.knowledgeReads(acme, 'handbook', 7), []);
     client.setQueryData(keys.connectionList(acme, {}), []);
     client.setQueryData(keys.knowledgeSources(labs, {}), []);
 
@@ -388,12 +367,10 @@ describe('knowledgeInvalidations', () => {
       keys.knowledgeSources(acme, {}),
       keys.knowledgeSources(acme, { factory: goal }),
       keys.knowledgeSource(acme, 'handbook'),
-      [...keys.knowledgeDocuments(acme, 'handbook'), 100],
-      keys.knowledgeDocument(acme, 'd1'),
-      keys.knowledgeUsage(acme, 'handbook', 7),
-      keys.knowledgeDocumentUses(acme, 'd1'),
+      keys.knowledgeFiles(acme, 'handbook', ''),
+      keys.knowledgeFind(acme, 'deploy'),
+      keys.knowledgeReads(acme, 'handbook', 7),
     ]);
-    // A search open on Knowledge is an embedding call on goald: it runs again when asked, not per sync.
   });
 
   test('a publish re-reads which factories may search each source', () => {

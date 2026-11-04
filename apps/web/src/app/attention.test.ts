@@ -5,6 +5,7 @@ describe('factorySignal', () => {
   test('names a quiet factory by its mark and name, and shows its title', () => {
     expect(factorySignal({ name: 'goal', title: 'Goal' }, 'G', noAttention)).toEqual({
       label: 'G, goal factory',
+      nameLabel: 'goal factory',
       detail: 'Goal',
     });
   });
@@ -12,6 +13,7 @@ describe('factorySignal', () => {
   test('says what waits on you', () => {
     expect(factorySignal({ name: 'sre' }, 'S', { ...noAttention, waiting: 3 })).toEqual({
       label: 'S, sre factory, 3 waiting on you',
+      nameLabel: 'sre factory, 3 waiting on you',
       detail: '3 waiting on you',
     });
   });
@@ -29,6 +31,7 @@ describe('factorySignal', () => {
   test('says both when work waits and is blocked', () => {
     expect(factorySignal({ name: 'goal' }, 'G', { waiting: 2, blocked: 1, andon: null })).toEqual({
       label: 'G, goal factory, 2 waiting on you, 1 item blocked',
+      nameLabel: 'goal factory, 2 waiting on you, 1 item blocked',
       detail: '2 waiting on you, 1 item blocked',
     });
   });

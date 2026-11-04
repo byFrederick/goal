@@ -16,8 +16,8 @@ import (
 var _ ports.CodeHost = (*CodeHost)(nil)
 
 // CodeHost is an in-memory code host holding the pull requests, branch heads and commits a test
-// adds. Like the adapters, it serves only pull requests and repositories on the host of the
-// connection's git login, and it merges and updates branches like a careful host: only open pull
+// adds. Like the adapters, it serves only pull requests and repositories on the login's host,
+// and it merges and updates branches like a careful host: only open pull
 // requests whose head has not moved.
 type CodeHost struct {
 	mu       sync.Mutex
@@ -28,13 +28,47 @@ type CodeHost struct {
 	refuse   map[string]int    // url → how many more merges are refused though it reads mergeable
 	merges   []MergeCall
 	branches []string
-	updated  []string                        // urls whose branches were updated, in order
-	conflict map[string][]string             // url → the files its branch conflicts with its base in
-	current  map[string]bool                 // urls whose branches already hold their base
-	heads    map[string]map[string]string    // repo → branch ("" the default) → head SHA
-	history  map[string][]ports.Commit       // repo → its linear history, oldest first
-	repos    map[string]ports.RepositoryList // owner → what Repositories answers for it
-	login    string                          // the owner an empty one means
+	updated  []string                          // urls whose branches were updated, in order
+	conflict map[string][]string               // url → the files its branch conflicts with its base in
+	current  map[string]bool                   // urls whose branches already hold their base
+	heads    map[string]map[string]string      // repo → branch ("" the default) → head SHA
+	history  map[string][]ports.Commit         // repo → its linear history, oldest first
+	repos    map[string]ports.RepositoryList   // owner → what Repositories answers for it
+	login    string                            // the owner an empty one means
+	access   map[string]ports.RepositoryAccess // repo + " " + token → what RepositoryAccess answers
+	stall    bool                              // RepositoryAccess waits for its context to end
+	tokens   []string                          // the tokens RepositoryAccess was given, in order
+	logins   []string                          // the tokens of the other calls' logins, in order
+}
+
+// SetAccess makes a what RepositoryAccess answers for token in the repository at repo. Any other
+// repository or token reads as one the host does not show: read and push failed.
+func (c *CodeHost) SetAccess(repo, token string, a ports.RepositoryAccess) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.access == nil {
+		c.access = map[string]ports.RepositoryAccess{}
+	}
+
+	c.access[repo+" "+token] = a
+}
+
+// StallAccess makes RepositoryAccess give no answer until its context ends, as a host that does
+// not answer.
+func (c *CodeHost) StallAccess() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.stall = true
+}
+
+// AccessTokens are the tokens RepositoryAccess was given, in order.
+func (c *CodeHost) AccessTokens() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.tokens)
 }
 
 // SetRepositories makes list what Repositories answers for list.Owner; the first list set is
@@ -175,7 +209,8 @@ func (c *CodeHost) Reads(url string) int {
 	return c.reads[url]
 }
 
-// MergeCall is one merge asked of the fake: the pull request, the connection it came with and how.
+// MergeCall is one merge asked of the fake: the pull request, the name of the login it came with
+// (its connection) and how.
 type MergeCall struct {
 	URL        string
 	Connection string
@@ -210,8 +245,8 @@ func (c *CodeHost) DeletedBranches() []string {
 }
 
 // PullRequest implements ports.CodeHost.
-func (c *CodeHost) PullRequest(_ context.Context, conn domain.ResolvedConnection, url string) (ports.PullRequest, error) {
-	if err := onHost(conn, url); err != nil {
+func (c *CodeHost) PullRequest(_ context.Context, login domain.CodeHostLogin, url string) (ports.PullRequest, error) {
+	if err := c.onHost(login, url); err != nil {
 		return ports.PullRequest{}, err
 	}
 
@@ -246,15 +281,15 @@ func (c *CodeHost) PullRequest(_ context.Context, conn domain.ResolvedConnection
 }
 
 // Merge implements ports.CodeHost.
-func (c *CodeHost) Merge(_ context.Context, conn domain.ResolvedConnection, url string, m ports.Merge) (string, error) {
-	if err := onHost(conn, url); err != nil {
+func (c *CodeHost) Merge(_ context.Context, login domain.CodeHostLogin, url string, m ports.Merge) (string, error) {
+	if err := c.onHost(login, url); err != nil {
 		return "", err
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.merges = append(c.merges, MergeCall{URL: url, Connection: conn.Connection.Name, Merge: m})
+	c.merges = append(c.merges, MergeCall{URL: url, Connection: login.Name, Merge: m})
 
 	pr, ok := c.prs[url]
 	switch {
@@ -276,8 +311,8 @@ func (c *CodeHost) Merge(_ context.Context, conn domain.ResolvedConnection, url 
 
 // UpdateBranch implements ports.CodeHost. An update moves the head to "updated-" and the head
 // it was given; an up-to-date branch (UpToDate) is left as it is.
-func (c *CodeHost) UpdateBranch(_ context.Context, conn domain.ResolvedConnection, url, headSHA string) error {
-	if err := onHost(conn, url); err != nil {
+func (c *CodeHost) UpdateBranch(_ context.Context, login domain.CodeHostLogin, url, headSHA string) error {
+	if err := c.onHost(login, url); err != nil {
 		return err
 	}
 
@@ -309,8 +344,8 @@ func (c *CodeHost) UpdateBranch(_ context.Context, conn domain.ResolvedConnectio
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (c *CodeHost) DeleteBranch(_ context.Context, conn domain.ResolvedConnection, url, branch string) error {
-	if err := onHost(conn, url); err != nil {
+func (c *CodeHost) DeleteBranch(_ context.Context, login domain.CodeHostLogin, url, branch string) error {
+	if err := c.onHost(login, url); err != nil {
 		return err
 	}
 
@@ -323,8 +358,8 @@ func (c *CodeHost) DeleteBranch(_ context.Context, conn domain.ResolvedConnectio
 }
 
 // BranchHead implements ports.CodeHost from SetBranchHead.
-func (c *CodeHost) BranchHead(_ context.Context, conn domain.ResolvedConnection, repo, branch string) (string, error) {
-	if err := onHost(conn, repo); err != nil {
+func (c *CodeHost) BranchHead(_ context.Context, login domain.CodeHostLogin, repo, branch string) (string, error) {
+	if err := c.onHost(login, repo); err != nil {
 		return "", err
 	}
 
@@ -341,8 +376,8 @@ func (c *CodeHost) BranchHead(_ context.Context, conn domain.ResolvedConnection,
 
 // Compare implements ports.CodeHost from AddCommits: the commits after base up to head, none
 // when head is not after base.
-func (c *CodeHost) Compare(_ context.Context, conn domain.ResolvedConnection, repo, base, head string) (ports.Comparison, error) {
-	if err := onHost(conn, repo); err != nil {
+func (c *CodeHost) Compare(_ context.Context, login domain.CodeHostLogin, repo, base, head string) (ports.Comparison, error) {
+	if err := c.onHost(login, repo); err != nil {
 		return ports.Comparison{}, err
 	}
 
@@ -381,8 +416,8 @@ func (c *CodeHost) Compare(_ context.Context, conn domain.ResolvedConnection, re
 }
 
 // Repositories implements ports.CodeHost from SetRepositories.
-func (c *CodeHost) Repositories(_ context.Context, conn domain.ResolvedConnection, owner string) (ports.RepositoryList, error) {
-	if _, _, err := conn.GitLogin(); err != nil {
+func (c *CodeHost) Repositories(_ context.Context, login domain.CodeHostLogin, owner string) (ports.RepositoryList, error) {
+	if err := login.Validate(); err != nil {
 		return ports.RepositoryList{}, err
 	}
 
@@ -408,12 +443,54 @@ func (c *CodeHost) Repositories(_ context.Context, conn domain.ResolvedConnectio
 	return list, nil
 }
 
-// onHost refuses a pull request or repository URL that is not on the host of the connection's git login.
-func onHost(conn domain.ResolvedConnection, raw string) error {
-	host, _, err := conn.GitLogin()
-	if err != nil {
+// RepositoryAccess implements ports.CodeHost from SetAccess and StallAccess.
+func (c *CodeHost) RepositoryAccess(ctx context.Context, repo, token string) (ports.RepositoryAccess, error) {
+	if u, err := url.Parse(repo); err != nil || u.Scheme != "https" || u.Host == "" || strings.Trim(u.Path, "/") == "" {
+		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL: %w", repo, domain.ErrInvalid)
+	}
+
+	c.mu.Lock()
+	c.tokens = append(c.tokens, token)
+	stall := c.stall
+	a, ok := c.access[repo+" "+token]
+	c.mu.Unlock()
+
+	if stall {
+		<-ctx.Done()
+
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: %w", repo, ctx.Err())
+	}
+
+	if !ok {
+		reason := "the host answered 404: Not Found"
+
+		return ports.RepositoryAccess{Read: ports.AccessCheck{Reason: reason}, Push: ports.AccessCheck{Reason: reason}}, nil
+	}
+
+	return a, nil
+}
+
+// LoginTokens are the tokens of the logins the pull request and repository calls were made
+// with, in order, refused ones included.
+func (c *CodeHost) LoginTokens() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.logins)
+}
+
+// onHost records login's token and refuses a pull request or repository URL that is not on the
+// login's host.
+func (c *CodeHost) onHost(login domain.CodeHostLogin, raw string) error {
+	c.mu.Lock()
+	c.logins = append(c.logins, login.Token)
+	c.mu.Unlock()
+
+	if err := login.Validate(); err != nil {
 		return err
 	}
+
+	host := login.Host
 
 	if u, err := url.Parse(raw); err != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, host) {
 		return fmt.Errorf("%s is not on %s: %w", raw, host, ports.ErrNotMergeable)

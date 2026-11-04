@@ -18,6 +18,7 @@ import {
 } from '../../shared/format';
 import { useModelLabel } from '../../shared/models';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { kindLabel } from '../../shared/touches';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -26,6 +27,7 @@ import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
 import { type Stat, StatStrip } from '../../ui/stat-strip';
+import { KeepTestDialog } from './keep-test-dialog';
 import { touchSentence } from './touch-words';
 
 const span = (seconds: number) => formatDurationCompact(seconds * 1000);
@@ -219,8 +221,21 @@ function TimeByStation({ td: data }: { td: Teardown }) {
   );
 }
 
-function Runs({ td: data }: { td: Teardown }) {
+/** The stations this item's runs make candidates for a kept test: one run there, finished, and nothing went back from it. */
+export function passedFirstTime(td: Teardown): string[] {
+  const wentBack = new Set(td.loops.flatMap((l) => (l.to ? [l.station, l.to] : [l.station])));
+  return td.stations
+    .map((s) => s.station)
+    .filter((station) => {
+      const here = td.runs.filter((r) => r.station === station);
+      return here.length === 1 && here[0]?.outcome === 'finished' && !wentBack.has(station);
+    });
+}
+
+function Runs({ td: data, keepable, number }: { td: Teardown; keepable: string[]; number: number }) {
   const model = useModelLabel();
+  const factory = useFactory();
+  const [keeping, setKeeping] = useState(false);
   const total = data.run_total;
   return (
     <section aria-labelledby="td-runs" className={cardClass}>
@@ -231,6 +246,20 @@ function Runs({ td: data }: { td: Teardown }) {
         <span className={cardAside}>
           {plural(total.runs, 'run')}, {plural(total.turns, 'turn')}, {formatUsdCost(total.cost_usd)}
         </span>
+        {keepable.length > 0 ? (
+          <>
+            <Button variant="secondary" size="sm" aria-haspopup="dialog" onClick={() => setKeeping(true)}>
+              Keep as a test
+            </Button>
+            <KeepTestDialog
+              open={keeping}
+              onOpenChange={setKeeping}
+              factoryId={factory.id}
+              number={number}
+              stations={keepable}
+            />
+          </>
+        ) : null}
       </header>
       <div className="overflow-x-auto max-[1000px]:hidden">
         <table className="w-full border-collapse text-secondary">
@@ -428,6 +457,8 @@ export function TeardownTab({ number }: { number: number }) {
   const { ref } = useParams({ from: '/o/$org/f/$factory/items/$ref' });
   const q = useQuery(teardownQuery(org.id, itemKey(factory.name, ref)));
   const data = q.data;
+  // Keep as a test is for a person who may edit the definition, at a station the item passed the first time.
+  const keepable = data && holds(factory, 'definition:edit') ? passedFirstTime(data) : [];
 
   if (q.isError && !data) {
     return (
@@ -466,7 +497,7 @@ export function TeardownTab({ number }: { number: number }) {
               hasSide && 'min-[1180px]:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]',
             )}
           >
-            <Runs td={data} />
+            <Runs td={data} keepable={keepable} number={number} />
             {hasSide ? (
               <div className="flex min-w-0 flex-col gap-4">
                 {data.loops.length > 0 ? <WhyItWentBack loops={data.loops} number={number} /> : null}

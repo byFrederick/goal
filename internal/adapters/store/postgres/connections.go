@@ -1023,7 +1023,7 @@ func Rekey(ctx context.Context, s *Store, key ports.MasterKey) (int, error) {
 
 	total := 0
 
-	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){resealConnections, resealCredentials, resealWebhookSecrets} {
+	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){resealConnections, resealSecrets, resealWebhookSecrets} {
 		for {
 			var n int
 

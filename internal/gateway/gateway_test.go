@@ -163,6 +163,11 @@ type harness struct {
 	// drafts hold the factories' drafts and requests their draft requests (bundle_test.go).
 	drafts   *porttest.Definitions
 	requests *porttest.DraftRequests
+	// kb and objects hold the organization's knowledge snapshots and their zips (knowledge_test.go).
+	kb      *porttest.Knowledge
+	objects *porttest.ObjectStore
+	// grades hold the grades' material (grade_test.go); nil with harnessDeps.noGrades.
+	grades *fakeGrades
 }
 
 func newHarness(t *testing.T, cfg Config) *harness {
@@ -177,8 +182,28 @@ type harnessDeps struct {
 	files map[string]string
 	// schema, when set, is the output.schema.json of every agent with a contract.
 	schema string
-	// noJonah leaves Deps.Jonah nil.
-	noJonah bool
+	// noJonah leaves Deps.Jonah nil, and noGrades Deps.Grades.
+	noJonah  bool
+	noGrades bool
+	// knowledge gives the gateway a knowledge base and a bucket, h.kb and h.objects (knowledge_test.go).
+	knowledge bool
+	// mcpCap is the organization policy's MCP tool mode cap (none when nil).
+	mcpCap map[string]domain.ConnectionToolMode
+}
+
+// cappedPolicies are the organization's default policy with mcp as its MCP tool mode cap.
+type cappedPolicies struct {
+	*porttest.OrgPolicies
+	mcp map[string]domain.ConnectionToolMode
+}
+
+func (c cappedPolicies) Get(ctx context.Context) (domain.OrgPolicy, error) {
+	p, err := c.OrgPolicies.Get(ctx)
+	if c.mcp != nil {
+		p.MCPToolModes = c.mcp
+	}
+
+	return p, err
 }
 
 // withSchema is definitions whose agents with a contract get schema as their output schema.
@@ -229,7 +254,8 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		store: porttest.NewStore(), clock: porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)), key: []byte("gateway-test-key"),
 		questions: &fakeQuestions{}, approvals: &fakeToolApprovals{}, logs: &syncBuffer{},
 	}
-	h.org, h.connections = newConnections(t, h.clock)
+	org, conns, tenancy := newConnections(t, h.clock)
+	h.org, h.connections = org, conns
 	h.drafts = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Now: h.clock.Now})
 	h.requests = porttest.NewDraftRequests(porttest.NewTenancy(h.clock.Now), h.clock.Now)
 
@@ -255,6 +281,22 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		jonah = h.store
 	}
 
+	var grades Grades
+	if !d.noGrades {
+		h.grades = &fakeGrades{}
+		grades = h.grades
+	}
+
+	var (
+		kb      Knowledge
+		objects Objects
+	)
+
+	if d.knowledge {
+		h.kb, h.objects = porttest.NewKnowledge(h.connections, tenancy), porttest.NewObjectStore()
+		kb, objects = h.kb, h.objects
+	}
+
 	h.gw, err = New(Deps{
 		Definitions:   defs,
 		Items:         h.store,
@@ -263,9 +305,16 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Clock:         h.clock,
 		Questions:     h.questions,
 		ToolApprovals: h.approvals,
+		Policies:      cappedPolicies{OrgPolicies: porttest.NewOrgPolicies(nil, nil, h.clock.Now), mcp: d.mcpCap},
 		DraftRequests: h.requests,
 		Drafts:        h.drafts,
 		Jonah:         jonah,
+		Watches:       h.store,
+		Tries:         h.store,
+		Proposed:      proposing{base: defs},
+		Grades:        grades,
+		Knowledge:     kb,
+		Objects:       objects,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, cfg)
 	if err != nil {
@@ -277,6 +326,41 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	h.url = ts.URL
 
 	return h
+}
+
+// proposing gives a try's version with the proposal's edits applied to it: here only to the agent
+// prompts, which the tests propose.
+type proposing struct{ base Definitions }
+
+func (p proposing) Proposed(_ context.Context, _ domain.DefinitionVersionID, edits []domain.ProposalEdit) (Definitions, error) {
+	return proposed{Definitions: p.base, edits: edits}, nil
+}
+
+type proposed struct {
+	Definitions
+	edits []domain.ProposalEdit
+}
+
+func (p proposed) AgentFiles(ctx context.Context, id domain.DefinitionVersionID, agent domain.AgentSpec, output string) (map[string][]byte, error) {
+	out, err := p.Definitions.AgentFiles(ctx, id, agent, output)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range p.edits {
+		if e.Path != strings.TrimPrefix(agent.PromptPath, "./") {
+			continue
+		}
+
+		edited, err := e.Apply(out["prompt.md"], true)
+		if err != nil {
+			return nil, err
+		}
+
+		out["prompt.md"] = []byte(edited)
+	}
+
+	return out, nil
 }
 
 func (h *harness) claims() domain.TaskClaims {
@@ -563,5 +647,22 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 				t.Fatalf("body = %q, want no detail", s)
 			}
 		})
+	}
+}
+
+// The run bundle applies the organization policy's MCP tool mode cap, so the gateway needs one.
+func TestNew_RequiresPolicies(t *testing.T) {
+	t.Parallel()
+
+	clock := porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC))
+	store := porttest.NewStore()
+	_, conns, _ := newConnections(t, clock)
+
+	_, err := New(Deps{
+		Definitions: definitions{}, Items: store, Connections: conns, Events: store, Clock: clock,
+		Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{},
+	}, Config{Key: []byte("gateway-test-key")})
+	if err == nil || !strings.Contains(err.Error(), "Policies") {
+		t.Errorf("New without Policies = %v; want an error naming Policies", err)
 	}
 }

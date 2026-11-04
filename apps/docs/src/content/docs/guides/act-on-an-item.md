@@ -26,10 +26,10 @@ At a station that waits for a person, approve the item to let it move on:
 goal approve acme-line#3
 ```
 
-An agent can also wait for permission to use a tool. Approving it lets that call go through. `--always-allow` does the same and lets that agent role make that call without asking from now on; the CLI needs the `connection:manage` permission for it. Deny the call with a note, which the item's next run reads:
+An agent can also wait for permission to use a tool. Approving it lets that call go through. `--always-allow` does the same and lets that agent role make that call without asking from now on; the CLI needs the permission to manage secrets and access for it (`connection:manage` in the API today). Deny the call with a note, which the item's next run reads:
 
 ```sh
-goal deny acme-line#3 --note "Use the staging connection"
+goal deny acme-line#3 --note "Use the staging server"
 ```
 
 On the item page and in Needs you, the Approve button approves, the Deny button denies, and an Always allow checkbox appears when you may set it.
@@ -85,6 +85,12 @@ goal move acme-line#3 review --reason "Needs a second look"
 ```
 
 A run in progress is stopped first. Moving an item to an earlier station needs a reason, and counts as rework. On the item page, use More, then Move.
+
+## Keep an item as a test
+
+On the item's Teardown tab, **Keep as a test** at a station the item passed the first time keeps the item as a test of that station. Jonah and Publish run kept tests against later changes. It needs `definition:edit`, and Goal refuses a station the item did not pass the first time. A toast says **Kept**.
+
+To try another model for an agent, open the agent's page and choose **Try another model**. Pick a model your policy allows, read the estimate and confirm; Jonah tries it on what the agent finished lately and makes a proposal, and a toast says **Proposal made**.
 
 ## Pause and resume
 

@@ -2,7 +2,9 @@
 // file trees (factory.yaml with comments, agent prompts, a local skill), the template catalog
 // (catalog/templates/) and the skills.sh skills catalog (catalog/skills/). Illustrative content
 // only: goald reads real definitions from the bucket.
+
 import type { Actor, VersionSource } from '@goal/api-client';
+import { environmentFiles } from './environments.ts';
 import { starterItem } from './starter.ts';
 
 /** A definition's files by path. */
@@ -150,6 +152,7 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
     - name: infra-engineer
       description: Changes Terraform and the deploy scripts.
       prompt: ./agents/infra-engineer.md
+      environment: deploy
       skills: [acme-conventions]
     - name: reviewer
       description: Reviews the pull request against the spec.
@@ -179,6 +182,7 @@ ${goalRules.map(([name]) => `    - { name: ${name}, source: ./rules/${name}.md }
 
 // The rules' texts and the skills' files beyond acme-conventions (which goalFiles writes out).
 const goalExtraFiles: Record<string, string> = {
+  ...environmentFiles,
   ...Object.fromEntries(
     goalRules.map(([name, description]) => [
       `rules/${name}.md`,

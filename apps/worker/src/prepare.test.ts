@@ -1,9 +1,10 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync, readdirSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { crc32 } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { credentialHelper, type Exec, type Output, type PrepareDeps, prepare } from './prepare.js';
 
@@ -34,10 +35,18 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'goal-prepare-'));
   home = join(root, 'home');
   await mkdir(home);
-  dirs = { goal: join(root, 'goal'), workspace: join(root, 'workspace'), claude: join(home, '.claude') };
+  dirs = {
+    goal: join(root, 'goal'),
+    workspace: join(root, 'workspace'),
+    claude: join(home, '.claude'),
+    home,
+    knowledge: join(root, 'knowledge'),
+  };
 });
 
 afterEach(async () => {
+  // The unpacked knowledge is read-only: its owner makes it writable again to remove it.
+  execFileSync('chmod', ['-R', 'u+w', root]);
   await rm(root, { recursive: true, force: true });
 });
 
@@ -120,6 +129,24 @@ function recorder(mise = 0) {
   return { exec, calls };
 }
 
+/**
+ * What `git credential fill` answers for https://<host> in the test's git environment, which holds
+ * no password variable; empty when nothing signs in (no prompt, since GIT_TERMINAL_PROMPT is 0).
+ */
+function fill(host: string, cwd?: string): string {
+  try {
+    return execFileSync('git', ['credential', 'fill'], {
+      cwd,
+      env: { ...gitEnv(), GIT_ASKPASS: '' },
+      input: `protocol=https\nhost=${host}\n\n`,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+  } catch {
+    return '';
+  }
+}
+
 /** Runs git for real (isolated) and returns its stdout. */
 const output: Output = async (command, args, opts = {}) =>
   execFileSync(command, args, { cwd: opts.cwd, env: gitEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -146,6 +173,182 @@ function depsWith(fake: typeof fetch, exec: Exec, env: NodeJS.ProcessEnv = {}): 
   };
 }
 
+/** A zip of files (path to content), stored without compression, as unzip reads it. */
+function zipOf(files: Record<string, string>): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const [path, content] of Object.entries(files)) {
+    const name = Buffer.from(path);
+    const body = Buffer.from(content);
+    const crc = crc32(body);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(body.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(body.length, 20);
+    central.writeUInt32LE(body.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    locals.push(local, name, body);
+    centrals.push(central, name);
+    offset += local.length + name.length + body.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(Object.keys(files).length, 8);
+  end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+}
+
+/** Runs unzip for real, records every command and answers the others with 0 (git rev-parse: no such branch). */
+function unzipping(before?: (command: string, args: string[]) => Promise<void>) {
+  const calls: string[] = [];
+  const exec: Exec = async (command, args) => {
+    calls.push(`${command} ${args.join(' ')}`);
+    await before?.(command, args);
+    if (command === 'git' && args[0] === 'rev-parse') return 1;
+    if (command !== 'unzip') return 0;
+    return new Promise((resolve) => {
+      const child = spawn(command, args, { stdio: 'ignore' });
+      child.once('close', (c) => resolve(c ?? 1));
+    });
+  };
+  return { exec, calls };
+}
+
+const handbookZip = zipOf({ 'README.md': '# Handbook', 'onboarding/first-week.md': '# First week' });
+const runbooksZip = zipOf({ 'alerts/disk.md': '# Disk' });
+
+const knowledge = {
+  section: '## Knowledge',
+  snapshots: [
+    { source: 'handbook', url: '/run/knowledge/handbook' },
+    { source: 'runbooks', url: '/run/knowledge/runbooks' },
+  ],
+};
+
+/** A gateway that serves bundle at /run and each zip of zips at /run/knowledge/<source>, recording what was asked. */
+function knowledgeGateway(bundle: unknown, zips: Record<string, Buffer | number>, onRequest?: () => void) {
+  const requests: { url: string; auth: string | null }[] = [];
+  const fake = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input));
+    requests.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
+    onRequest?.();
+    if (url.pathname === '/run') return new Response(JSON.stringify(bundle));
+    const zip = zips[url.pathname.replace('/run/knowledge/', '')];
+    if (zip === undefined || typeof zip === 'number') return new Response('not found', { status: zip ?? 404 });
+    return new Response(new Uint8Array(zip), { headers: { 'Content-Type': 'application/zip' } });
+  }) as typeof fetch;
+  return { fake, requests };
+}
+
+/** The permission bits of path. */
+async function mode(path: string): Promise<number> {
+  return (await stat(path)).mode & 0o777;
+}
+
+describe('prepare: knowledge', () => {
+  it('downloads every snapshot while the repository clones and unpacks each read-only into /knowledge/<source>/', async () => {
+    const bundle = {
+      spec: { ...spec, knowledge },
+      files: {},
+      repository: { url: 'https://github.com/acme/api.git', branch: 'goal/1-x' },
+    };
+    // The clone ends only once both snapshots were asked for: a prepare that waited for it first never would.
+    let asked: () => void = () => undefined;
+    const bothAsked = new Promise<void>((resolve) => {
+      asked = resolve;
+    });
+    const { fake, requests } = knowledgeGateway(bundle, { handbook: handbookZip, runbooks: runbooksZip }, () => {
+      if (requests.filter((r) => r.url.includes('/run/knowledge/')).length === 2) asked();
+    });
+    const { exec } = unzipping(async (command, args) => {
+      if (command === 'git' && args[0] === 'clone') await bothAsked;
+    });
+
+    // A box prepared again finds an earlier, read-only unpack; the new one replaces it.
+    await mkdir(join(dirs.knowledge, 'handbook'), { recursive: true });
+    await writeFile(join(dirs.knowledge, 'handbook', 'stale.md'), 'stale');
+    await chmod(join(dirs.knowledge, 'handbook', 'stale.md'), 0o444);
+    await chmod(join(dirs.knowledge, 'handbook'), 0o555);
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(requests.filter((r) => r.url.includes('/run/knowledge/'))).toEqual([
+      { url: 'http://goal-egress:3128/run/knowledge/handbook', auth: `Bearer ${token}` },
+      { url: 'http://goal-egress:3128/run/knowledge/runbooks', auth: `Bearer ${token}` },
+    ]);
+    expect(await readFile(join(dirs.knowledge, 'handbook', 'onboarding', 'first-week.md'), 'utf8')).toBe(
+      '# First week',
+    );
+    expect(await readFile(join(dirs.knowledge, 'runbooks', 'alerts', 'disk.md'), 'utf8')).toBe('# Disk');
+    expect(existsSync(join(dirs.knowledge, 'handbook', 'stale.md'))).toBe(false);
+    expect(existsSync(join(dirs.knowledge, '.handbook.zip'))).toBe(false);
+    for (const file of ['handbook/README.md', 'handbook/onboarding/first-week.md', 'runbooks/alerts/disk.md']) {
+      expect(await mode(join(dirs.knowledge, file)), file).toBe(0o444);
+    }
+    for (const dir of ['handbook', 'handbook/onboarding', 'runbooks', 'runbooks/alerts']) {
+      expect(await mode(join(dirs.knowledge, dir)), dir).toBe(0o555);
+    }
+    expect(prepared.knowledge).toBe(2);
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).knowledge).toEqual(knowledge);
+  });
+
+  it('fails the run with the source and the status when a snapshot does not download', async () => {
+    const bundle = { spec: { ...spec, knowledge }, files: {} };
+    const { fake } = knowledgeGateway(bundle, { handbook: handbookZip, runbooks: 404 });
+    await expect(prepare(depsWith(fake, unzipping().exec))).rejects.toThrow(
+      'knowledge runbooks: GET /run/knowledge/runbooks: 404 not found',
+    );
+  });
+
+  it('fails the run when a snapshot does not unpack', async () => {
+    const bundle = { spec: { ...spec, knowledge: { ...knowledge, snapshots: [knowledge.snapshots[0]] } }, files: {} };
+    const { fake } = knowledgeGateway(bundle, { handbook: Buffer.from('not a zip') });
+    await expect(prepare(depsWith(fake, unzipping().exec))).rejects.toThrow(/knowledge handbook: unzip exited [1-9]/);
+  });
+
+  it('sends the task token only to the gateway', async () => {
+    const elsewhere = { source: 'handbook', url: 'https://bucket.example.com/handbook.zip?signature=x' };
+    const bundle = { spec: { ...spec, knowledge: { section: '', snapshots: [elsewhere] } }, files: {} };
+    const requests: { url: string; auth: string | null }[] = [];
+    const fake = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
+      return String(input).endsWith('/run')
+        ? new Response(JSON.stringify(bundle))
+        : new Response(new Uint8Array(handbookZip));
+    }) as typeof fetch;
+
+    await prepare(depsWith(fake, unzipping().exec));
+
+    expect(requests[1]).toEqual({ url: elsewhere.url, auth: null });
+  });
+
+  it('downloads nothing for a bundle without snapshots, as a draft request has', async () => {
+    const bundle = { spec: { ...spec, knowledge: { section: '## Knowledge', snapshots: [] } }, files: {} };
+    const { fake, requests } = knowledgeGateway(bundle, {});
+    const { exec, calls } = unzipping();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(requests).toHaveLength(1);
+    expect(calls).toEqual([]);
+    expect(prepared.knowledge).toBeUndefined();
+  });
+});
+
 describe('prepare', () => {
   it("sets the sandbox up from the bundle goald's gateway serves (internal/gateway/testdata)", async () => {
     const served = JSON.parse(
@@ -163,6 +366,7 @@ describe('prepare', () => {
     expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({
       ...served.spec,
       gateway_url: gateway,
+      branch: 'goal/1-add-a-health-endpoint',
     });
     expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('# engineer\n');
     expect(await readFile(join(dirs.goal, 'agent/output.schema.json'), 'utf8')).toBe('{"type":"object"}');
@@ -215,7 +419,7 @@ describe('prepare', () => {
       gateway_url: gateway,
     });
     expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
-    // No repository: nothing cloned, no repository tools.
+    // No repository: nothing cloned, no repository tools, no heads.
     expect(calls).toEqual([]);
   });
 
@@ -305,6 +509,33 @@ describe('prepare', () => {
     expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).not.toHaveProperty('base_conflicts');
   });
 
+  it("reports the branch's and the base's heads from before the rebase, and writes the branch into spec.json", async () => {
+    const branch = 'goal/11-heads';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const bare = join(root, 'origin.git');
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    const pushed = git(bare, 'rev-parse', `refs/heads/${branch}`);
+    expect(prepared).toMatchObject({ branch_head: pushed, base_head: git(bare, 'rev-parse', 'refs/heads/main') });
+    // The rebase moved the branch past the head it reports.
+    expect(git(dirs.workspace, 'rev-parse', 'HEAD')).not.toBe(pushed);
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toMatchObject({ branch });
+  });
+
+  it("reports a new branch's head as the default branch's", async () => {
+    const url = await origin();
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/12-new' } });
+    const { exec } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    const main = git(join(root, 'origin.git'), 'rev-parse', 'refs/heads/main');
+    expect(prepared).toMatchObject({ branch_head: main, base_head: main });
+  });
+
   it('merges the default branch when fresh_base is merge', async () => {
     const branch = 'goal/11-merge';
     const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
@@ -367,6 +598,18 @@ describe('prepare', () => {
       expect(() => git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toThrow();
     });
 
+    it("reports the base branch's head as base_head", async () => {
+      const url = await origin(undefined, { moved: { 'main.txt': 'from main\n' }, base });
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/21-part', base } });
+      const { exec } = recorder();
+
+      const prepared = await prepare(depsWith(fake, exec));
+
+      const head = git(bare(), 'rev-parse', `refs/heads/${base}`);
+      expect(head).not.toBe(git(bare(), 'rev-parse', 'refs/heads/main'));
+      expect(prepared).toMatchObject({ branch_head: head, base_head: head });
+    });
+
     it('rebases an existing branch on the base branch', async () => {
       const branch = 'goal/21-rebase';
       const url = await origin(branch, { moved: { 'main.txt': 'from main\n' }, base });
@@ -426,6 +669,34 @@ describe('prepare', () => {
       const main = git(bare(), 'rev-parse', 'main');
       expect(git(bare(), 'rev-parse', base)).toBe(main);
       expect(git(dirs.workspace, 'rev-parse', 'HEAD')).toBe(main);
+    });
+
+    it("pushes a missing base with the repository token's stored login", async () => {
+      const url = await origin();
+      const login = {
+        host: 'github.com',
+        username: 'x-access-token',
+        password_env: 'GOAL_REPOSITORY_TOKEN',
+        store: true,
+      };
+      const { fake } = gatewayServing({
+        spec,
+        files: {},
+        repository: { url, branch: 'goal/24-first', base },
+        git_credentials: [login],
+      });
+      const { exec: real } = recorder();
+      // What git would sign in with when the push asks for the host's login, in the push's own
+      // environment: gitEnv, which has no GOAL_REPOSITORY_TOKEN.
+      let answer = '';
+      const exec: Exec = (command, args, opts) => {
+        if (args[0] === 'push') answer = fill('github.com', opts?.cwd);
+        return real(command, args, opts);
+      };
+
+      await prepare(depsWith(fake, exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t' }));
+
+      expect(answer).toContain('username=x-access-token\npassword=acme-s3cr3t\n');
     });
 
     it('uses the base branch another run pushed first', async () => {
@@ -552,6 +823,38 @@ describe('prepare', () => {
     expect(ask('store', { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t' })).toBe('');
   });
 
+  it("keeps a stored login in git's credential store under the home, outside the workspace", async () => {
+    const login = { host: 'gitlab.com', username: 'oauth2', password_env: 'GOAL_REPOSITORY_TOKEN', store: true };
+    const { fake } = gatewayServing({ spec, files: {}, git_credentials: [login] });
+
+    await prepare(depsWith(fake, recorder().exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t/+' }));
+
+    // A later git command, the agent's push, runs without the variable and still signs in.
+    expect(fill('gitlab.com')).toContain('username=oauth2\npassword=acme-s3cr3t/+\n');
+    const helper = execFileSync('git', ['config', '--global', '--get', 'credential.https://gitlab.com.helper'], {
+      env: gitEnv(),
+      encoding: 'utf8',
+    });
+    expect(helper).not.toContain('s3cr3t');
+    const store = join(home, '.git-credentials');
+    expect((await stat(store)).mode & 0o777).toBe(0o600);
+    expect(existsSync(dirs.workspace) ? readdirSync(dirs.workspace) : []).toEqual([]);
+  });
+
+  it('stores nothing for a stored login whose variable is unset', async () => {
+    const login = {
+      host: 'github.com',
+      username: 'x-access-token',
+      password_env: 'GOAL_REPOSITORY_TOKEN',
+      store: true,
+    };
+    const { fake } = gatewayServing({ spec, files: {}, git_credentials: [login] });
+
+    await prepare(depsWith(fake, recorder().exec));
+
+    expect(fill('github.com')).not.toContain('password=');
+  });
+
   it('fails when the gateway refuses the bundle', async () => {
     const { fake } = gatewayServing('forbidden\n', 403);
     await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('GET /run: 403 forbidden');
@@ -645,23 +948,12 @@ describe('prepare', () => {
       }
     });
 
-    it('refuses a judge with a repository, a definition or a draft request', async () => {
-      const judge = {
-        slug: 'evidence',
-        rubric: '# Evidence\n',
-        outcomes: [{ score: 1, label: 'complete', meaning: 'All there.' }],
-        pass_mark: 0.6,
-        material: { kind: 'eval_try', brief: 'b', output: 'o', diff: '' },
-      };
-      const judgeSpec = { ...spec, item_id: '', station: '', judge };
+    it('refuses a grade with a repository or a definition, and writes its block to spec.json', async () => {
+      const grade = { reason: 'It returned 500.', result: { kind: 'try', output: 'o', diff: '' } };
+      const gradeSpec = { ...spec, item_id: '', station: '', grade };
       for (const bundle of [
-        { spec: judgeSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
-        { spec: judgeSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
-        {
-          spec: { ...judgeSpec, draft_request: draftSpec.draft_request },
-          files: {},
-          definition: { files: { 'factory.yaml': b64(factory) } },
-        },
+        { spec: gradeSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
+        { spec: gradeSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
       ]) {
         const { exec, calls } = recorder();
         await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
@@ -669,18 +961,12 @@ describe('prepare', () => {
       }
 
       const { exec } = recorder();
-      await prepare(depsWith(gatewayServing({ spec: judgeSpec, files: {} }).fake, exec));
-      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).judge).toEqual(judge);
+      await prepare(depsWith(gatewayServing({ spec: gradeSpec, files: {} }).fake, exec));
+      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).grade).toEqual(grade);
     });
 
-    it('refuses a jonah review with a repository or a definition, and passes its spec on', async () => {
-      const jonah = {
-        files: [],
-        events: [],
-        rejected: [],
-        propose_after: 5,
-        manual: false,
-      };
+    it('refuses a jonah review with a repository or a definition, and writes its box and spec', async () => {
+      const jonah = { propose_after: 5, manual: false };
       const jonahSpec = { ...spec, item_id: '', station: '', jonah };
       for (const bundle of [
         { spec: jonahSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
@@ -692,8 +978,15 @@ describe('prepare', () => {
       }
 
       const { exec } = recorder();
-      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: {} }).fake, exec));
+      const box = {
+        'definition/factory.yaml': b64(factory),
+        'evidence/README.md': b64('# Evidence\n'),
+        'events.md': b64('# Sent-back events\n'),
+      };
+      await prepare(depsWith(gatewayServing({ spec: jonahSpec, files: box }).fake, exec));
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).jonah).toEqual(jonah);
+      expect(await readFile(join(dirs.goal, 'definition', 'factory.yaml'), 'utf8')).toBe(factory);
+      expect(await readFile(join(dirs.goal, 'evidence', 'README.md'), 'utf8')).toBe('# Evidence\n');
     });
 
     it('still needs an item outside definition mode', async () => {
@@ -707,5 +1000,72 @@ describe('prepare', () => {
     const missing = `file://${join(root, 'no-such.git')}`;
     const { fake } = gatewayServing({ spec, files: {}, repository: { url: missing, branch: 'goal/1-x' } });
     await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('git clone exited 128');
+  });
+});
+
+describe('prepare: a try of a past item', () => {
+  it('fully clones, fetches the recorded commits by SHA, checks the branch out at the commit and brings it up to date with the base commit', async () => {
+    const branch = 'goal/20-try';
+    const url = await origin(branch, { moved: { 'main.txt': 'from main\n' } });
+    const bare = join(root, 'origin.git');
+    const commit = git(bare, 'rev-parse', `refs/heads/${branch}`);
+    const base = git(bare, 'rev-parse', 'refs/heads/main');
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, commit, base_commit: base } });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(depsWith(fake, exec));
+
+    expect(prepared).toMatchObject({ branch, branch_head: commit, base_head: base, fresh_base: 'rebase' });
+    const clone = calls.find((c) => c.args[0] === 'clone');
+    expect(clone?.args).not.toContain('--filter=blob:none');
+    expect(calls).toContainEqual({
+      command: 'git',
+      args: ['fetch', '--quiet', 'origin', commit, base],
+      cwd: dirs.workspace,
+    });
+    const ws = dirs.workspace;
+    expect(git(ws, 'branch', '--show-current')).toBe(branch);
+    expect(git(ws, 'merge-base', '--is-ancestor', base, 'HEAD')).toBe('');
+    expect(git(ws, 'rev-parse', 'refs/goal/try-start')).toBe(git(ws, 'rev-parse', 'HEAD'));
+  });
+
+  it('drops the stored login and every credential helper before the agent runs', async () => {
+    const branch = 'goal/21-try';
+    const url = await origin(branch);
+    const commit = git(join(root, 'origin.git'), 'rev-parse', `refs/heads/${branch}`);
+    const login = {
+      host: 'github.com',
+      username: 'x-access-token',
+      password_env: 'GOAL_REPOSITORY_TOKEN',
+      store: true,
+    };
+    const other = { host: 'gitlab.com', username: 'oauth2', password_env: 'GITLAB_TOKEN' };
+    const { fake } = gatewayServing({
+      spec,
+      files: {},
+      repository: { url, branch, commit },
+      git_credentials: [login, other],
+    });
+
+    await prepare(
+      depsWith(fake, recorder().exec, { GOAL_REPOSITORY_TOKEN: 'acme-s3cr3t', GITLAB_TOKEN: 'acme-other' }),
+    );
+
+    expect(existsSync(join(home, '.git-credentials'))).toBe(false);
+    expect(fill('github.com')).not.toContain('password=');
+    expect(fill('gitlab.com')).not.toContain('password=');
+    const config = execFileSync('git', ['config', '--global', '--list'], { env: gitEnv(), encoding: 'utf8' });
+    expect(config).not.toContain('credential.');
+  });
+
+  it('fails, naming the commit, when the remote no longer has it', async () => {
+    const branch = 'goal/22-try';
+    const url = await origin(branch);
+    const gone = 'f'.repeat(40);
+    const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch, commit: gone } });
+
+    await expect(prepare({ ...depsWith(fake, recorder().exec), sleep: async () => undefined })).rejects.toThrow(
+      `commit ${gone} is gone from the remote`,
+    );
   });
 });

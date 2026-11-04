@@ -1,20 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type {
-  Connection,
-  components,
-  KnowledgeDocumentList,
-  KnowledgeDocumentPage,
-  KnowledgeSearchResult,
-  KnowledgeSource,
-  KnowledgeSourceList,
-  Problem,
-} from '@goal/api-client';
+import type { Connection, KnowledgeFilePage, KnowledgeSource, KnowledgeSourceList, Problem } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
-
-type KnowledgeUsage = components['schemas']['KnowledgeUsage'];
-type KnowledgeDocumentUsePage = components['schemas']['KnowledgeDocumentUsePage'];
 
 let api: MockApi;
 let server: Server;
@@ -56,45 +44,21 @@ async function call<T>(path: string, method = 'GET', body?: unknown): Promise<{ 
 async function upload<T>(source: string, files: Record<string, string>): Promise<{ status: number; body: T }> {
   const form = new FormData();
   for (const [name, text] of Object.entries(files)) form.append('files', new Blob([text]), name);
-  const res = await fetch(`${base}${sources}/${source}/documents`, { method: 'POST', body: form });
+  const res = await fetch(`${base}${sources}/${source}/uploads`, { method: 'POST', body: form });
   return { status: res.status, body: (await res.json()) as T };
 }
 
 describe('the mock knowledge base', () => {
-  it('starts acme with the three synced sources the knowledge picture shows, searched as agents search', async () => {
+  it('starts acme with the four sources the knowledge picture shows', async () => {
     const { body } = await call<KnowledgeSourceList>(sources);
-    expect(body.sources.map((s) => [s.name, s.kind, s.status, s.documents])).toEqual([
+    expect(body.sources.map((s) => [s.name, s.kind, s.status, s.latest_snapshot?.files ?? 0])).toEqual([
       ['dashboards', 'synced', 'failed', 1],
       ['goal-docs', 'synced', 'idle', 5],
+      ['product-specs', 'confluence', 'failed', 1],
       ['support-macros', 'synced', 'idle', 1],
     ]);
-    const hits = await call<KnowledgeSearchResult>('/v1/orgs/acme/knowledge/search?q=refunds');
-    expect(hits.body.hits.map((h) => [h.source, h.title])).toEqual([['support-macros', 'refund-policy.md']]);
-    const synced = await call<KnowledgeSearchResult>('/v1/orgs/acme/knowledge/search?q=latency&source=dashboards');
-    expect(synced.body.hits.map((h) => h.url)).toEqual(['https://github.com/acme/dashboards/blob/main/api-latency.md']);
-  });
-
-  it('serves goal-docs usage as the card pictures it, and each document’s runs with their items', async () => {
-    const usage = await call<KnowledgeUsage>('/v1/orgs/acme/knowledge/usage?source=goal-docs');
-    expect(usage.status).toBe(200);
-    expect(usage.body.documents.map((d) => [d.title, d.runs, d.agents_helped, d.agents_misled])).toEqual([
-      ['AGENTS.md', 212, 61, 0],
-      ['factory-definition.md', 64, 22, 1],
-      ['MASTER.md', 41, 9, 6],
-      ['testing.md', 33, 14, 0],
-    ]);
-    expect((await call(`/v1/orgs/acme/knowledge/usage?source=nope`)).status).toBe(404);
-
-    const id = usage.body.documents[2]?.id ?? '';
-    const uses = await call<KnowledgeDocumentUsePage>(`/v1/orgs/acme/knowledge/documents/${id}/uses`);
-    expect(uses.status).toBe(200);
-    expect(uses.body.uses).toHaveLength(41);
-    const first = uses.body.uses[0];
-    expect(first?.item.ref).toMatch(/^[a-z-]+#\d+$/);
-    expect(first?.factory.name).toBeTruthy();
-    expect((await call(`/v1/orgs/acme/knowledge/documents/nope/uses`)).body).toMatchObject({
-      code: 'knowledge-document-not-found',
-    });
+    const files = await call<KnowledgeFilePage>(`${sources}/goal-docs/files`);
+    expect(files.body.files.map((f) => f.path)).toContain('AGENTS.md');
   });
 
   it('names the factories whose current version lists a source, and keeps it while they do', async () => {
@@ -123,25 +87,38 @@ describe('the mock knowledge base', () => {
     expect((await call<KnowledgeSource>(`${sources}/handbook`)).body.updated_at).not.toBe(uploaded);
   });
 
-  it('uploads files, indexes them, serves the original as an attachment and deletes them', async () => {
+  it('uploads files, lists them as files and deletes them', async () => {
     await call(sources, 'POST', { name: 'handbook', title: 'Handbook', kind: 'upload' });
-    const up = await upload<KnowledgeDocumentList>('handbook', { 'leave.md': '# Leave\n\nAsk your lead.' });
+    const up = await upload<{ files: { path: string; bytes: number }[] }>('handbook', {
+      'leave.md': '# Leave\n\nAsk your lead.',
+    });
     expect(up.status).toBe(202);
-    expect(up.body.documents).toMatchObject([{ title: 'leave.md', status: 'pending', source: 'handbook' }]);
-    const id = up.body.documents[0]?.id ?? '';
+    expect(up.body.files).toMatchObject([{ path: 'leave.md' }]);
 
-    const page = await call<KnowledgeDocumentPage>(`${sources}/handbook/documents`);
-    expect(page.body.documents.find((d) => d.id === id)?.status).toBe('indexed');
+    const page = await call<KnowledgeFilePage>(`${sources}/handbook/files`);
+    expect(page.body.files.map((f) => f.path)).toEqual(['leave.md']);
 
-    const content = await fetch(`${base}/v1/orgs/acme/knowledge/documents/${id}/content`);
-    expect(content.headers.get('content-disposition')).toBe('attachment; filename="leave.md"');
-    expect(content.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(await content.text()).toBe('# Leave\n\nAsk your lead.');
-
-    expect((await call(`/v1/orgs/acme/knowledge/documents/${id}`, 'DELETE')).status).toBe(204);
-    expect((await call<Problem>(`/v1/orgs/acme/knowledge/documents/${id}`)).body.code).toBe(
-      'knowledge-document-not-found',
+    expect((await call(`${sources}/handbook/uploads?path=leave.md`, 'DELETE')).status).toBe(204);
+    expect((await call<Problem>(`${sources}/handbook/uploads?path=leave.md`, 'DELETE')).body.code).toBe(
+      'knowledge-file-not-found',
     );
+  });
+
+  it('takes sync_every_seconds 0 with no next sync, and stores a Confluence root_page', async () => {
+    const made = await call<KnowledgeSource>(sources, 'POST', {
+      name: 'wiki-pages',
+      title: 'Wiki pages',
+      kind: 'confluence',
+      secret: 'confluence-token',
+      sync_every_seconds: 0,
+      config: { site: 'https://acme.atlassian.net', email: 'bot@example.com', spaces: 'ENG', root_page: '777' },
+    });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ sync_every_seconds: 0, next_sync_at: null, config: { root_page: '777' } });
+    const later = await call<KnowledgeSource>(`${sources}/wiki-pages`, 'PATCH', { sync_every_seconds: 3600 });
+    expect(later.body.next_sync_at).not.toBeNull();
+    const back = await call<KnowledgeSource>(`${sources}/wiki-pages`, 'PATCH', { sync_every_seconds: 0 });
+    expect(back.body.next_sync_at).toBeNull();
   });
 
   it('refuses as goald does', async () => {
@@ -163,14 +140,13 @@ describe('the mock knowledge base', () => {
       ],
       [sources, 'POST', { name: 'notes', title: 'Notes', kind: 'upload', sync_every_seconds: 60 }, 400],
       [`${sources}/nothing`, 'GET', undefined, 404, 'knowledge-source-not-found'],
-      ['/v1/orgs/acme/knowledge/search?q=x&source=wiki', 'GET', undefined, 404, 'knowledge-source-not-found'],
     ];
     for (const [path, method, body, status, code] of refusals) {
       const res = await call<Problem>(path, method, body);
       expect([path, res.status, res.body.code]).toEqual([path, status, code]);
     }
     await call(sources, 'POST', { name: 'handbook', title: 'Handbook', kind: 'upload' });
-    const deck = await upload<Problem>('handbook', { 'deck.pptx': 'PK' });
+    const deck = await upload<Problem>('handbook', { 'deck.key': 'PK' });
     expect([deck.status, deck.body.code]).toEqual([415, 'unsupported-document-type']);
   });
 
@@ -185,5 +161,17 @@ describe('the mock knowledge base', () => {
     expect((await call<Problem>(`${sources}/repo-search/sync`, 'POST')).body.code).toBe('knowledge-source-live');
     const github = await call<Connection>('/v1/orgs/acme/connections/github');
     expect(github.body.used_by.knowledge_sources).toEqual(['dashboards', 'goal-docs', 'support-macros', 'repo-search']);
+  });
+
+  it('answers a check with the first files, at most 8 and no more than the file count', async () => {
+    const { status, body } = await call<{ files: number; first_files: string[] }>(
+      '/v1/orgs/acme/knowledge/check',
+      'POST',
+      { name: 'runbooks', kind: 'repository', read_when: 'Before acting.', factories: [] },
+    );
+    expect(status).toBe(200);
+    expect(body.first_files.length).toBeGreaterThan(0);
+    expect(body.first_files.length).toBeLessThanOrEqual(8);
+    expect(body.first_files.length).toBeLessThanOrEqual(body.files);
   });
 });

@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -22,6 +23,7 @@ func TestOrgPolicy_Validate(t *testing.T) {
 			p.DeniedCommands = []string{"Bash(terraform apply:*)", "Bash(git push --force:*)"}
 			p.WriteOutsideBranch, p.MergePullRequest, p.ReadWeb, p.UseCredentials = ToolOff, ToolOff, ToolAsk, ToolOff
 			p.BoxTimeLimitMinutes = 30
+			p.MCPToolModes = map[string]ConnectionToolMode{"*": ToolModeAsk, "delete_*": ToolModeOff, "get?.v2": ToolModeAllow}
 		}, true},
 		{"no allowed models", func(p *OrgPolicy) { p.AllowedModels = nil }, false},
 		{"a default outside the allowed models", func(p *OrgPolicy) { p.DefaultModel = "claude-other-1" }, false},
@@ -30,13 +32,24 @@ func TestOrgPolicy_Validate(t *testing.T) {
 		{"a duplicate model", func(p *OrgPolicy) { p.AllowedModels = append(p.AllowedModels, "claude-opus-5-5") }, false},
 		{"an unknown write value", func(p *OrgPolicy) { p.WriteOutsideBranch = ToolReviewApproval }, false},
 		{"an unknown merge value", func(p *OrgPolicy) { p.MergePullRequest = ToolAllowed }, false},
-		{"an unknown web value", func(p *OrgPolicy) { p.ReadWeb = ToolAttachedOnly }, false},
+		{"an unknown web value", func(p *OrgPolicy) { p.ReadWeb = ToolEnvironment }, false},
+		{"secrets from the environment", func(p *OrgPolicy) { p.UseCredentials = ToolEnvironment }, true},
+		{"the deprecated attached_only alias", func(p *OrgPolicy) { p.UseCredentials = ToolAttachedOnly }, true},
 		{"an unknown credentials value", func(p *OrgPolicy) { p.UseCredentials = ToolAsk }, false},
 		{"an empty tool value", func(p *OrgPolicy) { p.ReadWeb = "" }, false},
 		{"an empty denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{""} }, false},
 		{"a blank denied command", func(p *OrgPolicy) { p.DeniedCommands = []string{"Bash(rm -rf:*)", "  "} }, false},
 		{"a time limit of 0", func(p *OrgPolicy) { p.BoxTimeLimitMinutes = 0 }, false},
 		{"a negative time limit", func(p *OrgPolicy) { p.BoxTimeLimitMinutes = -5 }, false},
+		{"an unknown MCP tool mode", func(p *OrgPolicy) { p.MCPToolModes = map[string]ConnectionToolMode{"*": "maybe"} }, false},
+		{"an empty MCP tool mode", func(p *OrgPolicy) { p.MCPToolModes = map[string]ConnectionToolMode{"*": ""} }, false},
+		{"an empty MCP tool pattern", func(p *OrgPolicy) { p.MCPToolModes = map[string]ConnectionToolMode{"": ToolModeAsk} }, false},
+		{"an MCP tool pattern with a space", func(p *OrgPolicy) {
+			p.MCPToolModes = map[string]ConnectionToolMode{"delete *": ToolModeOff}
+		}, false},
+		{"an MCP tool pattern over 128 characters", func(p *OrgPolicy) {
+			p.MCPToolModes = map[string]ConnectionToolMode{strings.Repeat("a", 129): ToolModeOff}
+		}, false},
 	}
 
 	for _, tc := range tests {
@@ -71,9 +84,13 @@ func TestDefaultOrgPolicy(t *testing.T) {
 		t.Errorf("denied commands %v; want none", p.DeniedCommands)
 	}
 
+	if len(p.MCPToolModes) != 0 {
+		t.Errorf("MCP tool mode cap %v; want none", p.MCPToolModes)
+	}
+
 	if p.WriteOutsideBranch != ToolAsk || p.MergePullRequest != ToolReviewApproval || p.ReadWeb != ToolAllowed ||
-		p.UseCredentials != ToolAttachedOnly {
-		t.Errorf("tool defaults %q %q %q %q; want ask, review_approval, allowed, attached_only",
+		p.UseCredentials != ToolEnvironment {
+		t.Errorf("tool defaults %q %q %q %q; want ask, review_approval, allowed, environment",
 			p.WriteOutsideBranch, p.MergePullRequest, p.ReadWeb, p.UseCredentials)
 	}
 
@@ -100,5 +117,19 @@ func TestDefaultOrgPolicy_OwnsItsModels(t *testing.T) {
 
 	if d := DefaultOrgPolicy(nil); d.DefaultModel != "" || len(d.AllowedModels) != 0 {
 		t.Errorf("DefaultOrgPolicy(nil) = %+v; want no models", d)
+	}
+}
+
+// Normalized saves the deprecated attached_only as environment and keeps every other value.
+func TestOrgPolicy_Normalized(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[ToolSetting]ToolSetting{ToolAttachedOnly: ToolEnvironment, ToolEnvironment: ToolEnvironment, ToolOff: ToolOff} {
+		p := DefaultOrgPolicy(testPolicyModels)
+		p.UseCredentials = in
+
+		if got := p.Normalized().UseCredentials; got != want {
+			t.Errorf("Normalized() of %q = %q; want %q", in, got, want)
+		}
 	}
 }

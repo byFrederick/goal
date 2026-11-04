@@ -3,11 +3,15 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
+
+// definitionSlug is the shape of a station's or an agent's id in a definition.
+var definitionSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{1,38}[a-z0-9]$`)
 
 // ErrDraftRequestOpen means the factory already has a queued or running draft request: a factory
 // runs one at a time (ADR 0021, decision 4), and the API answers 409.

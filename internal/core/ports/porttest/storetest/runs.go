@@ -2,8 +2,10 @@ package storetest
 
 import (
 	"cmp"
+	"encoding/json"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -235,8 +237,8 @@ func testRunsJonahWithoutItem(f *fixture) {
 
 	sameRuns(t, []domain.Run{got}, []domain.Run{want})
 
-	if usd, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1); err != nil || usd != 0.5 {
-		t.Errorf("JonahSpendSince = %v, %v; want 0.5, the jonah run's cost", usd, err)
+	if s, err := f.Jonah.JonahSpendSince(f.ctx(t), f.factory, t1); err != nil || s.JonahUSD != 0.5 {
+		t.Errorf("JonahSpendSince = %+v, %v; want 0.5 of Jonah's, the jonah run's cost", s, err)
 	}
 
 	other := f.otherOrg(t)
@@ -254,5 +256,92 @@ func testRunsJonahWithoutItem(f *fixture) {
 			})
 			expect(t, "StartRun of a station run of item "+string(item), err, ports.ErrNotFound)
 		}
+	}
+}
+
+// testRunRecords: a run keeps what it was given (RecordRunInput) and its own output and pushed
+// head (FinishRun), and Run and Runs return them; empty values read back empty, and another
+// organization can record nothing on the run (ADR 0039, decision 8).
+func testRunRecords(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	t2 := t1.Add(time.Minute)
+	in := domain.RunInput{
+		Brief: "Add a button\n\nThe reviewer asked for tests.", BranchHead: strings.Repeat("a", 40), BaseHead: strings.Repeat("b", 40),
+	}
+	res := domain.RunResult{
+		Status: domain.RunSucceeded, Output: json.RawMessage(`{"lane":"backend","n":1}`), CostUSD: 0.5, PushedHead: strings.Repeat("c", 40),
+	}
+
+	first := f.recordedRun(t, it.ID, t1, in, res)
+
+	got, err := f.Store.Run(f.ctx(t), first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Input != in || got.Result.PushedHead != res.PushedHead {
+		t.Errorf("Run input = %+v, pushed head %q; want %+v, %q", got.Input, got.Result.PushedHead, in, res.PushedHead)
+	}
+
+	if g, w := normalJSON(t, got.Result.Output), normalJSON(t, res.Output); g != w {
+		t.Errorf("Run output = %s; want %s", g, w)
+	}
+
+	// A retry in the claim's box: its own brief, no heads; a failed run, no output.
+	retryIn := domain.RunInput{Brief: "Add a button"}
+	f.recordedRun(t, it.ID, t2, retryIn, domain.RunResult{Status: domain.RunFailed, Error: "no"})
+
+	runs, err := f.Store.Runs(f.ctx(t), it.ID, 10)
+	if err != nil || len(runs) != 2 {
+		t.Fatalf("Runs = %+v, %v; want two", runs, err)
+	}
+
+	if r := runs[1]; r.Input != retryIn || r.Result.PushedHead != "" || r.Result.Output != nil {
+		t.Errorf("Runs' retry = input %+v, pushed head %q, output %s; want only its brief", r.Input, r.Result.PushedHead, r.Result.Output)
+	}
+
+	if runs[0].Input != in {
+		t.Errorf("Runs' first run input = %+v; want %+v", runs[0].Input, in)
+	}
+
+	f.expectNoRunRecords(t, it.ID, in)
+}
+
+// recordedRun starts a run of item at at, records in and finishes it with res.
+func (f *fixture) recordedRun(t *testing.T, item domain.ItemID, at time.Time, in domain.RunInput, res domain.RunResult) domain.RunID {
+	t.Helper()
+
+	id := f.startRun(t, item, at)
+	if err := f.Store.RecordRunInput(f.ctx(t), id, in); err != nil {
+		t.Fatalf("RecordRunInput: %v", err)
+	}
+
+	if err := f.Store.FinishRun(f.ctx(t), id, res, at); err != nil {
+		t.Fatal(err)
+	}
+
+	return id
+}
+
+// expectNoRunRecords: a run that records nothing reads back empty, an unknown run and another
+// organization's record nothing.
+func (f *fixture) expectNoRunRecords(t *testing.T, item domain.ItemID, in domain.RunInput) {
+	t.Helper()
+
+	bare := f.startRun(t, item, t1)
+	if got, err := f.Store.Run(f.ctx(t), bare); err != nil || got.Input != (domain.RunInput{}) || got.Result.PushedHead != "" {
+		t.Errorf("Run without records = %+v, %v; want no input and no pushed head", got, err)
+	}
+
+	err := f.Store.RecordRunInput(f.ctx(t), missingRun, in)
+	expect(t, "RecordRunInput of an unknown run", err, ports.ErrNotFound)
+
+	err = f.Store.RecordRunInput(f.otherOrg(t).ctx(t), bare, in)
+	expect(t, "RecordRunInput of another org's run", err, ports.ErrNotFound)
+
+	if got, err := f.Store.Run(f.ctx(t), bare); err != nil || got.Input != (domain.RunInput{}) {
+		t.Errorf("Run after another org's RecordRunInput = %+v, %v; want no input", got.Input, err)
 	}
 }

@@ -59,7 +59,7 @@ func draftRequestOf(status gen.DraftRequestStatus) gen.DraftRequest {
 func TestFactoryAsk_PrintsIDAndStatus(t *testing.T) {
 	t.Parallel()
 
-	srv, sent := evalGoald(t, map[string]evalAnswer{
+	srv, sent := routeGoald(t, map[string]goaldAnswer{
 		"POST " + webDraftRequests: {http.StatusCreated, draftRequestOf(gen.DraftRequestStatusQueued)},
 	})
 
@@ -151,7 +151,7 @@ func TestFactoryAsk_WaitFailsWithTheRequestsError(t *testing.T) {
 func TestFactoryAsk_WaitStopsOnCtrlC(t *testing.T) {
 	t.Parallel()
 
-	srv, _ := evalGoald(t, map[string]evalAnswer{
+	srv, _ := routeGoald(t, map[string]goaldAnswer{
 		"GET " + webDraftRequests + "/" + askID: {http.StatusOK, draftRequestOf(gen.DraftRequestStatusRunning)},
 	})
 
@@ -173,7 +173,7 @@ func TestFactoryAsk_ExplainsAnOpenRequest(t *testing.T) {
 
 	code := "draft-request-open"
 	detail := "the factory already has a queued or running draft request"
-	srv, _ := evalGoald(t, map[string]evalAnswer{
+	srv, _ := routeGoald(t, map[string]goaldAnswer{
 		"POST " + webDraftRequests: {http.StatusConflict, gen.Problem{Status: http.StatusConflict, Title: http.StatusText(http.StatusConflict), Code: &code, Detail: &detail}},
 	})
 

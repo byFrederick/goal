@@ -520,10 +520,15 @@ func (s *server) ListConnectionRepositories(ctx context.Context, req gen.ListCon
 
 	rc := resolved[0]
 
+	login, err := rc.CodeHostLogin()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", errCodeHost, scrub(err.Error(), rc))
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, repositoriesTimeout)
 	defer cancel()
 
-	list, err := ch.Repositories(ctx, rc, deref(req.Params.Owner))
+	list, err := ch.Repositories(ctx, login, deref(req.Params.Owner))
 
 	switch {
 	case errors.Is(err, errors.ErrUnsupported):
@@ -645,6 +650,8 @@ func (s *server) usersBy(ctx context.Context, names func(*config.Factory) []stri
 type factoryUse struct {
 	id   domain.FactoryID
 	name string
+	// scope is who reads a knowledge source in the factory; zero for every run.
+	scope domain.RuleScope
 }
 
 // inUse refuses a change of the connection name while factories name it, naming them.

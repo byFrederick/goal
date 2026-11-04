@@ -146,7 +146,7 @@ const (
 kind: Factory
 metadata: { id: ` + reviewID + `, name: review }
 spec:
-  runtime: { modelConnection: claude }
+  runtime: { modelKey: "{{claude-key}}" }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -165,7 +165,7 @@ spec:
 func (h *harness) publishReview(t *testing.T) {
 	t.Helper()
 
-	files := textFiles(map[string]string{yamlFile: review, writerFile: writerPrompt})
+	files := textFiles(map[string]string{yamlFile: review, writerFile: writerPrompt, defaultEnvFile: defaultEnv})
 	decode[gen.Factory](t, h.request(t, http.MethodPost, factoriesPath, body(t, map[string]any{
 		"start": map[string]any{"kind": authoring.StartImport, "keep_id": true, filesKey: files},
 	}), nil), http.StatusCreated)
@@ -194,7 +194,7 @@ func (h *harness) verdicts(t *testing.T, at time.Time, reasons map[bool][]string
 
 	for rejected, list := range reasons {
 		for _, reason := range list {
-			e := domain.Event{FactoryID: reviewID, ItemID: it.ID, At: at, Kind: domain.EventGateApproved, Station: stCheck, Actor: evalAgent}
+			e := domain.Event{FactoryID: reviewID, ItemID: it.ID, At: at, Kind: domain.EventGateApproved, Station: stCheck, Actor: writerAgent}
 			if rejected {
 				e.Kind, e.Data = domain.EventGateRejected, map[string]any{"reason": reason}
 			}

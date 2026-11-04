@@ -1,9 +1,11 @@
 package domain
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -66,8 +68,11 @@ type Line struct {
 	// an agent's runs get the ones its AgentSpec.Connections names, besides the runtime's model
 	// and repository connections, and merges use those whose kind has a code host.
 	Connections []string
-	// KnowledgeSources are the organization's knowledge sources the factory's agents may search.
-	KnowledgeSources []string
+	// Knowledge are the organization's knowledge sources the factory's runs read (knowledge.sources,
+	// ADR 0038 decision 5), in the order the definition lists them, and Memory its factory memory
+	// (memory.yaml, decision 6).
+	Knowledge []KnowledgeEntry
+	Memory    []MemoryFact
 	// Rules are the factory rules the version declares (spec.rules, ADR 0014), in declaration
 	// order; a violation an output reports counts only when it names one of them.
 	Rules []Rule
@@ -79,17 +84,21 @@ type Line struct {
 	// Jonah is learning.jonah, the policy of the reviews that turn sent-back runs into
 	// proposals (ADR 0034), with DefaultJonahPolicy's values for the keys a definition leaves out.
 	Jonah JonahPolicy
+	// Environments are the version's environment files (ADR 0037 decision 5), by name; none for
+	// a version published before, which runs on connections (OnSecrets).
+	Environments []Environment
 }
 
-// JonahPolicy is when and how a factory's Jonah reviews run (ADR 0034).
+// JonahPolicy is when and how a factory's Jonah reviews run (ADR 0034, ADR 0039 decision 17).
 type JonahPolicy struct {
 	// Enabled says whether sent-back runs queue reviews at all.
 	Enabled bool
 	// ProposeAfter is both the number of sent-back touches that queue a review and the number of
 	// times an observation is seen before it becomes a proposal.
 	ProposeAfter int
-	// WeeklyUSD caps what the review runs cost over the last 7 days.
-	WeeklyUSD float64
+	// Share is learning.jonah.share as a fraction (5% is 0.05): Jonah's budget is this share of
+	// what the line spent over the last JonahBudgetWindow (ADR 0039 decision 16).
+	Share float64
 	// Model is the review run's model: learning.jonah.model, else runtime.model; empty when both
 	// are, and the run then takes the organization's default model, as an agent without one does.
 	Model string
@@ -97,21 +106,68 @@ type JonahPolicy struct {
 
 // DefaultJonahPolicy is the policy of a factory whose definition sets no learning.jonah key.
 func DefaultJonahPolicy() JonahPolicy {
-	return JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10}
+	return JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05}
+}
+
+// jonahReviewShare is the part of Jonah's budget one review may spend (ADR 0039 decision 16).
+const jonahReviewShare = 0.2
+
+// minJonahCap is the smallest cost cap a review run gets, so its cap is never absent: a run's
+// max_usd of 0 is no cap.
+const minJonahCap = 0.01
+
+// JonahSpend is what a factory spent over Jonah's budget window: LineUSD on every run but
+// Jonah's, JonahUSD on Jonah's runs.
+type JonahSpend struct {
+	LineUSD  float64
+	JonahUSD float64
+}
+
+// JonahBudget is a factory's Jonah budget at one moment (ADR 0039 decision 16).
+type JonahBudget struct {
+	// BudgetUSD is Share × the line's spend over the window.
+	BudgetUSD float64
+	// SpentUSD is what Jonah's runs cost over the window.
+	SpentUSD float64
+	// PerReviewUSD caps one review: a fifth of BudgetUSD.
+	PerReviewUSD float64
+}
+
+// Budget measures s against p's share of the line's spend.
+func (p JonahPolicy) Budget(s JonahSpend) JonahBudget {
+	budget := p.Share * s.LineUSD
+
+	return JonahBudget{BudgetUSD: budget, SpentUSD: s.JonahUSD, PerReviewUSD: budget * jonahReviewShare}
+}
+
+// Exhausted reports whether Jonah's runs reached the budget: reviews wait until the window
+// moves on. A budget of 0, as for a line that spent nothing, is always exhausted.
+func (b JonahBudget) Exhausted() bool { return b.SpentUSD >= b.BudgetUSD }
+
+// ReviewCap is the cost cap of a review run: what the budget has left, at most PerReviewUSD and
+// at least a cent.
+func (b JonahBudget) ReviewCap() float64 {
+	return max(min(b.BudgetUSD-b.SpentUSD, b.PerReviewUSD), minJonahCap)
 }
 
 // Refusal is why no run of the line can start, "" when runs can: since the cutover to
-// connections (spec 4 §14, step 5) a version that still has a form connections replaced, or one
-// that names no runtime.modelConnection (the only way a run gets its model), is refused, and the
-// engine blocks its items with this reason.
+// connections (spec 4 §14, step 5) a version that still has a form connections replaced is
+// refused, and so is one that names nothing that gives every run its model: runtime.modelKey on
+// secrets (ADR 0037 decision 7), runtime.modelConnection on connections. The engine blocks its
+// items with this reason, whose fix names environment files and secrets.
 func (l Line) Refusal() string {
-	const fix = "publish a version with connections (spec 4 §4.4); goal factory validate and the builder show the fix of each problem"
+	const fix = "publish a version on environment files and secrets (ADR 0037): runtime.modelKey names the {{secret}} " +
+		"that holds the model's key; goal factory validate and the builder show the fix of each problem"
 
 	switch {
 	case len(l.Removed) > 0:
 		return fmt.Sprintf("version %d still has %s, which connections replaced: %s", l.Number, strings.Join(l.Removed, ", "), fix)
-	case l.Runtime.ModelConnection == "":
-		return fmt.Sprintf("version %d names no runtime.modelConnection, which gives every run its model: %s", l.Number, fix)
+	case l.OnSecrets() && l.Runtime.ModelKey == "":
+		return fmt.Sprintf("version %d has environment files but names no runtime.modelKey, which gives every run its model: "+
+			"set it to the {{secret}} that holds the model's key", l.Number)
+	case !l.OnSecrets() && l.Runtime.ModelConnection == "":
+		return fmt.Sprintf("version %d names neither runtime.modelKey nor runtime.modelConnection, one of which gives every run its model: %s",
+			l.Number, fix)
 	default:
 		return ""
 	}
@@ -133,8 +189,11 @@ func (l Line) MergeConnections() []string {
 type Runtime struct {
 	Model string // default model; an agent's own Model wins
 	// ModelConnection is the organization connection, of a kind with model access, that gives
-	// every run its model.
+	// every run of a version on connections its model.
 	ModelConnection string
+	// ModelKey is the {{secret}} that gives every run of a version on secrets its model (ADR 0037
+	// decision 7).
+	ModelKey string
 	// Size is how much CPU and memory each run's sandbox gets; empty is medium.
 	Size SandboxSize
 	// Tools are mise tool specs every run installs after the repository's own.
@@ -155,9 +214,32 @@ type Runtime struct {
 type Repository struct {
 	// URL is an https clone URL without credentials.
 	URL string
-	// Connection is the organization connection that clones and merges it; empty for a public
-	// repository.
+	// Connection is the organization connection that clones and merges it on connections; empty
+	// for a public repository.
 	Connection string
+	// Token is the {{secret}} that clones and merges it on secrets, and Forge its forge on a host
+	// other than github.com and gitlab.com (ADR 0037 decision 12); both empty on connections.
+	Token, Forge string
+}
+
+// knownForges are the code hosts whose host names say which adapter serves them; any other host
+// needs runtime.repository.forge (ADR 0037 decision 12).
+var knownForges = map[string]string{"github.com": "github", "gitlab.com": "gitlab"}
+
+// KnownForge is the code host adapter host's name says (github or gitlab), or "" for a host
+// whose adapter only runtime.repository.forge names.
+func KnownForge(host string) string { return knownForges[strings.ToLower(host)] }
+
+// CodeHost is the host of r's URL in lower case, with its port if it has one, and the code host
+// adapter that serves it: Forge, else the one the host's name says (KnownForge). forge is ""
+// when neither says, and both are "" when the URL has no host.
+func (r Repository) CodeHost() (host, forge string) {
+	u, err := url.Parse(r.URL)
+	if err != nil || u.Host == "" {
+		return "", ""
+	}
+
+	return strings.ToLower(u.Host), cmp.Or(r.Forge, KnownForge(u.Hostname()))
 }
 
 // Station is one step of the line.
@@ -216,6 +298,8 @@ type AgentSpec struct {
 	PerItemUSD  float64
 	Skills      []SkillRef
 	Connections []string
+	// Environment is the environment file the agent's box gets on secrets; "" is DefaultEnvironment.
+	Environment string
 	ToolsAllow  []string
 	ToolsDeny   []string
 }
@@ -400,6 +484,10 @@ func (s Station) Arrival() ItemState {
 
 // CanRework reports whether an item already reworked reworkCount times may go back again.
 func (g Gate) CanRework(reworkCount int) bool { return reworkCount < g.MaxRework }
+
+// ReadsFiles reports whether the agent may read files: its builtins.read is not off, so Read is
+// not among its deny rules. An agent that may not gets no knowledge (ADR 0038 decision 7).
+func (a AgentSpec) ReadsFiles() bool { return !slices.Contains(a.ToolsDeny, "Read") }
 
 // Limits are the caps of one task of this agent: its own, else the runtime's.
 func (a AgentSpec) Limits(rt Runtime) (maxTurns int, perItemUSD float64) {

@@ -509,8 +509,8 @@ func (f *fixture) spendSince(t *testing.T, factory domain.FactoryID, since time.
 	return usd
 }
 
-// SpendSince sums the cost of the factory's runs started at or after since, the bound included;
-// a run still running costs nothing yet, and other factories' runs do not count.
+// SpendSince sums the cost of the factory's runs started at or after since, the bound included,
+// but Jonah's (testJonahSpend); a run still running costs nothing yet, and other factories' runs do not count.
 func testSpendSince(f *fixture) {
 	t := f.t
 	since := t1

@@ -273,6 +273,20 @@ func parseID(kind, id string) (uuid.UUID, error) {
 	return u, nil
 }
 
+// optionalID parses a domain id that may be empty; a non-empty one that is not a UUID is not found.
+func optionalID(kind, id string) (*uuid.UUID, error) {
+	if id == "" {
+		return nil, nil
+	}
+
+	u, err := parseID(kind, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &u, nil
+}
+
 // newID returns a UUIDv7: time-ordered, so new rows land at the right edge of the index.
 func newID() (uuid.UUID, error) {
 	id, err := uuid.NewV7()

@@ -136,7 +136,7 @@ export function StartStep({ search }: { search: StartSearch }) {
     <>
       <WizardHeader
         title="New factory"
-        description="Everything about a factory is set here: its line, agents, prompts, skills and connections. Nothing goes in code or environment variables. Your draft saves as you go."
+        description="Everything about a factory is set here: its line, agents, prompts, skills and environments. Nothing goes in code or environment variables. Your draft saves as you go."
         actions={
           <WizardViewToggle
             yaml={yaml && !yamlUnavailable}
@@ -251,7 +251,7 @@ function startOptions(kind: StartKind, hasBlankTemplate: boolean) {
       return {
         value: kind,
         label: 'Clone a factory',
-        description: 'Copy a factory of this organization without its items, history or credentials.',
+        description: 'Copy a factory of this organization without its items, history or secrets.',
         icon: <Copy {...icon} />,
       };
     case 'yaml':

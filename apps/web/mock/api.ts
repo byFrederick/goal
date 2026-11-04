@@ -60,12 +60,11 @@ import type {
 } from '@goal/api-client';
 import { parse } from 'yaml';
 import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
+import { createAccess } from './access.ts';
 import { authSettings, createMockAuth } from './auth.ts';
-import { createBakeOffs } from './bake-offs.ts';
 import { createConnections } from './connections.ts';
-import { createCredentials } from './credentials.ts';
 import { createDefinitions } from './definitions.ts';
-import { createEvals } from './evals.ts';
+import { createEnvironments, serveCatalog } from './environments.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
 import {
   acmeOrg,
@@ -81,15 +80,17 @@ import {
 import { constraintOf, type DayRange, type FlowInput, leadTimeOf, metricsOf, rangeOf, weeklyOf } from './flow.ts';
 import { intakeOf } from './intake.ts';
 import { createJonah } from './jonah.ts';
-import { createJudges } from './judges.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
+import { createOrgNotifications } from './org-notifications.ts';
 import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
 import { orgRunsOf, runsCsvOf } from './runs.ts';
 import { type SearchSource, search } from './search.ts';
+import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
+import { createStandingRules } from './standing-rules.ts';
 import { starterItem } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
@@ -307,7 +308,26 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
-  const credentials = createCredentials({
+  const environments = createEnvironments({
+    clock,
+    fileText: (org, factory, path) => definitions.fileText(org, factory, path),
+  });
+  const access = createAccess({ clock, acme: acmeOrg });
+
+  const secrets = createSecrets({
+    clock,
+    actor: (req) => auth.actor(req),
+    stale: (req, res) => stale(req, res),
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
+  });
+
+  const orgNotifications = createOrgNotifications({
+    secretNames: (org) => secrets.outlines(org).map((s) => s.name),
+    acme: acmeOrg,
+  });
+
+  const standingRules = createStandingRules({
     clock,
     actor: (req) => auth.actor(req),
     stale: (req, res) => stale(req, res),
@@ -330,17 +350,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
-  const evals = createEvals({
-    clock,
-    factory: (org, key) => findFactory(key, org),
-  });
-  const bakeOffs = createBakeOffs({
-    clock,
-    factory: (org, key) => findFactory(key, org),
-  });
-  const judges = createJudges({
-    factory: (org, key) => findFactory(key, org),
-  });
   const jonah = createJonah({
     factory: (org, key) => findFactory(key, org),
     clock,
@@ -973,6 +982,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       connections: caller.can?.includes('connection:read')
         ? connections.outlines(org.id).map((c) => ({ name: c.name, kind: c.kind }))
         : [],
+      // goald answers secrets only with secret:read; the mock's caller holds every org permission
+      // that matters here, so it finds them, metadata only.
+      secrets: secrets.outlines(org.id).map((s) => ({ name: s.name, scope: s.scope, expires_at: s.expires_at })),
     };
     return json(res, 200, search(source, q, limit));
   }
@@ -1649,11 +1661,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
       connections.reset(clock());
-      credentials.reset(clock());
+      secrets.reset(clock());
+      orgNotifications.reset();
+      standingRules.reset();
       knowledge.reset(clock());
-      evals.reset();
-      bakeOffs.reset();
-      judges.reset();
       jonah.reset();
       views.reset();
       webhooks.reset();
@@ -1714,6 +1725,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (auth.refuse(req, res, path, method)) return;
 
     if (path === '/v1/health') return json(res, 200, { status: 'ok' });
+    if (path === '/v1/catalog' && serveCatalog(req, res)) return;
 
     if (path === '/v1/orgs' && method === 'GET') {
       const orgs = [...state.orgs].sort((a, b) => a.name.localeCompare(b.name)).map(withCount);
@@ -1762,17 +1774,16 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (refused(method, path, forCaller(req, org))) {
       return json(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
     }
+    if (await environments.handle(org, rest, method, res, () => readBody(req))) return;
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
-    if (await credentials.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (access.handle(org, rest, method, url, res)) return;
+    if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
+    if (await orgNotifications.handle(org, rest, method, res, () => readBody(req))) return;
+    if (standingRules.handle(org, rest, method, url, req, res)) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
-    // Bake-offs sit under /evals, and the evals handler answers every sub-path it does not know,
-    // so bake-offs must be tried first.
-    if (await bakeOffs.handle(org, rest, method, res, () => readBody(req))) return;
-    if (await evals.handle(org, rest, method, res, () => readBody(req))) return;
-    if (await judges.handle(org, rest, method, res, () => readBody(req))) return;
     if (await jonah.handle(org, rest, method, url, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;

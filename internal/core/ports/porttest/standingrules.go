@@ -90,6 +90,46 @@ func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandi
 	return c.d.ruleLocked(org, r), nil
 }
 
+// CreateServerStandingRule implements ports.Connections.
+func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.StandingRule{}, domain.ErrNoOrg
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.StandingRule{}, fmt.Errorf("create standing rule: %w", err)
+	}
+
+	c.d.mu.Lock()
+	defer c.d.mu.Unlock()
+
+	for _, r := range c.d.rules[org] {
+		if r.Active() && r.ConnectionID == "" && r.Factory == n.Factory && r.Environment == n.Environment && r.Server == n.Server &&
+			r.Tool == n.Tool && r.Agent == n.Agent {
+			return c.d.ruleLocked(org, r), nil
+		}
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return domain.StandingRule{}, err
+	}
+
+	r := &domain.StandingRule{
+		ID: domain.StandingRuleID(id.String()), Factory: n.Factory, Environment: n.Environment, Server: n.Server, Tool: n.Tool,
+		Agent: n.Agent, CreatedBy: by, CreatedAt: time.Now().UTC().Truncate(time.Microsecond), ItemID: n.Item,
+	}
+
+	if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleCreated, *r, ""); err != nil {
+		return domain.StandingRule{}, err
+	}
+
+	c.d.rules[org] = append(c.d.rules[org], r)
+
+	return c.d.ruleLocked(org, r), nil
+}
+
 // RevokeStandingRule implements ports.Connections.
 func (c *Connections) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
@@ -126,7 +166,7 @@ func (d *connectionData) ruleLocked(org domain.OrgID, r *domain.StandingRule) do
 	out := *r
 
 	for _, conn := range d.conns[org] {
-		if conn.conn.ID == r.ConnectionID {
+		if r.ConnectionID != "" && conn.conn.ID == r.ConnectionID {
 			out.Connection = conn.conn.Name
 		}
 	}
@@ -139,9 +179,14 @@ func (d *connectionData) ruleLocked(org domain.OrgID, r *domain.StandingRule) do
 	return out
 }
 
-// ruleAudit appends action on rule r of the connection named name.
+// ruleAudit appends action on rule r, of the connection named name or of its server.
 func (c *Connections) ruleAudit(ctx context.Context, by domain.Actor, action string, r domain.StandingRule, name string) error {
-	return c.appendAudit(ctx, by, action, domain.AuditTargetStandingRule, string(r.ID), map[string]any{
-		"connection": name, "connection_id": string(r.ConnectionID), "tool": r.Tool, "agent": r.Agent, "item_id": string(r.ItemID),
-	})
+	data := map[string]any{"tool": r.Tool, "agent": r.Agent, "item_id": string(r.ItemID)}
+	if r.ConnectionID != "" {
+		data["connection"], data["connection_id"] = name, string(r.ConnectionID)
+	} else {
+		data["factory_id"], data["environment"], data["server"] = string(r.Factory), r.Environment, r.Server
+	}
+
+	return c.appendAudit(ctx, by, action, domain.AuditTargetStandingRule, string(r.ID), data)
 }

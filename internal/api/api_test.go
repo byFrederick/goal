@@ -20,6 +20,8 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
+	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -44,7 +46,7 @@ const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
 spec:
-  runtime: { modelConnection: claude }
+  runtime: { modelKey: "{{claude-key}}" }
   agents:
     - { name: writer, prompt: ./agents/writer.md }
   board:
@@ -111,6 +113,12 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
+// defaultEnvFile and defaultEnv are acme's default environment (ADR 0037).
+const (
+	defaultEnvFile = "environments/default.yaml"
+	defaultEnv     = "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"
+)
+
 // typeFeature is acme's first work type.
 const typeFeature = "feature"
 
@@ -175,10 +183,17 @@ type harness struct {
 	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
 	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
 	// servers) allowed unless publicOnly is set.
-	conns      *porttest.Connections
-	publicOnly atomic.Bool
+	conns         *porttest.Connections
+	publicOnly    atomic.Bool
+	connTransport *http.Transport
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
 	creds *porttest.Credentials
+	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
+	secrets *porttest.OrgSecrets
+	// notifySettings keeps the organizations' notification settings, naming secrets' secrets;
+	// slack checks a Slack bot token.
+	notifySettings *porttest.NotificationSettings
+	slack          *porttest.DirectMessenger
 	// intake keeps the factories' webhook endpoints, sealed under key k1, their deliveries and
 	// trigger firings, over store.
 	intake *porttest.Intake
@@ -186,20 +201,44 @@ type harness struct {
 	// bytes each; searches are by keywords.
 	kb        *porttest.Knowledge
 	kbObjects *porttest.ObjectStore
-	uploads   *knowledge.Uploads
-	// evals are the factories' eval runs, evalJudges the versions' judges as tests set them, and
-	// evalLoop the jonah eval loop that starts, prices and cancels runs over them.
-	evals      *porttest.Evals
-	evalJudges *porttest.Judges
-	evalLoop   *jonah.Evals
-	// versions is the definitions cache, which reads the line of a version a bake-off runs.
+	// kbRanges counts the ranged reads of kbObjects the API makes; ingestor syncs kb's sources into
+	// snapshots in kbObjects, its repositories read by kbDocs (knowledge_files_test.go).
+	kbRanges *rangeCounter
+	ingestor *knowledge.Ingestor
+	kbDocs   *docsReader
+	uploads  *knowledge.Uploads
+	// versions is the definitions cache, which the tests refresh after a change.
 	versions *definitions.Cache
-	// judges are the versions' judges as tests set them, judgeScores their scores; tries are
-	// queued by a jonah loop over them and the store's finished runs.
-	judges      *porttest.Judges
-	judgeScores *porttest.JudgeScores
 	// drafts are the factories' draft requests; nothing runs them, so tests finish them.
 	drafts *porttest.DraftRequests
+	// catalog are goald's tool templates; envTests keep the environments' MCP server tests, which
+	// tools answers.
+	catalog  []domain.ToolTemplate
+	envTests *porttest.EnvironmentTests
+	// conversions are the factories' conversions to secrets, which the inbox lists when refused.
+	conversions *porttest.FactoryConversions
+	tools       *porttest.ToolLister
+	// modelLine, when set, changes the line a model proposal reads (jonah_test.go).
+	modelLine func(*domain.Line)
+}
+
+// models is Try another model over the harness's store and the definitions cache defs, as goald
+// wires it.
+func (h *harness) keptDrafts(authors *authoring.Service, defs *definitions.Cache) *jonah.KeptDrafts {
+	return jonah.NewKeptDrafts(jonah.KeptDraftDeps{
+		Drafts: api.NewJonahAuthoring(authors), Definitions: tryLines{defs}, Kept: h.store, Tries: h.store, Spend: h.store, Clock: h.clock,
+	})
+}
+
+func (h *harness) models(defs *definitions.Cache, policies ports.OrgPolicies, audit ports.Audit) *jonah.ModelProposals {
+	return jonah.NewModelProposals(jonah.ModelDeps{
+		Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Check: config.ProposalCheck{}, Policies: policies, Audit: audit, Clock: h.clock,
+	})
+}
+
+// tryAgain is Try again over the harness's store and the definitions cache defs.
+func (h *harness) tryAgain(defs *definitions.Cache, audit ports.Audit) *jonah.TryAgain {
+	return jonah.NewTryAgain(jonah.TryAgainDeps{Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Audit: audit, Clock: h.clock})
 }
 
 // acme's one prompt and its path.
@@ -211,7 +250,7 @@ const (
 
 // The two factories' files.
 var (
-	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt}
+	acmeFiles = map[string]string{yamlFile: acme, writerFile: writerPrompt, defaultEnvFile: defaultEnv}
 	lineFiles = map[string]string{
 		yamlFile: line, "agents/backend.md": "# backend\n", "agents/frontend.md": "# frontend\n",
 		"contracts/change.schema.json": `{"type": "object"}`,
@@ -236,7 +275,12 @@ func (h *harness) publishImport(t *testing.T, authors *authoring.Service, files 
 		t.Fatal(err)
 	}
 
-	if _, err := authors.Publish(ctx, c.Factory.ID, authoring.PublishRequest{Revision: c.Draft.Revision}); err != nil {
+	// The fixtures are versions published before ADR 0037, which run on the old path: they are
+	// published in the store, since publish refuses the keys the ADR moved (moved-to-environment).
+	if _, err := h.defs.Publish(ctx, ports.Publish{
+		Factory: c.Factory.ID, DraftRevision: c.Draft.Revision, Name: c.Factory.Name, Title: c.Factory.Title,
+		Start: true, By: domain.LocalUser, At: h.clock.Now(),
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -439,6 +483,17 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.drafts.AddFactory(testOrg, acmeID)
 	h.drafts.AddFactory(testOrg, lineID)
 
+	h.envTests, h.tools = porttest.NewEnvironmentTests(), porttest.NewToolLister()
+	h.envTests.AddFactory(testOrg, acmeID)
+	h.envTests.AddFactory(testOrg, lineID)
+
+	templates, err := catalog.Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.catalog = templates
+
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
@@ -481,6 +536,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.keys.AddOrg(domain.Org{ID: otherOrg, Slug: labsSlug, Name: "Example Labs"})
 	h.keys.AddFactory(testOrg, acmeID)
 	h.keys.AddFactory(testOrg, lineID)
+	h.conversions = conversionsOf(testOrg, acmeID, lineID)
 
 	h.platform = porttest.NewPlatform(h.keys)
 	h.notifications = porttest.NewNotificationPreferences()
@@ -490,25 +546,25 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
-		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()},
-		Knowledge: h.kb, KnowledgeUploads: h.uploads, KnowledgeSearch: knowledge.NewSearcher(h.kb, nil, nil), UploadMaxBytes: testUploadMax, Clock: h.clock,
+		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
+		Knowledge: h.kb, KnowledgeUploads: h.uploads, UploadMaxBytes: testUploadMax, Clock: h.clock, KnowledgeObjects: h.kbRanges, KnowledgeCheck: h.ingestor,
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
-		NotificationPreferences: h.notifications,
-		DraftRequests:           h.drafts,
+		NotificationPreferences: h.notifications, NotificationSettings: h.notifySettings, SlackMessenger: h.slack,
+		DraftRequests: h.drafts,
+		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
 		deps.Auth = api.AuthConfig{Mode: api.AuthSession, EmailCodes: !in.noEmailCodes, Google: in.google}
 	}
 
-	deps.Judges = h.judgeDeps(tenancy)
-	deps.Jonah = &api.JonahDeps{Store: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
+	deps.Jonah = &api.JonahDeps{Store: h.store, Watches: h.store, Tests: h.store, Tries: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
-	})}
+	}), Models: h.models(defs, deps.OrgPolicies, tenancy), KeptDrafts: h.keptDrafts(authors, defs), TryAgain: h.tryAgain(defs, tenancy)}
 
-	handler, err := api.New(h.withEvals(deps, tenancy, opts))
+	handler, err := api.New(h.with(deps, opts))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,18 +618,13 @@ func (h *harness) startFeed(t *testing.T, in *signIn) (*api.Feed, func()) {
 	}
 }
 
-// judgeDeps are h's judges and their scores, with a jonah loop over them and the store's finished
-// runs for tries.
-func (h *harness) judgeDeps(tenancy *porttest.Tenancy) *api.JudgeDeps {
-	h.judges, h.judgeScores = porttest.NewJudges(), porttest.NewJudgeScores(h.store)
-
-	return &api.JudgeDeps{
-		Judges: h.judges, Scores: h.judgeScores,
-		Tries: jonah.New(jonah.Deps{
-			Orgs: tenancy, Runs: h.store, Finished: porttest.NewFinishedRuns(h.store), Judges: h.judges, Scores: h.judgeScores,
-			Runner: porttest.NewJudgeRunner(nil), Clock: h.clock,
-		}, jonah.Config{}),
+// with is d changed by each of opts.
+func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
+	for _, opt := range opts {
+		opt(h, &d)
 	}
+
+	return d
 }
 
 // sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
@@ -623,15 +674,24 @@ func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
 	return c
 }
 
-// connections makes h's connections, with goald's platform kinds, and the knowledge base whose
-// sources read them, and returns the transport their tests dial through.
+// connections makes h's connections, with goald's platform kinds, the secrets, the notification
+// settings naming them, and the knowledge base whose sources read them, and returns the transport their tests dial through.
 func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
 	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
-	h.kb, h.kbObjects = porttest.NewKnowledge(h.conns, audit), porttest.NewObjectStore()
+	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
+	h.notifySettings, h.slack = porttest.NewNotificationSettings(h.secrets, audit), porttest.NewDirectMessenger()
+	kb := porttest.NewKnowledge(h.conns, audit)
+	kb.ReadSecrets(h.secrets)
+	h.kb, h.kbObjects = kb, porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
+	h.kbRanges, h.kbDocs = &rangeCounter{ObjectStore: h.kbObjects}, &docsReader{}
+	h.ingestor = knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: h.kb, Secrets: h.secrets, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
+		Objects: h.kbObjects, Clock: h.clock, TempDir: t.TempDir(),
+	})
 
 	kinds, err := connkind.Platform()
 	if err != nil {
@@ -646,6 +706,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 		return egress.PublicDialer{AllowPrivate: !h.publicOnly.Load()}.DialContext(ctx, network, addr)
 	}}
 	t.Cleanup(tr.CloseIdleConnections)
+	h.connTransport = tr
 
 	return tr
 }
@@ -901,4 +962,14 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 			t.Errorf("submit with %s: source %q, want %q", c.name, it.Source, c.want)
 		}
 	}
+}
+
+// conversionsOf are factory conversions that know org's factories.
+func conversionsOf(org domain.OrgID, factories ...domain.FactoryID) *porttest.FactoryConversions {
+	c := porttest.NewFactoryConversions()
+	for _, f := range factories {
+		c.AddFactory(org, f)
+	}
+
+	return c
 }

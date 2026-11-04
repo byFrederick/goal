@@ -112,6 +112,17 @@ const (
 	// rules: [{name, sha256}], the rule's name and the hash of its rule file in the run's
 	// definition version.
 	EventRulesApplied EventKind = "rules_applied"
+	// EventKnowledgePinned is the knowledge snapshots a run reads (ADR 0038 decision 7), written by
+	// the gateway once per run when it first serves the run's bundle, and only when it pinned one.
+	// Data snapshots: [{source, snapshot}], each source's name and the id of its pinned snapshot.
+	EventKnowledgePinned EventKind = "knowledge_pinned"
+	// EventKnowledgeRead is the knowledge files a run read and the folders it searched (ADR 0038
+	// decision 10), written by the engine once per run when it ends, only when the run read or
+	// searched a source it pinned, and best effort. Data sources: [{source, reads, searches,
+	// more}], each touched source's name, the paths it read and searched (KnowledgeTally.Touched:
+	// each once, sorted, at most MaxKnowledgeTouchedPaths in all) and, only when some were left
+	// out, more (how many).
+	EventKnowledgeRead EventKind = "knowledge_read"
 	// EventQuestionAsked is an agent asking a person a question while its run works (ADR 0018):
 	// the run ends and the item waits for the answer at its station. Data question, choices (0–4
 	// quick answers), agent and run_id.

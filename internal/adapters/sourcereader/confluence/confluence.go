@@ -2,16 +2,32 @@
 // connection's kind syncs with confluence (spec 4 §4.8, §5.6): the pages of one or more spaces of
 // a Confluence Cloud site, read through its REST API v2 with the connection's Atlassian account.
 //
-// The connection gives the site (site: its host, such as acme.atlassian.net), the account's
-// email and its API token (email, token: the platform kind confluence's fields), sent with basic
-// authentication. A source's config names the spaces (spaces: space keys separated by commas or
-// new lines, such as ENG, SUP).
+// A source on a secret (ADR 0037 decision 14) names the site (site: its host, such as
+// acme.atlassian.net) and the account's email (email) in its config, and its secret holds the
+// API token; a source still on a connection takes all three from the connection's fields (the
+// platform kind confluence's). They are sent with basic authentication. A source's config names
+// the spaces (spaces: space keys separated by commas or new lines, such as ENG, SUP).
 //
 // A listing is every current page of the spaces (GET /wiki/api/v2/spaces/{id}/pages, 250 a
-// request, following the cursor of each answer's next link) with its version number as its
-// version, so a sync fetches only the pages edited since and the ingestion loop deletes the
-// documents of pages trashed, archived, moved out or no longer visible to the account. A space the
-// site does not show fails the listing instead of deleting its documents. A fetch reads one page
+// request, following the cursor of each answer's next link), so a sync fetches only the pages
+// edited or moved since and the ingestion loop deletes the documents of pages trashed, archived,
+// moved out or no longer visible to the account. A space the site does not show fails the listing
+// instead of deleting its documents.
+//
+// Each space's listing is read whole before its pages are yielded, so each page's place in the
+// page tree comes from the parent ids it holds, without a request more. A page's folder is its
+// space key, then the slugs of its ancestors' titles top-down (domain.Slug): Paging under
+// Runbooks in ENG lands at ENG/runbooks/paging-<id>.md. The space's homepage, every top page's
+// parent, is no folder. A page whose parent is not listed (one the account cannot see, a folder,
+// a whiteboard) sits at its space's top, and the walk up stops at a cycle or past 32 ancestors.
+// Its version is its version number and its ancestors' ids, <number>@<id>/<id> (3 for a page with
+// none), so moving a page fetches it again at its new path.
+//
+// A source's config may name a root page (root_page: a page id). Its listing is then only that
+// page and the pages under it, their folders starting at its slug without the space key: the root
+// page Runbooks lands at runbooks-<id>.md, Paging under it at runbooks/paging-<id>.md, and the
+// ancestors in a version start at the root page. A root page that is not a page id is refused
+// before any request, and one the spaces do not have fails the listing. A fetch reads one page
 // in storage format (GET /wiki/api/v2/pages/{id}?body-format=storage), at most an upload's size
 // (domain.DefaultMaxUpload), and turns it into Markdown.
 //
@@ -29,6 +45,7 @@ import (
 	"iter"
 	"net/http"
 	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,13 +67,16 @@ type Config struct {
 }
 
 const (
-	// The connection fields the reader reads: the platform kind confluence's.
+	// The values the reader reads: the platform kind confluence's fields, and the config keys of a
+	// source on a secret (site, email).
 	fieldSite  = "site"
 	fieldEmail = "email"
 	fieldToken = "token"
 
-	// cfgSpaces is the source's config key naming its spaces.
-	cfgSpaces = "spaces"
+	// cfgSpaces is the source's config key naming its spaces, cfgRootPage the one naming the
+	// page whose tree it holds.
+	cfgSpaces   = "spaces"
+	cfgRootPage = "root_page"
 
 	// statusCurrent is the status of a page neither archived, trashed nor a draft.
 	statusCurrent = "current"
@@ -71,6 +91,9 @@ const (
 	maxSpaceKey = 255
 	// maxID is the most digits of a page id.
 	maxID = 20
+	// maxAncestors is the most ancestors of a page the reader walks up to; a version of a page's
+	// number and its ancestors' ids then stays under domain.MaxFileVersion.
+	maxAncestors = 32
 )
 
 // Reader reads confluence sources. It is safe for concurrent use and keeps no state.
@@ -91,58 +114,127 @@ func New(cfg Config) *Reader {
 	}}
 }
 
-// List implements ports.SourceReader: the current pages of the source's spaces, with their
-// version numbers as versions.
+// List implements ports.SourceReader: the current pages of the source's spaces, or of its root
+// page's tree, each in its folder of the page tree, versioned by their version numbers and
+// ancestors.
 func (r *Reader) List(ctx context.Context, s domain.SyncSpec) iter.Seq2[domain.SourceItem, error] {
 	return func(yield func(domain.SourceItem, error) bool) {
-		src, err := open(s)
+		items, err := r.list(ctx, s)
 		if err != nil {
 			yield(domain.SourceItem{}, err)
 
 			return
 		}
 
-		spaces, err := r.spaces(ctx, src)
-		if err != nil {
-			yield(domain.SourceItem{}, err)
-
-			return
-		}
-
-		for _, sp := range spaces {
-			var (
-				stopped bool
-				bad     error
-			)
-
-			q := url.Values{"status": {statusCurrent}, "limit": {strconv.Itoa(pageLimit)}}
-
-			err := walk(ctx, r, src, "/spaces/"+sp.ID.String()+"/pages", q, func(p page) bool {
-				item, err := src.item(sp, p)
-				if err != nil {
-					bad = err
-
-					return false
-				}
-
-				stopped = !yield(item, nil)
-
-				return !stopped
-			})
-			if err == nil {
-				err = bad
-			}
-
-			if stopped {
+		for _, item := range items {
+			if !yield(item, nil) {
 				return
 			}
+		}
+	}
+}
 
+// list reads every space's listing whole, then places each page in its tree.
+func (r *Reader) list(ctx context.Context, s domain.SyncSpec) ([]domain.SourceItem, error) {
+	src, err := open(s)
+	if err != nil {
+		return nil, err
+	}
+
+	spaces, err := r.spaces(ctx, src)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		items []domain.SourceItem
+		root  bool
+	)
+
+	for _, sp := range spaces {
+		t := tree{home: sp.HomepageID.String(), root: src.root, pages: map[string]page{}}
+		q := url.Values{"status": {statusCurrent}, "limit": {strconv.Itoa(pageLimit)}}
+
+		if err := walk(ctx, r, src, "/spaces/"+sp.ID.String()+"/pages", q, func(p page) bool {
+			t.order = append(t.order, p.ID.String())
+			t.pages[p.ID.String()] = p
+
+			return true
+		}); err != nil {
+			return nil, fmt.Errorf("the pages of space %s: %w", sp.Key, err)
+		}
+
+		if _, ok := t.pages[src.root]; ok {
+			root = true
+		}
+
+		for _, id := range t.order {
+			ancestors, ok := t.ancestors(t.pages[id])
+			if !ok {
+				continue
+			}
+
+			item, err := src.item(sp, t.pages[id], ancestors)
 			if err != nil {
-				yield(domain.SourceItem{}, fmt.Errorf("the pages of space %s: %w", sp.Key, err))
-
-				return
+				return nil, fmt.Errorf("the pages of space %s: %w", sp.Key, err)
 			}
+
+			items = append(items, item)
 		}
+	}
+
+	// A root page not found would list nothing, which would delete every file.
+	if src.root != "" && !root {
+		return nil, fmt.Errorf("root page %s is not a current page of the spaces %s, or the connection's account cannot see it", src.root, strings.Join(src.keys, ", "))
+	}
+
+	return items, nil
+}
+
+// tree is a space's current pages by id, in the listing's order, its homepage's id and the
+// source's root page ("": none).
+type tree struct {
+	pages      map[string]page
+	order      []string
+	home, root string
+}
+
+// ancestors are the pages above p in its folder, top-down: up to the space's homepage, the first
+// parent not listed or a cycle, at most maxAncestors (past it, none). With a root page they start
+// at the root page, and ok is false for a page not under it.
+func (t tree) ancestors(p page) (out []page, ok bool) {
+	if t.root != "" && p.ID.String() == t.root {
+		return nil, true
+	}
+
+	seen := map[string]bool{p.ID.String(): true}
+
+	for cur := p; ; {
+		id := cur.ParentID.String()
+
+		parent, listed := t.pages[id]
+		if !listed || seen[id] || (t.root == "" && id == t.home) {
+			slices.Reverse(out)
+
+			return out, t.root == ""
+		}
+
+		// Too deep: a page with no place is at the space's top, or not known to be under the root.
+		if len(out) == maxAncestors {
+			return nil, t.root == ""
+		}
+
+		seen[id] = true
+
+		out = append(out, parent)
+
+		if id == t.root {
+			slices.Reverse(out)
+
+			return out, true
+		}
+
+		cur = parent
 	}
 }
 
@@ -177,7 +269,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 		return domain.SourceDoc{}, fmt.Errorf("page %s is not in the spaces of source %s: %w", id, s.Source.Name, domain.ErrInvalid)
 	}
 
-	item, err := src.item(spaces[i], p)
+	item, err := src.item(spaces[i], p, nil)
 	if err != nil {
 		return domain.SourceDoc{}, err
 	}
@@ -190,35 +282,49 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 	return domain.SourceDoc{SourceItem: item, Body: []byte(text)}, nil
 }
 
-// source is a confluence source opened: the connection's site and account, and the keys of the
-// spaces it reads.
+// source is a confluence source opened: the connection's site and account, the keys of the
+// spaces it reads and its root page's id ("": none).
 type source struct {
 	// site is the host every request goes to.
 	site         string
 	email, token string
 	keys         []string
+	root         string
 }
 
-// open reads s: the connection's site and account, and the source's spaces.
+// open reads s: the site and account (the source's config and its secret's value, or the
+// connection's fields), and the source's spaces.
 func open(s domain.SyncSpec) (source, error) {
-	if s.Connection == nil {
-		return source{}, fmt.Errorf("source %s has no connection to read: %w", s.Source.Name, domain.ErrInvalid)
+	var values map[string]string
+
+	owner := ""
+
+	switch {
+	case s.Secret != nil:
+		values = map[string]string{fieldSite: s.Source.Config[fieldSite], fieldEmail: s.Source.Config[fieldEmail], fieldToken: s.Secret.Value}
+		owner = "source " + s.Source.Name
+	case s.Connection != nil:
+		values, owner = s.Connection.Values, "connection "+s.Connection.Connection.Name
+	default:
+		return source{}, fmt.Errorf("source %s has no secret or connection to read with: %w", s.Source.Name, domain.ErrInvalid)
 	}
 
-	c := s.Connection
-
-	site, err := siteHost(c.Values[fieldSite])
+	site, err := siteHost(values[fieldSite])
 	if err != nil {
-		return source{}, fmt.Errorf("connection %s: %w", c.Connection.Name, err)
+		return source{}, fmt.Errorf("%s: %w", owner, err)
 	}
 
-	src := source{site: site, email: strings.TrimSpace(c.Values[fieldEmail]), token: c.Values[fieldToken]}
+	src := source{site: site, email: strings.TrimSpace(values[fieldEmail]), token: values[fieldToken]}
 	if src.email == "" || src.token == "" {
-		return source{}, fmt.Errorf("connection %s has no %s and %s for the site: %w", c.Connection.Name, fieldEmail, fieldToken, domain.ErrInvalid)
+		return source{}, fmt.Errorf("%s has no %s and %s for the site: %w", owner, fieldEmail, fieldToken, domain.ErrInvalid)
 	}
 
 	if src.keys, err = spaceKeys(s.Source.Config[cfgSpaces]); err != nil {
 		return source{}, fmt.Errorf("source %s: %w", s.Source.Name, err)
+	}
+
+	if src.root = strings.TrimSpace(s.Source.Config[cfgRootPage]); src.root != "" && !isID(src.root) {
+		return source{}, fmt.Errorf("source %s: %s %q is not a page id: %w", s.Source.Name, cfgRootPage, src.root, domain.ErrInvalid)
 	}
 
 	return src, nil
@@ -274,17 +380,19 @@ func isID(id string) bool {
 
 // space is a space of the site.
 type space struct {
-	ID  json.Number `json:"id"`
-	Key string      `json:"key"`
+	ID         json.Number `json:"id"`
+	Key        string      `json:"key"`
+	HomepageID json.Number `json:"homepageId"`
 }
 
 // page is a page of the site; its body only when fetched.
 type page struct {
-	ID      json.Number `json:"id"`
-	Status  string      `json:"status"`
-	Title   string      `json:"title"`
-	SpaceID json.Number `json:"spaceId"`
-	Version struct {
+	ID       json.Number `json:"id"`
+	Status   string      `json:"status"`
+	Title    string      `json:"title"`
+	SpaceID  json.Number `json:"spaceId"`
+	ParentID json.Number `json:"parentId"`
+	Version  struct {
 		Number int `json:"number"`
 	} `json:"version"`
 	Body struct {
@@ -294,15 +402,30 @@ type page struct {
 	} `json:"body"`
 }
 
-// item is p of sp as a source item: its id, version number, title and link.
-func (s source) item(sp space, p page) (domain.SourceItem, error) {
+// item is p of sp under ancestors, top-down, as a source item: its id, its version number and
+// ancestors' ids, its title, link and folder.
+func (s source) item(sp space, p page, ancestors []page) (domain.SourceItem, error) {
 	id := p.ID.String()
 	if !isID(id) || p.Version.Number < 1 {
 		return domain.SourceItem{}, fmt.Errorf("the site shows page %q without an id and a version", id)
 	}
 
+	var folder, ids []string
+	if s.root == "" {
+		folder = append(folder, sp.Key)
+	}
+
+	for _, a := range ancestors {
+		folder, ids = append(folder, domain.Slug(a.Title)), append(ids, a.ID.String())
+	}
+
+	version := strconv.Itoa(p.Version.Number)
+	if len(ids) > 0 {
+		version += "@" + strings.Join(ids, "/")
+	}
+
 	return domain.SourceItem{
-		ID: id, Version: strconv.Itoa(p.Version.Number), Title: p.Title, MIME: domain.MediaMarkdown,
+		ID: id, Version: version, Title: p.Title, MIME: domain.MediaMarkdown, Folder: path.Join(folder...),
 		URL: "https://" + s.site + "/wiki/spaces/" + url.PathEscape(sp.Key) + "/pages/" + id,
 	}, nil
 }

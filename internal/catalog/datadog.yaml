@@ -1,0 +1,15 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: datadog
+  title: Datadog
+  description: A Datadog API key and application key, scoped to what agents may read.
+spec:
+  secrets:
+    - {slot: api_key, title: API key, suggest: datadog-api-key}
+    - {slot: app_key, title: Application key, description: Scoped to what agents may read., suggest: datadog-app-key}
+  env:
+    DD_API_KEY: "{{api_key}}"
+    DD_APP_KEY: "{{app_key}}"
+    DD_SITE: datadoghq.com
+  test: {method: GET, url: "https://api.${DD_SITE}/api/v1/validate", headers: {DD-API-KEY: "{{api_key}}"}, expect: 200}

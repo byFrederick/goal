@@ -155,12 +155,22 @@ type Row = {
   output?: string[] | undefined;
 };
 
+/** The tag on a step that read or searched a knowledge source; the sentence names the source. */
+function KnowledgeTag() {
+  return <Chip className="mr-2 align-middle">Knowledge</Chip>;
+}
+
 function stepRow(step: StepRow): Row {
   return {
     key: step.key,
     at: step.at,
     tone: step.failed ? 'rework' : 'plain',
-    children: <Sentence segments={step.segments} />,
+    children: (
+      <>
+        {step.knowledge ? <KnowledgeTag /> : null}
+        <Sentence segments={step.segments} />
+      </>
+    ),
     right: step.right ? <span className={cn(step.failed && 'text-rework-ink')}>{step.right}</span> : undefined,
     output: step.output,
   };

@@ -2,12 +2,14 @@
 // in its colour, its title, its item and station, and its age. The selected row has the orange tint, no edge bar,
 // and says so with aria-current. Rows are links, so the selection lives in the URL.
 import { Link } from '@tanstack/react-router';
-import type { InboxEntry } from '../../api/types';
+import { useRef } from 'react';
+import type { InboxEntry, Watch } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import { formatAge, humanize } from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
 import { cn } from '../../ui/cn';
+import { watchMetricLabel } from '../jonah/jonah-format';
 import type { NeedsSearch } from './search';
 import { typeLabel, typeOf } from './types';
 
@@ -21,11 +23,22 @@ export function titleOf(entry: InboxEntry): string {
   if (entry.kind === 'question' && entry.question) return `${entry.question.agent}: ${entry.question.text}`;
   if (entry.kind === 'tool_approval' && entry.tool_approval) return approvalTitle(entry.tool_approval);
   if (entry.item) return entry.item.title;
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source)
+    return `${entry.knowledge_source.source} does not sync`;
+  if (entry.kind === 'watch_worse' && entry.watch) return watchWorseTitle(entry.watch);
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
   }
   return humanize(entry.kind);
+}
+
+/** A watch_worse entry's title: the proposal and the number that got worse, "Proposal 14 made sent-back rate worse". */
+export function watchWorseTitle(watch: { proposal?: number | undefined; metric: Watch['metric'] }): string {
+  const label = watchMetricLabel(watch.metric).toLowerCase();
+  return watch.proposal === undefined
+    ? `A change made ${label} worse`
+    : `Proposal ${watch.proposal} made ${label} worse`;
 }
 
 /** An Approval's title: the agent role that asks and the tool it wants to call. */
@@ -63,11 +76,13 @@ export function NeedsList({
   siblings: readonly { name: string }[];
   label: string;
 }) {
+  const arrived = useArrivals(entries.map((e) => e.id));
   return (
     <ul aria-label={label} className="m-0 flex list-none flex-col p-0">
       {entries.map((entry) => (
         <NeedsRow
           key={entry.id}
+          arrived={arrived.has(entry.id)}
           entry={entry}
           current={entry.id === selected}
           search={search}
@@ -78,12 +93,33 @@ export function NeedsList({
   );
 }
 
+/**
+ * The ids that appeared after the list first drew: a new entry fades in and rises (MOTION.md, A new item appears in
+ * a list). The entries there when the page opened, and those a tab or the factory filter brings back, do not move.
+ */
+function useArrivals(ids: readonly string[]): ReadonlySet<string> {
+  const known = useRef<Set<string> | null>(null);
+  const arrived = useRef(new Set<string>());
+  if (known.current === null) known.current = new Set(ids);
+  else {
+    for (const id of ids) {
+      if (!known.current.has(id)) {
+        known.current.add(id);
+        arrived.current.add(id);
+      }
+    }
+  }
+  return arrived.current;
+}
+
 function NeedsRow({
+  arrived,
   entry,
   current,
   search,
   mark,
 }: {
+  arrived: boolean;
   entry: InboxEntry;
   current: boolean;
   search: NeedsSearch;
@@ -98,7 +134,7 @@ function NeedsRow({
         ? 'text-rework-ink'
         : 'text-ink-soft';
   return (
-    <li className="border-b border-line">
+    <li className={cn('border-b border-line', arrived && 'motion-safe:animate-row-in')}>
       <Link
         to="/o/$org/needs-you"
         params={{ org: org.slug }}

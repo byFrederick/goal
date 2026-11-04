@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -53,7 +54,7 @@ func (h *harness) seedSpend(t *testing.T) {
 	h.spendRun(t, lineID, agBackend, "claude-fable-5-1", at(time.October, 22), 2)
 	h.spendRun(t, lineID, agBackend, "claude-fable-5-1", at(time.October, 5), 3)
 	h.spendRun(t, lineID, "frontend", "claude-haiku-5-5", at(time.September, 15), 4)
-	h.spendRun(t, acmeID, evalAgent, "claude-fable-5-1", at(time.October, 23), 1)
+	h.spendRun(t, acmeID, writerAgent, "claude-fable-5-1", at(time.October, 23), 1)
 	h.finished(t, at(time.October, 21), at(time.October, 22), false)
 }
 
@@ -120,7 +121,8 @@ func budgetLines(s gen.OrgSpend) []string {
 }
 
 // Each window has its bounds, days and totals; budgets are each factory's, acme stopped by its
-// andon, both paid for by claude.
+// andon, line paid for by claude. acme names a model key, a secret, rather than a model
+// connection (ADR 0037), and the organization has no secret by that name, so it lists none.
 func TestGetOrgSpend_Windows(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +153,7 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 			}
 
 			want := []string{
-				"acme daily=null weekly=null today=1.00 week=1.00 stopped (" + andonReason + ") models [claude (anthropic)]",
+				"acme daily=null weekly=null today=1.00 week=1.00 stopped (" + andonReason + ") models []",
 				"line daily=null weekly=70.00 today=0.00 week=2.00 running () models [claude (anthropic)]",
 			}
 			if lines := budgetLines(got); strings.Join(lines, "\n") != strings.Join(want, "\n") {
@@ -172,6 +174,54 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 
 	if res := h.request(t, http.MethodGet, orgSpendPath+"?window=year", "", nil); res.status != http.StatusBadRequest {
 		t.Errorf("GET spend?window=year = %d %s; want 400", res.status, res.body)
+	}
+}
+
+// A factory on secrets is paid for by the secret its runtime.modelKey names, listed by name as
+// kind secret, never with its value, and only when the organization has that secret.
+func TestGetOrgSpend_ModelKeyPays(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	acmeModels := func() string {
+		t.Helper()
+
+		res := h.request(t, http.MethodGet, orgSpendPath, "", nil)
+		if res.status != http.StatusOK {
+			t.Fatalf("GET spend = %d %s; want 200", res.status, res.body)
+		}
+
+		if strings.Contains(string(res.body), "sk-ant-test-value") {
+			t.Errorf("GET spend = %s; want no secret value", res.body)
+		}
+
+		var got gen.OrgSpend
+		if err := json.Unmarshal(res.body, &got); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, l := range budgetLines(got) {
+			if _, models, ok := strings.Cut(l, ") models "); ok && strings.HasPrefix(l, "acme ") {
+				return "models " + models
+			}
+		}
+
+		t.Fatalf("no acme budget in %s", res.body)
+
+		return ""
+	}
+
+	if got := acmeModels(); got != "models []" {
+		t.Errorf("acme without its model key's secret: %s; want models []", got)
+	}
+
+	if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: "claude-key", Value: "sk-ant-test-value"}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := acmeModels(); got != "models [claude-key (secret)]" {
+		t.Errorf("acme with its model key's secret: %s; want models [claude-key (secret)]", got)
 	}
 }
 

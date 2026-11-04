@@ -11,14 +11,17 @@ import { eventsQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
 import { formatAge, formatClock, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
+import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { SuccessLabel } from '../../ui/success-label';
 import { QuestionCard } from '../items/question-card';
+import { watchText, watchVerdicts } from '../jonah/jonah-format';
+import { UndoThisChange } from '../jonah/undo-button';
 import { decisionOf } from './actions';
-import { ageOf, approvalTitle } from './rows';
+import { ageOf, approvalTitle, watchWorseTitle } from './rows';
 import { typeLabel, typeOf } from './types';
 
 export interface DetailProps {
@@ -111,7 +114,7 @@ export function Detail({
       ) : (
         <>
           <AlertFacts entry={entry} station={station} />
-          <AlertLinks entry={entry} />
+          <AlertLinks entry={entry} canUndo={factory ? holds(factory, 'definition:edit') : false} />
         </>
       )}
 
@@ -152,6 +155,9 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
 }
 
 function kindTitle(entry: InboxEntry): string {
+  if (entry.kind === 'watch_worse' && entry.watch) return watchWorseTitle(entry.watch);
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source)
+    return `${entry.knowledge_source.source} does not sync`;
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
@@ -160,11 +166,15 @@ function kindTitle(entry: InboxEntry): string {
 }
 
 function alertSummary(entry: InboxEntry, station: string): string {
+  if (entry.kind === 'watch_worse') return 'Its number got worse after it was published.';
   if (entry.kind === 'andon') return entry.andon?.reason ?? 'The andon cord is pulled.';
   if (entry.kind === 'blocked') {
     return entry.blocked?.reason ?? (entry.blocked?.paused ? 'A person paused it.' : 'It is blocked.');
   }
   if (entry.kind === 'rework_warning') return `Rework is rising at ${station || 'its gate'}.`;
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
+    return `The last ${entry.knowledge_source.failed_syncs} syncs of ${entry.knowledge_source.source} failed.`;
+  }
   return 'It waits in the expedite lane.';
 }
 
@@ -210,7 +220,7 @@ function Brief({ entry }: { entry: InboxEntry }) {
   );
 }
 
-/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and connection. */
+/** The tool call an Approval asks to make: its input as canonical JSON, then its tool and server. */
 function ToolCall({ call }: { call: ToolApproval }) {
   return (
     <>
@@ -226,7 +236,7 @@ function ToolCall({ call }: { call: ToolApproval }) {
         <Fact label="Tool">
           <span className="font-mono">{call.tool}</span>
         </Fact>
-        <Fact label="Connection">{call.connection}</Fact>
+        <Fact label="Server">{call.connection}</Fact>
       </dl>
     </>
   );
@@ -297,6 +307,7 @@ function ActionBar({
 
 /** An Alert's facts: the andon pull, the rework tally, or why the item is blocked. */
 function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) {
+  const org = useOrg();
   if (entry.kind === 'andon' && entry.andon) {
     return (
       <section
@@ -327,6 +338,40 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
       </section>
     );
   }
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
+    const k = entry.knowledge_source;
+    return (
+      <section
+        aria-label="Why the source does not sync"
+        className="flex flex-col gap-2 rounded-card border border-line bg-card p-4 md:p-5"
+      >
+        <p className="m-0 text-body text-ink">
+          The last {k.failed_syncs} syncs of {k.source} failed, so {entry.factory.title ?? entry.factory.name} reads the
+          files from before.
+        </p>
+        <p className="m-0 text-secondary text-muted">{k.error || 'No reason was recorded.'}</p>
+        <p className="m-0 text-secondary">
+          <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: k.source }}>
+            Open {k.source}
+          </Link>
+        </p>
+      </section>
+    );
+  }
+  if (entry.kind === 'watch_worse' && entry.watch) {
+    const w = entry.watch;
+    return (
+      <section
+        aria-label="What got worse"
+        className="flex flex-col gap-2 rounded-card border border-line bg-card p-4 md:p-5"
+      >
+        <p className="m-0 text-body text-ink">{watchText(w)}</p>
+        <p className="m-0 text-secondary text-muted">
+          {watchVerdicts[w.verdict].label} after {w.after.items} items, against {w.before.items} before.
+        </p>
+      </section>
+    );
+  }
   if (entry.kind === 'blocked') {
     return (
       <section
@@ -345,11 +390,25 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
 }
 
 /** Links out of an Alert: the item, and the factory's Floor. An Alert has no Approve or Deny. */
-function AlertLinks({ entry }: { entry: InboxEntry }) {
+function AlertLinks({ entry, canUndo }: { entry: InboxEntry; canUndo: boolean }) {
   const org = useOrg();
   const factory = entry.factory.name;
+  const proposal = entry.kind === 'watch_worse' ? entry.watch?.proposal : undefined;
   return (
     <div className="flex flex-wrap gap-2">
+      {proposal !== undefined ? (
+        <>
+          {canUndo ? <UndoThisChange number={proposal} factoryId={entry.factory.id} factoryName={factory} /> : null}
+          <Button asChild variant="secondary">
+            <Link
+              to="/o/$org/f/$factory/jonah/proposals/$number"
+              params={{ org: org.slug, factory, number: String(proposal) }}
+            >
+              Open proposal {proposal}
+            </Link>
+          </Button>
+        </>
+      ) : null}
       {entry.item ? (
         <Button asChild variant="secondary">
           <Link to="/o/$org/f/$factory/items/$ref" params={{ org: org.slug, factory, ref: entry.item.ref }}>

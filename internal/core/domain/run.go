@@ -78,8 +78,23 @@ type Run struct {
 	Agent               string
 	Model               string
 	Result              RunResult
-	StartedAt           time.Time
-	EndedAt             time.Time
+	// Input is what the run was given, as RecordRunInput stored it; empty for runs from before
+	// run records (00085).
+	Input     RunInput
+	StartedAt time.Time
+	EndedAt   time.Time
+}
+
+// RunInput is what a run was given, for a later try to rerun it (ADR 0039, decision 8). Empty
+// fields are unknown: a retry in its claim's box has no heads, and a run without a repository none.
+type RunInput struct {
+	// Brief is the brief the agent was given: the bundle's brief (the item's work) and the run's
+	// feedback (its notes, answers and rejections), joined as the worker's prompt joins them.
+	Brief string
+	// BranchHead and BaseHead are the item branch's and its base's commits when prepare checked
+	// the branch out, before it brought the branch up to date with the base.
+	BranchHead string
+	BaseHead   string
 }
 
 // ListedRun is a run with the number and title of the item it worked, as the organization's run
@@ -104,6 +119,8 @@ type RunSummary struct {
 
 // RunResult is what a runner returns when an agent task ends.
 type RunResult struct {
+	// RunID is the run's record (agent_runs), set by engine.RunTask once it recorded one.
+	RunID  RunID
 	Status RunStatus
 	// Output is the agent's final JSON output; it must satisfy the station's contract.
 	Output       json.RawMessage
@@ -114,12 +131,34 @@ type RunResult struct {
 	SessionID    string
 	// Error explains a failed or cancelled run.
 	Error string
+	// PushedHead is the item branch's commit on the remote when the agent ended, as the worker
+	// read it; empty without a repository or when it could not be read.
+	PushedHead string
+	// Diff is a try's change against the commit it started from, as engine.RunTask read it from
+	// the box once the agent ended; empty for every other run.
+	Diff string
+	// FailedCheck is the first of a try's checks (RunRequest.Checks) that failed in its box once
+	// its agent succeeded; nil when they all passed, and for every other run.
+	FailedCheck *FailedCheck
+}
+
+// FailedCheck is a command check that ran and exited non-zero: its command, its exit code (124
+// when it ran out of time) and the end of its output, scrubbed of the run's secrets.
+type FailedCheck struct {
+	Command  string
+	ExitCode int
+	Output   string
 }
 
 // RunRequest is one agent run for engine.RunTask: what it records, which sandbox it opens, what
 // the gateway serves it and what it is given. A line's run (Kind station) works an item at a
 // station under the item's lease; a Jonah review's (Kind jonah, ADR 0034 decision 1) works no
-// item, holds no lease, clones no repository and gets only the model connection (Check).
+// item, holds no lease, clones no repository and gets only the model connection (Check). A try of
+// a past item (Kind try, ADR 0039 decision 9) reruns a station on no item and under no lease, from
+// a recorded commit, with only the model's access. A grade (Kind try on a TaskKindGrade bundle,
+// ADR 0039 decision 10) grades a try's result, or its item's original or final one, in one model
+// call: no item, lease, repository, commit, check, environment or connection but the model's, so
+// its cost is Jonah's as a try's is.
 type RunRequest struct {
 	OrgID     OrgID
 	FactoryID FactoryID
@@ -148,45 +187,101 @@ type RunRequest struct {
 	Repository Repository
 	// Branch and Base are the run's branch and the branch it is cut from (TaskClaims).
 	Branch, Base string
-	// ModelConnection is the connection that gives the run its model access.
+	// ModelConnection is the connection that gives a run on connections its model access.
 	ModelConnection string
 	// Connections are the organization connections the agent gets besides the model's.
 	Connections []string
+	// ModelKey is the {{secret}} that gives a run on secrets its model (ADR 0037 decision 7), and
+	// Environment the agent's environment file it gets its env from (decision 10); a run on
+	// secrets names no connection, and a Jonah run no environment.
+	ModelKey    string
+	Environment Environment
 	// DeniedCommands are added to the agent's deny rules (TaskClaims.DeniedCommands).
 	DeniedCommands []string
-	// Size is the sandbox's size; empty is medium.
-	Size SandboxSize
+	// Knowledge are the knowledge snapshots the run reads (TaskClaims.Knowledge).
+	Knowledge []KnowledgePin
+	// NoEnvironment says the agent gets no env, files or MCP servers (TaskClaims.NoEnvironment).
+	NoEnvironment bool
+	// Size is the sandbox's size; empty is medium. Image is the sandbox's image; empty is the
+	// engine's, Goal's own.
+	Size  SandboxSize
+	Image string
 	// Timeout bounds the run; BoxLimit, when set, bounds how long its sandbox may live (the
 	// organization policy's box time limit). Zero takes the engine's defaults.
 	Timeout, BoxLimit time.Duration
 	// Lease is the lease the run heartbeats while it runs, and loses the run with when it is lost;
 	// nil holds none.
 	Lease *Lease
+	// TryOf is the past-item try a try run carries out, which its task token names so the gateway
+	// serves the original run's brief, outputs and commit, and Commit the commit it starts from
+	// (the original run's branch head); both empty for every other kind.
+	TryOf  PastTryID
+	Commit string
+	// GradeOf is which result a grade run grades, which its task token names so the gateway
+	// serves that result; empty for every other run.
+	GradeOf GradeOf
+	// Checks are the station's command checks a try runs in its box, in order, once its agent
+	// succeeded (ADR 0039 decision 10); a line's run gets its station's checks from its claim, so
+	// only a try names them.
+	Checks []string
 }
 
 // ErrBadRunRequest refuses a RunRequest that Check does not accept.
 var ErrBadRunRequest = fmt.Errorf("bad run request: %w", ErrInvalid)
 
-// Check reports why r cannot run: a request without its organization, factory, agent or model
-// connection, a station run without its item and station, a Jonah run with an item, a station,
-// a lease, a repository or a connection besides the model's, a jonah bundle without a window that
-// ends after it starts, or a window on another bundle.
+// Check reports why r cannot run: a request without its organization, factory or agent, without
+// a model connection or a model key or with both, on a model key with a connection, a station run
+// without its item and station, a Jonah run with an item, a station, a lease, a repository, an
+// environment or a connection besides the model's, a try or a grade with what it may not have
+// (checkTry, checkGrade), a jonah bundle without a window that ends after it starts, or a window
+// on another bundle.
 func (r RunRequest) Check() error {
-	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || r.ModelConnection == "" {
-		return fmt.Errorf("%w: it needs an organization, a factory, an agent and a model connection", ErrBadRunRequest)
+	if err := r.checkModel(); err != nil {
+		return err
 	}
 
 	if err := r.checkWindow(); err != nil {
 		return err
 	}
 
-	switch {
-	case r.Kind == RunKindJonah:
+	switch r.Kind {
+	case RunKindJonah:
 		return r.checkJonah()
-	case r.Kind != "" && r.Kind != RunKindStation:
+	case RunKindTry:
+		if r.Bundle == TaskKindGrade {
+			return r.checkGrade()
+		}
+
+		return r.checkTry()
+	case "", RunKindStation:
+		return r.checkStation()
+	default:
 		return fmt.Errorf("%w: unknown run kind %q", ErrBadRunRequest, r.Kind)
+	}
+}
+
+// checkStation refuses a line's run without its item and station, or that names what only a try
+// or a grade has.
+func (r RunRequest) checkStation() error {
+	switch {
+	case r.TryOf != "" || r.Commit != "" || r.GradeOf != "" || r.Bundle == TaskKindTry || r.Bundle == TaskKindGrade || len(r.Checks) > 0:
+		return fmt.Errorf("%w: only a try names a try, a commit, a result to grade and checks", ErrBadRunRequest)
 	case r.Item == "" || r.Station == "":
 		return fmt.Errorf("%w: a station run needs its item and station", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkModel refuses a request without its organization, factory or agent, without a model
+// connection or a model key or with both, and one on a model key with a connection.
+func (r RunRequest) checkModel() error {
+	if r.OrgID == "" || r.FactoryID == "" || r.Agent == "" || (r.ModelConnection == "") == (r.ModelKey == "") {
+		return fmt.Errorf("%w: it needs an organization, a factory, an agent and either a model connection or a model key", ErrBadRunRequest)
+	}
+
+	if r.ModelKey != "" && (len(r.Connections) > 0 || r.Repository.Connection != "") {
+		return fmt.Errorf("%w: a run on secrets opens no connection", ErrBadRunRequest)
 	}
 
 	return nil
@@ -212,8 +307,39 @@ func (r RunRequest) checkWindow() error {
 
 // checkJonah refuses a Jonah run with what ADR 0034 decision 1 leaves out of it.
 func (r RunRequest) checkJonah() error {
-	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 {
-		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository or connection but the model's", ErrBadRunRequest)
+	if r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || len(r.Connections) > 0 ||
+		r.Environment.Name != "" || len(r.Environment.Env) > 0 || r.TryOf != "" || r.GradeOf != "" {
+		return fmt.Errorf("%w: a Jonah run has no item, station, lease, repository, environment, try or connection but the model's", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkTry refuses a try run with an item, a lease or a connection besides the model's, without its
+// station, its try, its recorded commit or a repository to fetch it from, or on another bundle.
+func (r RunRequest) checkTry() error {
+	switch {
+	case r.Item != "" || r.Lease != nil || len(r.Connections) > 0:
+		return fmt.Errorf("%w: a try has no item, lease or connection but the model's", ErrBadRunRequest)
+	case r.Station == "" || r.TryOf == "" || r.Bundle != TaskKindTry || r.GradeOf != "":
+		return fmt.Errorf("%w: a try needs its station, its try and a try bundle, and grades no result", ErrBadRunRequest)
+	case r.Commit == "" || r.Repository.URL == "":
+		return fmt.Errorf("%w: a try needs a recorded commit and the repository it is in", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkGrade refuses a grade run with an item, a lease, a repository, a commit, checks, an
+// environment or a connection besides the model's, or without its station, its try, the result it
+// grades or its model.
+func (r RunRequest) checkGrade() error {
+	switch {
+	case r.Item != "" || r.Lease != nil || len(r.Connections) > 0 || r.Repository != (Repository{}) || r.Commit != "" ||
+		len(r.Checks) > 0 || r.Environment.Name != "" || len(r.Environment.Env) > 0:
+		return fmt.Errorf("%w: a grade has no item, lease, repository, commit, check, environment or connection but the model's", ErrBadRunRequest)
+	case r.Station == "" || r.TryOf == "" || !r.GradeOf.Valid() || r.Model == "":
+		return fmt.Errorf("%w: a grade needs its station, its try, the result it grades and its model", ErrBadRunRequest)
 	}
 
 	return nil

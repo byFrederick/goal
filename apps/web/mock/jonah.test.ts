@@ -65,23 +65,37 @@ describe('the mock Jonah API', () => {
     expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7]);
   });
 
-  it('answers 409 review-loop-not-running to a manual review while no loop runs', async () => {
+  it('queues a manual review with 202 and answers 409 review-in-flight to the next while it waits', async () => {
     const api = jonah();
     const review = await call(api, '/factories/software/jonah/reviews', 'POST');
-    expect(review.status).toBe(409);
-    expect(review.body.code).toBe('review-loop-not-running');
-    expect(review.body.detail).toBe("Reviews start when Jonah's review loop ships");
+    expect(review.status).toBe(202);
+    expect(review.body).toMatchObject({ state: 'pending', trigger: 'manual' });
+    const again = await call(api, '/factories/software/jonah/reviews', 'POST');
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('review-in-flight');
   });
 
-  it('has no version for a factory without a seed, and a review still answers review-loop-not-running', async () => {
+  it('lists the four kept tests, removes one, and answers 404 for it a second time', async () => {
+    const api = jonah();
+    const list = await call(api, '/factories/software/jonah/tests', 'GET');
+    expect(list.body.tests).toHaveLength(4);
+    const removed = await call(api, '/factories/software/jonah/tests/kept-2', 'DELETE');
+    expect(removed.status).toBe(204);
+    const after = await call(api, '/factories/software/jonah/tests', 'GET');
+    expect(after.body.tests.map((t: { id: string }) => t.id)).toEqual(['kept-1', 'kept-3', 'kept-4']);
+    const again = await call(api, '/factories/software/jonah/tests/kept-2', 'DELETE');
+    expect(again.status).toBe(404);
+    expect(again.body.code).toBe('kept-test-not-found');
+  });
+
+  it('has no version for a factory without a seed, and a review still queues', async () => {
     const api = jonah();
     const overview = await call(api, '/factories/goal/jonah', 'GET', 'goal');
     expect(overview.body.waiting).toBe(0);
     expect(overview.body.observations).toEqual([]);
 
     const review = await call(api, '/factories/goal/jonah/reviews', 'POST', 'goal');
-    expect(review.status).toBe(409);
-    expect(review.body.code).toBe('review-loop-not-running');
+    expect(review.status).toBe(202);
   });
 
   it('serves proposal 7 as the picture shows it: two files, the four runs as evidence and the versions it moves between', async () => {
@@ -168,5 +182,32 @@ describe('the mock Jonah API', () => {
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
     expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8]);
+  });
+
+  it('answers Try again with an estimate, then with the new tries once confirmed, and refuses over budget', async () => {
+    const api = jonah();
+    const path = '/factories/software/jonah/proposals/7/try';
+    const estimate = await call(api, path, 'POST');
+    expect(estimate.status).toBe(200);
+    expect(estimate.body.estimate.tries).toBe(2);
+    expect(estimate.body.proposal).toBeUndefined();
+
+    const first = await call(api, path, 'POST', 'software', { confirm: true });
+    expect(first.status).toBe(201);
+    expect(first.body.proposal.tried.items[0].tries).toHaveLength(2);
+    const second = await call(api, path, 'POST', 'software', { confirm: true });
+    expect(second.body.proposal.tried.items[0].tries).toHaveLength(3);
+    const third = await call(api, path, 'POST', 'software', { confirm: true });
+    expect(third.status).toBe(409);
+    expect(third.body.code).toBe('learning-budget-exhausted');
+    const shown = await call(api, '/factories/software/jonah/proposals/7', 'GET');
+    expect(shown.body.tried.items[0].tries).toHaveLength(3);
+  });
+
+  it('gives the seeded kept tests passed, failed, error and no last result', async () => {
+    const list = await call(jonah(), '/factories/software/jonah/tests', 'GET');
+    expect(
+      list.body.tests.map((t: { last_result: { result: string } | null }) => t.last_result?.result ?? null),
+    ).toEqual(['passed', 'failed', 'error', null]);
   });
 });

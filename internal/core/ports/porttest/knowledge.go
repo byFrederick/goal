@@ -1,16 +1,13 @@
 package porttest
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"maps"
-	"math"
 	"slices"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 
@@ -26,54 +23,34 @@ const auditKind = "kind"
 // Knowledge keeps knowledge bases in memory with the database's rules: names unique per
 // organization, sources reading their organization's connections (a synced one only through a
 // kind that syncs; a connection a source reads cannot be deleted), leases claimed by time, an
-// audit entry for every change people make, and the same search: the nearest chunks of the
-// query's model by cosine distance and the best by keywords (any of the query's words, each
-// occurrence counting), the 50 best of each over the named sources only, fused by
-// domain.FuseRanks.
+// audit entry for every change people make, and the files uploaded to upload sources.
 type Knowledge struct {
 	conns *Connections
 	audit ports.Audit
+	// secrets are the ones sources read with, once ReadSecrets set them; until then any name is one.
+	secrets *OrgSecrets
 
-	mu      sync.Mutex
-	orgs    map[domain.OrgID]*knowledgeOrg
-	chunkID int64
+	mu   sync.Mutex
+	orgs map[domain.OrgID]*knowledgeOrg
 }
 
 type knowledgeOrg struct {
 	sources map[string]*fakeSource // by name
-	docs    map[domain.KnowledgeDocumentID]*fakeDocument
+	// pinned are the snapshots running agent runs pinned (Pin).
+	pinned map[domain.KnowledgeSnapshotID]bool
 }
 
 type fakeSource struct {
 	src    domain.KnowledgeSource
 	connID domain.ConnectionID
 	token  string // the lease's, "" when none holds it
-}
-
-type fakeDocument struct {
-	doc    domain.KnowledgeDocument
-	chunks []fakeChunk
-	// uses and verdicts go with the document, as 00072's cascade takes them.
-	uses     map[useKey]domain.KnowledgeUse
-	verdicts map[verdictKey]domain.KnowledgeVerdict
-}
-
-// useKey is a use's key: one per run, document and kind.
-type useKey struct {
-	run  domain.RunID
-	kind domain.KnowledgeUseKind
-}
-
-// verdictKey is a verdict's key: one per actor, document and run ("" its own).
-type verdictKey struct {
-	actor string
-	run   domain.RunID
-}
-
-type fakeChunk struct {
-	id    int64
-	chunk domain.Chunk
-	model string
+	// snapshots (oldest first), the current files by path and the read counts go with the
+	// source, as 00090's cascade takes them.
+	snapshots []domain.KnowledgeSnapshot
+	files     map[string]domain.KnowledgeFile
+	reads     map[readKey]domain.KnowledgeFileReads
+	// uploads are an upload source's files by name.
+	uploads map[string]domain.KnowledgeUpload
 }
 
 // NewKnowledge returns an empty knowledge base whose sources read conns' connections, audited
@@ -86,6 +63,60 @@ func NewKnowledge(conns *Connections, audit ports.Audit) *Knowledge {
 	conns.d.mu.Unlock()
 
 	return k
+}
+
+// ReadSecrets makes secrets the ones sources read with, as the database's foreign key does: a
+// source names an existing secret, follows its renames, and the secret cannot be deleted while a
+// source reads with it.
+func (k *Knowledge) ReadSecrets(secrets *OrgSecrets) {
+	k.mu.Lock()
+	k.secrets = secrets
+	k.mu.Unlock()
+
+	secrets.d.mu.Lock()
+	defer secrets.d.mu.Unlock()
+
+	secrets.d.readBy = func(org domain.OrgID, name string) []string {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+
+		var out []string
+
+		for _, n := range slices.Sorted(maps.Keys(k.org(org).sources)) {
+			if k.org(org).sources[n].src.Secret == name {
+				out = append(out, n)
+			}
+		}
+
+		return out
+	}
+	secrets.d.renamed = func(org domain.OrgID, from, to string) {
+		k.mu.Lock()
+		defer k.mu.Unlock()
+
+		for _, s := range k.org(org).sources {
+			if s.src.Secret == from {
+				s.src.Secret = to
+			}
+		}
+	}
+}
+
+// secret refuses a secret name that is none of ReadSecrets' (ErrNotFound). k.mu is not held.
+func (k *Knowledge) secret(ctx context.Context, name string) error {
+	k.mu.Lock()
+	secrets := k.secrets
+	k.mu.Unlock()
+
+	if name == "" || secrets == nil {
+		return nil
+	}
+
+	if _, err := secrets.Get(ctx, name); err != nil {
+		return fmt.Errorf("secret %q: %w", name, err)
+	}
+
+	return nil
 }
 
 // readsConnection reports whether one of org's sources reads the connection id.
@@ -106,7 +137,7 @@ func (k *Knowledge) readsConnection(org domain.OrgID, id domain.ConnectionID) bo
 func (k *Knowledge) org(org domain.OrgID) *knowledgeOrg {
 	o, ok := k.orgs[org]
 	if !ok {
-		o = &knowledgeOrg{sources: map[string]*fakeSource{}, docs: map[domain.KnowledgeDocumentID]*fakeDocument{}}
+		o = &knowledgeOrg{sources: map[string]*fakeSource{}, pinned: map[domain.KnowledgeSnapshotID]bool{}}
 		k.orgs[org] = o
 	}
 
@@ -141,16 +172,10 @@ func (k *Knowledge) Sources(ctx context.Context) ([]domain.KnowledgeSource, erro
 	return out, err
 }
 
-// view is s as it is read: a copy with its document count.
+// view is s as it is read: a copy.
 func (o *knowledgeOrg) view(s *fakeSource) domain.KnowledgeSource {
 	out := s.src
 	out.Config = maps.Clone(s.src.Config)
-
-	for _, d := range o.docs {
-		if d.doc.Source == s.src.ID {
-			out.Documents++
-		}
-	}
 
 	return out
 }
@@ -184,6 +209,10 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
 
+	if err := k.secret(ctx, n.Secret); err != nil {
+		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
+	}
+
 	var out domain.KnowledgeSource
 
 	err = k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
@@ -193,8 +222,8 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 		now := time.Now().UTC()
 		s := domain.KnowledgeSource{
-			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection,
-			Config: maps.Clone(n.Config), SyncEvery: cmp.Or(n.SyncEvery, domain.DefaultSyncEvery), Status: domain.SyncIdle,
+			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection, Secret: n.Secret,
+			Config: maps.Clone(n.Config), ReadWhen: n.ReadWhen, SyncEvery: n.Every(), Status: domain.SyncIdle,
 			CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 		}
 
@@ -207,7 +236,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		}
 
 		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceCreated, s.ID,
-			map[string]any{auditName: n.Name, auditKind: string(n.Kind), "connection": n.Connection})); err != nil {
+			sourceAudit(n))); err != nil {
 			return err
 		}
 
@@ -225,7 +254,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 // connection is the connection a new source reads ("" for uploads), checked as the database does.
 func (k *Knowledge) connection(ctx context.Context, n domain.NewKnowledgeSource) (domain.ConnectionID, error) {
-	if n.Kind == domain.SourceUpload {
+	if n.Connection == "" {
 		return "", nil
 	}
 
@@ -252,12 +281,22 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 		return domain.KnowledgeSource{}, fmt.Errorf("update knowledge source: %w", err)
 	}
 
+	if p.Secret != nil {
+		if err := k.secret(ctx, *p.Secret); err != nil {
+			return domain.KnowledgeSource{}, fmt.Errorf("update knowledge source: %w", err)
+		}
+	}
+
 	var out domain.KnowledgeSource
 
 	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
 		s, ok := o.sources[name]
 		if !ok {
 			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+		}
+
+		if err := p.CheckOn(s.src); err != nil {
+			return err
 		}
 
 		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceUpdated, s.src.ID, map[string]any{auditName: name})); err != nil {
@@ -274,15 +313,83 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 
 		if p.SyncEvery != nil {
 			s.src.SyncEvery = *p.SyncEvery
+			s.src.NextSyncAt = patchedNextSync(s.src, time.Now().UTC())
 		}
 
-		s.src.UpdatedAt = time.Now().UTC()
+		now := time.Now().UTC()
+		newReadWhen(&s.src, p.ReadWhen, now)
+
+		if p.Secret != nil {
+			s.src.Secret = *p.Secret
+		}
+
+		s.src.UpdatedAt = now
 		out = o.view(s)
 
 		return nil
 	})
 
 	return out, err
+}
+
+// newReadWhen sets src's read-when line to line when it differs, and then makes a source that
+// writes snapshots (upload, repository, Confluence) due at now.
+func newReadWhen(src *domain.KnowledgeSource, line *string, now time.Time) {
+	if line == nil || *line == src.ReadWhen {
+		return
+	}
+
+	src.ReadWhen = *line
+
+	switch src.Kind {
+	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
+		src.NextSyncAt = &now
+	case domain.SourceSynced, domain.SourceLive:
+	}
+}
+
+// ConvertSource implements ports.Knowledge.
+func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.KnowledgeSourceKind, by domain.Actor) (domain.KnowledgeSource, error) {
+	var out domain.KnowledgeSource
+
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, ok := o.sources[name]
+		if !ok {
+			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+		}
+
+		if err := s.src.CheckConvert(kind); err != nil {
+			return err
+		}
+
+		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceUpdated, s.src.ID,
+			map[string]any{auditName: name, auditKind: string(kind)})); err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		s.src.Kind, s.src.Connection, s.connID = kind, "", ""
+		s.src.Config = s.src.ConvertedConfig()
+		s.src.NextSyncAt, s.src.UpdatedAt = &now, now
+		out = o.view(s)
+
+		return nil
+	})
+	if err != nil {
+		return domain.KnowledgeSource{}, fmt.Errorf("convert knowledge source: %w", err)
+	}
+
+	return out, nil
+}
+
+// sourceAudit is the data of a new source's created entry: its name, kind and what it reads.
+func sourceAudit(n domain.NewKnowledgeSource) map[string]any {
+	out := map[string]any{auditName: n.Name, auditKind: string(n.Kind), "connection": n.Connection}
+	if n.Secret != "" {
+		out["secret"] = n.Secret
+	}
+
+	return out
 }
 
 // DeleteSource implements ports.Knowledge; drop runs before anything changes, so its error
@@ -296,10 +403,8 @@ func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Act
 
 		var blobs []domain.BlobHash
 
-		for _, d := range o.docs {
-			if d.doc.Source == s.src.ID && d.doc.Blob != "" {
-				blobs = append(blobs, d.doc.Blob)
-			}
+		for _, u := range s.uploads {
+			blobs = append(blobs, u.Blob)
 		}
 
 		var orphans []domain.BlobHash
@@ -319,12 +424,6 @@ func (k *Knowledge) DeleteSource(ctx context.Context, name string, by domain.Act
 			return err
 		}
 
-		for id, d := range o.docs {
-			if d.doc.Source == s.src.ID {
-				delete(o.docs, id)
-			}
-		}
-
 		delete(o.sources, name)
 
 		return nil
@@ -338,18 +437,6 @@ func dropped(ctx context.Context, drop ports.DropBlobs, unheld []domain.BlobHash
 	}
 
 	return drop(ctx, unheld)
-}
-
-// holds reports whether a document of o, other than those of the source without and the
-// document except, has the content b.
-func (o *knowledgeOrg) holds(b domain.BlobHash, without domain.KnowledgeSourceID, except domain.KnowledgeDocumentID) bool {
-	for id, d := range o.docs {
-		if d.doc.Blob == b && d.doc.Source != without && id != except {
-			return true
-		}
-	}
-
-	return false
 }
 
 // SyncNow implements ports.Knowledge.
@@ -371,8 +458,21 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 	})
 }
 
+// patchedNextSync is src's next sync once its interval changed to src.SyncEvery: none on demand, now
+// for one that waited for Sync, else as it was.
+func patchedNextSync(src domain.KnowledgeSource, now time.Time) *time.Time {
+	switch {
+	case src.SyncEvery == domain.SyncOnDemand:
+		return nil
+	case src.Kind != domain.SourceLive && src.NextSyncAt == nil:
+		return &now
+	default:
+		return src.NextSyncAt
+	}
+}
+
 // ClaimSource implements ports.Knowledge: the source due first of every organization's.
-func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model string) (*domain.SourceClaim, error) {
+func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time) (*domain.SourceClaim, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
@@ -383,7 +483,7 @@ func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model s
 
 	for org, o := range k.orgs {
 		for _, s := range o.sources {
-			if !claimable(s.src, now, model) {
+			if !claimable(s.src, now) {
 				continue
 			}
 
@@ -406,13 +506,14 @@ func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time, model s
 	}, nil
 }
 
-// claimable is the claim's rule: not live, its lease ended, and due or of another model.
-func claimable(s domain.KnowledgeSource, now time.Time, model string) bool {
-	if s.Kind == domain.SourceLive || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
+// claimable is the claim's rule: not live, its lease ended, and due; an on-demand source waiting
+// for Sync never is.
+func claimable(s domain.KnowledgeSource, now time.Time) bool {
+	if s.Kind == domain.SourceLive || s.NextSyncAt == nil || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
 		return false
 	}
 
-	return !s.NextSyncAt.After(now) || (model != "" && s.EmbedModel != model && s.Status != domain.SyncFailed)
+	return !s.NextSyncAt.After(now)
 }
 
 // RenewSource implements ports.Knowledge.
@@ -466,12 +567,18 @@ func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r doma
 		s.src.LeaseUntil, s.token = nil, ""
 
 		if r.Error == "" {
-			s.src.Status, s.src.LastError, s.src.LastSyncedAt, s.src.EmbedModel = domain.SyncIdle, "", &at, r.EmbedModel
+			s.src.Status, s.src.LastError, s.src.LastSyncedAt, s.src.SyncFailures = domain.SyncIdle, "", &at, 0
 		} else {
 			s.src.Status, s.src.LastError = domain.SyncFailed, truncateRunes(r.Error, domain.MaxKnowledgeError)
+			s.src.SyncFailures++
 		}
 
-		if s.src.NextSyncAt.Equal(r.Due) {
+		switch {
+		case s.src.NextSyncAt == nil || !s.src.NextSyncAt.Equal(r.Due):
+			// Made on demand, or due again, since the claim: that stands.
+		case s.src.SyncEvery == domain.SyncOnDemand:
+			s.src.NextSyncAt = nil
+		default:
 			next := at.Add(s.src.SyncEvery)
 			s.src.NextSyncAt = &next
 		}
@@ -482,460 +589,7 @@ func (k *Knowledge) FinishSync(ctx context.Context, l domain.SourceLease, r doma
 	})
 }
 
-// Versions implements ports.Knowledge.
-func (k *Knowledge) Versions(ctx context.Context, source domain.KnowledgeSourceID) (map[string]string, error) {
-	out := map[string]string{}
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		for _, d := range o.docs {
-			if d.doc.Source == source && d.doc.Status != domain.DocumentPending {
-				out[d.doc.ExternalID] = d.doc.Version
-			}
-		}
-
-		return nil
-	})
-
-	return out, err
-}
-
-// PutDocument implements ports.Knowledge.
-func (k *Knowledge) PutDocument(ctx context.Context, d domain.KnowledgeDocument, chunks []domain.Chunk) error {
-	if d.ExternalID == "" || len(d.ExternalID) > domain.MaxExternalID {
-		return fmt.Errorf("put knowledge document: its external id has %d bytes: %w", len(d.ExternalID), domain.ErrInvalid)
-	}
-
-	for _, c := range chunks {
-		if c.Embedding != nil && (d.EmbedModel == "" || len(c.Embedding) != domain.EmbeddingDimensions) {
-			return fmt.Errorf("put knowledge document %q: chunk %d's embedding: %w", d.ExternalID, c.Ord, domain.ErrInvalid)
-		}
-
-		if len([]rune(c.Text)) > domain.MaxChunkText {
-			return fmt.Errorf("put knowledge document %q: chunk %d is too long: %w", d.ExternalID, c.Ord, domain.ErrInvalid)
-		}
-	}
-
-	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		if o.byID(d.Source) == nil {
-			return fmt.Errorf("knowledge source %s: %w", d.Source, ports.ErrNotFound)
-		}
-
-		existing := o.document(d.Source, d.ExternalID)
-		if existing == nil && o.byID(d.Source).src.Kind == domain.SourceUpload {
-			return fmt.Errorf("upload %s: %w", d.ExternalID, ports.ErrNotFound)
-		}
-
-		if existing == nil {
-			d.ID = domain.KnowledgeDocumentID(newV7())
-			existing = &fakeDocument{}
-			o.docs[d.ID] = existing
-		} else {
-			d.ID, d.CreatedBy = existing.doc.ID, existing.doc.CreatedBy
-			d.Blob = cmp.Or(d.Blob, existing.doc.Blob)
-		}
-
-		d.Error = truncateRunes(d.Error, domain.MaxKnowledgeError)
-		d.SeenAt = later(existing.doc.SeenAt, d.SeenAt.UTC())
-		existing.doc, existing.chunks = d, nil
-
-		for _, c := range chunks {
-			k.chunkID++
-			c.Embedding = halve(c.Embedding)
-			existing.chunks = append(existing.chunks, fakeChunk{id: k.chunkID, chunk: c, model: modelOf(c, d.EmbedModel)})
-		}
-
-		return nil
-	})
-}
-
-func modelOf(c domain.Chunk, model string) string {
-	if c.Embedding == nil {
-		return ""
-	}
-
-	return model
-}
-
-// halve rounds v as the database's halfvec keeps it: to the nearest float16.
-func halve(v []float32) []float32 {
-	if v == nil {
-		return nil
-	}
-
-	out := make([]float32, len(v))
-	for i, x := range v {
-		out[i] = toFloat16(x)
-	}
-
-	return out
-}
-
-// toFloat16 rounds x to the nearest value a float16 holds (normal range; tiny values to zero).
-func toFloat16(x float32) float32 {
-	if x == 0 || math.IsNaN(float64(x)) || math.IsInf(float64(x), 0) {
-		return x
-	}
-
-	frac, exp := math.Frexp(float64(x))
-	if exp < -13 {
-		return 0
-	}
-
-	const mantissa = 1 << 11
-
-	return float32(math.Ldexp(math.Round(frac*mantissa)/mantissa, exp))
-}
-
-// document is the document of source with external id ext, or nil.
-func (o *knowledgeOrg) document(source domain.KnowledgeSourceID, ext string) *fakeDocument {
-	for _, d := range o.docs {
-		if d.doc.Source == source && d.doc.ExternalID == ext {
-			return d
-		}
-	}
-
-	return nil
-}
-
-// later is the later of a and b.
-func later(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-
-	return b
-}
-
-// MarkSeen implements ports.Knowledge; no external ids is nothing to do.
-func (k *Knowledge) MarkSeen(ctx context.Context, l domain.SourceLease, externalIDs []string, at time.Time) error {
-	if len(externalIDs) == 0 {
-		return nil
-	}
-
-	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		if _, err := o.leased(l); err != nil {
-			return err
-		}
-
-		for _, d := range o.docs {
-			if d.doc.Source == l.Source && slices.Contains(externalIDs, d.doc.ExternalID) {
-				d.doc.SeenAt = later(d.doc.SeenAt, at.UTC())
-			}
-		}
-
-		return nil
-	})
-}
-
-// DeleteUnseen implements ports.Knowledge.
-func (k *Knowledge) DeleteUnseen(ctx context.Context, l domain.SourceLease, before time.Time) (int, error) {
-	n := 0
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		if _, err := o.leased(l); err != nil {
-			return err
-		}
-
-		for id, d := range o.docs {
-			if d.doc.Source == l.Source && d.doc.SeenAt.Before(before) {
-				delete(o.docs, id)
-
-				n++
-			}
-		}
-
-		return nil
-	})
-
-	return n, err
-}
-
-// AddUpload implements ports.Knowledge.
-func (k *Knowledge) AddUpload(ctx context.Context, source string, d domain.KnowledgeDocument, by domain.Actor) (domain.KnowledgeDocument, error) {
-	if !d.Blob.Valid() {
-		return domain.KnowledgeDocument{}, fmt.Errorf("upload %q: its content hash %q: %w", d.Title, d.Blob, domain.ErrInvalid)
-	}
-
-	var out domain.KnowledgeDocument
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		s, ok := o.sources[source]
-		if !ok {
-			return fmt.Errorf("knowledge source %q: %w", source, ports.ErrNotFound)
-		}
-
-		if s.src.Kind != domain.SourceUpload {
-			return fmt.Errorf("knowledge source %q: %w", source, domain.ErrNotUploadSource)
-		}
-
-		if existing := o.document(s.src.ID, string(d.Blob)); existing != nil {
-			out = existing.doc
-
-			return nil
-		}
-
-		now := time.Now().UTC()
-		doc := domain.KnowledgeDocument{
-			ID: domain.KnowledgeDocumentID(newV7()), Source: s.src.ID, ExternalID: string(d.Blob), Version: string(d.Blob),
-			Title: d.Title, MIME: d.MIME, Bytes: d.Bytes, Blob: d.Blob, Status: domain.DocumentPending, SeenAt: now, CreatedBy: by,
-		}
-
-		if err := k.audit.Append(ctx, domain.AuditEntry{
-			Actor: by, Action: domain.AuditKnowledgeDocumentUploaded, TargetKind: domain.AuditTargetKnowledgeDocument,
-			TargetID: string(doc.ID), Data: map[string]any{"source": source, "title": d.Title, "bytes": d.Bytes},
-		}); err != nil {
-			return err
-		}
-
-		o.docs[doc.ID] = &fakeDocument{doc: doc}
-		out = doc
-
-		return nil
-	})
-
-	return out, err
-}
-
-// DeleteDocument implements ports.Knowledge; drop runs before anything changes, so its error
-// changes nothing.
-func (k *Knowledge) DeleteDocument(ctx context.Context, id domain.KnowledgeDocumentID, by domain.Actor, drop ports.DropBlobs) error {
-	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		d, ok := o.docs[id]
-		if !ok {
-			return fmt.Errorf("knowledge document %s: %w", id, ports.ErrNotFound)
-		}
-
-		src := o.byID(d.doc.Source)
-		if src.src.Kind != domain.SourceUpload {
-			return fmt.Errorf("knowledge document %s: %w", id, domain.ErrNotUploadSource)
-		}
-
-		if d.doc.Blob != "" && !o.holds(d.doc.Blob, "", id) {
-			if err := dropped(ctx, drop, []domain.BlobHash{d.doc.Blob}); err != nil {
-				return err
-			}
-		}
-
-		if err := k.audit.Append(ctx, domain.AuditEntry{
-			Actor: by, Action: domain.AuditKnowledgeDocumentDeleted, TargetKind: domain.AuditTargetKnowledgeDocument,
-			TargetID: string(id), Data: map[string]any{"source": src.src.Name, "title": d.doc.Title},
-		}); err != nil {
-			return err
-		}
-
-		delete(o.docs, id)
-
-		return nil
-	})
-}
-
-// Documents implements ports.Knowledge.
-func (k *Knowledge) Documents(ctx context.Context, source string, after domain.KnowledgeDocumentID, limit int) ([]domain.KnowledgeDocument, error) {
-	var out []domain.KnowledgeDocument
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		s, ok := o.sources[source]
-		if !ok {
-			return fmt.Errorf("knowledge source %q: %w", source, ports.ErrNotFound)
-		}
-
-		for _, id := range slices.Sorted(maps.Keys(o.docs)) {
-			if d := o.docs[id]; d.doc.Source == s.src.ID && (after == "" || id > after) && len(out) < limit {
-				out = append(out, d.doc)
-			}
-		}
-
-		return nil
-	})
-
-	return out, err
-}
-
-// Document implements ports.Knowledge.
-func (k *Knowledge) Document(ctx context.Context, id domain.KnowledgeDocumentID) (domain.KnowledgeDocument, string, error) {
-	var (
-		out  domain.KnowledgeDocument
-		text string
-	)
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		d, ok := o.docs[id]
-		if !ok {
-			return fmt.Errorf("knowledge document %s: %w", id, ports.ErrNotFound)
-		}
-
-		texts := make([]string, 0, len(d.chunks))
-		for _, c := range d.chunks {
-			texts = append(texts, c.chunk.Text)
-		}
-
-		out, text = d.doc, strings.Join(texts, "\n\n")
-
-		return nil
-	})
-
-	return out, text, err
-}
-
-// Search implements ports.Knowledge.
-func (k *Knowledge) Search(ctx context.Context, q domain.KnowledgeQuery) ([]domain.KnowledgeHit, error) {
-	if len(q.Sources) == 0 || q.Limit <= 0 {
-		return nil, nil
-	}
-
-	if q.Embedding != nil && (q.Model == "" || len(q.Embedding) != domain.EmbeddingDimensions) {
-		return nil, fmt.Errorf("search knowledge: the query's embedding: %w", domain.ErrInvalid)
-	}
-
-	var out []domain.KnowledgeHit
-
-	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
-		hits := o.candidates(q.Sources)
-		fused := domain.FuseRanks(nearest(hits, q), byWords(hits, q.Text))
-
-		for _, f := range fused[:min(len(fused), q.Limit, domain.SearchCandidates)] {
-			h := hits[f.Chunk]
-			h.Score = f.Score
-			out = append(out, h.KnowledgeHit)
-		}
-
-		return nil
-	})
-
-	return out, err
-}
-
 // candidate is a chunk a search may rank.
-type candidate struct {
-	domain.KnowledgeHit
-
-	embedding []float32
-	model     string
-}
-
-// candidates are the chunks of the named sources, by id.
-func (o *knowledgeOrg) candidates(sources []string) map[int64]candidate {
-	ids := map[domain.KnowledgeSourceID]string{}
-
-	for _, name := range sources {
-		if s, ok := o.sources[name]; ok {
-			ids[s.src.ID] = name
-		}
-	}
-
-	out := map[int64]candidate{}
-
-	for _, d := range o.docs {
-		name, ok := ids[d.doc.Source]
-		if !ok {
-			continue
-		}
-
-		for _, c := range d.chunks {
-			out[c.id] = candidate{
-				KnowledgeHit: domain.KnowledgeHit{
-					Chunk: c.id, Document: d.doc.ID, Source: name, Title: d.doc.Title, URL: d.doc.URL, Heading: c.chunk.Heading, Text: c.chunk.Text,
-				},
-				embedding: c.chunk.Embedding, model: c.model,
-			}
-		}
-	}
-
-	return out
-}
-
-// nearest ranks the chunks of q.Model by cosine distance to q.Embedding, at most
-// domain.SearchCandidates.
-func nearest(hits map[int64]candidate, q domain.KnowledgeQuery) []int64 {
-	if q.Embedding == nil {
-		return nil
-	}
-
-	type scored struct {
-		id int64
-		d  float64
-	}
-
-	var all []scored
-
-	query := halve(q.Embedding)
-
-	for id, h := range hits {
-		if h.embedding != nil && h.model == q.Model {
-			all = append(all, scored{id, cosineDistance(query, h.embedding)})
-		}
-	}
-
-	slices.SortFunc(all, func(a, b scored) int { return cmp.Or(cmp.Compare(a.d, b.d), cmp.Compare(a.id, b.id)) })
-
-	out := make([]int64, 0, min(len(all), domain.SearchCandidates))
-	for _, s := range all[:min(len(all), domain.SearchCandidates)] {
-		out = append(out, s.id)
-	}
-
-	return out
-}
-
-func cosineDistance(a, b []float32) float64 {
-	var dot, na, nb float64
-
-	for i := range a {
-		dot += float64(a[i]) * float64(b[i])
-		na += float64(a[i]) * float64(a[i])
-		nb += float64(b[i]) * float64(b[i])
-	}
-
-	if na == 0 || nb == 0 {
-		return math.NaN()
-	}
-
-	return 1 - dot/math.Sqrt(na*nb)
-}
-
-// byWords ranks the chunks holding any of text's words by how often they hold them over 1 + the
-// log of their length in words (ts_rank's normalization 1), at most domain.SearchCandidates.
-func byWords(hits map[int64]candidate, text string) []int64 {
-	words := tokens(text)
-	if len(words) == 0 {
-		return nil
-	}
-
-	type scored struct {
-		id   int64
-		rank float64
-	}
-
-	var all []scored
-
-	for id, h := range hits {
-		n, chunk := 0, tokens(h.Heading+" "+h.Text)
-
-		for _, t := range chunk {
-			if slices.Contains(words, t) {
-				n++
-			}
-		}
-
-		if n > 0 {
-			all = append(all, scored{id, float64(n) / (1 + math.Log(float64(len(chunk))))})
-		}
-	}
-
-	slices.SortFunc(all, func(a, b scored) int { return cmp.Or(cmp.Compare(b.rank, a.rank), cmp.Compare(a.id, b.id)) })
-
-	out := make([]int64, 0, min(len(all), domain.SearchCandidates))
-	for _, s := range all[:min(len(all), domain.SearchCandidates)] {
-		out = append(out, s.id)
-	}
-
-	return out
-}
-
-// tokens are s's words lowercased, as PostgreSQL's simple configuration splits them.
-func tokens(s string) []string {
-	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-}
-
 func sourceEntry(by domain.Actor, action string, id domain.KnowledgeSourceID, data map[string]any) domain.AuditEntry {
 	return domain.AuditEntry{Actor: by, Action: action, TargetKind: domain.AuditTargetKnowledgeSource, TargetID: string(id), Data: data}
 }
@@ -951,4 +605,151 @@ func truncateRunes(s string, n int) string {
 	}
 
 	return s
+}
+
+// holds reports whether an upload of o, other than those of the source without and the file
+// named except in the source with that id, has the content b.
+func (o *knowledgeOrg) holds(b domain.BlobHash, without domain.KnowledgeSourceID, except string) bool {
+	for _, s := range o.sources {
+		if s.src.ID == without {
+			continue
+		}
+
+		for name, u := range s.uploads {
+			if u.Blob == b && name != except {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// upload is the upload source named name, locked by the caller.
+func (o *knowledgeOrg) upload(name string) (*fakeSource, error) {
+	s, ok := o.sources[name]
+	if !ok {
+		return nil, fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
+	}
+
+	if s.src.Kind != domain.SourceUpload {
+		return nil, fmt.Errorf("knowledge source %q: %w", name, domain.ErrNotUploadSource)
+	}
+
+	return s, nil
+}
+
+// heldElsewhere reports whether another upload of o than the file named name of s has content b.
+func (o *knowledgeOrg) heldElsewhere(b domain.BlobHash, s *fakeSource, name string) bool {
+	for n, u := range s.uploads {
+		if u.Blob == b && n != name {
+			return true
+		}
+	}
+
+	return o.holds(b, s.src.ID, "")
+}
+
+// AddUpload implements ports.Knowledge.
+func (k *Knowledge) AddUpload(ctx context.Context, source string, u domain.KnowledgeUpload, by domain.Actor, drop ports.DropBlobs) (domain.KnowledgeUpload, error) {
+	if !u.Blob.Valid() {
+		return domain.KnowledgeUpload{}, fmt.Errorf("upload %q: its content hash %q: %w", u.Name, u.Blob, domain.ErrInvalid)
+	}
+
+	var out domain.KnowledgeUpload
+
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, err := o.upload(source)
+		if err != nil {
+			return err
+		}
+
+		if existing, ok := s.uploads[u.Name]; ok && existing.Blob == u.Blob {
+			out = existing
+
+			return nil
+		}
+
+		if old, ok := s.uploads[u.Name]; ok && !o.heldElsewhere(old.Blob, s, u.Name) {
+			if err := dropped(ctx, drop, []domain.BlobHash{old.Blob}); err != nil {
+				return err
+			}
+		}
+
+		f := domain.KnowledgeUpload{
+			ID: domain.KnowledgeUploadID(newV7()), Source: s.src.ID, Name: u.Name, MIME: u.MIME, Bytes: u.Bytes, Blob: u.Blob,
+			CreatedBy: by, CreatedAt: time.Now().UTC(),
+		}
+
+		if err := k.audit.Append(ctx, domain.AuditEntry{
+			Actor: by, Action: domain.AuditKnowledgeDocumentUploaded, TargetKind: domain.AuditTargetKnowledgeDocument,
+			TargetID: string(f.ID), Data: map[string]any{"source": source, "title": u.Name, "bytes": u.Bytes},
+		}); err != nil {
+			return err
+		}
+
+		if s.uploads == nil {
+			s.uploads = map[string]domain.KnowledgeUpload{}
+		}
+
+		s.uploads[u.Name] = f
+		out = f
+
+		return nil
+	})
+
+	return out, err
+}
+
+// DeleteUpload implements ports.Knowledge; drop runs before anything changes, so its error
+// changes nothing.
+func (k *Knowledge) DeleteUpload(ctx context.Context, source, name string, by domain.Actor, drop ports.DropBlobs) error {
+	return k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, err := o.upload(source)
+		if err != nil {
+			return err
+		}
+
+		u, ok := s.uploads[name]
+		if !ok {
+			return fmt.Errorf("knowledge source %q has no upload %q: %w", source, name, ports.ErrNotFound)
+		}
+
+		if !o.heldElsewhere(u.Blob, s, name) {
+			if err := dropped(ctx, drop, []domain.BlobHash{u.Blob}); err != nil {
+				return err
+			}
+		}
+
+		if err := k.audit.Append(ctx, domain.AuditEntry{
+			Actor: by, Action: domain.AuditKnowledgeDocumentDeleted, TargetKind: domain.AuditTargetKnowledgeDocument,
+			TargetID: string(u.ID), Data: map[string]any{"source": source, "title": name},
+		}); err != nil {
+			return err
+		}
+
+		delete(s.uploads, name)
+
+		return nil
+	})
+}
+
+// Uploads implements ports.Knowledge.
+func (k *Knowledge) Uploads(ctx context.Context, source string) ([]domain.KnowledgeUpload, error) {
+	var out []domain.KnowledgeUpload
+
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+		s, err := o.upload(source)
+		if err != nil {
+			return err
+		}
+
+		for _, name := range slices.Sorted(maps.Keys(s.uploads)) {
+			out = append(out, s.uploads[name])
+		}
+
+		return nil
+	})
+
+	return out, err
 }

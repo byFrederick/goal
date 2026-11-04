@@ -94,7 +94,6 @@ func TestFromYAML_ReadsTheSections(t *testing.T) {
 		"browser":    m.Connections[1],
 		"tickets":    dig(m.Connections, 0, "legacy"),
 		"gate":       dig(m.Line, "stations", 3, "gate"),
-		"librarian":  m.Line["librarian"],
 		"budget":     m.Review["budget"],
 	})
 
@@ -104,12 +103,16 @@ func TestFromYAML_ReadsTheSections(t *testing.T) {
 		`"tools":{"browser__click":{"agents":["engineer"],"scope":"preview"}}},` +
 		`"budget":{"daily_usd":20,"per_item_usd":2.5},` +
 		`"engineer":{"edit":"allowed","read":"allowed","run":{"commands":["pnpm","go"],"mode":"allowed"},"web":"ask"},` +
-		`"gate":{"max_rework":2,"on_reject":"build"},"librarian":"reviewer",` +
+		`"gate":{"max_rework":2,"on_reject":"build"},` +
 		`"purpose":"Builds and reviews changes to the acme example shop.",` +
 		`"repository":{"token":"env:ACME_REPO_TOKEN","url":"https://code.example.com/acme/shop.git"},"tickets":true}`
 
 	if string(got) != want {
 		t.Errorf("model =\n%s\nwant\n%s", got, want)
+	}
+
+	if l, ok := m.Line["librarian"]; ok {
+		t.Errorf("line librarian = %v; learning.librarian is ignored (ADR 0039) and has no field", l)
 	}
 
 	for pointer, lines := range map[string][2]int{
@@ -161,6 +164,44 @@ spec:
 
 	if want := []any{map[string]any{"name": "code"}, map[string]any{"name": "docs"}}; !reflect.DeepEqual(m.Connections, want) {
 		t.Errorf("connections = %v, want %v", m.Connections, want)
+	}
+}
+
+// A knowledge source entry written as an object (ADR 0038 decision 5) is Basics as written, and
+// writing it back changes nothing, byte for byte.
+func TestFromYAML_KeepsKnowledgeEntryObjects(t *testing.T) {
+	t.Parallel()
+
+	doc := []byte(`apiVersion: goal/v1
+spec:
+  knowledge:
+    sources:
+      - handbook
+      - name: runbooks
+        appliesTo: { stations: [investigate, fix] }
+        readWhen: Before you touch production, find the runbook for the alert.
+`)
+
+	m, _, err := FromYAML(doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []any{"handbook", map[string]any{
+		keyName: "runbooks", "appliesTo": map[string]any{"stations": []any{"investigate", "fix"}},
+		"readWhen": "Before you touch production, find the runbook for the alert.",
+	}}
+	if got := m.Basics["knowledge_sources"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("knowledge_sources = %#v\nwant %#v", got, want)
+	}
+
+	out, err := Apply(doc, Basics, sectionJSON(t, m, Basics))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out, doc) {
+		t.Errorf("unchanged basics rewrote the file:\n%s", out)
 	}
 }
 

@@ -175,6 +175,42 @@ func TestWeeklyBudget_DrainSkipsAgentClaimsOnly(t *testing.T) {
 	}
 }
 
+// Jonah's runs show in the factory's spend but never use up its weekly budget: the line keeps
+// claiming however much Jonah spent (ADR 0039 decision 16).
+func TestWeeklyBudget_IgnoresJonahRuns(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, budgeted(10, domain.BudgetStop, 1), porttest.Succeed(`{}`))
+
+	h.spent(t, t0, 9.5)
+
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: factoryID, Agent: agJonah, StartedAt: t0, Kind: domain.RunKindJonah})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(inOrg(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: 50}, t0); err != nil {
+		t.Fatal(err)
+	}
+
+	it := h.submit(t, domain.NewItem{Title: "after a review"})
+	h.tick(t)
+
+	if err := h.worker.WaitRuns(bounded(t), 1); err != nil {
+		t.Fatalf("no run started with $9.50 of the line's $10 spent and $50 of Jonah's: %v", err)
+	}
+
+	h.wait(t, h.e)
+
+	if got := h.logs.budgetLogs(t); slices.Contains(got, "budget_exhausted 1") {
+		t.Errorf("budget logs = %v; want no budget_exhausted", got)
+	}
+
+	if got := h.item(t, it.ID); got.Station == stWork && got.State == domain.StateQueued {
+		t.Errorf("item = %s/%s; want it claimed", got.Station, got.State)
+	}
+}
+
 func TestWeeklyBudget_StopCancelsRunningAndRequeues(t *testing.T) {
 	t.Parallel()
 

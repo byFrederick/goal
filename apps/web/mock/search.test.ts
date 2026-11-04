@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { SearchItem } from '@goal/api-client';
+import type { OrgSearch, SearchItem } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
 import { search } from './search.ts';
@@ -20,6 +20,14 @@ describe('search ranking', () => {
     items: [item(3, 'Spend tests for the tracker'), item(147, 'Show this week’s spend'), item(9, 'spend')],
     agents: [{ name: 'builder', stations: ['build'], factory_id: 'goal-id', factory_name: 'goal' }],
     connections: [{ name: 'spendwise', kind: 'github' }],
+    secrets: [
+      { name: 'old-spend-key', scope: { all_factories: true, factories: [] }, expires_at: null },
+      {
+        name: 'spend-key',
+        scope: { all_factories: false, factories: ['goal-id'] },
+        expires_at: '2027-01-31T00:00:00Z',
+      },
+    ],
     factories: [{ id: 'goal-id', name: 'goal', title: 'Software' }],
   };
 
@@ -27,6 +35,7 @@ describe('search ranking', () => {
     const found = search(source, 'spend', 5);
     expect(found.items.map((i) => i.number)).toEqual([9, 3, 147]);
     expect(found.connections.map((c) => c.name)).toEqual(['spendwise']);
+    expect(found.secrets.map((s) => s.name)).toEqual(['spend-key', 'old-spend-key']);
   });
 
   it('matches an item by its exact number, with or without the #, and ranks it first', () => {
@@ -99,6 +108,19 @@ describe('GET /v1/orgs/acme/search', () => {
     const body = (await res.json()) as { agents: { name: string; factory_name: string }[] };
     expect(body.agents.length).toBeGreaterThan(0);
     for (const agent of body.agents) expect(agent.name).not.toMatch(/-\d+$/);
+  });
+
+  it('finds secrets by name with their scope and expiry, never a value', async () => {
+    const res = await fetch(`${base}/v1/orgs/acme/search?q=token`);
+    const body = (await res.json()) as OrgSearch;
+    expect(body.secrets.map((s) => s.name)).toEqual([
+      'confluence-token',
+      'github-token',
+      'old-npm-token',
+      'sentry-token',
+      'zendesk-token',
+    ]);
+    for (const secret of body.secrets) expect(Object.keys(secret).sort()).toEqual(['expires_at', 'name', 'scope']);
   });
 
   it('refuses an empty query and a limit out of range with a problem', async () => {

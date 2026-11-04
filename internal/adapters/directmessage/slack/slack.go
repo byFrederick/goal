@@ -1,6 +1,7 @@
 // Package slack implements ports.DirectMessenger over the Slack Web API (ADR 0023, decision 5): it
 // finds the person by email with users.lookupByEmail, opens a direct message with
-// conversations.open and posts the text there with chat.postMessage. Every call is a form POST
+// conversations.open and posts the text there with chat.postMessage; a check asks auth.test
+// whether a token works. Every call is a form POST
 // with the bot token as a bearer token, so neither the token nor the email is ever in a URL, and
 // the client follows no redirect, so the token goes to the configured host only. No error carries
 // the token, the email or Slack's reply: each is a ports.DMError with a fixed code.
@@ -9,6 +10,7 @@ package slack
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -91,6 +93,29 @@ func (m *Messenger) Send(ctx context.Context, token string, msg ports.DirectMess
 	}
 
 	return m.call(ctx, token, "chat.postMessage", url.Values{"channel": {open.Channel.ID}, "text": {msg.Text}}, nil)
+}
+
+// Check implements ports.DirectMessenger with auth.test.
+func (m *Messenger) Check(ctx context.Context, token string) (string, error) {
+	var reply struct {
+		Team string `json:"team"`
+	}
+
+	if err := m.call(ctx, token, "auth.test", url.Values{}, &reply); err != nil {
+		if de, ok := errors.AsType[*ports.DMError](err); ok && tokenRefused[de.Code] {
+			return "", &ports.DMError{Code: "slack-token-invalid", Permanent: true}
+		}
+
+		return "", &ports.DMError{Code: "slack-token-unavailable", Permanent: errors.Is(err, ports.ErrDMPermanent)}
+	}
+
+	return reply.Team, nil
+}
+
+// tokenRefused are the codes of a call whose token Slack refuses.
+var tokenRefused = map[string]bool{
+	"slack-invalid-auth": true, "slack-not-authed": true, "slack-account-inactive": true, "slack-token-revoked": true,
+	"slack-token-expired": true,
 }
 
 // call posts form to method and decodes a good reply into out, when out is not nil.

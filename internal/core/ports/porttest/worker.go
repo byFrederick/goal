@@ -19,7 +19,8 @@ type AgentFunc func(ctx context.Context, run ExecCall, stdout io.Writer) domain.
 
 // Worker plays the goal-agent image in Sandboxes (NewSandboxes(w.Exec)), as apps/worker/README.md's
 // sandbox contract says: `goal-agent prepare` writes its one prepared line, `goal-agent run`
-// plays an AgentFunc and writes its result as the stdout protocol's finished line, and any
+// plays an AgentFunc and writes its result as the stdout protocol's finished line, a try's diff
+// (domain.PastTryDiffScript) prints what Diff scripted (none by default), and any
 // other command is a station check, which exits as scripted (Exit) and passes otherwise. It
 // records every command it was given.
 type Worker struct {
@@ -29,7 +30,12 @@ type Worker struct {
 	prepareCode   int
 	prepareStderr string
 	branchExisted bool
+	branchHead    string
+	baseHead      string
 	exits         map[string][]int
+	diff          string
+	diffCode      int
+	diffs         []ExecCall
 	prepares      []ExecCall
 	runs          []ExecCall
 	checks        []ExecCall
@@ -55,6 +61,31 @@ func (w *Worker) BranchExisted() {
 	w.branchExisted = true
 }
 
+// Heads makes prepare report the item branch's and the base's heads before its rebase, as
+// goal-agent prepare does with a repository.
+func (w *Worker) Heads(branch, base string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.branchHead, w.baseHead = branch, base
+}
+
+// Diff makes a try's diff (domain.PastTryDiffScript) print diff and exit with code.
+func (w *Worker) Diff(diff string, code int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.diff, w.diffCode = diff, code
+}
+
+// Diffs are the try diff commands the worker was given.
+func (w *Worker) Diffs() []ExecCall {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	return slices.Clone(w.diffs)
+}
+
 // Exit scripts the exit codes of successive runs of a check command, repeating the last.
 func (w *Worker) Exit(command string, codes ...int) {
 	w.mu.Lock()
@@ -70,6 +101,15 @@ func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer)
 		return w.prepare(c, stdout, stderr)
 	case slices.Equal(c.Argv, []string{"goal-agent", "run"}):
 		return w.run(ctx, c, stdout, stderr)
+	case slices.Equal(c.Argv, []string{"sh", "-c", domain.PastTryDiffScript}):
+		w.mu.Lock()
+		w.diffs = append(w.diffs, c)
+		diff, code := w.diff, w.diffCode
+		w.mu.Unlock()
+
+		_, _ = io.WriteString(stdout, diff)
+
+		return code
 	default:
 		return w.check(c, stdout)
 	}
@@ -78,7 +118,7 @@ func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer)
 func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 	w.mu.Lock()
 	w.prepares = append(w.prepares, c)
-	code, why, existed := w.prepareCode, w.prepareStderr, w.branchExisted
+	code, why, existed, branch, base := w.prepareCode, w.prepareStderr, w.branchExisted, w.branchHead, w.baseHead
 	w.mu.Unlock()
 
 	w.changes.signal()
@@ -88,7 +128,10 @@ func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 		return code
 	}
 
-	writeLine(stdout, preparedLine{Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed})
+	writeLine(stdout, preparedLine{
+		Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed,
+		BranchHead: branch, BaseHead: base,
+	})
 
 	return 0
 }
@@ -119,7 +162,8 @@ func (w *Worker) run(ctx context.Context, c ExecCall, stdout, stderr io.Writer) 
 
 	writeLine(stdout, finishedLine{Type: "finished", WorkerFinished: domain.WorkerFinished{
 		Status: string(status), Output: res.Output, Error: res.Error, CostUSD: res.CostUSD, Turns: res.Turns,
-		InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, SessionID: res.SessionID, At: time.Now().UTC().Format(time.RFC3339),
+		InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, SessionID: res.SessionID, PushedHead: res.PushedHead,
+		At: time.Now().UTC().Format(time.RFC3339),
 	}})
 
 	return 0
@@ -138,6 +182,8 @@ type preparedLine struct {
 	Seconds       float64 `json:"seconds"`
 	Tools         int     `json:"tools"`
 	BranchExisted bool    `json:"branch_existed"`
+	BranchHead    string  `json:"branch_head,omitempty"`
+	BaseHead      string  `json:"base_head,omitempty"`
 }
 
 func (w *Worker) check(c ExecCall, stdout io.Writer) int {

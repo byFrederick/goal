@@ -33,13 +33,13 @@ import (
 type Section string
 
 // The sections. Everything else in factory.yaml (apiVersion, metadata.owner, contracts,
-// learning other than the librarian's agent, unknown keys) is edited in YAML mode only.
+// learning, unknown keys) is edited in YAML mode only.
 const (
 	// Basics: metadata.id/name/title/purpose, board.workTypes, runtime.modelConnection/size/tools/
 	// repository, knowledge.sources, and the removed runtime.runner/image/auth, secrets and
 	// knowledgeBase.
 	Basics      Section = "basics"
-	Line        Section = "line"        // board.stations/intake/flow, learning.librarian.agent
+	Line        Section = "line"        // board.stations/intake/flow
 	Agents      Section = "agents"      // agents, skills, rules, runtime.model
 	Connections Section = "connections" // connections
 	Review      Section = "review"      // runtime.budget
@@ -151,7 +151,6 @@ var sections = map[Section][]binding{
 		{keyStations, []string{keySpec, keyBoard, keyStations}, stationsShape},
 		{"intake", []string{keySpec, keyBoard, "intake"}, intakeShape},
 		{keyFlow, []string{keySpec, keyBoard, keyFlow}, flowShape},
-		{keyLibrarian, []string{keySpec, keyLearning, keyLibrarian, "agent"}, renamedShape},
 	},
 	Agents: {
 		{"default_model", []string{keySpec, keyRuntime, "model"}, renamedShape},

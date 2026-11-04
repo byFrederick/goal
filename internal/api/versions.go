@@ -39,6 +39,10 @@ func (s *server) ListVersions(ctx context.Context, req gen.ListVersionsRequestOb
 		out.Versions = append(out.Versions, s.versionOut(v))
 	}
 
+	if err := s.withWatches(ctx, rec.ID, out.Versions); err != nil {
+		return nil, err
+	}
+
 	if page.NextBefore > 0 {
 		out.NextBefore = &page.NextBefore
 	}
@@ -57,7 +61,19 @@ func (s *server) GetVersion(ctx context.Context, req gen.GetVersionRequestObject
 		return nil, err
 	}
 
-	return gen.GetVersion200JSONResponse(s.versionDetailOut(v)), nil
+	out := s.versionDetailOut(v)
+
+	if v.State == domain.VersionPublished {
+		by, err := s.versionWatches(ctx, rec, []domain.DefinitionVersionID{v.ID})
+		if err != nil {
+			return nil, err
+		}
+
+		ws := by[v.ID]
+		out.Watches = &ws
+	}
+
+	return gen.GetVersion200JSONResponse(out), nil
 }
 
 func (s *server) GetVersionModel(ctx context.Context, req gen.GetVersionModelRequestObject) (gen.GetVersionModelResponseObject, error) {

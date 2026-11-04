@@ -336,3 +336,120 @@ func TestTaskToken_DraftRequest(t *testing.T) {
 		t.Errorf("verifying a production token that names a draft request: err = %v, want ErrBadTaskToken", err)
 	}
 }
+
+// Use secrets off (ADR 0037 decision 12) travels in the token; a token without it is today's.
+func TestTaskToken_CarriesNoEnvironment(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+
+	for _, want := range []bool{true, false} {
+		claims := TaskClaims{
+			OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+			NoEnvironment: want, ExpiresAt: now.Add(time.Hour).Unix(),
+		}
+
+		token, err := SignTaskToken(key, claims)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := VerifyTaskToken(key, token, now)
+		if err != nil || got.NoEnvironment != want {
+			t.Errorf("VerifyTaskToken = %+v, %v; want no environment %v", got, err, want)
+		}
+	}
+}
+
+func TestTaskToken_CarriesTheKnowledgePins(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	pins := []KnowledgePin{{Source: srcHandbook, Snapshot: "s1"}, {Source: srcRunbooks, Snapshot: "s2"}}
+	claims := TaskClaims{
+		OrgID: "o1", FactoryID: "f1", VersionID: "v1", ItemID: "i1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		Knowledge: pins, ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, _, _ := strings.Cut(token, ".")
+	if payload, _ := base64.RawURLEncoding.DecodeString(body); !strings.Contains(string(payload), `"kn":[{"n":"handbook","s":"s1"}`) {
+		t.Errorf("payload %s; want the pins under kn", payload)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil || !reflect.DeepEqual(got.Knowledge, pins) {
+		t.Errorf("VerifyTaskToken = %+v, %v; want pins %v", got.Knowledge, err, pins)
+	}
+}
+
+// A grade token (ADR 0039 decision 10) names the try and which result it grades, and no item or
+// connection; no other kind names a result to grade.
+func TestTaskToken_Grade(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	key := []byte("gateway-key")
+	claims := TaskClaims{
+		Kind: TaskKindGrade, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Station: stationBuild, Agent: testAgent, RunID: "r1",
+		Model: "claude-haiku-5-5", TryOf: "try-1", GradeOf: GradeOriginal, ExpiresAt: now.Add(time.Hour).Unix(),
+	}
+
+	token, err := SignTaskToken(key, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := VerifyTaskToken(key, token, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claims.Audience = TaskAudience
+	if !reflect.DeepEqual(got, claims) {
+		t.Errorf("claims = %+v, want %+v", got, claims)
+	}
+
+	sign := func(c TaskClaims) string {
+		c.Audience = TaskAudience
+
+		payload, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		enc := base64.RawURLEncoding
+
+		return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac(key, payload))
+	}
+
+	bad := map[string]func(c *TaskClaims){
+		"no try":                func(c *TaskClaims) { c.TryOf = "" },
+		"no result":             func(c *TaskClaims) { c.GradeOf = "" },
+		"an unknown result":     func(c *TaskClaims) { c.GradeOf = "again" },
+		"an item":               func(c *TaskClaims) { c.ItemID = "i1" },
+		"connections":           func(c *TaskClaims) { c.Connections = []string{"acme-tracker"} },
+		"a result on a try":     func(c *TaskClaims) { c.Kind = TaskKindTry },
+		"a result on a station": func(c *TaskClaims) { c.Kind, c.TryOf, c.ItemID = "", "", "i1" },
+		"a result on a draft":   func(c *TaskClaims) { c.Kind, c.TryOf, c.Station, c.DraftRequest = TaskKindDraftRequest, "", "", "d1" },
+	}
+
+	for name, change := range bad {
+		c := claims
+		change(&c)
+
+		if _, err := SignTaskToken(key, c); !errors.Is(err, ErrBadTaskToken) {
+			t.Errorf("signing a token with %s: err = %v, want ErrBadTaskToken", name, err)
+		}
+
+		if _, err := VerifyTaskToken(key, sign(c), now); !errors.Is(err, ErrBadTaskToken) {
+			t.Errorf("verifying a token with %s: err = %v, want ErrBadTaskToken", name, err)
+		}
+	}
+}

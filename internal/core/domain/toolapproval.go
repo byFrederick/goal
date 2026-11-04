@@ -2,10 +2,13 @@ package domain
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
+	"path"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -235,9 +238,252 @@ type RunToolModes struct {
 // EffectiveToolModes combines the organization connection's modes with the organization's
 // standing rules for agent, the agent's role: an active rule for (connection, tool, agent) turns
 // an ask into allow, and nothing turns off into anything. Every ask that remains comes from the
-// organization's mode, so each offers Always allow. The definition's per-tool rule has no input
-// here: no definition can carry one today.
+// organization's mode, so each offers Always allow. A rule keyed by server lifts nothing here. The
+// definition's per-tool rule has no input here: no definition can carry one today.
 func EffectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, connection ConnectionID, agent string) RunToolModes {
+	return effectiveToolModes(modes, rules, func(r StandingRule, tool string) bool {
+		return r.ConnectionID != "" && r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
+	})
+}
+
+// ToolModeEntry is one entry of an MCP server's tool modes in a run: a tool name or a glob, as
+// path.Match reads it, and its mode.
+type ToolModeEntry struct {
+	Tool string
+	Mode ConnectionToolMode
+}
+
+// ServerToolModes are the modes of one MCP server's tools for agent, the agent's role, in a run on
+// secrets (ADR 0037 decisions 8 and 12), as an ordered list: a tool's mode is the first entry whose
+// pattern matches it, and a tool no entry matches is allow.
+//
+// file is the environment file's mcp.<server>.tools, a tool name or glob to its mode, where the
+// most specific pattern wins: an exact name beats any glob, a glob with more characters other than
+// * beats one with fewer, and a tie goes to the pattern that sorts first. An active standing rule
+// for (factory, environment, server, tool, agent) whose tool resolves to ask in file lifts that
+// tool to allow; nothing lifts off. limit is the organization policy's cap in the same form: the
+// stricter of a tool's mode and the cap's wins (off, then ask, then allow), after any rule.
+//
+// Where a cap pattern and a file pattern match the same tool, the list folds both in; when the
+// tools a glob's entry covers can resolve to different caps, its entry takes the strictest of them,
+// so the list is never looser than the cap. Every ask in the list offers Always allow.
+func ServerToolModes(
+	file, limit map[string]ConnectionToolMode, rules []StandingRule, factory FactoryID, environment, server, agent string,
+) []ToolModeEntry {
+	lifted := map[string]bool{}
+
+	for _, r := range rules {
+		if r.Active() && r.ConnectionID == "" && r.Factory == factory && r.Environment == environment && r.Server == server &&
+			r.Agent == agent && resolveToolMode(file, r.Tool) == ToolModeAsk {
+			lifted[r.Tool] = true
+		}
+	}
+
+	patterns := toolPatterns(file, limit, slices.Collect(maps.Keys(lifted)))
+	out := make([]ToolModeEntry, 0, len(patterns))
+
+	for i, p := range patterns {
+		mode := modeFor(file, patterns[i+1:], p)
+		if lifted[p] {
+			mode = ToolModeAllow
+		}
+
+		out = append(out, ToolModeEntry{Tool: p, Mode: stricterMode(mode, modeFor(limit, patterns[i+1:], p))})
+	}
+
+	return out
+}
+
+// toolPatterns are the patterns of file and limit and the exact names lifted, each once, most
+// specific first.
+func toolPatterns(file, limit map[string]ConnectionToolMode, lifted []string) []string {
+	patterns := slices.Collect(maps.Keys(file))
+	for _, p := range append(slices.Collect(maps.Keys(limit)), lifted...) {
+		if !slices.Contains(patterns, p) {
+			patterns = append(patterns, p)
+		}
+	}
+
+	slices.SortFunc(patterns, CompareToolPatterns)
+
+	return patterns
+}
+
+// modeFor is the mode modes give the tools whose first entry is p, the patterns after p being
+// later: p's own mode when modes has it, the mode of exact name p, or otherwise the strictest of
+// the later patterns of modes that may match a tool p matches, and allow.
+func modeFor(modes map[string]ConnectionToolMode, later []string, p string) ConnectionToolMode {
+	if m, ok := modes[p]; ok {
+		return m
+	}
+
+	if !IsToolGlob(p) {
+		return resolveToolMode(modes, p)
+	}
+
+	mode := ToolModeAllow
+
+	for _, q := range later {
+		if m, ok := modes[q]; ok && toolGlobsOverlap(p, q) {
+			mode = stricterMode(mode, m)
+		}
+	}
+
+	return mode
+}
+
+// resolveToolMode is tool's mode in modes: its most specific matching pattern's, and allow when
+// none matches.
+func resolveToolMode(modes map[string]ConnectionToolMode, tool string) ConnectionToolMode {
+	patterns := slices.SortedFunc(maps.Keys(modes), CompareToolPatterns)
+	for _, p := range patterns {
+		if ok, err := path.Match(p, tool); err == nil && ok {
+			return modes[p]
+		}
+	}
+
+	return ToolModeAllow
+}
+
+// CompareToolPatterns orders tool patterns most specific first, as ServerToolModes does: exact
+// names, then globs by their count of characters other than *, more first, then by the patterns
+// themselves.
+func CompareToolPatterns(a, b string) int {
+	if ga, gb := IsToolGlob(a), IsToolGlob(b); ga != gb {
+		if ga {
+			return 1
+		}
+
+		return -1
+	}
+
+	return cmp.Or(cmp.Compare(len(b)-strings.Count(b, "*"), len(a)-strings.Count(a, "*")), strings.Compare(a, b))
+}
+
+// IsToolGlob reports whether tool pattern p holds a character path.Match reads as more than itself.
+func IsToolGlob(p string) bool { return strings.ContainsAny(p, `*?[\`) }
+
+// toolModeRank orders modes by strictness; anything but allow and ask counts as off.
+func toolModeRank(m ConnectionToolMode) int {
+	switch m {
+	case ToolModeAllow:
+		return 0
+	case ToolModeAsk:
+		return 1
+	case ToolModeOff:
+		return 2
+	default:
+		return 2
+	}
+}
+
+// stricterMode is the stricter of a and b.
+func stricterMode(a, b ConnectionToolMode) ConnectionToolMode {
+	if toolModeRank(b) > toolModeRank(a) {
+		return b
+	}
+
+	return a
+}
+
+// toolGlobsOverlap reports whether a tool name may match both globs. It is exact for *, ? and
+// literal characters, and counts a character class as matching any character, so it may say true
+// where no name matches both, never false where one does.
+func toolGlobsOverlap(a, b string) bool {
+	o := globOverlap{x: globTokens(a), y: globTokens(b), seen: map[[2]int]bool{}}
+	return o.from(0, 0)
+}
+
+// globOverlap is toolGlobsOverlap's search over two globs' tokens, remembering each pair of
+// positions it has decided.
+type globOverlap struct {
+	x, y []string
+	seen map[[2]int]bool
+}
+
+// from reports whether a name may match x from token i and y from token j.
+func (o globOverlap) from(i, j int) bool {
+	key := [2]int{i, j}
+	if done, ok := o.seen[key]; ok {
+		return done
+	}
+
+	r := o.step(i, j)
+	o.seen[key] = r
+
+	return r
+}
+
+// step decides from(i, j) by the tokens at i and j: a * matches nothing or one more character of
+// the other glob.
+func (o globOverlap) step(i, j int) bool {
+	xEnd, yEnd := i == len(o.x), j == len(o.y)
+
+	switch {
+	case !xEnd && o.x[i] == "*":
+		return o.from(i+1, j) || (!yEnd && o.from(i, j+1))
+	case !yEnd && o.y[j] == "*":
+		return o.from(i, j+1) || (!xEnd && o.from(i+1, j))
+	case xEnd || yEnd:
+		return xEnd && yEnd
+	}
+
+	return globCharsOverlap(o.x[i], o.y[j]) && o.from(i+1, j+1)
+}
+
+// globTokens splits a glob into tokens: "*", "?", a character class "[…]" or one literal
+// character, an escaped one without its backslash.
+func globTokens(p string) []string {
+	var out []string
+
+	for i := 0; i < len(p); i++ {
+		switch p[i] {
+		case '*', '?':
+			out = append(out, p[i:i+1])
+		case '[':
+			end := strings.IndexByte(p[i:], ']')
+			if end < 0 {
+				end = len(p) - i - 1
+			}
+
+			out = append(out, p[i:i+end+1])
+			i += end
+		case '\\':
+			if i+1 < len(p) {
+				i++
+			}
+
+			out = append(out, "\\"+p[i:i+1])
+		default:
+			out = append(out, "\\"+p[i:i+1])
+		}
+	}
+
+	return out
+}
+
+// globCharsOverlap reports whether one character may match both tokens: two literals only when
+// equal, a literal and a class when the class matches it, and anything else always.
+func globCharsOverlap(a, b string) bool {
+	la, lb := strings.HasPrefix(a, "\\"), strings.HasPrefix(b, "\\")
+
+	switch {
+	case la && lb:
+		return a == b
+	case la && strings.HasPrefix(b, "["):
+		ok, err := path.Match(b, a[1:])
+		return err != nil || ok
+	case lb && strings.HasPrefix(a, "["):
+		ok, err := path.Match(a, b[1:])
+		return err != nil || ok
+	default:
+		return true
+	}
+}
+
+// effectiveToolModes are modes with each ask that an active rule of rules matches (lifts) turned
+// into allow.
+func effectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, lifts func(r StandingRule, tool string) bool) RunToolModes {
 	out := RunToolModes{Modes: map[string]ConnectionToolMode{}, AlwaysAllowOffered: []string{}}
 
 	for _, tool := range slices.Sorted(maps.Keys(modes)) {
@@ -245,9 +491,7 @@ func EffectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRul
 		case ToolModeOff:
 			out.Modes[tool] = ToolModeOff
 		case ToolModeAsk:
-			if slices.ContainsFunc(rules, func(r StandingRule) bool {
-				return r.Active() && r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
-			}) {
+			if slices.ContainsFunc(rules, func(r StandingRule) bool { return r.Active() && lifts(r, tool) }) {
 				continue
 			}
 

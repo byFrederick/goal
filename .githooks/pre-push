@@ -24,6 +24,12 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 	fi
 done
 
+# git runs hooks with GIT_DIR set, and in a worktree more GIT_* variables. They override `git -C`,
+# so a test that runs git in a temporary directory would commit, check out and change config in
+# this repository instead. The loop above needed them; nothing after it does.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+	GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX GIT_QUARANTINE_PATH
+
 if ! command -v task >/dev/null 2>&1; then
 	echo "pre-push: task is not installed (https://taskfile.dev; mise install)" >&2
 	exit 1

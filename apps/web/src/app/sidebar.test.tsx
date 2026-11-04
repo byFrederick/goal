@@ -89,7 +89,7 @@ const me: Me = {
 
 /** Jonah's overview of each factory: nothing waiting by default, so a row with no count keeps its plain name. */
 const jonahWaiting = (waiting: number): JonahOverview => ({
-  policy: { enabled: true, propose_after: 5, weekly_usd: 20, approver_roles: ['owner'] },
+  policy: { enabled: true, propose_after: 5, share: 0.05, budget_usd: 10, approver_roles: ['owner'] },
   waiting,
   month_cost_usd: 0,
   observations: [],
@@ -194,13 +194,13 @@ describe('the sidebar', () => {
   });
 
   it('lists the organization-wide pages in the sidebar’s order', async () => {
-    renderSidebar({ can: ['connection:read', 'knowledge:read'] });
+    renderSidebar({ can: ['access:read', 'knowledge:read'] });
     const links = within(await nav())
       .getAllByRole('link', { hidden: false })
       .map((link) => link.textContent);
 
     expect(links.findIndex((text) => text?.startsWith('Home'))).toBeLessThan(
-      links.findIndex((text) => text?.startsWith('Connections')),
+      links.findIndex((text) => text?.startsWith('Access')),
     );
     expect(links.some((text) => text?.startsWith('Knowledge'))).toBe(true);
   });
@@ -252,8 +252,8 @@ describe('the sidebar', () => {
     expect(screen.queryByText(/waiting for your review/)).toBeNull();
   });
 
-  it('keeps Jonah current on its Evals page', async () => {
-    renderSidebar({ at: '/o/acme/f/goal/jonah/evals' });
+  it('keeps Jonah current on its Tests page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/jonah/tests' });
 
     expect(
       within(await nav())
@@ -293,7 +293,7 @@ describe('the sidebar', () => {
   });
 
   it('shows New factory only to whoever may create one', async () => {
-    const { unmount } = renderSidebar({ can: ['connection:read'] });
+    const { unmount } = renderSidebar({ can: ['access:read'] });
     expect(within(await nav()).queryByRole('link', { name: 'New factory' })).toBeNull();
     unmount();
 
@@ -324,6 +324,14 @@ describe('the sidebar', () => {
     expect(within(sidebar).getByRole('link', { name: /Needs you/ }).textContent).toContain('waiting on you');
     expect(within(sidebar).getByRole('link', { name: /sre factory, 3 waiting on you/ })).toBeTruthy();
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
+  });
+
+  it('starts a factory link’s accessible name with its visible name', async () => {
+    renderSidebar();
+    const sidebar = await nav();
+    const link = within(sidebar).getByRole('link', { name: /^sre factory/ });
+    expect(link.getAttribute('aria-label')).toBe('sre factory, 3 waiting on you');
+    expect(link.textContent?.startsWith('S')).toBe(true);
   });
 
   it('keeps the Needs you row as tall as its siblings, with the badge centred and no stray text node', async () => {
@@ -502,7 +510,7 @@ describe('the sidebar', () => {
 describe('the collapsed rail', () => {
   it('lists its entries in order with accessible names', async () => {
     renderSidebar({
-      can: ['connection:read', 'credential:read', 'knowledge:read', 'factory:create'],
+      can: ['access:read', 'secret:read', 'knowledge:read', 'factory:create'],
       list: [factory('goal', { can: ['item:create'] }), factory('sre'), factory('support')],
     });
     await collapse();
@@ -514,8 +522,8 @@ describe('the collapsed rail', () => {
       'Home',
       'Needs you, 3 waiting on you',
       'Runs',
-      'Connections',
-      'Credentials',
+      'Access',
+      'Secrets',
       'Knowledge',
     ]);
     expect(names.slice(8, 11).map((name) => name?.match(/, (\w+) factory/)?.[1])).toEqual(['goal', 'sre', 'support']);
@@ -540,17 +548,17 @@ describe('the collapsed rail', () => {
     expect(docs.compareDocumentPosition(spend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('links Credentials to its page for those who may read credentials', async () => {
-    renderSidebar({ can: ['credential:read'] });
-    const link = within(await nav()).getByRole('link', { name: /^Credentials/ });
+  it('links Secrets to its page for those who may read secrets', async () => {
+    renderSidebar({ can: ['secret:read'] });
+    const link = within(await nav()).getByRole('link', { name: /^Secrets/ });
 
-    expect(link.getAttribute('href')).toBe('/o/acme/credentials');
+    expect(link.getAttribute('href')).toBe('/o/acme/secrets');
   });
 
-  it('does not list Credentials without credential:read', async () => {
-    renderSidebar({ can: ['connection:read'] });
+  it('does not list Secrets without secret:read', async () => {
+    renderSidebar({ can: ['access:read'] });
 
-    expect(within(await nav()).queryByRole('link', { name: /^Credentials/ })).toBeNull();
+    expect(within(await nav()).queryByRole('link', { name: /^Secrets/ })).toBeNull();
   });
 
   it('links Needs you to its page, with the count it waits on', async () => {
@@ -563,11 +571,11 @@ describe('the collapsed rail', () => {
   });
 
   it('gives each enabled entry a tooltip with its label', async () => {
-    renderSidebar({ can: ['connection:read'] });
+    renderSidebar({ can: ['access:read'] });
     await collapse();
-    fireEvent.focus(within(await nav()).getByRole('link', { name: 'Connections' }));
+    fireEvent.focus(within(await nav()).getByRole('link', { name: 'Access' }));
 
-    expect(await screen.findByText('Connections')).toBeTruthy();
+    expect(await screen.findByText('Access')).toBeTruthy();
   });
 
   it('the collapsed choice survives a remount', async () => {

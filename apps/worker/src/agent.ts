@@ -1,7 +1,15 @@
 import { realpath } from 'node:fs/promises';
 import { posix } from 'node:path';
 import type { CanUseTool, McpServerConfig, Options, PermissionResult, Settings } from '@anthropic-ai/claude-agent-sdk';
-import { type AgentFiles, type Connection, paths, type Rule, type TaskSpec } from './spec.js';
+import {
+  type AgentFiles,
+  type Connection,
+  type Environment,
+  type EnvironmentServer,
+  paths,
+  type Rule,
+  type TaskSpec,
+} from './spec.js';
 
 /** goald's gateway as an MCP server: Goal's own tools, mcp__goal__<tool>. */
 export const gatewayServer = 'goal';
@@ -66,6 +74,8 @@ export function agentQuery(
   if (spec.max_turns) options.maxTurns = spec.max_turns;
   if (spec.max_usd) options.maxBudgetUsd = spec.max_usd;
   if (files.outputSchema) options.outputFormat = { type: 'json_schema', schema: files.outputSchema };
+  // The snapshots prepare unpacked, read-only, outside the workspace (ADR 0038).
+  if ((spec.knowledge?.snapshots.length ?? 0) > 0) options.additionalDirectories = [paths.knowledge];
 
   return { prompt: taskPrompt(spec, env.GOAL_FEEDBACK), options };
 }
@@ -75,7 +85,8 @@ export function agentQuery(
  * Claude Code reaches from the box like any API. A remote server's headers name the box's env
  * variables (${NAME}), which Claude Code expands, so no value is in the config; a stdio server is
  * started in the box and inherits the agent's env. A connection with both a URL and a command is
- * reached at its URL. Every server's tools are loaded up front: deferred behind tool search,
+ * reached at its URL. The environment's servers (ADR 0037) are configured the same way, their
+ * secrets left as ${GOAL_SECRET_<NAME>} and a stdio one's env passed as it is. Every server's tools are loaded up front: deferred behind tool search,
  * agents called them by name and failed.
  */
 function mcpServers(spec: TaskSpec, gatewayToken: string | undefined): Record<string, McpServerConfig> {
@@ -97,6 +108,15 @@ function mcpServers(spec: TaskSpec, gatewayToken: string | undefined): Record<st
       servers[c.name] = { type: 'stdio', command, args, alwaysLoad: true };
     }
   }
+  for (const s of spec.environment?.mcp_servers ?? []) {
+    if (s.name === gatewayServer) throw new Error(`MCP server ${s.name}: the name is goald's gateway's`);
+    const [command, ...args] = s.command ?? [];
+    if (s.url) {
+      servers[s.name] = { type: 'http', url: s.url, headers: s.headers ?? {}, alwaysLoad: true };
+    } else if (command) {
+      servers[s.name] = { type: 'stdio', command, args, ...(s.env ? { env: s.env } : {}), alwaysLoad: true };
+    }
+  }
   return servers;
 }
 
@@ -105,7 +125,8 @@ function mcpServers(spec: TaskSpec, gatewayToken: string | undefined): Record<st
  * ("Read", "Bash(npm test*)"): their tool names are the only built-in tools available, and the
  * rules themselves are pre-approved. Deny rules always win. Rules for connection tools
  * ("github__get_*": a connection, two underscores, a tool pattern) are left out: the gateway
- * enforces them for its tools and connectionPermission for the connections' own servers.
+ * enforces them for its tools and connectionPermission for the connections' and the environment's
+ * own servers.
  */
 export function toolPolicy(
   spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'skills'>,
@@ -136,10 +157,14 @@ function isConnectionRule(rule: string): boolean {
  * connection with allow rules allows only the tools they match. A tool whose mode is off is denied,
  * and one whose mode is ask is not run: it waits for a person (askFirst), unless a grant the run
  * carries allows that exact call once. A built-in write Claude Code escalates is decided by
- * guidanceWrite. Every other call is denied, as Claude Code's dontAsk mode would.
+ * guidanceWrite. A tool of one of the environment's MCP servers (mcp__<server>__<tool>, ADR 0037
+ * decision 8) is first decided by the agent's rules for the server, exactly as a connection's tool;
+ * then it takes the mode of the server's first tool_modes entry that matches it, allow when none
+ * does: allow runs, off is denied and ask goes to askFirst with the server as its connection. Every
+ * other call is denied, as Claude Code's dontAsk mode would.
  */
 export function connectionPermission(
-  spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections' | 'gateway_url' | 'granted_calls'>,
+  spec: Pick<TaskSpec, 'tools_allow' | 'tools_deny' | 'connections' | 'environment' | 'gateway_url' | 'granted_calls'>,
   reach: GatewayReach,
   workspace: string = paths.workspace,
 ): CanUseTool {
@@ -148,32 +173,62 @@ export function connectionPermission(
     list
       .filter(isConnectionRule)
       .flatMap((rule) => (rule.startsWith(`${conn}__`) ? [rule.slice(conn.length + 2)] : []));
+  // Deny wins, a malformed deny pattern denies the server's every tool, and allow rules restrict.
+  const allowedByRules = (conn: string, tool: string) => {
+    const allow = rules(spec.tools_allow, conn);
+    if (rules(spec.tools_deny, conn).some((p) => matches(p, tool) ?? true)) return false;
+    return allow.length === 0 || allow.some((p) => matches(p, tool) ?? false);
+  };
   // Each grant allows one call, so it is taken out of this list when it matches (ADR 0031 decision 5).
   const grants = (spec.granted_calls ?? []).map((g) => ({ ...g, key: canonicalJSON(g.input) }));
+  const granted = (conn: string, tool: string, input: unknown) => {
+    const key = canonicalJSON(input);
+    const grant = grants.findIndex((g) => g.connection === conn && g.tool === tool && g.key === key);
+    if (grant >= 0) grants.splice(grant, 1);
+    return grant >= 0;
+  };
+  // A server name may hold "_", so a tool is the environment server's whose prefix is the longest match.
+  const envServers = (spec.environment?.mcp_servers ?? [])
+    .filter((s) => s.url || s.command)
+    .sort((a, b) => b.name.length - a.name.length);
 
   return async (toolName, input) => {
     if (writeTools.has(toolName) || toolName === 'Bash') {
       if (await guidanceWrite(spec, workspace, toolName, input)) return { behavior: 'allow', updatedInput: input };
       return { behavior: 'deny', message: `${toolName} may write only the workspace's guidance files: ${guidance}.` };
     }
+    const server = envServers.find((s) => toolName.startsWith(`mcp__${s.name}__`));
+    if (server) {
+      const tool = toolName.slice(`mcp__${server.name}__`.length);
+      if (!allowedByRules(server.name, tool)) {
+        return { behavior: 'deny', message: `The agent's tool rules do not let it call ${server.name}__${tool}.` };
+      }
+      const mode = serverToolMode(server, tool);
+      if (mode === 'off') {
+        return {
+          behavior: 'deny',
+          message: `The environment's tool modes do not let it call ${server.name}__${tool}.`,
+        };
+      }
+      if (mode === 'ask' && !granted(server.name, tool, input)) return askFirst(spec, reach, server.name, tool, input);
+      return { behavior: 'allow', updatedInput: input };
+    }
     const [, conn = '', tool = ''] = /^mcp__([a-z0-9-]+)__(.+)$/.exec(toolName) ?? [];
     if (!servers.has(conn))
       return { behavior: 'deny', message: `${toolName} is not allowed by the agent's tool rules.` };
 
-    const allow = rules(spec.tools_allow, conn);
-    const denied = rules(spec.tools_deny, conn).some((p) => matches(p, tool) ?? true);
     const mode = spec.connections.find((c) => c.name === conn)?.tool_modes?.[tool];
-    if (denied || mode === 'off' || (allow.length > 0 && !allow.some((p) => matches(p, tool) ?? false))) {
+    if (!allowedByRules(conn, tool) || mode === 'off') {
       return { behavior: 'deny', message: `The agent's tool rules do not let it call ${conn}__${tool}.` };
     }
-    if (mode === 'ask') {
-      const key = canonicalJSON(input);
-      const grant = grants.findIndex((g) => g.connection === conn && g.tool === tool && g.key === key);
-      if (grant < 0) return askFirst(spec, reach, conn, tool, input);
-      grants.splice(grant, 1);
-    }
+    if (mode === 'ask' && !granted(conn, tool, input)) return askFirst(spec, reach, conn, tool, input);
     return { behavior: 'allow', updatedInput: input };
   };
+}
+
+/** A tool's mode on an environment server: its first tool_modes entry that matches it, allow when none does. */
+function serverToolMode(server: EnvironmentServer, tool: string): 'allow' | 'ask' | 'off' {
+  return server.tool_modes.find((m) => matches(m.tool, tool) ?? false)?.mode ?? 'allow';
 }
 
 /** How the worker reaches the gateway: fetch, and the run's task token (GOAL_GATEWAY_TOKEN). */
@@ -394,24 +449,19 @@ export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefi
 
 /**
  * What goes after Claude Code's system prompt: the factory's purpose, when it has one, the agent's
- * prompt, then the agent's connections, the factory rules the run has and the knowledge sources the
- * gateway's knowledge tools search, when it serves them.
+ * prompt, then what its box has (its environment on a version on secrets, its connections
+ * otherwise), the factory rules the run has and the run's Knowledge section as goald built it
+ * (ADR 0038 decision 8), when it has one.
  */
 export function systemAppend(
-  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'gateway_url' | 'knowledge_sources' | 'rules'>,
+  spec: Pick<TaskSpec, 'purpose' | 'connections' | 'environment' | 'knowledge' | 'rules'>,
   files: Pick<AgentFiles, 'prompt'>,
 ): string {
   const parts = spec.purpose ? [`## This factory\n${spec.purpose}`, files.prompt] : [files.prompt];
-  if (spec.connections.length > 0) parts.push(connectionsSection(spec.connections));
+  if (spec.environment) parts.push(environmentSection(spec.environment));
+  else if (spec.connections.length > 0) parts.push(connectionsSection(spec.connections));
   if (spec.rules && spec.rules.length > 0) parts.push(factoryRulesSection(spec.rules));
-  const sources = spec.knowledge_sources ?? [];
-  if (spec.gateway_url && sources.length > 0) {
-    const tool = (name: string) => `mcp__${gatewayServer}__knowledge__${name}`;
-    parts.push(
-      `## Knowledge\nThe organization's knowledge sources ${sources.join(', ')} are searchable with ${tool('search')}; ` +
-        `${tool('read')} returns a whole document by the id a search gave.`,
-    );
-  }
+  if (spec.knowledge?.section) parts.push(spec.knowledge.section);
   return parts.join('\n\n');
 }
 
@@ -427,6 +477,25 @@ function connectionsSection(connections: Connection[]): string {
     if (c.mcp) facts.push(`MCP server \`${c.name}\`: its tools are \`mcp__${c.name}__*\`.`);
     parts.push([`### ${c.name} (${c.title})`, facts.join(' '), c.docs].filter(Boolean).join('\n\n'));
   }
+  return parts.join('\n\n');
+}
+
+/**
+ * The "Your box" section (ADR 0037 decision 11): the environment's CLIs, the names of its variables,
+ * its files' paths and its MCP servers; never a value.
+ */
+function environmentSection(e: Environment): string {
+  const code = (xs: string[]) => xs.map((x) => `\`${x}\``).join(', ');
+  const facts = [];
+  if (e.clis.length > 0) facts.push(`- CLIs: ${code(e.clis)}.`);
+  if (e.env.length > 0) facts.push(`- Environment variables: ${code(e.env)}.`);
+  if (e.files.length > 0) facts.push(`- Files: ${code(e.files.map((f) => f.path))}.`);
+  for (const s of e.mcp_servers) facts.push(`- MCP server \`${s.name}\`: its tools are \`mcp__${s.name}__*\`.`);
+  const parts = [
+    '## Your box',
+    `Your box has environment \`${e.name}\`. Its variables and files may carry credentials: use them, never print or share their values.`,
+  ];
+  if (facts.length > 0) parts.push(facts.join('\n'));
   return parts.join('\n\n');
 }
 

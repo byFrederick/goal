@@ -1,7 +1,11 @@
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CanUseTool, Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Shell } from './environment.js';
 import type { WorkerEvent } from './events.js';
-import { runTask } from './run.js';
+import { lsRemoteHead, type RunDeps, runTask } from './run.js';
 import { type AgentFiles, parseSpec, type TaskSpec } from './spec.js';
 
 const spec: TaskSpec = parseSpec(
@@ -90,6 +94,8 @@ async function run(
     files?: AgentFiles;
     env?: NodeJS.ProcessEnv;
     fetch?: typeof globalThis.fetch;
+    remoteHead?: (branch: string) => Promise<string | undefined>;
+    environment?: RunDeps['environment'];
   } = {},
 ) {
   const { fake, calls } = scripted(messages, opts);
@@ -102,6 +108,8 @@ async function run(
     abortController: new AbortController(),
     fetch: opts.fetch ?? gateway().fetch,
     notePollMs: 0,
+    ...(opts.remoteHead ? { remoteHead: opts.remoteHead } : {}),
+    ...(opts.environment ? { environment: opts.environment } : {}),
   });
   for (const call of calls) await call.read;
   return { code, events, calls };
@@ -218,6 +226,39 @@ describe('runTask', () => {
     });
   });
 
+  it('puts the path of each Read, Grep and Glob call in its tool_use event', async () => {
+    const long = `/knowledge/runbooks/${'deep/'.repeat(120)}disk.md`;
+    const { events } = await run([
+      {
+        type: 'assistant',
+        message: {
+          id: 'msg_1',
+          content: [
+            { type: 'tool_use', id: 'tu_1', name: 'Read', input: { file_path: long } },
+            { type: 'tool_use', id: 'tu_2', name: 'Grep', input: { pattern: 'disk', path: '/knowledge/runbooks' } },
+            { type: 'tool_use', id: 'tu_3', name: 'Glob', input: { pattern: '**/*.md', path: '/knowledge' } },
+            { type: 'tool_use', id: 'tu_4', name: 'Grep', input: { pattern: 'disk' } },
+            { type: 'tool_use', id: 'tu_5', name: 'Bash', input: { path: '/knowledge/runbooks' } },
+          ],
+          usage: { ...usage, output_tokens: 1 },
+        },
+        parent_tool_use_id: null,
+        session_id: 's1',
+      },
+      success,
+    ]);
+
+    const paths = events.flatMap((e) => (e.type === 'tool_use' ? [[e.id, e.path]] : []));
+    // The path is never clipped, unlike the input, so a long one still counts.
+    expect(paths).toEqual([
+      ['tu_1', long],
+      ['tu_2', '/knowledge/runbooks'],
+      ['tu_3', '/knowledge'],
+      ['tu_4', undefined],
+      ['tu_5', undefined],
+    ]);
+  });
+
   it('streams progress events and ends with the result', async () => {
     const assistant = (content: unknown[]) => ({
       type: 'assistant',
@@ -278,6 +319,8 @@ describe('runTask', () => {
       is_error: false,
       summary: 'ok',
     });
+    // Bash names no path: goald counts only Read, Grep and Glob.
+    expect(events.find((e) => e.type === 'tool_use')).not.toHaveProperty('path');
     expect(events.at(-1)).toEqual({
       type: 'finished',
       at: at.toISOString(),
@@ -349,6 +392,69 @@ describe('runTask', () => {
     const silent = await run([]);
     expect(silent.code).toBe(1);
     expect(silent.events).toEqual([expect.objectContaining({ type: 'finished', status: 'failed' })]);
+  });
+});
+
+describe('runTask pushed head', () => {
+  const head = 'c'.repeat(40);
+  const onBranch = parseSpec(JSON.stringify({ ...spec, branch: 'goal/1-add-a-health-endpoint' }));
+
+  it("reports the item branch's head on the remote when the agent ended", async () => {
+    const asked: string[] = [];
+    const remoteHead = async (branch: string) => {
+      asked.push(branch);
+      return head;
+    };
+
+    const { code, events } = await run([success], { spec: onBranch, remoteHead });
+
+    expect(code).toBe(0);
+    expect(asked).toEqual(['goal/1-add-a-health-endpoint']);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded', pushed_head: head });
+  });
+
+  it('reports it after a crash too, as the agent may have pushed before', async () => {
+    const { code, events } = await run([], { spec: onBranch, remoteHead: async () => head, throws: new Error('boom') });
+
+    expect(code).toBe(1);
+    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom', pushed_head: head });
+  });
+
+  it('leaves it out when the lookup fails or finds no branch, and the run ends as it would', async () => {
+    for (const remoteHead of [async () => undefined, () => Promise.reject(new Error('git ls-remote exited 128'))]) {
+      const { code, events } = await run([success], { spec: onBranch, remoteHead });
+
+      expect(code).toBe(0);
+      expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+      expect(events.at(-1)).not.toHaveProperty('pushed_head');
+    }
+  });
+
+  it('never looks without a repository', async () => {
+    const asked: string[] = [];
+    const { events } = await run([success], {
+      remoteHead: async (b) => {
+        asked.push(b);
+        return head;
+      },
+    });
+
+    expect(asked).toEqual([]);
+    expect(events.at(-1)).not.toHaveProperty('pushed_head');
+  });
+});
+
+describe('lsRemoteHead', () => {
+  const sha = 'd'.repeat(40);
+
+  it("reads the branch's commit from git ls-remote's output", () => {
+    expect(lsRemoteHead(`${sha}\trefs/heads/goal/1-x\n`, 'goal/1-x')).toBe(sha);
+  });
+
+  it('reads nothing for another ref, no output or something that is not a commit id', () => {
+    expect(lsRemoteHead(`${sha}\trefs/heads/goal/1-xy\n`, 'goal/1-x')).toBeUndefined();
+    expect(lsRemoteHead('', 'goal/1-x')).toBeUndefined();
+    expect(lsRemoteHead('main\trefs/heads/goal/1-x\n', 'goal/1-x')).toBeUndefined();
   });
 });
 
@@ -529,5 +635,152 @@ describe('runTask Ask-first tool calls', () => {
     expect(events.some((e) => e.type === 'tool_result')).toBe(false);
     expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'failed' });
     expect(code).toBe(1);
+  });
+});
+
+describe('runTask environment', () => {
+  const withEnvironment = (setup: string[]) =>
+    parseSpec(
+      JSON.stringify({
+        ...spec,
+        environment: { name: 'default', files: [{ path: '~/.npmrc', env: 'GOAL_FILE_1' }], setup },
+      }),
+    );
+  let home = '';
+
+  afterEach(async () => {
+    if (home) await rm(home, { recursive: true, force: true });
+  });
+
+  it('writes the files and runs setup before it queries the agent', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const ran: string[] = [];
+    const shell: Shell = async (command) => {
+      ran.push(`${command}:${await readFile(join(home, '.npmrc'), 'utf8')}`);
+      return { code: 0, timedOut: false };
+    };
+
+    const { code, events, calls } = await run([success], {
+      spec: withEnvironment(['pnpm install']),
+      env: { ...env, GOAL_FILE_1: 'registry=https://npm.example.com/' },
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
+    });
+
+    expect(code).toBe(0);
+    expect(ran).toEqual(['pnpm install:registry=https://npm.example.com/']);
+    expect((await stat(join(home, '.npmrc'))).mode & 0o777).toBe(0o600);
+    expect(calls).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+  });
+
+  it("gives a try's env to setup alone: its variables are gone before the agent starts", async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const runEnv: NodeJS.ProcessEnv = { ...env, NPM_TOKEN: 'acme-npm-token' };
+    const seen: (string | undefined)[] = [];
+    const shell: Shell = async () => {
+      seen.push(runEnv.NPM_TOKEN);
+      return { code: 0, timedOut: false };
+    };
+    const trySpec = parseSpec(
+      JSON.stringify({
+        ...spec,
+        environment: { name: 'default', setup: ['pnpm install'], env: ['NPM_TOKEN'], setup_only: true },
+      }),
+    );
+
+    const { code, calls } = await run([success], {
+      spec: trySpec,
+      env: runEnv,
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
+    });
+
+    expect(code).toBe(0);
+    expect(seen).toEqual(['acme-npm-token']);
+    expect(calls[0]?.options.env).not.toHaveProperty('NPM_TOKEN');
+    expect(JSON.stringify(calls[0]?.options)).not.toContain('acme-npm-token');
+  });
+
+  it('fails the run with the command and its last lines when setup fails, and never queries the agent', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const shell: Shell = async (_command, opts) => {
+      opts.onOutput(`${Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n')}\n`);
+      return { code: 2, timedOut: false };
+    };
+
+    const { code, events, calls } = await run([success], {
+      spec: withEnvironment(['make deps']),
+      env: { ...env, GOAL_FILE_1: 'x' },
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
+    });
+
+    expect(code).toBe(1);
+    expect(calls).toEqual([]);
+    expect(events).toHaveLength(1);
+    const finished = events[0];
+    expect(finished).toMatchObject({ type: 'finished', status: 'failed' });
+    const error = finished?.type === 'finished' ? (finished.error ?? '') : '';
+    expect(error).toMatch(/^environment setup: `make deps` exited 2; its last 50 lines:\nline 11\n/);
+    expect(error).toMatch(/line 60$/);
+    expect(error).not.toContain('line 10\n');
+  });
+
+  it('writes the files again but runs no setup on a second run in the same box', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    const ran: string[] = [];
+    const shell: Shell = async (command) => {
+      ran.push(command);
+      return { code: 0, timedOut: false };
+    };
+    const marker = join(home, 'goal/environment-setup.done');
+    const box = (value: string) => ({
+      spec: withEnvironment(['pnpm install', 'make tools']),
+      env: { ...env, GOAL_FILE_1: value },
+      environment: { home, workspace: '/workspace', marker, shell },
+    });
+
+    const first = await run([success], box('registry=https://npm.example.com/'));
+    expect(first.code).toBe(0);
+    expect(ran).toEqual(['pnpm install', 'make tools']);
+    expect(await readFile(marker, 'utf8')).not.toContain('npm.example.com');
+
+    const second = await run([success], box('registry=https://npm2.example.com/'));
+    expect(second.code).toBe(0);
+    expect(ran).toEqual(['pnpm install', 'make tools']);
+    expect(await readFile(join(home, '.npmrc'), 'utf8')).toBe('registry=https://npm2.example.com/');
+    expect(second.calls).toHaveLength(1);
+    expect(second.events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+  });
+
+  it('runs setup again on the next run in the box after a failed setup', async () => {
+    home = await mkdtemp(join(tmpdir(), 'goal-run-home-'));
+    let code = 2;
+    const ran: string[] = [];
+    const shell: Shell = async (command) => {
+      ran.push(command);
+      return { code, timedOut: false };
+    };
+    const box = {
+      spec: withEnvironment(['make deps']),
+      env: { ...env, GOAL_FILE_1: 'x' },
+      environment: { home, workspace: '/workspace', marker: join(home, 'goal/environment-setup.done'), shell },
+    };
+
+    const first = await run([success], box);
+    expect(first.code).toBe(1);
+    expect(first.calls).toEqual([]);
+    const finished = first.events.at(-1);
+    expect(finished?.type === 'finished' ? finished.error : '').toBe('environment setup: `make deps` exited 2');
+
+    code = 0;
+    const second = await run([success], box);
+    expect(second.code).toBe(0);
+    expect(ran).toEqual(['make deps', 'make deps']);
+    expect(second.calls).toHaveLength(1);
+  });
+
+  it('runs a spec without an environment as before, with no shell', async () => {
+    const { code, calls } = await run([success]);
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(1);
   });
 });

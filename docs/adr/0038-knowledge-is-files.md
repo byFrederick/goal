@@ -1,6 +1,8 @@
 # ADR 0038 — Knowledge is files: synced folders, factory memory, an index in every prompt
 
-Status: proposed · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 11: how Jonah fills factory memory) and [ADR 0041](0041-code-and-github-without-an-app.md) (a repository source's secret opens only for the factories that list it; hosts come from the organization's list)
+Status: accepted · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 11: how Jonah fills factory memory) and [ADR 0041](0041-code-and-github-without-an-app.md) (a repository source's secret opens only for the factories that list it; hosts come from the organization's list)
+
+Amended during the build: the migration that drops the old tables (00099, with 00098 for the embeddings) does not drop the `vector` extension, because the administrator owns it and the migration role may not drop it. `goal db init` creates it and the administrator drops it, once no database needs 00054's `vector` columns on a fresh install; row 8 of the build plan reads that way. Uploads keep the original in the bucket and their name and content hash in `knowledge_uploads` (decision 2).
 
 - **Replaces:**
   - Decision 6 of [ADR 0008](0008-portable-runs-connections-and-knowledge.md): the knowledge base of chunks and vectors, searched through gateway tools.
@@ -95,6 +97,8 @@ An independent review of the first draft against the code changed nine things, a
      - A file that looks like it holds a key, by ADR 0037's `plain-key` patterns, stays out and is flagged.
      - A source whose last three syncs failed shows in Needs you, once for each factory that lists it.
    - **Retention:** goald keeps the current snapshot and any snapshot an open claim pinned, and deletes the rest.
+
+   *Amended 2026-11-03 (software#581):* a claim pins a source's newest snapshot when it starts, and the run's `knowledge_pinned` event is written only when the box first fetches its bundle, so a pin alone leaves a gap. Retention keeps a third kind of snapshot: one replaced less than the longest a claim can last ago. A snapshot is replaced when the next snapshot of its source is made. The longest a claim can last is both attempts of its run plus the lease (`engine.Config.LongestClaim`: 2 × the task timeout + the lease TTL, 4 h 2 min by default), and goald passes it to the ingestor. goald keeps a source's current snapshot, any snapshot a running run's `knowledge_pinned` event names, and any snapshot replaced inside that window, and deletes the rest. The sweep runs in each sync of the source, under its lease, so one goald does it and no advisory lock is needed. A source that stops syncing keeps its old snapshots until its next sync. The sweep deletes each zip before its row: a crash between the two leaves a row whose zip is gone, which the gateway treats as not synced and the next sync deletes, and never a zip that no row names. A failure is logged and doesn't fail the sync. Deleting a source deletes its zips (`orgs/<org>/knowledge/<source>/`) before its rows. When that fails, the source stays.
 
 4. **Limits keep every box fast.**
    - **A source** holds at most 50 MB of Markdown, 20,000 files and 5 MB per file.

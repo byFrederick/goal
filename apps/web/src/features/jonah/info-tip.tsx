@@ -1,0 +1,18 @@
+// The ⓘ beside a heading: how something works sits behind it, never in a paragraph (MOTION.md, Tooltip).
+// A button so it takes focus and shows the tip on keyboard focus too; it keeps a 44 px tap target on phones.
+import { Info } from 'lucide-react';
+import { Tooltip } from '../../ui/tooltip';
+
+export function InfoTip({ label, children }: { label: string; children: string }) {
+  return (
+    <Tooltip label={children} side="bottom">
+      <button
+        type="button"
+        aria-label={label}
+        className="press inline-grid size-6 shrink-0 place-items-center rounded-chip text-muted hover:text-ink max-md:-my-2.5 max-md:size-11"
+      >
+        <Info size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    </Tooltip>
+  );
+}

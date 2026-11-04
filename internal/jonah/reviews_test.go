@@ -2,6 +2,7 @@ package jonah_test
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -30,6 +32,49 @@ const (
 	reviewTimeout = 10 * time.Minute
 	reviewMargin  = time.Minute
 )
+
+// The review runs the fake runner names.
+const (
+	firstRun  = domain.RunID("run-1")
+	secondRun = domain.RunID("run-2")
+)
+
+// reviewFiles are the review world's version: a valid line whose writer's prompt is writerText,
+// with a rule, a contract and the build station's wip.
+var reviewFiles = map[string]string{
+	"factory.yaml": `apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 00000000-0000-4000-8000-0000000000f1
+  name: acme-review
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+  rules:
+    - { name: tests, source: ./rules/tests.md }
+  agents:
+    - name: writer
+      prompt: ./agents/writer.md
+  board:
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: build, kind: agent, agent: writer, wip: 2 }
+      - { id: done, kind: done }
+`,
+	"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n",
+	writerPath:                  writerText,
+	"rules/tests.md":            "---\ndescription: Tests\n---\nRun the tests.\n",
+}
+
+// otherModel is a model the organization's policy allows besides reviewModel.
+const otherModel = "claude-opus-5-5"
+
+// policies is the organization's policy, allowing reviewModel and otherModel.
+type policies struct{}
+
+func (policies) Get(context.Context) (domain.OrgPolicy, error) {
+	return domain.OrgPolicy{AllowedModels: []string{reviewModel, otherModel}, DefaultModel: reviewModel}, nil
+}
 
 // rt0 is the review world's now.
 var rt0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
@@ -102,7 +147,14 @@ type reviewWorld struct {
 func newReviewWorld(t *testing.T) *reviewWorld {
 	t.Helper()
 
-	clock := porttest.NewClock(rt0)
+	return newReviewWorldAt(t, rt0)
+}
+
+// newReviewWorldAt is a review world whose clock starts at now.
+func newReviewWorldAt(t *testing.T, now time.Time) *reviewWorld {
+	t.Helper()
+
+	clock := porttest.NewClock(now)
 	store := porttest.NewStore()
 	tn := porttest.NewTenancy(clock.Now).WithStore(store)
 
@@ -120,25 +172,75 @@ func newReviewWorld(t *testing.T) *reviewWorld {
 		t: t, org: o.ID, store: store, clock: clock, log: &bytes.Buffer{},
 		defs: &reviewDefs{
 			line: domain.Line{
-				OrgID: o.ID, FactoryID: reviewFactory, VersionID: reviewVersion, Number: 3,
+				OrgID: o.ID, FactoryID: reviewFactory, VersionID: reviewVersion, Number: 3, Name: "acme-review",
 				Runtime: domain.Runtime{ModelConnection: modelConn}, Jonah: policy,
 			},
-			files: map[string][]byte{writerPath: []byte(writerText), "factory.yaml": []byte("metadata: {}\n")},
+			files: bytesOf(reviewFiles),
 		},
 		runner: &taskRunner{answer: func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 			return succeeded(`{"observations": [], "proposals": []}`), nil
 		}},
 	}
 	w.loop = jonah.NewReviews(jonah.ReviewDeps{
-		Orgs: tn, Jonah: store, Definitions: w.defs, Runner: w.runner, Clock: clock,
-		Log: slog.New(slog.NewJSONHandler(w.log, nil)),
+		Orgs: tn, Jonah: store, Definitions: w.defs, Runner: w.runner, Check: config.ProposalCheck{}, Policies: policies{},
+		Clock: clock, Log: slog.New(slog.NewJSONHandler(w.log, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 	}, jonah.ReviewConfig{Timeout: reviewTimeout, Margin: reviewMargin})
+
+	w.lineSpend(reviewLineUSD, now.Add(-time.Hour))
 
 	return w
 }
 
+// bytesOf is files as bytes.
+func bytesOf(files map[string]string) map[string][]byte {
+	out := make(map[string][]byte, len(files))
+	for p, c := range files {
+		out[p] = []byte(c)
+	}
+
+	return out
+}
+
+// reviewLineUSD is what the review world's line spent over the last 7 days: with the default
+// share of 5%, Jonah's budget is $10 and a review's cap $2.
+const reviewLineUSD = 200
+
+// lineSpend records a finished station run, on a new item still in progress, that cost usd,
+// started at. The world records one first, so its item is #1.
+func (w *reviewWorld) lineSpend(usd float64, at time.Time) {
+	w.t.Helper()
+
+	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
+		FactoryID: reviewFactory, Title: "work in progress", Station: stBuild, State: domain.StateInProgress,
+		Class: domain.ClassStandard, CreatedAt: at,
+	})
+	if err != nil {
+		w.t.Fatalf("CreateItem: %v", err)
+	}
+
+	id, err := w.store.StartRun(w.ctx(), ports.NewRun{FactoryID: reviewFactory, ItemID: it.ID, Station: stBuild, Agent: "builder", StartedAt: at})
+	if err != nil {
+		w.t.Fatalf("StartRun: %v", err)
+	}
+
+	if err := w.store.FinishRun(w.ctx(), id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		w.t.Fatalf("FinishRun: %v", err)
+	}
+}
+
 func succeeded(output string) domain.RunResult {
 	return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(output), CostUSD: 0.5}
+}
+
+// at moves the world's clock forward to now.
+func (w *reviewWorld) at(now time.Time) {
+	w.t.Helper()
+
+	if now.Before(w.clock.Now()) {
+		w.t.Fatalf("at %s: the clock is already at %s", now, w.clock.Now())
+	}
+
+	w.clock.Advance(now.Sub(w.clock.Now()))
 }
 
 func (w *reviewWorld) ctx() context.Context { return domain.WithOrg(w.t.Context(), w.org) }
@@ -148,17 +250,16 @@ func (w *reviewWorld) sentBack(station string, at time.Time, reason string) {
 	w.t.Helper()
 
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
-		FactoryID: reviewFactory, Title: "an item", Type: "task", Station: station, State: domain.StateQueued,
+		FactoryID: reviewFactory, Title: "an item", Type: taskType, Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at.Add(-time.Hour),
 	})
 	if err != nil {
 		w.t.Fatalf("CreateItem: %v", err)
 	}
 
-	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
 	if err := w.store.AppendEvents(w.ctx(), domain.Event{
 		FactoryID: reviewFactory, ItemID: it.ID, At: at, Kind: domain.EventRejected, Station: station, Actor: ada.Name,
-		Data: map[string]any{"actor": ada.Ref(), "reason": reason},
+		Data: map[string]any{"actor": ada.Ref(), keyReason: reason},
 	}); err != nil {
 		w.t.Fatalf("AppendEvents: %v", err)
 	}
@@ -178,7 +279,7 @@ func (w *reviewWorld) span(station string, entered, left time.Time) {
 	w.t.Helper()
 
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
-		FactoryID: reviewFactory, Title: "a passing item", Type: "task", Station: station, State: domain.StateQueued,
+		FactoryID: reviewFactory, Title: "a passing item", Type: taskType, Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: entered,
 	})
 	if err != nil {
@@ -207,13 +308,13 @@ func (w *reviewWorld) spend(usd float64, at time.Time) {
 	}
 }
 
-// queue queues a review by a person, over the first window.
+// queue queues a review by a person, over the first window, as of the clock.
 func (w *reviewWorld) queue(trigger domain.JonahTrigger) domain.JonahReview {
 	w.t.Helper()
 
 	r, err := w.store.QueueJonahReview(w.ctx(), domain.NewJonahReview{
-		FactoryID: reviewFactory, VersionID: reviewVersion, Trigger: trigger, WindowStart: rt0.Add(-jonah.FirstWindow), WindowEnd: rt0,
-		By: domain.LocalUser, At: rt0,
+		FactoryID: reviewFactory, VersionID: reviewVersion, Trigger: trigger, WindowStart: w.clock.Now().Add(-jonah.FirstWindow),
+		WindowEnd: w.clock.Now(), By: domain.LocalUser, At: w.clock.Now(),
 	})
 	if err != nil {
 		w.t.Fatalf("QueueJonahReview: %v", err)
@@ -270,37 +371,102 @@ func (w *reviewWorld) logged(msg string) []map[string]any {
 	return out
 }
 
+// finished moves a new item to done at at: evidence for a review whose window holds at.
+func (w *reviewWorld) finished(at time.Time) {
+	w.t.Helper()
+
+	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
+		FactoryID: reviewFactory, Title: "a finished item", Type: taskType, Station: stBuild, State: domain.StateQueued,
+		Class: domain.ClassStandard, CreatedAt: at.Add(-time.Hour),
+	})
+	if err != nil {
+		w.t.Fatalf("CreateItem: %v", err)
+	}
+
+	if _, err := w.store.Transition(w.ctx(), ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: "done", State: domain.StateDone}, At: at, DoneAt: at,
+	}); err != nil {
+		w.t.Fatalf("Transition: %v", err)
+	}
+}
+
+// today is the review world's day, at UTC midnight; reviewFactory's slot is ReviewHour into it.
+var today = time.Date(rt0.Year(), rt0.Month(), rt0.Day(), 0, 0, 0, 0, time.UTC)
+
+func reviewSlot() time.Time {
+	return today.Add(time.Duration(jonah.ReviewHour(reviewFactory)) * time.Hour)
+}
+
 func TestReviews_Sweep(t *testing.T) {
 	t.Parallel()
 
+	if h := jonah.ReviewHour(reviewFactory); h == 0 || !rt0.After(reviewSlot()) {
+		t.Fatalf("reviewFactory's hour is %d: the cases need one after midnight and before rt0", h)
+	}
+
 	cases := []struct {
-		name  string
+		name string
+		// from is the world's now before setup, rt0 when zero.
+		from  time.Time
 		setup func(w *reviewWorld)
-		// want is the trigger of the factory's only review after the sweep, "" for none.
-		want domain.JonahTrigger
+		// want is the trigger of the factory's latest review after the sweep, "" for none, and
+		// start its window's start when it is the daily review.
+		want  domain.JonahTrigger
+		start func(w *reviewWorld) time.Time
 	}{
-		{name: "below the threshold", setup: func(w *reviewWorld) { w.sentBacks(4) }},
-		{name: "at the threshold", setup: func(w *reviewWorld) { w.sentBacks(5) }, want: domain.JonahThreshold},
+		{name: "after the slot", setup: func(w *reviewWorld) { w.finished(rt0.Add(-time.Hour)) }, want: domain.JonahThreshold, start: firstWindow},
+		{name: "before the slot", from: reviewSlot().Add(-3 * time.Hour), setup: func(w *reviewWorld) {
+			w.finished(reviewSlot().Add(-2 * time.Hour))
+			w.at(reviewSlot().Add(-time.Minute))
+		}},
+		{name: "no evidence", setup: func(w *reviewWorld) { w.sentBacks(5) }},
+		{name: "evidence before the first window", setup: func(w *reviewWorld) { w.finished(rt0.Add(-jonah.FirstWindow - time.Hour)) }},
 		{name: "budget spent", setup: func(w *reviewWorld) {
-			w.sentBacks(5)
+			w.finished(rt0.Add(-time.Hour))
 			w.spend(6, rt0.Add(-6*24*time.Hour))
 			w.spend(4, rt0.Add(-time.Hour))
 		}},
+		{name: "budget nearly spent", setup: func(w *reviewWorld) {
+			w.finished(rt0.Add(-time.Hour))
+			w.spend(9.99, rt0.Add(-time.Hour))
+		}, want: domain.JonahThreshold, start: firstWindow},
+		{name: "no share", setup: func(w *reviewWorld) {
+			w.finished(rt0.Add(-time.Hour))
+			w.defs.line.Jonah.Share = 0
+		}},
 		{name: "budget spent before the window", setup: func(w *reviewWorld) {
-			w.sentBacks(5)
+			w.finished(rt0.Add(-time.Hour))
 			w.spend(10, rt0.Add(-jonah.BudgetWindow-time.Hour))
-		}, want: domain.JonahThreshold},
+		}, want: domain.JonahThreshold, start: firstWindow},
 		{name: "review in flight", setup: func(w *reviewWorld) {
-			w.sentBacks(5)
+			w.finished(rt0.Add(-time.Hour))
 			w.queue(domain.JonahManual)
 		}, want: domain.JonahManual},
-		{name: "touches before the last review's window ended", setup: func(w *reviewWorld) {
-			w.sentBacks(5)
-			w.finishedReview()
-			w.clock.Advance(time.Hour)
+		{name: "already reviewed today", from: reviewSlot().Add(time.Minute), setup: func(w *reviewWorld) {
+			w.finished(reviewSlot().Add(-time.Hour))
+			w.finishedReview(domain.JonahDone)
+			w.at(rt0)
+			w.finished(rt0.Add(-time.Minute))
 		}, want: domain.JonahManual},
+		{name: "evidence only before the last done review's window ended", from: rt0.Add(-24 * time.Hour), setup: func(w *reviewWorld) {
+			w.finished(rt0.Add(-25 * time.Hour))
+			w.finishedReview(domain.JonahDone)
+			w.at(rt0)
+		}, want: domain.JonahManual},
+		{name: "evidence since the last done review", from: rt0.Add(-24 * time.Hour), setup: func(w *reviewWorld) {
+			w.finishedReview(domain.JonahDone)
+			w.at(rt0)
+			w.finished(rt0.Add(-time.Hour))
+		}, want: domain.JonahThreshold, start: func(*reviewWorld) time.Time { return rt0.Add(-24 * time.Hour) }},
+		{name: "a failed review does not move the window", from: rt0.Add(-48 * time.Hour), setup: func(w *reviewWorld) {
+			w.finishedReview(domain.JonahDone)
+			w.at(rt0.Add(-24 * time.Hour))
+			w.finished(rt0.Add(-30 * time.Hour))
+			w.finishedReview(domain.JonahFailed)
+			w.at(rt0)
+		}, want: domain.JonahThreshold, start: func(*reviewWorld) time.Time { return rt0.Add(-48 * time.Hour) }},
 		{name: "learning off", setup: func(w *reviewWorld) {
-			w.sentBacks(5)
+			w.finished(rt0.Add(-time.Hour))
 			w.defs.line.Jonah.Enabled = false
 		}},
 	}
@@ -309,56 +475,111 @@ func TestReviews_Sweep(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			w := newReviewWorld(t)
+			w := newReviewWorldAt(t, cmp.Or(tc.from, rt0))
 			tc.setup(w)
 
 			if err := w.loop.Sweep(t.Context()); err != nil {
 				t.Fatalf("Sweep: %v", err)
 			}
 
-			w.expectSwept(tc.want)
+			w.expectSwept(tc.want, tc.start)
 		})
+	}
+
+	t.Run("once a day", func(t *testing.T) {
+		t.Parallel()
+
+		w := newReviewWorld(t)
+		w.finished(rt0.Add(-time.Hour))
+
+		for range 2 {
+			if err := w.loop.Sweep(t.Context()); err != nil {
+				t.Fatalf("Sweep: %v", err)
+			}
+
+			w.work()
+			w.finished(w.clock.Now())
+			w.clock.Advance(time.Hour)
+		}
+
+		if rs := w.reviews(); len(rs) != 1 {
+			t.Fatalf("reviews after two sweeps on one day = %d, want 1", len(rs))
+		}
+
+		w.at(reviewSlot().Add(24*time.Hour + time.Minute))
+
+		if err := w.loop.Sweep(t.Context()); err != nil {
+			t.Fatalf("Sweep: %v", err)
+		}
+
+		if rs := w.reviews(); len(rs) != 2 || rs[0].State != domain.JonahPending || !rs[0].WindowStart.Equal(rs[1].WindowEnd) {
+			t.Fatalf("reviews the next day = %+v, want a second one starting where the first ended", rs)
+		}
+	})
+}
+
+func TestReviewHour_SpreadsFactories(t *testing.T) {
+	t.Parallel()
+
+	hours := map[int]bool{}
+
+	for _, f := range []domain.FactoryID{reviewFactory, "00000000-0000-4000-8000-0000000000f2", "00000000-0000-4000-8000-0000000000f3"} {
+		h := jonah.ReviewHour(f)
+		if h < 0 || h > 23 || h != jonah.ReviewHour(f) {
+			t.Fatalf("ReviewHour(%s) = %d, want a stable hour of the day", f, h)
+		}
+
+		hours[h] = true
+	}
+
+	if len(hours) < 2 {
+		t.Errorf("three factories share one hour %v, want them spread", hours)
 	}
 }
 
-// finishedReview queues, claims and finishes a manual review over the first window.
-func (w *reviewWorld) finishedReview() {
+func firstWindow(w *reviewWorld) time.Time { return w.clock.Now().Add(-jonah.FirstWindow) }
+
+// finishedReview queues and claims a manual review over the first window, as of the clock, and
+// ends it in state.
+func (w *reviewWorld) finishedReview(state domain.JonahReviewState) {
 	w.t.Helper()
 
 	r := w.queue(domain.JonahManual)
 
-	claimed, err := w.store.ClaimJonahReview(w.ctx(), rt0, time.Minute)
+	claimed, err := w.store.ClaimJonahReview(w.ctx(), w.clock.Now(), time.Minute)
 	if err != nil || claimed.ID != r.ID {
 		w.t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
 	}
 
-	if _, _, err := w.store.FinishJonahReview(w.ctx(), claimed, domain.JonahReviewResult{State: domain.JonahDone, At: rt0}); err != nil {
+	if _, _, err := w.store.FinishJonahReview(w.ctx(), claimed, domain.JonahReviewResult{State: state, At: w.clock.Now()}); err != nil {
 		w.t.Fatalf("FinishJonahReview: %v", err)
 	}
 }
 
-// expectSwept checks that the factory has one review of trigger want, none when want is "", and
-// that a threshold review is pending on the line's version over the first window.
-func (w *reviewWorld) expectSwept(want domain.JonahTrigger) {
+// expectSwept checks that the factory's latest review is of trigger want, that none is pending
+// when want is "", and that a daily review is pending on the line's version from start to now.
+func (w *reviewWorld) expectSwept(want domain.JonahTrigger, start func(*reviewWorld) time.Time) {
 	w.t.Helper()
 
 	rs := w.reviews()
+	pending := len(rs) > 0 && rs[0].State == domain.JonahPending
 
 	switch {
-	case want == "" && len(rs) == 0:
+	case want == "":
+		if pending {
+			w.t.Fatalf("reviews = %+v, want none pending", rs)
+		}
+
 		return
-	case want == "" || len(rs) != 1:
-		w.t.Fatalf("reviews = %+v, want one of trigger %q", rs, want)
-	case rs[0].Trigger != want:
-		w.t.Fatalf("trigger = %s, want %s", rs[0].Trigger, want)
+	case len(rs) == 0 || rs[0].Trigger != want:
+		w.t.Fatalf("reviews = %+v, want the latest of trigger %q", rs, want)
 	case want != domain.JonahThreshold:
 		return
 	}
 
 	now := w.clock.Now()
-	if r := rs[0]; r.VersionID != reviewVersion || !r.WindowStart.Equal(now.Add(-jonah.FirstWindow)) || !r.WindowEnd.Equal(now) ||
-		r.State != domain.JonahPending || r.CreatedBy == "" {
-		w.t.Errorf("threshold review = %+v, want a pending review of %s over the first window", r, reviewVersion)
+	if r := rs[0]; r.VersionID != reviewVersion || !r.WindowStart.Equal(start(w)) || !r.WindowEnd.Equal(now) || !pending || r.CreatedBy == "" {
+		w.t.Errorf("daily review = %+v, want a pending review of %s from %s to %s", r, reviewVersion, start(w), now)
 	}
 }
 
@@ -372,24 +593,29 @@ func TestReviews_Work(t *testing.T) {
 	failures := []struct {
 		name  string
 		setup func(w *reviewWorld)
-		// error is in the failed review's error; runs is how many runs started.
+		// error is in the failed review's error; runs is how many runs started, each attempt one.
 		error string
 		runs  int
 	}{
 		{name: "budget spent", setup: func(w *reviewWorld) { w.spend(10, rt0.Add(-time.Hour)) }, error: domain.ErrLearningBudgetExhausted.Error()},
 		{name: "run failed", setup: func(w *reviewWorld) {
 			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-				return domain.RunResult{Status: domain.RunFailed, Error: "out of turns"}, nil
+				return domain.RunResult{RunID: firstRun, Status: domain.RunFailed, Error: "out of turns"}, nil
 			}
-		}, error: "out of turns", runs: 1},
+		}, error: "out of turns", runs: jonah.MaxReviewAttempts},
 		{name: "run not carried out", setup: func(w *reviewWorld) {
 			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-				return domain.RunResult{}, ports.ErrSandboxLost
+				return domain.RunResult{RunID: firstRun}, ports.ErrSandboxLost
 			}
-		}, error: "the review run failed", runs: 1},
+		}, error: "the review run failed", runs: jonah.MaxReviewAttempts},
 		{name: "output does not parse", setup: func(w *reviewWorld) {
-			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) { return succeeded(`"nothing"`), nil }
-		}, error: "does not parse", runs: 1},
+			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+				res := succeeded(`"nothing"`)
+				res.RunID = firstRun
+
+				return res, nil
+			}
+		}, error: "does not parse", runs: jonah.MaxReviewAttempts},
 		{name: "version gone", setup: func(w *reviewWorld) { w.defs.line.VersionID = "version-4" }, error: "is gone"},
 	}
 
@@ -409,10 +635,86 @@ func TestReviews_Work(t *testing.T) {
 				t.Errorf("runs = %d, want %d", n, tc.runs)
 			}
 
-			if r := w.reviews()[0]; r.State != domain.JonahFailed || !strings.Contains(r.Error, tc.error) {
-				t.Errorf("review = %s %q, want failed with %q", r.State, r.Error, tc.error)
+			r := w.reviews()[0]
+			if r.State != domain.JonahFailed || !strings.Contains(r.Error, tc.error) || r.Attempts != max(tc.runs, 1) {
+				t.Errorf("review = %s %q after %d attempts, want failed with %q after %d", r.State, r.Error, r.Attempts, tc.error, max(tc.runs, 1))
+			}
+
+			var wantRun domain.RunID
+			if tc.runs > 0 {
+				wantRun = firstRun
+			}
+
+			if r.RunID != wantRun {
+				t.Errorf("review's run = %q, want %q", r.RunID, wantRun)
+			}
+
+			if n := len(w.logged("jonah review retried")); n != max(tc.runs-1, 0) {
+				t.Errorf("retries logged = %d, want %d", n, max(tc.runs-1, 0))
 			}
 		})
+	}
+
+	t.Run("a retry that succeeds", testWorkRetrySucceeds)
+	t.Run("claimed past its last attempt", testWorkPastLastAttempt)
+}
+
+// A run that fails once puts the review back with its error; the next attempt's success ends it
+// done, with its own run.
+func testWorkRetrySucceeds(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	w.queue(domain.JonahManual)
+
+	var seen []domain.JonahReview
+
+	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+		seen = append(seen, w.reviews()[0])
+		if len(seen) == 1 {
+			return domain.RunResult{RunID: firstRun, Status: domain.RunFailed, Error: "provider overloaded"}, nil
+		}
+
+		res := succeeded(`{"observations": [], "proposals": []}`)
+		res.RunID = secondRun
+
+		return res, nil
+	}
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("Work finished %d, want 1", n)
+	}
+
+	if len(seen) != 2 || seen[1].Attempts != 2 || !strings.Contains(seen[1].Error, "provider overloaded") || seen[1].RunID != firstRun {
+		t.Fatalf("second attempt saw %+v, want attempt 2 with the first one's error and run", seen)
+	}
+
+	if r := w.reviews()[0]; r.State != domain.JonahDone || r.Attempts != 2 || r.RunID != secondRun {
+		t.Errorf("review = %+v, want done after two attempts with run-2", r)
+	}
+}
+
+// A review whose runs died with their goald and that is claimed a fourth time fails without a run.
+func testWorkPastLastAttempt(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	w.queue(domain.JonahManual)
+
+	for range jonah.MaxReviewAttempts {
+		if _, err := w.store.ClaimJonahReview(w.ctx(), w.clock.Now(), time.Minute); err != nil {
+			t.Fatalf("ClaimJonahReview: %v", err)
+		}
+
+		w.clock.Advance(time.Minute)
+	}
+
+	if n := w.work(); n != 1 || len(w.runner.requests()) != 0 {
+		t.Fatalf("Work finished %d and ran %d, want 1 and none", n, len(w.runner.requests()))
+	}
+
+	if r := w.reviews()[0]; r.State != domain.JonahFailed || !strings.Contains(r.Error, "did not finish in 3 attempts") {
+		t.Errorf("review = %s %q, want failed after its attempts", r.State, r.Error)
 	}
 }
 
@@ -537,8 +839,8 @@ func TestReviews_Finish(t *testing.T) {
 
 	out := output{
 		Observations: []observation{
-			{Summary: testsMissing, Detail: "two items", Items: []string{"#1", "#2", "#99"}, Count: 2, Proposal: new(1)},
-			{Summary: screenshotsMissing, Items: []string{"#2"}, Count: 1},
+			{Summary: testsMissing, Detail: "two items", Items: []string{"#2", "#3", "#99"}, Count: 2, Proposal: new(1)},
+			{Summary: screenshotsMissing, Items: []string{"#3"}, Count: 1},
 		},
 		Proposals: []proposal{
 			newProposal("Ask for tests", writerPath, ev[0], domain.MetricSentBackRate),
@@ -601,9 +903,9 @@ func expectTestsProposal(t *testing.T, p domain.Proposal, r domain.JonahReview, 
 		t.Errorf("proposal 1 evidence = %+v, want %+v", p.Evidence, wantEvidence)
 	}
 
-	wantFiles := []domain.ProposalFile{{Path: writerPath, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: newWriterText}}
-	if !reflect.DeepEqual(p.Files, wantFiles) {
-		t.Errorf("proposal 1 files = %+v, want %+v", p.Files, wantFiles)
+	wantEdits := []domain.ProposalEdit{{Path: writerPath, Replacements: []domain.Replacement{{Old: writerText, New: newWriterText}}}}
+	if !reflect.DeepEqual(p.Edits, wantEdits) {
+		t.Errorf("proposal 1 edits = %+v, want %+v", p.Edits, wantEdits)
 	}
 }
 
@@ -635,22 +937,37 @@ func (w *reviewWorld) expectFinishedObservations(shorter domain.ProposalID) {
 type output struct {
 	Observations []observation `json:"observations"`
 	Proposals    []proposal    `json:"proposals"`
+	Facts        []fact        `json:"facts,omitempty"`
 }
 
 type observation struct {
-	Summary  string   `json:"summary"`
-	Detail   string   `json:"detail"`
-	Items    []string `json:"items"`
-	Count    int      `json:"count"`
-	Proposal *int     `json:"proposal,omitempty"`
+	ID        string   `json:"id,omitempty"`
+	Summary   string   `json:"summary"`
+	Detail    string   `json:"detail"`
+	Items     []string `json:"items"`
+	Count     int      `json:"count"`
+	Proposal  *int     `json:"proposal,omitempty"`
+	NotJonahs bool     `json:"not_jonahs,omitempty"`
 }
 
 type proposal struct {
-	Title    string                `json:"title"`
-	Summary  string                `json:"summary"`
-	Files    []domain.ProposalFile `json:"files"`
-	Evidence []evidence            `json:"evidence"`
-	Estimate estimate              `json:"estimate"`
+	Title    string     `json:"title"`
+	Summary  string     `json:"summary"`
+	Edits    []fileEdit `json:"edits"`
+	Evidence []evidence `json:"evidence"`
+	Estimate estimate   `json:"estimate"`
+}
+
+// fileEdit mirrors the worker's Edit: replacements, or content for a new file.
+type fileEdit struct {
+	Path         string               `json:"path"`
+	Replacements []domain.Replacement `json:"replacements,omitempty"`
+	Content      *string              `json:"content,omitempty"`
+}
+
+// replace is an edit of path replacing old with nw.
+func replace(path, old, nw string) fileEdit {
+	return fileEdit{Path: path, Replacements: []domain.Replacement{{Old: old, New: nw}}}
 }
 
 type evidence struct {
@@ -673,8 +990,87 @@ func idOf(s domain.SentBack) string { return strconv.FormatInt(s.EventID, 10) }
 func newProposal(title, path string, e domain.SentBack, metric domain.ProposalMetric) proposal {
 	return proposal{
 		Title: title, Summary: "Say it in the prompt.",
-		Files:    []domain.ProposalFile{{Path: path, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: newWriterText}},
+		Edits:    []fileEdit{replace(path, writerText, newWriterText)},
 		Evidence: []evidence{{Event: idOf(e), Reason: e.Reason}},
 		Estimate: estimate{Metric: metric, Station: stBuild, After: 0.1, CostDelta: 0.02},
 	}
+}
+
+// A review updates the open observation it names, so its count grows across reviews (ADR 0039
+// decision 5), and its proposal supersedes only the open proposal whose replacements overlap
+// its own (decision 6): one of another file stays proposed.
+func TestReviews_FinishUpdatesObservationsAndSupersedesOverlaps(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	w.sentBacks(2)
+
+	w.queue(domain.JonahManual)
+	ev := w.oldWindow()
+	first := newProposal("Ask for tests", writerPath, ev[0], domain.MetricSentBackRate)
+	other := newProposal("Run them twice", writerPath, ev[0], domain.MetricSentBackRate)
+	other.Edits = []fileEdit{replace("rules/tests.md", "Run the tests.\n", "Run the tests twice.\n")}
+	w.answer(output{
+		Observations: []observation{{Summary: testsMissing, Items: []string{"#2"}, Count: 2, Proposal: new(0)}},
+		Proposals:    []proposal{first, other},
+	})
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("first Work finished %d, want 1", n)
+	}
+
+	open, err := w.store.OpenObservations(w.ctx(), reviewFactory, 10)
+	if err != nil || len(open) != 1 {
+		t.Fatalf("OpenObservations = %+v, %v; want 1", open, err)
+	}
+
+	w.at(rt0.Add(time.Hour))
+	w.queue(domain.JonahManual)
+
+	again := newProposal("Ask for tests and a screenshot", writerPath, ev[1], domain.MetricSentBackRate)
+	again.Edits = []fileEdit{replace(writerPath, writerText, "Write the change, its tests and a screenshot.\n")}
+	w.answer(output{
+		Observations: []observation{{ID: string(open[0].ID), Summary: testsMissing, Items: []string{"#3"}, Count: 3, Proposal: new(0)}},
+		Proposals:    []proposal{again},
+	})
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("second Work finished %d, want 1", n)
+	}
+
+	states := map[int64]domain.ProposalState{}
+	for _, p := range w.proposals() {
+		states[p.Number] = p.State
+	}
+
+	if want := map[int64]domain.ProposalState{1: domain.ProposalSuperseded, 2: domain.ProposalProposed, 3: domain.ProposalProposed}; !reflect.DeepEqual(states, want) {
+		t.Errorf("proposal states = %v, want %v", states, want)
+	}
+
+	obs, err := w.store.Observations(w.ctx(), reviewFactory, 10)
+	if err != nil || len(obs) != 1 || obs[0].Count != 5 || len(obs[0].ItemIDs) != 2 || obs[0].State != domain.ObservationProposed {
+		t.Errorf("observations = %+v, %v; want one of count 5 on two items, proposed", obs, err)
+	}
+}
+
+// oldWindow are the world's sent-back events of the last day, oldest first.
+func (w *reviewWorld) oldWindow() []domain.SentBack {
+	w.t.Helper()
+
+	ev, err := w.store.SentBackBetween(w.ctx(), reviewFactory, rt0.Add(-24*time.Hour), rt0.Add(24*time.Hour), 10)
+	if err != nil || len(ev) < 2 {
+		w.t.Fatalf("SentBackBetween = %+v, %v; want 2", ev, err)
+	}
+
+	return ev
+}
+
+// dropTime leaves the wall-clock time out of the review log, so a test that asserts what the log
+// never holds cannot match a digit run in a timestamp.
+func dropTime(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+
+	return a
 }

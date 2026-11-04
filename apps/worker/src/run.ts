@@ -1,7 +1,9 @@
 import type { SDKMessage, query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { agentQuery } from './agent.js';
+import { applyEnvironment, type EnvironmentDeps } from './environment.js';
 import { EventMapper, type Finished, type WorkerEvent } from './events.js';
 import { NotePoller, notePollMs, PromptQueue } from './notes.js';
+import { isCommitId } from './prepare.js';
 import type { AgentFiles, TaskSpec } from './spec.js';
 
 export interface RunDeps {
@@ -13,16 +15,41 @@ export interface RunDeps {
   fetch: typeof globalThis.fetch;
   /** How often notes are polled between turns; 15 s when unset. */
   notePollMs?: number;
+  /**
+   * The item branch's commit on the remote, read after the agent ends; undefined when the remote
+   * has no such branch. Absent, the finished event names no pushed head.
+   */
+  remoteHead?: (branch: string) => Promise<string | undefined>;
+  /** Where and how the spec's environment is applied before the agent starts; needed when the spec has one. */
+  environment?: Omit<EnvironmentDeps, 'env'>;
 }
 
 /**
  * Runs one task and emits its events, ending with exactly one finished event. It returns the
  * process exit code: 0 when the agent produced a result (succeeded or not), 1 when it crashed.
  *
+ * On a spec with an environment (ADR 0037) its files are written first and its setup runs, once per
+ * box (applyEnvironment's marker); a failure there ends the run with a failed event before the
+ * agent is queried. A try's environment (setup_only) gives its env to setup alone: its variables
+ * are removed before the agent starts.
+ *
  * The agent's input is a stream: the task's prompt first, then each note left on the item while
  * it works. The stream ends at the result, so the query ends with it.
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {
+  if (spec.environment) {
+    try {
+      if (!deps.environment) throw new Error('environment setup: the worker has no shell to apply it');
+      await applyEnvironment(spec.environment, { ...deps.environment, env: deps.env });
+    } catch (err) {
+      deps.emit(failed(deps.now, err instanceof Error ? err.message : String(err)));
+      return 1;
+    }
+    // A try's env is setup's alone (ADR 0039 decision 9): the agent starts without it.
+    if (spec.environment.setup_only) {
+      for (const name of spec.environment.env) delete deps.env[name];
+    }
+  }
   const mapper = new EventMapper(deps.now, spec.skills);
   const { prompt, options } = agentQuery(spec, files, deps.env, deps.abortController, deps.fetch);
   const inbox = new PromptQueue();
@@ -53,14 +80,37 @@ export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps):
       }
     }
   } catch (err) {
-    deps.emit(failed(deps.now, err instanceof Error ? err.message : String(err)));
+    deps.emit(await withPushedHead(spec, deps, failed(deps.now, err instanceof Error ? err.message : String(err))));
     return 1;
   } finally {
     inbox.close();
   }
 
-  deps.emit(result ?? failed(deps.now, 'the agent ended without a result'));
+  deps.emit(await withPushedHead(spec, deps, result ?? failed(deps.now, 'the agent ended without a result')));
   return result ? 0 : 1;
+}
+
+/**
+ * The finished event with the head the run pushed (ADR 0039, decision 8): the agent pushes with
+ * its own git, so this is the item branch's commit on the remote once it ended. Without a
+ * repository, or when the lookup finds nothing or fails, the event is as it was.
+ */
+async function withPushedHead(spec: TaskSpec, deps: RunDeps, f: Finished): Promise<Finished> {
+  if (!spec.branch || !deps.remoteHead) return f;
+  const head = await deps.remoteHead(spec.branch).catch((err: unknown) => {
+    process.stderr.write(`goal-agent run: the pushed head: ${err instanceof Error ? err.message : String(err)}\n`);
+    return undefined;
+  });
+  return head ? { ...f, pushed_head: head } : f;
+}
+
+/** The commit `git ls-remote origin refs/heads/<branch>` printed for branch, if it printed one. */
+export function lsRemoteHead(out: string, branch: string): string | undefined {
+  for (const line of out.split('\n')) {
+    const [sha, ref] = line.trim().split('\t');
+    if (ref === `refs/heads/${branch}` && sha && isCommitId(sha)) return sha;
+  }
+  return undefined;
 }
 
 /** Whether the agent is between turns: an assistant message or a tool result has just arrived. */

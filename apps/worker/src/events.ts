@@ -14,7 +14,11 @@ export type WorkerEvent =
       skills: string[];
       mcp_servers: { name: string; status: string }[];
     }
-  | { type: 'tool_use'; at: string; id: string; tool: string; input: string }
+  /**
+   * path is the file or folder a Read, Grep or Glob call names, unclipped, so goald counts the
+   * reads of /knowledge (ADR 0038 decision 10); absent for other tools and when the call names none.
+   */
+  | { type: 'tool_use'; at: string; id: string; tool: string; input: string; path?: string }
   | { type: 'tool_result'; at: string; id: string; is_error: boolean; summary: string }
   | { type: 'message'; at: string; text: string }
   | {
@@ -43,6 +47,11 @@ export interface Finished {
   input_tokens: number;
   output_tokens: number;
   session_id: string;
+  /**
+   * The item branch's commit on the remote when the agent ended (git ls-remote); absent without a
+   * repository, when the remote has no such branch or the lookup failed.
+   */
+  pushed_head?: string;
   /** The tool calls the agent's policy refused, by tool and call id (never their input); absent when none. */
   permission_denials?: { tool: string; id: string }[];
 }
@@ -54,6 +63,34 @@ const maxText = 2000;
 
 export function clip(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+/** The input field that names the file or folder of each tool goald counts reads of. */
+const pathFields: Record<string, string> = { Read: 'file_path', Grep: 'path', Glob: 'path' };
+
+/** The leading folders of an absolute glob pattern, before the first segment with a glob character. */
+function patternFolder(pattern: string): string | undefined {
+  if (!pattern.startsWith('/')) return undefined;
+  const segments = pattern.split('/');
+  const wild = segments.findIndex((s) => /[*?[{]/.test(s));
+  if (wild === -1) return pattern;
+  return segments.slice(0, wild).join('/') || '/';
+}
+
+/**
+ * The path a Read, Grep or Glob call names; undefined for other tools or without one. A Glob with
+ * only an absolute pattern reports the pattern's leading folders, so goald counts it as a search.
+ */
+export function toolPath(tool: string, input: unknown): string | undefined {
+  const field = pathFields[tool];
+  if (field === undefined || typeof input !== 'object' || input === null) {
+    return undefined;
+  }
+  const args = input as Record<string, unknown>;
+  const value = args[field];
+  if (typeof value === 'string' && value !== '') return value;
+  if (tool === 'Glob' && typeof args.pattern === 'string') return patternFolder(args.pattern);
+  return undefined;
 }
 
 type Usage = Omit<Extract<WorkerEvent, { type: 'usage' }>, 'type' | 'at'>;
@@ -110,12 +147,14 @@ export class EventMapper {
       if (block.type === 'text' && block.text.trim() !== '') {
         events.push({ type: 'message', at, text: clip(block.text, maxText) });
       } else if (block.type === 'tool_use') {
+        const path = toolPath(block.name, block.input);
         events.push({
           type: 'tool_use',
           at,
           id: block.id,
           tool: block.name,
           input: clip(JSON.stringify(block.input), maxInput),
+          ...(path === undefined ? {} : { path }),
         });
       }
     }

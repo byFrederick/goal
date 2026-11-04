@@ -23,11 +23,16 @@ const (
 	checkReferences = "references" // every name and path points at something that exists
 	checkTools      = "tools"      // runtime.tools are mise tool specs
 	checkRemoved    = "removed"    // no form connections replaced is left
+	checkIgnored    = "ignored"    // no retired key that does nothing is left
 	checkContracts  = "contracts"  // every output contract is a schema the model API takes as a tool's input
 	// checkAvailability: what the definition declares that this install cannot serve yet.
 	checkAvailability = "availability"
-	checkEvals        = "evals"    // judges and eval cases are well formed (ADR 0025)
 	checkTriggers     = "triggers" // intake triggers' crons, time zones and templates are well formed (ADR 0026)
+	// checkEnvironments: environment files and {{secret}} references are well formed (ADR 0037).
+	checkEnvironments = "environments"
+	// checkMoved: no key ADR 0037 moved to environment files is left. Load skips it, so versions
+	// published before still run on the old path until Goal converts them.
+	checkMoved = "moved"
 )
 
 // Problem codes config reports. They are stable: the UI, the CLI and tests key on them.
@@ -57,7 +62,6 @@ const (
 	codeUnknownConnection = "unknown-connection"
 	codeUnknownContract   = "unknown-contract"
 	codeUnknownStation    = "unknown-station"
-	codeUnknownCollection = "unknown-collection"
 	codePromptNotFound    = "prompt-not-found"
 	codeSkillNotFound     = "skill-not-found"
 	codeContractNotFound  = "contract-not-found"
@@ -65,6 +69,15 @@ const (
 	codeUnknownWorkType   = "unknown-work-type"
 	codeRuleNotFound      = "rule-not-found"
 	codeRuleInvalid       = "rule-invalid"
+
+	// codeKnowledgeTooMany: knowledge.sources lists more than domain.MaxFactorySources.
+	codeKnowledgeTooMany = "knowledge-too-many"
+	// codeKnowledgeSourceDuplicate: knowledge.sources lists a source name more than once.
+	codeKnowledgeSourceDuplicate = "knowledge-source-duplicate"
+	// codeMemoryTooLong and codeMemoryTooBig: a memory.yaml entry's text is over
+	// domain.MaxMemoryText characters; the file is over domain.MaxMemoryBytes or MaxMemoryEntries.
+	codeMemoryTooLong = "memory-too-long"
+	codeMemoryTooBig  = "memory-too-big"
 
 	codeContractNotToolSchema = "contract-not-tool-schema"
 
@@ -76,18 +89,37 @@ const (
 	codeEnvReferenceRemoved = "env-reference-removed"
 	codeInlineRemoved       = "connection-inline-removed"
 
+	// codeFieldIgnored: a key a decision retired, which stays in the schema marked deprecated and
+	// does nothing. A warning, never a removed form: a live version that has it keeps running.
+	codeFieldIgnored = "field-ignored"
+
 	codeBuiltinAsk = "builtin-ask-unavailable"
 
-	codeJudgeFrontMissing     = "judge-front-matter-missing"
-	codeJudgeOutcomeDuplicate = "judge-outcome-duplicate"
-	codeEvalNameInvalid       = "eval-name-invalid"
-	codeUnknownJudge          = "unknown-judge"
-	codePatchNotFound         = "patch-not-found"
+	// codeEvalsIgnored: an evals/ folder, which ADR 0039 decision 21 retired with judges and eval
+	// cases. A warning like field-ignored, never a removed form: a live version that has it keeps
+	// running.
+	codeEvalsIgnored = "evals-ignored"
 
 	codeCronInvalid          = "cron-invalid"
 	codeTimeZoneInvalid      = "time-zone-invalid"
 	codePlaceholderInvalid   = "placeholder-invalid"
 	codeModelQuestionInvalid = "model-question-invalid"
+
+	codeEnvironmentNameInvalid    = "environment-name-invalid"
+	codeEnvironmentNameMismatch   = "environment-name-mismatch"
+	codeEnvironmentDefaultMissing = "environment-default-missing"
+	codeEnvironmentUnknown        = "environment-unknown"
+	// codeEnvironmentImage: an environment names an image, which a box on Cloudflare cannot run
+	// (the control Worker runs only its own images). A warning: Compose runs it.
+	codeEnvironmentImage = "environment-image"
+	codeForgeMissing     = "forge-missing"
+	codeSecretPlacement  = "secret-placement"
+	codeReferenceInvalid = "secret-ref-invalid"
+
+	// codeMovedToEnvironment: a key ADR 0037 moved (spec.connections, an agent's connections,
+	// runtime.modelConnection, size, tools and repository.connection, modelAgrees.connection). An
+	// error with a fix that removes it; Load skips it.
+	codeMovedToEnvironment = "moved-to-environment"
 )
 
 // toolSpec is a mise tool spec: an optional backend ("aqua:", "npm:"), a tool name (a path for
@@ -99,6 +131,8 @@ type checker struct {
 	f        *Factory
 	agents   []string
 	stations []string
+	// envNames are the names of the definition's environment files, once environments ran.
+	envNames []string
 	problems []domain.DefinitionProblem
 }
 
@@ -115,12 +149,17 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.files()
 	c.agentRefs()
 	c.rules()
+	c.knowledge()
+	c.memory()
 	c.line()
 	c.flowAndLearning()
 	c.tools()
 	c.outputContracts()
 	c.removedForms()
-	c.evals()
+	c.ignoredFields(ignoredKeys)
+	c.moved()
+	c.environments()
+	c.evalsIgnored()
 	c.triggers()
 	c.starter()
 
@@ -182,6 +221,36 @@ func dup(c *checker, what string, ids []string, list, sub, key string) {
 
 		c.errorf(checkReferences, codeDuplicateName, append(p, strconv.Itoa(i), key),
 			"%s %s: the name is used by another %s", what, id, what)
+	}
+}
+
+// knowledge checks knowledge.sources: at most domain.MaxFactorySources, each source once, and
+// each entry's appliesTo names only what the definition declares. Whether the organization has
+// the sources is authoring's.
+func (c *checker) knowledge() {
+	k := c.f.Spec.Knowledge
+	if k == nil {
+		return
+	}
+
+	if n := len(k.Sources); n > domain.MaxFactorySources {
+		c.errorf(checkReferences, codeKnowledgeTooMany, at("spec", "knowledge", "sources"),
+			"knowledge.sources lists %d sources, more than the %d a factory may list, so that every box gets its files fast; remove some",
+			n, domain.MaxFactorySources)
+	}
+
+	seen := make(map[string]bool, len(k.Sources))
+	for i, s := range k.Sources {
+		if seen[s.Name] {
+			c.errorf(checkReferences, codeKnowledgeSourceDuplicate, at("spec", "knowledge", "sources", i),
+				"knowledge source %s is listed more than once, so a box would unpack it twice; remove this entry", s.Name)
+		}
+
+		seen[s.Name] = true
+
+		c.scope("knowledge source "+s.Name, s.AppliesTo, func(key string, j int) []string {
+			return at("spec", "knowledge", "sources", i, "appliesTo", key, j)
+		})
 	}
 }
 
@@ -397,28 +466,6 @@ func (c *checker) capacity(i int, s Station) {
 func (c *checker) flowAndLearning() {
 	c.constraint()
 	c.integration()
-
-	l := c.f.Spec.Learning
-	if l == nil || l.Librarian == nil {
-		return
-	}
-
-	if !slices.Contains(c.agents, l.Librarian.Agent) {
-		c.errorf(checkReferences, codeUnknownAgent, at("spec", "learning", "librarian", "agent"),
-			"learning.librarian: unknown agent %q", l.Librarian.Agent)
-	}
-
-	var collections []string
-	if kb := c.f.Spec.KnowledgeBase; kb != nil {
-		collections = kb.Collections
-	}
-
-	for j, w := range l.Librarian.Writes {
-		if !slices.Contains(collections, w) {
-			c.errorf(checkReferences, codeUnknownCollection, at("spec", "learning", "librarian", "writes", j),
-				"learning.librarian writes %q, which is not a knowledge base collection", w)
-		}
-	}
 }
 
 // constraint checks that flow.constraint names a station and warns about buffers away from it:
@@ -522,9 +569,9 @@ func (c *checker) removedForms() {
 			Fixes = []domain.ProblemFix{RemoveFix("Remove "+name, k.path)}
 	}
 
-	if p := at("spec", "runtime", "repository", "token"); c.f.hasKey(p) {
+	if p := at("spec", "runtime", "repository", "token"); c.f.hasKey(p) && !strings.Contains(c.f.Spec.Runtime.Repository.Token, "{{") {
 		c.removed(p, codeEnvReferenceRemoved,
-			"runtime.repository.token is removed: set runtime.repository.connection to an organization connection that signs git in to the repository's host").
+			"runtime.repository.token: only a {{secret}} reference is valid here, such as {{github-token}}; references of other forms are removed").
 			Fixes = []domain.ProblemFix{RemoveFix("Remove the token", p)}
 	}
 
@@ -538,6 +585,102 @@ func (c *checker) removedForms() {
 			"connection %s: inline connections are removed; create an organization connection named %s (for example of kind mcp-server) "+
 				"and list it here by name, with its credentials in the connection", conn.Name, conn.Name).
 			Fixes = []domain.ProblemFix{ReplaceFix("Use the organization's connection "+conn.Name, p, map[string]string{keyName: conn.Name})}
+	}
+}
+
+// ignoredKey is a key a decision retired, with what replaces it.
+type ignoredKey struct {
+	path []string
+	why  string
+}
+
+// ignoredKeys are the keys ADR 0039 retired (decision 17).
+var ignoredKeys = []ignoredKey{
+	{at("spec", "learning", "jonah", "weeklyUsd"), "Jonah's budget is learning.jonah.share of what the line spent in the last 7 days"},
+	{at("spec", "learning", "librarian"), "Jonah proposes knowledge from the line"},
+	{at("spec", "learning", "kaizen"), "Jonah reviews the line once a day"},
+}
+
+// ignoredFields warns, code field-ignored, about each key of keys the definition still has. It
+// never goes through removed: a removed form refuses every run of a version that has it
+// (domain.Line.Refusal), and these keys must not stop a live factory.
+func (c *checker) ignoredFields(keys []ignoredKey) {
+	for _, k := range keys {
+		if c.f.hasKey(k.path) {
+			c.warnf(checkIgnored, codeFieldIgnored, k.path, "%s is ignored: %s; remove it", strings.Join(k.path[1:], "."), k.why)
+		}
+	}
+}
+
+// EvalsDir is the folder that held a definition's judges and eval cases (ADR 0025), which ADR 0039
+// decision 21 retired: Load and Check ignore what it holds.
+const EvalsDir = "evals"
+
+// evalsIgnored warns, code evals-ignored, when the definition still has an evals/ folder. Like
+// ignoredFields it never goes through removed, so a live version that has one keeps running.
+func (c *checker) evalsIgnored() {
+	if fi, err := fs.Stat(c.f.files, EvalsDir); err != nil || !fi.IsDir() {
+		return
+	}
+
+	c.problems = append(c.problems, domain.DefinitionProblem{
+		Code: codeEvalsIgnored, Severity: domain.SeverityWarning, Check: checkIgnored, Section: domain.SectionFiles,
+		File:    EvalsDir + "/",
+		Message: EvalsDir + "/ is ignored: Jonah's kept tests replace eval cases and judges; remove it",
+	})
+}
+
+// movedKeys are the keys ADR 0037 moved to environment files and secret references, with where
+// each went.
+var movedKeys = []struct {
+	path []string
+	to   string
+}{
+	{at("spec", "connections"), "what agents reach is listed in environments/<name>.yaml (env, files and mcp)"},
+	{at("spec", "runtime", "modelConnection"), "set runtime.modelKey to the {{secret}} that holds the model key"},
+	{at("spec", "runtime", "size"), "set size in each environment file"},
+	{at("spec", "runtime", "tools"), "set tools in each environment file"},
+	{at("spec", "runtime", "repository", "connection"), "set runtime.repository.token to the {{secret}} that clones and merges"},
+}
+
+// movedNote ends every moved-to-environment message.
+const movedNote = "Goal converts published versions itself (ADR 0037); remove it from this draft"
+
+// moved names each key ADR 0037 moved that the definition still has, with a fix that removes it.
+// They are errors, so no draft that has one publishes, but Load skips them and they are not
+// removed forms: a version published before runs on the old path until Goal converts it.
+func (c *checker) moved() {
+	for _, k := range movedKeys {
+		if !c.f.hasKey(k.path) {
+			continue
+		}
+
+		name := strings.Join(k.path[1:], ".")
+		fix := RemoveFix("Remove "+name, k.path)
+
+		if k.path[1] == "connections" {
+			fix = ReplaceFix("Remove "+name, k.path, []any{}) // the section is the list; an empty one writes nothing
+		}
+
+		c.errorf(checkMoved, codeMovedToEnvironment, k.path, "%s moved to environment files: %s. %s", name, k.to, movedNote).
+			Fixes = []domain.ProblemFix{fix}
+	}
+
+	for i, a := range c.f.Spec.Agents {
+		if p := at("spec", keyAgents, i, "connections"); c.f.hasKey(p) {
+			c.errorf(checkMoved, codeMovedToEnvironment, p,
+				"agent %s: connections moved to environment files: set the agent's environment to the file that lists what it reaches. %s",
+				a.Name, movedNote).Fixes = []domain.ProblemFix{RemoveFix("Remove the agent's connections", p)}
+		}
+	}
+
+	// Triggers are edited in YAML only (no model section), so this one has no fix to apply.
+	for i, t := range c.f.Spec.Board.Triggers {
+		if p := at("spec", "board", "triggers", i, "only", "modelAgrees", "connection"); c.f.hasKey(p) {
+			c.errorf(checkMoved, codeMovedToEnvironment, p,
+				"trigger %s: only.modelAgrees.connection moved: set only.modelAgrees.key to a {{secret}}, or leave it out for runtime.modelKey. %s",
+				t.Name, movedNote)
+		}
 	}
 }
 
@@ -595,8 +738,9 @@ func (f *Factory) exists(rel string) bool {
 	return err == nil
 }
 
-// otherFileProblems reports YAML and JSON files besides factory.yaml (contracts, eval cases)
-// that do not parse. Hidden folders (a working copy's .goal/) are skipped.
+// otherFileProblems reports YAML and JSON files besides factory.yaml (contracts, environments)
+// that do not parse. Hidden folders (a working copy's .goal/) and evals/, which is ignored, are
+// skipped.
 func otherFileProblems(files fs.FS) []domain.DefinitionProblem {
 	var out []domain.DefinitionProblem
 
@@ -604,7 +748,7 @@ func otherFileProblems(files fs.FS) []domain.DefinitionProblem {
 		switch {
 		case err != nil:
 			return nil //nolint:nilerr // an unreadable entry is reported by whatever references it
-		case d.IsDir() && p != "." && strings.HasPrefix(d.Name(), "."):
+		case d.IsDir() && p != "." && strings.HasPrefix(d.Name(), "."), d.IsDir() && p == EvalsDir:
 			return fs.SkipDir
 		case d.IsDir() || p == FileName:
 			return nil

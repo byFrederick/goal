@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/jonah"
 )
 
@@ -39,6 +41,8 @@ var (
 	_ api.JonahDecisions = (*jonah.Decider)(nil)
 	_ jonah.Authoring    = (*api.JonahAuthoring)(nil)
 	_ api.JonahReads     = ports.JonahStore(nil)
+	_ api.JonahModels    = (*jonah.ModelProposals)(nil)
+	_ api.JonahTryAgain  = (*jonah.TryAgain)(nil)
 )
 
 // val is *p, or T's zero value for nil.
@@ -51,10 +55,10 @@ func val[T any](p *T) T {
 	return *p
 }
 
-// proposalFiles edit acme's writer prompt as v1 has it and add a rule.
-func proposalFiles() []domain.ProposalFile {
-	return []domain.ProposalFile{
-		{Path: writerFile, BaseSHA256: string(domain.HashBlob([]byte(writerPrompt))), Content: writerNew},
+// proposalFiles edit acme's writer prompt as v1 has it, by one replacement, and add a rule.
+func proposalFiles() []domain.ProposalEdit {
+	return []domain.ProposalEdit{
+		{Path: writerFile, Replacements: []domain.Replacement{{Old: writerPrompt, New: writerNew}}},
 		{Path: rulePath, Content: ruleNew},
 	}
 }
@@ -90,10 +94,10 @@ func (h *harness) review(t *testing.T, proposals []domain.NewProposal, observati
 }
 
 // proposeOne stores one proposal of files and returns its path.
-func (h *harness) proposeOne(t *testing.T, files []domain.ProposalFile) string {
+func (h *harness) proposeOne(t *testing.T, files []domain.ProposalEdit) string {
 	t.Helper()
 
-	p := h.review(t, []domain.NewProposal{{Title: "Ask for a screenshot", Files: files}})
+	p := h.review(t, []domain.NewProposal{{Title: "Ask for a screenshot", Edits: files}})
 
 	return acmeProposals + "/" + strconv.FormatInt(p[0].Number, 10)
 }
@@ -179,12 +183,12 @@ func TestJonah_ApproveRefusals(t *testing.T) {
 		}
 	})
 
-	t.Run("changed base", func(t *testing.T) {
+	t.Run("old text gone", func(t *testing.T) {
 		t.Parallel()
 
 		h := newHarness(t)
 		files := proposalFiles()
-		files[0].BaseSHA256 = string(domain.HashBlob([]byte("# writer, as it was once\n")))
+		files[0].Replacements = []domain.Replacement{{Old: "# writer, as it was once\n", New: writerNew}}
 		path := h.proposeOne(t, files)
 
 		code, p := problemOfCall(t, h, http.MethodPost, path+"/approve", "")
@@ -239,8 +243,8 @@ func TestJonah_EditProposal(t *testing.T) {
 		t.Errorf("%d %s entries, want 1", n, domain.AuditProposalApplied)
 	}
 
-	// The draft's copy of the writer's prompt changed: a second proposal of it conflicts.
-	second := h.proposeOne(t, proposalFiles()[:1])
+	// The draft has the rule now: a second proposal adding it as a new file conflicts.
+	second := h.proposeOne(t, proposalFiles()[1:])
 
 	code, p := problemOfCall(t, h, http.MethodPost, second+"/edit", "")
 	wantProblem(t, "edit over a changed draft", code, p, http.StatusConflict, "draft-conflict")
@@ -284,22 +288,69 @@ func TestJonah_RejectProposal(t *testing.T) {
 	wantProblem(t, "reject of an unknown proposal", code, p, http.StatusNotFound, "proposal-not-found")
 }
 
+// "Look for improvements now" queues a manual review at once; one in flight refuses a second, a
+// failed review's error shows on the overview, and a spent budget refuses another.
 func TestJonah_QueueReview(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
-	// No review loop runs yet (software#344): a review is refused before anything is queued.
 	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a review while no loop runs", code, p, http.StatusConflict, "review-loop-not-running")
+	wantProblem(t, "a review of a line that spent nothing", code, p, http.StatusConflict, "learning-budget-exhausted")
 
-	if n := h.audited(t, domain.AuditReviewQueued); n != 0 {
-		t.Errorf("%d %s entries, want none", n, domain.AuditReviewQueued)
+	h.kindRun(t, domain.RunKindStation, 200) // Jonah's budget is $10
+
+	var r gen.JonahReview
+	if code := h.call(t, http.MethodPost, acmeJonah+"/reviews", "", &r); code != http.StatusAccepted {
+		t.Fatalf("queue review = %d, want 202", code)
 	}
+
+	if r.State != gen.JonahReviewStatePending || r.Trigger != gen.JonahReviewTriggerManual || r.Id == "" {
+		t.Errorf("queued review = %+v, want a pending manual review", r)
+	}
+
+	if n := h.audited(t, domain.AuditReviewQueued); n != 1 {
+		t.Errorf("%d %s entries, want 1", n, domain.AuditReviewQueued)
+	}
+
+	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
+	wantProblem(t, "a second review while one is pending", code, p, http.StatusConflict, "review-in-flight")
+
+	claimed, err := h.store.ClaimJonahReview(inOrg(t), h.clock.Now(), time.Minute)
+	if err != nil || string(claimed.ID) != r.Id {
+		t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
+	}
+
+	if _, _, err := h.store.FinishJonahReview(inOrg(t), claimed, domain.JonahReviewResult{
+		State: domain.JonahFailed, Error: "the review run ended failed: out of turns", At: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var ov gen.JonahOverview
+	if code := h.call(t, http.MethodGet, acmeJonah, "", &ov); code != http.StatusOK {
+		t.Fatalf("overview = %d, want 200", code)
+	}
+
+	if last := val(ov.LastReview); last.State != gen.JonahReviewStateFailed || val(last.Error) != "the review run ended failed: out of turns" {
+		t.Errorf("last review = %+v, want failed with its error", last)
+	}
+
+	h.jonahRun(t, 10)
+
+	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
+	wantProblem(t, "a review over Jonah's budget", code, p, http.StatusConflict, "learning-budget-exhausted")
 }
 
 // jonahRun records a finished review run of acme that cost usd, started an hour ago.
 func (h *harness) jonahRun(t *testing.T, usd float64) {
+	t.Helper()
+
+	h.kindRun(t, domain.RunKindJonah, usd)
+}
+
+// kindRun records a finished run of kind of acme that cost usd, started an hour ago.
+func (h *harness) kindRun(t *testing.T, kind domain.RunKind, usd float64) {
 	t.Helper()
 
 	ctx := inOrg(t)
@@ -312,7 +363,7 @@ func (h *harness) jonahRun(t *testing.T, usd float64) {
 
 	id, err := h.store.StartRun(ctx, ports.NewRun{
 		FactoryID: acmeID, DefinitionVersionID: h.acmeRecord(t).Current.ID, ItemID: it.ID, Station: stInbox, Agent: writerAgent,
-		StartedAt: at, Kind: domain.RunKindJonah,
+		StartedAt: at, Kind: kind,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -338,6 +389,9 @@ func TestJonah_Permissions(t *testing.T) {
 	code, p := problemOfCall(t, h, http.MethodPost, path+"/approve", "")
 	wantProblem(t, "approve without definition:publish", code, p, http.StatusForbidden, "forbidden")
 
+	code, p = problemOfCall(t, h, http.MethodPost, acmeDraft+"/kept-tests", "")
+	wantProblem(t, "start the draft's kept tests without definition:publish", code, p, http.StatusForbidden, "forbidden")
+
 	if got := h.getProposal(t, path); got.State != gen.ProposalStateProposed {
 		t.Fatalf("the key could read the proposal as %s, want proposed", got.State)
 	}
@@ -345,17 +399,31 @@ func TestJonah_Permissions(t *testing.T) {
 	h.as(acmeMember(domain.FactoryViewer))
 
 	for _, c := range []struct{ path, body string }{
-		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", rejectBody}, {acmeJonah + "/reviews", ""},
+		{path + "/approve", ""},
+		{path + "/edit", ""},
+		{path + "/reject", rejectBody},
+		{path + "/undo", ""},
+		{path + "/try", ""},
+		{acmeJonah + "/reviews", ""},
+		{acmeJonah + "/tests", keepBody(1, "inbox")},
+		{acmeDraft + "/kept-tests", ""},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body)
 		wantProblem(t, "a viewer's POST "+c.path, code, p, http.StatusForbidden, "forbidden")
 	}
 
-	for _, read := range []string{acmeJonah, acmeProposals, path} {
+	code, p = problemOfCall(t, h, http.MethodDelete, acmeJonah+"/tests/019a0000-0000-7000-8000-00000000dead", "")
+	wantProblem(t, "a viewer's DELETE of a kept test", code, p, http.StatusForbidden, "forbidden")
+
+	for _, read := range []string{acmeJonah, acmeProposals, path, acmeJonah + "/tests"} {
 		if code := h.call(t, http.MethodGet, read, "", nil); code != http.StatusOK {
 			t.Errorf("a viewer's GET %s = %d, want 200", read, code)
 		}
 	}
+
+	// A viewer reads the draft's kept tests: acme has no draft open, so 404, not 403.
+	code, p = problemOfCall(t, h, http.MethodGet, acmeDraft+"/kept-tests", "")
+	wantProblem(t, "a viewer's GET of the draft's kept tests", code, p, http.StatusNotFound, "no-draft")
 
 	if got := h.getProposal(t, path); got.State != gen.ProposalStateProposed {
 		t.Errorf("after refusals the proposal is %s, want proposed", got.State)
@@ -371,14 +439,14 @@ func TestJonah_Reads(t *testing.T) {
 	files := proposalFiles()
 	stored := h.review(t, []domain.NewProposal{
 		{
-			Title: "Ask for a screenshot", Summary: "Four UI changes came back without one.", Files: files,
+			Title: "Ask for a screenshot", Summary: "Four UI changes came back without one.", Edits: files,
 			Evidence: []domain.ProposalEvidence{{ItemID: domain.ItemID(it.Id), Station: reviewStation, Quote: "No screenshot."}},
 			Estimate: domain.ProposalEstimate{Metric: domain.MetricSentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUSD: 0.05},
 		},
-		{Title: "Tighten the rule", Files: files[1:]},
+		{Title: "Tighten the rule", Edits: files[1:]},
 	},
 		domain.NewObservation{Summary: "UI changes lack screenshots", Detail: "4 of 6", ItemIDs: []domain.ItemID{domain.ItemID(it.Id)}, Count: 4, Proposal: 1},
-		domain.NewObservation{Summary: "Tests skipped", Count: 3},
+		domain.NewObservation{Summary: "Tests skipped", Count: 2},
 	)
 
 	if _, err := h.store.DecideProposal(inOrg(t), acmeID, stored[1].Number, domain.ProposalDecision{
@@ -388,6 +456,7 @@ func TestJonah_Reads(t *testing.T) {
 	}
 
 	h.jonahRun(t, 1.5)
+	h.kindRun(t, domain.RunKindStation, 200)
 
 	h.wantOverview(t, stored[0].Number, it.Ref)
 	h.wantProposalPages(t, stored)
@@ -404,7 +473,8 @@ func (h *harness) wantOverview(t *testing.T, proposal int64, ref string) {
 		t.Fatalf("overview = %d, want 200", code)
 	}
 
-	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUsd: 10, ApproverRoles: []string{roleOwner, "admin", "editor"}}
+	// The line spent $200 in the last 7 days: 5% of it is Jonah's $10.
+	wantPolicy := gen.JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05, BudgetUsd: 10, ApproverRoles: []string{roleOwner, "admin", "editor"}}
 	if !reflect.DeepEqual(ov.Policy, wantPolicy) {
 		t.Errorf("policy = %+v, want %+v", ov.Policy, wantPolicy)
 	}
@@ -427,7 +497,7 @@ func (h *harness) wantOverview(t *testing.T, proposal int64, ref string) {
 
 	slices.SortFunc(got, func(a, b seen) int { return strings.Compare(a.State, b.State) })
 
-	want := []seen{{"UI changes lack screenshots", "proposed", 4, 5, proposal, ref}, {"Tests skipped", "watching", 3, 5, 0, ""}}
+	want := []seen{{"UI changes lack screenshots", "proposed", 4, 3, proposal, ref}, {"Tests skipped", "watching", 2, 3, 0, ""}}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("observations = %+v, want %+v", got, want)
@@ -474,7 +544,7 @@ func (h *harness) wantProposalPages(t *testing.T, stored []domain.Proposal) {
 	e := second.Proposals[0]
 	got := fmt.Sprint(e.Paths, e.Agents, e.EvidenceCount, val(e.Estimate))
 	want := fmt.Sprint([]string{writerFile, rulePath}, []string{writerAgent}, 1,
-		gen.ProposalEstimate{Metric: gen.SentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUsd: 0.05})
+		gen.ProposalEstimate{Metric: gen.ProposalEstimateMetricSentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUsd: 0.05})
 
 	if got != want {
 		t.Errorf("entry = %s, want %s", got, want)
@@ -486,7 +556,7 @@ func (h *harness) wantProposalPages(t *testing.T, stored []domain.Proposal) {
 }
 
 // wantProposal checks proposal number of TestJonah_Reads, which edits files and rests on it.
-func (h *harness) wantProposal(t *testing.T, number int64, files []domain.ProposalFile, it gen.Item) {
+func (h *harness) wantProposal(t *testing.T, number int64, files []domain.ProposalEdit, it gen.Item) {
 	t.Helper()
 
 	p := h.getProposal(t, acmeProposals+"/"+strconv.FormatInt(number, 10))
@@ -495,11 +565,19 @@ func (h *harness) wantProposal(t *testing.T, number int64, files []domain.Propos
 	}
 
 	wantFiles := []gen.ProposalFile{
-		{Path: writerFile, BaseSha256: files[0].BaseSHA256, BaseContent: writerPrompt, Content: writerNew},
+		{Path: writerFile, BaseSha256: string(domain.HashBlob([]byte(writerPrompt))), BaseContent: writerPrompt, Content: writerNew},
 		{Path: rulePath, Content: ruleNew},
 	}
 	if !reflect.DeepEqual(p.Files, wantFiles) {
 		t.Errorf("files = %+v, want %+v", p.Files, wantFiles)
+	}
+
+	wantEdits := []gen.ProposalEdit{
+		{Path: writerFile, Replacements: &[]gen.Replacement{{Old: files[0].Replacements[0].Old, New: files[0].Replacements[0].New}}},
+		{Path: rulePath, Content: &files[1].Content},
+	}
+	if !reflect.DeepEqual(p.Edits, wantEdits) {
+		t.Errorf("edits = %+v, want %+v", p.Edits, wantEdits)
 	}
 
 	station := reviewStation
@@ -520,4 +598,465 @@ func TestJonah_Unavailable(t *testing.T) {
 
 	code, p := problemOfCall(t, h, http.MethodGet, acmeJonah, "")
 	wantProblem(t, "overview without a Jonah store", code, p, http.StatusServiceUnavailable, "jonah-unavailable")
+}
+
+// lineModels is the model-proposal route of line's agents.
+const lineModels = "/v1/orgs/acme/factories/line/agents/"
+
+// modelLines is jonah.ModelDefinitions over the definitions cache, with the harness's modelLine
+// change, when a test sets one, applied to each line it reads.
+type modelLines struct {
+	*definitions.Cache
+	h *harness
+}
+
+func (m modelLines) Line(ctx context.Context, id domain.DefinitionVersionID) (domain.Line, error) {
+	l, err := m.Cache.Line(ctx, id)
+	if err == nil && m.h.modelLine != nil {
+		l.Agents = slices.Clone(l.Agents)
+		m.h.modelLine(&l)
+	}
+
+	return l, err
+}
+
+// ProposedLine is jonah.ProposedLines for Try again: the version's line as Line reads it, every
+// station of it reached.
+func (m modelLines) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, _ []domain.ProposalEdit) (domain.Line, []string, error) {
+	l, err := m.Line(ctx, v)
+	if err != nil {
+		return domain.Line{}, nil, err
+	}
+
+	reached := make([]string, 0, len(l.Stations))
+	for _, st := range l.Stations {
+		reached = append(reached, st.ID)
+	}
+
+	return l, reached, nil
+}
+
+// doneLineItem is a done item of line that backend built at build an hour ago, in a claim's first
+// run that cost usd, sent back once at merge; the line spent lineUSD more on another item.
+func (h *harness) doneLineItem(t *testing.T, usd, lineUSD float64) domain.Item {
+	t.Helper()
+
+	ctx := inOrg(t)
+	at := h.clock.Now().Add(-time.Hour)
+	it := h.seed(t, stBuild, domain.StateQueued, at)
+	version := h.lineRecord(t).Current.ID
+
+	for i, cost := range []float64{usd, lineUSD} {
+		item := it
+		if i == 1 {
+			item = h.seed(t, stBuild, domain.StateQueued, at)
+		}
+
+		id, err := h.store.StartRun(ctx, ports.NewRun{
+			FactoryID: lineID, DefinitionVersionID: version, ItemID: item.ID, Station: stBuild, Agent: backendAgent, StartedAt: at,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", BranchHead: strings.Repeat("c", 40)}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: cost}, at.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := h.store.AppendEvents(ctx, domain.Event{
+		FactoryID: lineID, ItemID: it.ID, At: at.Add(2 * time.Minute), Kind: domain.EventRejected, Station: "merge", Actor: "user:ada",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	return h.move(t, it, domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = h.clock.Now() })
+}
+
+// lineRecord is line's record.
+func (h *harness) lineRecord(t *testing.T) ports.FactoryRecord {
+	t.Helper()
+
+	rec, err := h.defs.FactoryRecord(inOrg(t), lineID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return rec
+}
+
+func TestJonah_ModelProposalEstimate(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.doneLineItem(t, 2, 998) // the line spent $1,000: Jonah's budget is $50
+
+	var est gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`, &est); code != http.StatusOK {
+		t.Fatalf("estimate = %d, want 200", code)
+	}
+
+	if est.Proposal != nil {
+		t.Errorf("an estimate answered a proposal: %+v", est.Proposal)
+	}
+
+	wantModelEstimate(t, est.Estimate, it)
+
+	if page := h.proposalPageOf(t, "/v1/orgs/acme/factories/line/jonah/proposals"); len(page.Proposals) != 0 {
+		t.Errorf("an estimate stored %d proposals, want none", len(page.Proposals))
+	}
+
+	var made gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`","confirm":true}`, &made); code != http.StatusCreated {
+		t.Fatalf("confirm = %d, want 201", code)
+	}
+
+	if p := made.Proposal; p == nil || p.State != gen.ProposalStateProposed || len(p.Edits) != 1 || p.Edits[0].Path != yamlFile ||
+		len(p.Evidence) != 1 || made.Estimate.Tries != 3 {
+		t.Fatalf("confirm = %+v, want a proposed proposal of factory.yaml with its evidence and 3 tries", made)
+	}
+
+	if n := h.audited(t, domain.AuditProposalModel); n != 1 {
+		t.Errorf("%d %s entries, want 1", n, domain.AuditProposalModel)
+	}
+}
+
+// wantModelEstimate fails t unless e is backend's from backendModel to modelOpus on it alone: sent
+// back once at merge, $2, so 3 tries at $6 against the $50 of Jonah's budget.
+func wantModelEstimate(t *testing.T, e gen.ModelProposalEstimate, it domain.Item) {
+	t.Helper()
+
+	if e.Agent != backendAgent || e.CurrentModel != backendModel || e.Model != modelOpus || len(e.Items) != 1 {
+		t.Fatalf("estimate = %+v, want one item of backend from %s to %s", e, backendModel, modelOpus)
+	}
+
+	want := gen.ModelProposalItem{
+		ItemRef: fmt.Sprintf("line#%d", it.Number), ItemTitle: it.Title, Station: stBuild, RunId: e.Items[0].RunId, SentBack: 1,
+		LineResult: "sent back once at merge, $2.00", CostUsd: 2, RunCostUsd: 2,
+	}
+	if e.Items[0] != want || want.RunId == "" {
+		t.Errorf("item = %+v, want %+v", e.Items[0], want)
+	}
+
+	if e.Tries != 3 || e.EstimateUsd != 6 || e.BudgetLeftUsd != 50 {
+		t.Errorf("estimate %d tries, $%v, $%v left; want 3, $6 and $50", e.Tries, e.EstimateUsd, e.BudgetLeftUsd)
+	}
+}
+
+// proposalPageOf reads the first page of proposals at path.
+func (h *harness) proposalPageOf(t *testing.T, path string) gen.ProposalPage {
+	t.Helper()
+
+	var page gen.ProposalPage
+	if code := h.call(t, http.MethodGet, path, "", &page); code != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200", path, code)
+	}
+
+	return page
+}
+
+func TestJonah_ModelProposalRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.doneLineItem(t, 100, 900) // $300 of tries against a $50 budget
+
+	for _, c := range []struct {
+		what, agent, model string
+		status             int
+		code               string
+	}{
+		{"a model outside the policy", backendAgent, backendModel, http.StatusUnprocessableEntity, "model-not-allowed"},
+		{"the agent's own model", agentFrontend, modelHaiku, http.StatusUnprocessableEntity, "model-not-allowed"},
+		{"an agent with no finished item", agentFrontend, modelOpus, http.StatusUnprocessableEntity, "no-finished-items"},
+		{"an unknown agent", "nobody", modelOpus, http.StatusNotFound, "agent-not-found"},
+	} {
+		code, p := problemOfCall(t, h, http.MethodPost, lineModels+c.agent+"/model-proposal", `{"model":"`+c.model+`","confirm":true}`)
+		wantProblem(t, c.what, code, p, c.status, c.code)
+	}
+
+	code, p := problemOfCall(t, h, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "tries over Jonah's budget", code, p, http.StatusConflict, "learning-budget-exhausted")
+
+	if est := val(p.ModelEstimate); est.EstimateUsd != 300 || est.BudgetLeftUsd != 50 || len(est.Items) != 1 {
+		t.Errorf("refused estimate = %+v, want $300 of tries against $50 left", p)
+	}
+
+	h.modelLine = func(l *domain.Line) {
+		for i := range l.Agents {
+			l.Agents[i].Connections = []string{"repo"}
+		}
+	}
+
+	code, p = problemOfCall(t, h, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "an agent that needs a connection", code, p, http.StatusUnprocessableEntity, "agent-not-triable")
+
+	if c := h.request(t, http.MethodPost, factoriesPath, `{"name":"support","title":"Support","start":{"kind":"blank"}}`, nil); c.status != http.StatusCreated {
+		t.Fatalf("create support = %d", c.status)
+	}
+
+	code, p = problemOfCall(t, h, http.MethodPost, factoriesPath+"/support/agents/writer/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "a factory never published", code, p, http.StatusNotFound, "version-not-found")
+
+	h.as(acmeMember(domain.FactoryViewer))
+
+	code, p = problemOfCall(t, h, http.MethodPost, acmeFactory+"/agents/"+writerAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "a viewer's model proposal", code, p, http.StatusForbidden, "forbidden")
+}
+
+func TestJonah_ModelProposalUnavailable(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) { d.Jonah.Models = nil })
+
+	code, p := problemOfCall(t, h, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "a model proposal without Try another model", code, p, http.StatusServiceUnavailable, "jonah-unavailable")
+}
+
+func TestJonah_ProposalTried(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.doneLineItem(t, 2, 998) // the line spent $1,000: Jonah's budget is $50
+	kept := h.builtItem(t, true, domain.EventClaimed, domain.EventMoved)
+	h.keep(t, kept)
+
+	var made gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`","confirm":true}`, &made); code != http.StatusCreated {
+		t.Fatalf("confirm = %d, want 201", code)
+	}
+
+	ctx := inOrg(t)
+
+	claimed, err := h.store.ClaimPastTry(ctx, lineID, h.clock.Now(), time.Minute, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.clock.Advance(90 * time.Second)
+
+	if _, err := h.store.FinishPastTry(ctx, claimed, domain.PastTryResult{
+		Verdict: domain.PastTryFixed, Reason: "The tests now cover the merge.", CostUSD: 1.25, At: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tried := h.getProposal(t, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number)).Tried
+	if tried == nil || tried.State != gen.ProposalTriedStateTrying || tried.CostUsd != 1.25 || tried.Seconds != nil ||
+		tried.Grader != nil || len(tried.Items) != 1 {
+		t.Fatalf("tried = %+v, want one item trying at $1.25, no time or grader yet", tried)
+	}
+
+	wantTriedItem(t, tried.Items[0], it)
+
+	// The kept test at build, which the model change reaches, is tried three times too.
+	wantKept := []gen.TriedKeptTest{
+		{Test: kept.Number, Station: stBuild, Attempt: 1, Result: gen.KeptTestResultRunning},
+		{Test: kept.Number, Station: stBuild, Attempt: 2, Result: gen.KeptTestResultRunning},
+		{Test: kept.Number, Station: stBuild, Attempt: 3, Result: gen.KeptTestResultRunning},
+	}
+	if !reflect.DeepEqual(tried.KeptTests, wantKept) {
+		t.Errorf("kept tests = %+v, want %+v", tried.KeptTests, wantKept)
+	}
+
+	wantGrader(t, h, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number), claimed, it)
+
+	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
+	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
+		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
+	}
+}
+
+// wantGrader records checks of the grader on it for claimed's proposal, at path, and fails t
+// unless its tried shows each hit rate as hits over checks, 0 without checks, and adds the checks'
+// cost to the tries' $1.25.
+func wantGrader(t *testing.T, h *harness, path string, claimed domain.PastTry, it domain.Item) {
+	t.Helper()
+
+	ctx := inOrg(t)
+	check := func(r domain.GraderCheckResult, answer domain.PastTryVerdict) {
+		t.Helper()
+
+		if _, err := h.store.RecordGraderCheck(ctx, domain.NewGraderCheck{
+			ProposalID: claimed.ProposalID, ItemID: it.ID, Result: r, Answer: answer, Reason: "the grader's reason", CostUSD: 0.25, CheckedAt: h.clock.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	check(domain.GraderCheckOriginal, domain.PastTryNotFixed)
+
+	if g := h.getProposal(t, path).Tried; g.Grader == nil || g.Grader.OriginalHitRate != 1 || g.Grader.FinalHitRate != 0 || g.CostUsd != 1.5 {
+		t.Errorf("tried = %+v, want the grader's original hit rate 1, its final 0 with no final check, and $1.50 with the check", g)
+	}
+
+	check(domain.GraderCheckFinal, domain.PastTryNotFixed) // a miss: the final should read fixed
+
+	if g := h.getProposal(t, path).Tried; g.Grader == nil || g.Grader.OriginalHitRate != 1 || g.Grader.FinalHitRate != 0 || g.CostUsd != 1.75 {
+		t.Errorf("tried = %+v, want hit rates 1 and 0 and $1.75 with both checks", g)
+	}
+}
+
+// wantTriedItem fails t unless item is it at the build station with its line result and three
+// tries: the first done and fixed with its reason, the other two queued.
+func wantTriedItem(t *testing.T, item gen.TriedItem, it domain.Item) {
+	t.Helper()
+
+	if item.ItemRef != fmt.Sprintf("line#%d", it.Number) || item.ItemTitle != it.Title || item.Station != stBuild ||
+		val(item.LineResult) != "sent back once at merge, $2.00" || len(item.Tries) != 3 {
+		t.Fatalf("item = %+v, want %s at %s with its line result and 3 tries", item, it.Title, stBuild)
+	}
+
+	want := []gen.TriedTry{
+		{Attempt: 1, State: gen.TriedTryStateDone, Verdict: new(gen.TriedTryVerdictFixed), Reason: new("The tests now cover the merge."), CostUsd: 1.25},
+		{Attempt: 2, State: gen.TriedTryStateQueued},
+		{Attempt: 3, State: gen.TriedTryStateQueued},
+	}
+	if !reflect.DeepEqual(item.Tries, want) {
+		t.Errorf("tries = %+v, want %+v", item.Tries, want)
+	}
+}
+
+// tryPath is the Try again route of line's proposal number.
+func tryPath(number int64) string {
+	return fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d/try", number)
+}
+
+// lineModelProposal is a model proposal of backend on line, tried three times on one done item
+// whose run cost usd; the line spent $1,000 in all, so Jonah's budget is $50.
+func (h *harness) lineModelProposal(t *testing.T, usd float64) (gen.Proposal, domain.Item) {
+	t.Helper()
+
+	it := h.doneLineItem(t, usd, 1000-usd)
+
+	var made gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+backendAgent+"/model-proposal", `{"model":"`+modelOpus+`","confirm":true}`, &made); code != http.StatusCreated {
+		t.Fatalf("model proposal = %d, want 201", code)
+	}
+
+	return *made.Proposal, it
+}
+
+// lineJonahRun records a finished Jonah run of line that cost usd, started an hour ago.
+func (h *harness) lineJonahRun(t *testing.T, usd float64) {
+	t.Helper()
+
+	ctx := inOrg(t)
+	at := h.clock.Now().Add(-time.Hour)
+
+	id, err := h.store.StartRun(ctx, ports.NewRun{
+		FactoryID: lineID, DefinitionVersionID: h.lineRecord(t).Current.ID, Agent: backendAgent, StartedAt: at, Kind: domain.RunKindJonah,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestJonah_TryAgain(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	p, it := h.lineModelProposal(t, 2)
+
+	var est gen.TryProposalResult
+	if code := h.call(t, http.MethodPost, tryPath(p.Number), "", &est); code != http.StatusOK {
+		t.Fatalf("estimate = %d, want 200", code)
+	}
+
+	want := gen.TryProposalEstimate{
+		Number: p.Number, Tries: 3, EstimateUsd: 6, BudgetLeftUsd: 50,
+		Items: []gen.TryProposalItem{{ItemRef: fmt.Sprintf("line#%d", it.Number), ItemTitle: it.Title, Station: stBuild, Tries: 3, RunCostUsd: 2}},
+	}
+	if est.Proposal != nil || !reflect.DeepEqual(est.Estimate, want) {
+		t.Fatalf("estimate = %+v, want %+v and no proposal", est, want)
+	}
+
+	if tried := h.getProposal(t, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", p.Number)).Tried; len(tried.Items[0].Tries) != 3 {
+		t.Errorf("an estimate left %d tries, want 3", len(tried.Items[0].Tries))
+	}
+
+	var made gen.TryProposalResult
+	if code := h.call(t, http.MethodPost, tryPath(p.Number), `{"confirm":true}`, &made); code != http.StatusCreated {
+		t.Fatalf("confirm = %d, want 201", code)
+	}
+
+	if made.Proposal == nil || made.Proposal.Tried == nil || !reflect.DeepEqual(made.Estimate, want) {
+		t.Fatalf("confirm = %+v, want the estimate and the proposal with its tries", made)
+	}
+
+	var attempts []int
+	for _, tr := range made.Proposal.Tried.Items[0].Tries {
+		attempts = append(attempts, tr.Attempt)
+	}
+
+	if !slices.Equal(attempts, []int{1, 2, 3, 4, 5, 6}) {
+		t.Errorf("tried attempts = %v, want 1 to 6, the new ones after the earlier", attempts)
+	}
+
+	if n := h.audited(t, domain.AuditProposalTried); n != 1 {
+		t.Errorf("%d %s entries, want 1", n, domain.AuditProposalTried)
+	}
+}
+
+func TestJonah_TryAgainRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	p, _ := h.lineModelProposal(t, 10)
+	h.lineJonahRun(t, 25) // $30 of tries against the $25 left of $50
+
+	code, prob := problemOfCall(t, h, http.MethodPost, tryPath(p.Number), `{"confirm":true}`)
+	wantProblem(t, "tries over Jonah's budget", code, prob, http.StatusConflict, "learning-budget-exhausted")
+
+	if est := val(prob.TryEstimate); est.Tries != 3 || est.EstimateUsd != 30 || est.BudgetLeftUsd != 25 {
+		t.Errorf("refused estimate = %+v, want 3 tries at $30 against $25 left", prob)
+	}
+
+	code, prob = problemOfCall(t, h, http.MethodPost, tryPath(99), "")
+	wantProblem(t, "no such proposal", code, prob, http.StatusNotFound, "proposal-not-found")
+
+	h.modelLine = func(l *domain.Line) {
+		for i := range l.Agents {
+			l.Agents[i].Connections = []string{"repo"}
+		}
+	}
+
+	code, prob = problemOfCall(t, h, http.MethodPost, tryPath(p.Number), "")
+	wantProblem(t, "a proposal that reaches no triable station", code, prob, http.StatusUnprocessableEntity, "proposal-not-triable")
+
+	h.modelLine = nil
+
+	if code := h.call(t, http.MethodPost, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d/reject", p.Number), rejectBody, nil); code != http.StatusOK {
+		t.Fatalf("reject = %d", code)
+	}
+
+	code, prob = problemOfCall(t, h, http.MethodPost, tryPath(p.Number), "")
+	wantProblem(t, "a rejected proposal", code, prob, http.StatusConflict, "proposal-decided")
+
+	untried, _, err := h.store.ProposeModel(inOrg(t), lineID, h.lineRecord(t).Current.ID, backendAgent, domain.NewProposal{
+		Title: "Try " + modelOpus, Edits: proposalFiles(),
+	}, nil, h.clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, prob = problemOfCall(t, h, http.MethodPost, tryPath(untried.Number), "")
+	wantProblem(t, "a proposal not tried yet", code, prob, http.StatusConflict, "proposal-not-tried")
+}
+
+func TestJonah_TryAgainUnavailable(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) { d.Jonah.TryAgain = nil })
+
+	code, p := problemOfCall(t, h, http.MethodPost, tryPath(1), "")
+	wantProblem(t, "Try again without its service", code, p, http.StatusServiceUnavailable, "jonah-unavailable")
 }

@@ -1,15 +1,21 @@
 package porttest
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -22,7 +28,12 @@ type ObjectStore struct {
 	mu      sync.Mutex
 	objects map[string][]byte
 	writes  map[string]int
+	// presignErr, when set, is what PresignGet fails with (FailPresign).
+	presignErr error
 }
+
+// PresignBase is where the fake's presigned URLs point.
+const PresignBase = "https://bucket.example.com/"
 
 // NewObjectStore returns an empty bucket.
 func NewObjectStore() *ObjectStore {
@@ -40,6 +51,72 @@ func (s *ObjectStore) Get(_ context.Context, key string) (ports.Object, error) {
 	}
 
 	return ports.Object{ObjectInfo: objectInfo(key, body), Body: slices.Clone(body)}, nil
+}
+
+// GetRange implements ports.ObjectStore.
+func (s *ObjectStore) GetRange(_ context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	if offset < 0 {
+		return nil, fmt.Errorf("get %s from %d: a negative offset: %w", key, offset, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	body, ok := s.objects[key]
+	if !ok {
+		return nil, fmt.Errorf("get %s: %w", key, ports.ErrNotFound)
+	}
+
+	size := int64(len(body))
+	from := min(offset, size)
+
+	to := size
+	if length >= 0 {
+		to = min(from+length, size)
+	}
+
+	return io.NopCloser(bytes.NewReader(slices.Clone(body[from:to]))), nil
+}
+
+// PresignGet implements ports.ObjectStore: PresignBase, the key and the ttl in seconds as
+// X-Amz-Expires, as an S3 presigned URL carries them, unless FailPresign set an error.
+func (s *ObjectStore) PresignGet(_ context.Context, key string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("presign %s for %s: %w", key, ttl, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.presignErr != nil {
+		return "", fmt.Errorf("presign %s: %w", key, s.presignErr)
+	}
+
+	q := url.Values{"X-Amz-Expires": {strconv.Itoa(int(ttl.Seconds()))}}
+
+	return PresignBase + key + "?" + q.Encode(), nil
+}
+
+// FailPresign makes every later PresignGet fail with err; nil makes it sign again.
+func (s *ObjectStore) FailPresign(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.presignErr = err
+}
+
+// PutStream implements ports.ObjectStore. The fake reads the whole stream before it writes, so
+// a reader that fails leaves the object as it was.
+func (s *ObjectStore) PutStream(_ context.Context, key string, r io.Reader) (ports.ObjectInfo, error) {
+	body, err := io.ReadAll(r)
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("put %s: read: %w", key, err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.write(key, body), nil
 }
 
 // Put implements ports.ObjectStore.

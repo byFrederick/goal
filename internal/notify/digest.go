@@ -23,14 +23,15 @@ const DigestHour = 8
 const reasonNothingToReport = "nothing-to-report"
 
 // DigestDeps are what a DigestJob works through. Email digests are queued and sent only with a
-// Mailer, and Slack digests only with Slack and Connections, as the Sender's rows are.
+// Mailer, and Slack digests only with Slack, Settings and Secrets, as the Sender's rows are.
 type DigestDeps struct {
 	Orgs        Orgs
 	Digests     ports.Digests
 	Preferences ports.NotificationPreferences
 	Mailer      ports.Mailer
 	Slack       ports.DirectMessenger
-	Connections SlackConnections
+	Settings    ports.NotificationSettings
+	Secrets     Secrets
 	Clock       ports.Clock
 	// PublicURL is the origin every link starts with (GOAL_PUBLIC_URL).
 	PublicURL string
@@ -67,7 +68,7 @@ func NewDigestJob(d DigestDeps) *DigestJob {
 		channels = append(channels, ports.ChannelEmail)
 	}
 
-	if d.Slack != nil && d.Connections != nil {
+	if slackReady(d.Slack, d.Settings, d.Secrets) {
 		channels = append(channels, ports.ChannelSlack)
 	}
 
@@ -116,7 +117,7 @@ func (j *DigestJob) Round(ctx context.Context) (DigestRound, error) {
 
 // queue queues, for every member of every live organization with the digest on, the digest of
 // their local date once their local time is at or past DigestHour: one email digest across their
-// organizations and one Slack digest per organization with a Slack connection. The store keeps a
+// organizations and one Slack digest per organization with a Slack secret set. The store keeps a
 // digest already queued for the date, so every round may ask again.
 func (j *DigestJob) queue(ctx context.Context) (int, error) {
 	if len(j.channels) == 0 {
@@ -165,7 +166,7 @@ func (j *DigestJob) dueIn(ctx context.Context, org domain.OrgID, now time.Time, 
 		return nil, fmt.Errorf("digest recipients of org %s: %w", org, err)
 	}
 
-	mail, chat := j.d.Mailer != nil, j.d.Slack != nil && j.d.Connections != nil
+	mail, chat := j.d.Mailer != nil, slackReady(j.d.Slack, j.d.Settings, j.d.Secrets)
 
 	var ds []ports.NewDigest
 
@@ -368,7 +369,7 @@ func (j *DigestJob) summaries(ctx context.Context, g ports.Digest) ([]ports.Dige
 // sendSlack sends m's text to m.To as a direct message with the token of the organization in
 // ctx.
 func (j *DigestJob) sendSlack(ctx context.Context, m ports.Message, token *tokenOnce) error {
-	t, err := token.get(ctx, j.d.Connections)
+	t, err := token.get(ctx, j.d.Settings, j.d.Secrets)
 	if err != nil {
 		return err
 	}

@@ -12,17 +12,17 @@ import {
   type QueryKey,
   queryOptions,
 } from '@tanstack/react-query';
+import { getAccess } from './access';
 import { getBuilderMeta, getSkillFiles, type SkillKey, searchSkills } from './builder';
 import {
   ApiError,
-  estimateEvalRun,
   type FlowRange,
   getAgentStats,
   getAttention,
   getAuthConfig,
-  getBakeOff,
   getBoard,
   getConstraint,
+  getDraftKeptTests,
   getFactoryActivity,
   getFactoryOverview,
   getInbox,
@@ -30,7 +30,6 @@ import {
   getItemParts,
   getItemTeardown,
   getJonahOverview,
-  getJudge,
   getLeadTime,
   getMe,
   getMetrics,
@@ -40,19 +39,18 @@ import {
   getTouchMetrics,
   getWeekly,
   type ItemFilter,
-  listBakeOffs,
-  listEvals,
   listFactories,
   listInvitations,
   listItemEvents,
   listItemRuns,
   listItems,
-  listJudges,
+  listKeptTests,
   listMembers,
   listOrgRuns,
   listOrgs,
   listProposals,
   listSavedViews,
+  listStandingRules,
   type RunsFilter,
 } from './client';
 import {
@@ -63,8 +61,8 @@ import {
   listConnectionRepositories,
   listConnections,
 } from './connections';
-import { listCredentials } from './credentials';
 import {
+  getCatalog,
   getDraft,
   getDraftFile,
   getDraftModel,
@@ -83,21 +81,21 @@ import {
 import { definitionFile, getIntake, getIntakeTrigger, tryIntakeTrigger } from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
-  getKnowledgeDocument,
+  findKnowledgeFiles,
   getKnowledgeSource,
-  getKnowledgeUsage,
-  type KnowledgeQuery,
   type KnowledgeSourceFilter,
-  listKnowledgeDocuments,
-  listKnowledgeDocumentUses,
+  listKnowledgeFiles,
+  listKnowledgeReads,
   listKnowledgeSources,
-  searchKnowledge,
 } from './knowledge';
 import { getNotificationPreferences } from './notifications';
+import { getOrgNotificationSettings } from './org-notifications';
 import { getOrgPolicy } from './policy';
+import { testRepository } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
+import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
-import type { Factory, ItemEvent, ProposalState, SpendWindow } from './types';
+import type { AccessView, Factory, ItemEvent, ProposalState, SpendWindow } from './types';
 import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
 
 /**
@@ -155,6 +153,8 @@ export const keys = {
   /** What each factory needs from people now (the rail's badges). */
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
+  /** The organization's notification settings (the Slack secret). */
+  orgNotifications: (org: string) => ['org', org, 'settings', 'notifications'] as const,
   /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
   policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
@@ -179,26 +179,30 @@ export const keys = {
   /** The owners and repositories a code host connection reaches; `owner` absent is its own account. */
   connectionRepositories: (org: string, connection: string, owner?: string) =>
     ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
-  /** The organization's credentials (ADR 0017): the list, which a connection's change also moves. */
-  credentials: (org: string) => ['org', org, 'credentials'] as const,
+  /** The organization's secrets (ADR 0037): the list, one secret, and the audit entries about it. A connection's change also moves them. */
+  /** What the organization's agents reach (ADR 0037): the read model, by view. A secret's or a factory's change moves it. */
+  access: (org: string, by: string) => ['org', org, 'access', by] as const,
+  /** The organization's active standing rules (Always allow). */
+  standingRules: (org: string) => ['org', org, 'standing-rules'] as const,
+  secrets: (org: string) => ['org', org, 'secrets'] as const,
+  secret: (org: string, name: string) => ['org', org, 'secrets', name] as const,
+  secretActivity: (org: string, id: string) => ['org', org, 'secrets', 'activity', id] as const,
   /**
    * The prefix of everything of the organization's knowledge base (spec 4 §10): the source lists
-   * by filter, each source and its documents, a document's text, searches. `event: knowledge` re-reads
-   * all of it but the searches (shared/invalidation.ts).
+   * by filter, each source and its files, how often they were read. `event: knowledge` re-reads
+   * all of it (shared/invalidation.ts).
    */
   knowledge: (org: string) => ['org', org, 'knowledge'] as const,
   /** The spend over one window (week, month or 90d) with the factories' budgets. */
   spend: (org: string, window: SpendWindow) => ['org', org, 'spend', window] as const,
   knowledgeSources: (org: string, filter: KnowledgeSourceFilter) =>
     ['org', org, 'knowledge', 'sources', filter] as const,
+  knowledgeFiles: (org: string, name: string, find: string) =>
+    ['org', org, 'knowledge', 'source', name, 'files', find] as const,
+  knowledgeFind: (org: string, find: string) => ['org', org, 'knowledge', 'find', find] as const,
+  knowledgeReads: (org: string, source: string, days: number) =>
+    ['org', org, 'knowledge', 'reads', source, days] as const,
   knowledgeSource: (org: string, name: string) => ['org', org, 'knowledge', 'source', name] as const,
-  knowledgeDocuments: (org: string, name: string) => ['org', org, 'knowledge', 'source', name, 'documents'] as const,
-  knowledgeDocument: (org: string, id: string) => ['org', org, 'knowledge', 'document', id] as const,
-  knowledgeSearch: (org: string, query: KnowledgeQuery) => ['org', org, 'knowledge', 'search', query] as const,
-  /** Where one source's documents were used over `days` days (ADR 0027, decision 3). */
-  knowledgeUsage: (org: string, source: string, days: number) =>
-    ['org', org, 'knowledge', 'usage', source, days] as const,
-  knowledgeDocumentUses: (org: string, id: string) => ['org', org, 'knowledge', 'document', id, 'uses'] as const,
   /** The shell's search box (sidebar-search.tsx): one entry per debounced query and limit. */
   search: (org: string, query: SearchQuery) => ['org', org, 'search', query] as const,
   /** The prefix of every factory overview window. */
@@ -243,16 +247,6 @@ export const keys = {
   runs: (org: string, filter?: RunsFilter) =>
     filter ? (['org', org, 'runs', filter] as const) : (['org', org, 'runs'] as const),
   parts: (org: string, item: string) => ['org', org, 'item', item, 'parts'] as const,
-  /**
-   * The prefix of a factory's eval cases, their estimate (Jonah's Evals) and its bake-offs. A `definition`
-   * event refreshes all of it; no stream event reports a bake-off's progress, so a bake-off is read again on
-   * focus and on its own actions.
-   */
-  evals: (org: string, factory: string) => ['org', org, 'factory', factory, 'evals'] as const,
-  /** The factory's bake-offs (under keys.evals): the list, and each bake-off by its id. */
-  bakeOffs: (org: string, factory: string) => [...keys.evals(org, factory), 'bake-offs'] as const,
-  /** The prefix of a factory's judges (Jonah's Judges). A `definition` event refreshes it. */
-  judges: (org: string, factory: string) => ['org', org, 'factory', factory, 'judges'] as const,
   /** The prefix of a factory's Jonah reads: the overview and the proposals. A `learning` or `definition` event refreshes it. */
   jonah: (org: string, factory: string) => ['org', org, 'factory', factory, 'jonah'] as const,
   /** The factory's intake (sources and triggers); item and definition events refresh it. */
@@ -399,12 +393,54 @@ export const connectionActivityQuery = (org: string, id?: string) =>
     staleTime: 30_000,
   });
 
-/** The organization's credentials, by name, never a value (credential:read: every member). */
-export const credentialsQuery = (org: string) =>
+/** What every factory's agents reach, grouped `by` (access:read). */
+export const accessQuery = (org: string, by: AccessView) =>
   queryOptions({
-    queryKey: keys.credentials(org),
-    queryFn: ({ signal }) => listCredentials(org, signal),
+    queryKey: keys.access(org, by),
+    queryFn: ({ signal }) => getAccess(org, by, signal),
     staleTime: 30_000,
+  });
+
+/** The read and push check of a repository's token (ADR 0037): a test that costs a request, so it is kept for a minute. */
+export const repositoryTestQuery = (org: string, url: string, secret: string) =>
+  queryOptions({
+    queryKey: ['org', org, 'repository-test', url, secret] as const,
+    queryFn: ({ signal }) => testRepository(org, { url, secret }, signal),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+/** The organization's notification settings (org:read). */
+export const orgNotificationsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.orgNotifications(org),
+    queryFn: ({ signal }) => getOrgNotificationSettings(org, signal),
+    staleTime: 30_000,
+  });
+
+/** The organization's secrets, by name, never a value (secret:read: every member). */
+export const secretsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.secrets(org),
+    queryFn: ({ signal }) => listSecrets(org, signal),
+    staleTime: 30_000,
+  });
+
+/** One secret by name. */
+export const secretQuery = (org: string, name: string) =>
+  queryOptions({
+    queryKey: keys.secret(org, name),
+    queryFn: ({ signal }) => getSecret(org, name, signal),
+    staleTime: 30_000,
+  });
+
+/** The newest audit entries about one secret, by its id (audit:read: a 403 is the page's "Not available"). */
+export const secretActivityQuery = (org: string, id: string) =>
+  queryOptions({
+    queryKey: keys.secretActivity(org, id),
+    queryFn: ({ signal }) => listSecretActivity(org, id, signal),
+    staleTime: 30_000,
+    retry: false,
   });
 
 /** The organization's knowledge sources; `factory` (an id) narrows them to what its current version lists. */
@@ -415,56 +451,36 @@ export const knowledgeSourcesQuery = (org: string, filter: KnowledgeSourceFilter
     staleTime: 30_000,
   });
 
+/** The files of a source's current snapshot, in path order; `find` narrows by path or title. */
+export const knowledgeFilesQuery = (org: string, name: string, find = '') =>
+  queryOptions({
+    queryKey: keys.knowledgeFiles(org, name, find),
+    queryFn: ({ signal }) => listKnowledgeFiles(org, name, { find, limit: 1000 }, signal).then((p) => p.files),
+    staleTime: 30_000,
+  });
+
+/** The files whose path or title starts with `find`, across every source. */
+export const knowledgeFindQuery = (org: string, find: string) =>
+  queryOptions({
+    queryKey: keys.knowledgeFind(org, find),
+    queryFn: ({ signal }) => findKnowledgeFiles(org, find, 8, signal),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+/** The reads of every source, or of one, over the last `days` days (UTC days, today counting). */
+export const knowledgeReadsQuery = (org: string, source = '', days = 7) =>
+  queryOptions({
+    queryKey: keys.knowledgeReads(org, source, days),
+    queryFn: ({ signal }) => listKnowledgeReads(org, { source, days }, signal),
+    staleTime: 30_000,
+  });
+
 export const knowledgeSourceQuery = (org: string, name: string) =>
   queryOptions({
     queryKey: keys.knowledgeSource(org, name),
     queryFn: ({ signal }) => getKnowledgeSource(org, name, signal),
     staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** A source's documents, a page of `limit` at a time ("Show more"). */
-export const knowledgeDocumentsQuery = (org: string, name: string, limit = 100) =>
-  infiniteQueryOptions({
-    queryKey: [...keys.knowledgeDocuments(org, name), limit],
-    queryFn: ({ pageParam, signal }) => listKnowledgeDocuments(org, name, { after: pageParam, limit }, signal),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.next_after,
-    staleTime: 30_000,
-  });
-
-export const knowledgeDocumentQuery = (org: string, id: string) =>
-  queryOptions({
-    queryKey: keys.knowledgeDocument(org, id),
-    queryFn: ({ signal }) => getKnowledgeDocument(org, id, signal),
-    staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** Where a source's documents were used over the last `days` days (7 by default), the most used first. */
-export const knowledgeUsageQuery = (org: string, source: string, days = 7) =>
-  queryOptions({
-    queryKey: keys.knowledgeUsage(org, source, days),
-    queryFn: ({ signal }) => getKnowledgeUsage(org, source, days, signal),
-    staleTime: 30_000,
-  });
-
-/** The first page of the runs that used a document, newest first (the card's uses under a document). */
-export const knowledgeDocumentUsesQuery = (org: string, id: string, limit = 50) =>
-  queryOptions({
-    queryKey: keys.knowledgeDocumentUses(org, id),
-    queryFn: ({ signal }) => listKnowledgeDocumentUses(org, id, { limit }, signal),
-    staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** What knowledge__search answers; the previous answer stays shown while the next one loads. */
-export const knowledgeSearchQuery = (org: string, query: KnowledgeQuery) =>
-  queryOptions({
-    queryKey: keys.knowledgeSearch(org, query),
-    queryFn: ({ signal }) => searchKnowledge(org, query, signal),
-    staleTime: 30_000,
-    placeholderData: keepPreviousData,
     retry: retryUnlessRefused,
   });
 
@@ -624,41 +640,6 @@ export const itemQuery = (org: string, item: string) =>
   queryOptions({ queryKey: keys.item(org, item), queryFn: ({ signal }) => getItem(org, item, signal) });
 
 /** An assembly's parts: under the item's key, so the stream's item events refresh them. */
-/** The factory's eval cases of the current version and their summary (listEvals). */
-export const evalsQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.evals(org, factory), 'cases'] as const,
-    queryFn: ({ signal }) => listEvals(org, factory, signal),
-  });
-
-/** The factory's bake-offs, newest first (listBakeOffs). */
-export const bakeOffsQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.bakeOffs(org, factory), 'list'] as const,
-    queryFn: ({ signal }) => listBakeOffs(org, factory, signal),
-  });
-
-/** One bake-off with its arms and per-case tries (getBakeOff). */
-export const bakeOffQuery = (org: string, factory: string, bakeOff: string) =>
-  queryOptions({
-    queryKey: [...keys.bakeOffs(org, factory), bakeOff] as const,
-    queryFn: ({ signal }) => getBakeOff(org, factory, bakeOff, signal),
-  });
-
-/** The factory's judges of the current version, each with its 30 days (listJudges). */
-export const judgesQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.judges(org, factory), 'list'] as const,
-    queryFn: ({ signal }) => listJudges(org, factory, signal),
-  });
-
-/** One judge of the current version with its file, its scores and where it runs (getJudge). */
-export const judgeQuery = (org: string, factory: string, judge: string) =>
-  queryOptions({
-    queryKey: [...keys.judges(org, factory), 'judge', judge] as const,
-    queryFn: ({ signal }) => getJudge(org, factory, judge, signal),
-  });
-
 /** Jonah's overview: the policy, the proposals waiting, this month's cost and the week's observations (getJonahOverview). */
 export const jonahOverviewQuery = (org: string, factory: string) =>
   queryOptions({
@@ -673,18 +654,18 @@ export const proposalsQuery = (org: string, factory: string, state?: ProposalSta
     queryFn: ({ signal }) => listProposals(org, factory, { state }, signal),
   });
 
+/** The factory's kept tests, grouped by the page by station (listKeptTests). Under keys.jonah, so a learning event refreshes it. */
+export const keptTestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'kept-tests'] as const,
+    queryFn: ({ signal }) => listKeptTests(org, factory, signal),
+  });
+
 /** One proposal with its files and evidence (getProposal), under its number beside the lists. */
 export const proposalQuery = (org: string, factory: string, number: number) =>
   queryOptions({
     queryKey: [...keys.jonah(org, factory), 'proposals', number] as const,
     queryFn: ({ signal }) => getProposal(org, factory, number, signal),
-  });
-
-/** What a run of every case would cost about (estimateEvalRun): a read, so it is asked again on each refresh. */
-export const evalEstimateQuery = (org: string, factory: string) =>
-  queryOptions({
-    queryKey: [...keys.evals(org, factory), 'estimate'] as const,
-    queryFn: ({ signal }) => estimateEvalRun(org, factory, {}, signal),
   });
 
 export const partsQuery = (org: string, item: string) =>
@@ -969,4 +950,27 @@ export const eventsQuery = (client: QueryClient, org: string, item: string) =>
 
       return events;
     },
+  });
+
+/** The tool templates of Add a tool: the same for every organization, so kept for a while. */
+export const catalogQuery = () =>
+  queryOptions({
+    queryKey: ['catalog'] as const,
+    queryFn: ({ signal }) => getCatalog(signal),
+    staleTime: 5 * 60_000,
+  });
+
+/** The organization's active standing rules (connection:read); the Environments form picks the ones of its servers. */
+export const standingRulesQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.standingRules(org),
+    queryFn: ({ signal }) => listStandingRules(org, signal),
+    staleTime: 30_000,
+  });
+
+/** The open draft's kept tests, read (never started) by the poll that follows startDraftKeptTests. */
+export const draftKeptTestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: [...keys.jonah(org, factory), 'draft-kept-tests'] as const,
+    queryFn: ({ signal }) => getDraftKeptTests(org, factory, signal),
   });

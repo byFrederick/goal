@@ -34,7 +34,7 @@ export function ClonePicker({ value, onChange }: { value: string | undefined; on
           Factories to copy
         </h2>
         <p className="m-0 mt-1 text-sm text-muted">
-          Copies the line, agents and prompts of the version that runs, without items, history or credentials.
+          Copies the line, agents and prompts of the version that runs, without items, history or secrets.
         </p>
       </div>
       <RadioList

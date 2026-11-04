@@ -351,6 +351,32 @@ func (s *Service) DraftModel(ctx context.Context, f domain.FactoryID) (DraftMode
 	return out, nil
 }
 
+// DraftLine is the line of the draft's definition, read as validation reads it, so a draft whose
+// references are broken still has one, with its knowledge sources and memory.yaml's facts: a
+// *ParseError when its factory.yaml does not parse or does not satisfy the schema.
+func (s *Service) DraftLine(ctx context.Context, f domain.FactoryID) (domain.Line, error) {
+	d, err := s.draft(ctx, f)
+	if err != nil {
+		return domain.Line{}, err
+	}
+
+	t := s.tree(ctx, d.Manifest)
+	if _, _, err := s.versionModel(t); err != nil {
+		return domain.Line{}, err
+	}
+
+	def, _ := config.Check(t)
+	if t.err != nil {
+		return domain.Line{}, t.err
+	}
+
+	if def == nil {
+		return domain.Line{}, fmt.Errorf("draft of %s: %w", f, &ParseError{Message: "factory.yaml does not satisfy the schema"})
+	}
+
+	return def.Line(), nil
+}
+
 // referenceModel is the model a draft's edits are marked against; empty when it has no
 // reference or the reference does not parse.
 func (s *Service) referenceModel(ctx context.Context, d domain.DefinitionVersion) (Model, error) {

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,7 +20,7 @@ func (f *Factory) Line() domain.Line {
 		Name:      f.Metadata.Name,
 		Purpose:   f.Purpose(),
 		Runtime: domain.Runtime{
-			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection,
+			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection, ModelKey: s.Runtime.ModelKey,
 			Size: domain.SandboxSize(s.Runtime.Size), Tools: slices.Clone(s.Runtime.Tools),
 		},
 		Stations: make([]domain.Station, 0, len(s.Board.Stations)),
@@ -26,8 +28,10 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	if r := s.Runtime.Repository; r != nil {
-		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection}
+		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, Token: r.Token, Forge: r.Forge}
 	}
+
+	l.Environments = environments(f.environments)
 
 	for _, c := range s.Connections {
 		if !c.Inline() {
@@ -35,9 +39,7 @@ func (f *Factory) Line() domain.Line {
 		}
 	}
 
-	if s.Knowledge != nil {
-		l.KnowledgeSources = slices.Clone(s.Knowledge.Sources)
-	}
+	l.Knowledge, l.Memory = f.knowledge()
 
 	for _, r := range s.Rules {
 		l.Rules = append(l.Rules, domain.Rule{
@@ -84,6 +86,32 @@ func (f *Factory) Line() domain.Line {
 	return l
 }
 
+// environments maps the environment files, every key, to what the engine gives a run of them.
+func environments(files []Environment) []domain.Environment {
+	var out []domain.Environment
+
+	for _, e := range files {
+		s := e.Spec
+		env := domain.Environment{
+			Name: e.Name, Size: domain.SandboxSize(s.Size), Image: s.Image, Tools: slices.Clone(s.Tools), Setup: slices.Clone(s.Setup),
+			Env: maps.Clone(s.Env), Files: maps.Clone(s.Files),
+		}
+
+		if s.MCP != nil {
+			env.MCP = make(map[string]domain.MCPServer, len(s.MCP))
+			for name, m := range s.MCP {
+				env.MCP[name] = domain.MCPServer{
+					URL: m.URL, Headers: maps.Clone(m.Headers), Command: slices.Clone(m.Command), Env: maps.Clone(m.Env), Tools: maps.Clone(m.Tools),
+				}
+			}
+		}
+
+		out = append(out, env)
+	}
+
+	return out
+}
+
 // jonahPolicy maps learning.jonah: a key left out takes domain.DefaultJonahPolicy's value, and an
 // unset model the runtime's.
 func jonahPolicy(learning *Learning, runtimeModel string) domain.JonahPolicy {
@@ -104,8 +132,8 @@ func jonahPolicy(learning *Learning, runtimeModel string) domain.JonahPolicy {
 		p.ProposeAfter = *j.ProposeAfter
 	}
 
-	if j.WeeklyUSD != nil {
-		p.WeeklyUSD = *j.WeeklyUSD
+	if share, ok := percent(j.Share); ok {
+		p.Share = share
 	}
 
 	if j.Model != "" {
@@ -113,6 +141,22 @@ func jonahPolicy(learning *Learning, runtimeModel string) domain.JonahPolicy {
 	}
 
 	return p
+}
+
+// percent reads a percent string such as "5%" or "2.5%" as a fraction; false for anything else.
+// The schema's pattern keeps it to 0% to 100%.
+func percent(s string) (float64, bool) {
+	n, ok := strings.CutSuffix(s, "%")
+	if !ok {
+		return 0, false
+	}
+
+	v, err := strconv.ParseFloat(n, 64)
+	if err != nil || v < 0 || v > 100 {
+		return 0, false
+	}
+
+	return v / 100, true
 }
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
@@ -284,7 +328,7 @@ func trigger(t Trigger) domain.Trigger {
 
 func agent(a Agent, sources map[string]string) domain.AgentSpec {
 	out := domain.AgentSpec{
-		Name: a.Name, PromptPath: a.Prompt, Model: a.Model, Connections: slices.Clone(a.Connections),
+		Name: a.Name, PromptPath: a.Prompt, Model: a.Model, Connections: slices.Clone(a.Connections), Environment: a.Environment,
 		MaxTurns: a.MaxTurns, PerItemUSD: a.PerItemUSD,
 	}
 
@@ -300,6 +344,26 @@ func agent(a Agent, sources map[string]string) domain.AgentSpec {
 	}
 
 	return out
+}
+
+// knowledge are the factory's knowledge.sources and its memory.yaml's facts as the line has them.
+func (f *Factory) knowledge() ([]domain.KnowledgeEntry, []domain.MemoryFact) {
+	var (
+		entries []domain.KnowledgeEntry
+		facts   []domain.MemoryFact
+	)
+
+	if k := f.Spec.Knowledge; k != nil {
+		for _, s := range k.Sources {
+			entries = append(entries, domain.KnowledgeEntry{Name: s.Name, AppliesTo: s.AppliesTo, ReadWhen: s.ReadWhen})
+		}
+	}
+
+	for _, m := range f.memory {
+		facts = append(facts, domain.MemoryFact{Text: m.Text, From: slices.Clone(m.From)})
+	}
+
+	return entries, facts
 }
 
 // builtinGroups are the Claude Code tools of each built-in group but run.

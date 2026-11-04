@@ -1,0 +1,14 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: confluence
+  title: Confluence
+  description: A Confluence Cloud site with an Atlassian account's API token.
+spec:
+  secrets:
+    - {slot: token, title: API token, description: "The API token of the account in CONFLUENCE_EMAIL.", suggest: confluence-token}
+  env:
+    CONFLUENCE_URL: "https://acme.atlassian.net/wiki"
+    CONFLUENCE_EMAIL: "agent@example.com"
+    CONFLUENCE_API_TOKEN: "{{token}}"
+  test: {method: GET, url: "${CONFLUENCE_URL}/rest/api/user/current", basic: {username: "${CONFLUENCE_EMAIL}", password: "{{token}}"}, expect: 200}

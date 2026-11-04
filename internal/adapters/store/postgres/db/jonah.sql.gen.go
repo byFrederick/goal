@@ -58,7 +58,7 @@ UPDATE jonah_proposals
 SET state = $1, published_version_id = $2, reject_reason = $3,
     decided_by = $4, decided_at = $5::timestamptz
 WHERE factory_id = $6 AND number = $7 AND state = 'proposed'
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
 `
 
 type DecideProposalParams struct {
@@ -93,7 +93,6 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -102,8 +101,192 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.Edits,
+		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
+}
+
+const evidenceEvents = `-- name: EvidenceEvents :many
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
+WHERE item_id = ANY($1::uuid[]) AND NOT (kind = ANY($2::text[]))
+ORDER BY item_id, id
+`
+
+type EvidenceEventsParams struct {
+	ItemIds []uuid.UUID
+	PerTurn []string
+}
+
+// The events of the items but those of the per-turn kinds, by item in append order
+// (item_events_item_idx).
+func (q *Queries) EvidenceEvents(ctx context.Context, arg EvidenceEventsParams) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, evidenceEvents, arg.ItemIds, arg.PerTurn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evidenceItems = `-- name: EvidenceItems :many
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, f.finished_at::timestamptz AS finished_at
+FROM (
+  SELECT d.id, d.done_at AS finished_at FROM work_items d
+  WHERE d.factory_id = $1 AND d.state = 'done'
+    AND d.done_at >= $2::timestamptz AND d.done_at < $3::timestamptz
+  UNION ALL
+  SELECT c.item_id, max(c.at) FROM item_events c
+  JOIN work_items cw ON cw.id = c.item_id AND cw.state = 'cancelled'
+  WHERE c.factory_id = $1 AND c.kind = 'cancelled' AND c.at >= $2::timestamptz
+  GROUP BY c.item_id
+  HAVING max(c.at) < $3::timestamptz
+) f
+JOIN work_items w ON w.id = f.id
+ORDER BY f.finished_at DESC, w.id
+LIMIT $4
+`
+
+type EvidenceItemsParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	MaxItems  int32
+}
+
+type EvidenceItemsRow struct {
+	WorkItem   WorkItem
+	FinishedAt time.Time
+}
+
+// The factory's items finished in [since, until), the most recently finished first, at most
+// max_items: a done item by its done_at (work_items_done_at_idx), a cancelled one by its latest
+// cancelled event (item_events_factory_at_idx; a later one past until keeps it out).
+func (q *Queries) EvidenceItems(ctx context.Context, arg EvidenceItemsParams) ([]EvidenceItemsRow, error) {
+	rows, err := q.db.Query(ctx, evidenceItems,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.MaxItems,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvidenceItemsRow
+	for rows.Next() {
+		var i EvidenceItemsRow
+		if err := rows.Scan(
+			&i.WorkItem.ID,
+			&i.WorkItem.FactoryID,
+			&i.WorkItem.Number,
+			&i.WorkItem.ParentID,
+			&i.WorkItem.Type,
+			&i.WorkItem.Lane,
+			&i.WorkItem.Title,
+			&i.WorkItem.Body,
+			&i.WorkItem.Station,
+			&i.WorkItem.State,
+			&i.WorkItem.ClassOfService,
+			&i.WorkItem.Priority,
+			&i.WorkItem.Size,
+			&i.WorkItem.ReworkCount,
+			&i.WorkItem.CostUsd,
+			&i.WorkItem.Outputs,
+			&i.WorkItem.CreatedAt,
+			&i.WorkItem.UpdatedAt,
+			&i.WorkItem.DoneAt,
+			&i.WorkItem.OrgID,
+			&i.WorkItem.PartKey,
+			&i.WorkItem.PartPaths,
+			&i.WorkItem.Paths,
+			&i.WorkItem.BaseCommit,
+			&i.WorkItem.Trigger,
+			&i.WorkItem.Source,
+			&i.WorkItem.IntegrationBranch,
+			&i.WorkItem.IntegrationLandAt,
+			&i.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evidenceRuns = `-- name: EvidenceRuns :many
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs WHERE item_id = ANY($1::uuid[]) ORDER BY item_id, started_at, id
+`
+
+// The runs of the items, by item, oldest first (agent_runs_item_id_idx).
+func (q *Queries) EvidenceRuns(ctx context.Context, itemIds []uuid.UUID) ([]AgentRun, error) {
+	rows, err := q.db.Query(ctx, evidenceRuns, itemIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentRun
+	for rows.Next() {
+		var i AgentRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.Station,
+			&i.Agent,
+			&i.Model,
+			&i.SessionID,
+			&i.Status,
+			&i.Turns,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostUsd,
+			&i.Error,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.OrgID,
+			&i.DefinitionVersionID,
+			&i.Kind,
+			&i.Brief,
+			&i.Output,
+			&i.BranchHead,
+			&i.BaseHead,
+			&i.PushedHead,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const finishJonahReview = `-- name: FinishJonahReview :one
@@ -118,12 +301,13 @@ type FinishJonahReviewParams struct {
 	State      string
 	Error      string
 	RunID      *uuid.UUID
-	FinishedAt time.Time
+	FinishedAt *time.Time
 	ID         uuid.UUID
 	LeaseUntil time.Time
 }
 
-// Ends a running review under the lease its claim returned. No row when the lease is lost.
+// Ends a running review under the lease its claim returned, or puts it back to pending for a
+// retry with no finished_at. No row when the lease is lost.
 func (q *Queries) FinishJonahReview(ctx context.Context, arg FinishJonahReviewParams) (JonahReview, error) {
 	row := q.db.QueryRow(ctx, finishJonahReview,
 		arg.State,
@@ -201,7 +385,7 @@ type InsertJonahReviewParams struct {
 	CreatedAt   time.Time
 }
 
-// Jonah reviews, proposals and observations (00075), under row-level security: every statement
+// Jonah reviews, proposals and observations (00078, 00101), under row-level security: every statement
 // sees the transaction's organization only.
 // org_id comes from its default, goal_org(). No row when the factory has a review in flight.
 func (q *Queries) InsertJonahReview(ctx context.Context, arg InsertJonahReviewParams) (JonahReview, error) {
@@ -236,11 +420,80 @@ func (q *Queries) InsertJonahReview(ctx context.Context, arg InsertJonahReviewPa
 	return i, err
 }
 
+const insertModelProposal = `-- name: InsertModelProposal :one
+INSERT INTO jonah_proposals (id, factory_id, number, agent, version_id, title, summary, edits, evidence, estimate, paths,
+                             created_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11::text[],
+        $12)
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
+`
+
+type InsertModelProposalParams struct {
+	ID        uuid.UUID
+	FactoryID uuid.UUID
+	Number    int64
+	Agent     *string
+	VersionID uuid.UUID
+	Title     string
+	Summary   string
+	Edits     []byte
+	Evidence  []byte
+	Estimate  []byte
+	Paths     []string
+	CreatedAt time.Time
+}
+
+// A person's model proposal (Try another model, ADR 0039 decision 13): no review, the agent whose
+// model it changes.
+func (q *Queries) InsertModelProposal(ctx context.Context, arg InsertModelProposalParams) (JonahProposal, error) {
+	row := q.db.QueryRow(ctx, insertModelProposal,
+		arg.ID,
+		arg.FactoryID,
+		arg.Number,
+		arg.Agent,
+		arg.VersionID,
+		arg.Title,
+		arg.Summary,
+		arg.Edits,
+		arg.Evidence,
+		arg.Estimate,
+		arg.Paths,
+		arg.CreatedAt,
+	)
+	var i JonahProposal
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ReviewID,
+		&i.VersionID,
+		&i.State,
+		&i.Title,
+		&i.Summary,
+		&i.Evidence,
+		&i.Estimate,
+		&i.Paths,
+		&i.PublishedVersionID,
+		&i.RejectReason,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.Edits,
+		&i.Agent,
+		&i.Undoes,
+	)
+	return i, err
+}
+
 const insertObservation = `-- name: InsertObservation :one
-INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at)
+INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at,
+                                updated_at)
 VALUES ($1, $2, $3, $4, $5,
-        $6::uuid[], $7, $8, $9, $10)
-RETURNING id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at
+        $6::uuid[], $7, $8, $9, $10,
+        $10)
+RETURNING id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at
 `
 
 type InsertObservationParams struct {
@@ -282,28 +535,29 @@ func (q *Queries) InsertObservation(ctx context.Context, arg InsertObservationPa
 		&i.State,
 		&i.ProposalID,
 		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const insertProposal = `-- name: InsertProposal :one
-INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, files, evidence, estimate,
+INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, edits, evidence, estimate,
                              paths, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11::text[],
         $12)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
 `
 
 type InsertProposalParams struct {
 	ID        uuid.UUID
 	FactoryID uuid.UUID
 	Number    int64
-	ReviewID  uuid.UUID
+	ReviewID  *uuid.UUID
 	VersionID uuid.UUID
 	Title     string
 	Summary   string
-	Files     []byte
+	Edits     []byte
 	Evidence  []byte
 	Estimate  []byte
 	Paths     []string
@@ -319,7 +573,7 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		arg.VersionID,
 		arg.Title,
 		arg.Summary,
-		arg.Files,
+		arg.Edits,
 		arg.Evidence,
 		arg.Estimate,
 		arg.Paths,
@@ -336,7 +590,6 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -345,14 +598,79 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.Edits,
+		&i.Agent,
+		&i.Undoes,
+	)
+	return i, err
+}
+
+const insertUndoProposal = `-- name: InsertUndoProposal :one
+INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, edits, paths, created_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9::text[], $10)
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes
+`
+
+type InsertUndoProposalParams struct {
+	ID        uuid.UUID
+	FactoryID uuid.UUID
+	Number    int64
+	Undoes    *uuid.UUID
+	VersionID uuid.UUID
+	Title     string
+	Summary   string
+	Edits     []byte
+	Paths     []string
+	CreatedAt time.Time
+}
+
+// An undo proposal: no review, undoes the proposal it reverses. The undo key's conflict means
+// one is already proposed, published or applied.
+func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposalParams) (JonahProposal, error) {
+	row := q.db.QueryRow(ctx, insertUndoProposal,
+		arg.ID,
+		arg.FactoryID,
+		arg.Number,
+		arg.Undoes,
+		arg.VersionID,
+		arg.Title,
+		arg.Summary,
+		arg.Edits,
+		arg.Paths,
+		arg.CreatedAt,
+	)
+	var i JonahProposal
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ReviewID,
+		&i.VersionID,
+		&i.State,
+		&i.Title,
+		&i.Summary,
+		&i.Evidence,
+		&i.Estimate,
+		&i.Paths,
+		&i.PublishedVersionID,
+		&i.RejectReason,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.Edits,
+		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
 
 const jonahSpendSince = `-- name: JonahSpendSince :one
-SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+SELECT coalesce(sum(cost_usd) FILTER (WHERE kind NOT IN ('jonah', 'try')), 0)::float8 AS line_usd,
+  coalesce(sum(cost_usd) FILTER (WHERE kind IN ('jonah', 'try')), 0)::float8 AS jonah_usd
 FROM agent_runs
-WHERE factory_id = $1 AND kind = 'jonah' AND started_at >= $2
+WHERE factory_id = $1 AND started_at >= $2
 `
 
 type JonahSpendSinceParams struct {
@@ -360,12 +678,49 @@ type JonahSpendSinceParams struct {
 	Since     time.Time
 }
 
-// The cost of the factory's review runs started at or after since, on agent_runs_jonah_idx.
-func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams) (float64, error) {
+type JonahSpendSinceRow struct {
+	LineUsd  float64
+	JonahUsd float64
+}
+
+// The cost of the factory's runs started at or after since, the line's (station runs) and Jonah's
+// (its reviews and tries): Jonah's budget is a share of the first (ADR 0039 decision 16). Row-level security
+// scopes it to the organization; agent_runs_factory_started_idx serves the range.
+func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams) (JonahSpendSinceRow, error) {
 	row := q.db.QueryRow(ctx, jonahSpendSince, arg.FactoryID, arg.Since)
-	var spend_usd float64
-	err := row.Scan(&spend_usd)
-	return spend_usd, err
+	var i JonahSpendSinceRow
+	err := row.Scan(&i.LineUsd, &i.JonahUsd)
+	return i, err
+}
+
+const lastDoneJonahReview = `-- name: LastDoneJonahReview :one
+SELECT id, org_id, factory_id, version_id, trigger, state, lease_until, attempts, run_id, window_start, window_end, error, created_by, created_at, finished_at FROM jonah_reviews WHERE factory_id = $1 AND state = 'done'
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// The factory's newest done review, where the next window starts (jonah_reviews_factory_idx).
+func (q *Queries) LastDoneJonahReview(ctx context.Context, factoryID uuid.UUID) (JonahReview, error) {
+	row := q.db.QueryRow(ctx, lastDoneJonahReview, factoryID)
+	var i JonahReview
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.VersionID,
+		&i.Trigger,
+		&i.State,
+		&i.LeaseUntil,
+		&i.Attempts,
+		&i.RunID,
+		&i.WindowStart,
+		&i.WindowEnd,
+		&i.Error,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
 }
 
 const lastProposalNumber = `-- name: LastProposalNumber :one
@@ -430,8 +785,8 @@ func (q *Queries) LatestJonahReviews(ctx context.Context, arg LatestJonahReviews
 }
 
 const latestObservations = `-- name: LatestObservations :many
-SELECT id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at FROM jonah_observations WHERE factory_id = $1
-ORDER BY created_at DESC, id DESC
+SELECT id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at FROM jonah_observations WHERE factory_id = $1
+ORDER BY updated_at DESC, id DESC
 LIMIT $2
 `
 
@@ -440,6 +795,7 @@ type LatestObservationsParams struct {
 	MaxObservations int32
 }
 
+// A factory's observations, the latest updated first.
 func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservationsParams) ([]JonahObservation, error) {
 	rows, err := q.db.Query(ctx, latestObservations, arg.FactoryID, arg.MaxObservations)
 	if err != nil {
@@ -461,6 +817,52 @@ func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservations
 			&i.State,
 			&i.ProposalID,
 			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const openObservations = `-- name: OpenObservations :many
+SELECT id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at FROM jonah_observations WHERE factory_id = $1 AND state IN ('watching', 'proposed')
+ORDER BY updated_at DESC, id DESC
+LIMIT $2
+`
+
+type OpenObservationsParams struct {
+	FactoryID       uuid.UUID
+	MaxObservations int32
+}
+
+// A factory's watching and proposed observations, the latest updated first (jonah_observations_open_idx).
+func (q *Queries) OpenObservations(ctx context.Context, arg OpenObservationsParams) ([]JonahObservation, error) {
+	rows, err := q.db.Query(ctx, openObservations, arg.FactoryID, arg.MaxObservations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JonahObservation
+	for rows.Next() {
+		var i JonahObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.FactoryID,
+			&i.ReviewID,
+			&i.Summary,
+			&i.Detail,
+			&i.ItemIds,
+			&i.Count,
+			&i.State,
+			&i.ProposalID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -473,7 +875,7 @@ func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservations
 }
 
 const proposalByNumber = `-- name: ProposalByNumber :one
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at FROM jonah_proposals WHERE factory_id = $1 AND number = $2
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes FROM jonah_proposals WHERE factory_id = $1 AND number = $2
 `
 
 type ProposalByNumberParams struct {
@@ -494,7 +896,6 @@ func (q *Queries) ProposalByNumber(ctx context.Context, arg ProposalByNumberPara
 		&i.State,
 		&i.Title,
 		&i.Summary,
-		&i.Files,
 		&i.Evidence,
 		&i.Estimate,
 		&i.Paths,
@@ -503,12 +904,15 @@ func (q *Queries) ProposalByNumber(ctx context.Context, arg ProposalByNumberPara
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.Edits,
+		&i.Agent,
+		&i.Undoes,
 	)
 	return i, err
 }
 
 const proposals = `-- name: Proposals :many
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at FROM jonah_proposals
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, edits, agent, undoes FROM jonah_proposals
 WHERE factory_id = $1
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::bigint IS NULL OR number < $3::bigint)
@@ -549,7 +953,6 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 			&i.State,
 			&i.Title,
 			&i.Summary,
-			&i.Files,
 			&i.Evidence,
 			&i.Estimate,
 			&i.Paths,
@@ -558,6 +961,9 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 			&i.DecidedBy,
 			&i.DecidedAt,
 			&i.CreatedAt,
+			&i.Edits,
+			&i.Agent,
+			&i.Undoes,
 		); err != nil {
 			return nil, err
 		}
@@ -649,24 +1055,6 @@ func (q *Queries) SentBackBetween(ctx context.Context, arg SentBackBetweenParams
 	return items, nil
 }
 
-const sentBackSince = `-- name: SentBackSince :one
-SELECT count(*)::bigint FROM item_touches
-WHERE factory_id = $1 AND kind IN ('rejected', 'gate_rejected') AND at >= $2
-`
-
-type SentBackSinceParams struct {
-	FactoryID uuid.UUID
-	Since     time.Time
-}
-
-// The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
-func (q *Queries) SentBackSince(ctx context.Context, arg SentBackSinceParams) (int64, error) {
-	row := q.db.QueryRow(ctx, sentBackSince, arg.FactoryID, arg.Since)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const stationFlowSpans = `-- name: StationFlowSpans :one
 SELECT count(DISTINCT item_id) AS passed,
        coalesce(percentile_cont(0.85) WITHIN GROUP (ORDER BY extract(epoch FROM left_at - entered_at)::float8), 0)::float8 AS p85_seconds
@@ -701,6 +1089,58 @@ func (q *Queries) StationFlowSpans(ctx context.Context, arg StationFlowSpansPara
 	return i, err
 }
 
+const stationRunMedians = `-- name: StationRunMedians :many
+SELECT station,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd)::float8 AS cost_usd,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY turns)::float8 AS turns,
+       count(*)::bigint AS runs
+FROM agent_runs
+WHERE factory_id = $1 AND kind = 'station' AND status <> 'running'
+  AND started_at >= $2::timestamptz AND started_at < $3::timestamptz
+GROUP BY station
+ORDER BY station
+`
+
+type StationRunMediansParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type StationRunMediansRow struct {
+	Station string
+	CostUsd float64
+	Turns   float64
+	Runs    int64
+}
+
+// The median cost and turns of the factory's finished station runs started in [since, until), by
+// station (agent_runs_factory_started_idx).
+func (q *Queries) StationRunMedians(ctx context.Context, arg StationRunMediansParams) ([]StationRunMediansRow, error) {
+	rows, err := q.db.Query(ctx, stationRunMedians, arg.FactoryID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationRunMediansRow
+	for rows.Next() {
+		var i StationRunMediansRow
+		if err := rows.Scan(
+			&i.Station,
+			&i.CostUsd,
+			&i.Turns,
+			&i.Runs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const stationSentBack = `-- name: StationSentBack :one
 SELECT count(*)::bigint FROM item_touches t
 WHERE t.item_id IN (
@@ -731,4 +1171,87 @@ func (q *Queries) StationSentBack(ctx context.Context, arg StationSentBackParams
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const supersedeProposal = `-- name: SupersedeProposal :exec
+UPDATE jonah_proposals SET state = 'superseded', decided_by = $1, decided_at = $2::timestamptz
+WHERE factory_id = $3 AND id = $4 AND state = 'proposed'
+`
+
+type SupersedeProposalParams struct {
+	DecidedBy *string
+	DecidedAt time.Time
+	FactoryID uuid.UUID
+	ID        uuid.UUID
+}
+
+// Sets a proposal that is still proposed superseded by a newer one whose edits overlap its own
+// (ADR 0039 decision 6); one decided since is left as it is.
+func (q *Queries) SupersedeProposal(ctx context.Context, arg SupersedeProposalParams) error {
+	_, err := q.db.Exec(ctx, supersedeProposal,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.FactoryID,
+		arg.ID,
+	)
+	return err
+}
+
+const updateObservation = `-- name: UpdateObservation :one
+UPDATE jonah_observations o
+SET summary = $1, detail = $2,
+    item_ids = (SELECT coalesce((array_agg(i ORDER BY n))[1:1000], '{}')
+                FROM (SELECT i, min(n) AS n FROM unnest(o.item_ids || $3::uuid[]) WITH ORDINALITY AS u (i, n)
+                      GROUP BY i) AS d),
+    count = least(o.count::bigint + $4::bigint, 2147483647)::integer,
+    state = coalesce($5::text, o.state),
+    proposal_id = coalesce($6::uuid, o.proposal_id),
+    updated_at = $7
+WHERE o.factory_id = $8 AND o.id = $9 AND o.state IN ('watching', 'proposed')
+RETURNING id, org_id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at, updated_at
+`
+
+type UpdateObservationParams struct {
+	Summary    string
+	Detail     string
+	ItemIds    []uuid.UUID
+	Count      int64
+	State      *string
+	ProposalID *uuid.UUID
+	UpdatedAt  time.Time
+	FactoryID  uuid.UUID
+	ID         uuid.UUID
+}
+
+// A later review's update of an open observation (ADR 0039 decision 5): its items join the
+// observation's (at most 1000, the first kept), its count adds to the count, and a state and
+// proposal, when given, replace the observation's. No row when it is not open.
+func (q *Queries) UpdateObservation(ctx context.Context, arg UpdateObservationParams) (JonahObservation, error) {
+	row := q.db.QueryRow(ctx, updateObservation,
+		arg.Summary,
+		arg.Detail,
+		arg.ItemIds,
+		arg.Count,
+		arg.State,
+		arg.ProposalID,
+		arg.UpdatedAt,
+		arg.FactoryID,
+		arg.ID,
+	)
+	var i JonahObservation
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ReviewID,
+		&i.Summary,
+		&i.Detail,
+		&i.ItemIds,
+		&i.Count,
+		&i.State,
+		&i.ProposalID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

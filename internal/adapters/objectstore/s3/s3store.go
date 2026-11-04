@@ -17,8 +17,10 @@ import (
 	"net/http"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
@@ -28,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -69,9 +72,10 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 
 // Store is one bucket. It is safe for concurrent use.
 type Store struct {
-	client *s3.Client
-	bucket string
-	region string
+	client  *s3.Client
+	presign *s3.PresignClient
+	bucket  string
+	region  string
 	// unconditional is set once the server answered a conditional write with 501.
 	unconditional atomic.Bool
 }
@@ -104,7 +108,23 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 		}
 	})
 
-	return &Store{client: client, bucket: cfg.Bucket, region: ac.Region}, nil
+	return &Store{client: client, presign: s3.NewPresignClient(client), bucket: cfg.Bucket, region: ac.Region}, nil
+}
+
+// PresignGet implements ports.ObjectStore with a SigV4 query-signed GET, signed locally with the
+// store's credentials.
+func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("presign %s for %s: %w", key, ttl, domain.ErrInvalid)
+	}
+
+	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)},
+		s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("presign %s: %w", key, err)
+	}
+
+	return req.URL, nil
 }
 
 // Bucket returns the bucket's name.
@@ -162,6 +182,140 @@ func (s *Store) Get(ctx context.Context, key string) (ports.Object, error) {
 		ObjectInfo: ports.ObjectInfo{Key: key, ETag: aws.ToString(out.ETag), Size: int64(len(body))},
 		Body:       body,
 	}, nil
+}
+
+// GetRange implements ports.ObjectStore with a ranged GetObject. S3 answers a range that starts
+// at or past the object's end with 416, which means the object is there: an empty reader. A zero
+// length asks HeadObject whether it is.
+func (s *Store) GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	if offset < 0 {
+		return nil, fmt.Errorf("get s3://%s/%s from %d: a negative offset: %w", s.bucket, key, offset, domain.ErrInvalid)
+	}
+
+	if length == 0 {
+		if _, _, err := s.existing(ctx, key); err != nil {
+			return nil, err
+		}
+
+		return io.NopCloser(bytes.NewReader(nil)), nil
+	}
+
+	byteRange := fmt.Sprintf("bytes=%d-", offset)
+	if length > 0 {
+		byteRange += strconv.FormatInt(offset+length-1, 10)
+	}
+
+	// A server that answers a range with the whole object's checksum (some S3-compatible ones do)
+	// would fail every read: a range's bytes never match it.
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key), Range: aws.String(byteRange),
+	}, func(o *s3.Options) { o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired })
+
+	switch {
+	case err == nil:
+		return out.Body, nil
+	case isNotFound(err):
+		return nil, fmt.Errorf("get s3://%s/%s: %w", s.bucket, key, ports.ErrNotFound)
+	case httpStatus(err) == http.StatusRequestedRangeNotSatisfiable:
+		return io.NopCloser(bytes.NewReader(nil)), nil
+	default:
+		return nil, fmt.Errorf("get s3://%s/%s %s: %w", s.bucket, key, byteRange, err)
+	}
+}
+
+// PartSize is the size of each part PutStream uploads, S3's smallest. R2 wants every part but the
+// last of one size, which full parts give.
+const PartSize = 5 << 20
+
+// PutStream implements ports.ObjectStore. A stream that fits in one part is one PutObject; a
+// longer one is a multipart upload of PartSize parts, read into one buffer in turn, and aborted
+// when the reader or a part fails, so nothing is left at key.
+func (s *Store) PutStream(ctx context.Context, key string, r io.Reader) (ports.ObjectInfo, error) {
+	buf := make([]byte, PartSize)
+
+	n, err := io.ReadFull(r, buf)
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return s.Put(ctx, key, buf[:n])
+	}
+
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("put s3://%s/%s: read: %w", s.bucket, key, err)
+	}
+
+	info, err := s.multipart(ctx, key, r, buf)
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("put s3://%s/%s: %w", s.bucket, key, err)
+	}
+
+	return info, nil
+}
+
+// multipart uploads first, a full part already read, then the rest of r.
+func (s *Store) multipart(ctx context.Context, key string, r io.Reader, first []byte) (ports.ObjectInfo, error) {
+	created, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key), ContentType: aws.String(contentType(key)),
+	})
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("create multipart upload: %w", err)
+	}
+
+	info, err := s.uploadParts(ctx, key, created.UploadId, r, first)
+	if err != nil {
+		// The caller's context may be what failed; the abort still needs to reach the bucket.
+		abortCtx := context.WithoutCancel(ctx)
+		if _, abortErr := s.client.AbortMultipartUpload(abortCtx, &s3.AbortMultipartUploadInput{
+			Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: created.UploadId,
+		}); abortErr != nil {
+			return ports.ObjectInfo{}, errors.Join(err, fmt.Errorf("abort multipart upload: %w", abortErr))
+		}
+
+		return ports.ObjectInfo{}, err
+	}
+
+	return info, nil
+}
+
+func (s *Store) uploadParts(ctx context.Context, key string, upload *string, r io.Reader, buf []byte) (ports.ObjectInfo, error) {
+	var (
+		parts []types.CompletedPart
+		size  int64
+	)
+
+	part := buf
+
+	for number := int32(1); ; number++ {
+		out, err := s.client.UploadPart(ctx, &s3.UploadPartInput{
+			Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: upload, PartNumber: aws.Int32(number),
+			Body: bytes.NewReader(part), ContentLength: aws.Int64(int64(len(part))),
+		})
+		if err != nil {
+			return ports.ObjectInfo{}, fmt.Errorf("upload part %d: %w", number, err)
+		}
+
+		parts = append(parts, types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(number)})
+		size += int64(len(part))
+
+		n, err := io.ReadFull(r, buf)
+		if n == 0 && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) {
+			break
+		}
+
+		if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+			return ports.ObjectInfo{}, fmt.Errorf("read part %d: %w", number+1, err)
+		}
+
+		part = buf[:n]
+	}
+
+	done, err := s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: upload,
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
+	})
+	if err != nil {
+		return ports.ObjectInfo{}, fmt.Errorf("complete multipart upload: %w", err)
+	}
+
+	return ports.ObjectInfo{Key: key, ETag: aws.ToString(done.ETag), Size: size}, nil
 }
 
 // Put implements ports.ObjectStore.

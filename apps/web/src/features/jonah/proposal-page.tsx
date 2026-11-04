@@ -1,8 +1,8 @@
-// One proposal of Jonah's, for a person to decide (jonah/proposal.jpg, ADR 0017): its estimate and cost per item,
-// the definition's files as diffs, the sent-back runs that prompted it, and its details. Approve publishes it,
-// Edit writes it into the draft and Reject records the reason Jonah reads (proposal-actions.tsx). A decided
-// proposal shows its state and no actions. Judges, Evals and their results are not built yet, so they render
-// through NotAvailable.
+// One proposal of Jonah's, for a person to decide (proposal.jpg, proposal-memory.jpg, proposal-model.jpg, ADR 0039):
+// its estimate, what was tried on past items, the files as diffs, the items that prompted it with their reasons, and
+// its details. A memory proposal lists its facts with the quotes they come from; a model proposal shows its three
+// tries per item beside the item's line result. Approve publishes it, Edit writes it into the draft and Reject records
+// the reason Jonah reads (proposal-actions.tsx). A decided proposal shows its state and no actions.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Check } from 'lucide-react';
@@ -14,26 +14,40 @@ import { PendingSkeleton } from '../../app/route-skeletons';
 import { TopBarSlot } from '../../app/top-bar';
 import { since } from '../../shared/connections';
 import { useFactory, useFactoryParams } from '../../shared/factory';
-import { plural } from '../../shared/format';
+import { formatUsd, plural } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { Disclosure } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
-import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
 import { type Stat, StatStrip } from '../../ui/stat-strip';
 import { DiffView } from '../factory-editor/review/changes-card';
 import { hunksOf } from '../factory-editor/review/review';
+import { InfoTip } from './info-tip';
 import {
-  basedOnText,
+  addedFacts,
   costPerItemText,
+  costPerTry,
   estimateDelta,
   estimateOf,
+  factCount,
+  fixedCount,
+  itemNumber,
+  keptCount,
+  lineCostPerItem,
+  lineCount,
+  modelOfProposal,
+  type ProposalKind,
+  proposalKind,
   proposalStateLabels,
   reviewersText,
+  triesPassed,
+  watchText,
+  watchVerdicts,
 } from './jonah-format';
 import { JonahTabs } from './jonah-header';
 import { JonahError } from './jonah-page';
@@ -44,6 +58,8 @@ import {
   RejectDialog,
   useProposalDecisions,
 } from './proposal-actions';
+import { ModelTries, TriedPanel } from './tried-panel';
+import { TryAgain } from './try-again';
 
 /** The chip tone of a decided proposal's state: published is done, rejected is sent back. */
 const stateTones: Record<ProposalState, ChipTone> = {
@@ -54,17 +70,17 @@ const stateTones: Record<ProposalState, ChipTone> = {
   superseded: 'plain',
 };
 
-/** The line under the chip: who proposed it and why, or what became of a decided proposal. */
+/** The line beside the chip: who proposed it and when, or what became of a decided proposal. */
 function statusLine(p: Proposal, now: number): string {
   switch (p.state) {
     case 'proposed':
-      return `Proposed by Jonah ${since(p.created_at, now)}, after ${plural(p.evidence_count, 'run', 'runs')} sent back. Rejecting tells Jonah why, so it does not propose this again.`;
+      return `Jonah, ${since(p.created_at, now)}`;
     case 'published':
       return `Published as v${p.published_version ?? p.publishes_as_version}. Runs in progress kept the version they started on.`;
     case 'applied':
       return 'Edited in the draft. Publish the draft from the definition to put it in place.';
     case 'rejected':
-      return `Rejected. Jonah reads the reason before it proposes again: "${p.reject_reason ?? ''}"`;
+      return `Rejected: "${p.reject_reason ?? ''}"`;
     case 'superseded':
       return 'A later version replaced this proposal.';
   }
@@ -109,40 +125,89 @@ function proposalActions(p: Proposal, can: readonly string[], decisions: Proposa
   ];
 }
 
-/** One file of the change: a bordered block with its path and the lines it adds, then its diff. */
+/** One file of the change: a bordered block with its path and the lines it adds and removes, then its diff. */
 function FileDiff({ file }: { file: ProposalFile }) {
   const hunks = hunksOf(file.base_content, file.content);
-  const added = hunks.reduce((n, hunk) => n + hunk.lines.filter((line) => line.kind === 'added').length, 0);
+  const lines = hunks.flatMap((hunk) => hunk.lines);
+  const added = lines.filter((line) => line.kind === 'added').length;
+  const removed = lines.filter((line) => line.kind === 'removed').length;
   return (
     <div className="flex min-w-0 flex-col overflow-hidden rounded-control border border-line bg-card">
       <div className="flex min-w-0 items-center gap-3 border-b border-line bg-panel px-4 py-2">
         <span className="min-w-0 break-all font-mono text-secondary font-medium">{file.path}</span>
-        <span className="ml-auto font-control text-ok-ink tabular-nums">+{added}</span>
+        <span className="ml-auto flex gap-2 font-control tabular-nums">
+          {added > 0 ? <span className="text-ok-ink">+{added}</span> : null}
+          {removed > 0 ? <span className="text-rework-ink">−{removed}</span> : null}
+        </span>
       </div>
       <DiffView hunks={hunks} label={`Changes to ${file.path}`} bare />
     </div>
   );
 }
 
-/** The strip's three figures: the estimate with its change, the new eval case (not built yet) and the cost per item. */
-function expectedEffect(p: Proposal): Stat[] {
+/** The strip's three figures, by the proposal's kind. */
+function expectedEffect(p: Proposal, kind: ProposalKind): Stat[] {
+  const tried = p.tried;
+  if (kind === 'memory') {
+    const file = p.files[0];
+    const after = file ? factCount(file.content) : 0;
+    const before = file ? factCount(file.base_content) : 0;
+    return [
+      { label: 'Facts in memory', value: after, note: `Now ${before}` },
+      { label: 'Evidence', value: plural(p.evidence_count, 'item', 'items'), note: 'Each quotes a person' },
+      { label: 'Tried', value: 'None', note: 'Memory changes run no try' },
+    ];
+  }
+  if (kind === 'model' && tried) {
+    const passed = triesPassed(tried);
+    const line = lineCount(tried);
+    const perTry = costPerTry(tried);
+    const now = lineCostPerItem(tried);
+    const each = tried.items[0]?.tries.length ?? 3;
+    return [
+      {
+        label: 'Tries passed',
+        value: `${passed.passed} of ${passed.total}`,
+        note: `${each} tries on each of ${plural(tried.items.length, 'item', 'items')}`,
+      },
+      { label: 'On the line', value: `${line.passed} of ${line.total}`, note: 'Passed first time' },
+      {
+        label: 'Cost per try',
+        value: perTry === undefined ? null : formatUsd(perTry),
+        ...(now === undefined ? {} : { note: `Now ${formatUsd(now)}` }),
+      },
+    ];
+  }
   const figures = p.estimate ? estimateOf(p.estimate) : undefined;
   const stats: Stat[] = [];
   if (figures && p.estimate) {
     stats.push({
       label: figures.label,
       value: `about ${figures.after}`,
-      target: `Now ${figures.before}`,
+      target: `Now ${figures.before}, Jonah's estimate`,
       delta: estimateDelta(p.estimate),
     });
   }
-  stats.push({ label: 'New eval case', value: null, note: 'Not available yet' });
-  if (p.estimate) {
+  if (tried) {
+    const fixed = fixedCount(tried);
+    const kept = keptCount(tried);
+    const noneTried = tried.state === 'budget_used' && tried.items.every((item) => item.tries.every((t) => !t.verdict));
     stats.push({
-      label: 'Cost per item',
-      value: costPerItemText(p.estimate.cost_per_item_usd),
-      note: basedOnText(p.evidence_count),
+      label: 'Tried on past items',
+      value: noneTried ? null : `${fixed.fixed} of ${fixed.total} fixed`,
+      note: noneTried
+        ? 'Not tried: budget used'
+        : kept.total > 0
+          ? `${kept.passed} of ${kept.total} kept tests pass`
+          : tried.state === 'trying'
+            ? 'Still trying'
+            : 'No kept tests',
     });
+  } else {
+    stats.push({ label: 'Tried on past items', value: null, note: 'Not tried' });
+  }
+  if (p.estimate) {
+    stats.push({ label: 'Cost per item', value: costPerItemText(p.estimate.cost_per_item_usd) });
   }
   return stats;
 }
@@ -152,8 +217,65 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
   return (
     <div className="flex gap-3 border-t border-line pt-3 text-secondary first:border-t-0 first:pt-0">
       <dt className="w-28 shrink-0 text-muted">{label}</dt>
-      <dd className="m-0 min-w-0">{children}</dd>
+      <dd className="m-0 min-w-0 break-words text-ink-soft">{children}</dd>
     </div>
+  );
+}
+
+/** Details: what it affects, what it publishes as, what is watched, who may approve. Open on a desktop, shut on a phone. */
+function DetailsCard({ p, reviewers }: { p: Proposal; reviewers: string | undefined }) {
+  const figures = p.estimate ? estimateOf(p.estimate) : undefined;
+  const open = typeof window === 'undefined' || (window.matchMedia?.('(min-width: 768px)').matches ?? true);
+  return (
+    <div className="rounded-card border border-line bg-card px-2 py-1 md:px-3">
+      <Disclosure summary={<span className="text-heading">Details</span>} defaultOpen={open}>
+        <dl className="m-0 flex flex-col gap-3 px-2 pt-1 pb-3">
+          <DetailRow label="Affects">{p.agents.length > 0 ? p.agents.join(', ') : p.paths.join(', ')}</DetailRow>
+          <DetailRow label="Found in">{plural(p.evidence_count, 'item', 'items')} sent back</DetailRow>
+          <DetailRow label="Publishes">
+            v{p.publishes_as_version}; running items keep v{p.made_against_version}
+          </DetailRow>
+          {figures ? <DetailRow label="Watched">{`${figures.label}, now ${figures.before}`}</DetailRow> : null}
+          {p.watch ? (
+            <DetailRow label="Watch">
+              {watchText(p.watch)}, {watchVerdicts[p.watch.verdict].label.toLowerCase()}
+            </DetailRow>
+          ) : null}
+          <DetailRow label="Undo">Undo this change, any time</DetailRow>
+          {reviewers === undefined ? null : <DetailRow label="Reviewers">{reviewers}</DetailRow>}
+        </dl>
+      </Disclosure>
+    </div>
+  );
+}
+
+/** The facts a memory proposal adds, each with the quote it comes from. */
+function MemoryFacts({ p }: { p: Proposal }) {
+  const file = p.files[0];
+  const facts = file ? addedFacts(file.base_content, file.content) : [];
+  const quoteOf = (ref: string) => p.evidence.find((e) => e.item_ref === ref);
+  return (
+    <SectionCard
+      title="New facts"
+      aside={<span className="text-secondary text-muted">{plural(facts.length, 'fact', 'facts')}</span>}
+    >
+      <ul className="m-0 flex list-none flex-col p-0">
+        {facts.map((fact) => (
+          <li key={fact.text} className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0">
+            <span className="font-control text-ink break-words">{fact.text}</span>
+            {fact.from.map((ref) => {
+              const evidence = quoteOf(ref);
+              return (
+                <span key={ref} className="text-secondary text-muted break-words">
+                  <span className="mr-2 tabular-nums">{itemNumber(ref)}</span>
+                  {evidence ? <>&ldquo;{evidence.quote}&rdquo;</> : null}
+                </span>
+              );
+            })}
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
 }
 
@@ -221,7 +343,7 @@ export function ProposalPage({ number }: { number: number }) {
             title="This proposal does not exist"
             actions={
               <Button asChild variant="secondary">
-                <Link to="/o/$org/f/$factory/jonah" params={params} search={{ tab: 'proposals' }}>
+                <Link to="/o/$org/f/$factory/jonah/proposals" params={params}>
                   All proposals
                 </Link>
               </Button>
@@ -237,18 +359,23 @@ export function ProposalPage({ number }: { number: number }) {
   }
 
   const p = proposal.data;
+  const kind = proposalKind(p);
   const now = Date.now();
   const waiting = p.state === 'proposed';
   const reviewers = overview.data ? reviewersText(overview.data.policy.approver_roles) : undefined;
   const actions = waiting || decisions.approve.isSuccess ? proposalActions(p, factory.can, decisions) : [];
-  const counts = overview.data ? { proposals: overview.data.waiting } : {};
+  const tried = p.tried;
+  const tryAgain =
+    waiting && factory.can.includes('definition:edit') && tried && tried.items.length > 0 ? (
+      <TryAgain number={p.number} />
+    ) : undefined;
 
   return (
-    <div className="@container flex min-w-0 flex-col gap-5">
+    <div className="@container flex min-w-0 flex-col gap-5 max-md:motion-safe:animate-pane-forward">
       <TopBarSlot crumb={crumb} actions={actions.length > 0 ? actions : undefined} />
 
       <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Chip tone={stateTones[p.state]} dot>
             {waiting ? 'Waiting for your review' : proposalStateLabels[p.state]}
           </Chip>
@@ -257,21 +384,21 @@ export function ProposalPage({ number }: { number: number }) {
         <h1 className="m-0 text-page-title tracking-display">{p.title}</h1>
       </div>
 
-      <JonahTabs tab="proposals" counts={counts} />
+      <JonahTabs tab="proposals" />
 
       <div aria-live="polite" className="flex flex-col gap-3">
         {decisions.approve.isError ? <Callout tone="rework">{approveFailure(decisions.approve.error)}</Callout> : null}
         {decisions.edit.isError ? <Callout tone="rework">{editFailure(decisions.edit.error)}</Callout> : null}
       </div>
 
-      <StatStrip label="Expected effect" stats={expectedEffect(p)} />
+      <StatStrip label="Expected effect" stats={expectedEffect(p, kind)} />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-5">
           <section aria-labelledby="changes-h" className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-wrap items-baseline gap-2">
               <h2 id="changes-h" className="m-0 text-heading">
-                Changes to the definition
+                {kind === 'memory' ? 'Changes to factory memory' : 'Changes to the definition'}
               </h2>
               <span className="text-secondary text-muted">
                 {plural(p.files.length, 'file', 'files')}, v{p.made_against_version} to v{p.publishes_as_version}
@@ -282,18 +409,40 @@ export function ProposalPage({ number }: { number: number }) {
             ))}
           </section>
 
-          <SectionCard title={`Why: ${plural(p.evidence_count, 'run', 'runs')} sent back`}>
+          {kind === 'memory' ? <MemoryFacts p={p} /> : null}
+          {kind === 'model' && tried ? (
+            <ModelTries tried={tried} model={modelOfProposal(p.files)} action={tryAgain} />
+          ) : null}
+
+          <SectionCard
+            title={
+              <span className="inline-flex items-center gap-1">
+                Why
+                <InfoTip label="What Why shows">
+                  Each item that prompted this proposal, with the reason it was sent back.
+                </InfoTip>
+              </span>
+            }
+            aside={
+              <span className="text-secondary text-muted">
+                {p.evidence.length} of {plural(p.evidence_count, 'item', 'items')}
+              </span>
+            }
+          >
             <ul className="m-0 flex list-none flex-col p-0">
               {p.evidence.map((evidence) => (
                 <li
                   key={`${evidence.item_ref}:${evidence.quote}`}
                   className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Chip className="font-mono">{evidence.item_ref}</Chip>
-                    <span className="font-control text-ink">{evidence.item_title}</span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-muted tabular-nums">{itemNumber(evidence.item_ref)}</span>
+                    <span className="min-w-0 font-control text-ink break-words">{evidence.item_title}</span>
+                    {evidence.station ? (
+                      <span className="ml-auto text-secondary text-muted">{evidence.station}</span>
+                    ) : null}
                   </div>
-                  <p className="m-0 text-secondary text-ink-soft">&ldquo;{evidence.quote}&rdquo;</p>
+                  <p className="m-0 text-secondary text-ink-soft break-words">&ldquo;{evidence.quote}&rdquo;</p>
                 </li>
               ))}
             </ul>
@@ -301,38 +450,8 @@ export function ProposalPage({ number }: { number: number }) {
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
-          <SectionCard title="Details">
-            <dl className="m-0 flex flex-col gap-3">
-              <DetailRow label="Affects">{p.agents.length > 0 ? p.agents.join(', ') : p.paths.join(', ')}</DetailRow>
-              <DetailRow label="Found by">
-                <NotAvailable label="Judge">
-                  <button type="button" className="cursor-not-allowed text-ink-soft">
-                    The judge
-                  </button>
-                </NotAvailable>{' '}
-                and sent-back reasons
-              </DetailRow>
-              <DetailRow label="Tested on">
-                <NotAvailable label="Tested on">
-                  <button type="button" className="cursor-not-allowed text-left text-muted">
-                    Not available yet
-                  </button>
-                </NotAvailable>
-              </DetailRow>
-              <DetailRow label="Publishes">
-                v{p.publishes_as_version}; runs in progress keep v{p.made_against_version}
-              </DetailRow>
-              {reviewers === undefined ? null : <DetailRow label="Reviewers">{reviewers}</DetailRow>}
-            </dl>
-          </SectionCard>
-
-          <SectionCard title="Eval results">
-            <NotAvailable label="Eval results">
-              <button type="button" className="cursor-not-allowed text-left text-muted">
-                Not available yet
-              </button>
-            </NotAvailable>
-          </SectionCard>
+          {kind === 'definition' && tried ? <TriedPanel tried={tried} action={tryAgain} /> : null}
+          <DetailsCard p={p} reviewers={reviewers} />
         </div>
       </div>
     </div>

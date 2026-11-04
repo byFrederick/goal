@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -396,32 +395,34 @@ func TestBackoff_DoublesUpToAnHour(t *testing.T) {
 	}
 }
 
-// slackHarness is a sender whose organization is a real one of a tenancy, so it can hold
-// connections, and whose rows go to Slack.
+// slackHarness is a sender whose organization is a real one of a tenancy, so it can hold secrets
+// and a notification setting, and whose rows go to Slack.
 type slackHarness struct {
 	senderHarness
-	org   domain.OrgID
-	conns *porttest.Connections
+	org      domain.OrgID
+	tenancy  *porttest.Tenancy
+	secrets  *porttest.OrgSecrets
+	settings *porttest.NotificationSettings
 }
 
 func newSlackSender(t *testing.T, mailer bool) slackHarness {
 	t.Helper()
 
+	return newSlackSenderOpening(t, mailer, nil)
+}
+
+// newSlackSenderOpening is newSlackSender whose sender opens secrets through opened, when it is
+// not nil, instead of the store the setting names its secret in.
+func newSlackSenderOpening(t *testing.T, mailer bool, opened Secrets) slackHarness {
+	t.Helper()
+
 	clock := porttest.NewClock(start)
 	tenancy := porttest.NewTenancy(clock.Now)
-	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil)
+	settings := porttest.NewNotificationSettings(secrets, tenancy)
 
 	o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
 	if err != nil {
-		t.Fatal(err)
-	}
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
 		t.Fatal(err)
 	}
 
@@ -430,11 +431,15 @@ func newSlackSender(t *testing.T, mailer bool) slackHarness {
 			orgs: orgList{o.ID}, outbox: porttest.NewNotificationDeliveries(), mailer: porttest.NewMailer(),
 			slack: porttest.NewDirectMessenger(), clock: clock, logs: &syncBuffer{},
 		},
-		org: o.ID, conns: conns,
+		org: o.ID, tenancy: tenancy, secrets: secrets, settings: settings,
+	}
+
+	if opened == nil {
+		opened = secrets
 	}
 
 	d := Deps{
-		Orgs: h.orgs, Outbox: h.outbox, Slack: h.slack, Connections: conns, Clock: clock, PublicURL: publicURL,
+		Orgs: h.orgs, Outbox: h.outbox, Slack: h.slack, Settings: settings, Secrets: opened, Clock: clock, PublicURL: publicURL,
 		Log: slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 	if mailer {
@@ -446,14 +451,49 @@ func newSlackSender(t *testing.T, mailer bool) slackHarness {
 	return h
 }
 
-// connect adds a Slack connection whose token is token, or a reference to a credential.
-func (h slackHarness) connect(t *testing.T, name, kind, token string) {
+// useSlackSecret creates the secret name holding token, open to all factories, and names it
+// in the organization's Slack notification setting.
+func (h slackHarness) useSlackSecret(t *testing.T, name, token string) {
 	t.Helper()
 
-	ctx := domain.WithOrg(t.Context(), h.org)
-	if _, err := h.conns.Create(ctx, domain.NewConnection{Name: name, Kind: kind, Secrets: map[string]string{"token": token}}, domain.LocalUser); err != nil {
+	h.useScopedSlackSecret(t, name, token, domain.SecretScope{All: true})
+}
+
+func (h slackHarness) useScopedSlackSecret(t *testing.T, name, token string, scope domain.SecretScope) {
+	t.Helper()
+
+	setSlackSecret(domain.WithOrg(t.Context(), h.org), t, h.secrets, h.settings, name, token, scope)
+}
+
+// setSlackSecret creates the secret name holding token with scope and names it in the Slack
+// notification setting of the organization in ctx.
+func setSlackSecret(ctx context.Context, t *testing.T, secrets *porttest.OrgSecrets, settings *porttest.NotificationSettings,
+	name, token string, scope domain.SecretScope,
+) {
+	t.Helper()
+
+	if _, err := secrets.Create(ctx, domain.NewSecret{Name: name, Scope: scope, Value: token}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := settings.SetNotificationSettings(ctx, domain.NotificationSettings{SlackSecret: name}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// chosenValue is the value of the secret a test's notification setting names.
+const chosenValue = "xoxb-chosen"
+
+// opens is how many times the organization's secret name was opened.
+func (h slackHarness) opens(t *testing.T) int {
+	t.Helper()
+
+	used, err := h.tenancy.AuditLog(domain.WithOrg(t.Context(), h.org), ports.AuditQuery{Action: domain.AuditSecretUsed, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return len(used)
 }
 
 func slackNotification(event domain.NotificationEvent) ports.Notification {
@@ -463,14 +503,14 @@ func slackNotification(event domain.NotificationEvent) ports.Notification {
 	return n
 }
 
-// A Slack row is sent to its recipient's email as a direct message, with the token of the
-// organization's Slack connection and the email's text, and marked sent; the log names no
-// address, no text and no token.
+// A Slack row is sent to its recipient's email as a direct message, with the value of the secret
+// the organization's notification setting names and the email's text, and marked sent; the log
+// names no address, no text and no token.
 func TestSender_SlackSendsDirectMessage(t *testing.T) {
 	t.Parallel()
 
 	h := newSlackSender(t, false)
-	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
 
 	n := slackNotification(domain.NotifyApproval)
 	id := h.queue(h.org, n)
@@ -482,7 +522,7 @@ func TestSender_SlackSendsDirectMessage(t *testing.T) {
 	sent := h.slack.Sent()
 	if len(sent) != 1 || sent[0].Token != "xoxb-test-token" || sent[0].Message.To != n.Address ||
 		!strings.Contains(sent[0].Message.Text, "needs your OK") || !strings.Contains(sent[0].Message.Text, publicURL+"/o/acme/f/web-app/items/12") {
-		t.Fatalf("sent %+v; want the approval to ann@example.com with the connection's token", sent)
+		t.Fatalf("sent %+v; want the approval to ann@example.com with the secret's token", sent)
 	}
 
 	if r := h.row(t, id); r.State != ports.NotificationSent || !r.SentAt.Equal(start) {
@@ -498,49 +538,114 @@ func TestSender_SlackSendsDirectMessage(t *testing.T) {
 	}
 }
 
-// Without a Slack connection, or with one whose token is a credential reference, a Slack row
-// fails at once with a fixed reason and sends nothing.
-func TestSender_SlackWithoutConnectionFails(t *testing.T) {
+// Without a Slack notification setting, a Slack row fails at once with slack-not-set, opens no
+// secret and sends nothing; it is not retried.
+func TestSender_SlackWithoutSettingFails(t *testing.T) {
 	t.Parallel()
 
-	for _, c := range []struct {
-		name    string
-		connect func(t *testing.T, h slackHarness)
-		reason  string
-	}{
-		{"no connection", func(t *testing.T, h slackHarness) {
-			t.Helper()
-			h.connect(t, "pager", "pagerduty", "pd-token")
-		}, "slack-no-connection"},
-		{"a credential reference", func(t *testing.T, h slackHarness) {
-			t.Helper()
-			h.connect(t, "slack", "slack", "{{slack-bot}}")
-		}, "slack-token-unavailable"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
+	h := newSlackSender(t, false)
+	h.wantSlackFailed(t, "slack-not-set")
 
-			h := newSlackSender(t, false)
-			c.connect(t, h)
-			id := h.queue(h.org, slackNotification(domain.NotifyAndon))
-
-			h.work(t)
-
-			if r := h.row(t, id); r.State != ports.NotificationFailed || r.Attempts != 1 || r.LastError != c.reason {
-				t.Fatalf("row = %+v; want failed after one attempt with %s", r, c.reason)
-			}
-
-			if len(h.slack.Sent()) != 0 {
-				t.Fatal("a message was sent")
-			}
-
-			h.clock.Advance(maxBackoff)
-
-			if n := h.work(t); n != 0 {
-				t.Fatalf("a failed row was retried")
-			}
-		})
+	if n := h.opens(t); n != 0 {
+		t.Fatalf("%d secrets opened; want none", n)
 	}
+}
+
+// A setting that names a secret the sender cannot find fails the row at once with
+// slack-token-unavailable.
+func TestSender_SlackMissingSecretFails(t *testing.T) {
+	t.Parallel()
+
+	// The sender opens secrets from a store that lacks the one the setting names.
+	empty := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), porttest.NewTenancy(porttest.NewClock(start).Now), nil)
+	h := newSlackSenderOpening(t, false, empty)
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
+
+	h.wantSlackFailed(t, "slack-token-unavailable")
+}
+
+// A setting that names a secret open to some factories only fails the row at once with
+// slack-token-unavailable: the sender opens it without a factory.
+func TestSender_SlackScopedSecretFails(t *testing.T) {
+	t.Parallel()
+
+	h := newSlackSender(t, false)
+	h.useScopedSlackSecret(t, "slack-bot", "xoxb-test-token", domain.SecretScope{Factories: []domain.FactoryID{"7d1c2a8e-0b5f-4c39-9e64-2f1a3b4c5d6e"}})
+
+	h.wantSlackFailed(t, "slack-token-unavailable")
+}
+
+// wantSlackFailed queues a Slack row, works it, and fails unless it failed after one attempt
+// with reason, sent nothing and is not retried.
+func (h slackHarness) wantSlackFailed(t *testing.T, reason string) {
+	t.Helper()
+
+	id := h.queue(h.org, slackNotification(domain.NotifyAndon))
+
+	h.work(t)
+
+	if r := h.row(t, id); r.State != ports.NotificationFailed || r.Attempts != 1 || r.LastError != reason {
+		t.Fatalf("row = %+v; want failed after one attempt with %s", r, reason)
+	}
+
+	if len(h.slack.Sent()) != 0 {
+		t.Fatal("a message was sent")
+	}
+
+	h.clock.Advance(maxBackoff)
+
+	if n := h.work(t); n != 0 {
+		t.Fatalf("a failed row was retried")
+	}
+
+	if logs := h.logs.String(); strings.Contains(logs, "xoxb-test-token") {
+		t.Fatalf("logs hold the token:\n%s", logs)
+	}
+}
+
+// A store error opening the secret is temporary: the row backs off with a fixed reason that
+// names no secret, and goes out once the secret opens.
+func TestSender_SlackSecretErrorBacksOff(t *testing.T) {
+	t.Parallel()
+
+	failing := &failingSecrets{err: errors.New("connection reset xoxb-test-token")}
+	h := newSlackSenderOpening(t, false, failing)
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
+	failing.secrets = h.secrets
+	id := h.queue(h.org, slackNotification(domain.NotifyBudget))
+
+	h.work(t)
+
+	if r := h.row(t, id); r.State != ports.NotificationPending || r.LastError != "slack-secret-error" || !r.NextAttemptAt.Equal(start.Add(time.Minute)) {
+		t.Fatalf("row = %+v; want pending a minute with slack-secret-error", r)
+	}
+
+	failing.err = nil
+
+	h.clock.Advance(time.Minute)
+	h.work(t)
+
+	if r := h.row(t, id); r.State != ports.NotificationSent {
+		t.Fatalf("row = %+v; want sent once the secret opens", r)
+	}
+
+	if logs := h.logs.String(); strings.Contains(logs, "xoxb-test-token") {
+		t.Fatalf("logs hold the token:\n%s", logs)
+	}
+}
+
+// failingSecrets fails each Resolve with err while it is set, and else opens from secrets.
+type failingSecrets struct {
+	secrets *porttest.OrgSecrets
+	err     error
+}
+
+func (f *failingSecrets) Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+
+	return f.secrets.Resolve(ctx, names, use)
 }
 
 // A person Slack does not find fails the row after one attempt, and it is not retried.
@@ -548,7 +653,7 @@ func TestSender_SlackUserNotFoundFailsOnce(t *testing.T) {
 	t.Parallel()
 
 	h := newSlackSender(t, false)
-	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
 
 	var tries int
 
@@ -576,7 +681,7 @@ func TestSender_SlackTemporaryErrorsBackOff(t *testing.T) {
 	t.Parallel()
 
 	h := newSlackSender(t, false)
-	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
 	h.slack.Fail = func(string, ports.DirectMessage) error { return &ports.DMError{Code: "slack-rate-limited"} }
 	id := h.queue(h.org, slackNotification(domain.NotifyBudget))
 
@@ -595,19 +700,33 @@ func TestSender_SlackTemporaryErrorsBackOff(t *testing.T) {
 	}
 }
 
-// With more than one Slack connection, the oldest one's token is used, whatever the names.
-func TestSender_SlackUsesTheOldestConnection(t *testing.T) {
+// Every Slack row of a round goes out with the value of the secret the setting names, which is
+// opened once for the round, whatever other secrets the organization has.
+func TestSender_SlackUsesTheSettingsSecret(t *testing.T) {
 	t.Parallel()
 
 	h := newSlackSender(t, false)
-	h.connect(t, "zz-first", "slack", "xoxb-oldest")
-	h.connect(t, "aa-second", "slack", "xoxb-newer")
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+	if _, err := h.secrets.Create(ctx, domain.NewSecret{Name: "aa-other", Scope: domain.SecretScope{All: true}, Value: "xoxb-other"}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	h.useSlackSecret(t, "team-slack", chosenValue)
 	h.queue(h.org, slackNotification(domain.NotifyApproval))
+	h.queue(h.org, slackNotification(domain.NotifyAndon))
 
-	h.work(t)
+	if done := h.work(t); done != 2 {
+		t.Fatalf("work finished %d rows; want 2", done)
+	}
 
-	if sent := h.slack.Sent(); len(sent) != 1 || sent[0].Token != "xoxb-oldest" {
-		t.Fatalf("sent %+v; want one message with the oldest connection's token", sent)
+	sent := h.slack.Sent()
+	if len(sent) != 2 || sent[0].Token != chosenValue || sent[1].Token != chosenValue {
+		t.Fatalf("sent %+v; want two messages with the setting's secret", sent)
+	}
+
+	if n := h.opens(t); n != 1 {
+		t.Fatalf("the secret was opened %d times; want once for the round", n)
 	}
 }
 
@@ -617,7 +736,7 @@ func TestSender_EmailWaitsWithoutAMailer(t *testing.T) {
 	t.Parallel()
 
 	h := newSlackSender(t, false)
-	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
 	email := h.queue(h.org, itemNotification(domain.NotifyApproval))
 	slackRow := h.queue(h.org, slackNotification(domain.NotifyApproval))
 
@@ -639,7 +758,7 @@ func TestSender_SendsBothChannels(t *testing.T) {
 	t.Parallel()
 
 	h := newSlackSender(t, true)
-	h.connect(t, "slack", "slack", "xoxb-test-token")
+	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
 	h.queue(h.org, itemNotification(domain.NotifyApproval))
 	h.queue(h.org, slackNotification(domain.NotifyApproval))
 

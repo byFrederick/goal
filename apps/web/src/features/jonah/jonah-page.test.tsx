@@ -2,32 +2,38 @@
 
 import { useSearch } from '@tanstack/react-router';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { type ReactNode, useState } from 'react';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, getJonahOverview, listJudges, listProposals, queueJonahReview } from '../../api/client';
-import { jonahOverviewQuery, judgesQuery, proposalsQuery } from '../../api/queries';
+import { ApiError, getJonahOverview, queueJonahReview, undoProposal } from '../../api/client';
+import {
+  jonahOverviewQuery,
+  keptTestsQuery,
+  membersQuery,
+  proposalQuery,
+  proposalsQuery,
+  versionsQuery,
+} from '../../api/queries';
 import type {
   Factory,
   JonahOverview,
-  JudgeList,
   OrgSummary,
+  Proposal,
   ProposalEntry,
   ProposalPage,
   ProposalState,
+  Version,
+  Watch,
 } from '../../api/types';
-import { TopBar, TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { renderFactoryPage, type Seed } from '../../test/route';
-import { TooltipProvider } from '../../ui/tooltip';
-import { touchLink } from '../../ui/touch-target';
 import { JonahOverviewPage, JonahProposalsPage } from './jonah-page';
 
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
   getJonahOverview: vi.fn(),
-  listJudges: vi.fn(),
-  listProposals: vi.fn(),
   queueJonahReview: vi.fn(),
+  undoProposal: vi.fn(),
 }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -50,6 +56,7 @@ const editor: Factory = {
   role: 'editor',
   can: ['definition:edit', 'definition:publish', 'factory:read'],
 };
+const viewer: Factory = { ...editor, role: 'viewer', can: ['factory:read'] };
 
 const proposal7: ProposalEntry = {
   number: 7,
@@ -63,13 +70,12 @@ const proposal7: ProposalEntry = {
 };
 const proposal8: ProposalEntry = {
   number: 8,
-  title: 'Split requests over 400 changed lines into an assembly',
+  title: 'Add 3 facts from answers, notes and send-backs',
   state: 'proposed',
   created_at: '2026-10-27T12:00:00Z',
-  paths: ['agents/architect.md'],
-  agents: ['architect'],
-  estimate: { metric: 'lead_time_p85', station: '', before: 31, after: 26, cost_per_item_usd: 0 },
-  evidence_count: 6,
+  paths: ['memory.yaml'],
+  agents: [],
+  evidence_count: 3,
 };
 const applied6: ProposalEntry = {
   number: 6,
@@ -81,11 +87,54 @@ const applied6: ProposalEntry = {
   evidence_count: 3,
 };
 
+const full7 = {
+  ...proposal7,
+  summary: '',
+  edits: [],
+  files: [],
+  evidence: [],
+  made_against_version: 21,
+  publishes_as_version: 22,
+  tried: {
+    state: 'done',
+    items: [
+      {
+        item_ref: 'software#511',
+        item_title: 'Board',
+        station: 'frontend',
+        tries: [{ attempt: 1, state: 'done', verdict: 'fixed', cost_usd: 1 }],
+      },
+      {
+        item_ref: 'software#505',
+        item_title: 'Box',
+        station: 'frontend',
+        tries: [{ attempt: 1, state: 'done', verdict: 'not_fixed', cost_usd: 1 }],
+      },
+    ],
+    cost_usd: 2,
+    kept_tests: [{ test: 418, station: 'frontend', attempt: 1, result: 'passed' }],
+  },
+} as Proposal;
+const full8 = {
+  ...proposal8,
+  summary: '',
+  edits: [],
+  files: [],
+  evidence: [
+    { item_ref: 'software#493', item_title: 'Phones', quote: 'Phones are 390 wide; check 375 too.' },
+    { item_ref: 'software#371', item_title: 'Docs', quote: 'The docs site is apps/docs.' },
+    { item_ref: 'software#308', item_title: 'ADR', quote: 'Check main before you number one.' },
+  ],
+  made_against_version: 21,
+  publishes_as_version: 22,
+} as Proposal;
+
 const overview: JonahOverview = {
   policy: {
     enabled: true,
     propose_after: 5,
-    weekly_usd: 20,
+    share: 0.05,
+    budget_usd: 14,
     model: 'claude-opus-5-5',
     approver_roles: ['owner', 'admin'],
   },
@@ -102,6 +151,7 @@ const overview: JonahOverview = {
       propose_after: 5,
       proposal: 7,
       created_at: '2026-10-28T10:00:00Z',
+      updated_at: '2026-10-28T10:00:00Z',
     },
     {
       id: 'obs-2',
@@ -112,116 +162,89 @@ const overview: JonahOverview = {
       count: 3,
       propose_after: 5,
       created_at: '2026-10-27T10:00:00Z',
+      updated_at: '2026-10-27T10:00:00Z',
     },
   ],
 };
+const empty: JonahOverview = { ...overview, waiting: 0, observations: [] };
 
-const empty: JonahOverview = { ...overview, waiting: 0, observations: [], month_cost_usd: 0 };
-
-// Two judges: one that scored on the first and the last day of the window, one that is off.
-const day = (daysAgo: number, scored: number, passed: number) => ({
-  day: new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10),
-  scored,
-  passed,
-  pass_rate: passed / scored,
+const watch = (over: Partial<Watch>): Watch => ({
+  station: 'architect',
+  metric: 'lead_time_p85',
+  before: { items: 40, value: 31 * 3600 },
+  after: { items: 64, value: 34 * 3600 },
+  interval: { low: 1, high: 2 },
+  verdict: 'worse',
+  opened_at: '2026-10-20T00:00:00Z',
+  closed_at: null,
+  ...over,
 });
-const judges: JudgeList = {
-  version: 21,
-  judge_cost_usd: 1.2,
-  judges: [
-    {
-      slug: 'spec-testable',
-      title: 'Spec criteria testable',
-      criterion: 'Every criterion can be tested',
-      agents: ['architect'],
-      sample: 0.25,
-      pass_mark: 0.7,
-      enabled: true,
-      summary: { scored: 10, passed: 9, pass_rate: 0.9, cost_usd: 0.4, days: [day(28, 5, 4), day(0, 5, 5)] },
-    },
-    {
-      slug: 'efficiency',
-      title: 'Efficiency',
-      criterion: 'No wasted work',
-      agents: [],
-      sample: 0.5,
-      pass_mark: 0.6,
-      enabled: false,
-      summary: { scored: 0, passed: 0, pass_rate: 0, cost_usd: 0, days: [] },
-    },
+const version = (number: number, message: string, watches: Watch[]): Version =>
+  ({
+    id: `v-${number}`,
+    number,
+    message,
+    published_by: { kind: 'user', id: 'u1', name: 'Freddy Cruz' },
+    watches,
+  }) as unknown as Version;
+const versions = {
+  versions: [
+    version(40, 'Architect splits specs over 400 changed lines', [watch({ proposal: 11 })]),
+    version(39, 'frontend-engineer on Sonnet 5.5', [
+      watch({
+        station: 'frontend',
+        metric: 'cost_per_item',
+        verdict: 'helped',
+        before: { items: 10, value: 2.38 },
+        after: { items: 30, value: 1.91 },
+      }),
+    ]),
+    version(38, 'Docs', [
+      watch({
+        proposal: 10,
+        station: 'integrate',
+        metric: 'sent_back_rate',
+        before: { items: 9, value: 0.09 },
+        after: { items: 112, value: 0.2 },
+      }),
+    ]),
   ],
+  next_before: null,
 };
 
-function listOf(proposals: ProposalEntry[]): ProposalPage {
-  return { proposals };
-}
+const page = (proposals: ProposalEntry[]): ProposalPage => ({ proposals });
 
-function seeds(data: JonahOverview = overview, factory: Factory = editor): Seed[] {
+function seeds(factory: Factory = editor, data: JonahOverview = overview): Seed[] {
   return [
     [jonahOverviewQuery(org.id, factory.id).queryKey, data],
-    [proposalsQuery(org.id, factory.id, 'proposed').queryKey, listOf([proposal8, proposal7])],
-    [judgesQuery(org.id, factory.id).queryKey, judges],
+    [proposalsQuery(org.id, factory.id, 'proposed').queryKey, page([proposal8, proposal7])],
+    [proposalsQuery(org.id, factory.id).queryKey, page([proposal8, proposal7, applied6])],
+    [proposalQuery(org.id, factory.id, 7).queryKey, full7],
+    [proposalQuery(org.id, factory.id, 8).queryKey, full8],
+    [versionsQuery(org.id, factory.id).queryKey, versions],
+    [keptTestsQuery(org.id, factory.id).queryKey, { tests: [] }],
+    [membersQuery(org.id).queryKey, []],
   ];
 }
 
-// The page with the shell's top bar above it, so its TopBarSlot actions are on screen as they are in the app.
-function TopBarFrame({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<TopBarState | null>(null);
-  return (
-    <TopBarSetContext.Provider value={setState}>
-      <TopBar state={state} />
-      {children}
-    </TopBarSetContext.Provider>
-  );
+function renderOverview(factory: Factory = editor, seed: Seed[] = seeds(factory)) {
+  return renderFactoryPage({ page: () => <JonahOverviewPage />, path: 'jonah/', org, factory, seed, topBar: true });
 }
 
-function renderOverview(factory: Factory = editor, seed: Seed[] = seeds(overview, factory)) {
-  return renderFactoryPage({
-    page: () => (
-      <TooltipProvider>
-        <TopBarFrame>
-          <JonahOverviewPage />
-        </TopBarFrame>
-      </TooltipProvider>
-    ),
-    path: 'jonah/',
-    org,
-    factory,
-    seed,
-  });
-}
-
-// The proposals tab reads its state from the URL, as the route does, so a filter changes the list it asks for.
+// The Proposals tab reads its state from the URL, as the route does, so a filter changes the list it asks for.
 function ProposalsRoute() {
   const { state } = useSearch({ strict: false }) as { state?: ProposalState };
-  return (
-    <TooltipProvider>
-      <TopBarFrame>
-        <JonahProposalsPage state={state} />
-      </TopBarFrame>
-    </TooltipProvider>
-  );
-}
-
-function renderProposals(search: Record<string, string>, factory: Factory = editor) {
-  return renderFactoryPage({
-    page: () => <ProposalsRoute />,
-    path: 'jonah/',
-    org,
-    factory,
-    search: { tab: 'proposals', ...search },
-    seed: [[proposalsQuery(org.id, factory.id).queryKey, listOf([applied6, proposal8, proposal7])]],
-  });
+  return <JonahProposalsPage state={state} />;
 }
 
 describe('the Jonah overview, its four states', () => {
-  it('is loading until the overview arrives: the app background, aria-busy and a Loading label', async () => {
+  it('is loading until the overview arrives: aria-busy and a Loading label', async () => {
     vi.mocked(getJonahOverview).mockReturnValue(new Promise(() => {}));
     renderOverview(editor, []);
 
-    const busy = (await screen.findByText('Loading')).closest('[aria-busy]');
+    const busy = (await screen.findAllByText('Loading'))[0]?.closest('[aria-busy]');
     expect(busy?.getAttribute('aria-busy')).toBe('true');
-    expect(screen.queryByRole('heading', { name: 'Waiting for your review' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'How Jonah works here' })).toBeNull();
   });
 
   it('says Jonah is not available on a goald without it, and offers to try again', async () => {
@@ -230,48 +253,45 @@ describe('the Jonah overview, its four states', () => {
     );
     renderOverview(editor, []);
 
-    expect(await screen.findByText('Jonah could not be loaded')).toBeTruthy();
-    expect(screen.getByText('Jonah is not turned on for this installation yet.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect((await screen.findAllByText('Jonah could not be loaded')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Jonah is not turned on for this installation yet.').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Try again' }).length).toBeGreaterThan(0);
   });
 
   it('is empty when nothing waits and nothing was noticed', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(empty);
-    renderOverview(editor, seeds(empty).slice(0, 1));
+    renderOverview(editor, [
+      [jonahOverviewQuery(org.id, editor.id).queryKey, empty],
+      [proposalsQuery(org.id, editor.id, 'proposed').queryKey, page([])],
+      [proposalsQuery(org.id, editor.id).queryKey, page([])],
+      [versionsQuery(org.id, editor.id).queryKey, { versions: [], next_before: null }],
+      [keptTestsQuery(org.id, editor.id).queryKey, { tests: [] }],
+    ]);
 
-    expect(await screen.findByText('Jonah has nothing to review yet')).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'What Jonah noticed this week' })).toBeNull();
+    expect(await screen.findByText(/Nothing waits for you/)).toBeTruthy();
+    expect(screen.getByText('Nothing published is watched yet.')).toBeTruthy();
+    expect(screen.getByText(/Nothing yet\./)).toBeTruthy();
   });
 
-  it('is ready: the waiting proposals, the policy in words and what Jonah noticed', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
+  it('shows each panel: waiting proposals, After publish, what Jonah noticed and how Jonah works here', async () => {
     renderOverview();
 
-    const waiting = await screen.findByRole('heading', { name: 'Waiting for your review' });
-    expect(waiting).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'All proposals' }).getAttribute('href')).toBe(
-      '/o/acme/f/software/jonah?tab=proposals',
-    );
+    expect(await screen.findByRole('heading', { name: 'Waiting for your review' })).toBeTruthy();
+    const first = screen.getByRole('article', { name: /Add 3 facts/ });
+    expect(within(first).getByText('memory.yaml')).toBeTruthy();
+    expect(within(first).getByText(/Phones are 390 wide/)).toBeTruthy();
+    expect(within(first).getByText(/and 2 more/)).toBeTruthy();
+    expect(within(first).getByText("Quoted from 3 people's words")).toBeTruthy();
 
-    const first = screen.getByRole('article', { name: /Ask frontend-engineer/ });
-    expect(within(first).getByText('Proposal 7')).toBeTruthy();
-    expect(within(first).getByText('frontend-engineer')).toBeTruthy();
-    expect(within(first).getByText('rules/evidence.md')).toBeTruthy();
-    expect(within(first).getByText(/18%/)).toBeTruthy();
-    expect(within(first).getByText(/about 10%/)).toBeTruthy();
-    expect(within(first).getByText('+$0.04')).toBeTruthy();
-    expect(within(first).getByText('Based on 4 runs sent back')).toBeTruthy();
+    const second = screen.getByRole('article', { name: /Ask frontend-engineer/ });
+    expect(within(second).getByText(/18%/)).toBeTruthy();
+    expect(within(second).getByText(/about 10%/)).toBeTruthy();
+    expect(within(second).getByText('Tried: fixed 1 of 2, kept tests 1 of 1')).toBeTruthy();
+    expect(within(second).getByText('+$0.04')).toBeTruthy();
 
-    const second = screen.getByRole('article', { name: /Split requests/ });
-    expect(within(second).getByText(/31 h/)).toBeTruthy();
-    expect(within(second).getByText('no change')).toBeTruthy();
-
-    const policy = screen.getByRole('region', { name: 'How Jonah works here' });
+    const policy = screen.getByRole('region', { name: /How Jonah works here/ });
     expect(within(policy).getByText('5 failures with the same cause')).toBeTruthy();
     expect(within(policy).getByText('Owners and admins')).toBeTruthy();
     expect(within(policy).getByText('claude-opus-5-5')).toBeTruthy();
-    expect(within(policy).getByText('$6.40 this month')).toBeTruthy();
     expect(within(policy).getByRole('link', { name: 'Change' }).getAttribute('href')).toBe(
       '/o/acme/f/software/definition/basics?mode=yaml&file=factory.yaml',
     );
@@ -281,160 +301,113 @@ describe('the Jonah overview, its four states', () => {
     expect(within(noticed).getByText('Watching, 3 of 5')).toBeTruthy();
   });
 
+  it('shows the tooltip of how Jonah works behind its i button', async () => {
+    renderOverview();
+    const info = await screen.findByRole('button', { name: 'How Jonah works' });
+    info.focus();
+    expect(await screen.findByText(/Jonah reviews the line once a day/)).toBeTruthy();
+  });
+
   it('links each proposal to its page', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
     renderOverview();
 
     await screen.findByRole('heading', { name: 'Waiting for your review' });
-    const review = screen.getAllByRole('link', { name: 'Review' });
+    const review = screen.getAllByRole('link', { name: /^Review/ });
     expect(review).toHaveLength(2);
     expect(review[0]?.getAttribute('href')).toContain('/jonah/proposals/8');
     expect(review[1]?.getAttribute('href')).toContain('/jonah/proposals/7');
   });
 });
 
-describe('the Jonah header', () => {
-  it('draws the tabs as links on an underline row: the current one has aria-current', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+describe('After publish', () => {
+  it('shows each change before and after with its verdict, and Undo this change only on a Worse watch of a proposal', async () => {
     renderOverview();
 
-    const nav = await screen.findByRole('navigation', { name: 'Jonah' });
-    const links = within(nav).getAllByRole('link');
-    expect(links.map((l) => l.textContent?.replace(/\d+$/, ''))).toEqual([
-      'Overview',
-      'Proposals',
-      'Judges',
-      'Evals',
-      'Bake-offs',
-    ]);
-    expect(links.filter((l) => l.getAttribute('aria-current') === 'page').map((l) => l.textContent)).toEqual([
-      'Overview',
-    ]);
-    expect(
-      within(nav)
-        .getByRole('link', { name: /Proposals/ })
-        .getAttribute('href'),
-    ).toBe('/o/acme/f/software/jonah?tab=proposals');
-    expect(within(nav).getByRole('link', { name: 'Judges' }).getAttribute('href')).toBe(
-      '/o/acme/f/software/jonah/judges',
-    );
-    expect(nav.className).toMatch(/border-b/);
-  });
-});
-
-describe('the pass rate by judge', () => {
-  it('shows a chart per enabled judge: its figure, its pass mark, a link and a table for screen readers', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    renderOverview();
-
-    const section = await screen.findByRole('region', { name: 'Pass rate by judge, last 30 days' });
-    const charts = within(section).getAllByRole('article');
-    expect(charts).toHaveLength(1);
-    const chart = charts[0] as HTMLElement;
-    expect(within(chart).getByRole('link', { name: 'Spec criteria testable' }).getAttribute('href')).toBe(
-      '/o/acme/f/software/jonah/judges/spec-testable',
-    );
-    expect(within(chart).getByText('90%')).toBeTruthy();
-    expect(within(chart).getByText('+20 pts')).toBeTruthy();
-    expect(within(chart).getByText('architect, pass at 0.7')).toBeTruthy();
-    expect(within(chart).getByRole('img').getAttribute('aria-label')).toBe('From 80% to 100%, pass mark 70%');
-    const rects = chart.querySelectorAll('rect');
-    expect(rects).toHaveLength(9);
-    expect(rects[8]?.getAttribute('class')).toBe('fill-ink');
-    expect(rects[0]?.getAttribute('class')).toBe('fill-rule');
-    expect(chart.querySelector('line')?.getAttribute('stroke-dasharray')).toBe('4 3');
-    expect(within(chart).getByRole('table')).toBeTruthy();
-    expect(within(chart).getAllByText('Nothing scored', { selector: 'td' })).toBeTruthy();
-    expect(within(section).queryByText('Efficiency')).toBeNull();
+    const panel = await screen.findByRole('region', { name: /After publish/ });
+    expect(within(panel).getByText('Lead time p85 at architect: 31 h → 34 h')).toBeTruthy();
+    expect(within(panel).getByText('Cost per item at frontend: $2.38 → $1.91')).toBeTruthy();
+    expect(within(panel).getByText('Proposal 11, v40')).toBeTruthy();
+    expect(within(panel).getByText('v39, by Freddy Cruz')).toBeTruthy();
+    expect(within(panel).getByText('Helped')).toBeTruthy();
+    expect(within(panel).getAllByText('Worse')).toHaveLength(2);
+    expect(within(panel).getAllByRole('button', { name: /Undo this change/ })).toHaveLength(2);
   });
 
-  it('is empty without judges', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    renderOverview(editor, [
-      ...seeds().filter((entry) => entry[0][2] !== 'list' || entry[0][0] !== 'judges'),
-      [judgesQuery(org.id, editor.id).queryKey, { ...judges, judges: [] }],
-    ]);
+  it('undoes a proposal and opens the proposal that reverses it', async () => {
+    vi.mocked(undoProposal).mockResolvedValue({ number: 15 } as Proposal);
+    const { router } = renderOverview();
 
-    expect(await screen.findByText('No judges are on yet')).toBeTruthy();
+    const panel = await screen.findByRole('region', { name: /After publish/ });
+    fireEvent.click(within(panel).getAllByRole('button', { name: /Undo this change/ })[0] as HTMLElement);
+
+    await waitFor(() => expect(undoProposal).toHaveBeenCalledWith('org-1', 'factory-1', 11));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/software/jonah/proposals/15'));
   });
 
-  it('says so when the judges cannot be loaded, and offers Try again', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listJudges).mockRejectedValue(new Error('down'));
-    renderOverview(editor, seeds().slice(0, 2));
+  it('offers no Undo to a person who cannot edit the definition', async () => {
+    renderOverview(viewer);
 
-    const section = await screen.findByRole('region', { name: 'Pass rate by judge, last 30 days' });
-    expect(await within(section).findByRole('button', { name: 'Try again' })).toBeTruthy();
-  });
-});
-
-describe('the top bar', () => {
-  it('shows the breadcrumb Software › Jonah on the overview', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
-    renderOverview();
-
-    await screen.findByRole('heading', { name: 'Waiting for your review' });
-    const crumbs = screen.getByRole('navigation', { name: /breadcrumb/i });
-    expect(within(crumbs).getByText('Software')).toBeTruthy();
-    expect(within(crumbs).getAllByText('Jonah')).toHaveLength(1);
+    const panel = await screen.findByRole('region', { name: /After publish/ });
+    expect(within(panel).getAllByText('Worse')).toHaveLength(2);
+    expect(within(panel).queryByRole('button', { name: /Undo this change/ })).toBeNull();
   });
 });
 
 describe('Look for improvements now', () => {
-  it('is a secondary button that is not available yet, with no explanation beside it, and sends no request', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
+  it('queues a review', async () => {
+    vi.mocked(queueJonahReview).mockResolvedValue({ id: 'r1' } as never);
     renderOverview();
 
-    await screen.findByRole('heading', { name: 'Waiting for your review' });
-    const look = screen.getByRole('button', { name: 'Look for improvements now' });
-    expect(look.getAttribute('aria-disabled')).toBe('true');
-    expect(look.className).toContain('border-rule');
-    expect(look.getAttribute('aria-label')).toBe('Look for improvements now');
-    expect(look.querySelector('.max-md\\:hidden')?.textContent).toBe('Look for improvements now');
-    expect(look.querySelector('.max-md\\:sr-only')).toBeNull();
-    expect(screen.queryByText("Reviews start when Jonah's review loop ships")).toBeNull();
-    fireEvent.click(look);
-    await waitFor(() => expect(queueJonahReview).not.toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole('button', { name: 'Look for improvements now' }));
+
+    await waitFor(() => expect(queueJonahReview).toHaveBeenCalledWith('org-1', 'factory-1'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+  });
+
+  it.each([
+    ['review-in-flight', 'A review is already running. Its proposals appear here.'],
+    ['learning-budget-exhausted', "Jonah's budget for this week is used up, so no review was started."],
+  ])('says what a 409 %s means', async (code, message) => {
+    vi.mocked(queueJonahReview).mockRejectedValue(new ApiError({ title: 'Conflict', status: 409, code } as never));
+    renderOverview();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Look for improvements now' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+  });
+
+  it('is disabled without definition:edit', async () => {
+    renderOverview(viewer);
+    const button = await screen.findByRole('button', { name: 'Look for improvements now' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
 describe('the Proposals tab', () => {
-  it('lists every proposal when no state is named, and the state the URL names when it is', async () => {
-    const { router } = renderProposals({});
-    expect(await screen.findByRole('radio', { name: 'All' })).toBeTruthy();
-    const applied = screen.getByRole('article', { name: /Name the agent in every sent-back note/ });
-    expect(within(applied).getByText('Applied')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('radio', { name: 'Waiting' }));
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ state: 'proposed' }));
-  });
-
-  it('says so when a state has no proposals', async () => {
-    renderFactoryPage({
+  function renderProposals(search: Record<string, string> = {}) {
+    return renderFactoryPage({
       page: () => <ProposalsRoute />,
-      path: 'jonah/',
+      path: 'jonah/proposals/',
       org,
       factory: editor,
-      search: { tab: 'proposals', state: 'rejected' },
-      seed: [[proposalsQuery(org.id, editor.id, 'rejected').queryKey, listOf([])]],
+      search,
+      seed: [...seeds(), [proposalsQuery(org.id, editor.id, 'rejected').queryKey, page([])]],
     });
+  }
+
+  it('lists every proposal, newest first, with its state', async () => {
+    renderProposals();
+
+    expect(await screen.findByRole('article', { name: /Name the agent/ })).toBeTruthy();
+    expect(screen.getAllByRole('article')).toHaveLength(3);
+    expect(within(screen.getByRole('article', { name: /Name the agent/ })).getByText('Applied')).toBeTruthy();
+  });
+
+  it('filters by state in the URL, and says when none is in that state', async () => {
+    const { router } = renderProposals({ state: 'rejected' });
 
     expect(await screen.findByText('No proposals in this state')).toBeTruthy();
-  });
-});
-
-describe('phone tap targets on the Jonah policy', () => {
-  it('gives both Not available yet buttons the touchLink classes', async () => {
-    vi.mocked(getJonahOverview).mockResolvedValue(overview);
-    vi.mocked(listProposals).mockResolvedValue(listOf([proposal8, proposal7]));
-    renderOverview();
-    const policy = await screen.findByRole('region', { name: 'How Jonah works here' });
-    const buttons = within(policy).getAllByRole('button', { name: 'Not available yet' });
-    expect(buttons).toHaveLength(2);
-    for (const button of buttons)
-      for (const cls of touchLink.split(' ')) expect(button.classList.contains(cls)).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: 'All' }));
+    await waitFor(() => expect(router.state.location.search).not.toHaveProperty('state'));
   });
 });

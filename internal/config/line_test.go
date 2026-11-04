@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -17,7 +18,7 @@ var defaultIntegration = domain.IntegrationPolicy{Mode: domain.IntegrationModeTr
 func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 		t.Errorf("expedite target = %v, want 1h", got)
 	}
 
-	plain, err := LoadDir("testdata/line")
+	plain, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +243,7 @@ func TestLine_PurposeFallsBackToDescription(t *testing.T) {
 func TestLine_CarriesTheVersionsRules(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +399,7 @@ func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/line")
+	f, err := LoadDir("testdata/.line")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,8 +419,8 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		t.Errorf("runtime = %+v, want %+v", l.Runtime, wantRuntime)
 	}
 
-	if !slices.Equal(l.Connections, []string{"code", "docs"}) || !slices.Equal(l.KnowledgeSources, []string{"notes"}) {
-		t.Errorf("connections %v, knowledge sources %v; want [code docs] and [notes]", l.Connections, l.KnowledgeSources)
+	if !slices.Equal(l.Connections, []string{"code", "docs"}) || !reflect.DeepEqual(l.Knowledge, []domain.KnowledgeEntry{{Name: "notes"}}) {
+		t.Errorf("connections %v, knowledge %+v; want [code docs] and notes for every run", l.Connections, l.Knowledge)
 	}
 
 	wantStations := []domain.Station{
@@ -645,7 +646,7 @@ const workIncident = "incident"
 func TestLine_Triggers(t *testing.T) {
 	t.Parallel()
 
-	f, err := LoadDir("testdata/support")
+	f, err := LoadDir("testdata/.support")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,7 +688,7 @@ func TestLine_JonahPolicyDefaults(t *testing.T) {
 	t.Parallel()
 
 	withModel := edited(runtimeModel, runtimeModel+"    model: "+jonahRuntimeModel+"\n")
-	want := domain.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10, Model: jonahRuntimeModel}
+	want := domain.JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05, Model: jonahRuntimeModel}
 
 	for name, doc := range map[string]string{
 		"no learning":  withModel,
@@ -729,17 +730,17 @@ func TestLine_CarriesJonahPolicy(t *testing.T) {
 	}{
 		{
 			name:  "all keys",
-			jonah: "{ enabled: true, proposeAfter: 3, weeklyUsd: 2.5, model: claude-haiku-5-5 }",
-			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 3, WeeklyUSD: 2.5, Model: "claude-haiku-5-5"},
+			jonah: "{ enabled: true, proposeAfter: 4, share: 2.5%, model: claude-haiku-5-5 }",
+			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 4, Share: 0.025, Model: "claude-haiku-5-5"},
 		},
 		{
 			name:  "off",
 			jonah: "{ enabled: false }",
-			want:  domain.JonahPolicy{ProposeAfter: 5, WeeklyUSD: 10, Model: jonahRuntimeModel},
+			want:  domain.JonahPolicy{ProposeAfter: 3, Share: 0.05, Model: jonahRuntimeModel},
 		},
 		{
 			name:  "no spend",
-			jonah: "{ weeklyUsd: 0, proposeAfter: 50 }",
+			jonah: "{ share: 0%, proposeAfter: 50 }",
 			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 50, Model: jonahRuntimeModel},
 		},
 	}
@@ -768,7 +769,8 @@ func TestLoad_RefusesBadJonahPolicy(t *testing.T) {
 	t.Parallel()
 
 	for _, jonah := range []string{
-		"proposeAfter: 0", "proposeAfter: 51", "proposeAfter: 2.5", "weeklyUsd: -1", "enabled: sometimes", "cadence: daily",
+		"proposeAfter: 0", "proposeAfter: 51", "proposeAfter: 2.5", "share: 120%", "share: five", "share: 5", "share: -1%",
+		"enabled: sometimes", "cadence: daily",
 	} {
 		doc := baseFactory + "  learning:\n    jonah:\n      " + jonah + " #here\n"
 		line := markedLine(doc)
@@ -779,5 +781,82 @@ func TestLoad_RefusesBadJonahPolicy(t *testing.T) {
 		}) {
 			t.Errorf("jonah %s: problems %+v, want a blocking schema problem in section files at %s:%d", jonah, problems, FileName, line)
 		}
+	}
+}
+
+// A version on secrets carries its environment files' env, each agent's environment, the model key
+// and the repository's token into the line (ADR 0037 decisions 5, 7 and 12).
+func TestFactory_LineEnvironments(t *testing.T) {
+	t.Parallel()
+
+	f, err := LoadDir("testdata/build")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	l := f.Line()
+
+	if l.Runtime.ModelKey != "{{claude-key}}" || l.Runtime.ModelConnection != "" {
+		t.Errorf("runtime = %+v; want the model key and no model connection", l.Runtime)
+	}
+
+	if r := l.Runtime.Repository; r.Token != "{{github-token}}" || r.Forge != "" || r.Connection != "" {
+		t.Errorf("repository = %+v; want its token", r)
+	}
+
+	if !l.OnSecrets() || l.Refusal() != "" {
+		t.Errorf("OnSecrets = %v, Refusal = %q; want a line on secrets that runs", l.OnSecrets(), l.Refusal())
+	}
+
+	expectEnvironments(t, l)
+}
+
+// expectEnvironments fails the test unless l has testdata/build's environments and agents'.
+func expectEnvironments(t *testing.T, l domain.Line) {
+	t.Helper()
+
+	def, ok := l.Environment("")
+	if want := map[string]string{"GH_TOKEN": "{{github-token}}", "SENTRY_ORG": "acme"}; !ok || !maps.Equal(def.Env, want) { //nolint:gosec // a reference, not a credential
+		t.Errorf("default environment = %+v, %v; want env %v", def, ok, want)
+	}
+
+	if b, ok := l.Environment("browser"); !ok || len(b.Env) != 0 {
+		t.Errorf("browser environment = %+v, %v; want one without env", b, ok)
+	}
+
+	wantDef := domain.Environment{
+		Name: "default", Size: domain.SandboxMedium, Image: "ghcr.io/acme/box:1", Tools: []string{"go@1.26", "gh@2"},
+		Setup: []string{"go mod download"}, Env: def.Env, Files: map[string]string{"~/.npmrc": "{{npm-config}}"},
+	}
+	if !reflect.DeepEqual(def, wantDef) {
+		t.Errorf("default environment =\n%+v\nwant\n%+v", def, wantDef)
+	}
+
+	b, _ := l.Environment("browser")
+
+	wantBrowser := domain.Environment{
+		Name: "browser", Size: domain.SandboxLarge, Tools: []string{"node@22"},
+		MCP: map[string]domain.MCPServer{
+			"playwright": {
+				Command: []string{"npx", "@playwright/mcp@0.0.41"},
+				Tools:   map[string]string{"browser_*": "allow", "browser_install": "off"},
+			},
+			"tickets": {
+				URL: "https://tickets.example.com/mcp", Headers: map[string]string{"Authorization": "Bearer {{tickets-key}}"},
+				Tools: map[string]string{"create_comment": "ask"},
+			},
+		},
+	}
+	if !reflect.DeepEqual(b, wantBrowser) {
+		t.Errorf("browser environment =\n%+v\nwant\n%+v", b, wantBrowser)
+	}
+
+	envs := map[string]string{}
+	for _, a := range l.Agents {
+		envs[a.Name] = a.Environment
+	}
+
+	if want := map[string]string{engineer: "", "tester": "browser"}; !maps.Equal(envs, want) {
+		t.Errorf("agents' environments = %v; want %v", envs, want)
 	}
 }

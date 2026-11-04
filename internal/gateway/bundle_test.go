@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"flag"
 	"io"
+	"maps"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -63,7 +65,7 @@ func testKinds() []domain.ConnectionKind {
 
 // newConnections makes an organization and its connections of testKinds: claude (the model),
 // code (git to github.com), issues, docs (a stdio server) and wiki (a stdio server too).
-func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Connections) {
+func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Connections, *porttest.Tenancy) {
 	t.Helper()
 
 	tenancy := porttest.NewTenancy(clock.Now)
@@ -90,7 +92,7 @@ func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttes
 		}
 	}
 
-	return org.ID, c
+	return org.ID, c, tenancy
 }
 
 // bundleYAML is a factory on connections with a private repository, a contract at the agent's
@@ -455,7 +457,7 @@ func TestServeRun_RefusesWhatTheTokenDoesNotName(t *testing.T) {
 		token  string
 		status int
 	}{
-		{name: "no token", status: http.StatusUnauthorized},
+		{name: noToken, status: http.StatusUnauthorized},
 		{name: "garbage", token: "not-a-token", status: http.StatusUnauthorized},
 		{name: "expired", token: h.token(t, expired), status: http.StatusUnauthorized},
 		{name: "another audience", token: h.tokenFor(t, valid, "goal-api"), status: http.StatusUnauthorized},
@@ -893,7 +895,10 @@ var jonahFiles = map[string]string{
 func newJonahHarness(t *testing.T, d harnessDeps) *harness {
 	t.Helper()
 
-	d.yaml, d.files = jonahYAML, jonahFiles
+	d.yaml = jonahYAML
+	if d.files == nil {
+		d.files = jonahFiles
+	}
 
 	return newHarnessWith(t, Config{}, d)
 }
@@ -920,8 +925,9 @@ func (h *harness) sendBack(t *testing.T, it domain.Item, kind domain.EventKind, 
 	return events[len(events)-1].ID
 }
 
-// decidedProposals stores a finished review of the harness's factory with three proposals and
-// rejects the first 10 days ago and the second 100 days ago; the third stays proposed.
+// decidedProposals stores a finished review of the harness's factory with four proposals, rejects
+// the first 10 days ago and the second 100 days ago, and publishes the fourth; the third stays
+// proposed.
 func (h *harness) decidedProposals(t *testing.T) {
 	t.Helper()
 
@@ -940,12 +946,19 @@ func (h *harness) decidedProposals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	file := func(p string) []domain.ProposalFile { return []domain.ProposalFile{{Path: p, Content: "new\n"}} }
+	file := func(p string) []domain.ProposalEdit {
+		return []domain.ProposalEdit{{Path: p, Replacements: []domain.Replacement{{Old: "old\n", New: "new\n"}}}}
+	}
 
 	_, stored, err := h.store.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{State: domain.JonahDone, At: now, Proposals: []domain.NewProposal{
-		{Title: "Ask for tests", Summary: "The engineer skips tests.", Files: file(jonahRule)},
-		{Title: "An old idea", Summary: "Rejected long ago.", Files: file(engineerPrompt)},
-		{Title: "Still open", Files: file("factory.yaml")},
+		{Title: "Ask for tests", Summary: "The engineer skips tests.", Edits: file(jonahRule)},
+		{Title: "An old idea", Summary: "Rejected long ago.", Edits: file(engineerPrompt)},
+		{Title: "Still open", Edits: file("factory.yaml")},
+		{Title: "Name the checks", Summary: "The reviewer forgets the checks.", Edits: file(jonahRule)},
+	}, Observations: []domain.NewObservation{
+		{Summary: "Checks are named late", Detail: "Three reviews in a row.", Count: 3, Proposal: 3},
+		{Summary: "Health endpoints lack tests", Count: 2},
+		{Summary: "The sandbox was lost", Count: 4, NotJonahs: true},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -958,11 +971,18 @@ func (h *harness) decidedProposals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	if _, err := h.store.DecideProposal(ctx, factoryID, stored[3].Number, domain.ProposalDecision{
+		State: domain.ProposalPublished, PublishedVersionID: version, By: domain.LocalUser, At: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
-// A Jonah review's bundle is its version's definition files, the factory's sent-back events in
-// the token's window and its proposals rejected in the last 90 days, with the policy's threshold:
-// no item, no repository, no definition, no connection, no knowledge, no rule and no file.
+// A Jonah review's bundle names the factory's sent-back events in the token's window in events.md,
+// with the ids a proposal cites, and its open proposals and those rejected or published in the last
+// 90 days under proposals/, with the policy's threshold and the weekly budget left: no item, no
+// repository, no definition, no connection, no rule and no tool (ADR 0039 decision 4).
 func TestServeRun_JonahBundle(t *testing.T) {
 	t.Parallel()
 
@@ -975,6 +995,8 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	h.sendBack(t, it, domain.EventRejected, "alice", "Too old.", now.Add(-10*24*time.Hour)) // before the window
 	h.sendBack(t, it, domain.EventNote, "carol", "", now.Add(-3*time.Hour))                 // not sent back
 	h.decidedProposals(t)
+	h.finishedRun(t, it, now.Add(-2*time.Hour), 200) // the line's spend: Jonah's budget is $10, a review's cap $2
+	h.finishedJonahRun(t, now.Add(-time.Hour), 8.5)
 
 	c := h.jonahClaims()
 	c.Manual = true
@@ -993,23 +1015,146 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	expectJonahSpec(t, b, c, it)
 	expectNoKeys(t, body)
 
+	if math.Abs(b.Spec.MaxUSD-1.5) > 1e-9 {
+		t.Errorf("max_usd = %v, want 1.5: the $10 budget less the $8.50 spent, under the $2 cap", b.Spec.MaxUSD)
+	}
+
 	if n := len(h.store.Events(it.ID)); n != before {
 		t.Errorf("%d events of the item, want %d: a bundle records nothing", n, before)
 	}
 
-	wantEvents := []jonahEvent{
-		{ID: strconv.FormatInt(rejected, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventRejected), Reason: "No tests."},
-		{ID: strconv.FormatInt(gate, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventGateRejected)},
-	}
-	if !reflect.DeepEqual(b.Spec.Jonah.Events, wantEvents) {
-		t.Errorf("events =\n %+v\nwant\n %+v", b.Spec.Jonah.Events, wantEvents)
+	ref := "#" + strconv.FormatInt(it.Number, 10)
+	events := string(b.Files["events.md"])
+
+	for _, want := range []string{
+		"## Event " + strconv.FormatInt(rejected, 10) + "\n\n- Item: " + ref + " Add a health endpoint\n- Station: build\n- Agent: none\n- Kind: rejected\n- Reason:\n\n> No tests.",
+		"## Event " + strconv.FormatInt(gate, 10) + "\n\n- Item: " + ref + " Add a health endpoint\n- Station: build\n- Agent: none\n- Kind: gate_rejected\n",
+	} {
+		if !strings.Contains(events, want) {
+			t.Errorf("events.md lacks %q:\n%s", want, events)
+		}
 	}
 
-	wantRejected := []jonahRejected{{
-		Title: "Ask for tests", Summary: "The engineer skips tests.", Paths: []string{jonahRule}, Reason: "Not for Ask for tests.",
-	}}
-	if !reflect.DeepEqual(b.Spec.Jonah.Rejected, wantRejected) {
-		t.Errorf("rejected =\n %+v\nwant\n %+v", b.Spec.Jonah.Rejected, wantRejected)
+	if strings.Contains(events, "Too old.") || strings.Count(events, "## Event ") != 2 {
+		t.Errorf("events.md =\n%s\nwant only the two sent-back events in the window", events)
+	}
+}
+
+// finishedJonahRun records a finished review run of the harness's factory that cost usd, started at.
+func (h *harness) finishedJonahRun(t *testing.T, at time.Time, usd float64) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	id, err := h.store.StartRun(ctx, ports.NewRun{FactoryID: factoryID, Agent: "jonah-reviewer", StartedAt: at, Kind: domain.RunKindJonah})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A Jonah review's bundle holds its evidence under evidence/: README.md, versions.md and a file for
+// each item finished in the window that needed help, built with the stations' medians over the 30
+// days before the window's end and the versions published in it.
+func TestServeRun_JonahBundleHoldsEvidence(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	now := h.clock.Now()
+
+	// An earlier item's three runs set the build station's median at $1.
+	earlier := h.submit(t, factoryID, "Earlier work", "")
+	for i := range 3 {
+		h.finishedRun(t, earlier, now.Add(-20*24*time.Hour+time.Duration(i)*time.Minute), 1)
+	}
+
+	h.finishItem(t, earlier, now.Add(-20*24*time.Hour))
+
+	it := h.submit(t, factoryID, "Add a health endpoint", "Answer 200 on /healthz.")
+	h.finishedRun(t, it, now.Add(-2*24*time.Hour), 5)
+	h.sendBack(t, it, domain.EventNote, "carol", "", now.Add(-2*24*time.Hour+time.Hour))
+	h.finishItem(t, it, now.Add(-24*time.Hour))
+
+	h.publishVersion(t, "Ask for tests")
+	h.clock.Advance(time.Hour)
+
+	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
+
+	item := string(b.Files["evidence/items/"+strconv.FormatInt(it.Number, 10)+".md"])
+	for _, want := range []string{"# #" + strconv.FormatInt(it.Number, 10) + " Add a health endpoint", "> Answer 200 on /healthz.", "| note | build | carol |", "## Outliers", "$5.00"} {
+		if !strings.Contains(item, want) {
+			t.Errorf("the item's evidence lacks %q:\n%s", want, item)
+		}
+	}
+
+	if _, ok := b.Files["evidence/items/"+strconv.FormatInt(earlier.Number, 10)+".md"]; ok {
+		t.Error("evidence for an item finished before the window, want none")
+	}
+
+	if readme := string(b.Files["evidence/README.md"]); !strings.Contains(readme, "1 of the 1 items that finished") {
+		t.Errorf("evidence/README.md =\n%s\nwant 1 of the 1 items", readme)
+	}
+
+	if versions := string(b.Files["evidence/versions.md"]); !strings.Contains(versions, "## v1") || !strings.Contains(versions, "> Ask for tests") {
+		t.Errorf("evidence/versions.md =\n%s\nwant v1 with its message", versions)
+	}
+}
+
+// finishedRun records a finished run of the build station's engineer on it, started at at, that cost usd.
+func (h *harness) finishedRun(t *testing.T, it domain.Item, at time.Time, usd float64) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	id, err := h.store.StartRun(ctx, ports.NewRun{FactoryID: it.FactoryID, ItemID: it.ID, Station: h.claims().Station, Agent: agentEngineer, Model: "model-a", StartedAt: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd, Turns: 4}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// finishItem moves it to the done station, done at at.
+func (h *harness) finishItem(t *testing.T, it domain.Item, at time.Time) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	cur, err := h.store.Item(ctx, it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.Transition(ctx, ports.Transition{
+		ItemID: it.ID, From: cur.Position(), To: domain.Position{Station: "done", State: domain.StateDone}, At: at, DoneAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// publishVersion publishes the test factory's first version in h.drafts, now, with message.
+func (h *harness) publishVersion(t *testing.T, message string) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	m, err := h.drafts.PutBlobs(ctx, draftFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, d, err := h.drafts.CreateFactory(ctx, ports.NewFactory{ID: factoryID, Name: "acme-gateway", Manifest: m, By: domain.LocalUser})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.drafts.Publish(ctx, ports.Publish{Factory: factoryID, DraftRevision: d.Revision, Name: "acme-gateway", Message: message, By: domain.LocalUser}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1028,7 +1173,7 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 	}
 
 	// Everything else is an empty item-less spec: no item, station, brief, connection, rule,
-	// granted call, skill, file, git login, tool or repository.
+	// granted call, skill, git login, tool or repository, and no file but the box's.
 	want := runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: "claude-haiku-5-5", Skills: []string{}, ToolsAllow: []string{},
@@ -1038,7 +1183,19 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 	}
 
 	got := b
-	got.Spec.Jonah = nil
+	got.Spec.Jonah, got.Spec.MaxUSD = nil, 0
+	got.Files = map[string][]byte{}
+
+	for p, body := range b.Files {
+		if !slices.ContainsFunc([]string{"evidence/", "definition/", "proposals/"}, func(dir string) bool { return strings.HasPrefix(p, dir) }) &&
+			p != "files.md" && p != "events.md" && p != "observations.md" {
+			got.Files[p] = body
+		}
+	}
+
+	if b.Spec.MaxUSD <= 0 {
+		t.Errorf("max_usd = %v, want the budget left", b.Spec.MaxUSD)
+	}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("bundle =\n %+v\nwant (not item %s)\n %+v", got, it.ID, want)
@@ -1070,34 +1227,120 @@ func expectNoKeys(t *testing.T, body []byte) {
 	}
 }
 
-// A review reads only the files a proposal may edit, factory.yaml, agents/, skills/, rules/ and
-// contracts/, each as text under its sha256, sorted by path: never evals/, another path or a
-// file that is not text.
-func TestServeRun_JonahBundleOnlyAllowlistedFiles(t *testing.T) {
+// A review's box holds every text file of the version under definition/, and files.md names each
+// with its sha256 and whether a proposal may edit it; a file that is not text is in neither. Its
+// proposals are under proposals/<state>/<number>.md: open ones, and published and rejected ones of
+// the last 90 days, a rejected one with its reason.
+func TestServeRun_JonahBundleHoldsDefinitionAndProposals(t *testing.T) {
 	t.Parallel()
 
-	h := newJonahHarness(t, harnessDeps{})
+	// With a factory memory, which files.md marks no: the review proposes facts for it instead.
+	files := maps.Clone(jonahFiles)
+	files["memory.yaml"] = "- text: Use acme in samples\n  added: 2026-11-01\n"
+
+	h := newJonahHarness(t, harnessDeps{files: files})
+	h.submit(t, factoryID, "Add a health endpoint", "") // the factory exists once an item does
+	h.decidedProposals(t)
 	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
 
-	want := []string{engineerPrompt, "contracts/change.json", config.FileName, jonahRule, "skills/acme-conventions/SKILL.md"}
+	expectDefinitionFiles(t, b, files)
 
-	var got []string
+	var proposals []string
 
-	for _, f := range b.Spec.Jonah.Files {
-		got = append(got, f.Path)
-
-		body := cmp.Or(jonahFiles[f.Path], map[string]string{engineerPrompt: "# engineer\n"}[f.Path])
-		if f.Path == config.FileName {
-			body = jonahYAML
-		}
-
-		if f.Content != body || f.SHA256 != string(domain.HashBlob([]byte(body))) {
-			t.Errorf("%s = %q under %s, want %q under its sha256", f.Path, f.Content, f.SHA256, body)
+	for p := range b.Files {
+		if strings.HasPrefix(p, "proposals/") {
+			proposals = append(proposals, p)
 		}
 	}
 
-	if !slices.Equal(got, want) {
-		t.Errorf("files = %v, want %v", got, want)
+	slices.Sort(proposals)
+
+	if want := []string{"proposals/proposed/3.md", "proposals/published/4.md", "proposals/rejected/1.md"}; !slices.Equal(proposals, want) {
+		t.Fatalf("proposals = %v, want %v: none rejected over 90 days ago", proposals, want)
+	}
+
+	rejected := string(b.Files["proposals/rejected/1.md"])
+	for _, want := range []string{"# Proposal #1: Ask for tests", "- State: rejected", "- Files: " + jonahRule, "- Rejected because:\n\n> Not for Ask for tests.", "> The engineer skips tests."} {
+		if !strings.Contains(rejected, want) {
+			t.Errorf("proposals/rejected/1.md lacks %q:\n%s", want, rejected)
+		}
+	}
+
+	if published := string(b.Files["proposals/published/4.md"]); !strings.Contains(published, "- Published as version "+string(version)) {
+		t.Errorf("proposals/published/4.md =\n%s\nwant the version it published", published)
+	}
+
+	h.expectObservationsFile(t, b)
+}
+
+// expectObservationsFile checks observations.md of decidedProposals' review: its open
+// observations with the ids a review gives to update them and their counts, and not the one
+// that is not Jonah's (ADR 0039 decision 5).
+func (h *harness) expectObservationsFile(t *testing.T, b runBundle) {
+	t.Helper()
+
+	open, err := h.store.OpenObservations(domain.WithOrg(t.Context(), h.org), factoryID, 10)
+	if err != nil || len(open) != 2 {
+		t.Fatalf("OpenObservations = %+v, %v; want 2", open, err)
+	}
+
+	obs := string(b.Files["observations.md"])
+
+	for _, o := range open {
+		for _, want := range []string{"## " + o.Summary, "- id: `" + string(o.ID) + "`", "- Count so far: " + strconv.Itoa(o.Count), "- State: " + string(o.State)} {
+			if !strings.Contains(obs, want) {
+				t.Errorf("observations.md lacks %q:\n%s", want, obs)
+			}
+		}
+	}
+
+	if !strings.Contains(obs, "> Three reviews in a row.") || strings.Contains(obs, "The sandbox was lost") {
+		t.Errorf("observations.md =\n%s\nwant the open observations' details and not the one that is not Jonah's", obs)
+	}
+}
+
+// expectDefinitionFiles checks TestServeRun_JonahBundleHoldsDefinitionAndProposals's definition/
+// and files.md.
+func expectDefinitionFiles(t *testing.T, b runBundle, files map[string]string) {
+	t.Helper()
+
+	all := map[string]string{engineerPrompt: "# engineer\n", config.FileName: jonahYAML}
+	maps.Copy(all, files)
+	delete(all, "skills/acme-conventions/logo.png")
+
+	var got []string
+
+	for p, body := range b.Files {
+		if rest, ok := strings.CutPrefix(p, "definition/"); ok {
+			got = append(got, rest)
+
+			if string(body) != all[rest] {
+				t.Errorf("%s = %q, want %q", p, body, all[rest])
+			}
+		}
+	}
+
+	slices.Sort(got)
+
+	if want := slices.Sorted(maps.Keys(all)); !slices.Equal(got, want) {
+		t.Errorf("definition files = %v, want %v", got, want)
+	}
+
+	index := string(b.Files["files.md"])
+
+	for p, body := range all {
+		editable := "no"
+		if domain.ProposalPathAllowed(p) && p != config.MemoryFile { // memory takes the review's facts only
+			editable = "yes"
+		}
+
+		if row := "| `" + p + "` | " + string(domain.HashBlob([]byte(body))) + " | " + editable + " |"; !strings.Contains(index, row) {
+			t.Errorf("files.md lacks %q:\n%s", row, index)
+		}
+	}
+
+	if strings.Contains(index, "logo.png") {
+		t.Errorf("files.md names a file that is not text:\n%s", index)
 	}
 }
 
@@ -1338,5 +1581,389 @@ func TestServeRun_DraftRequestStaleRevision(t *testing.T) {
 
 	if status, _, body := request(t, http.MethodPost, h.url, h.token(t, h.draftClaims(r, rev+1))); status != http.StatusForbidden {
 		t.Errorf("tools for a draft request: status = %d, want 403 (%s)", status, body)
+	}
+}
+
+// secretsBundleYAML is a factory on secrets (ADR 0037) whose repository at url clones with the
+// {{github-token}} secret, and on a host other than github.com and gitlab.com with forge.
+func secretsBundleYAML(url, forge string) string {
+	repo := `{ url: "` + url + `", token: "{{github-token}}" }`
+	if forge != "" {
+		repo = `{ url: "` + url + `", token: "{{github-token}}", forge: ` + forge + ` }`
+	}
+
+	return `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-bundle, purpose: Ship small changes to acme's API. }
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    modelKey: "{{claude-key}}"
+    repository: ` + repo + `
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md }
+  board:
+    stations:
+      - { id: spec, kind: human }
+      - { id: build, kind: agent, agent: engineer }
+      - { id: done, kind: done }
+`
+}
+
+// secretsBundleFiles are the files secretsBundleYAML needs besides factory.yaml.
+var secretsBundleFiles = map[string]string{"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
+
+// serveRunBundle serves the bundle of a run of a new item of the factory yaml describes.
+func serveRunBundle(t *testing.T, yaml string, files map[string]string) (runBundle, []byte) {
+	t.Helper()
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	c := h.claims()
+	c.ItemID = it.ID
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	return got, body
+}
+
+// On a version on secrets, the repository token signs git in to the repository's host: one
+// stored login whose password is GOAL_REPOSITORY_TOKEN, as the forge names its user, never the
+// secret's name or value.
+func TestServeRun_GitLoginFromRepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, url, forge string
+		want             gitCredential
+	}{
+		{
+			name: "GitHub", url: "https://github.com/acme/api.git",
+			want: gitCredential{Host: "github.com", Username: "x-access-token", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+		{
+			name: "GitLab", url: "https://gitlab.com/acme/api.git",
+			want: gitCredential{Host: "gitlab.com", Username: "oauth2", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+		{
+			name: "a GitLab of its own", url: "https://git.example.com/acme/api.git", forge: "gitlab",
+			want: gitCredential{Host: "git.example.com", Username: "oauth2", PasswordEnv: domain.RepositoryTokenEnv, Store: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, body := serveRunBundle(t, secretsBundleYAML(tt.url, tt.forge), secretsBundleFiles)
+
+			if len(got.Git) != 1 || got.Git[0] != tt.want {
+				t.Errorf("git credentials %+v; want [%+v]", got.Git, tt.want)
+			}
+
+			if got.Repository == nil || got.Repository.URL != tt.url {
+				t.Errorf("repository %+v; want %s", got.Repository, tt.url)
+			}
+
+			if strings.Contains(string(body), "github-token") {
+				t.Errorf("the bundle names the token's secret:\n%s", body)
+			}
+		})
+	}
+}
+
+// A public repository on secrets clones without a login.
+func TestServeRun_PublicRepositoryWithoutToken(t *testing.T) {
+	t.Parallel()
+
+	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""), `, token: "{{github-token}}"`, "", 1)
+	got, body := serveRunBundle(t, yaml, secretsBundleFiles)
+
+	if got.Repository == nil || len(got.Git) != 0 {
+		t.Errorf("repository %+v, git credentials %+v; want the repository and no login", got.Repository, got.Git)
+	}
+
+	if strings.Contains(string(body), `"store"`) {
+		t.Errorf("the bundle has a stored login:\n%s", body)
+	}
+}
+
+// envCI is the environment file environmentBundle gives the agent.
+const envCI = "ci-box"
+
+// environmentBundle serves the bundle of a run on secrets whose agent gets environment ci-box,
+// environments/ci-box.yaml being env, with the token granting connTracker.
+func environmentBundle(t *testing.T, env string, rules ...domain.NewServerStandingRule) (runBundle, []byte) {
+	t.Helper()
+
+	return cappedEnvironmentBundle(t, env, nil, rules...)
+}
+
+// serverLinear is the environment MCP server of the tool-mode tests.
+const serverLinear = "linear"
+
+// cappedEnvironmentBundle is environmentBundle with mcpCap as the organization policy's MCP tool
+// mode cap.
+func cappedEnvironmentBundle(
+	t *testing.T, env string, mcpCap map[string]domain.ConnectionToolMode, rules ...domain.NewServerStandingRule,
+) (runBundle, []byte) {
+	t.Helper()
+
+	return environmentBundleOf(t, env, mcpCap, func(*domain.TaskClaims) {}, rules...)
+}
+
+// environmentBundleOf is cappedEnvironmentBundle with the token's claims changed by claim.
+func environmentBundleOf(
+	t *testing.T, env string, mcpCap map[string]domain.ConnectionToolMode, claim func(*domain.TaskClaims),
+	rules ...domain.NewServerStandingRule,
+) (runBundle, []byte) {
+	t.Helper()
+
+	yaml := strings.Replace(secretsBundleYAML("https://github.com/acme/api.git", ""),
+		"{ name: engineer, prompt: ./agents/engineer.md }", "{ name: engineer, prompt: ./agents/engineer.md, environment: ci-box }", 1)
+	files := maps.Clone(secretsBundleFiles)
+	files["environments/ci-box.yaml"] = "apiVersion: goal/v1\nkind: Environment\nspec:\n" + env
+
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: yaml, files: files, mcpCap: mcpCap})
+	it := h.submit(t, factoryID, "Add a health endpoint", "")
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	for _, r := range rules {
+		r.Item = it.ID
+		if _, err := h.connections.CreateServerStandingRule(ctx, r, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := h.claims()
+	c.ItemID, c.Connections = it.ID, []string{connTracker, connDocs}
+	claim(&c)
+
+	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (%s)", status, body)
+	}
+
+	var got runBundle
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Spec.Environment == nil || got.Spec.Environment.Name != envCI {
+		t.Fatalf("environment %+v; want ci-box's", got.Spec.Environment)
+	}
+
+	return got, body
+}
+
+// ADR 0037 decision 8: on secrets the bundle lists the agent's environment's MCP servers, sorted,
+// with their secrets as ${GOAL_SECRET_<NAME>}, and no connection; no value reaches its JSON.
+func TestBundle_EnvironmentServersOnSecrets(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundle(t, `  mcp:
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+      env: {PW_LOGIN: "{{pw-login}}", PW_MODE: headless}
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      headers: {Authorization: "Bearer {{linear-key}}", X-Org: acme}
+`)
+
+	want := []bundleMCPServer{
+		{
+			Name: serverLinear, URL: "https://mcp.linear.example.com/mcp",
+			Headers:   map[string]string{"Authorization": "Bearer ${GOAL_SECRET_LINEAR_KEY}", "X-Org": "acme"},
+			ToolModes: []bundleToolMode{},
+		},
+		{
+			Name: "playwright", Command: []string{"npx", "@playwright/mcp@0.0.41"},
+			Env: map[string]string{"PW_LOGIN": "${GOAL_SECRET_PW_LOGIN}", "PW_MODE": "headless"}, ToolModes: []bundleToolMode{}, //nolint:gosec // a variable's name, not a credential
+		},
+	}
+	if !reflect.DeepEqual(got.Spec.Environment.MCPServers, want) {
+		t.Errorf("mcp_servers %+v; want %+v", got.Spec.Environment.MCPServers, want)
+	}
+
+	if got.Spec.Connections == nil || len(got.Spec.Connections) != 0 {
+		t.Errorf("connections %+v; want [] on secrets", got.Spec.Connections)
+	}
+
+	for _, value := range []string{modelAPIKey, cloneToken, issuesToken, "{{", "linear-key"} {
+		if strings.Contains(string(body), value) {
+			t.Errorf("the bundle holds %q:\n%s", value, body)
+		}
+	}
+}
+
+// ADR 0037 decision 8: a server's tool modes follow the file, most specific first, and an active
+// standing rule for the factory, environment, server and role lifts an ask, never off.
+func TestBundle_EnvironmentToolModesWithStandingRule(t *testing.T) {
+	t.Parallel()
+
+	rule := func(tool, agent string) domain.NewServerStandingRule {
+		return domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: serverLinear, Tool: tool, Agent: agent}
+	}
+	got, _ := environmentBundle(t, `  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      tools: {create_comment: ask, "delete_*": off, "close_*": ask}
+`,
+		rule("create_comment", agentEngineer), rule("delete_issue", agentEngineer), rule("close_issue", "reviewer"),
+		domain.NewServerStandingRule{Factory: factoryID, Environment: domain.DefaultEnvironment, Server: serverLinear, Tool: "close_pr", Agent: agentEngineer},
+	)
+
+	want := []bundleToolMode{
+		{Tool: "create_comment", Mode: domain.ToolModeAllow}, {Tool: "delete_*", Mode: domain.ToolModeOff}, {Tool: "close_*", Mode: domain.ToolModeAsk},
+	}
+	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
+		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
+	}
+}
+
+// ADR 0037 decisions 8 and 12: the organization policy's MCP tool mode cap applies to the file's
+// modes, the stricter winning: allow under an ask cap is ask, off stays off, and a standing rule
+// does not lift an ask the cap keeps.
+func TestBundle_EnvironmentToolModesUnderThePolicyCap(t *testing.T) {
+	t.Parallel()
+
+	got, _ := cappedEnvironmentBundle(t, `  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      tools: {create_issue: allow, create_comment: ask, "delete_*": off}
+`, map[string]domain.ConnectionToolMode{"*": domain.ToolModeAsk},
+		domain.NewServerStandingRule{Factory: factoryID, Environment: envCI, Server: serverLinear, Tool: "create_comment", Agent: agentEngineer},
+	)
+
+	want := []bundleToolMode{
+		{Tool: "create_comment", Mode: domain.ToolModeAsk},
+		{Tool: "create_issue", Mode: domain.ToolModeAsk},
+		{Tool: "delete_*", Mode: domain.ToolModeOff},
+		{Tool: "*", Mode: domain.ToolModeAsk},
+	}
+	if servers := got.Spec.Environment.MCPServers; len(servers) != 1 || !reflect.DeepEqual(servers[0].ToolModes, want) {
+		t.Errorf("mcp_servers %+v; want linear with tool_modes %+v", servers, want)
+	}
+}
+
+// ADR 0037 decisions 5 and 11: the bundle's tools are the environment's, in file order; setup
+// keeps its order, files carry each path's GOAL_FILE_<n>, and env and clis are names only.
+func TestBundle_EnvironmentToolsSetupAndFiles(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundle(t, `  tools: [node@22, go@1.26, "npm:@acme/cli@2", gh]
+  setup: [pnpm install --frozen-lockfile, make generate]
+  env: {SENTRY_ORG: acme-sentry-org, GH_TOKEN: "{{github-token}}"}
+  files:
+    ~/.npmrc: "{{npmrc}}"
+    /etc/acme.conf: "{{acme-conf}}"
+`)
+
+	if want := []string{"node@22", "go@1.26", "npm:@acme/cli@2", "gh"}; !slices.Equal(got.Tools, want) {
+		t.Errorf("tools %v; want %v", got.Tools, want)
+	}
+
+	e := got.Spec.Environment
+	want := bundleEnvironment{
+		Name: envCI, MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile", "make generate"},
+		Files: []bundleFile{{Path: "/etc/acme.conf", Env: "GOAL_FILE_1"}, {Path: "~/.npmrc", Env: "GOAL_FILE_2"}},
+		Env:   []string{"GH_TOKEN", "SENTRY_ORG"}, CLIs: []string{"node", "go", "npm:@acme/cli", "gh"},
+	}
+
+	if !reflect.DeepEqual(*e, want) {
+		t.Errorf("environment %+v; want %+v", *e, want)
+	}
+
+	if strings.Contains(string(body), "acme-sentry-org") {
+		t.Errorf("the bundle holds an env value:\n%s", body)
+	}
+}
+
+// ADR 0037 decision 12: with Use secrets off the token says NoEnvironment, and the bundle keeps
+// the environment's name, setup and tools but gives no variable, file or MCP server, with a secret
+// or without.
+func TestBundle_EnvironmentNoEnvironmentDropsEnvFilesAndMCP(t *testing.T) {
+	t.Parallel()
+
+	got, body := environmentBundleOf(t, `  tools: [node@22, gh]
+  setup: [pnpm install --frozen-lockfile]
+  env: {SENTRY_ORG: acme-sentry-org, GH_TOKEN: "{{github-token}}"}
+  files:
+    ~/.npmrc: "{{npmrc}}"
+  mcp:
+    linear:
+      url: https://mcp.linear.example.com/mcp
+      headers: {Authorization: "Bearer {{linear-key}}"}
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+`, nil, func(c *domain.TaskClaims) { c.NoEnvironment = true })
+
+	if want := []string{"node@22", "gh"}; !slices.Equal(got.Tools, want) {
+		t.Errorf("tools %v; want %v", got.Tools, want)
+	}
+
+	want := bundleEnvironment{
+		Name: envCI, MCPServers: []bundleMCPServer{}, Setup: []string{"pnpm install --frozen-lockfile"},
+		Files: []bundleFile{}, Env: []string{}, CLIs: []string{"node", "gh"},
+	}
+	if !reflect.DeepEqual(*got.Spec.Environment, want) {
+		t.Errorf("environment %+v; want %+v", *got.Spec.Environment, want)
+	}
+
+	for _, name := range []string{"GOAL_FILE_", "GOAL_SECRET_", "SENTRY_ORG", "GH_TOKEN", "mcp.linear.example.com", "@playwright/mcp"} {
+		if strings.Contains(string(body), name) {
+			t.Errorf("the bundle holds %q:\n%s", name, body)
+		}
+	}
+}
+
+// A published proposal's file ends with its watch: one line saying there is none before the first
+// watch sweep, then its metric, station, verdict and both sides (ADR 0039 decision 14).
+func TestServeRun_JonahBundleHoldsPublishedWatch(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	h.submit(t, factoryID, "Add a health endpoint", "") // the factory exists once an item does
+	h.decidedProposals(t)
+
+	published := string(h.fetchBundle(t, h.runServer(t), h.jonahClaims()).Files["proposals/published/4.md"])
+	if !strings.HasSuffix(published, "\n## Watch\n\nNo watch yet: the first watch sweep after the publish opens it.\n") {
+		t.Errorf("proposals/published/4.md =\n%s\nwant it to say it has no watch yet", published)
+	}
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	p, err := h.store.Proposal(ctx, factoryID, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.SaveWatch(ctx, domain.Watch{
+		FactoryID: factoryID, VersionID: version, ProposalID: p.ID, Station: tryStation, Metric: domain.MetricSentBackRate,
+		Before: domain.WatchSide{N: 12, Value: 0.25}, After: domain.WatchSide{N: 9, Value: 0.1}, Verdict: domain.WatchHelped,
+		OpenedAt: h.clock.Now(), UpdatedAt: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
+
+	want := "\n## Watch\n\n- sent_back_rate at build: helped; before 12 items, 0.25; after 9 items, 0.1\n"
+	if published := string(b.Files["proposals/published/4.md"]); !strings.HasSuffix(published, want) {
+		t.Errorf("proposals/published/4.md =\n%s\nwant it to end with %q", published, want)
+	}
+
+	for _, path := range []string{"proposals/proposed/3.md", "proposals/rejected/1.md"} {
+		if strings.Contains(string(b.Files[path]), "## Watch") {
+			t.Errorf("%s has a watch, want one only on a published proposal", path)
+		}
 	}
 }

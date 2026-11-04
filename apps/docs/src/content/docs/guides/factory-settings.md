@@ -1,6 +1,6 @@
 ---
 title: Factory settings
-description: Set a factory's repository, box size, tools, budgets, flow targets and flow choices from its Settings page, and publish them as a new version.
+description: Set a factory's repository and its token, model key, environments, budgets, flow targets and flow choices from its Settings page, and publish them as a new version.
 ---
 
 You end with the factory's repository, runtime, budgets and flow set as you want them, published as a new version. The Settings page edits the same definition as the Definition editor, for the fields below.
@@ -30,20 +30,22 @@ The factory's name, its purpose from the definition, and its Badge: the colour a
 
 ### Repository
 
-The page shows the repository URL with a chip, "Connected with" and the connection's name, and a Change button. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
+The page shows the repository URL, a chip that says whether the token works, the name of the secret that holds the token, and a Change button. The chip comes from Goal trying to clone and push with the token: "Token works", or "Token fails" with the host's reason. It shows only to people who may create factories, and "Token not tested" says the test could not run, for example because the secret is limited to some factories. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
 
 | Field | Sets | Notes |
 |---|---|---|
 | Repository URL | `runtime.repository.url` | An https URL cloned into each run's box before the agent starts. Empty means no checkout and no pull requests. |
-| Repository connection | `runtime.repository.connection` | The organization connection git signs in with. Choose "Public, no connection" for a public repository. |
+| Repository token | `runtime.repository.token` | The secret whose token git signs in with, written as `{{secret-name}}`. Pick one, or choose New secret to make it here. "Use no token" is for a public repository. See [Access and secrets](../../concepts/access-and-secrets/). |
 | Base branch | none yet | Shows "Not available yet". The factory definition has no field for it. |
 
 ### Runtime
 
+A line at the top says "Box size, CLIs and what agents reach live in environments." The word "environments" links to the Definition's Environments section, where each environment's size, image, tools and setup are set. Settings no longer edits them.
+
 | Field | Sets | Notes |
 |---|---|---|
-| Size of each run's box | `runtime.size` | `small` (1 CPU, 2 GiB), `medium` (2 CPU, 4 GiB) or `large` (4 CPU, 8 GiB). Medium when unset. |
-| Tools | `runtime.tools` | mise tool specs, such as `go`, `go@1.26.10` or `npm:@acme/cli@2`. Each run installs them after the repository's own `mise.toml`. Press Enter to add one. A value that is not a tool spec is refused. |
+| Model key | `runtime.modelKey` | The secret that gives every run its model. It shows here with a Change link to Secrets; set it in the YAML view. |
+| Environments | `environments/<name>.yaml` | One chip per environment with the number of agents that use it, and an Edit link to the Definition's Environments section. |
 
 ### Budgets and targets
 
@@ -72,6 +74,22 @@ Leave a field empty to remove its value. A cap with no value is no cap.
 | Expedite lane | `board.flow.expedite.types` | Work types whose items are expedite items. Press Enter to add one. A value must be a work type the factory has. |
 
 Each choice keeps the other settings of its object, such as `board.flow.assemblies.freshBase`.
+
+### Jonah
+
+Jonah reviews the line once a day and proposes changes for you to approve. The section sets `learning.jonah`. Each field has an ⓘ tip beside it.
+
+| Choice | Sets | Notes |
+|---|---|---|
+| Jonah reviews this line | `learning.jonah.enabled` | On by default. Off, Jonah reviews nothing. |
+| Model | `learning.jonah.model` | The model of the daily review. The line's model when left at Same as the line. |
+| Budget, % of the line's spend | `learning.jonah.share` | From 0 to 100, as a share of what the line spent in the last 7 days. 5 by default. It never stops the line. |
+| Proposes after, items | `learning.jonah.proposeAfter` | From 1 to 50. How many items with the same cause Jonah needs before it makes a proposal. 3 by default. |
+
+A value out of range shows its message and is not saved. Like every group, Jonah saves into the draft and Save changes publishes it. The fields are read-only without `definition:edit`.
+### Notifications
+
+A read-only Slack row. It shows "Sent with the secret `slack-bot`." when the organization has chosen a Slack secret, and "Slack is off" when it has not. Slack sends direct messages only, so a factory has no channel of its own. The secret is organization-wide: a person who holds `org:manage` sees a "Change in organization settings" link to pick or turn it off there. Without that permission the row has no link. If the setting cannot be read, the row says "Couldn’t load the Slack setting."
 
 ## Related
 

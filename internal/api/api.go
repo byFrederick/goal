@@ -187,21 +187,38 @@ type Deps struct {
 	// as the engine has them; they list what a connection reaches. Without one, no kind is a code
 	// host here.
 	CodeHosts map[string]ports.CodeHost
+	// RepositoryTestTimeout bounds a repository test's call to its code host; 0 is 10 seconds.
+	RepositoryTestTimeout time.Duration
 	// Credentials are the organization's credentials (ADR 0017), which connections refer to as
 	// {{name}}.
 	Credentials ports.Credentials
+	// OrgSecrets are the organization's secrets (ADR 0037), the only place a value lives. What uses
+	// one is read from the factories' current versions, the knowledge sources and, for connections,
+	// Credentials.UsedBy.
+	OrgSecrets ports.OrgSecrets
+	// Catalog are the tool templates goald ships (catalog.Templates), served on /v1/catalog;
+	// EnvironmentTests keep the latest test of each environment's MCP servers, which ToolLister
+	// runs (ADR 0037 decision 9). ToolLister must dial public addresses only.
+	Catalog          []domain.ToolTemplate
+	EnvironmentTests ports.EnvironmentTests
+	ToolLister       ports.ToolLister
+	// Conversions are the factories' conversions to secrets (ADR 0037 decision 19): the inbox
+	// lists each refused one as a conversion entry. Nil lists none.
+	Conversions ports.FactoryConversions
 	// Intake keeps the factories' webhook endpoints, with their signing secrets, and the
 	// deliveries they received (ADR 0026).
 	Intake ports.Intake
 	// DraftRequests are the factories' asked definition changes (ADR 0021).
 	DraftRequests ports.DraftRequests
 	// Knowledge is the organization's knowledge base (spec 4 §4.8); KnowledgeUploads keeps its
-	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES); KnowledgeSearch
-	// searches it as the gateway's knowledge__search does.
+	// uploaded files, of at most UploadMaxBytes each (GOAL_UPLOAD_MAX_BYTES).
 	Knowledge        ports.Knowledge
 	KnowledgeUploads KnowledgeUploads
-	KnowledgeSearch  KnowledgeSearch
 	UploadMaxBytes   int64
+	// KnowledgeObjects reads the snapshots' zips by range for one file's Markdown, and
+	// KnowledgeCheck lists a source's settings before they are saved (ADR 0038 decision 13).
+	KnowledgeObjects KnowledgeObjects
+	KnowledgeCheck   KnowledgeCheck
 	// OrgPolicies is the organization policy (ADR 0024), over the install's models (Builder's
 	// Meta). BoxSizes are small, medium and large as the active sandbox backend sizes them, and
 	// EgressAddresses where agents' traffic leaves from (GOAL_EGRESS_ADDRESSES): facts the policy
@@ -212,15 +229,14 @@ type Deps struct {
 	// NotificationPreferences keeps each signed-in person's own notification preferences
 	// (ADR 0023, decision 1), served on /v1/me/notifications.
 	NotificationPreferences ports.NotificationPreferences
+	// NotificationSettings are the organization's notification settings (ADR 0037 decision 14):
+	// Access shows the secret of its Slack notifications as an organization-wide row. Nil shows
+	// none. They are served on /v1/orgs/{org}/settings/notifications, and SlackMessenger checks a
+	// Slack bot token there.
+	NotificationSettings ports.NotificationSettings
+	SlackMessenger       ports.DirectMessenger
 	// ExportMaxRows caps a CSV export (ADR 0020, decision 3); 0 is 100000.
 	ExportMaxRows int
-	// Judges serve Jonah's judges routes (judges.go). Optional: while it is nil those routes
-	// answer 503 judges-unavailable; when set, all three of its collaborators are.
-	Judges *JudgeDeps
-
-	// Evals serve Jonah's evals routes (evals.go). Optional: while it is nil those routes answer
-	// 503 evals-unavailable; when set, all three of its collaborators are.
-	Evals *EvalDeps
 	// Jonah serves Jonah's overview, proposals and reviews (jonah.go). Optional: while it is nil
 	// those routes answer 503 jonah-unavailable; when set, both of its collaborators are.
 	Jonah *JonahDeps
@@ -234,11 +250,9 @@ func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
-		d.Connections == nil, d.Credentials == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
-		d.Knowledge == nil, d.KnowledgeUploads == nil, d.KnowledgeSearch == nil, d.UploadMaxBytes <= 0,
-		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil,
-		d.Judges != nil && (d.Judges.Judges == nil || d.Judges.Scores == nil || d.Judges.Tries == nil),
-		d.Evals != nil && (d.Evals.Runs == nil || d.Evals.Loop == nil || d.Evals.Judges == nil),
+		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
+		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
+		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
 	}
 
@@ -281,9 +295,8 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeSearch, OrgPolicies, BoxSizes, NotificationPreferences, " +
-			"a positive UploadMaxBytes and a positive OrgRetention are required, Judges, when set, needs Judges, Scores and Tries, " +
-			"Evals, when set, needs Runs, Loop and Judges, and Jonah, when set, needs Store and Decisions")
+			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
+			"a positive UploadMaxBytes and a positive OrgRetention are required, and Jonah, when set, needs Store and Decisions")
 	}
 
 	if err := d.failsClosed(); err != nil {
@@ -298,11 +311,12 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
-		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, search: d.KnowledgeSearch, uploadMax: d.UploadMaxBytes,
-		policies: d.OrgPolicies, notifications: d.NotificationPreferences, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
-		judges: d.Judges, evals: d.Evals, jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
+		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
+		policies: d.OrgPolicies, notifications: d.NotificationPreferences, notifySettings: d.NotificationSettings, slack: d.SlackMessenger, boxSizes: slices.Clone(d.BoxSizes), egress: slices.Clone(d.EgressAddresses),
+		jonah: d.Jonah, clock: d.Clock, log: log, exportMax: cmp.Or(d.ExportMaxRows, defaultExportMaxRows),
 	}
 	s.inbox = append([]InboxSource{workInbox{s: s}}, d.InboxSources...)
 
@@ -381,17 +395,17 @@ func definitionRoute(path string) bool {
 	}
 }
 
-// uploadRoute reports whether r uploads knowledge documents:
-// POST /v1/orgs/{org}/knowledge/sources/{source}/documents.
+// uploadRoute reports whether r uploads knowledge files:
+// POST /v1/orgs/{org}/knowledge/sources/{source}/uploads.
 func uploadRoute(r *http.Request) bool {
 	rest, ok := strings.CutPrefix(r.URL.Path, "/v1/orgs/")
 	if !ok || r.Method != http.MethodPost {
 		return false
 	}
 
-	parts := strings.Split(rest, "/") // org, knowledge, sources, source, documents
+	parts := strings.Split(rest, "/") // org, knowledge, sources, source, uploads
 
-	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && parts[4] == "documents"
+	return len(parts) == 5 && parts[1] == "knowledge" && parts[2] == "sources" && parts[4] == "uploads"
 }
 
 // errCrossOrigin marks an unsafe request from another origin, which cross-origin protection
@@ -421,16 +435,30 @@ type server struct {
 	connectionClient *http.Client
 	// codehosts list what code host connections reach.
 	codehosts map[string]ports.CodeHost
+	// repoTestTimeout bounds a repository test's call to its code host.
+	repoTestTimeout time.Duration
 	// credentials serve the credential routes.
 	credentials ports.Credentials
+	// secrets serve the secret routes.
+	secrets ports.OrgSecrets
+	// notifySettings name the secret of the organization's Slack notifications, for Access.
+	notifySettings ports.NotificationSettings
+	// catalog serves /v1/catalog; envTests and tools the environment tests and the Access read
+	// model.
+	catalog  []domain.ToolTemplate
+	envTests ports.EnvironmentTests
+	tools    ports.ToolLister
+	// conversions are the refused conversions the inbox lists; nil lists none.
+	conversions ports.FactoryConversions
 	// intake serves the webhook routes and Intake's reads.
 	intake ports.Intake
 	// draftRequests serve the draft request routes.
 	draftRequests ports.DraftRequests
-	// knowledge, uploads and search serve the knowledge routes; uploadMax bounds an uploaded file.
+	// knowledge and uploads serve the knowledge routes; uploadMax bounds an uploaded file.
 	knowledge ports.Knowledge
 	uploads   KnowledgeUploads
-	search    KnowledgeSearch
+	objects   KnowledgeObjects
+	check     KnowledgeCheck
 	uploadMax int64
 	// exportMax caps a CSV export.
 	exportMax int
@@ -440,10 +468,8 @@ type server struct {
 	egress   []netip.Prefix
 	// notifications keeps each person's notification preferences (notifications.go).
 	notifications ports.NotificationPreferences
-	// judges serve the judges routes; nil when this goald does not.
-	judges *JudgeDeps
-	// evals serve the evals routes; nil when this goald does not run evals.
-	evals *EvalDeps
+	// slack checks a Slack bot token on the notification settings routes (notificationsettings.go).
+	slack ports.DirectMessenger
 	// jonah serves the Jonah routes; nil when this goald does not.
 	jonah *JonahDeps
 	clock ports.Clock
@@ -684,11 +710,11 @@ func problemOf(err error) gen.Problem {
 	var tooLarge *http.MaxBytesError
 
 	// The answers with a code of their own, the fixed bodies first.
-	// The credential, connection and knowledge routes' answers come before the definitions' (all
-	// wrap ports.ErrNameTaken); the credentials' before the connections' (both wrap
-	// ports.ErrNoMasterKey).
+	// The secret, credential, connection and knowledge routes' answers come before the
+	// definitions' (all wrap ports.ErrNameTaken); the secrets' and the credentials' before the
+	// connections' (all wrap ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, judgeProblem, evalProblem, jonahProblem, definitionProblem,
+		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, watchProblem, keptTestProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, draftRequestProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {

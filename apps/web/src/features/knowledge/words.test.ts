@@ -1,15 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { ApiError } from '../../api/client';
-import type { KnowledgeDocument, KnowledgeSource } from '../../api/types';
+import type { KnowledgeSource } from '../../api/types';
 import {
-  documentStatus,
   everyLabel,
-  excerpt,
   formatBytes,
   nameFor,
   refusalText,
   refusedFile,
   sourceStatus,
+  syncChoices,
   syncTimes,
 } from './words';
 
@@ -20,6 +19,7 @@ const hour = 60 * min;
 
 const source = (patch: Partial<KnowledgeSource>): KnowledgeSource => ({
   id: 's1',
+  read_when: '',
   name: 'goal-docs',
   title: 'goal docs',
   kind: 'synced',
@@ -29,36 +29,25 @@ const source = (patch: Partial<KnowledgeSource>): KnowledgeSource => ({
   status: 'idle',
   last_synced_at: at(-hour),
   next_sync_at: at(15 * min),
-  documents: 3,
-  used_by: { factories: [] },
+  latest_snapshot: null,
+  used_by: { factories: [], readers: [] },
   created_by: { kind: 'user', id: 'local', name: 'Local user' },
   created_at: at(-30 * 24 * hour),
   updated_at: at(-30 * 24 * hour),
   ...patch,
 });
 
-const document = (patch: Partial<KnowledgeDocument>): KnowledgeDocument => ({
-  id: 'd1',
-  source: 'handbook',
-  title: 'deploy.md',
-  mime: 'text/markdown',
-  bytes: 120,
-  status: 'indexed',
-  indexed_at: at(-hour),
-  ...patch,
-});
-
 describe('sourceStatus', () => {
   test('says what a source is in words, by its kind and its last sync', () => {
     expect(sourceStatus(source({}))).toEqual({ tone: 'ok', text: 'Synced' });
-    expect(sourceStatus(source({ kind: 'upload' }))).toEqual({ tone: 'ok', text: 'Indexed' });
+    expect(sourceStatus(source({ kind: 'upload' }))).toEqual({ tone: 'ok', text: 'Synced' });
     expect(sourceStatus(source({ status: 'syncing' }))).toEqual({ tone: 'muted', text: 'Syncing' });
     expect(sourceStatus(source({ kind: 'live', next_sync_at: null }))).toEqual({
       tone: 'muted',
       text: 'Live, not indexed',
     });
     expect(sourceStatus(source({ last_synced_at: null })).text).toBe('Waiting for its first sync');
-    expect(sourceStatus(source({ kind: 'upload', last_synced_at: null, documents: 0 })).text).toBe('No documents yet');
+    expect(sourceStatus(source({ kind: 'upload', last_synced_at: null })).text).toBe('No files yet');
   });
 
   test('a failed sync says why and that what it indexed before stays searchable', () => {
@@ -68,7 +57,7 @@ describe('sourceStatus', () => {
     expect(failed).toEqual({
       tone: 'rework',
       text: 'Sync failed',
-      detail: 'Confluence answered 429. The documents from Oct 22 stay searchable.',
+      detail: 'Confluence answered 429. The files from Oct 22 stay as they were.',
     });
     expect(sourceStatus(source({ status: 'failed', last_synced_at: null })).detail).toBe('It stopped before the end.');
   });
@@ -90,18 +79,12 @@ describe('syncTimes', () => {
   });
 });
 
-describe('documentStatus', () => {
-  test('says each state, with the reason of a failed or skipped document', () => {
-    expect(documentStatus(document({}), now)).toMatchObject({ tone: 'ok', text: expect.stringMatching(/^Indexed /) });
-    expect(documentStatus(document({ status: 'pending', indexed_at: null }), now)).toEqual({
-      tone: 'muted',
-      text: 'Waiting to be indexed',
-    });
-    expect(documentStatus(document({ status: 'failed', error: 'Confluence answered 429' }), now)).toEqual({
-      tone: 'rework',
-      text: 'Failed: Confluence answered 429',
-    });
-    expect(documentStatus(document({ status: 'skipped' }), now).text).toBe('Skipped: it has no text');
+describe('on-demand sync', () => {
+  test('0 seconds is the first schedule, worded, and shows no next sync', () => {
+    expect(syncChoices[0]).toEqual({ seconds: 0, label: 'Only when someone presses Sync' });
+    expect(everyLabel(0)).toBe('Only when someone presses Sync');
+    expect(syncTimes(source({ sync_every_seconds: 0, next_sync_at: null }), now)).toEqual({ last: '1 h ago' });
+    expect(syncTimes(source({ sync_every_seconds: 0, next_sync_at: at(hour) }), now).next).toBeUndefined();
   });
 });
 
@@ -147,29 +130,4 @@ test("refusalText is goald's detail, or that goald is not answering", () => {
   });
   expect(refusalText(taken)).toBe('knowledge source "handbook" is taken');
   expect(refusalText(new TypeError('Failed to fetch'))).toMatch(/not answering/);
-});
-
-describe('excerpt', () => {
-  const marked = (segments: { text: string; mark: boolean }[]) =>
-    segments.map((s) => (s.mark ? `[${s.text}]` : s.text)).join('');
-
-  test("marks the query's words where they start a word, whatever their case", () => {
-    expect(marked(excerpt('# Deploy\n\nDeploys go out on Tuesdays after the release review.', 'deploy tuesday'))).toBe(
-      '[Deploy] [Deploy]s go out on [Tuesday]s after the release review.',
-    );
-    expect(marked(excerpt('Redeploy the task', 'deploy'))).toBe('Redeploy the task');
-  });
-
-  test('starts a little before the first match in a long chunk, cut at words, with ellipses', () => {
-    const long = `${'lorem ipsum '.repeat(40)}the task stops with OutOfMemoryError when ${'dolor sit '.repeat(40)}`;
-    const text = marked(excerpt(long, 'task memory', 120));
-    expect(text.startsWith('…')).toBe(true);
-    expect(text.endsWith('…')).toBe(true);
-    expect(text).toContain('the [task] stops');
-    expect(text.replace(/[[\]…]/g, '').length).toBeLessThanOrEqual(120);
-  });
-
-  test('a query without words marks nothing', () => {
-    expect(excerpt('Some text', '!!')).toEqual([{ text: 'Some text', mark: false }]);
-  });
 });

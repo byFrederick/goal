@@ -178,8 +178,8 @@ run "r2_keys_come_from_the_bucket_scoped_token" {
   }
 
   assert {
-    condition     = local.secret_values.GOAL_EMBED_KEY == "ai-token-value"
-    error_message = "The embedder's key is the Workers AI token."
+    condition     = local.secret_values.GOAL_WORKERS_AI_KEY == "ai-token-value"
+    error_message = "The conversion service's key is the Workers AI token."
   }
 }
 

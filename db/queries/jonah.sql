@@ -1,4 +1,4 @@
--- Jonah reviews, proposals and observations (00075), under row-level security: every statement
+-- Jonah reviews, proposals and observations (00078, 00101), under row-level security: every statement
 -- sees the transaction's organization only.
 
 -- name: InsertJonahReview :one
@@ -25,12 +25,19 @@ WHERE r.id = (
 RETURNING r.*;
 
 -- name: FinishJonahReview :one
--- Ends a running review under the lease its claim returned. No row when the lease is lost.
+-- Ends a running review under the lease its claim returned, or puts it back to pending for a
+-- retry with no finished_at. No row when the lease is lost.
 UPDATE jonah_reviews
-SET state = sqlc.arg(state), error = sqlc.arg(error), run_id = sqlc.narg(run_id), finished_at = sqlc.arg(finished_at)::timestamptz,
+SET state = sqlc.arg(state), error = sqlc.arg(error), run_id = sqlc.narg(run_id), finished_at = sqlc.narg(finished_at)::timestamptz,
     lease_until = NULL
 WHERE id = sqlc.arg(id) AND state = 'running' AND lease_until = sqlc.arg(lease_until)::timestamptz
 RETURNING *;
+
+-- name: LastDoneJonahReview :one
+-- The factory's newest done review, where the next window starts (jonah_reviews_factory_idx).
+SELECT * FROM jonah_reviews WHERE factory_id = sqlc.arg(factory_id) AND state = 'done'
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
 
 -- name: LatestJonahReviews :many
 SELECT * FROM jonah_reviews WHERE factory_id = sqlc.arg(factory_id)
@@ -44,18 +51,48 @@ LIMIT sqlc.arg(max_reviews);
 SELECT coalesce(max(number), 0)::bigint FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id);
 
 -- name: InsertProposal :one
-INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, files, evidence, estimate,
+INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, title, summary, edits, evidence, estimate,
                              paths, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(review_id), sqlc.arg(version_id), sqlc.arg(title),
-        sqlc.arg(summary), sqlc.arg(files), sqlc.arg(evidence), sqlc.arg(estimate), sqlc.arg(paths)::text[],
+        sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(evidence), sqlc.arg(estimate), sqlc.arg(paths)::text[],
         sqlc.arg(created_at))
 RETURNING *;
 
+-- name: SupersedeProposal :exec
+-- Sets a proposal that is still proposed superseded by a newer one whose edits overlap its own
+-- (ADR 0039 decision 6); one decided since is left as it is.
+UPDATE jonah_proposals SET state = 'superseded', decided_by = sqlc.arg(decided_by), decided_at = sqlc.arg(decided_at)::timestamptz
+WHERE factory_id = sqlc.arg(factory_id) AND id = sqlc.arg(id) AND state = 'proposed';
+
 -- name: InsertObservation :one
-INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at)
+INSERT INTO jonah_observations (id, factory_id, review_id, summary, detail, item_ids, count, state, proposal_id, created_at,
+                                updated_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(review_id), sqlc.arg(summary), sqlc.arg(detail),
-        sqlc.arg(item_ids)::uuid[], sqlc.arg(count), sqlc.arg(state), sqlc.narg(proposal_id), sqlc.arg(created_at))
+        sqlc.arg(item_ids)::uuid[], sqlc.arg(count), sqlc.arg(state), sqlc.narg(proposal_id), sqlc.arg(created_at),
+        sqlc.arg(created_at))
 RETURNING *;
+
+-- name: UpdateObservation :one
+-- A later review's update of an open observation (ADR 0039 decision 5): its items join the
+-- observation's (at most 1000, the first kept), its count adds to the count, and a state and
+-- proposal, when given, replace the observation's. No row when it is not open.
+UPDATE jonah_observations o
+SET summary = sqlc.arg(summary), detail = sqlc.arg(detail),
+    item_ids = (SELECT coalesce((array_agg(i ORDER BY n))[1:1000], '{}')
+                FROM (SELECT i, min(n) AS n FROM unnest(o.item_ids || sqlc.arg(item_ids)::uuid[]) WITH ORDINALITY AS u (i, n)
+                      GROUP BY i) AS d),
+    count = least(o.count::bigint + sqlc.arg(count)::bigint, 2147483647)::integer,
+    state = coalesce(sqlc.narg(state)::text, o.state),
+    proposal_id = coalesce(sqlc.narg(proposal_id)::uuid, o.proposal_id),
+    updated_at = sqlc.arg(updated_at)
+WHERE o.factory_id = sqlc.arg(factory_id) AND o.id = sqlc.arg(id) AND o.state IN ('watching', 'proposed')
+RETURNING *;
+
+-- name: OpenObservations :many
+-- A factory's watching and proposed observations, the latest updated first (jonah_observations_open_idx).
+SELECT * FROM jonah_observations WHERE factory_id = sqlc.arg(factory_id) AND state IN ('watching', 'proposed')
+ORDER BY updated_at DESC, id DESC
+LIMIT sqlc.arg(max_observations);
 
 -- name: Proposals :many
 -- A factory's proposals, newest first, in state when one is given, below number before when one
@@ -79,20 +116,19 @@ WHERE factory_id = sqlc.arg(factory_id) AND number = sqlc.arg(number) AND state 
 RETURNING *;
 
 -- name: LatestObservations :many
+-- A factory's observations, the latest updated first.
 SELECT * FROM jonah_observations WHERE factory_id = sqlc.arg(factory_id)
-ORDER BY created_at DESC, id DESC
+ORDER BY updated_at DESC, id DESC
 LIMIT sqlc.arg(max_observations);
 
 -- name: JonahSpendSince :one
--- The cost of the factory's review runs started at or after since, on agent_runs_jonah_idx.
-SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
+-- The cost of the factory's runs started at or after since, the line's (station runs) and Jonah's
+-- (its reviews and tries): Jonah's budget is a share of the first (ADR 0039 decision 16). Row-level security
+-- scopes it to the organization; agent_runs_factory_started_idx serves the range.
+SELECT coalesce(sum(cost_usd) FILTER (WHERE kind NOT IN ('jonah', 'try')), 0)::float8 AS line_usd,
+  coalesce(sum(cost_usd) FILTER (WHERE kind IN ('jonah', 'try')), 0)::float8 AS jonah_usd
 FROM agent_runs
-WHERE factory_id = sqlc.arg(factory_id) AND kind = 'jonah' AND started_at >= sqlc.arg(since);
-
--- name: SentBackSince :one
--- The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
-SELECT count(*)::bigint FROM item_touches
-WHERE factory_id = sqlc.arg(factory_id) AND kind IN ('rejected', 'gate_rejected') AND at >= sqlc.arg(since);
+WHERE factory_id = sqlc.arg(factory_id) AND started_at >= sqlc.arg(since);
 
 -- name: SentBackBetween :many
 -- The factory's sent-back touches in [since, until), oldest first, at most max_events: each with
@@ -139,3 +175,65 @@ WHERE t.item_id IN (
   AND t.factory_id = sqlc.arg(factory_id) AND t.station = sqlc.arg(station)::text
   AND t.kind IN ('rejected', 'gate_rejected')
   AND t.at >= sqlc.arg(since)::timestamptz AND t.at < sqlc.arg(until)::timestamptz;
+
+-- name: InsertUndoProposal :one
+-- An undo proposal: no review, undoes the proposal it reverses. The undo key's conflict means
+-- one is already proposed, published or applied.
+INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, edits, paths, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(undoes), sqlc.arg(version_id), sqlc.arg(title),
+        sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(paths)::text[], sqlc.arg(created_at))
+RETURNING *;
+
+-- name: InsertModelProposal :one
+-- A person's model proposal (Try another model, ADR 0039 decision 13): no review, the agent whose
+-- model it changes.
+INSERT INTO jonah_proposals (id, factory_id, number, agent, version_id, title, summary, edits, evidence, estimate, paths,
+                             created_at)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(agent), sqlc.arg(version_id), sqlc.arg(title),
+        sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(evidence), sqlc.arg(estimate), sqlc.arg(paths)::text[],
+        sqlc.arg(created_at))
+RETURNING *;
+
+-- name: EvidenceItems :many
+-- The factory's items finished in [since, until), the most recently finished first, at most
+-- max_items: a done item by its done_at (work_items_done_at_idx), a cancelled one by its latest
+-- cancelled event (item_events_factory_at_idx; a later one past until keeps it out).
+SELECT sqlc.embed(w), f.finished_at::timestamptz AS finished_at
+FROM (
+  SELECT d.id, d.done_at AS finished_at FROM work_items d
+  WHERE d.factory_id = sqlc.arg(factory_id) AND d.state = 'done'
+    AND d.done_at >= sqlc.arg(since)::timestamptz AND d.done_at < sqlc.arg(until)::timestamptz
+  UNION ALL
+  SELECT c.item_id, max(c.at) FROM item_events c
+  JOIN work_items cw ON cw.id = c.item_id AND cw.state = 'cancelled'
+  WHERE c.factory_id = sqlc.arg(factory_id) AND c.kind = 'cancelled' AND c.at >= sqlc.arg(since)::timestamptz
+  GROUP BY c.item_id
+  HAVING max(c.at) < sqlc.arg(until)::timestamptz
+) f
+JOIN work_items w ON w.id = f.id
+ORDER BY f.finished_at DESC, w.id
+LIMIT sqlc.arg(max_items);
+
+-- name: EvidenceRuns :many
+-- The runs of the items, by item, oldest first (agent_runs_item_id_idx).
+SELECT * FROM agent_runs WHERE item_id = ANY(sqlc.arg(item_ids)::uuid[]) ORDER BY item_id, started_at, id;
+
+-- name: EvidenceEvents :many
+-- The events of the items but those of the per-turn kinds, by item in append order
+-- (item_events_item_idx).
+SELECT * FROM item_events
+WHERE item_id = ANY(sqlc.arg(item_ids)::uuid[]) AND NOT (kind = ANY(sqlc.arg(per_turn)::text[]))
+ORDER BY item_id, id;
+
+-- name: StationRunMedians :many
+-- The median cost and turns of the factory's finished station runs started in [since, until), by
+-- station (agent_runs_factory_started_idx).
+SELECT station,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd)::float8 AS cost_usd,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY turns)::float8 AS turns,
+       count(*)::bigint AS runs
+FROM agent_runs
+WHERE factory_id = sqlc.arg(factory_id) AND kind = 'station' AND status <> 'running'
+  AND started_at >= sqlc.arg(since)::timestamptz AND started_at < sqlc.arg(until)::timestamptz
+GROUP BY station
+ORDER BY station;

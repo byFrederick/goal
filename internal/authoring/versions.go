@@ -400,3 +400,58 @@ func (s *Service) Compare(ctx context.Context, f domain.FactoryID, from, to Vers
 
 	return CompareResult{Comparison: c, From: a.version, To: b.version}, nil
 }
+
+// Reach is f's newest limit published versions, oldest first, each with the stations it reaches
+// against the version published before it (ADR 0039 decision 14, factorymodel.StationsReached):
+// the watch sweep's history. The factory's first version is First.
+func (s *Service) Reach(ctx context.Context, f domain.FactoryID, limit int) ([]domain.VersionReach, error) {
+	vs, err := s.store.Versions(ctx, f, 0, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("list versions of %s: %w", f, err)
+	}
+
+	out := make([]domain.VersionReach, 0, min(len(vs), limit))
+
+	for i := min(len(vs), limit) - 1; i >= 0; i-- {
+		v := vs[i]
+		r := domain.VersionReach{ID: v.ID, Number: v.Number, PublishedAt: v.PublishedAt, First: v.Number == 1}
+
+		if i+1 < len(vs) && !r.First && !maps.Equal(vs[i+1].Manifest, v.Manifest) {
+			from, to := s.tree(ctx, vs[i+1].Manifest), s.tree(ctx, v.Manifest)
+			r.Stations = factorymodel.StationsReached(
+				factorymodel.Snapshot{Manifest: from.manifest, Files: from}, factorymodel.Snapshot{Manifest: to.manifest, Files: to})
+
+			if err := errors.Join(from.err, to.err); err != nil {
+				return nil, fmt.Errorf("reach of v%d of %s: %w", v.Number, f, err)
+			}
+		}
+
+		out = append(out, r)
+	}
+
+	return out, nil
+}
+
+// VersionFileByID returns one file of f's published version id: ErrVersionNotFound when f has
+// no such version, ErrFileNotFound when it has no file at path.
+func (s *Service) VersionFileByID(ctx context.Context, f domain.FactoryID, id domain.DefinitionVersionID, path string) (File, error) {
+	v, err := s.byID(ctx, f, id, VersionSelector{Kind: SelectNumber})
+	if err != nil {
+		return File{}, err
+	}
+
+	if v.FactoryID != f || v.State == domain.VersionDraft {
+		return File{}, fmt.Errorf("version %s of %s: %w", id, f, ErrVersionNotFound)
+	}
+
+	b, ok, err := s.tree(ctx, v.Manifest).file(path)
+	if err != nil {
+		return File{}, err
+	}
+
+	if !ok {
+		return File{}, fmt.Errorf("v%d of %s has no %s: %w", v.Number, f, path, ErrFileNotFound)
+	}
+
+	return File{Content: b, SHA256: v.Manifest[path], Immutable: true}, nil
+}

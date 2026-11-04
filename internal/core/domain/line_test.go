@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -44,16 +45,24 @@ func TestLine_Refusal(t *testing.T) {
 		line Line
 		want []string // in the reason; none for a line that runs
 	}{
-		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: "claude"}}},
+		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}}},
 		{
 			name: "a removed form", line: Line{
-				Number: 3, Runtime: Runtime{ModelConnection: "claude"}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
+				Number: 3, Runtime: Runtime{ModelConnection: testModelConn}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
 			},
-			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version on environment files and secrets (ADR 0037)"},
 		},
 		{
 			name: "no model connection", line: Line{Number: 2},
-			want: []string{"version 2", "runtime.modelConnection", "publish a version with connections (spec 4 §4.4)"},
+			want: []string{"version 2", "runtime.modelConnection", "runtime.modelKey"},
+		},
+		{name: "on secrets", line: Line{Runtime: Runtime{ModelKey: testModelKey}, Environments: []Environment{{Name: DefaultEnvironment}}}},
+		{name: "a model key without environments", line: Line{Runtime: Runtime{ModelKey: testModelKey}}},
+		{
+			name: "environments without a model key", line: Line{
+				Number: 4, Runtime: Runtime{ModelConnection: testModelConn}, Environments: []Environment{{Name: DefaultEnvironment}},
+			},
+			want: []string{"version 4", "runtime.modelKey"},
 		},
 	}
 
@@ -85,6 +94,36 @@ func TestLine_MergeConnections(t *testing.T) {
 	l.Runtime.Repository.Connection = repos
 	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog"}) {
 		t.Errorf("MergeConnections with the repository's listed = %v", got)
+	}
+}
+
+// A repository's host names its code host on github.com and gitlab.com, whatever the case;
+// forge names it on any host and wins over the host's.
+func TestRepository_CodeHost(t *testing.T) {
+	t.Parallel()
+
+	const forgeGitHub, forgeGitLab = "github", "gitlab"
+
+	tests := []struct {
+		repo                Repository
+		wantHost, wantForge string
+	}{
+		{repo: Repository{URL: "https://github.com/acme/app.git"}, wantHost: hostGitHub, wantForge: forgeGitHub},
+		{repo: Repository{URL: "https://GitLab.com/acme/web.git"}, wantHost: "gitlab.com", wantForge: forgeGitLab},
+		{repo: Repository{URL: "https://git.example.com/acme/app.git"}, wantHost: "git.example.com"},
+		{repo: Repository{URL: "https://git.example.com:8443/acme/app.git", Forge: forgeGitLab}, wantHost: "git.example.com:8443", wantForge: forgeGitLab},
+		{repo: Repository{URL: "https://github.com/acme/app.git", Forge: forgeGitLab}, wantHost: hostGitHub, wantForge: forgeGitLab},
+		{repo: Repository{}},
+	}
+
+	for _, tt := range tests {
+		if host, forge := tt.repo.CodeHost(); host != tt.wantHost || forge != tt.wantForge {
+			t.Errorf("CodeHost of %+v = %q, %q; want %q, %q", tt.repo, host, forge, tt.wantHost, tt.wantForge)
+		}
+	}
+
+	if KnownForge("GITHUB.COM") != forgeGitHub || KnownForge("git.example.com") != "" {
+		t.Error("KnownForge does not name github.com's adapter alone")
 	}
 }
 
@@ -182,8 +221,51 @@ func TestLine_LandingStation(t *testing.T) {
 func TestDefaultJonahPolicy(t *testing.T) {
 	t.Parallel()
 
-	want := JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10}
+	want := JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05}
 	if got := DefaultJonahPolicy(); got != want {
 		t.Errorf("DefaultJonahPolicy() = %+v, want %+v", got, want)
 	}
 }
+
+// Jonah's budget is its share of the line's spend, each review is capped at a fifth of it, and a
+// review's cap is what is left under that, at least a cent (ADR 0039 decision 16).
+func TestJonahPolicy_Budget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		share         float64
+		spend         JonahSpend
+		wantBudget    float64
+		wantPerReview float64
+		wantCap       float64
+		wantExhausted bool
+	}{
+		{name: "nothing spent", share: 0.05, spend: JonahSpend{LineUSD: 200}, wantBudget: 10, wantPerReview: 2, wantCap: 2},
+		{name: "little left", share: 0.05, spend: JonahSpend{LineUSD: 200, JonahUSD: 9.5}, wantBudget: 10, wantPerReview: 2, wantCap: 0.5},
+		{name: "used up", share: 0.05, spend: JonahSpend{LineUSD: 200, JonahUSD: 10}, wantBudget: 10, wantPerReview: 2, wantCap: 0.01, wantExhausted: true},
+		{name: "no line spend", share: 0.05, spend: JonahSpend{}, wantCap: 0.01, wantExhausted: true},
+		{name: "share off", share: 0, spend: JonahSpend{LineUSD: 200}, wantCap: 0.01, wantExhausted: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			b := JonahPolicy{Share: tt.share}.Budget(tt.spend)
+			if !near(b.BudgetUSD, tt.wantBudget) || !near(b.PerReviewUSD, tt.wantPerReview) || !near(b.SpentUSD, tt.spend.JonahUSD) {
+				t.Errorf("budget = %+v, want $%v, $%v per review", b, tt.wantBudget, tt.wantPerReview)
+			}
+
+			if got := b.ReviewCap(); !near(got, tt.wantCap) {
+				t.Errorf("ReviewCap() = %v, want %v", got, tt.wantCap)
+			}
+
+			if got := b.Exhausted(); got != tt.wantExhausted {
+				t.Errorf("Exhausted() = %v, want %v", got, tt.wantExhausted)
+			}
+		})
+	}
+}
+
+func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }

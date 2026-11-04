@@ -14,8 +14,8 @@ test('the page shows proposal 7 as pictured: the estimate, the two diffs, the fo
   await expect(page.getByRole('heading', { level: 1, name: /Ask frontend-engineer for a screenshot/ })).toBeVisible();
   await expect(page.getByText('Waiting for your review')).toBeVisible();
   await expect(page.getByText('2 files, v21 to v22')).toBeVisible();
-  await expect(page.getByText('Why: 4 runs sent back')).toBeVisible();
-  await expect(page.getByText('v22; runs in progress keep v21')).toBeVisible();
+  await expect(page.getByRole('region', { name: /Why/ })).toBeVisible();
+  await expect(page.getByText('v22; running items keep v21')).toBeVisible();
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -44,8 +44,43 @@ test('Reject needs a reason, then records it and shows the rejected state', asyn
   await expect(submit).toBeEnabled();
   await submit.click();
 
-  await expect(page.getByText('Rejected')).toBeVisible();
+  await expect(page.getByText(/^Rejected/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Approve and publish v22' })).toHaveCount(0);
+});
+
+test('Try again shows the estimate, and Confirm adds a try to each item', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  await page.getByRole('button', { name: 'Try again' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText(/Adds 2 tries for about \$2\.80/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Queue the tries' }).click();
+  await expect(page.getByText('Try 2 of 2').first()).toBeVisible();
+});
+
+test('Try again is refused with Not tried: budget used once the budget is gone', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  for (let round = 0; round < 2; round++) {
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Queue the tries' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByRole('dialog').getByText('Not tried: budget used')).toBeVisible();
+});
+
+test('Try again is 44 px at 390 px and the card fits at 390, 768 and 1440 px', async ({ page }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [768, 1024],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/o/acme/f/software/jonah/proposals/7');
+    const button = page.getByRole('button', { name: 'Try again' });
+    await expect(button).toBeVisible();
+    if (width === 390) expect((await button.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await expectNoHorizontalScroll(page);
+  }
 });
 
 test('the page fits 375 and 768 px and renders in dark mode', async ({ page }) => {

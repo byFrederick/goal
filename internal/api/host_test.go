@@ -19,6 +19,10 @@ const (
 // The Host check refuses, with 421, every request but the health check and the agents' gateway
 // whose Host names a host other than goald's own, so a page that rebinds its name to the loopback
 // address cannot use the API or the SPA even though its requests look same-origin.
+
+// dockerHost is how agent containers reach goald.
+const dockerHost = "host.docker.internal:8080"
+
 func TestCheckHost(t *testing.T) {
 	t.Parallel()
 
@@ -41,10 +45,11 @@ func TestCheckHost(t *testing.T) {
 		{name: "the listen host", method: http.MethodGet, host: "127.0.0.2:8080", path: anAPIPath, want: http.StatusNoContent},
 		{name: "the public URL's host, any case", method: http.MethodGet, host: "Goal.Example.com", path: "/", want: http.StatusNoContent},
 		{name: "health check from anywhere", method: http.MethodGet, host: evilHost, path: "/v1/health", want: http.StatusNoContent},
-		{name: "agents reach the gateway as the Docker host", method: http.MethodPost, host: "host.docker.internal:8080", path: api.GatewayPath, want: http.StatusNoContent},
-		{name: "and its run bundle", method: http.MethodGet, host: "host.docker.internal:8080", path: api.RunPath, want: http.StatusNoContent},
-		{name: "and its tool approvals", method: http.MethodPost, host: "host.docker.internal:8080", path: api.ToolApprovalPath, want: http.StatusNoContent},
+		{name: "agents reach the gateway as the Docker host", method: http.MethodPost, host: dockerHost, path: api.GatewayPath, want: http.StatusNoContent},
+		{name: "and its run bundle", method: http.MethodGet, host: dockerHost, path: api.RunPath, want: http.StatusNoContent},
+		{name: "and its tool approvals", method: http.MethodPost, host: dockerHost, path: api.ToolApprovalPath, want: http.StatusNoContent},
 		{name: "a path under the tool approvals'", method: http.MethodPost, host: evilHost, path: api.ToolApprovalPath + "/x", want: http.StatusMisdirectedRequest},
+		{name: "and its knowledge snapshots", method: http.MethodGet, host: dockerHost, path: api.KnowledgePath + "handbook", want: http.StatusNoContent},
 	}
 
 	for _, tt := range tests {

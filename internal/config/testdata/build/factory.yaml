@@ -1,0 +1,25 @@
+# Test fixture for environment files (ADR 0037): a small line whose agents reach what their
+# environment files give them, with the model key and repository token as secret references.
+# Self-contained: tests never read factory definitions from outside testdata.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 3a1f6c2e-7b4d-4e85-9c0a-5d6e7f8a9b10
+  name: acme-build
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    modelKey: "{{claude-key}}"
+    repository: { url: "https://github.com/acme/build.git", token: "{{github-token}}" }
+  agents:
+    - name: engineer
+      prompt: ./agents/engineer.md
+    - name: tester
+      prompt: ./agents/tester.md
+      environment: browser
+  board:
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: build, kind: agent, agent: engineer }
+      - { id: test, kind: agent, agent: tester }
+      - { id: done, kind: done }

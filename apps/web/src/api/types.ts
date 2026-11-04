@@ -17,15 +17,6 @@ export type {
   AuditPage,
   AuthConfig,
   AuthMode,
-  BakeOff,
-  BakeOffApply,
-  BakeOffArm,
-  BakeOffArmSummary,
-  BakeOffCase,
-  BakeOffCaseArm,
-  BakeOffJudged,
-  BakeOffList,
-  BakeOffStarted,
   Board,
   BoardLane,
   BoardLine,
@@ -53,10 +44,6 @@ export type {
   ConstraintSource,
   CreatedApiKey,
   CreatedPersonalToken,
-  Credential,
-  CredentialPatch,
-  CredentialType,
-  CredentialUsers,
   CurrentRun,
   DefinitionCounts,
   DefinitionEvent,
@@ -68,16 +55,6 @@ export type {
   DraftRequest,
   DraftRequestList,
   DraftTree,
-  EvalCaseEntry,
-  EvalCaseFromRun,
-  EvalCheckedBy,
-  EvalEstimate,
-  EvalHistoryTry,
-  EvalList,
-  EvalResultState,
-  EvalRunRequest,
-  EvalRunStarted,
-  EvalSummary,
   EventPage,
   Factory,
   FactoryAttention,
@@ -117,14 +94,16 @@ export type {
   ItemsAtRemovedStations,
   ItemTouches,
   ItemWaiting,
-  KnowledgeDocument,
-  KnowledgeDocumentPage,
-  KnowledgeDocumentText,
+  KnowledgeCheck,
+  KnowledgeCheckInput,
   KnowledgeEvent,
-  KnowledgeHit,
+  KnowledgeFile,
+  KnowledgeFilePage,
+  KnowledgeReadCount,
   KnowledgeSource,
   KnowledgeSourceKind,
   KnowledgeSourcePatch,
+  KnowledgeSourceReader,
   LeadTimeBridge,
   LineRange,
   Me,
@@ -225,24 +204,46 @@ export type MergeMethod = NonNullable<MergeRequest['method']>;
 
 // The spend shapes are the contract's, read from the generated schema (the api-client does not re-export them).
 type Schemas = components['schemas'];
-// The credential shapes a create or an import sends and answers (ADR 0017), read from the generated schema.
-export type NewCredential = Schemas['NewCredential'];
-export type CredentialImport = Schemas['CredentialImport'];
-export type CredentialImportResult = Schemas['CredentialImportResult'];
-export type CredentialImportOutcome = Schemas['CredentialImportOutcome'];
+// The secret shapes (ADR 0037), read from the generated schema. A value is in NewSecret, SecretValue and
+// SecretImport only, which go out; no answer carries one.
+export type Secret = Schemas['Secret'];
+/** A standing rule (Always allow): one agent role, one tool; keyed by server for a factory on secrets (ADR 0037 decision 8). */
+export type StandingRule = Schemas['StandingRule'];
+// The Access read model (ADR 0037 decision 14): what every factory's agents reach.
+export type Access = Schemas['Access'];
+export type AccessGroup = Schemas['AccessGroup'];
+export type AccessRow = Schemas['AccessRow'];
+export type AccessUse = Schemas['AccessUse'];
+export type AccessStatus = Schemas['AccessStatus'];
+export type AccessView = Access['by'];
+export type SecretUse = Schemas['SecretUse'];
+export type SecretScope = Schemas['SecretScope'];
+export type NewSecret = Schemas['NewSecret'];
+export type RepositoryTestRequest = Schemas['RepositoryTestRequest'];
+export type RepositoryTestResult = Schemas['RepositoryTestResult'];
+export type RepositoryCheck = Schemas['RepositoryCheck'];
+export type SecretPatch = Schemas['SecretPatch'];
+export type SecretImport = Schemas['SecretImport'];
+export type SecretImportResult = Schemas['SecretImportResult'];
+// The tool catalog and the environment test (ADR 0037 decisions 14 and 15).
+export type ToolTemplate = Schemas['ToolTemplate'];
+export type TemplateSecret = Schemas['TemplateSecret'];
+export type TemplateAdds = Schemas['TemplateAdds'];
+export type TemplateMCP = Schemas['TemplateMCP'];
+export type EnvironmentTestRequest = Schemas['EnvironmentTestRequest'];
+export type EnvironmentTestResult = Schemas['EnvironmentTestResult'];
+export type ServerTest = Schemas['ServerTest'];
+export type SecretImportOutcome = Schemas['SecretImportOutcome'];
 // The signed-in person's notification preferences (ADR 0023, decision 1): the events, their channels and the email.
 export type NotificationPreferences = Schemas['NotificationPreferences'];
+export type OrgNotificationSettings = Schemas['NotificationSettings'];
+export type NotificationTestResult = Schemas['NotificationTestResult'];
 export type NotificationEvents = Schemas['NotificationEvents'];
 export type NotificationChannels = Schemas['NotificationChannels'];
 // What a code host connection reaches (GET …/connections/{connection}/repositories), for the Code step.
 export type RepositoryList = Schemas['RepositoryList'];
 export type RepositoryOwner = Schemas['RepositoryOwner'];
 export type Repository = Schemas['Repository'];
-// The organization's knowledge usage (ADR 0027): where a source's documents were used, and the runs of one document.
-export type KnowledgeUsage = Schemas['KnowledgeUsage'];
-export type KnowledgeDocumentUsage = Schemas['KnowledgeDocumentUsage'];
-export type KnowledgeDocumentUsePage = Schemas['KnowledgeDocumentUsePage'];
-export type KnowledgeDocumentUse = Schemas['KnowledgeDocumentUse'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];
@@ -264,18 +265,6 @@ export type SpendDay = Schemas['SpendDay'];
 export type SpendWindow = Schemas['SpendWindow'];
 export type WeekCost = Schemas['WeekCost'];
 
-// The judges API's shapes (ADR 0025), read from the generated schema.
-export type JudgeList = Schemas['JudgeList'];
-export type JudgeListEntry = Schemas['JudgeListEntry'];
-export type Judge = Schemas['Judge'];
-export type JudgeWrite = Schemas['JudgeWrite'];
-export type CreateJudgeRequest = Schemas['CreateJudgeRequest'];
-export type JudgeOutcome = Schemas['JudgeOutcome'];
-export type JudgeSummary = Schemas['JudgeSummary'];
-export type JudgeDay = Schemas['JudgeDay'];
-export type JudgeScore = Schemas['JudgeScore'];
-export type JudgeRunsOn = Schemas['JudgeRunsOn'];
-export type JudgeTries = Schemas['JudgeTries'];
 export type JonahOverview = Schemas['JonahOverview'];
 export type JonahPolicy = Schemas['JonahPolicy'];
 export type JonahObservation = Schemas['JonahObservation'];
@@ -288,5 +277,20 @@ export type Proposal = Schemas['Proposal'];
 export type ProposalFile = Schemas['ProposalFile'];
 export type ProposalEvidence = Schemas['ProposalEvidence'];
 export type ProposalDecided = Schemas['ProposalDecided'];
+export type ProposalTried = Schemas['ProposalTried'];
+export type TriedItem = Schemas['TriedItem'];
+export type TriedTry = Schemas['TriedTry'];
+export type KeptTest = Schemas['KeptTest'];
+export type KeptTestLastResult = Schemas['KeptTestLastResult'];
+export type TryProposalEstimate = Schemas['TryProposalEstimate'];
+export type TryProposalResult = Schemas['TryProposalResult'];
+export type KeptTestList = Schemas['KeptTestList'];
+export type KeepTestRequest = Schemas['KeepTestRequest'];
+export type DraftKeptTests = Schemas['DraftKeptTests'];
+export type DraftKeptTest = Schemas['DraftKeptTest'];
+export type ModelProposalResult = Schemas['ModelProposalResult'];
+export type ModelProposalEstimate = Schemas['ModelProposalEstimate'];
+export type Watch = Schemas['Watch'];
+export type WatchVerdict = Schemas['WatchVerdict'];
 export type TriggerTry = Schemas['TriggerTry'];
 export type TriggerTryStep = Schemas['TriggerTryStep'];

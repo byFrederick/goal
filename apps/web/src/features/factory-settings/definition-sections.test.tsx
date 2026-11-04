@@ -2,8 +2,16 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { publishDraft } from '../../api/definitions';
-import { connectionKindsQuery, connectionsQuery, defKeys, membersQuery, orgQuery } from '../../api/queries';
-import type { Connection, ConnectionKind, Factory, OrgSummary, SectionSave } from '../../api/types';
+import {
+  defKeys,
+  draftFileQuery,
+  draftFilesQuery,
+  membersQuery,
+  orgQuery,
+  repositoryTestQuery,
+  secretsQuery,
+} from '../../api/queries';
+import type { Factory, OrgSummary, Secret, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
 import { renderFactoryPage } from '../../test/route';
 import { FactorySettingsPage } from './settings-page';
@@ -12,7 +20,7 @@ import { FactorySettingsPage } from './settings-page';
 // uses, so each test reads what the session saved for a section.
 /** The fields of the sections the settings write, as the session saved them. */
 interface Saved {
-  repository?: { url?: string; connection?: string };
+  repository?: { url?: string; connection?: string; token?: string };
   size?: string;
   tools?: string[];
   work_types?: string[];
@@ -29,6 +37,7 @@ interface Saved {
 const api = vi.hoisted(() => ({
   model: {} as Saved,
   saves: [] as { section: string; value: Saved }[],
+  files: [] as { path: string; text: string }[],
 }));
 
 vi.mock(import('../../api/definitions'), async (original) => ({
@@ -56,6 +65,18 @@ vi.mock(import('../../api/definitions'), async (original) => ({
       };
     },
   ),
+  putDraftFile: vi.fn(async (_org: string, _factory: string, path: string, text: string) => {
+    api.files.push({ path, text });
+    return {
+      etag: 'next',
+      revision: 2,
+      updated_at: '2026-10-28T10:00:00Z',
+      sha256: 'f2',
+      sections: [],
+      change_count: 1,
+      problem_count: 0,
+    };
+  }),
   getVersionModel: vi.fn(async () => ({ model: api.model, revision: 1 }) as never),
   publishDraft: vi.fn(async () => ({ id: 'version-2', number: 2 }) as never),
 }));
@@ -69,6 +90,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   api.saves = [];
+  api.files = [];
   setDraft();
 });
 
@@ -85,7 +107,7 @@ function setDraft(over: Partial<Model> = {}) {
       size: 'medium',
       tools: ['node@22'],
       work_types: ['incident'],
-      repository: { url: 'https://github.com/acme/sre', connection: 'github' },
+      repository: { url: 'https://github.com/acme/sre', token: '{{github-token}}' },
     },
     line: {
       stations: [{ id: 'build', name: 'Build', kind: 'agent', agent: 'sre', wip: 2 }],
@@ -104,8 +126,8 @@ function setDraft(over: Partial<Model> = {}) {
   api.model = factoryModelOf(model) as unknown as Saved;
 }
 
-const github = { name: 'github', kind: 'github', scope: 'org' } as unknown as Connection;
-const githubKind = { name: 'github', title: 'GitHub', modes: ['git'] } as unknown as ConnectionKind;
+const secrets = [{ name: 'github-token' }, { name: 'slack-bot' }] as unknown as Secret[];
+const passing = { tested: true, read: { ok: true, reason: 'ok' }, push: { ok: true, reason: 'ok' } };
 
 function factoryDetail(): Factory {
   return {
@@ -128,10 +150,26 @@ function factoryDetail(): Factory {
 async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
   const factory = { ...factoryDetail(), can: canEdit ? can : [] };
   const seed: [readonly unknown[], unknown][] = [
-    [orgQuery(org.id).queryKey, { ...org, created_at: '2026-10-01T00:00:00Z', can: ['connection:read'] }],
+    [orgQuery(org.id).queryKey, { ...org, created_at: '2026-10-01T00:00:00Z', can: ['factory:create'] }],
     [defKeys.factory(org.id, factoryId), factory],
-    [connectionsQuery(org.id).queryKey, [github]],
-    [connectionKindsQuery(org.id).queryKey, [githubKind]],
+    [secretsQuery(org.id).queryKey, secrets],
+    [
+      draftFilesQuery(org.id, factoryId).queryKey,
+      [
+        { path: 'factory.yaml', sha256: 'f1' },
+        { path: 'environments/default.yaml', sha256: 'e1' },
+        { path: 'environments/deploy.yaml', sha256: 'e2' },
+      ],
+    ],
+    [
+      draftFileQuery(org.id, factoryId, 'factory.yaml').queryKey,
+      {
+        path: 'factory.yaml',
+        sha256: 'f1',
+        text: 'spec:\n  runtime:\n    modelKey: "{{claude}}"\n  agents:\n    - name: sre\n    - name: deploy-bot\n      environment: deploy\nlearning:\n  # Jonah\n  jonah:\n    share: 8%\n',
+      },
+    ],
+    [repositoryTestQuery(org.id, 'https://github.com/acme/sre', 'github-token').queryKey, passing],
     [membersQuery(org.id).queryKey, []],
   ];
   const rendered = renderFactoryPage({
@@ -143,7 +181,7 @@ async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
     topBar: true,
   });
   await screen.findByRole('region', { name: 'Repository' });
-  await waitFor(() => expect(screen.getByText('https://github.com/acme/sre')).toBeTruthy(), { timeout: 3000 });
+  await waitFor(() => expect(screen.getByText('github.com/acme/sre')).toBeTruthy(), { timeout: 3000 });
   if (canEdit) fireEvent.click(screen.getByRole('button', { name: 'Change' }));
   return rendered;
 }
@@ -161,9 +199,11 @@ async function savedSection(section: Section, check: (value: Saved) => boolean =
 }
 
 describe('Repository', () => {
-  it('shows the URL and the connection chip, and Change opens the editor', async () => {
+  it('shows the URL, Token works and the token secret, and Change opens the editor', async () => {
     await renderSettings({ canEdit: false });
-    expect(screen.getByText('Connected with github')).toBeTruthy();
+    expect(screen.getByText('Token works')).toBeTruthy();
+    expect(screen.getByText('github-token')).toBeTruthy();
+    expect(screen.queryByText(/connect/i)).toBeNull();
     expect(screen.queryByLabelText('Repository URL')).toBeNull();
     cleanup();
     await renderSettings();
@@ -172,7 +212,7 @@ describe('Repository', () => {
 
   it('has no accordion buttons: every section is open', async () => {
     await renderSettings();
-    expect(document.querySelector('[aria-expanded]')).toBeNull();
+    expect(document.querySelector('[aria-expanded]:not([role="combobox"])')).toBeNull();
     expect(screen.getByLabelText('Each week')).toBeTruthy();
   });
 
@@ -183,14 +223,15 @@ describe('Repository', () => {
     fireEvent.blur(url);
 
     const basics = await savedSection('basics', (v) => v.repository?.url === 'https://github.com/acme/tools');
-    expect(basics.repository).toEqual({ url: 'https://github.com/acme/tools', connection: 'github' });
+    expect(basics.repository).toEqual({ url: 'https://github.com/acme/tools', token: '{{github-token}}' });
   });
 
-  it('writes the connection git signs in with to basics.repository.connection', async () => {
+  it('writes the token secret git signs in with to basics.repository.token, and none clears it', async () => {
     await renderSettings();
-    fireEvent.change(screen.getByLabelText('Repository connection'), { target: { value: '' } });
+    expect(screen.queryByLabelText('Repository connection')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Use no token' }));
 
-    const basics = await savedSection('basics', (v) => v.repository?.connection === undefined);
+    const basics = await savedSection('basics', (v) => v.repository?.token === undefined);
     expect(basics.repository).toEqual({ url: 'https://github.com/acme/sre' });
   });
 
@@ -205,30 +246,26 @@ describe('Repository', () => {
 });
 
 describe('Runtime', () => {
-  it('writes the box size to basics.size', async () => {
+  it('shows the model key secret and one chip per environment with its agent count', async () => {
     await renderSettings();
-    fireEvent.click(screen.getByRole('radio', { name: 'Large' }));
-
-    const basics = await savedSection('basics', (v) => v.size === 'large');
-    expect(basics.size).toBe('large');
+    expect(await screen.findByText('claude')).toBeTruthy();
+    expect(screen.getByText('default')).toBeTruthy();
+    expect(screen.getByText('deploy')).toBeTruthy();
+    expect(screen.getAllByText('1 agent')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Edit' }).getAttribute('href')).toContain('/definition/environments');
+    expect(screen.queryByText(/connection/i)).toBeNull();
   });
 
-  it('appends a mise tool spec to basics.tools', async () => {
+  it('points at environments instead of editing the box size and tools', async () => {
     await renderSettings();
-    fireEvent.change(screen.getByPlaceholderText('name@version…'), { target: { value: 'go@1.26.10' } });
-    fireEvent.keyDown(screen.getByLabelText('Add a tool'), { key: 'Enter' });
+    const runtime = screen.getByRole('region', { name: 'Runtime' });
 
-    const basics = await savedSection('basics', (v) => (v.tools ?? []).includes('go@1.26.10'));
-    expect(basics.tools).toEqual(['node@22', 'go@1.26.10']);
-  });
-
-  it('refuses a tool that is not a mise tool spec', async () => {
-    await renderSettings();
-    fireEvent.change(screen.getByPlaceholderText('name@version…'), { target: { value: 'not a tool!' } });
-    fireEvent.keyDown(screen.getByLabelText('Add a tool'), { key: 'Enter' });
-
-    expect(await screen.findByText(/A mise tool spec, such as go/)).toBeTruthy();
-    expect(api.saves.some((s) => s.section === 'basics' && JSON.stringify(s.value).includes('not a tool'))).toBe(false);
+    expect(within(runtime).getByText(/Box size, CLIs and what agents reach live in/)).toBeTruthy();
+    const link = within(runtime).getByRole('link', { name: 'environments' });
+    expect(link.getAttribute('href')).toBe('/o/acme/f/sre/definition/environments');
+    expect(within(runtime).queryByRole('radio')).toBeNull();
+    expect(within(runtime).queryByText('Tools')).toBeNull();
+    expect(within(runtime).queryByPlaceholderText('name@version…')).toBeNull();
   });
 });
 
@@ -388,8 +425,38 @@ describe('Read-only callers', () => {
     await renderSettings({ canEdit: false });
 
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
-    expect(screen.getByText('https://github.com/acme/sre')).toBeTruthy();
+    expect(screen.getByText('github.com/acme/sre')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
     expect(screen.getByLabelText('Each week').closest('fieldset')?.disabled).toBe(true);
+  });
+});
+
+describe('Jonah', () => {
+  it('shows learning.jonah and writes a change to factory.yaml, keeping its comments', async () => {
+    await renderSettings();
+    const share = (await screen.findByLabelText(/^Budget, %/)) as HTMLInputElement;
+    await waitFor(() => expect(share.value).toBe('8'));
+    expect(screen.getByRole('switch', { name: 'Jonah reviews this line' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('switch', { name: 'Jonah reviews this line' }));
+    await waitFor(() => expect(api.files.at(-1)?.text).toMatch(/enabled: false/), { timeout: 3000 });
+    expect(api.files.at(-1)?.text).toMatch(/# Jonah/);
+    const after = screen.getByLabelText(/^Proposes after, items/);
+    fireEvent.change(after, { target: { value: '5' } });
+    fireEvent.blur(after);
+    await waitFor(() => expect(api.files.at(-1)?.text).toMatch(/proposeAfter: 5/), { timeout: 3000 });
+  });
+
+  it('flags a share over 100 and writes nothing', async () => {
+    await renderSettings();
+    const share = (await screen.findByLabelText(/^Budget, %/)) as HTMLInputElement;
+    await waitFor(() => expect(share.value).toBe('8'));
+    fireEvent.change(share, { target: { value: '150' } });
+    expect(await screen.findByText('A number from 0 to 100.')).toBeTruthy();
+    expect(api.files).toEqual([]);
+  });
+
+  it('is read-only without definition:edit', async () => {
+    await renderSettings({ canEdit: false });
+    expect(screen.getByLabelText(/^Proposes after, items/).closest('fieldset')?.disabled).toBe(true);
   });
 });

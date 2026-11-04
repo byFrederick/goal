@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,8 +23,8 @@ const (
 	rulePath  = "rules/evidence.md"
 )
 
-// errGate stands in for the eval gate's refusal, which keeps the draft open.
-var errGate = errors.New("evals pending")
+// errRefused stands in for a publish's refusal, such as definition-invalid.
+var errRefused = errors.New("definition invalid")
 
 // definition is an Authoring over one factory's files in memory: the current version's and an
 // open draft's, published as numbered versions.
@@ -32,8 +34,10 @@ type definition struct {
 	number   int
 	draft    map[string]string
 	revision int64
+	// published are the files of each version Publish published, by number.
+	published map[int]map[string]string
 	// gate refuses every publish, keeping the draft, when set.
-	gate      bool
+	refuse    bool
 	discarded int
 }
 
@@ -55,6 +59,22 @@ func (d *definition) CurrentFile(_ context.Context, _ domain.FactoryID, path str
 	defer d.mu.Unlock()
 
 	c, ok := d.current[path]
+
+	return []byte(c), ok, nil
+}
+
+func (d *definition) VersionFile(_ context.Context, _ domain.FactoryID, version domain.DefinitionVersionID, path string) ([]byte, bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	files := d.published[0]
+	if n, err := strconv.Atoi(strings.TrimPrefix(string(version), "v")); err == nil && n == d.number {
+		files = d.current
+	} else if err == nil && d.published[n] != nil {
+		files = d.published[n]
+	}
+
+	c, ok := files[path]
 
 	return []byte(c), ok, nil
 }
@@ -96,22 +116,27 @@ func (d *definition) WriteFile(_ context.Context, _ domain.FactoryID, path strin
 	return d.revision, nil
 }
 
-func (d *definition) Publish(_ context.Context, _ domain.FactoryID, _ int64, expected domain.DefinitionVersionID, _ string) (domain.DefinitionVersion, bool, error) {
+func (d *definition) Publish(_ context.Context, _ domain.FactoryID, _ int64, expected domain.DefinitionVersionID, _ string) (domain.DefinitionVersion, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if d.gate {
-		return domain.DefinitionVersion{}, true, errGate
+	if d.refuse {
+		return domain.DefinitionVersion{}, errRefused
 	}
 
 	if expected != versionID(d.number) {
-		return domain.DefinitionVersion{}, false, errors.New("base moved")
+		return domain.DefinitionVersion{}, errors.New("base moved")
 	}
 
+	if d.published == nil {
+		d.published = map[int]map[string]string{}
+	}
+
+	d.published[d.number] = d.current
 	d.current, d.draft = d.draft, nil
 	d.number++
 
-	return domain.DefinitionVersion{ID: versionID(d.number), Number: d.number}, false, nil
+	return domain.DefinitionVersion{ID: versionID(d.number), Number: d.number}, nil
 }
 
 func (d *definition) DiscardDraft(context.Context, domain.FactoryID, int64) error {
@@ -194,8 +219,8 @@ func newDecideFixture(t *testing.T) (*decideFixture, context.Context) {
 		State: domain.JonahDone, At: t0,
 		Proposals: []domain.NewProposal{{
 			Title: "Ask for a screenshot",
-			Files: []domain.ProposalFile{
-				{Path: agentPath, BaseSHA256: string(domain.HashBlob([]byte(writerV1))), Content: "# writer\nAttach a screenshot.\n"},
+			Edits: []domain.ProposalEdit{
+				{Path: agentPath, Replacements: []domain.Replacement{{Old: writerV1, New: "# writer\nAttach a screenshot.\n"}}},
 				{Path: rulePath, Content: "Show evidence.\n"},
 			},
 		}},
@@ -203,7 +228,39 @@ func newDecideFixture(t *testing.T) (*decideFixture, context.Context) {
 		t.Fatal(err)
 	}
 
+	f.run(ctx, t, domain.RunKindStation, 200) // the line's spend: Jonah's budget is $10
+
 	return f, ctx
+}
+
+// run records a finished run of the factory of kind that cost usd, started an hour before t0: a
+// station run is on an item still in progress, a jonah run on none.
+func (f *decideFixture) run(ctx context.Context, t *testing.T, kind domain.RunKind, usd float64) {
+	t.Helper()
+
+	at := t0.Add(-time.Hour)
+	n := ports.NewRun{FactoryID: factory, Agent: "builder", StartedAt: at, Kind: kind}
+
+	if kind == domain.RunKindStation {
+		it, err := f.store.CreateItem(ctx, domain.NewItem{
+			FactoryID: factory, Title: "work in progress", Station: stationBuild, State: domain.StateInProgress,
+			Class: domain.ClassStandard, CreatedAt: at,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		n.ItemID, n.Station = it.ID, stationBuild
+	}
+
+	id, err := f.store.StartRun(ctx, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (f *decideFixture) state(ctx context.Context, t *testing.T) domain.Proposal {
@@ -244,6 +301,23 @@ func TestDecide_Approve(t *testing.T) {
 	}
 }
 
+// Approve applies the stored replacements to the file as it is now: an unrelated change to the
+// same file since the review still publishes, with both changes in it (ADR 0039 decision 6).
+func TestDecide_ApproveAfterAnUnrelatedEdit(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t)
+	f.def.current = map[string]string{agentPath: "Intro.\n" + writerV1 + "Be brief.\n"}
+
+	if _, _, err := f.dc.Approve(ctx, factory, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := f.def.current[agentPath], "Intro.\n# writer\nAttach a screenshot.\nBe brief.\n"; got != want {
+		t.Errorf("v2's %s = %q, want %q", agentPath, got, want)
+	}
+}
+
 func TestDecide_ApproveRefusals(t *testing.T) {
 	t.Parallel()
 
@@ -263,7 +337,8 @@ func TestDecide_ApproveRefusals(t *testing.T) {
 	})
 
 	for name, current := range map[string]map[string]string{
-		"changed base":      {agentPath: "# writer, changed\n"},
+		"old text gone":     {agentPath: "# writer, changed\n"},
+		"old text twice":    {agentPath: writerV1 + writerV1},
 		"new file now here": {agentPath: writerV1, rulePath: "someone added it\n"},
 		"base file removed": {},
 	} {
@@ -283,18 +358,18 @@ func TestDecide_ApproveRefusals(t *testing.T) {
 		})
 	}
 
-	t.Run("gate keeps the draft", func(t *testing.T) {
+	t.Run("a refused publish discards the draft", func(t *testing.T) {
 		t.Parallel()
 
 		f, ctx := newDecideFixture(t)
-		f.def.gate = true
+		f.def.refuse = true
 
-		if _, _, err := f.dc.Approve(ctx, factory, 1); !errors.Is(err, errGate) {
-			t.Fatalf("approve = %v, want the gate's refusal", err)
+		if _, _, err := f.dc.Approve(ctx, factory, 1); !errors.Is(err, errRefused) {
+			t.Fatalf("approve = %v, want the publish's refusal", err)
 		}
 
-		if f.def.draft == nil || f.def.discarded != 0 || f.state(ctx, t).State != domain.ProposalProposed {
-			t.Errorf("after the gate draft = %v, discarded %d; want it open and the proposal proposed", f.def.draft, f.def.discarded)
+		if f.def.draft != nil || f.def.discarded != 1 || f.state(ctx, t).State != domain.ProposalProposed {
+			t.Errorf("after the refusal draft = %v, discarded %d; want it discarded and the proposal proposed", f.def.draft, f.def.discarded)
 		}
 	})
 }
@@ -319,6 +394,22 @@ func TestDecide_Edit(t *testing.T) {
 
 	if _, err := f.dc.Reject(ctx, factory, 1, "no"); !errors.Is(err, ports.ErrProposalDecided) {
 		t.Errorf("reject after edit = %v, want ErrProposalDecided", err)
+	}
+}
+
+// Edit applies the stored replacements to the draft's copy of a file a person changed elsewhere.
+func TestDecide_EditIntoAChangedDraft(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t)
+	f.def.draft, f.def.revision = map[string]string{agentPath: writerV1 + "Keep it short.\n"}, 3
+
+	if _, _, err := f.dc.Edit(ctx, factory, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := f.def.draft[agentPath], "# writer\nAttach a screenshot.\nKeep it short.\n"; got != want {
+		t.Errorf("draft's %s = %q, want %q", agentPath, got, want)
 	}
 }
 
@@ -404,9 +495,151 @@ func TestDecide_QueueReview(t *testing.T) {
 		t.Errorf("second review = %v, want ErrReviewInFlight", err)
 	}
 
-	policy.WeeklyUSD = 0 // no spend at all is already the budget
+	none := policy
+	none.Share = 0 // a share of nothing is already used up
+
+	if _, err := f.dc.QueueReview(ctx, factory, versionID(1), none); !errors.Is(err, domain.ErrLearningBudgetExhausted) {
+		t.Errorf("review with no share = %v, want ErrLearningBudgetExhausted", err)
+	}
+
+	f.run(ctx, t, domain.RunKindJonah, 10) // 5% of the line's $200
 
 	if _, err := f.dc.QueueReview(ctx, factory, versionID(1), policy); !errors.Is(err, domain.ErrLearningBudgetExhausted) {
 		t.Errorf("review over budget = %v, want ErrLearningBudgetExhausted", err)
+	}
+}
+
+// publishFile publishes path as content on top of the current version, as a person's later
+// publish does.
+func (f *decideFixture) publishFile(ctx context.Context, t *testing.T, path, content string) {
+	t.Helper()
+
+	if _, _, err := f.def.OpenDraft(ctx, factory); err != nil {
+		t.Fatal(err)
+	}
+
+	rev, err := f.def.WriteFile(ctx, factory, path, []byte(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.def.Publish(ctx, factory, rev, versionID(f.def.number), "later"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Undo this change reverses the published edit against the current version, after a later
+// publish changed the same file elsewhere, and publishes nothing; the file the proposal added is
+// left. A second undo waits for the first to be decided.
+func TestDecider_UndoReversesAfterLaterPublish(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t)
+
+	if _, _, err := f.dc.Approve(ctx, factory, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	f.publishFile(ctx, t, agentPath, "# writer\nAttach a screenshot.\nBe brief.\n")
+
+	undo, err := f.dc.Undo(ctx, factory, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first := f.state(ctx, t)
+
+	want := []domain.ProposalEdit{{Path: agentPath, Replacements: []domain.Replacement{{Old: "# writer\nAttach a screenshot.\n", New: writerV1}}}}
+	if undo.Number != 2 || undo.Undoes != first.ID || undo.State != domain.ProposalProposed || undo.VersionID != versionID(3) ||
+		!reflect.DeepEqual(undo.Edits, want) {
+		t.Errorf("undo = %+v, want proposal 2 undoing proposal 1 against v3 with %+v", undo, want)
+	}
+
+	if f.def.number != 3 || f.def.draft != nil {
+		t.Errorf("after the undo the factory is at v%d with draft %v; want v3 and no draft: nothing publishes", f.def.number, f.def.draft)
+	}
+
+	if got := f.audit.actions(); got[len(got)-1] != domain.AuditProposalUndo {
+		t.Errorf("audit = %v, want %s last", got, domain.AuditProposalUndo)
+	}
+
+	if _, err := f.dc.Undo(ctx, factory, 1); !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("second undo = %v, want ErrConflict", err)
+	}
+
+	f.expectUndoApproves(ctx, t, 2, "# writer\nBe brief.\n")
+}
+
+// expectUndoApproves checks that the undo of number approves, leaving the writer's prompt want.
+func (f *decideFixture) expectUndoApproves(ctx context.Context, t *testing.T, number int64, want string) {
+	t.Helper()
+
+	if _, _, err := f.dc.Approve(ctx, factory, number); err != nil || f.def.current[agentPath] != want {
+		t.Errorf("approve the undo = %v, %s = %q; want %q: the later publish kept and the change gone", err, agentPath, f.def.current[agentPath], want)
+	}
+}
+
+func TestDecider_UndoRefusals(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a proposal never published", func(t *testing.T) {
+		t.Parallel()
+
+		f, ctx := newDecideFixture(t)
+		if _, err := f.dc.Undo(ctx, factory, 1); !errors.Is(err, domain.ErrProposalNotPublished) {
+			t.Errorf("undo = %v, want ErrProposalNotPublished", err)
+		}
+	})
+
+	t.Run("the changed text is gone", func(t *testing.T) {
+		t.Parallel()
+
+		f, ctx := newDecideFixture(t)
+		if _, _, err := f.dc.Approve(ctx, factory, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		f.publishFile(ctx, t, agentPath, "# writer\nAttach two screenshots.\n")
+
+		_, err := f.dc.Undo(ctx, factory, 1)
+		if !errors.Is(err, domain.ErrUndoConflict) || !strings.Contains(err.Error(), agentPath) {
+			t.Errorf("undo = %v, want ErrUndoConflict naming %s", err, agentPath)
+		}
+	})
+}
+
+// A failed review never moves the window: the next manual review starts where the last done one
+// ended (ADR 0039 decision 3).
+func TestDecide_QueueReviewAfterAFailedOne(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t) // its review is done, its window ended at t0
+	f.clock.Advance(time.Hour)
+
+	policy := domain.DefaultJonahPolicy()
+
+	failedOne, err := f.dc.QueueReview(ctx, factory, versionID(1), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claimed, err := f.store.ClaimJonahReview(ctx, f.clock.Now(), time.Minute)
+	if err != nil || claimed.ID != failedOne.ID {
+		t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
+	}
+
+	if _, _, err := f.store.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "x", At: f.clock.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	f.clock.Advance(time.Hour)
+
+	r, err := f.dc.QueueReview(ctx, factory, versionID(1), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !r.WindowStart.Equal(t0) {
+		t.Errorf("window starts %s, want %s, where the last done review ended", r.WindowStart, t0)
 	}
 }

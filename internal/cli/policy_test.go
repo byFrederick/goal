@@ -41,7 +41,7 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 		Policy: gen.OrgPolicyInput{
 			AllowedModels: []string{cliOpus, cliHaiku}, DefaultModel: cliOpus,
 			DeniedCommands: []string{"Bash(terraform apply:*)"}, BoxTimeLimitMinutes: 180,
-			Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "attached_only"},
+			Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "environment"},
 		},
 		Models: []gen.PolicyModel{
 			{Id: cliOpus, Label: "Claude Opus 5.5", UsedBy: []gen.ModelUse{
@@ -159,7 +159,7 @@ func TestPolicy_SetKeepsWhatItRead(t *testing.T) {
 	want := gen.OrgPolicyInput{
 		AllowedModels: []string{cliOpus, cliSonnet}, DefaultModel: cliSonnet,
 		DeniedCommands: []string{"Bash(git push --force:*)", "Bash(rm -rf /:*)"}, BoxTimeLimitMinutes: 90,
-		Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "attached_only"},
+		Tools: gen.ToolPolicy{WriteOutsideBranch: "off", MergePullRequest: "review_approval", ReadWeb: "ask", UseCredentials: "environment"},
 	}
 
 	if got, _ := json.Marshal(g.saved); string(got) != mustJSON(t, want) {

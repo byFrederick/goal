@@ -81,21 +81,45 @@ func TestSettings_JonahReviews(t *testing.T) {
 	}
 }
 
-// Without GOAL_EMBED_URL the knowledge base searches by keywords; with it the model defaults to
-// Workers AI's bge-m3, and two workers sync.
+// The try loop's times and cap are read from the environment, defaulting to 1m, 30m, 5m and 2, and
+// one that is not positive is refused by name.
+func TestSettings_JonahTries(t *testing.T) {
+	t.Parallel()
+
+	s, err := settingsFrom(envOf(nil))
+	if err != nil || s.JonahTryEvery != time.Minute || s.JonahTry.Timeout != 30*time.Minute || s.JonahTry.Margin != 5*time.Minute ||
+		s.JonahTry.PerFactory != 2 {
+		t.Fatalf("defaults %s, %+v (%v); want 1m, 30m, 5m and 2", s.JonahTryEvery, s.JonahTry, err)
+	}
+
+	s, err = settingsFrom(envOf(map[string]string{"GOAL_JONAH_TRY_TIMEOUT": "1h", "GOAL_JONAH_TRIES_PER_FACTORY": "4"}))
+	if err != nil || s.JonahTry.Timeout != time.Hour || s.JonahTry.PerFactory != 4 {
+		t.Fatalf("try timeout %s, per factory %d (%v); want 1h and 4", s.JonahTry.Timeout, s.JonahTry.PerFactory, err)
+	}
+
+	for name, bad := range map[string]string{
+		"GOAL_JONAH_TRY_EVERY": "0s", "GOAL_JONAH_TRY_TIMEOUT": "soon", "GOAL_JONAH_TRY_LEASE_MARGIN": "-1m", "GOAL_JONAH_TRIES_PER_FACTORY": "0",
+	} {
+		if _, err := settingsFrom(envOf(map[string]string{name: bad})); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=%s: %v; want an error naming it", name, bad, err)
+		}
+	}
+}
+
+// Without GOAL_WORKERS_AI_URL goald converts no PDF or Office file, and with it goald does; two workers sync.
 func TestSettings_Knowledge(t *testing.T) {
 	t.Parallel()
 
 	s, err := settingsFrom(envOf(nil))
-	if err != nil || s.Embed.URL != "" || s.KBWorkers != 2 || s.UploadMaxBytes != 25<<20 {
-		t.Fatalf("defaults = %+v, %d, %d, %v", s.Embed, s.KBWorkers, s.UploadMaxBytes, err)
+	if err != nil || s.WorkersAI.URL != "" || s.KBWorkers != 2 || s.UploadMaxBytes != 25<<20 {
+		t.Fatalf("defaults = %+v, %d, %d, %v", s.WorkersAI, s.KBWorkers, s.UploadMaxBytes, err)
 	}
 
 	s, err = settingsFrom(envOf(map[string]string{
-		embedURLEnv: "https://api.cloudflare.com/client/v4/accounts/acme/ai/v1", embedKeyEnv: "k", kbWorkersEnv: "0", uploadMaxEnv: "1048576",
+		workersAIURLEnv: "https://api.cloudflare.com/client/v4/accounts/acme/ai", workersAIKeyEnv: "k", kbWorkersEnv: "0", uploadMaxEnv: "1048576",
 	}))
-	if err != nil || s.Embed.Model != "@cf/baai/bge-m3" || s.Embed.Key != "k" || s.KBWorkers != 0 || s.UploadMaxBytes != 1<<20 {
-		t.Errorf("with an embedding API = %+v, %d, %d, %v", s.Embed, s.KBWorkers, s.UploadMaxBytes, err)
+	if err != nil || s.WorkersAI.URL == "" || s.WorkersAI.Key != "k" || s.KBWorkers != 0 || s.UploadMaxBytes != 1<<20 {
+		t.Errorf("with a conversion API = %+v, %d, %d, %v", s.WorkersAI, s.KBWorkers, s.UploadMaxBytes, err)
 	}
 
 	for _, bad := range []string{"0", "-1", "25MiB"} {
@@ -187,8 +211,8 @@ func TestSettings_TheCutoverIgnoresTheEnvironmentCredentials(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"GOAL_TASK_ENV": "runtime.modelConnection", "CLAUDE_CODE_OAUTH_TOKEN": "goal connection import-env",
-		"GOAL_GITHUB_TOKEN": "github connection", "GOAL_GITHUB_API_URL": "host gives its API", "GOAL_GITHUB_WEB_URL": "host",
+		"GOAL_TASK_ENV": "runtime.modelKey", "CLAUDE_CODE_OAUTH_TOKEN": "goal secret create",
+		"GOAL_GITHUB_TOKEN": "runtime.repository.token", "GOAL_GITHUB_API_URL": "host gives its API", "GOAL_GITHUB_WEB_URL": "host",
 	}
 
 	if got := ignored(s); len(got) != len(want) {
@@ -340,33 +364,6 @@ func TestSettings_Models(t *testing.T) {
 	}
 }
 
-// The bake-off models: none by default; GOAL_BAKEOFF_MODELS lists model ids, and a value that is
-// not a list of them refuses to start, naming the variable.
-func TestSettings_BakeOffModels(t *testing.T) {
-	t.Parallel()
-
-	s, err := settingsFrom(envOf(nil))
-	if err != nil || len(s.BakeOffModels) != 0 {
-		t.Fatalf("default bake-off models = %v (%v), want none", s.BakeOffModels, err)
-	}
-
-	s, err = settingsFrom(envOf(map[string]string{"GOAL_BAKEOFF_MODELS": " claude-sonnet-5-5 , claude-haiku-5-5"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if want := []string{"claude-sonnet-5-5", "claude-haiku-5-5"}; !slices.Equal(s.BakeOffModels, want) {
-		t.Errorf("bake-off models = %v, want %v", s.BakeOffModels, want)
-	}
-
-	for _, bad := range []string{"gpt-5", "claude-haiku-5-5,,claude-sonnet-5-5", "claude-haiku-5-5,claude-haiku-5-5", "Claude-Opus"} {
-		_, err := settingsFrom(envOf(map[string]string{"GOAL_BAKEOFF_MODELS": bad}))
-		if err == nil || !strings.Contains(err.Error(), "GOAL_BAKEOFF_MODELS") {
-			t.Errorf("GOAL_BAKEOFF_MODELS=%q: err = %v, want a refusal naming it", bad, err)
-		}
-	}
-}
-
 // The egress addresses: none by default; GOAL_EGRESS_ADDRESSES lists CIDRs, and a value that is
 // not one refuses to start, naming the variable.
 func TestSettings_EgressAddresses(t *testing.T) {
@@ -415,7 +412,7 @@ func TestSettings_RefusesUnsafeConfiguration(t *testing.T) {
 		{name: "public URL in clear text ending like localhost", env: map[string]string{publicURLEnv: "http://evillocalhost"}, want: publicURLEnv},
 		{name: "public URL without a scheme", env: map[string]string{publicURLEnv: "goal.example.com"}, want: publicURLEnv},
 		{name: "public URL with a path", env: map[string]string{publicURLEnv: "https://example.com/goal"}, want: publicURLEnv},
-		{name: "embeddings in clear text", env: map[string]string{embedURLEnv: "http://embeddings.example.com/v1"}, want: embedURLEnv},
+		{name: "conversions in clear text", env: map[string]string{workersAIURLEnv: "http://ai.example.com/v1"}, want: workersAIURLEnv},
 		{name: "negative knowledge workers", env: map[string]string{kbWorkersEnv: "-1"}, want: kbWorkersEnv},
 		{name: "gateway listener on the main one", env: map[string]string{gatewayEnv: defaultListen}, want: "another address"},
 		{name: "gateway listener on the main one by name", env: map[string]string{gatewayEnv: "localhost:8080"}, want: "another address"},

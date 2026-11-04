@@ -23,12 +23,22 @@
 // see of them (domain.ConnectionKind.Outline): env names, MCP servers whose headers name env
 // variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
 // bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
-// Its knowledge_sources name what Goal's knowledge tools search, which the worker's prompt
-// mentions. Its rules are the factory rules of the run's version that apply to its agent,
-// station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
+// Its rules are the factory rules of the run's version that apply to its agent, station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
 // rule file and the file the worker writes; the first bundle served to a run that any rule
 // applies to appends domain.EventRulesApplied with their names and hashes, and a bundle fetched
 // again appends none.
+//
+// # Knowledge
+//
+// The engine pins, at a claim's start, the newest snapshot of each knowledge source of the version
+// that applies to the run (ADR 0038 decision 7), and the task token carries the pins. The bundle's
+// spec.knowledge holds the run's Knowledge section (domain.KnowledgeIndex: the ground rules, one
+// line per pinned source with its read-when line, file count and top folders read from its zip's
+// central directory, the sources not synced yet and the factory memory) and, for each pin, the URL
+// prepare downloads it from: GET /run/knowledge/<source> (ServeKnowledge), which streams the pinned
+// zip and answers 404 for a source the token did not pin. An agent whose builtins.read is off gets
+// no knowledge; a draft request's bundle gets the section and no snapshot. The first bundle served
+// to a run with a pin appends domain.EventKnowledgePinned, once, as for rules.
 //
 // # Notes
 //
@@ -52,13 +62,7 @@
 // # Goal's tools
 //
 // The endpoint serves Goal's own tools, named "<server>__<tool>" (Claude's tool names allow no
-// dots); a tool the run may not call, a connection's included, is refused like an unknown one. A
-// run whose definition version lists knowledge sources (spec.knowledge.sources) is served
-// knowledge__search, knowledge__read and knowledge__verdict (knowledge.go). They search and read
-// those sources only, in the token's organization only (row-level security), whatever the agent
-// asks: a document of another source answers as one that does not exist. A search and a read
-// record the run's use of each document they return, best effort, and knowledge__verdict records
-// the agent's verdict on a document the run used (ADR 0027).
+// dots); a tool the run may not call, a connection's included, is refused like an unknown one.
 //
 // Every run is served question__ask (question.go, ADR 0018): the agent asks the person
 // responsible for its item a question, 1 to 500 characters, with 0 to 4 quick-answer choices of
@@ -74,6 +78,24 @@
 // events in the token's window and its proposals rejected in the last 90 days, read through
 // Deps.Jonah (503 when nil); it names no item, repository, connection, rule or knowledge source.
 // Its MCP session needs no agent of the version, lists no tool and refuses every call.
+//
+// # Tries of past items
+//
+// A token of kind domain.TaskKindTry is a try of a past item (ADR 0039 decision 9, try.go). Its
+// bundle is the station's on the version with the proposal's edits applied to it, from what
+// the original run recorded: its brief, the item's earlier outputs and its commit. Its agent gets
+// no connection, environment file or MCP server, and its environment's env is for setup alone.
+// Its MCP session lists no tool, and it records no event on the past item.
+//
+// # Grades
+//
+// A token of kind domain.TaskKindGrade is a grade (ADR 0039 decision 10, grade.go): one model call
+// that decides whether a result fixed the reason an item went back. It names the try and which
+// result it grades, a try's or the item's original or final one. Its bundle's spec.grade holds the
+// reason and that result's output and diff, read through Deps.Grades (503 when it or Deps.Jonah is
+// nil), with the token's model and Jonah's budget left as max_usd; it has no item, repository,
+// definition, file, connection, knowledge, rule or tool. Its MCP session lists no tool, refuses
+// every call, and its notes are none.
 //
 // # State
 //
@@ -105,7 +127,7 @@ import (
 )
 
 // EventToolCall is the kind of the audit event every gateway tool call appends.
-const EventToolCall domain.EventKind = "gateway_tool_call"
+const EventToolCall = domain.EventGatewayToolCall
 
 // Definitions returns a published definition version. The gateway reads the version a task's
 // run started on (its token's v claim), so the run sees that version's agents and connections
@@ -141,6 +163,12 @@ type Connections interface {
 	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
 }
 
+// Policies reads the organization policy of the organization in ctx, whose MCP tool mode cap the
+// run bundle applies; ports.OrgPolicies satisfies it.
+type Policies interface {
+	Get(ctx context.Context) (domain.OrgPolicy, error)
+}
+
 // Deps are the gateway's collaborators. Logger may be nil (logs discarded).
 type Deps struct {
 	Definitions Definitions
@@ -151,9 +179,13 @@ type Deps struct {
 	Events      Events
 	Clock       ports.Clock
 	Logger      *slog.Logger
-	// Knowledge serves Goal's knowledge tools to runs whose factory lists knowledge sources; nil
-	// serves none.
+	// Knowledge and Objects give runs the knowledge snapshots their tokens pin, and their prompt's
+	// Knowledge section (knowledge.go); without Knowledge every pinned source reads as not synced,
+	// and without Objects no snapshot is served and no top folder listed.
 	Knowledge Knowledge
+	Objects   Objects
+	// Policies cap the tool modes of the run bundle's environment MCP servers.
+	Policies Policies
 	// Questions takes the questions agents ask with question__ask, which every run is served.
 	Questions Questions
 	// ToolApprovals take the Ask-first tool calls runs report at POST /run/tool-approval.
@@ -165,6 +197,17 @@ type Deps struct {
 	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
 	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
 	Jonah Jonah
+	// Watches reads the watches of the published proposals a review's bundle holds (ADR 0039
+	// decisions 4 and 14); nil leaves the watch out of their files.
+	Watches ProposalWatches
+	// Tries and Proposed give a try of a past item its bundle (try.go): the try's record and its
+	// version with the proposal's edits applied to it. Without both, or without Jonah, a try
+	// token's bundle is 503.
+	Tries    Tries
+	Proposed ProposedDefinitions
+	// Grades give a grade its reason and the result it grades (grade.go). Without it, or without
+	// Jonah, a grade token's bundle is 503.
+	Grades Grades
 }
 
 // DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
@@ -173,11 +216,13 @@ type DraftRequests interface {
 	Get(ctx context.Context, id domain.DraftRequestID) (domain.DraftRequest, error)
 }
 
-// Drafts reads a factory's open draft and the blobs of its files, for the organization in ctx;
-// ports.DefinitionStore satisfies it. The gateway only reads them: writing a draft is authoring's.
+// Drafts reads a factory's open draft and the blobs of its files, and its published versions
+// (a Jonah review's versions.md), for the organization in ctx; ports.DefinitionStore satisfies it.
+// The gateway only reads them: writing a draft is authoring's.
 type Drafts interface {
 	Draft(ctx context.Context, f domain.FactoryID) (domain.DefinitionVersion, error)
 	Blob(ctx context.Context, h domain.BlobHash) ([]byte, error)
+	Versions(ctx context.Context, f domain.FactoryID, before, limit int) ([]domain.DefinitionVersion, error)
 }
 
 // Config bounds the gateway. Zero values take the defaults below.
@@ -186,6 +231,11 @@ type Config struct {
 	Key []byte
 	// MaxRequestBytes caps one request from an agent (default 4 MiB).
 	MaxRequestBytes int64
+	// KnowledgeURLTTL, when above zero, gives each pinned snapshot in a run's bundle a signed
+	// bucket URL valid that long (Objects.PresignGet), for boxes that reach the bucket: cloud ones
+	// (ADR 0038 decision 7). Zero keeps KnowledgePath<source>, served by ServeKnowledge, for local
+	// boxes that cannot reach the bucket.
+	KnowledgeURLTTL time.Duration
 }
 
 const (
@@ -201,25 +251,32 @@ type Gateway struct {
 	defs        Definitions
 	items       Items
 	connections Connections
+	policies    Policies
 	events      Events
 	clock       ports.Clock
 	log         *slog.Logger
 	knowledge   Knowledge // nil without Deps.Knowledge
+	objects     Objects   // nil without Deps.Objects
 	questions   Questions
 	approvals   ToolApprovals
 	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
 	draftRequests DraftRequests
 	drafts        Drafts
 	jonah         Jonah // nil without Deps.Jonah
-	cfg           Config
-	mcp           http.Handler
+	watches       ProposalWatches
+	// tries and proposed are nil without Deps.Tries and Deps.Proposed.
+	tries    Tries
+	proposed ProposedDefinitions
+	grades   Grades // nil without Deps.Grades
+	cfg      Config
+	mcp      http.Handler
 }
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Events == nil || d.Clock == nil || d.Questions == nil ||
-		d.ToolApprovals == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Events, Clock, Questions and ToolApprovals are required")
+	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Policies == nil || d.Events == nil || d.Clock == nil ||
+		d.Questions == nil || d.ToolApprovals == nil {
+		return nil, errors.New("gateway: Definitions, Items, Connections, Policies, Events, Clock, Questions and ToolApprovals are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -229,8 +286,9 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
 
 	g := &Gateway{
-		defs: d.Definitions, items: d.Items, connections: d.Connections, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah, cfg: cfg,
+		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
+		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
+		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -321,8 +379,9 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: version %s is not a version of factory %s", errForbidden, c.VersionID, c.FactoryID)
 	}
 
-	// A Jonah review's agent is not one of the factory's, and it is served no tool.
-	if c.Kind == domain.TaskKindJonah {
+	// A Jonah review's agent is not one of the factory's, and it is served no tool; nor is a try
+	// of a past item, which has no person to ask and no connection, or a grade, which calls none.
+	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry || c.Kind == domain.TaskKindGrade {
 		return &session{g: g, claims: c, noTools: true}, nil
 	}
 
@@ -330,7 +389,7 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 		return nil, fmt.Errorf("%w: agent %q is not in factory %s", errForbidden, c.Agent, c.FactoryID)
 	}
 
-	return &session{g: g, claims: c, sources: g.searchable(f.Line())}, nil
+	return &session{g: g, claims: c}, nil
 }
 
 func claimAttrs(c domain.TaskClaims, more ...any) []any {

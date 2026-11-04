@@ -27,8 +27,8 @@ export function organizationCard(org: OrgSummary, host: string): ReactNode {
   return <PreviewCard label="Organization" value={org.name} detail={`${host}/o/${org.slug}`} />;
 }
 
-/** The code card: the first repository chosen in step 2. */
-export function codeCard(repo: string | undefined): ReactNode {
+/** The code card: the repository entered in step 2 and the secret that holds its token. */
+export function codeCard(repo: string | undefined, secret?: string): ReactNode {
   if (repo === undefined) return undefined;
   return (
     <PreviewCard
@@ -36,7 +36,7 @@ export function codeCard(repo: string | undefined): ReactNode {
       label="Code"
       value={repo}
       icon={<GitHubMark className="shrink-0" />}
-      detail="GitHub, read and pull requests"
+      detail={secret ? `Token ${secret}` : 'Public repository'}
     />
   );
 }

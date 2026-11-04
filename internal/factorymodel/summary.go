@@ -208,7 +208,7 @@ func fieldSummary(key string, op ChangeOp, from, to any) string {
 
 var fieldLabels = map[string]string{
 	"id": "Factory id", "work_types": "Work types", "default_model": "Default model",
-	keyLibrarian: "The Done station's worker", "flow": "Flow policy",
+	"flow": "Flow policy",
 }
 
 func isScalar(v any) bool { return !isCollection(v) }

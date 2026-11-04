@@ -1,6 +1,9 @@
-// Package gitdocs implements ports.SourceReader for the knowledge base's synced sources whose
-// connection's kind syncs with gitdocs (spec 4 §4.8, §5.6): the documents of one repository on
-// GitHub or GitLab, read through the code host's REST API with the connection's token.
+// Package gitdocs implements ports.SourceReader for the knowledge base's synced sources that sync
+// with gitdocs (spec 4 §4.8, §5.6): the documents of one repository on GitHub or GitLab, read
+// through the code host's REST API with the token of the source's secret (ADR 0037 decision 14)
+// or, until moving over gives it one, of its connection. A source on a secret reads on its
+// repository's host, github.com or gitlab.com, or another whose code host its config names
+// (code_host: github or gitlab).
 //
 // A source's config names the repository (repository: its https URL on the connection's git host,
 // such as https://github.com/acme/docs), the branch (branch; the repository's default branch when
@@ -12,7 +15,12 @@
 // git blob id as its version, so a sync fetches only the files whose blob changed and the
 // ingestion loop deletes the documents of files no longer listed. Symbolic links and submodules
 // are not documents. A fetch reads one file raw, at most an upload's size
-// (domain.DefaultMaxUpload). The token travels only in the API's own header of requests to the
+// (domain.DefaultMaxUpload). A sync that changes many files reads them from the branch's zip
+// archive instead (ports.ArchiveReader): one download, streamed to a temporary file and bounded
+// at four times a source's Markdown (maxArchiveBytes, 200 MB); it yields only listed files whose
+// blob id still matches, skips links, and fails on an entry that escapes the archive's root, so
+// the sync fetches the rest file by file. GitHub's archive redirects to its download host, which
+// is followed once, over https, without the token. The token travels only in the API's own header of requests to the
 // connection's host; a repository on any other host is refused before anything is sent, redirects
 // are not followed and no error carries the token. goald gives it a transport that dials public
 // addresses only (egress.PublicDialer).
@@ -58,6 +66,8 @@ const (
 // Reader reads gitdocs sources. It is safe for concurrent use and keeps no state.
 type Reader struct {
 	http *http.Client
+	// maxArchive bounds an archive: maxArchiveBytes (tests lower it, export_test.go).
+	maxArchive int64
 }
 
 // New returns a reader.
@@ -70,7 +80,7 @@ func New(cfg Config) *Reader {
 		Timeout: cfg.Timeout, Transport: cfg.Transport,
 		// A credentialed request is never sent anywhere but the connection's API.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}}
+	}, maxArchive: maxArchiveBytes}
 }
 
 // List implements ports.SourceReader: the files of the source's branch its globs choose, with
@@ -145,29 +155,30 @@ type source struct {
 	include, exclude [][]string
 }
 
-// open reads s: the connection's code host and git login, and the source's config.
-func open(s domain.SyncSpec) (source, error) {
-	if s.Connection == nil {
-		return source{}, fmt.Errorf("source %s has no connection to read: %w", s.Source.Name, domain.ErrInvalid)
-	}
+// cfgCodeHost is the config key of a source on a secret naming its code host (github or gitlab),
+// for a repository on a host other than github.com and gitlab.com.
+const cfgCodeHost = "code_host"
 
-	c := s.Connection
+// dotComHosts are the code hosts a repository's host names without code_host.
+var dotComHosts = map[string]string{githubDotCom: "github", "gitlab.com": "gitlab"}
+
+// open reads s: the code host and its login (the secret's value on the repository's host, or the
+// connection's git login), and the source's config.
+func open(s domain.SyncSpec) (source, error) {
+	login, token, hostName, owner, err := credential(s)
+	if err != nil {
+		return source{}, err
+	}
 
 	var host codeHost
 
-	switch c.Kind.Spec.CodeHost {
+	switch hostName {
 	case "github":
 		host = github{}
 	case "gitlab":
 		host = gitlab{}
 	default:
-		return source{}, fmt.Errorf("gitdocs reads repositories on GitHub or GitLab, and kind %s of connection %s has neither as its code host: %w",
-			c.Kind.Name, c.Connection.Name, domain.ErrInvalid)
-	}
-
-	login, token, err := c.GitLogin()
-	if err != nil {
-		return source{}, err
+		return source{}, fmt.Errorf("gitdocs reads repositories on GitHub or GitLab, and %s names neither as its code host: %w", owner, domain.ErrInvalid)
 	}
 
 	cfg := s.Source.Config
@@ -193,6 +204,42 @@ func open(s domain.SyncSpec) (source, error) {
 	}
 
 	return src, nil
+}
+
+// credential is what s reads with: the git host, the token, the code host's name and who names
+// it. A source on a secret reads on its repository's host, whose code host its config names
+// (code_host) or the host is (github.com, gitlab.com); one on a connection on the host of the
+// connection's git login, whose kind names the code host.
+func credential(s domain.SyncSpec) (login, token, host, owner string, err error) {
+	switch {
+	case s.Secret != nil:
+		cfg := s.Source.Config
+
+		u, perr := url.Parse(strings.TrimSpace(cfg["repository"]))
+		if perr != nil || u.Host == "" {
+			return "", "", "", "", fmt.Errorf("source %s: the config names no repository URL: %w", s.Source.Name, domain.ErrInvalid)
+		}
+
+		login = strings.ToLower(u.Host)
+
+		host = strings.TrimSpace(cfg[cfgCodeHost])
+		if host == "" {
+			host = dotComHosts[login]
+		}
+
+		return login, s.Secret.Value, host, "source " + s.Source.Name + " (" + cfgCodeHost + ", or a repository on github.com or gitlab.com)", nil
+	case s.Connection != nil:
+		c := s.Connection
+
+		login, token, err = c.GitLogin()
+		if err != nil {
+			return "", "", "", "", err
+		}
+
+		return login, token, c.Kind.Spec.CodeHost, "kind " + c.Kind.Name + " of connection " + c.Connection.Name, nil
+	default:
+		return "", "", "", "", fmt.Errorf("source %s has no secret or connection to read with: %w", s.Source.Name, domain.ErrInvalid)
+	}
 }
 
 // repository checks that raw is an https URL of a repository on host (the connection's git
@@ -256,6 +303,8 @@ type codeHost interface {
 	raw(s source, p string) (u, accept string)
 	// webURL links to the file at p of branch.
 	webURL(s source, branch, p string) string
+	// archive is where the zip archive of the source's branch is read.
+	archive(s source) string
 }
 
 // mode of a symbolic link in a git tree; a submodule is a "commit" entry.
@@ -318,18 +367,7 @@ func (r *Reader) send(ctx context.Context, s source, url, accept string, limit i
 	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(res.Body, maxProblemBytes))
-
-		var problem struct {
-			Message any `json:"message"`
-			Error   any `json:"error"`
-		}
-
-		_ = json.Unmarshal(raw, &problem)
-
-		msg := fmt.Sprint(firstOf(problem.Message, problem.Error))
-
-		return nil, nil, &statusError{host: s.host.name(), status: res.StatusCode, message: strings.ReplaceAll(msg, s.token, "[redacted]")}
+		return nil, nil, refusal(res, s)
 	}
 
 	tooLarge := fmt.Errorf("%s's answer is larger than %d bytes: %w", s.host.name(), limit, ports.ErrTooLarge)
@@ -349,6 +387,23 @@ func (r *Reader) send(ctx context.Context, s source, url, accept string, limit i
 	}
 
 	return res.Header, body, nil
+}
+
+// refusal is res, an answer other than 200, as a statusError with the host's message, the token
+// scrubbed from it.
+func refusal(res *http.Response, s source) error {
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, maxProblemBytes))
+
+	var problem struct {
+		Message any `json:"message"`
+		Error   any `json:"error"`
+	}
+
+	_ = json.Unmarshal(raw, &problem)
+
+	msg := fmt.Sprint(firstOf(problem.Message, problem.Error))
+
+	return &statusError{host: s.host.name(), status: res.StatusCode, message: strings.ReplaceAll(msg, s.token, "[redacted]")}
 }
 
 // firstOf is the first of vs that is set, "" when none is.

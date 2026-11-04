@@ -26,6 +26,11 @@ func (c *Cache) Validate(ctx context.Context, id domain.DefinitionVersionID, con
 		return err
 	}
 
+	return validate(v, contract, output)
+}
+
+// validate checks output against the schema v declares for contract.
+func validate(v *version, contract string, output json.RawMessage) error {
 	schema, err := compileContract(v, contract)
 	if err != nil {
 		return err

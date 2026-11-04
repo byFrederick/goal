@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, connection, credential, knowledge, search, runs, eval, bake-off, jonah, spend, judge, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -364,7 +364,7 @@ Flags: `--models M,M`, `--default M`, `--deny-command P`, `--box-limit 3h`.
 goal standing-rules list [--revoked] [--json]
 ```
 
-the organization's standing rules: which agent role may call which connection tool without asking, who made it and when (--revoked: the revoked ones too)
+the organization's standing rules: which agent role may call which connection or MCP server tool without asking, who made it and when (--revoked: the revoked ones too)
 
 Flags: `--revoked`, `--json`.
 
@@ -402,127 +402,103 @@ goal key revoke <name|id>
 
 revoke a key: anything using it stops working at once
 
-## goal connection list
+## goal connection
 
 ```text
-goal connection list [--kind K] [--factory F]
+goal connection ...
 ```
 
-the organization's connections: kind, status, which secrets are set (never a value), what uses them
+moved to goal access, goal secret and environment files; prints where and exits 2
 
-Flags: `--kind K`, `--factory F`.
-
-## goal connection show
+## goal secret list
 
 ```text
-goal connection show <name>
+goal secret list
 ```
 
-one connection: its fields, last test, the env names a run gets and its kind's docs
+the organization's secrets: factories, what uses them, last use and expiry (never a value)
 
-## goal connection create
+## goal secret show
 
 ```text
-goal connection create <name> --kind K [--field k=v]... [--secret k=-] [--secret-file k=<path>]... [--description D]
+goal secret show <name>
 ```
 
-create a connection (owners and admins); a secret comes from stdin (k=-, one value) or a file, never argv
+one secret: source, description, factories, what uses it, expiry and reminder, last use, who changed it
 
-Flags: `--kind K`, `--field k=v`, `--secret k=-`, `--secret-file k=<path>`, `--description D`.
-
-## goal connection update
+## goal secret create
 
 ```text
-goal connection update <name> [--name N] [--description D] [--field k=v]... [--secret k=-] [--secret-file k=<path>]...
+goal secret create <name> [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
 ```
 
-rename it, change its fields (merged; k= clears one) or replace the named secrets
+create a secret (owners and admins), open to no factory unless --factory or --all-factories; its value comes from stdin, never argv: ... &lt; value-file
 
-Flags: `--name N`, `--description D`, `--field k=v`, `--secret k=-`, `--secret-file k=<path>`.
+Flags: `--description D`, `--factory <id>`, `--all-factories`, `--expires YYYY-MM-DD`, `--remind-days N`.
 
-## goal connection delete
-
-```text
-goal connection delete <name>
-```
-
-delete it (refused while a factory's current version names it)
-
-## goal connection test
+## goal secret replace
 
 ```text
-goal connection test <name>
-```
-
-run its kind's test from goald (exit 1 when it fails)
-
-## goal connection kinds
-
-```text
-goal connection kinds
-```
-
-the kinds connections are made of, the platform's and the organization's
-
-## goal connection kind push
-
-```text
-goal connection kind push <file.yaml>
-```
-
-create or replace an organization kind from its file
-
-## goal connection kind delete
-
-```text
-goal connection kind delete <name>
-```
-
-delete an organization kind no connection is of
-
-## goal credential list
-
-```text
-goal credential list
-```
-
-the organization's credentials: type, factories, what uses them, last use and expiry (never a value)
-
-## goal credential create
-
-```text
-goal credential create <name> --type T [--description D] [--factory <id>]... [--all-factories] [--expires YYYY-MM-DD] [--remind-days N]
-```
-
-create a credential (owners and admins; types api\_key, oauth\_token, ssh\_key, cloud\_role, app\_key); its value comes from stdin, never argv: ... &lt; value-file
-
-Flags: `--type T`, `--description D`, `--factory <id>`, `--all-factories`, `--expires YYYY-MM-DD`, `--remind-days N`.
-
-## goal credential replace
-
-```text
-goal credential replace <name>
+goal secret replace <name>
 ```
 
 replace its value with the one on stdin
 
-## goal credential rm
+## goal secret delete
 
 ```text
-goal credential rm <name>
+goal secret delete <name>
 ```
 
-delete it (refused while a connection refers to it as {{name}}; the error names them)
+delete it (refused while something uses it; the error names each use)
 
-## goal credential import
+## goal secret import
 
 ```text
-goal credential import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
+goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
 ```
 
-import a .env or YAML file's credentials (format from the extension by default; a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
+import a .env file or a YAML file's credentials: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
 
 Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
+
+## goal credential
+
+```text
+goal credential ...
+```
+
+moved to goal secret; prints where and exits 2
+
+## goal env test
+
+```text
+goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
+```
+
+call tools/list on the environment's remote MCP servers (default: default) from goald, with their secrets opened there; the draft, or the current version while no draft is open (exit 1 when one fails)
+
+Flags: `--server <name>`, `--version draft|current|N`.
+
+## goal repository test
+
+```text
+goal repository test <url> --secret <name>
+```
+
+whether the secret's token can read the repository and push to it (github.com and gitlab.com), asked of the code host by goald with the secret opened there (owners and admins; exit 1 when a check fails)
+
+Flags: `--secret <name>`.
+
+## goal access
+
+```text
+goal access [--factory <f>] [--group reach|factory|secret]
+```
+
+what agents reach: each MCP server, and each variable and file with a secret, with its factories and environments, secrets and status (tested, failed, untested, expiring, expired, missing, ok)
+
+Flags: `--factory <f>`, `--group reach|factory|secret`.
 
 ## goal knowledge sources
 
@@ -530,19 +506,29 @@ Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
 goal knowledge sources [--factory F]
 ```
 
-the knowledge base's sources: kind, status, documents, last and next sync, the factories that search them
+the knowledge sources: kind, status, last and next sync, the factories that list them, the read-when line
 
 Flags: `--factory F`.
 
 ## goal knowledge add
 
 ```text
-goal knowledge add <name> --kind upload|synced|live [--connection C] [--config k=v]... [--title T] [--every 1h]
+goal knowledge add <name> --kind upload|repository|confluence --read-when "<line>" [--factories a,b] [--secret S] [--config k=v]... [--title T] [--every 1h]
 ```
 
-add a source (owners and admins); a synced or live one reads a connection, --config says what (space=ENG)
+add a source (owners and admins); a repository or Confluence one reads with secret S, --config says what (repository=URL branch=… include=…, or site=… email=… spaces=ENG); --factories lists it in each one's draft factory.yaml, never publishing
 
-Flags: `--kind upload|synced|live`, `--connection C`, `--config k=v`, `--title T`, `--every 1h`.
+Flags: `--kind upload|repository|confluence`, `--read-when "<line>"`, `--factories a,b`, `--secret S`, `--config k=v`, `--title T`, `--every 1h`.
+
+## goal knowledge check
+
+```text
+goal knowledge check <name> --kind … [same flags as add]
+```
+
+a dry run of add: whether goald can read it, its file count against the limits, each factory's warnings and the line agents will see; saves nothing
+
+Flags: `--kind …`.
 
 ## goal knowledge sync
 
@@ -552,69 +538,78 @@ goal knowledge sync <source>
 
 sync it now
 
+## goal knowledge files
+
+```text
+goal knowledge files <source> [--find P]
+goal knowledge files --find P
+```
+
+its current files: path, size, title (--find: those whose path or title starts with P)
+
+find a file across every source
+
+Flags: `--find P`.
+
+## goal knowledge cat
+
+```text
+goal knowledge cat <source> <path>
+```
+
+one file's Markdown, as runs read it under /knowledge/&lt;source&gt;/&lt;path&gt;
+
 ## goal knowledge upload
 
 ```text
-goal knowledge upload <source> <file>...
+goal knowledge upload <source> <file|dir>...
 ```
 
-upload text, Markdown, HTML, JSON or YAML files to an upload source; indexed at its next sync
-
-## goal knowledge documents
-
-```text
-goal knowledge documents <source>
-```
-
-its documents: id, title, status, size
+upload text, Markdown, HTML, JSON or YAML files to an upload source, a folder's files at their paths below it; its next sync takes them
 
 ## goal knowledge rm
 
 ```text
-goal knowledge rm <document>
+goal knowledge rm <source> [<path>]
 ```
 
-delete an uploaded document
+delete the source, or one of an upload source's files
 
-## goal knowledge search
+## goal knowledge reads
 
 ```text
-goal knowledge search "<query>" [--source S]... [--limit N]
+goal knowledge reads [--source S] [--days N]
 ```
 
-search as agents do: the best passages first, with their document ids or links
+how often runs read each file and searched each folder under /knowledge over the window (default 7 days, at most 90), by factory, the most read first
 
-Flags: `--source S`, `--limit N`.
+Flags: `--source S`, `--days N`.
 
-## goal knowledge usage
+## goal memory list
 
 ```text
-goal knowledge usage [--source S] [--days N] [--json]
+goal memory list <factory>
 ```
 
-each document's use over the window (default 7 days, at most 90), of S or every source: runs, helped and misled, the people's share in brackets
+the factory memory (memory.yaml), numbered: the open draft's, or the current version's when no draft is open; it opens no draft
 
-Flags: `--source S`, `--days N`, `--json`.
-
-## goal knowledge uses
+## goal memory add
 
 ```text
-goal knowledge uses <document> [--json]
+goal memory add <factory> "<text>" [--from <factory>#<n>] [--publish]
 ```
 
-the runs that used it, newest first: item, factory, search or read, first use
+add a fact to the draft's memory.yaml, dated today (--from: the items it came from, comma-separated; --publish: publish the draft after it)
 
-Flags: `--json`.
+Flags: `--from <factory>#<n>`, `--publish`.
 
-## goal knowledge verdict
+## goal memory rm
 
 ```text
-goal knowledge verdict <document> helped|misled [--run R] [--note TEXT] [--json]
+goal memory rm <factory> <n>
 ```
 
-give your verdict on it, of a run that used it with --run
-
-Flags: `--run R`, `--note TEXT`, `--json`.
+remove the n-th fact from the draft's memory.yaml
 
 ## goal search
 
@@ -635,26 +630,6 @@ goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--lim
 the organization's agent runs, newest first: factory, item, station, agent, model, start, duration, turns, cost and status, then the window's totals and spend (--since/--until: RFC 3339, default the current UTC day; --status: running, succeeded, failed or cancelled; --search: item title, agent, model or #147; another page prints its --cursor)
 
 Flags: `--factory F`, `--status S`, `--since T`, `--until T`, `--search Q`, `--limit N`, `--cursor C`, `--json`.
-
-## goal eval run
-
-```text
-goal eval run [--case C] [--draft] [--factory F] [--json]
-```
-
-start an eval run of the factory's eval cases (every one, or --case), on the current version or --draft, and print what it is about to cost
-
-Flags: `--case C`, `--draft`, `--factory F`, `--json`.
-
-## goal eval show
-
-```text
-goal eval show <run> [--factory F] [--json]
-```
-
-an eval run's state and cost, and each case's tries: pass, fail or error
-
-Flags: `--factory F`, `--json`.
 
 ## goal jonah
 
@@ -712,39 +687,67 @@ Flags: `--reason "..."`, `--factory F`.
 goal jonah look [--factory F]
 ```
 
-queue a review of the factory's sent-back runs now
+queue a review of what the factory finished, now
 
 Flags: `--factory F`.
 
-## goal bake-off run
+## goal jonah try
 
 ```text
-goal bake-off run <agent> [--model M]... [--trials N] [--follow] [--factory F] [--json]
+goal jonah try <number> [--factory F] [--yes] [--json]
 ```
 
-print the estimate and the models, then start a bake-off of the agent's eval cases on 2 to 4 models (default its model and goald's default ones; --trials: tries per case, default 3); --follow waits for the result
+print what trying the proposal again costs: one more try per item it was tried on, three for a model proposal; ask, then queue them (--yes: without asking)
 
-Flags: `--model M`, `--trials N`, `--follow`, `--factory F`, `--json`.
+Flags: `--factory F`, `--yes`, `--json`.
 
-## goal bake-off show
+## goal test keep
 
 ```text
-goal bake-off show <id> [--factory F] [--json]
+goal test keep <item> --station S [--factory F]
 ```
 
-the recommended model against the current one, then per model the pass rate, cost and time per item, turns and judged share (Recommended, Now), and per case the tries passed per model
+keep the item as a test at a station it passed the first time: every change that reaches the station is tried on it, and a failing test warns at publish
 
-Flags: `--factory F`, `--json`.
+Flags: `--station S`, `--factory F`.
 
-## goal bake-off apply
+## goal test list
 
 ```text
-goal bake-off apply <id> [--model M] [--factory F] [--json]
+goal test list [--factory F]
 ```
 
-write the recommended model (or M) as the agent's model into the factory's draft; nothing is published
+the kept tests by station: item, title, last result (passed, failed or error, and when), who kept it, id
 
-Flags: `--model M`, `--factory F`, `--json`.
+Flags: `--factory F`.
+
+## goal test rm
+
+```text
+goal test rm <id> [--factory F]
+```
+
+remove a kept test; its item stays
+
+Flags: `--factory F`.
+
+## goal agent try-model
+
+```text
+goal agent try-model <agent> <model> [--factory F] [--yes] [--json]
+```
+
+print what trying the model costs: three tries on each of the agent's five newest finished items, beside how each went on the line; ask, then propose the model as a Jonah proposal (--yes: without asking)
+
+Flags: `--factory F`, `--yes`, `--json`.
+
+## goal
+
+```text
+goal judge, goal eval, goal bake-off
+```
+
+removed: each prints where it moved (goal jonah, goal test, goal agent try-model)
 
 ## goal spend
 
@@ -755,26 +758,6 @@ goal spend [--window week|month|90d] [--json]
 what the organization's agent runs cost (default this week), per merged item and on rework, and each factory's budget: running, stopped or over\_budget, its spend today and in the last 7 days
 
 Flags: `--window week|month|90d`, `--json`.
-
-## goal judge list
-
-```text
-goal judge list [--factory F] [--json]
-```
-
-the factory's judges (default: the organization's only factory): enabled, sample, pass mark, and over the last 30 days the pass rate, runs scored and cost; then what its judge runs cost (--json: goald's answer as it came)
-
-Flags: `--factory F`, `--json`.
-
-## goal judge try
-
-```text
-goal judge try <slug> [--factory F] [--json]
-```
-
-queue the judge on the 10 newest finished runs of its agents; the tries never count in its 30-day figures
-
-Flags: `--factory F`, `--json`.
 
 ## goal triggers list
 
@@ -845,14 +828,6 @@ goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
 what it received, newest first: refused (and why), accepted or created an item
 
 Flags: `--limit N`, `--after C`, `--json`.
-
-## goal connection import-env
-
-```text
-goal connection import-env
-```
-
-once, after the cutover to connections: GOAL\_GITHUB\_TOKEN becomes github, CLAUDE\_CODE\_OAUTH\_TOKEN (or ANTHROPIC\_API\_KEY) claude; names that exist are left as they are
 
 ## goal storage init
 

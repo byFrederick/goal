@@ -47,7 +47,7 @@ export function CommandsCard({ form, onChange }: { form: PolicyForm; onChange: (
                   onClick={() =>
                     onChange({ ...form, denied_commands: form.denied_commands.filter((p) => p !== pattern) })
                   }
-                  className="grid size-5 place-items-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:text-ink"
+                  className="relative grid size-5 place-items-center pointer-coarse:before:absolute pointer-coarse:before:-inset-3 pointer-coarse:before:content-[''] rounded-chip text-muted transition-colors duration-(--duration-quick) hover:text-ink"
                 >
                   <X size={12} strokeWidth={1.6} aria-hidden="true" />
                 </button>

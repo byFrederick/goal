@@ -40,7 +40,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0035](0035-docs-site-from-the-control-workers-static-assets.md): The docs site is served from the control Worker's static assets on Cloudflare. Status: accepted.
 - [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md): Design system v3 "Plain" and MOTION.md are binding. Status: accepted.
 - [ADR 0037](0037-secrets-and-environment-files.md): Secrets hold the keys, environment files say what agents reach. Status: accepted.
-- [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: proposed.
-- [ADR 0039](0039-jonah-learns-from-the-line.md): Jonah learns from the line: evidence from every item, tries on past items, a watch on every change. Status: proposed.
+- [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: accepted.
+- [ADR 0039](0039-jonah-learns-from-the-line.md): Jonah learns from the line: evidence from every item, tries on past items, a watch on every change. Status: accepted.
 - [ADR 0040](0040-one-door-for-every-source.md): One door for every source: start times, follow-ups that say where they go, checks that ask an agent what to file, webhooks that work. Status: proposed.
 - [ADR 0041](0041-code-and-github-without-an-app.md): Code and GitHub without an App: optional code access, the repositories an item opens, write access per agent, webhooks the organization connects once. Status: proposed.

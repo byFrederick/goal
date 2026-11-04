@@ -1,45 +1,62 @@
-// New source (spec 4 §10, canvas "Knowledge-Source-New"): choose a kind (?kind=), then what it
-// needs. Upload: a title and name, and files dropped here go up once the source exists. Synced: a
-// connection whose kind can sync, what of it to read (a repository's paths, Confluence spaces)
-// and how often. Live: a connection that runs an MCP server; nothing is stored. Add source opens
-// the new source's page, which says what happens next.
-import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+// Add a source (ADR 0038 decision 12, canvas "Knowledge-New" and its Upload, Confluence and 768 px
+// variants): one page. Pick where the files are (Upload, Repository or Confluence; the rest show as
+// later), fill in that kind's settings, name it and say when agents should read it, and pick the
+// factories that read it. The Check beside the form reads the source with these settings before
+// anything is saved. Add source creates it and lists it in each picked factory's draft; it never
+// publishes a factory. The kind is in the URL (?kind=) so a link opens the page on it.
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
-import { Info } from 'lucide-react';
+import { Globe, HardDrive, NotebookText } from 'lucide-react';
 import { type FormEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
 import { createKnowledgeSource } from '../../api/knowledge';
-import { connectionKindsQuery, connectionsQuery, keys, knowledgeSourcesQuery } from '../../api/queries';
-import type { Connection, ConnectionKind, KnowledgeSourceKind } from '../../api/types';
+import { factoriesQuery, keys, knowledgeSourcesQuery } from '../../api/queries';
+import type { KnowledgeCheckInput, KnowledgeSourceKind } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { sourceKinds } from '../../shared/knowledge';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { Field, Input, NativeSelect } from '../../ui/field';
+import { Chip } from '../../ui/chip';
+import { Field, Input, NativeSelect, Textarea } from '../../ui/field';
 import { RadioCards } from '../../ui/radio-cards';
-import { type Config, ConfigFields, configErrors, readerOf, trimmed } from './config-fields';
+import { CheckPanel } from './check-panel';
+import { type Config, ConfigFields, configErrors, trimmed } from './config-fields';
+import { listInDrafts } from './draft';
+import { FactoryCheckboxes } from './factory-checkboxes';
+import { SecretField } from './secret-field';
 import { DropZone, UploadRows, useUploader } from './upload';
-import { nameFor, refusalText, sourceName, syncChoices } from './words';
+import { refusalText, sourceName } from './words';
 
-const card = 'flex min-w-0 flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5';
+const card = 'flex min-w-0 flex-col rounded-card border border-line bg-card';
+const cardBody = 'flex flex-col gap-4 border-t border-line p-4 md:p-5';
+const maxReadWhen = 160;
 
-const kindText: Record<KnowledgeSourceKind, (org: string) => string> = {
-  upload: (org) =>
-    `Drop files. Text, Markdown, HTML, JSON or YAML, each up to goald’s upload limit (25 MiB by default). Stored in ${org}’s bucket and indexed.`,
-  synced: () =>
-    'A connection that can sync: a repository’s docs, or a Confluence space. Goal copies the text on a schedule, indexes it and links back.',
-  live: () =>
-    'A connection that searches by itself, such as a Slack MCP server. Nothing is stored; factories listing it get its tools.',
-};
+type NewKind = Extract<KnowledgeSourceKind, 'upload' | 'repository' | 'confluence'>;
+
+const kinds: readonly { value: NewKind; text: string }[] = [
+  { value: 'upload', text: 'Drop text, Markdown, HTML, JSON or YAML files.' },
+  { value: 'repository', text: 'Folders of a GitHub or GitLab repository.' },
+  { value: 'confluence', text: 'The pages of one or more spaces.' },
+];
+
+const later = [
+  { value: 'website', label: 'Website', text: 'A docs site, page by page.', icon: Globe },
+  { value: 'notion', label: 'Notion', text: 'Pages shared with Goal.', icon: NotebookText },
+  { value: 'drive', label: 'Google Drive', text: 'A shared folder.', icon: HardDrive },
+] as const;
+
+const schedules = [
+  { value: '3600', label: 'Every hour' },
+  { value: '86400', label: 'Every day' },
+  { value: '0', label: 'Only when someone presses Sync' },
+] as const;
 
 export function NewSourcePage() {
   const org = useOrg();
-  const search = useSearch({ from: '/o/$org/_org/knowledge/new' });
-  const navigate = useNavigate({ from: '/o/$org/knowledge/new' });
   const manage = useOrgHolds('knowledge:manage');
-  const kind = search.kind ?? 'upload';
+  const kind: NewKind = useSearch({ from: '/o/$org/_org/knowledge/new' }).kind ?? 'upload';
 
   return (
     <>
@@ -47,36 +64,11 @@ export function NewSourcePage() {
       <header className="flex flex-col gap-1">
         <h1 className="m-0 text-page-title">New source</h1>
         <p className="m-0 max-w-[680px] text-body text-muted">
-          Add text agents can search: files you upload, or a system Goal reaches through one of {org.name}’s
-          connections. Factories add a source in their Definition.
+          Point at the documents, say when agents should read them, and pick the factories that read them.
         </p>
       </header>
       {manage ? (
-        <div className="flex max-w-[980px] flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <span aria-hidden="true" className="text-secondary font-control text-ink">
-              Kind
-            </span>
-            <RadioCards
-              legend="Kind"
-              showLegend={false}
-              name="kind"
-              value={kind}
-              onChange={(k) => void navigate({ search: { kind: k }, replace: true })}
-              gridClassName="@[720px]:grid-cols-3"
-              options={(['upload', 'synced', 'live'] as const).map((k) => {
-                const { label, icon: Icon } = sourceKinds[k];
-                return {
-                  value: k,
-                  label,
-                  icon: <Icon size={16} strokeWidth={1.5} />,
-                  description: kindText[k](org.name),
-                };
-              })}
-            />
-          </div>
-          <SourceForm key={kind} kind={kind} />
-        </div>
+        <SourceForm key={kind} kind={kind} />
       ) : (
         <Callout tone="note">Owners and admins of {org.name} add knowledge sources.</Callout>
       )}
@@ -84,53 +76,50 @@ export function NewSourcePage() {
   );
 }
 
-/** A connection's kind: the one a synced source's reader comes from, or whose tools a live source gets. */
-function useConnections(kind: KnowledgeSourceKind) {
-  const org = useOrg();
-  const { data: connections } = useSuspenseQuery(connectionsQuery(org.id));
-  const { data: kinds } = useSuspenseQuery(connectionKindsQuery(org.id));
-  const kindOf = (c: Connection): ConnectionKind | undefined => kinds.find((k) => k.name === c.kind);
-  const fits = (c: Connection) => (kind === 'synced' ? Boolean(kindOf(c)?.sync) : kindOf(c)?.modes.includes('mcp'));
-  return { usable: connections.filter(fits), kindOf };
-}
-
-function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
+function SourceForm({ kind }: { kind: NewKind }) {
   const org = useOrg();
   const client = useQueryClient();
   const navigate = useNavigate();
-  const mayConnect = useOrgHolds('connection:manage');
   const taken = (useQuery(knowledgeSourcesQuery(org.id)).data ?? []).map((s) => s.name);
-  const { usable, kindOf } = useConnections(kind);
+  const factories = (useQuery(factoriesQuery(org.id)).data ?? []).filter((f) => !f.archived_at);
   const uploader = useUploader(org.id);
-  const [title, setTitle] = useState('');
   const [name, setName] = useState('');
-  const [named, setNamed] = useState(false);
-  const [connection, setConnection] = useState(kind === 'upload' ? '' : (usable[0]?.name ?? ''));
+  const [readWhen, setReadWhen] = useState('');
+  const [secret, setSecret] = useState('');
   const [config, setConfig] = useState<Config>({});
-  const [every, setEvery] = useState(3600);
+  const [every, setEvery] = useState('3600');
+  const [picked, setPicked] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const id = useId();
 
-  const chosen = usable.find((c) => c.name === connection);
-  const reader = kind === 'synced' && chosen ? readerOf(kindOf(chosen)?.sync, {}) : undefined;
-  const errors = kind === 'synced' ? configErrors(reader, config) : {};
-  const shownName = named ? name : nameFor(title, taken);
-  const titleError = title.trim() === '' ? 'A title is required.' : undefined;
-  const nameError = !sourceName.test(shownName)
+  const reader = kind === 'repository' ? 'gitdocs' : kind === 'confluence' ? 'confluence' : undefined;
+  const errors = kind === 'upload' ? {} : configErrors(reader, config);
+  const secretError = kind === 'confluence' && secret === '' ? 'Pick a secret.' : undefined;
+  const nameError = !sourceName.test(name)
     ? '3 to 40 lowercase letters, digits and dashes, starting with a letter.'
-    : taken.includes(shownName)
-      ? `${org.name} already has a source named ${shownName}.`
+    : taken.includes(name)
+      ? `${org.name} already has a source named ${name}.`
       : undefined;
-  const connectionError = kind !== 'upload' && !chosen ? 'Choose a connection.' : undefined;
+  const readWhenError = readWhen.trim() === '' ? 'Say when agents should read it.' : undefined;
+  const valid = !nameError && !readWhenError && !secretError && Object.keys(errors).length === 0;
+
+  const body = {
+    name,
+    kind,
+    ...(kind === 'upload' ? {} : { config: trimmed(config) }),
+    ...(secret ? { secret } : {}),
+    read_when: readWhen.trim(),
+  };
+  // The Check reads the source as typed once its settings are complete; the name only has to be a name.
+  const checkable = sourceName.test(name) && !secretError && Object.keys(errors).length === 0;
+  const checkInput: KnowledgeCheckInput | null = checkable ? { ...body, factories: picked } : null;
 
   const create = useMutation({
     mutationFn: () =>
       createKnowledgeSource(org.id, {
-        name: shownName,
-        title: title.trim(),
-        kind,
-        ...(kind === 'upload' ? {} : { connection }),
-        ...(kind === 'synced' ? { config: trimmed(config), sync_every_seconds: every } : {}),
+        ...body,
+        title: name,
+        ...(kind === 'upload' ? {} : { sync_every_seconds: Number(every) }),
       }),
     onSuccess: async (created) => {
       client.setQueryData(keys.knowledgeSource(org.id, created.name), created);
@@ -141,6 +130,18 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
             description: 'The source is added; upload them again from its page once they fit.',
           });
         }
+      }
+      // The source exists now, so the drafts that list it check out; each is written, none published.
+      const results = await listInDrafts(
+        org.id,
+        factories.filter((f) => picked.includes(f.id)),
+        created.name,
+      );
+      const failed = results.filter((r) => r.outcome === 'failed');
+      if (failed.length > 0) {
+        toast.error(`Couldn’t list ${created.name} in ${failed.map((r) => r.factory).join(', ')}`, {
+          description: failed[0]?.error ?? 'Add it from the source page.',
+        });
       }
       await client.invalidateQueries({ queryKey: keys.knowledge(org.id) });
       await navigate({
@@ -155,156 +156,196 @@ function SourceForm({ kind }: { kind: KnowledgeSourceKind }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
-    if (titleError || nameError || connectionError || Object.keys(errors).length > 0 || create.isPending) return;
+    if (!valid || create.isPending) return;
     create.mutate();
   };
 
-  const heading = { upload: 'Upload', synced: 'Synced from a connection', live: 'Live from a connection' }[kind];
-  const noConnection =
-    kind === 'synced'
-      ? `${org.name} has no connection whose kind can sync yet: a GitHub, GitLab or Confluence connection.`
-      : `${org.name} has no connection that runs an MCP server yet.`;
-
   return (
-    <form onSubmit={submit} noValidate aria-labelledby={id} className="flex flex-col gap-4">
-      <section className={card}>
-        <h2 id={id} className="m-0 text-heading">
-          {heading}
-        </h2>
-        {kind !== 'upload' && usable.length === 0 ? (
-          <Callout tone="note">
-            {noConnection}{' '}
-            {mayConnect ? (
-              <Link
-                to="/o/$org/connections/new"
-                params={{ org: org.slug }}
-                className="text-ink underline underline-offset-3"
-              >
-                New connection
-              </Link>
-            ) : null}
-          </Callout>
-        ) : null}
-        <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
-          {kind === 'upload' ? null : (
-            <Field
-              label="Connection"
-              error={submitted ? connectionError : undefined}
-              help={
-                <>
-                  {kind === 'synced'
-                    ? 'Only connections whose kind can sync.'
-                    : 'Only connections that run an MCP server.'}{' '}
-                  {mayConnect ? (
-                    <Link
-                      to="/o/$org/connections/new"
-                      params={{ org: org.slug }}
-                      className="text-ink underline underline-offset-3"
-                    >
-                      New connection
-                    </Link>
-                  ) : null}
-                </>
+    <form
+      onSubmit={submit}
+      noValidate
+      aria-labelledby={id}
+      className="grid items-start gap-4 @[1100px]:grid-cols-[minmax(0,1fr)_380px]"
+    >
+      <div className="flex min-w-0 flex-col gap-4">
+        <section className={card}>
+          <h2 id={id} className="m-0 px-5 py-3 text-heading">
+            Where the files are
+          </h2>
+          <div className={cardBody}>
+            <RadioCards
+              legend="Where the files are"
+              showLegend={false}
+              name="kind"
+              value={kind}
+              onChange={(k) =>
+                void navigate({
+                  to: '/o/$org/knowledge/new',
+                  params: { org: org.slug },
+                  search: { kind: k },
+                  replace: true,
+                })
               }
+              gridClassName="grid-cols-1 @[560px]:grid-cols-3"
+              options={[
+                ...kinds.map((k) => {
+                  const { label, icon: Icon } = sourceKinds[k.value];
+                  return { value: k.value, label, icon: <Icon size={16} strokeWidth={1.5} />, description: k.text };
+                }),
+                ...later.map((l) => ({
+                  value: l.value as NewKind,
+                  label: l.label,
+                  icon: <l.icon size={16} strokeWidth={1.5} />,
+                  description: l.text,
+                  disabled: true,
+                  badge: <Chip>Later</Chip>,
+                })),
+              ]}
+            />
+          </div>
+        </section>
+
+        <section className={card} aria-labelledby={`${id}-settings`}>
+          <h2 id={`${id}-settings`} className="m-0 px-5 py-3 text-heading">
+            {sourceKinds[kind].label}
+          </h2>
+          <div className={cardBody}>
+            {kind === 'upload' ? (
+              <div className="flex flex-col gap-2">
+                <DropZone onFiles={(files) => void uploader.add(files)} disabled={create.isPending} />
+                <UploadRows rows={uploader.rows} onRemove={create.isPending ? undefined : uploader.remove} />
+                <p className="m-0 text-secondary text-muted">
+                  The files go up when you add the source. You can add more on its page.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
+                <ConfigFields
+                  reader={reader}
+                  secret={secret}
+                  config={config}
+                  errors={submitted ? errors : {}}
+                  onChange={setConfig}
+                />
+                <SecretField
+                  value={secret}
+                  onChange={setSecret}
+                  error={submitted ? secretError : undefined}
+                  help={kind === 'repository' ? 'Read access is enough. None for a public repository.' : undefined}
+                />
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className={card} aria-labelledby={`${id}-what`}>
+          <h2 id={`${id}-what`} className="m-0 px-5 py-3 text-heading">
+            What it is
+          </h2>
+          <div className={cardBody}>
+            <Field
+              label="Name"
+              className="@[640px]:max-w-[50%]"
+              error={takenByGoald ? 'Taken' : submitted || taken.includes(name) ? nameError : undefined}
+              help={`Its folder in every run: /knowledge/${name || 'name'}. It never changes.`}
             >
-              <NativeSelect
-                value={connection}
-                onChange={(e) => {
-                  setConnection(e.target.value);
-                  setConfig({});
-                }}
-              >
-                {usable.length === 0 ? <option value="">None yet</option> : null}
-                {usable.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}, {kindOf(c)?.title ?? c.kind}
-                  </option>
-                ))}
-              </NativeSelect>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={40}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                translate="no"
+                className="font-mono md:text-body"
+              />
             </Field>
-          )}
-          {kind === 'synced' ? (
-            <ConfigFields
-              reader={reader}
-              connection={connection}
-              config={config}
-              errors={submitted ? errors : {}}
-              onChange={setConfig}
-            />
-          ) : null}
-          <Field label="Title" error={submitted ? titleError : undefined} help="What people see, such as Infra docs.">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} autoComplete="off" />
-          </Field>
-          <Field
-            label="Name"
-            error={takenByGoald ? 'Taken' : submitted || taken.includes(shownName) ? nameError : undefined}
-            help="How definitions list it. It never changes."
-          >
-            <Input
-              value={shownName}
-              onChange={(e) => {
-                setNamed(true);
-                setName(e.target.value);
-              }}
-              maxLength={40}
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              translate="no"
-              className="font-mono md:text-body"
-            />
-          </Field>
-          {kind === 'synced' ? (
-            <Field label="Sync every" help="At least 15 minutes. Only changed documents are fetched again.">
-              <NativeSelect value={every} onChange={(e) => setEvery(Number(e.target.value))}>
-                {syncChoices.map((c) => (
-                  <option key={c.seconds} value={c.seconds}>
-                    {c.label}
-                  </option>
-                ))}
-              </NativeSelect>
+            <Field
+              label="When should agents read it?"
+              error={submitted ? readWhenError : undefined}
+              help={`Every run’s prompt shows this line, so say when to read it, not only what it is. ${readWhen.length} of ${maxReadWhen}.`}
+            >
+              <Textarea
+                value={readWhen}
+                onChange={(e) => setReadWhen(e.target.value.slice(0, maxReadWhen))}
+                rows={2}
+                maxLength={maxReadWhen}
+              />
             </Field>
-          ) : null}
-        </div>
-        {kind === 'upload' ? (
-          <div className="flex flex-col gap-2">
-            <DropZone onFiles={(files) => void uploader.add(files)} disabled={create.isPending} />
-            <UploadRows rows={uploader.rows} onRemove={create.isPending ? undefined : uploader.remove} />
-            <p className="m-0 text-secondary text-muted">
-              The files go up when you add the source. You can add more on its page later.
-            </p>
+          </div>
+        </section>
+
+        <section className={card} aria-labelledby={`${id}-factories`}>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 px-5 py-3">
+            <h2 id={`${id}-factories`} className="m-0 text-heading">
+              Factories that read it
+            </h2>
+            <span className="text-secondary text-muted">Adds a line to each one’s draft; you publish it there</span>
+          </div>
+          <div className="border-t border-line">
+            {factories.length === 0 ? (
+              <p className="m-0 px-5 py-4 text-body text-muted">{org.name} has no factory yet.</p>
+            ) : (
+              <FactoryCheckboxes
+                factories={factories}
+                checked={picked}
+                onChange={setPicked}
+                disabled={create.isPending}
+              />
+            )}
+          </div>
+        </section>
+
+        {kind !== 'upload' ? (
+          <section className={card} aria-labelledby={`${id}-sync`}>
+            <h2 id={`${id}-sync`} className="m-0 px-5 py-3 text-heading">
+              Sync
+            </h2>
+            <div className={cardBody}>
+              <Field label="Sync every" help="Only changed documents are fetched again.">
+                <NativeSelect value={every} onChange={(e) => setEvery(e.target.value)}>
+                  {schedules.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+            </div>
+          </section>
+        ) : null}
+
+        {create.error && !takenByGoald ? (
+          <div role="alert">
+            <Callout tone="rework">{refusalText(create.error)}</Callout>
           </div>
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
-          <Button asChild variant="white" className="h-11 md:h-8.5">
-            <Link to="/o/$org/knowledge" params={{ org: org.slug }}>
-              Cancel
-            </Link>
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            className="h-11 md:h-8.5"
-            disabled={create.isPending || uploader.busy}
-          >
-            {create.isPending || uploader.busy ? 'Adding…' : 'Add source'}
-          </Button>
-        </div>
-      </section>
 
-      {create.error && !takenByGoald ? (
-        <div role="alert">
-          <Callout tone="rework">{refusalText(create.error)}</Callout>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-secondary text-muted">
+            The same from the CLI: <code className="font-mono">goal knowledge add</code>
+          </span>
+          <div className="flex gap-2">
+            <Button asChild variant="white" className="h-11 md:h-8.5">
+              <Link to="/o/$org/knowledge" params={{ org: org.slug }}>
+                Cancel
+              </Link>
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              className="h-11 md:h-8.5"
+              disabled={create.isPending || uploader.busy}
+            >
+              {create.isPending || uploader.busy ? 'Adding…' : 'Add source'}
+            </Button>
+          </div>
         </div>
-      ) : null}
-      {kind !== 'upload' ? (
-        <p className="m-0 flex items-start gap-2.5 text-body leading-normal text-ink-soft">
-          <Info size={16} strokeWidth={1.75} aria-hidden="true" className="mt-0.5 shrink-0 text-muted" />
-          {kind === 'synced'
-            ? 'Goal indexes the source with the connection’s access. Every factory that lists it can find anything that access sees.'
-            : 'Agents of factories that list it call the connection’s tools with the connection’s access.'}
-        </p>
-      ) : null}
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-4 @[1100px]:sticky @[1100px]:top-4">
+        <CheckPanel input={checkInput} />
+      </div>
     </form>
   );
 }

@@ -14,6 +14,10 @@ export interface RadioOption<T extends string> {
   icon?: ReactNode;
   /** A row's far end: "6 stations, 3 agents". */
   aside?: ReactNode;
+  /** A card that cannot be chosen yet; it shows dimmed and the radio is disabled. */
+  disabled?: boolean;
+  /** Beside a card's title ("Later"). */
+  badge?: ReactNode;
 }
 
 interface RadioGroupProps<T extends string> {
@@ -59,6 +63,7 @@ export function RadioCards<T extends string>({
             className={cn(
               'relative flex min-w-0 cursor-pointer flex-col gap-2 rounded-card border border-line bg-card p-4 transition-colors duration-(--duration-quick) hover:border-rule',
               o.value === value && chosen,
+              o.disabled && 'cursor-not-allowed opacity-55 hover:border-line',
             )}
           >
             <span className="flex items-start justify-between gap-3">
@@ -75,11 +80,15 @@ export function RadioCards<T extends string>({
                 name={name}
                 value={o.value}
                 checked={o.value === value}
+                disabled={o.disabled ?? false}
                 onChange={() => onChange(o.value)}
                 className={radio}
               />
             </span>
-            <span className="mt-1 text-[17px] font-medium tracking-[-0.01em]">{o.label}</span>
+            <span className="mt-1 flex items-center gap-2 text-[17px] font-medium tracking-[-0.01em]">
+              {o.label}
+              {o.badge}
+            </span>
             {o.description ? <span className="text-sm leading-normal text-muted">{o.description}</span> : null}
           </label>
         ))}

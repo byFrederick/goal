@@ -45,13 +45,15 @@ export function factorySignal(
   factory: { name: string; title?: string | undefined },
   mark: string,
   attention: Attention,
-): { label: string; detail: string } {
+): { label: string; nameLabel: string; detail: string } {
   const status = [
     attention.waiting > 0 ? `${attention.waiting} waiting on you` : '',
     attention.andon !== null ? 'blocked: andon pulled' : '',
     attention.andon === null && attention.blocked > 0 ? plural(attention.blocked, 'item blocked', 'items blocked') : '',
   ].filter(Boolean);
   const label = [`${mark}, ${factory.name} factory`, ...status].join(', ');
+  // The sidebar shows the name, so its accessible name starts with it (WCAG 2.5.3, label in name).
+  const nameLabel = [`${factory.name} factory`, ...status].join(', ');
   const detail = status.length > 0 ? status.join(', ').replace('blocked: andon pulled', 'Andon pulled') : '';
-  return { label, detail: detail || factory.title || '' };
+  return { label, nameLabel, detail: detail || factory.title || '' };
 }

@@ -1,0 +1,709 @@
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/byFrederick/goal/internal/adapters/store/postgres/db"
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
+)
+
+var _ ports.PastTries = (*Store)(nil)
+
+// QueuePastTries implements ports.PastTries: the proposal is locked, so two sweeps queue its tries
+// once, and every try is inserted in the same transaction.
+func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, tries []domain.NewPastTry,
+	at time.Time,
+) ([]domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	for _, n := range tries {
+		if err := n.Check(); err != nil {
+			return nil, fmt.Errorf("queue past tries: %w", err)
+		}
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := parseID("proposal", string(proposal))
+	if err != nil {
+		return nil, err
+	}
+
+	var out []domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		row, err := q.LockProposal(ctx, db.LockProposalParams{FactoryID: f, ID: p})
+		if notFound(err) {
+			return fmt.Errorf("proposal %s: %w", proposal, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return fmt.Errorf("lock proposal: %w", err)
+		}
+
+		has, err := q.ProposalHasTries(ctx, &p)
+		if err != nil {
+			return fmt.Errorf("read tries: %w", err)
+		}
+
+		if has {
+			return fmt.Errorf("proposal %s has tries: %w", proposal, ports.ErrConflict)
+		}
+
+		out, err = insertTries(ctx, q, f, p, row.Number, tries, at)
+
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("queue past tries: %w", err)
+	}
+
+	return out, nil
+}
+
+// insertTries inserts tries of proposal p, numbered number, in order.
+func insertTries(ctx context.Context, q *db.Queries, f, p uuid.UUID, number int64, tries []domain.NewPastTry, at time.Time) ([]domain.PastTry, error) {
+	out := make([]domain.PastTry, 0, len(tries))
+
+	for _, n := range tries {
+		t, err := insertTry(ctx, q, f, p, n, at)
+		if err != nil {
+			return nil, err
+		}
+
+		try, err := pastTryFrom(t, number)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, try)
+	}
+
+	return out, nil
+}
+
+// AddPastTries implements ports.PastTries: the proposal is locked, so two concurrent calls number
+// their attempts in turn, and every try is inserted in the same transaction.
+func (s *Store) AddPastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, adds []domain.PastTryAdd,
+	at time.Time,
+) ([]domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	if err := domain.CheckPastTryAdds(adds); err != nil {
+		return nil, fmt.Errorf("add past tries: %w", err)
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := parseID("proposal", string(proposal))
+	if err != nil {
+		return nil, err
+	}
+
+	var out []domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		row, err := q.LockProposal(ctx, db.LockProposalParams{FactoryID: f, ID: p})
+		if notFound(err) {
+			return fmt.Errorf("proposal %s: %w", proposal, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return fmt.Errorf("lock proposal: %w", err)
+		}
+
+		if row.State != string(domain.ProposalProposed) {
+			return fmt.Errorf("proposal %s is %s: %w", proposal, row.State, ports.ErrProposalDecided)
+		}
+
+		out = nil
+
+		for _, a := range adds {
+			added, err := addItemTries(ctx, q, f, p, a, at)
+			if err != nil {
+				return err
+			}
+
+			for _, t := range added {
+				try, err := pastTryFrom(t, row.Number)
+				if err != nil {
+					return err
+				}
+
+				out = append(out, try)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("add past tries: %w", err)
+	}
+
+	return out, nil
+}
+
+// addItemTries inserts a.Tries copies of proposal p's try of a.ItemID with the highest attempt, at
+// the attempts after it: ErrNotFound when p has no try of the item.
+func addItemTries(ctx context.Context, q *db.Queries, f, p uuid.UUID, a domain.PastTryAdd, at time.Time) ([]db.Try, error) {
+	item, err := parseID("item", string(a.ItemID))
+	if err != nil {
+		return nil, err
+	}
+
+	latest, err := q.LatestItemTry(ctx, db.LatestItemTryParams{ProposalID: &p, ItemID: item})
+	if notFound(err) {
+		return nil, fmt.Errorf("proposal %s has no try of item %s: %w", p, a.ItemID, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read the latest try of item %s: %w", a.ItemID, err)
+	}
+
+	out := make([]db.Try, 0, a.Tries)
+
+	for k := 1; k <= a.Tries; k++ {
+		t, err := insertTry(ctx, q, f, p, domain.NewPastTry{
+			ItemID: a.ItemID, Attempt: int(latest.Attempt) + k, Station: latest.Station, OriginalRunID: domain.RunID(latest.OriginalRunID.String()),
+			Model: latest.Model,
+		}, at)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, t)
+	}
+
+	return out, nil
+}
+
+// tryKeys are a new try's new id, item, original run and kept test (nil without one).
+func tryKeys(n domain.NewPastTry) (uuid.UUID, uuid.UUID, uuid.UUID, *uuid.UUID, error) {
+	item, err := parseID("item", string(n.ItemID))
+	if err != nil {
+		return uuid.UUID{}, uuid.UUID{}, uuid.UUID{}, nil, err
+	}
+
+	run, err := parseID("run", string(n.OriginalRunID))
+	if err != nil {
+		return uuid.UUID{}, uuid.UUID{}, uuid.UUID{}, nil, err
+	}
+
+	kept, err := optionalID("kept test", string(n.KeptTestID))
+	if err != nil {
+		return uuid.UUID{}, uuid.UUID{}, uuid.UUID{}, nil, err
+	}
+
+	id, err := newID()
+
+	return id, item, run, kept, err
+}
+
+// insertTry inserts one try of proposal p: ErrNotFound for an item, run or kept test that is not
+// the organization's, ErrConflict for an item tried twice.
+func insertTry(ctx context.Context, q *db.Queries, f, p uuid.UUID, n domain.NewPastTry, at time.Time) (db.Try, error) {
+	id, item, run, kept, err := tryKeys(n)
+	if err != nil {
+		return db.Try{}, err
+	}
+
+	t, err := q.InsertTry(ctx, db.InsertTryParams{
+		ID: id, FactoryID: f, ProposalID: &p, ItemID: item, Attempt: clampLimit(n.TryAttempt()), Station: n.Station, OriginalRunID: run, Model: n.Model,
+		KeptTestID: kept, ContentKey: optional(n.ContentKey), CreatedAt: at,
+	})
+
+	var pg *pgconn.PgError
+
+	switch {
+	case isForeignKeyViolation(err):
+		return db.Try{}, fmt.Errorf("item %s or run %s: %w", n.ItemID, n.OriginalRunID, ports.ErrNotFound)
+	case errors.As(err, &pg) && pg.Code == uniqueViolation:
+		return db.Try{}, fmt.Errorf("item %s attempt %d twice: %w", n.ItemID, n.TryAttempt(), ports.ErrConflict)
+	case err != nil:
+		return db.Try{}, fmt.Errorf("insert try: %w", err)
+	}
+
+	return t, nil
+}
+
+// QueuePublishTries implements ports.PastTries: every try is inserted in one transaction, and
+// tries_publish_key skips one a publish has queued already.
+func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, edits []domain.ProposalEdit,
+	tries []domain.NewPastTry, at time.Time,
+) ([]domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	for _, n := range tries {
+		if err := n.CheckPublish(); err != nil {
+			return nil, fmt.Errorf("queue publish tries: %w", err)
+		}
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := parseID("version", string(version))
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := json.Marshal(nonNil(edits))
+	if err != nil {
+		return nil, fmt.Errorf("queue publish tries: encode edits: %w", err)
+	}
+
+	out := []domain.PastTry{}
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		for _, n := range tries {
+			t, ok, err := insertPublishTry(ctx, q, db.InsertPublishTryParams{FactoryID: f, VersionID: &v, Edits: raw, CreatedAt: at}, n)
+			if err != nil {
+				return err
+			}
+
+			if ok {
+				out = append(out, t)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("queue publish tries: %w", err)
+	}
+
+	return out, nil
+}
+
+// insertPublishTry inserts n as a publish's try with p's factory, version, edits and time: false
+// when a publish's try of its kept test, content key and attempt exists, ErrNotFound for an item,
+// run or kept test that is not the organization's.
+func insertPublishTry(ctx context.Context, q *db.Queries, p db.InsertPublishTryParams, n domain.NewPastTry) (domain.PastTry, bool, error) {
+	id, item, run, kept, err := tryKeys(n)
+	if err != nil {
+		return domain.PastTry{}, false, err
+	}
+
+	p.ID, p.ItemID, p.Attempt, p.Station, p.OriginalRunID, p.Model = id, item, clampLimit(n.TryAttempt()), n.Station, run, n.Model
+	p.KeptTestID, p.ContentKey = kept, &n.ContentKey
+
+	t, err := q.InsertPublishTry(ctx, p)
+
+	switch {
+	case notFound(err):
+		return domain.PastTry{}, false, nil
+	case isForeignKeyViolation(err):
+		return domain.PastTry{}, false, fmt.Errorf("item %s, run %s or kept test %s: %w", n.ItemID, n.OriginalRunID, n.KeptTestID, ports.ErrNotFound)
+	case err != nil:
+		return domain.PastTry{}, false, fmt.Errorf("insert try: %w", err)
+	}
+
+	out, err := pastTryFrom(t, 0)
+
+	return out, err == nil, err
+}
+
+// nonNil is edits, or an empty list for none: tries.edits is an array.
+func nonNil(edits []domain.ProposalEdit) []domain.ProposalEdit {
+	if edits == nil {
+		return []domain.ProposalEdit{}
+	}
+
+	return edits
+}
+
+// KeptTestTries implements ports.PastTries.
+func (s *Store) KeptTestTries(ctx context.Context, factory domain.FactoryID, key string) ([]domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.KeptTestTriesRow, error) {
+		return q.KeptTestTries(ctx, db.KeptTestTriesParams{FactoryID: f, ContentKey: &key})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("kept-test tries of factory %s: %w", factory, err)
+	}
+
+	out := make([]domain.PastTry, len(rows))
+	for i, r := range rows {
+		if out[i], err = pastTryFrom(r.Try, r.ProposalNumber); err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// ProposalPastTries implements ports.PastTries.
+func (s *Store) ProposalPastTries(ctx context.Context, proposal domain.ProposalID) ([]domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	p, err := parseID("proposal", string(proposal))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ProposalTriesRow, error) { return q.ProposalTries(ctx, &p) })
+	if err != nil {
+		return nil, fmt.Errorf("tries of proposal %s: %w", proposal, err)
+	}
+
+	out := make([]domain.PastTry, len(rows))
+	for i, r := range rows {
+		if out[i], err = pastTryFrom(r.Try, r.ProposalNumber); err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// PastTry implements ports.PastTries.
+func (s *Store) PastTry(ctx context.Context, id domain.PastTryID) (domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.PastTry{}, domain.ErrNoOrg
+	}
+
+	uid, err := parseID("past try", string(id))
+	if err != nil {
+		return domain.PastTry{}, err
+	}
+
+	return s.pastTry(ctx, s.read, uid)
+}
+
+func (s *Store) pastTry(ctx context.Context, tx func(context.Context, func(*db.Queries) error) error, id uuid.UUID) (domain.PastTry, error) {
+	row, err := fetch(ctx, tx, func(q *db.Queries) (db.TryByIDRow, error) { return q.TryByID(ctx, id) })
+
+	switch {
+	case notFound(err):
+		return domain.PastTry{}, fmt.Errorf("past try %s: %w", id, ports.ErrNotFound)
+	case err != nil:
+		return domain.PastTry{}, fmt.Errorf("past try %s: %w", id, err)
+	}
+
+	return pastTryFrom(row.Try, row.ProposalNumber)
+}
+
+// ClaimPastTry implements ports.PastTries: the factory's claims are serialized by an advisory
+// lock for the transaction, so the cap holds under concurrent claims.
+func (s *Store) ClaimPastTry(ctx context.Context, factory domain.FactoryID, now time.Time, lease time.Duration, limit int) (domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.PastTry{}, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("claim past try: %w", err)
+	}
+
+	var out domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		if err := q.LockFactoryTries(ctx, f); err != nil {
+			return fmt.Errorf("lock the factory's tries: %w", err)
+		}
+
+		id, err := q.ClaimTry(ctx, db.ClaimTryParams{Until: now.Add(lease), FactoryID: f, Now: now, MaxRunning: int64(limit)})
+		if notFound(err) {
+			return ports.ErrNotFound
+		}
+
+		if err != nil {
+			return err
+		}
+
+		row, err := q.TryByID(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		out, err = pastTryFrom(row.Try, row.ProposalNumber)
+
+		return err
+	})
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("claim past try of factory %s: %w", factory, err)
+	}
+
+	return out, nil
+}
+
+// FinishPastTry implements ports.PastTries: an update fenced by the claim's lease.
+func (s *Store) FinishPastTry(ctx context.Context, claimed domain.PastTry, r domain.PastTryResult) (domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.PastTry{}, domain.ErrNoOrg
+	}
+
+	if err := r.Check(); err != nil {
+		return domain.PastTry{}, fmt.Errorf("finish past try %s: %w", claimed.ID, err)
+	}
+
+	id, err := uuid.Parse(string(claimed.ID))
+	if err != nil || claimed.LeaseUntil.IsZero() {
+		return domain.PastTry{}, fmt.Errorf("finish past try %s: %w", claimed.ID, ports.ErrLeaseLost)
+	}
+
+	run, err := optionalID("run", string(r.TryRunID))
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("finish past try %s: %w", claimed.ID, err)
+	}
+
+	var verdict *string
+
+	if r.Verdict != "" {
+		v := string(r.Verdict)
+		verdict = &v
+	}
+
+	var out domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		_, err := q.FinishTry(ctx, db.FinishTryParams{
+			Verdict: verdict, Error: r.Error, Reason: r.Reason, Diff: r.Diff, CostUsd: r.CostUSD, TryRunID: run, FinishedAt: r.At, ID: id,
+			LeaseUntil: claimed.LeaseUntil,
+		})
+		if notFound(err) {
+			return ports.ErrLeaseLost
+		}
+
+		if err != nil {
+			return err
+		}
+
+		row, err := q.TryByID(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		out, err = pastTryFrom(row.Try, row.ProposalNumber)
+
+		return err
+	})
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("finish past try %s: %w", claimed.ID, err)
+	}
+
+	return out, nil
+}
+
+// RecordPastTryRun implements ports.PastTries: an update fenced by the claim's lease.
+func (s *Store) RecordPastTryRun(ctx context.Context, claimed domain.PastTry, run domain.RunID, diff string, cost float64) (domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.PastTry{}, domain.ErrNoOrg
+	}
+
+	if err := domain.CheckPastTryRun(run, diff, cost); err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	id, err := uuid.Parse(string(claimed.ID))
+	if err != nil || claimed.LeaseUntil.IsZero() {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, ports.ErrLeaseLost)
+	}
+
+	rid, err := parseID("run", string(run))
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	var out domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		_, err := q.RecordTryRun(ctx, db.RecordTryRunParams{TryRunID: &rid, Diff: diff, CostUsd: cost, ID: id, LeaseUntil: claimed.LeaseUntil})
+		if notFound(err) {
+			return ports.ErrLeaseLost
+		}
+
+		if err != nil {
+			return err
+		}
+
+		row, err := q.TryByID(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		out, err = pastTryFrom(row.Try, row.ProposalNumber)
+
+		return err
+	})
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	return out, nil
+}
+
+// PastTryTarget implements ports.PastTries.
+func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station string) (domain.Run, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.Run{}, domain.ErrNoOrg
+	}
+
+	uid, err := parseID("item", string(item))
+	if err != nil {
+		return domain.Run{}, err
+	}
+
+	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.AgentRun, error) {
+		return q.TryTarget(ctx, db.TryTargetParams{ItemID: &uid, Station: station})
+	})
+
+	switch {
+	case notFound(err):
+		return domain.Run{}, fmt.Errorf("past try target of item %s at %s: %w", item, station, ports.ErrNotFound)
+	case err != nil:
+		return domain.Run{}, fmt.Errorf("past try target of item %s at %s: %w", item, station, err)
+	}
+
+	return runFrom(row), nil
+}
+
+// AgentDoneItems implements ports.PastTries.
+func (s *Store) AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AgentDoneItemsRow, error) {
+		return q.AgentDoneItems(ctx, db.AgentDoneItemsParams{FactoryID: f, Agent: agent, MaxItems: clampLimit(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("done items of agent %s: %w", agent, err)
+	}
+
+	out := make([]domain.AgentItem, len(rows))
+	for i, r := range rows {
+		run := runFrom(r.AgentRun)
+		out[i] = domain.AgentItem{
+			ItemID: run.ItemID, ItemNumber: r.ItemNumber, ItemTitle: r.ItemTitle, Run: run, SentBackAt: r.SentBackAt,
+			CostUSD: r.ItemCostUsd, DoneAt: r.DoneAt.UTC(),
+		}
+
+		if len(out[i].SentBackAt) == 0 {
+			out[i].SentBackAt = nil
+		}
+	}
+
+	return out, nil
+}
+
+// PastTryInput implements ports.PastTries.
+func (s *Store) PastTryInput(ctx context.Context, run domain.RunID) (domain.PastTryInput, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.PastTryInput{}, domain.ErrNoOrg
+	}
+
+	uid, err := parseID("run", string(run))
+	if err != nil {
+		return domain.PastTryInput{}, err
+	}
+
+	var out domain.PastTryInput
+
+	err = s.read(ctx, func(q *db.Queries) error {
+		r, err := q.RunByID(ctx, uid)
+		if notFound(err) || (err == nil && r.ItemID == nil) {
+			return fmt.Errorf("run %s: %w", run, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		rows, err := q.OutputsBefore(ctx, db.OutputsBeforeParams{ItemID: r.ItemID, Before: r.StartedAt})
+		if err != nil {
+			return fmt.Errorf("outputs before run %s: %w", run, err)
+		}
+
+		out = domain.PastTryInput{Run: runFrom(r), Outputs: make(map[string]json.RawMessage, len(rows))}
+		for _, o := range rows {
+			out.Outputs[o.Station] = rawJSON(o.Output)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.PastTryInput{}, fmt.Errorf("past try input: %w", err)
+	}
+
+	return out, nil
+}
+
+// pastTryFrom is a tries row with its proposal's number, 0 for a publish's try.
+func pastTryFrom(t db.Try, number int64) (domain.PastTry, error) {
+	out := domain.PastTry{
+		ID: domain.PastTryID(t.ID.String()), FactoryID: domain.FactoryID(t.FactoryID.String()), ContentKey: deref(t.ContentKey),
+		ProposalNumber: number, ItemID: domain.ItemID(t.ItemID.String()), Attempt: int(t.Attempt), Station: t.Station, OriginalRunID: domain.RunID(t.OriginalRunID.String()),
+		Model: t.Model, State: domain.PastTryState(t.State), Verdict: domain.PastTryVerdict(deref(t.Verdict)), Error: t.Error, Reason: t.Reason, Diff: t.Diff,
+		CostUSD: t.CostUsd, Attempts: int(t.Attempts), CreatedAt: t.CreatedAt.UTC(),
+	}
+
+	if t.TryRunID != nil {
+		out.TryRunID = domain.RunID(t.TryRunID.String())
+	}
+
+	if t.LeaseUntil != nil {
+		out.LeaseUntil = t.LeaseUntil.UTC()
+	}
+
+	if t.FinishedAt != nil {
+		out.FinishedAt = t.FinishedAt.UTC()
+	}
+
+	if t.ProposalID != nil {
+		out.ProposalID = domain.ProposalID(t.ProposalID.String())
+	}
+
+	if t.KeptTestID != nil {
+		out.KeptTestID = domain.KeptTestID(t.KeptTestID.String())
+	}
+
+	if t.VersionID != nil {
+		out.VersionID = domain.DefinitionVersionID(t.VersionID.String())
+	}
+
+	if len(t.Edits) > 0 {
+		if err := json.Unmarshal(t.Edits, &out.Edits); err != nil {
+			return domain.PastTry{}, fmt.Errorf("try %s: decode edits: %w", t.ID, err)
+		}
+	}
+
+	return out, nil
+}

@@ -106,6 +106,16 @@ func (github) webURL(s source, branch, p string) string {
 	return s.web + "/blob/" + segments(branch) + "/" + segments(p)
 }
 
+// archive is the branch's zipball; "" reads the default branch's.
+func (g github) archive(s source) string {
+	u := g.repoURL(s) + "/zipball"
+	if s.branch != "" {
+		u += "/" + url.PathEscape(s.branch)
+	}
+
+	return u
+}
+
 // gitlab is GitLab's REST API v4 at https://<host>/api/v4 (gitlab.com or a self-managed GitLab),
 // as the gitlab code host adapter's. A project is named by its full path, URL-encoded; its tree
 // comes in pages of 100.
@@ -206,6 +216,16 @@ func (g gitlab) raw(s source, p string) (u, accept string) {
 
 func (gitlab) webURL(s source, branch, p string) string {
 	return s.web + "/-/blob/" + segments(branch) + "/" + segments(p)
+}
+
+// archive is the branch's archive as a zip; without sha GitLab reads the default branch's.
+func (g gitlab) archive(s source) string {
+	u := g.projectURL(s) + "/repository/archive.zip"
+	if s.branch != "" {
+		u += "?" + url.Values{"sha": {s.branch}}.Encode()
+	}
+
+	return u
 }
 
 // names reports whether every one of a repository path's segments is a name: not empty, . or ..

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byFrederick/goal/internal/adapters/embedder/openai"
+	"github.com/byFrederick/goal/internal/adapters/converter/workersai"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/docker"
 	"github.com/byFrederick/goal/internal/adapters/store/postgres"
@@ -93,13 +93,20 @@ type settings struct {
 	// DefinitionCacheBytes bounds the files of the definition versions kept for runs that started
 	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
 	DefinitionCacheBytes int64
-	// JonahReviewEvery is how often goald sweeps for Jonah threshold reviews and works the queued
+	// JonahReviewEvery is how often goald sweeps for the daily Jonah reviews that are due and works the queued
 	// reviews (GOAL_JONAH_REVIEW_EVERY, default 1m). JonahReview bounds one review run
 	// (GOAL_JONAH_REVIEW_TIMEOUT, default 30m) and the time its lease adds beyond the run
 	// (GOAL_JONAH_REVIEW_LEASE_MARGIN, default 5m): a review whose goald died is claimed again
 	// once both have passed.
 	JonahReviewEvery time.Duration
 	JonahReview      jonah.ReviewConfig
+	// JonahTryEvery is how often goald queues the tries of past items of the proposals that have
+	// none and works the queued tries (GOAL_JONAH_TRY_EVERY, default 1m). JonahTry bounds one
+	// try's run (GOAL_JONAH_TRY_TIMEOUT, default 30m), the time its lease adds beyond the run
+	// (GOAL_JONAH_TRY_LEASE_MARGIN, default 5m) and how many of a factory's tries run at once on
+	// every goald together (GOAL_JONAH_TRIES_PER_FACTORY, default 2).
+	JonahTryEvery time.Duration
+	JonahTry      jonah.TryConfig
 	// MaxRuns caps the agent runs this goald has in flight at once (GOAL_MAX_RUNS, default 0:
 	// no cap). With a cap, claims are shared out fairly across organizations.
 	MaxRuns int
@@ -109,10 +116,6 @@ type settings struct {
 	// Models are the models the factory editor offers (GOAL_MODELS: comma-separated model ids,
 	// each optionally id=Label; the first is the default; default defaultModels).
 	Models []builder.Model
-	// BakeOffModels are the models a bake-off that names no arms tries beside the agent's own
-	// (GOAL_BAKEOFF_MODELS: comma-separated model ids, default none; ADR 0029 decision 6). Read and
-	// checked here; Jonah's eval loop takes them once goald builds it.
-	BakeOffModels []string
 	// LogLevel (GOAL_LOG_LEVEL: debug, info, warn, error) and LogFormat (GOAL_LOG_FORMAT: json or
 	// text) shape the structured log on stdout.
 	LogLevel  slog.Level
@@ -139,10 +142,10 @@ type settings struct {
 	// loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true or false, default
 	// false): for a laptop's own test servers, and refused when goald listens off loopback.
 	AllowPrivateUpstreams bool
-	// Embed is the knowledge base's embedding model (GOAL_EMBED_URL, an OpenAI-compatible API
-	// root; GOAL_EMBED_MODEL, default defaultEmbedModel; GOAL_EMBED_KEY, its bearer key). Without
-	// GOAL_EMBED_URL the knowledge base is searched by keywords only.
-	Embed openai.Config
+	// WorkersAI is the conversion service for PDF and Office files (GOAL_WORKERS_AI_URL, the
+	// account's Workers AI API root; GOAL_WORKERS_AI_KEY, its bearer token). Without
+	// GOAL_WORKERS_AI_URL those files are refused.
+	WorkersAI workersai.Config
 	// KBWorkers is how many knowledge sources this goald syncs at once (GOAL_KB_WORKERS, default
 	// 2; 0 syncs none here).
 	KBWorkers int
@@ -179,15 +182,10 @@ const (
 	sandboxURLEnv     = "GOAL_SANDBOX_URL"
 	sandboxKeyEnv     = "GOAL_SANDBOX_KEY"
 
-	embedURLEnv   = "GOAL_EMBED_URL"
-	embedModelEnv = "GOAL_EMBED_MODEL"
-	embedKeyEnv   = "GOAL_EMBED_KEY"
-	kbWorkersEnv  = "GOAL_KB_WORKERS"
-	uploadMaxEnv  = "GOAL_UPLOAD_MAX_BYTES"
-	// defaultEmbedModel is Workers AI's bge-m3 (1024 dimensions), the default by spec 4's recall
-	// check on this repository's docs (§17 q2); on another API name its id of a 1024-dimension
-	// model (Ollama's bge-m3, OpenAI's text-embedding-3-small with dimensions).
-	defaultEmbedModel = "@cf/baai/bge-m3"
+	workersAIURLEnv = "GOAL_WORKERS_AI_URL"
+	workersAIKeyEnv = "GOAL_WORKERS_AI_KEY"
+	kbWorkersEnv    = "GOAL_KB_WORKERS"
+	uploadMaxEnv    = "GOAL_UPLOAD_MAX_BYTES"
 	// authProxySecretEnv is the secret goald's /api/auth proxy sends the identity service, which
 	// refuses requests without it (GOAL_AUTH=session only; goal up generates one for both).
 	authProxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
@@ -208,8 +206,8 @@ type removedSetting struct {
 const (
 	insteadEgress    = "compose's goal-egress service, one policy for every box (ADR 0009's phase 4 amendment)"
 	insteadSandbox   = "nothing: a run's sandbox holds its workspace"
-	insteadModel     = "the factory's runtime.modelConnection, an organization connection (goal connection import-env creates one)"
-	insteadGitHubKey = "a github connection, named by the factory's runtime.repository.connection and connections (goal connection import-env creates it)"
+	insteadModel     = "the factory's runtime.modelKey, an organization secret (goal secret create)"
+	insteadGitHubKey = "a secret, named by the factory's runtime.repository.token (goal secret create)"
 )
 
 // removedSettings are the settings of earlier releases goald ignores, warning at start while one
@@ -229,7 +227,7 @@ var removedSettings = []removedSetting{
 	{"GOAL_TASK_ENV", insteadModel},
 	{"CLAUDE_CODE_OAUTH_TOKEN", insteadModel + "; runs no longer get it from goald's environment"},
 	{"GOAL_GITHUB_TOKEN", insteadGitHubKey},
-	{"GOAL_GITHUB_WEB_URL", "the github connection's host (goal connection import-env reads it)"},
+	{"GOAL_GITHUB_WEB_URL", "the host of the factory's runtime.repository.url"},
 	{"GOAL_GITHUB_API_URL", "nothing: a github connection's host gives its API; goal catalog skills sync reads GOAL_SKILLS_GITHUB_API_URL"},
 }
 
@@ -293,10 +291,6 @@ func settingsFrom(getenv func(string) string) (settings, error) {
 
 	if s.LogFormat != "json" && s.LogFormat != "text" {
 		errs = append(errs, fmt.Errorf("GOAL_LOG_FORMAT %q is not json or text", s.LogFormat))
-	}
-
-	if s.BakeOffModels, err = bakeOffModels(getenv("GOAL_BAKEOFF_MODELS")); err != nil {
-		errs = append(errs, err)
 	}
 
 	// errors.Join drops a nil error.
@@ -398,14 +392,14 @@ func smtpPlaintext(u *url.URL, mode string) (bool, error) {
 	return allowed, nil
 }
 
-// knowledgeSettings reads the embedding model, GOAL_KB_WORKERS and GOAL_UPLOAD_MAX_BYTES.
+// knowledgeSettings reads the conversion service, GOAL_KB_WORKERS and GOAL_UPLOAD_MAX_BYTES.
 func knowledgeSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
-	if url := or(embedURLEnv, ""); url != "" {
-		s.Embed = openai.Config{URL: url, Model: or(embedModelEnv, defaultEmbedModel), Key: or(embedKeyEnv, "")}
-		if _, err := openai.New(s.Embed); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", embedURLEnv, err))
+	if url := or(workersAIURLEnv, ""); url != "" {
+		s.WorkersAI = workersai.Config{URL: url, Key: or(workersAIKeyEnv, "")}
+		if _, err := workersai.New(s.WorkersAI); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", workersAIURLEnv, err))
 		}
 	}
 
@@ -522,7 +516,8 @@ func definitionSettings(s *settings, or func(name, def string) string) []error {
 	return errs
 }
 
-// jonahSettings reads the Jonah review loop's times, each a positive duration.
+// jonahSettings reads the Jonah review and try loops' times, each a positive duration, and the
+// try loop's cap per factory, a positive number.
 func jonahSettings(s *settings, or func(name, def string) string) []error {
 	var errs []error
 
@@ -536,6 +531,16 @@ func jonahSettings(s *settings, or func(name, def string) string) []error {
 	read("GOAL_JONAH_REVIEW_EVERY", or("GOAL_JONAH_REVIEW_EVERY", "1m"), &s.JonahReviewEvery)
 	read("GOAL_JONAH_REVIEW_TIMEOUT", or("GOAL_JONAH_REVIEW_TIMEOUT", "30m"), &s.JonahReview.Timeout)
 	read("GOAL_JONAH_REVIEW_LEASE_MARGIN", or("GOAL_JONAH_REVIEW_LEASE_MARGIN", "5m"), &s.JonahReview.Margin)
+	read("GOAL_JONAH_TRY_EVERY", or("GOAL_JONAH_TRY_EVERY", "1m"), &s.JonahTryEvery)
+	read("GOAL_JONAH_TRY_TIMEOUT", or("GOAL_JONAH_TRY_TIMEOUT", "30m"), &s.JonahTry.Timeout)
+	read("GOAL_JONAH_TRY_LEASE_MARGIN", or("GOAL_JONAH_TRY_LEASE_MARGIN", "5m"), &s.JonahTry.Margin)
+
+	perFactory := or("GOAL_JONAH_TRIES_PER_FACTORY", strconv.Itoa(jonah.DefaultTriesPerFactory))
+	if n, err := strconv.Atoi(perFactory); err != nil || n <= 0 {
+		errs = append(errs, fmt.Errorf("GOAL_JONAH_TRIES_PER_FACTORY %q is not a positive number", perFactory))
+	} else {
+		s.JonahTry.PerFactory = n
+	}
 
 	return errs
 }
@@ -945,31 +950,6 @@ func models(raw string) ([]builder.Model, error) {
 		}
 
 		out = append(out, builder.Model{ID: id, Label: cmp.Or(label, modelLabel(id))})
-	}
-
-	return out, nil
-}
-
-// bakeOffModels parses GOAL_BAKEOFF_MODELS: comma-separated model ids, none when empty.
-func bakeOffModels(raw string) ([]string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return nil, nil
-	}
-
-	var out []string
-
-	for item := range strings.SplitSeq(raw, ",") {
-		id := strings.TrimSpace(item)
-
-		if !modelID.MatchString(id) {
-			return nil, fmt.Errorf("GOAL_BAKEOFF_MODELS: %q is not a model id (claude-...)", id)
-		}
-
-		if slices.Contains(out, id) {
-			return nil, fmt.Errorf("GOAL_BAKEOFF_MODELS: %s is listed twice", id)
-		}
-
-		out = append(out, id)
 	}
 
 	return out, nil

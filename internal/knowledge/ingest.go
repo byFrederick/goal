@@ -1,8 +1,7 @@
 // Package knowledge indexes and searches the organizations' knowledge bases (spec 4 §4.8): the
 // ingestion loop that syncs due sources under leases (Ingestor), the text extraction and the
-// chunking it uses, uploads kept in the bucket (Uploads) and search with or without an embedding
-// model (Searcher). It reaches the database, the bucket, the embedding model and the sources
-// only through ports.
+// chunking it uses, uploads kept in the bucket (Uploads) and keyword search (Searcher). It reaches
+// the database, the bucket and the sources only through ports.
 package knowledge
 
 import (
@@ -12,7 +11,6 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -23,6 +21,11 @@ type Connections interface {
 	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
 }
 
+// Secrets open the secrets synced sources read with: ports.OrgSecrets.
+type Secrets interface {
+	Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error)
+}
+
 // Defaults of the ingestion loop.
 const (
 	// DefaultWorkers is how many sources one goald syncs at once (GOAL_KB_WORKERS).
@@ -31,38 +34,44 @@ const (
 	Lease = 10 * time.Minute
 	// Tick is how often an idle worker looks for a due source.
 	Tick = 15 * time.Second
-	// embedBatch is how many texts one embedding request carries at most, and embedBatchTokens
-	// how many tokens by estimateTokens: models bound a request's tokens (Workers AI's bge-m3 takes
-	// 60,000 in all).
-	embedBatch       = 64
-	embedBatchTokens = 40_000
 )
 
-// IngestorConfig wires an Ingestor. Embedder nil indexes keywords only; Readers are the source
-// readers of synced connections by their kind's sync name (KindSpec.Sync); Uploads reads upload
-// sources.
+// IngestorConfig wires an Ingestor. Readers are the source
+// readers by name: a synced connection's kind's sync name (KindSpec.Sync), the reader a synced
+// source on a secret names, gitdocs for repository and confluence for Confluence sources; Uploads
+// reads upload sources. Objects stores the snapshots upload, repository and Confluence sources
+// sync into, written first in TempDir ("" is the system's); nil writes none, and repository and
+// Confluence sources then fail. Converter turns what is neither text nor HTML into Markdown; nil
+// refuses it. Keep is how long a replaced snapshot stays (ADR 0038 decision 3): the longest a
+// claim that may have pinned it can last; 0 deletes none.
 type IngestorConfig struct {
 	Knowledge   ports.Knowledge
 	Connections Connections
+	Secrets     Secrets
 	Uploads     ports.SourceReader
 	Readers     map[string]ports.SourceReader
-	Embedder    ports.Embedder
+	Objects     ports.ObjectStore
+	Converter   ports.Converter
+	TempDir     string
 	Clock       ports.Clock
 	Log         *slog.Logger
 	// Workers, Lease and Tick default to DefaultWorkers, Lease and Tick.
 	Workers int
 	Lease   time.Duration
 	Tick    time.Duration
+	Keep    time.Duration
 }
 
 // Ingestor syncs the sources that are due, in every live organization in one order (the source
 // due first, whichever its organization): it claims one with a lease (renewed while it works
 // and fencing its writes), lists its documents, fetches, extracts, chunks and embeds the
 // new and changed ones, replaces their chunks, deletes those its source no longer lists and
-// schedules the next sync. Any goald runs one; a goald that dies mid-sync leaves its source to
+// schedules the next sync. Upload, repository and Confluence sources sync into a snapshot too
+// (ADR 0038 decision 3, snapshot.go); upload sources keep their chunks until the cut-over. Any goald runs one; a goald that dies mid-sync leaves its source to
 // the next claim once the lease ends, and every step is safe to repeat.
 type Ingestor struct {
-	cfg IngestorConfig
+	cfg    IngestorConfig
+	limits byteLimits
 }
 
 // NewIngestor returns an ingestor for cfg.
@@ -83,7 +92,7 @@ func NewIngestor(cfg IngestorConfig) *Ingestor {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 
-	return &Ingestor{cfg: cfg}
+	return &Ingestor{cfg: cfg, limits: defaultLimits}
 }
 
 // Run syncs due sources with cfg.Workers workers until ctx ends; each looks every cfg.Tick.
@@ -124,7 +133,7 @@ func (in *Ingestor) SyncDue(ctx context.Context) (int, error) {
 	for ctx.Err() == nil {
 		now := in.cfg.Clock.Now()
 
-		c, err := in.cfg.Knowledge.ClaimSource(ctx, now, now.Add(in.cfg.Lease), in.model())
+		c, err := in.cfg.Knowledge.ClaimSource(ctx, now, now.Add(in.cfg.Lease))
 		if err != nil {
 			errs = append(errs, fmt.Errorf("knowledge: claim: %w", err))
 
@@ -145,15 +154,6 @@ func (in *Ingestor) SyncDue(ctx context.Context) (int, error) {
 	return n, errors.Join(errs...)
 }
 
-// model is the embedding model, "" without one.
-func (in *Ingestor) model() string {
-	if in.cfg.Embedder == nil {
-		return ""
-	}
-
-	return in.cfg.Embedder.Model()
-}
-
 // sync runs one claimed source's sync, renewing its lease, and records how it ended. A sync cut
 // short (goald stopping, the lease lost or taken over) records nothing: the lease ends, or
 // another claim holds it, and that sync takes the source over.
@@ -172,7 +172,7 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 	}()
 
 	started := in.cfg.Clock.Now()
-	stats, err := in.pass(ctx, c, started)
+	stats, err := in.pass(ctx, c)
 
 	lost := context.Cause(ctx)
 	if lost == nil && errors.Is(err, ports.ErrLeaseLost) {
@@ -191,13 +191,12 @@ func (in *Ingestor) sync(ctx context.Context, c domain.SourceClaim) error {
 	r := domain.SyncResult{At: in.cfg.Clock.Now(), Due: *src.NextSyncAt}
 	if err != nil {
 		r.Error = err.Error()
-	} else {
-		r.EmbedModel = in.model()
 	}
 
 	in.cfg.Log.InfoContext(ctx, "knowledge sync", slog.String("source", src.Name), slog.String("source_id", string(src.ID)),
-		slog.Int("listed", stats.listed), slog.Int("fetched", stats.fetched), slog.Int("deleted", stats.deleted),
-		slog.Int("chunks", stats.chunks), slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
+		slog.Int("files", stats.snapshot.files), slog.Int("files_fetched", stats.snapshot.fetched),
+		slog.Int("files_archived", stats.snapshot.archived), slog.Int("files_failed", stats.snapshot.failed), slog.Bool("snapshot", stats.snapshot.written),
+		slog.Float64("seconds", r.At.Sub(started).Seconds()), slog.String("error", r.Error))
 
 	err = in.cfg.Knowledge.FinishSync(context.WithoutCancel(ctx), c.Lease, r)
 	if errors.Is(err, ports.ErrLeaseLost) {
@@ -243,13 +242,14 @@ func (in *Ingestor) renew(ctx context.Context, cancel context.CancelCauseFunc, l
 }
 
 type syncStats struct {
-	listed, fetched, deleted, chunks int
+	snapshot snapshotStats
 }
 
-// pass is one sync of src: every listed document whose version changed (all of them when its
-// chunks are of another model) indexed, the others marked seen, and for a synced source the ones
-// it no longer lists deleted.
-func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time.Time) (syncStats, error) {
+// pass is one sync of src: for an upload or synced source every listed document whose version
+// changed indexed, the others marked seen,
+// and for a synced source the ones it no longer lists deleted; then for an upload, repository or
+// Confluence source its snapshot.
+func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim) (syncStats, error) {
 	var stats syncStats
 
 	src := c.Source
@@ -259,86 +259,97 @@ func (in *Ingestor) pass(ctx context.Context, c domain.SourceClaim, started time
 		return stats, err
 	}
 
-	versions, err := in.cfg.Knowledge.Versions(ctx, src.ID)
-	if err != nil {
-		return stats, err
+	if !writesSnapshots(src.Kind) {
+		return stats, nil
 	}
 
-	seen, err := in.list(ctx, spec, reader, versions, started, &stats)
-	if err != nil {
-		return stats, err
-	}
-
-	if err := in.cfg.Knowledge.MarkSeen(ctx, c.Lease, seen, started); err != nil {
-		return stats, err
-	}
-
-	if src.Kind == domain.SourceSynced {
-		if stats.deleted, err = in.cfg.Knowledge.DeleteUnseen(ctx, c.Lease, started); err != nil {
-			return stats, err
+	if in.cfg.Objects == nil {
+		if src.Kind == domain.SourceUpload {
+			return stats, nil
 		}
+
+		return stats, fmt.Errorf("source %s syncs into snapshots, and this goald stores none", src.Name)
 	}
 
-	return stats, nil
+	stats.snapshot, err = in.snapshot(ctx, c, spec, reader)
+	if !errors.Is(err, ports.ErrLeaseLost) && ctx.Err() == nil {
+		in.retain(ctx, c)
+	}
+
+	return stats, err
 }
 
-// list indexes the listed documents of spec's source that changed (every one when its chunks
-// are of another model than the embedder's) and returns the external ids of those that stay as
-// they are: unchanged, or indexed before and not fetched this time.
-func (in *Ingestor) list(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, versions map[string]string,
-	started time.Time, stats *syncStats,
-) ([]string, error) {
-	model := in.model()
-	fresh := model == "" || spec.Source.EmbedModel == model
-
-	var seen []string
-
-	for item, err := range reader.List(ctx, spec) {
-		if err != nil {
-			return nil, fmt.Errorf("list: %w", err)
-		}
-
-		stats.listed++
-
-		if len(item.ID) > domain.MaxExternalID {
-			in.cfg.Log.WarnContext(ctx, "knowledge document left out: its id is too long", slog.String("source", spec.Source.Name),
-				slog.Int("bytes", len(item.ID)))
-
-			continue
-		}
-
-		v, known := versions[item.ID]
-		if known && fresh && v == item.Version {
-			seen = append(seen, item.ID)
-
-			continue
-		}
-
-		n, kept, err := in.index(ctx, spec, reader, item, started, known)
-		if err != nil {
-			return nil, err
-		}
-
-		if kept {
-			seen = append(seen, item.ID)
-
-			continue
-		}
-
-		stats.fetched++
-		stats.chunks += n
+// retain deletes the source's snapshots retention no longer keeps (ADR 0038 decision 3): those
+// not current, pinned by no running run and replaced cfg.Keep ago or longer. Each zip goes before
+// its row, so a crash between the two leaves a row whose zip is gone, which reads as not synced
+// and the next sync deletes, never a zip no row names. A failure is logged and fails no sync.
+func (in *Ingestor) retain(ctx context.Context, c domain.SourceClaim) {
+	if in.cfg.Keep <= 0 {
+		return
 	}
 
-	return seen, nil
+	log := in.cfg.Log.With(slog.String("source", c.Source.Name), slog.String("source_id", string(c.Source.ID)))
+
+	expired, err := in.cfg.Knowledge.ExpiredSnapshots(ctx, c.Lease, in.cfg.Clock.Now().Add(-in.cfg.Keep))
+	if err != nil {
+		log.WarnContext(ctx, "knowledge retention", slog.Any("error", err))
+
+		return
+	}
+
+	var (
+		gone []domain.KnowledgeSnapshotID
+		errs []error
+	)
+
+	for _, s := range expired {
+		if err := in.cfg.Objects.Delete(ctx, s.Key); err != nil {
+			errs = append(errs, fmt.Errorf("delete %s: %w", s.Key, err))
+
+			continue
+		}
+
+		gone = append(gone, s.ID)
+	}
+
+	if len(gone) > 0 {
+		if err := in.cfg.Knowledge.DeleteSnapshots(ctx, c.Lease, gone); err != nil {
+			errs = append(errs, err)
+			gone = nil
+		}
+	}
+
+	if len(gone) > 0 || len(errs) > 0 {
+		log.InfoContext(ctx, "knowledge retention", slog.Int("snapshots_deleted", len(gone)),
+			slog.Int("snapshots_expired", len(expired)), slog.Any("error", errors.Join(errs...)))
+	}
 }
 
-// reader is what reads src: the uploads, or its connection's kind's reader with the connection
-// opened.
+// reader is what reads src: the uploads; a repository's or Confluence source's kind's reader,
+// with its secret opened when it has one; a synced source's reader its config names, with its
+// secret opened; or its connection's kind's reader with the connection opened.
 func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (domain.SyncSpec, ports.SourceReader, error) {
 	spec := domain.SyncSpec{Source: src}
 
 	if src.Kind == domain.SourceUpload {
 		return spec, in.cfg.Uploads, nil
+	}
+
+	if name, ok := kindReaders[src.Kind]; ok {
+		if src.Secret == "" {
+			reader, ok := in.cfg.Readers[name]
+			if !ok {
+				return spec, nil, fmt.Errorf("source %s reads with %q, which this goald cannot read", src.Name, name)
+			}
+
+			return spec, reader, nil
+		}
+
+		return in.secretReader(ctx, spec, name)
+	}
+
+	if src.Secret != "" {
+		return in.secretReader(ctx, spec, src.Config[domain.SourceReaderKey])
 	}
 
 	conns, err := in.cfg.Connections.Resolve(ctx, []string{src.Connection}, domain.ConnectionUse{Source: src.Name})
@@ -358,166 +369,34 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 	return spec, reader, nil
 }
 
-// index fetches, extracts, chunks and embeds one document and stores it, and returns how many
-// chunks it has. A document that cannot be read is stored failed with the reason; one that cannot
-// be fetched (the source failing for now) keeps what was indexed of it when it was known (kept:
-// the next sync tries again), else is stored failed without a version, so the next sync tries
-// again too. An upload deleted meanwhile stays deleted. Only the embedding model failing, the
-// database or ctx ending stop the sync.
-func (in *Ingestor) index(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, item domain.SourceItem, seen time.Time,
-	known bool,
-) (n int, kept bool, err error) {
-	d := domain.KnowledgeDocument{
-		Source: spec.Source.ID, ExternalID: item.ID, Version: item.Version, Title: item.Title, URL: item.URL, MIME: item.MIME,
-		SeenAt: seen, CreatedBy: domain.EngineActor,
+// secretReader opens the secret spec's source reads with, now, without a factory (audited as
+// secret.used), so a value replaced since is the one read, and picks the reader name. A secret
+// open to some factories only does not open.
+func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name string) (domain.SyncSpec, ports.SourceReader, error) {
+	src := spec.Source
+
+	if in.cfg.Secrets == nil {
+		return spec, nil, fmt.Errorf("source %s reads with secret %s, and this goald opens no secrets", src.Name, src.Secret)
 	}
 
-	pieces, err := in.read(ctx, spec, reader, &d)
-	if ctx.Err() != nil {
-		return 0, false, ctx.Err()
+	reader, ok := in.cfg.Readers[name]
+	if !ok {
+		return spec, nil, fmt.Errorf("source %s names reader %q, which this goald cannot read", src.Name, name)
 	}
 
-	if known && errors.Is(err, errFetch) {
-		in.cfg.Log.WarnContext(ctx, "knowledge document kept as indexed", slog.String("source", spec.Source.Name),
-			slog.String("document", item.ID), slog.Any("error", err))
-
-		return 0, true, nil
-	}
-
-	switch {
-	case err != nil:
-		d.Status, d.Error = domain.DocumentFailed, err.Error()
-	case len(pieces) == 0:
-		d.Status = domain.DocumentSkipped
-	default:
-		d.Status = domain.DocumentIndexed
-	}
-
-	chunks, err := in.embed(ctx, pieces)
-	if err != nil {
-		return 0, false, err
-	}
-
-	if d.Status == domain.DocumentIndexed {
-		now := in.cfg.Clock.Now()
-		d.IndexedAt, d.EmbedModel = &now, in.model()
-	}
-
-	err = in.cfg.Knowledge.PutDocument(ctx, d, chunks)
-	if errors.Is(err, ports.ErrNotFound) && spec.Source.Kind == domain.SourceUpload {
-		return 0, false, nil // deleted meanwhile
+	opened, err := in.cfg.Secrets.Resolve(ctx, []string{src.Secret}, domain.SecretUse{})
+	if errors.Is(err, ports.ErrSecretNotAllowed) {
+		return spec, nil, fmt.Errorf("secret %s is open to some factories only; a knowledge source reads with a secret open to all: %w", src.Secret, err)
 	}
 
 	if err != nil {
-		return 0, false, err
+		return spec, nil, fmt.Errorf("secret %s: %w", src.Secret, err)
 	}
 
-	return len(chunks), false, nil
+	spec.Secret = &opened[0]
+
+	return spec, reader, nil
 }
 
 // errFetch marks a document its source could not hand over.
 var errFetch = errors.New("fetch")
-
-// read fetches d's content and cuts its text into pieces, filling in what the fetch tells.
-func (in *Ingestor) read(ctx context.Context, spec domain.SyncSpec, reader ports.SourceReader, d *domain.KnowledgeDocument) ([]Piece, error) {
-	doc, err := reader.Fetch(ctx, spec, d.ExternalID)
-	if err != nil {
-		d.Version = ""
-
-		return nil, fmt.Errorf("%w: %w", errFetch, err)
-	}
-
-	if doc.MIME != "" {
-		d.MIME = doc.MIME
-	}
-
-	if doc.Title != "" {
-		d.Title = doc.Title
-	}
-
-	if doc.URL != "" {
-		d.URL = doc.URL
-	}
-
-	d.Bytes = int64(len(doc.Body))
-
-	text, err := Extract(d.MIME, doc.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return Chunk(text), nil
-}
-
-// batchEnd is where the embedding request of texts from start ends: at most embedBatch texts
-// and, as servers pad a batch to its longest text, at most embedBatchTokens estimated tokens for
-// that many texts of the longest's length; one text at least.
-func batchEnd(texts []string, start int) int {
-	end, longest := start, 0
-
-	for end < len(texts) && end-start < embedBatch {
-		longest = max(longest, estimateTokens(texts[end]))
-		if end > start && (end-start+1)*longest > embedBatchTokens {
-			break
-		}
-
-		end++
-	}
-
-	return end
-}
-
-// estimateTokens is a cautious count of the tokens in s: English and code run at about three
-// ASCII characters a token, other scripts and symbols (box drawing, CJK) at up to two tokens a
-// character.
-func estimateTokens(s string) int {
-	ascii, other := 0, 0
-
-	for _, r := range s {
-		if r < utf8.RuneSelf {
-			ascii++
-		} else {
-			other++
-		}
-	}
-
-	return ascii/3 + 2*other + 1
-}
-
-// embed turns pieces into chunks, with embeddings when there is a model, in batches.
-func (in *Ingestor) embed(ctx context.Context, pieces []Piece) ([]domain.Chunk, error) {
-	chunks := make([]domain.Chunk, len(pieces))
-	for i, p := range pieces {
-		chunks[i] = domain.Chunk{Ord: i, Heading: p.Heading, Text: p.Text}
-	}
-
-	if in.cfg.Embedder == nil {
-		return chunks, nil
-	}
-
-	texts := make([]string, len(pieces))
-	for i, p := range pieces {
-		texts[i] = p.EmbedText()
-	}
-
-	for start := 0; start < len(texts); {
-		end := batchEnd(texts, start)
-
-		vecs, err := in.cfg.Embedder.Embed(ctx, texts[start:end])
-		if err != nil {
-			return nil, fmt.Errorf("embed: %w", err)
-		}
-
-		if len(vecs) != end-start {
-			return nil, fmt.Errorf("embed: %d embeddings for %d texts", len(vecs), end-start)
-		}
-
-		for i, v := range vecs {
-			chunks[start+i].Embedding = v
-		}
-
-		start = end
-	}
-
-	return chunks, nil
-}

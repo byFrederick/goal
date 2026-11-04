@@ -2,8 +2,8 @@ package domain
 
 import (
 	"errors"
-	"strings"
 	"testing"
+	"time"
 )
 
 func TestDocumentType_ByExtensionElseByContent(t *testing.T) {
@@ -26,87 +26,43 @@ func TestDocumentType_ByExtensionElseByContent(t *testing.T) {
 		t.Errorf("DocumentType of HTML without an extension = %q, %v", got, err)
 	}
 
-	for name, body := range map[string]string{"report.pdf": "%PDF", "image": "\x89PNG\x00\x01", "sheet.xlsx": "PK"} {
+	if got, err := DocumentType("report.pdf", []byte("%PDF")); err != nil || got != MediaPDF {
+		t.Errorf("DocumentType of a PDF = %q, %v; want it for the conversion service", got, err)
+	}
+
+	for name, body := range map[string]string{"image": "\x89PNG\x00\x01", "slides.key": "PK", "archive.zip": "PK"} {
 		if _, err := DocumentType(name, []byte(body)); !errors.Is(err, ErrUnsupportedDocument) {
 			t.Errorf("DocumentType(%s) = %v, want it unsupported", name, err)
 		}
 	}
 }
 
-func TestKnowledgeVerdict_Check(t *testing.T) {
+func TestNewKnowledgeSource_SyncEveryDefaultOnDemandOrAtLeastTheMinimum(t *testing.T) {
 	t.Parallel()
 
-	agent := Actor{Kind: ActorAgent, ID: "investigator"}
-	ok := KnowledgeVerdict{Document: "d", Verdict: KnowledgeHelped, Note: strings.Repeat("é", MaxVerdictNote), By: agent}
-
-	if err := ok.Check(); err != nil {
-		t.Errorf("Check of a verdict with a note of %d characters = %v", MaxVerdictNote, err)
-	}
-
-	for what, v := range map[string]KnowledgeVerdict{
-		"no document":         {Verdict: KnowledgeHelped, By: agent},
-		"an unknown verdict":  {Document: "d", Verdict: "meh", By: agent},
-		"a note too long":     {Document: "d", Verdict: KnowledgeMisled, Note: strings.Repeat("x", MaxVerdictNote+1), By: agent},
-		"a service actor":     {Document: "d", Verdict: KnowledgeHelped, By: Actor{Kind: ActorService, ID: "k"}},
-		"an actor with no id": {Document: "d", Verdict: KnowledgeHelped, By: Actor{Kind: ActorUser}},
-		"an item with no run": {Document: "d", Verdict: KnowledgeHelped, Item: "i", By: agent},
+	for _, tc := range []struct {
+		every *time.Duration
+		ok    bool
+	}{
+		{nil, true},
+		{new(SyncOnDemand), true},
+		{new(MinSyncEvery), true},
+		{new(24 * time.Hour), true},
+		{new(time.Second), false},
+		{new(MinSyncEvery - time.Second), false},
+		{new(-time.Hour), false},
 	} {
-		if err := v.Check(); !errors.Is(err, ErrInvalid) {
-			t.Errorf("Check of a verdict with %s = %v, want ErrInvalid", what, err)
+		n := NewKnowledgeSource{Name: "handbook", Title: "Handbook", Kind: SourceUpload, SyncEvery: tc.every}
+		if err := n.Check(); (err == nil) != tc.ok || (err != nil && !errors.Is(err, ErrInvalid)) {
+			t.Errorf("NewKnowledgeSource{SyncEvery: %v}.Check() = %v, want ok %t", tc.every, err, tc.ok)
 		}
-	}
-}
 
-func TestKnowledgeUse_Check(t *testing.T) {
-	t.Parallel()
-
-	ok := KnowledgeUse{Factory: "f", Item: "i", Run: "r", Source: "s", Document: "d", Kind: KnowledgeSearched, Chunks: []int64{1}}
-	if err := ok.Check(); err != nil {
-		t.Errorf("Check of a search use = %v", err)
-	}
-
-	for what, u := range map[string]KnowledgeUse{
-		"an unknown kind": {Factory: "f", Item: "i", Run: "r", Source: "s", Document: "d", Kind: "browse"},
-		"no run":          {Factory: "f", Item: "i", Source: "s", Document: "d", Kind: KnowledgeRead},
-		"no document":     {Factory: "f", Item: "i", Run: "r", Source: "s", Kind: KnowledgeRead},
-		"too many chunks": {
-			Factory: "f", Item: "i", Run: "r", Source: "s", Document: "d", Kind: KnowledgeSearched,
-			Chunks: make([]int64, MaxUseChunks+1),
-		},
-	} {
-		if err := u.Check(); !errors.Is(err, ErrInvalid) {
-			t.Errorf("Check of a use with %s = %v, want ErrInvalid", what, err)
+		if tc.every == nil {
+			continue
 		}
-	}
-}
 
-func TestCheckUsageDays(t *testing.T) {
-	t.Parallel()
-
-	for _, d := range []int{1, DefaultUsageDays, MaxUsageDays} {
-		if err := CheckUsageDays(d); err != nil {
-			t.Errorf("CheckUsageDays(%d) = %v", d, err)
+		if err := (KnowledgeSourcePatch{SyncEvery: tc.every}).Check(); (err == nil) != tc.ok {
+			t.Errorf("KnowledgeSourcePatch{SyncEvery: %s}.Check() = %v, want ok %t", *tc.every, err, tc.ok)
 		}
-	}
-
-	for _, d := range []int{-1, 0, MaxUsageDays + 1} {
-		if err := CheckUsageDays(d); !errors.Is(err, ErrInvalid) {
-			t.Errorf("CheckUsageDays(%d) = %v, want ErrInvalid", d, err)
-		}
-	}
-}
-
-func TestKnowledgeVerdict_AuditEntryHasNoNote(t *testing.T) {
-	t.Parallel()
-
-	by := Actor{Kind: ActorUser, ID: "u1", Name: "Ada"}
-	e := KnowledgeVerdict{Document: "d", Run: "r", Item: "i", Verdict: KnowledgeMisled, Note: "names the old port", By: by}.AuditEntry()
-
-	if e.Action != AuditKnowledgeVerdictGiven || e.TargetKind != AuditTargetKnowledgeDocument || e.TargetID != "d" || e.Actor != by {
-		t.Errorf("AuditEntry = %+v; want knowledge_verdict.given on document d by Ada", e)
-	}
-
-	if len(e.Data) != 2 || e.Data["verdict"] != "misled" || e.Data["run"] != "r" {
-		t.Errorf("AuditEntry data = %v; want the verdict and the run only, never the note", e.Data)
 	}
 }

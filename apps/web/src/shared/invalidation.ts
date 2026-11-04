@@ -98,7 +98,7 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
  *   with the eval cases (a publish starts an eval run);
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
  *   the list, its versions, draft (based on, running), comparisons, board, overviews, the
- *   connections, the knowledge sources (what uses each), the eval cases and Jonah's reads;
+ *   connections, the knowledge sources (what uses each), Jonah's reads;
  * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
  */
 export function definitionInvalidations(org: string, data: unknown): QueryKey[] {
@@ -113,9 +113,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
       return [
         ...factory,
         defKeys.draft(org, f),
-        ...(data.number !== undefined
-          ? [defKeys.versions(org, f), defKeys.versionsOf(org, f), keys.evals(org, f), keys.judges(org, f)]
-          : []),
         ...(data.number !== undefined ? [defKeys.versions(org, f), defKeys.versionsOf(org, f)] : []),
         ...(data.number !== undefined ? [intakeKeys.triggers(org, f)] : []),
       ];
@@ -127,7 +124,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         defKeys.draft(org, f),
         defKeys.compares(org, f),
         keys.board(org, f),
-        keys.judges(org, f),
         // A publish changes the policy Jonah follows (learning.jonah), so its overview is read again.
         keys.jonah(org, f),
         keys.overviews(org),
@@ -136,7 +132,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         // What uses a connection or a knowledge source is read from the current versions.
         keys.connections(org),
         keys.knowledge(org),
-        keys.evals(org, f),
         // A trigger's rules and its results read from the current definition.
         intakeKeys.triggers(org, f),
       ];
@@ -151,37 +146,36 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
  * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
  * or deleted changes the lists, that connection and the audit entries about connections, all
  * under one prefix; it carries no value. The kinds too: a connection of a kind another admin just
- * defined (kinds have no event of their own). A credential's "used by" names the connections
- * that refer to it, so the credentials list moves with them.
+ * defined (kinds have no event of their own). A secret's uses name the connections
+ * that refer to it, so the secrets list moves with them.
  */
 export function connectionInvalidations(org: string): QueryKey[] {
-  return [keys.connections(org), keys.connectionKinds(org), keys.credentials(org)];
+  return [keys.connections(org), keys.connectionKinds(org), keys.secrets(org)];
 }
 
 /**
  * The queries one `knowledge` event touches (spec 4 §8.3): a source's sync started or ended, so
- * the source lists, each source with its documents and each document's text may have changed, and
- * the usage of the sources (the runs that opened each document). The documents' uses sit under the
- * 'document' prefix. Not a search: one open on Knowledge is an embedding call on goald, run again when asked.
+ * the source lists, each source with its files, a search across the files and how often they were
+ * read may have changed.
  */
 export function knowledgeInvalidations(org: string): QueryKey[] {
   const knowledge = keys.knowledge(org);
   return [
     [...knowledge, 'sources'],
     [...knowledge, 'source'],
-    [...knowledge, 'document'],
-    [...knowledge, 'usage'],
+    [...knowledge, 'find'],
+    [...knowledge, 'reads'],
   ];
 }
 
 /**
  * The queries one `learning` event touches: Jonah made or changed a review, proposal or observation of
- * a factory, so its overview and proposals are read again. goald does not send this event yet
+ * a factory, so its overview, proposals, kept tests and the versions' watches are read again. goald does not send this event yet
  * (openapi.yaml names no such event); the handler waits for it, and a resync or a focus refetch covers the gap.
  */
 export function learningInvalidations(org: string, data: unknown): QueryKey[] {
   const factory = (data as { factory_id?: unknown } | null)?.factory_id;
-  return typeof factory === 'string' ? [keys.jonah(org, factory)] : [];
+  return typeof factory === 'string' ? [keys.jonah(org, factory), defKeys.versions(org, factory)] : [];
 }
 
 /** A resync may have missed anything of the organization: everything under it is re-read. */
