@@ -924,13 +924,27 @@ func TestLine_CarriesFollowUps(t *testing.T) {
 	}
 
 	for _, flow := range []string{
-		"outputs: { followUps: \"\" }", "outputs: { close: close }", "outputs: { followUps: [a] }",
+		"outputs: { followUps: \"\" }", "outputs: { close: \"\" }", "outputs: { close: [a] }", "outputs: { followUps: [a] }",
 		"followUpsFrom: [acme-other]", "followUpsFrom: " + otherFactoryID, "followUpsFrom: [" + otherFactoryID + ", " + otherFactoryID + "]",
 	} {
 		_, problems := Check(checkTree(baseFactory+"    flow:\n      "+flow+"\n", nil))
 		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
 			t.Errorf("flow %s: problems %+v, want a schema problem", flow, problems)
 		}
+	}
+}
+
+// board.flow.outputs.close maps the field that closes an item onto the line, next to followUps.
+func TestLine_CarriesClose(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { followUps: followups, close: closing }\n", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if o := f.Line().Flow.Outputs; o.FollowUps != "followups" || o.Close != "closing" {
+		t.Errorf("outputs = %+v; want followUps followups and close closing", o)
 	}
 }
 

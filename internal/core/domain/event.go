@@ -166,7 +166,7 @@ const (
 	// AuditItemLaneSet is a person setting an item's lane (from, to).
 	AuditItemLaneSet = "item.lane_set"
 	// AuditItemCancelled is a person cancelling an item (station, reason; assembly for a part
-	// cancelled with its assembly).
+	// cancelled with its assembly), or an agent closing one (station, reason, agent, closed).
 	AuditItemCancelled = "item.cancelled"
 	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
 	AuditItemRejected = "item.rejected"

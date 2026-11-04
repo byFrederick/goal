@@ -244,7 +244,7 @@ func (e *Engine) Pause(ctx context.Context, id domain.ItemID, by domain.Actor, r
 	return e.control(ctx, "pause", it, by, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateBlocked}, At: now,
 		Events: []domain.Event{decision(it, domain.EventPaused, now, by, withReason(nil, reason))},
-		Audit:  itemAudit(it, now, by, domain.AuditItemPaused, withReason(map[string]any{"station": it.Station}, reason)),
+		Audit:  itemAudit(it, now, by, domain.AuditItemPaused, withReason(map[string]any{keyStation: it.Station}, reason)),
 	})
 }
 
@@ -279,7 +279,7 @@ func cancelOf(it domain.Item, at time.Time, by domain.Actor, reason string, data
 		audit = map[string]any{}
 	}
 
-	audit["station"] = it.Station
+	audit[keyStation] = it.Station
 
 	return ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateCancelled}, At: at,
