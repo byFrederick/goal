@@ -65,8 +65,10 @@ func TestProposed_ValidatesOutputAgainstItsContracts(t *testing.T) {
 	ctx := ctxOf(t, org)
 	title, body := json.RawMessage(`{"title":"x"}`), json.RawMessage(`{"body":"x"}`)
 
-	p, err := c.Proposed(ctx, v.ID, []domain.ProposalEdit{{Path: "contracts/note.schema.json",
-		Replacements: []domain.Replacement{{Old: noteContract, New: bodyContract}}}})
+	p, err := c.Proposed(ctx, v.ID, []domain.ProposalEdit{{
+		Path:         "contracts/note.schema.json",
+		Replacements: []domain.Replacement{{Old: noteContract, New: bodyContract}},
+	}})
 	if err != nil {
 		t.Fatalf("Proposed: %v", err)
 	}

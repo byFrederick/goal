@@ -28,6 +28,9 @@ const (
 
 var tryHead = strings.Repeat("c", 40)
 
+// tryDiff is the diff the graded tries' runs leave.
+const tryDiff = "diff --git a/notes.go b/notes.go\n"
+
 // tryDefs is TryDefinitions over each organization's one line: ProposedLine answers the line of
 // the version and the stations reached[version] names, every agent station by default.
 type tryDefs struct {
@@ -619,18 +622,19 @@ func TestTries_FailingCheckIsNotFixed(t *testing.T) {
 	w := newTryWorld(t, 1)
 	org := w.orgs[0]
 	checks := []string{"make lint", "make test"}
+
 	w.defs.build(org, func(s *domain.Station) { s.Checks = checks })
 	w.queued(org, 1)
 	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 		return domain.RunResult{
-			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: "diff", RunID: tryRunID,
+			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: tryDiff, RunID: tryRunID,
 			FailedCheck: &domain.FailedCheck{Command: "make test", ExitCode: 2, Output: "FAIL TestNotes"},
 		}, nil
 	}
 
 	got := w.onlyTry(org)
 	if got.Verdict != domain.PastTryNotFixed || !strings.HasPrefix(got.Reason, "check `make test` exited 2") ||
-		!strings.Contains(got.Reason, "FAIL TestNotes") || got.Diff != "diff" || got.CostUSD != 0.25 || got.Error != "" {
+		!strings.Contains(got.Reason, "FAIL TestNotes") || got.Diff != tryDiff || got.CostUSD != 0.25 || got.Error != "" {
 		t.Errorf("try = %+v; want not fixed, the failing check first in its reason, its diff and cost", got)
 	}
 
@@ -651,8 +655,10 @@ func TestTries_ContractOfTheProposalIsChecked(t *testing.T) {
 		verdict domain.PastTryVerdict
 		want    string
 	}{
-		{name: "a violation", err: fmt.Errorf("%w: note: missing title", ports.ErrContractViolation), verdict: domain.PastTryNotFixed,
-			want: "the output does not satisfy contract note"},
+		{
+			name: "a violation", err: fmt.Errorf("%w: note: missing title", ports.ErrContractViolation), verdict: domain.PastTryNotFixed,
+			want: "the output does not satisfy contract note",
+		},
 		{name: "a contract that is gone", err: errors.New(`unknown contract "note"`), verdict: domain.PastTryError, want: "contract note"},
 	} {
 		w := newTryWorld(t, 1)
@@ -707,11 +713,11 @@ func TestTries_PassingChecksAwaitTheGrader(t *testing.T) {
 		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = "note", []string{"make test"} })
 		w.queued(org, 1)
 		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-			return domain.RunResult{Status: tt.status, Output: json.RawMessage(`{}`), Diff: "diff", RunID: tryRunID}, nil
+			return domain.RunResult{Status: tt.status, Output: json.RawMessage(`{}`), Diff: tryDiff, RunID: tryRunID}, nil
 		}
 
 		got := w.onlyTry(org)
-		if got.State != domain.PastTryDone || got.Verdict != "" || got.Reason != "" || got.Diff != "diff" {
+		if got.State != domain.PastTryDone || got.Verdict != "" || got.Reason != "" || got.Diff != tryDiff {
 			t.Errorf("%s: try = %+v; want done with no verdict, for the grader", tt.name, got)
 		}
 

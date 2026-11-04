@@ -200,20 +200,7 @@ func testTriesGraded(f *fixture) {
 	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
 
 	for i, v := range []domain.PastTryVerdict{domain.PastTryNotFixed, domain.PastTryFixed} {
-		claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now, ttl, 2)
-		if err != nil || claimed.ID != tries[i].ID {
-			t.Fatalf("ClaimPastTry = %+v, %v; want try %d", claimed, err, i)
-		}
-
-		_, err = f.Tries.FinishPastTry(f.ctx(t), claimed, domain.PastTryResult{Verdict: v, At: now})
-		expect(t, "FinishPastTry of a grade without its reason", err, domain.ErrInvalid)
-
-		res := domain.PastTryResult{Verdict: v, Reason: "check `make test` exited 2", Diff: "diff", CostUSD: 0.5, TryRunID: run, At: now}
-
-		done, err := f.Tries.FinishPastTry(f.ctx(t), claimed, res)
-		if err != nil || done.Verdict != v || done.Reason != res.Reason {
-			t.Fatalf("FinishPastTry = %+v, %v; want verdict %s with its reason", done, err, v)
-		}
+		f.finishGraded(tries[i], v, run, now)
 	}
 
 	got, err := f.Tries.ProposalPastTries(f.ctx(t), p.ID)
@@ -225,6 +212,27 @@ func testTriesGraded(f *fixture) {
 	one, err := f.Tries.PastTry(f.ctx(t), tries[1].ID)
 	if err != nil || one.Verdict != domain.PastTryFixed || one.Reason != "check `make test` exited 2" {
 		t.Errorf("PastTry = %+v, %v; want fixed with its reason", one, err)
+	}
+}
+
+// finishGraded claims want, the factory's next due try, and finishes it graded v with a reason,
+// after a finish of v without its reason is refused.
+func (f *fixture) finishGraded(want domain.PastTry, v domain.PastTryVerdict, run domain.RunID, now time.Time) {
+	t := f.t
+
+	claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now, ttl, 2)
+	if err != nil || claimed.ID != want.ID {
+		t.Fatalf("ClaimPastTry = %+v, %v; want try %s", claimed, err, want.ID)
+	}
+
+	_, err = f.Tries.FinishPastTry(f.ctx(t), claimed, domain.PastTryResult{Verdict: v, At: now})
+	expect(t, "FinishPastTry of a grade without its reason", err, domain.ErrInvalid)
+
+	res := domain.PastTryResult{Verdict: v, Reason: "check `make test` exited 2", Diff: "diff", CostUSD: 0.5, TryRunID: run, At: now}
+
+	done, err := f.Tries.FinishPastTry(f.ctx(t), claimed, res)
+	if err != nil || done.Verdict != v || done.Reason != res.Reason {
+		t.Fatalf("FinishPastTry = %+v, %v; want verdict %s with its reason", done, err, v)
 	}
 }
 

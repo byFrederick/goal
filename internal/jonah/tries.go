@@ -477,22 +477,22 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 		return res, nil
 	}
 
+	return s.grade(ctx, p, line, try, run)
+}
+
+// grade is the result of try's run that ended, with its diff, cost and run, graded by code (ADR
+// 0039 decision 10) when the run succeeded, as the station checks a line's run: its output against
+// the station's contract as p changes it, then the station's checks, which RunTask ran in the
+// try's box. The first that fails makes it not fixed with what failed as its reason; a try that
+// passes both, or whose run failed, stays without a verdict, for the grader. A contract that
+// cannot be checked makes it an error, and a cancelled ctx an error.
+func (s *Tries) grade(ctx context.Context, p domain.Proposal, line domain.Line, try domain.PastTry, run domain.RunResult,
+) (domain.PastTryResult, error) {
 	res := domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}
 	if run.Status != domain.RunSucceeded {
 		return res, nil
 	}
 
-	return s.grade(ctx, p, line, try, run, res)
-}
-
-// grade is how code grades a try whose run succeeded (ADR 0039 decision 10), as the station
-// checks a line's run: its output against the station's contract as p changes it, then the
-// station's checks, which RunTask ran in the try's box. The first that fails makes res not fixed
-// with what failed as its reason; a try that passes both stays without a verdict, for the
-// grader. A contract that cannot be checked makes res an error, and a cancelled ctx an error.
-func (s *Tries) grade(ctx context.Context, p domain.Proposal, line domain.Line, try domain.PastTry, run domain.RunResult,
-	res domain.PastTryResult,
-) (domain.PastTryResult, error) {
 	st, _ := line.Station(try.Station)
 
 	if st.Output != "" {

@@ -16,6 +16,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
+// envTaskToken is the env variable that carries a run's task token.
+const envTaskToken = "GOAL_GATEWAY_TOKEN"
+
 // agJonah is the agent name the Jonah runs of the tests record.
 const agJonah = "jonah"
 
@@ -70,7 +73,7 @@ func TestRunTask_Jonah(t *testing.T) {
 	expectOnlyModelEnv(t, runs[0].Env)
 	h.expectJonahRun(t, prepares[0].Sandbox.RunID)
 
-	expectJonahToken(t, h.claims(t, runs[0].Env["GOAL_GATEWAY_TOKEN"]))
+	expectJonahToken(t, h.claims(t, runs[0].Env[envTaskToken]))
 
 	if events := h.store.Events(""); len(events) != 0 {
 		t.Errorf("events without an item = %+v; want none", events)
@@ -279,7 +282,7 @@ func TestRunTask_TryRecordsNoItemCost(t *testing.T) {
 
 	expectNoSecretButModel(t, runs[0].Env)
 
-	c := h.claims(t, runs[0].Env["GOAL_GATEWAY_TOKEN"])
+	c := h.claims(t, runs[0].Env[envTaskToken])
 	if c.Kind != domain.TaskKindTry || c.TryOf != "try-1" || c.Station != stWork || c.ItemID != "" || len(c.Connections) != 0 {
 		t.Errorf("token claims = %+v; want a try token of try-1 at %s with no item or connection", c, stWork)
 	}
@@ -353,24 +356,7 @@ func TestRunTask_TryRunsChecksInItsBox(t *testing.T) {
 		t.Errorf("RunTask = %+v with failed check %+v; want succeeded with %+v", res, res.FailedCheck, want)
 	}
 
-	checks := h.worker.Checks()
-	if len(checks) != 2 || checks[0].Argv[2] != lint || checks[1].Argv[2] != test {
-		t.Fatalf("checks = %+v; want %s then %s, and none after the failure", checks, lint, test)
-	}
-
-	runBox := h.worker.Runs()[0].Sandbox.RunID
-	for _, c := range checks {
-		if c.Dir != "/workspace" || c.Env["CI"] != "true" || c.Timeout <= 0 || c.Sandbox.RunID != runBox {
-			t.Errorf("check %q in %q with env %v and timeout %s; want the try's box's workspace, CI=true and a timeout",
-				c.Argv, c.Dir, keys(c.Env), c.Timeout)
-		}
-
-		for _, name := range []string{envModelKey, "GOAL_GATEWAY_TOKEN", envCodeToken} {
-			if _, ok := c.Env[name]; ok {
-				t.Errorf("check %q got %s", c.Argv, name)
-			}
-		}
-	}
+	h.expectTryChecks(t, lint, test)
 
 	if n := len(h.worker.Diffs()); n != 1 {
 		t.Errorf("%d diffs read; want one", n)
@@ -381,6 +367,31 @@ func TestRunTask_TryRunsChecksInItsBox(t *testing.T) {
 
 	if res, err := failed.e.RunTask(t.Context(), req); err != nil || res.FailedCheck != nil || len(failed.worker.Checks()) != 0 {
 		t.Errorf("RunTask of a failed agent = %+v, %v with %d checks; want no check run", res, err, len(failed.worker.Checks()))
+	}
+}
+
+// expectTryChecks fails the test unless the checks run are commands, in order, each in the
+// workspace of the agent's box with CI=true, no credential and a timeout.
+func (h *harness) expectTryChecks(t *testing.T, commands ...string) {
+	t.Helper()
+
+	checks := h.worker.Checks()
+	if len(checks) != len(commands) {
+		t.Fatalf("checks = %+v; want %q, and none after the failure", checks, commands)
+	}
+
+	runBox := h.worker.Runs()[0].Sandbox.RunID
+	for i, c := range checks {
+		if c.Argv[2] != commands[i] || c.Dir != "/workspace" || c.Env["CI"] != "true" || c.Timeout <= 0 || c.Sandbox.RunID != runBox {
+			t.Errorf("check %q in %q with env %v and timeout %s; want %q in the try's box's workspace, CI=true and a timeout",
+				c.Argv, c.Dir, keys(c.Env), c.Timeout, commands[i])
+		}
+
+		for _, name := range []string{envModelKey, envTaskToken, envCodeToken} {
+			if _, ok := c.Env[name]; ok {
+				t.Errorf("check %q got %s", c.Argv, name)
+			}
+		}
 	}
 }
 

@@ -131,6 +131,27 @@ type PastTryResult struct {
 // error verdict without its error, a grade without its reason or a reason without a grade, a
 // negative cost, or a diff, error or reason past its bound.
 func (r PastTryResult) Check() error {
+	if err := r.checkVerdict(); err != nil {
+		return err
+	}
+
+	switch {
+	case r.CostUSD < 0:
+		return fmt.Errorf("past try result: negative cost: %w", ErrInvalid)
+	case len(r.Diff) > MaxPastTryDiff:
+		return fmt.Errorf("past try result: the diff is over %d bytes: %w", MaxPastTryDiff, ErrInvalid)
+	case len([]rune(r.Error)) > MaxPastTryError:
+		return fmt.Errorf("past try result: the error is over %d characters: %w", MaxPastTryError, ErrInvalid)
+	case r.At.IsZero():
+		return fmt.Errorf("past try result: no finish time: %w", ErrInvalid)
+	}
+
+	return nil
+}
+
+// checkVerdict refuses an unknown verdict, an error without its error, and a grade without its
+// reason, a reason without a grade or one past its bound.
+func (r PastTryResult) checkVerdict() error {
 	switch {
 	case r.Verdict != "" && r.Verdict != PastTryError && !r.Verdict.graded():
 		return fmt.Errorf("past try result: verdict %q: %w", r.Verdict, ErrInvalid)
@@ -142,14 +163,6 @@ func (r PastTryResult) Check() error {
 		return fmt.Errorf("past try result: a reason needs a grade: %w", ErrInvalid)
 	case len([]rune(r.Reason)) > MaxPastTryReason:
 		return fmt.Errorf("past try result: the reason is over %d characters: %w", MaxPastTryReason, ErrInvalid)
-	case r.CostUSD < 0:
-		return fmt.Errorf("past try result: negative cost: %w", ErrInvalid)
-	case len(r.Diff) > MaxPastTryDiff:
-		return fmt.Errorf("past try result: the diff is over %d bytes: %w", MaxPastTryDiff, ErrInvalid)
-	case len([]rune(r.Error)) > MaxPastTryError:
-		return fmt.Errorf("past try result: the error is over %d characters: %w", MaxPastTryError, ErrInvalid)
-	case r.At.IsZero():
-		return fmt.Errorf("past try result: no finish time: %w", ErrInvalid)
 	}
 
 	return nil

@@ -189,12 +189,8 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 
 	res, lost := e.agent(ctx, t, runID, agentEnv, scrub)
 
-	if lost == nil && t.Kind == domain.RunKindTry && res.Status != domain.RunCancelled {
-		res.Diff, lost = e.tryDiff(ctx, t, runID, scrub)
-	}
-
-	if lost == nil && t.Kind == domain.RunKindTry && res.Status == domain.RunSucceeded {
-		res.FailedCheck, lost = e.tryChecks(ctx, t, runID, scrub)
+	if lost == nil && t.Kind == domain.RunKindTry {
+		lost = e.tryEnded(ctx, t, runID, &res, scrub)
 	}
 
 	e.finishRun(ctx, runID, res)
@@ -274,6 +270,24 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 		slog.Int("exit", st.Code), slog.Float64("seconds", e.since(started)))
 
 	return res, lost
+}
+
+// tryEnded reads what a try's agent left in its box into res once it ended: its diff unless it
+// was cancelled, and, when it succeeded, the first of its checks that fails. An error when either
+// could not be read or run.
+func (e *Engine) tryEnded(ctx context.Context, t runTask, runID domain.RunID, res *domain.RunResult, scrub scrubber) error {
+	if res.Status == domain.RunCancelled {
+		return nil
+	}
+
+	var err error
+	if res.Diff, err = e.tryDiff(ctx, t, runID, scrub); err != nil || res.Status != domain.RunSucceeded {
+		return err
+	}
+
+	res.FailedCheck, err = e.tryChecks(ctx, t, runID, scrub)
+
+	return err
 }
 
 // tryDiffTimeout bounds reading a try's diff from its box.
