@@ -233,3 +233,48 @@ func TestInbox_Conversion(t *testing.T) {
 		t.Errorf("conversion %+v; want reason %q and each problem", e.Conversion, want)
 	}
 }
+
+// Needs you shows a check trigger whose last three checks failed, and one whose check skipped
+// something over the limit today, once.
+func TestInbox_CheckEntries(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	day := h.clock.Now().UTC().Truncate(24 * time.Hour)
+
+	h.check(t, day.Add(time.Hour), `{"file": [{"key": "a", "title": "a", "brief": "b"}, {"key": "b", "title": "b", "brief": "b"},
+		{"key": "c", "title": "c", "brief": "b"}]}`, "")
+	h.check(t, day.Add(2*time.Hour), `{"file": [{"key": "d", "title": "d", "brief": "b"}, {"key": "e", "title": "e", "brief": "b"},
+		{"key": "f", "title": "f", "brief": "b"}]}`, "")
+
+	entries := func() map[gen.InboxEntryKind][]gen.InboxEntry {
+		got := map[gen.InboxEntryKind][]gen.InboxEntry{}
+
+		for _, e := range h.inbox(t, "").Entries {
+			if e.Kind == gen.InboxEntryKindCheckFailing || e.Kind == gen.InboxEntryKindCheckLimit {
+				got[e.Kind] = append(got[e.Kind], e)
+			}
+		}
+
+		return got
+	}
+
+	got := entries()
+	if l := got[gen.InboxEntryKindCheckLimit]; len(l) != 1 || l[0].Id != "check_limit:"+acmeID+":"+incidentsName+":"+day.Format(time.DateOnly) ||
+		l[0].TriggerCheck == nil || l[0].TriggerCheck.Trigger != incidentsName || !l[0].Since.Equal(day.Add(time.Hour+time.Minute)) {
+		t.Errorf("limit entries = %+v; want one for today, since the first check over the limit", l)
+	}
+
+	if len(got[gen.InboxEntryKindCheckFailing]) != 0 {
+		t.Errorf("failing entries = %+v; want none yet", got[gen.InboxEntryKindCheckFailing])
+	}
+
+	for i := range 3 {
+		h.check(t, day.Add(time.Duration(3+i)*time.Hour), "", "the check run ended failed: boom")
+	}
+
+	if f := entries()[gen.InboxEntryKindCheckFailing]; len(f) != 1 || f[0].Id != "check_failing:"+acmeID+":"+incidentsName ||
+		f[0].TriggerCheck.Reason != "the check run ended failed: boom" {
+		t.Errorf("failing entries = %+v; want one with the newest reason", f)
+	}
+}

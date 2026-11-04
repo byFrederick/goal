@@ -25,6 +25,8 @@ const (
 	maxIntakeItems     = 500
 	intakeDays         = 7
 	triggerEvents      = 20
+	triggerChecks      = 20
+	maxTriggerChecks   = 100
 	problemDeliveries  = 100
 )
 
@@ -45,6 +47,12 @@ func triggerProblem(err error) (gen.Problem, bool) {
 	case errors.Is(err, engine.ErrEventNotStored):
 		p = detailed(http.StatusUnprocessableEntity, err)
 		p.Code = optional("event-not-stored")
+	case errors.Is(err, engine.ErrStillChecking):
+		p = detailed(http.StatusConflict, err)
+		p.Code = optional("still-checking")
+	case errors.Is(err, engine.ErrNoCheck):
+		p = detailed(http.StatusUnprocessableEntity, err)
+		p.Code = optional("no-check")
 	default:
 		return gen.Problem{}, false
 	}
@@ -169,6 +177,92 @@ func (s *server) TryIntakeTrigger(ctx context.Context, req gen.TryIntakeTriggerR
 	}
 
 	return gen.TryIntakeTrigger200JSONResponse(triggerTry(got)), nil
+}
+
+func (s *server) ListTriggerChecks(ctx context.Context, req gen.ListTriggerChecksRequestObject) (gen.ListTriggerChecksResponseObject, error) {
+	limit := triggerChecks
+
+	if n := req.Params.Limit; n != nil {
+		if *n < 1 || *n > maxTriggerChecks {
+			return nil, fmt.Errorf("%w: limit must be 1 to %d", errInvalid, maxTriggerChecks)
+		}
+
+		limit = *n
+	}
+
+	f, err := s.factory(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	l := f.Line()
+	if _, ok := l.Trigger(req.Trigger); !ok {
+		return nil, fmt.Errorf("%w: %s is not in the factory's current definition", errTriggerNotFound, req.Trigger)
+	}
+
+	checks, err := s.intake.TriggerChecks(ctx, l.FactoryID, req.Trigger, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	out := gen.ListTriggerChecks200JSONResponse{Checks: make([]gen.TriggerCheck, 0, len(checks))}
+	for _, c := range checks {
+		out.Checks = append(out.Checks, triggerCheck(c))
+	}
+
+	return out, nil
+}
+
+func (s *server) TryTriggerCheck(ctx context.Context, req gen.TryTriggerCheckRequestObject) (gen.TryTriggerCheckResponseObject, error) {
+	f, err := s.factory(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	by, err := actorOf(ctx, "try a check")
+	if err != nil {
+		return nil, err
+	}
+
+	got, err := s.engine.TryCheck(ctx, f.Line().FactoryID, req.Trigger, by)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.TryTriggerCheck202JSONResponse(triggerCheck(got)), nil
+}
+
+// triggerCheck is a checked firing as the API answers it: what it applied, empty lists before it
+// is done.
+func triggerCheck(f domain.TriggerFiring) gen.TriggerCheck {
+	out := gen.TriggerCheck{
+		Id: f.ID, At: f.At, State: gen.TriggerCheckState(f.CheckState), Try: f.Try, CostUsd: f.CostUSD,
+		Filed: []gen.TriggerCheckFiled{}, Noted: []gen.TriggerCheckNoted{}, Skipped: []gen.TriggerCheckSkip{},
+	}
+
+	if !f.CheckedAt.IsZero() {
+		out.CheckedAt = &f.CheckedAt
+	}
+
+	if f.CheckState == domain.CheckFailed {
+		out.Reason = optional(f.Reason)
+	}
+
+	if a := f.Applied; a != nil {
+		for _, x := range a.Filed {
+			out.Filed = append(out.Filed, gen.TriggerCheckFiled{Key: x.Key, Title: x.Title, Ref: optional(x.Ref), Reopens: optional(x.Reopens)})
+		}
+
+		for _, x := range a.Noted {
+			out.Noted = append(out.Noted, gen.TriggerCheckNoted{Key: x.Key, Ref: x.Ref, Text: x.Text})
+		}
+
+		for _, x := range a.Skipped {
+			out.Skipped = append(out.Skipped, gen.TriggerCheckSkip{Key: x.Key, Reason: x.Reason})
+		}
+	}
+
+	return out
 }
 
 // triggerTry is a try as the API answers it.

@@ -2293,6 +2293,61 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/TriggerTry" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    get:
+      operationId: listTriggerChecks
+      x-goal-scope: intake:read
+      tags: [intake]
+      summary: The trigger's checks, newest first, with what each filed, noted and skipped
+      description: >-
+        A check trigger's checks (ADR 0040 decision 19), tries among them, newest first: when each
+        fired and finished, where it is, what it cost, why it failed, and for a done check what
+        goald applied of its answer: the items it filed, the notes it wrote on open items and what
+        it skipped, each with the reason (a closed key, the limit, a note too soon or repeated, or
+        the agent's own). A try's lists are what it would have done. Clients re-read it on `item`
+        and `definition` stream events. 404 trigger-not-found for a name the current definition
+        does not have.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: How many checks to list (default 20)
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: The trigger's checks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerCheckList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: tryTriggerCheck
+      x-goal-scope: trigger:try
+      tags: [intake]
+      summary: Try the trigger's check now, filing, noting and saving nothing
+      description: >-
+        Queues a try check (ADR 0040 decision 19): it runs as the trigger's checks do, with its
+        agent, brief, spend and time limits, and spends from the factory's budget, but its finish
+        keeps only what it would file, note and skip; it files no item, writes no note, keeps no
+        key, saves no state and counts toward no limit. Read the result with listTriggerChecks.
+        Writes a trigger.tried audit entry. 404 trigger-not-found for a name the current
+        definition does not have; 409 still-checking while the trigger's check is queued or
+        running; 422 no-check for a trigger without check.
+      responses:
+        "202":
+          description: The try check, queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerCheck" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -7931,6 +7986,63 @@ components:
         item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
         reason: { type: string, nullable: true, description: Why it was skipped or what it missed; null otherwise }
         missed: { type: integer, description: How many schedule instants a missed event covers; 0 for any other outcome }
+    TriggerCheckList:
+      type: object
+      required: [checks]
+      properties:
+        checks:
+          type: array
+          items: { $ref: "#/components/schemas/TriggerCheck" }
+    TriggerCheck:
+      type: object
+      description: >-
+        One check of a trigger. Every key, title, text and reason comes from the check's agent or
+        the source it read: text to show as text, never markup.
+      required: [id, at, checked_at, state, try, cost_usd, reason, filed, noted, skipped]
+      properties:
+        id: { type: string, description: The check's firing id }
+        at: { type: string, format: date-time, description: When it was queued }
+        checked_at: { type: string, format: date-time, nullable: true, description: When it finished; null while queued or running }
+        state: { type: string, enum: [queued, running, done, failed] }
+        try: { type: boolean, description: A try (tryTriggerCheck), whose lists are what it would do }
+        cost_usd: { type: number, format: double, description: What its run cost }
+        reason: { type: string, nullable: true, description: Why it failed; null otherwise }
+        filed:
+          type: array
+          description: The items it filed, one per key
+          items: { $ref: "#/components/schemas/TriggerCheckFiled" }
+        noted:
+          type: array
+          description: The notes it wrote on its keys' open items
+          items: { $ref: "#/components/schemas/TriggerCheckNoted" }
+        skipped:
+          type: array
+          description: >-
+            What it did not file or note, with why: "closed on Nov 2: <reason>", "over the limit",
+            "a note on this key within the hour", "the same note again", "no open item for this
+            key", "can't file it: …", or the agent's own reason
+          items: { $ref: "#/components/schemas/TriggerCheckSkip" }
+    TriggerCheckFiled:
+      type: object
+      required: [key, title, ref, reopens]
+      properties:
+        key: { type: string, description: "The source's own id for it" }
+        title: { type: string }
+        ref: { type: string, nullable: true, description: "The item's ref, #<number>; null for a try" }
+        reopens: { type: string, nullable: true, description: "For a key filed again with reopen, the ref of the closed item it links to" }
+    TriggerCheckNoted:
+      type: object
+      required: [key, ref, text]
+      properties:
+        key: { type: string }
+        ref: { type: string, description: "The open item's ref, #<number>" }
+        text: { type: string }
+    TriggerCheckSkip:
+      type: object
+      required: [key, reason]
+      properties:
+        key: { type: string }
+        reason: { type: string }
     TriggerTryRequest:
       type: object
       additionalProperties: false
@@ -8737,8 +8849,10 @@ components:
         publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038
         decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got
         worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo
-        this change (POST …/jonah/proposals/{number}/undo)
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse]
+        this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three
+        checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger
+        whose check skipped something over its limit today (UTC), once a day
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse, check_failing, check_limit]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8748,7 +8862,7 @@ components:
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
             andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>,
-            watch_worse:<proposal id>
+            watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -8820,6 +8934,21 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/Watch"
+        trigger_check:
+          description: The trigger of a check_failing or check_limit entry; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxTriggerCheck"
+    InboxTriggerCheck:
+      type: object
+      description: A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page.
+      required: [trigger, reason]
+      properties:
+        trigger: { type: string, description: The trigger's name }
+        reason:
+          type: string
+          description: >-
+            For check_failing, why its newest check failed; for check_limit, "over the limit"
     InboxKnowledgeSource:
       type: object
       description: A knowledge source whose last syncs failed, shown under each factory that lists it.
