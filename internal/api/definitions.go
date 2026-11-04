@@ -57,6 +57,7 @@ type Definitions interface {
 	Versions(ctx context.Context, f domain.FactoryID, before, limit int) (authoring.VersionPage, error)
 	Version(ctx context.Context, f domain.FactoryID, sel authoring.VersionSelector) (authoring.VersionDetail, error)
 	VersionFile(ctx context.Context, f domain.FactoryID, sel authoring.VersionSelector, path string) (authoring.File, error)
+	VersionFileByID(ctx context.Context, f domain.FactoryID, id domain.DefinitionVersionID, path string) (authoring.File, error)
 	VersionModel(ctx context.Context, f domain.FactoryID, sel authoring.VersionSelector) (authoring.Model, authoring.Ranges, error)
 	Compare(ctx context.Context, f domain.FactoryID, from, to authoring.VersionSelector) (authoring.CompareResult, error)
 	Restore(ctx context.Context, f domain.FactoryID, r authoring.RestoreRequest) (ports.FactoryRecord, error)

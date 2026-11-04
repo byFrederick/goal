@@ -66,6 +66,13 @@ func (w workInbox) Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, e
 
 	out = append(out, sources...)
 
+	worse, err := w.watchEntries(ctx, q.Factories, q.Limit+1)
+	if err != nil {
+		return nil, err
+	}
+
+	out = append(out, worse...)
+
 	// The most recent, as every source returns them.
 	slices.SortFunc(out, func(a, b gen.InboxEntry) int { return cmp.Or(b.Since.Compare(a.Since), cmp.Compare(a.Id, b.Id)) })
 

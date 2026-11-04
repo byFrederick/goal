@@ -431,3 +431,27 @@ func (s *Service) Reach(ctx context.Context, f domain.FactoryID, limit int) ([]d
 
 	return out, nil
 }
+
+// VersionFileByID returns one file of f's published version id: ErrVersionNotFound when f has
+// no such version, ErrFileNotFound when it has no file at path.
+func (s *Service) VersionFileByID(ctx context.Context, f domain.FactoryID, id domain.DefinitionVersionID, path string) (File, error) {
+	v, err := s.byID(ctx, f, id, VersionSelector{Kind: SelectNumber})
+	if err != nil {
+		return File{}, err
+	}
+
+	if v.FactoryID != f || v.State == domain.VersionDraft {
+		return File{}, fmt.Errorf("version %s of %s: %w", id, f, ErrVersionNotFound)
+	}
+
+	b, ok, err := s.tree(ctx, v.Manifest).file(path)
+	if err != nil {
+		return File{}, err
+	}
+
+	if !ok {
+		return File{}, fmt.Errorf("v%d of %s has no %s: %w", v.Number, f, path, ErrFileNotFound)
+	}
+
+	return File{Content: b, SHA256: v.Manifest[path], Immutable: true}, nil
+}

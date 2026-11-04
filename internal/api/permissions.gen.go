@@ -239,6 +239,7 @@ var operationScopes = map[string]string{
 	"transferOwnership":          "org:transfer",
 	"tryIntakeTrigger":           "trigger:try",
 	"tryJudge":                   "definition:publish",
+	"undoProposal":               "definition:edit",
 	"unlinkItem":                 "item:operate",
 	"updateConnection":           "connection:manage",
 	"updateJudge":                "definition:publish",
