@@ -48,17 +48,24 @@ export interface Grants {
   factory: string[];
 }
 
+/** The organization permissions an organization role holds by the table, sorted as goald sorts them. */
+export function orgPermissionsOf(table: PermissionTable, orgRole: OrgRole): string[] {
+  return table.rules
+    .filter((r) => r.level === 'org' && r.org_roles?.includes(orgRole))
+    .map((r) => r.name)
+    .sort();
+}
+
 /** What `role` holds by the table (owners and admins hold every factory permission). */
 export function grantsOf(table: PermissionTable, role: MockRole): Grants {
   const orgRole: OrgRole = role === 'owner' || role === 'admin' ? role : 'member';
   const factoryRole: FactoryRole | null =
     orgRole !== 'member' ? 'editor' : role === 'member' ? null : (role as FactoryRole);
   const rank = (r: FactoryRole | undefined) => (r ? table.factoryRoles.indexOf(r) : -1);
-  const org = table.rules.filter((r) => r.level === 'org' && r.org_roles?.includes(orgRole)).map((r) => r.name);
   const factory = table.rules
     .filter((r) => r.level === 'factory' && factoryRole !== null && rank(r.factory_role) <= rank(factoryRole))
     .map((r) => r.name);
-  return { orgRole, factoryRole, org: org.sort(), factory: factory.sort() };
+  return { orgRole, factoryRole, org: orgPermissionsOf(table, orgRole), factory: factory.sort() };
 }
 
 export interface Scope {

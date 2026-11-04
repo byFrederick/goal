@@ -696,7 +696,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   /** The organization as the caller sees it: their role, and what it allows. */
   const forCaller = (req: IncomingMessage, o: Org): Org => {
     const role = roleIn(req, o.id);
-    return role ? { ...o, role, can: orgCanOf(role, orgCan) } : o;
+    return role ? { ...o, role, can: orgCanOf(sources.table, role) } : o;
   };
 
   /**
