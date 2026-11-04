@@ -29,6 +29,7 @@ A sync reads the source, converts what is not Markdown, and writes a snapshot, o
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
 - A file that looks like it holds a key stays out.
+- goald keeps the current snapshot, any snapshot a running run pinned, and a replaced snapshot for at least the longest a claim can last (about 4 hours by default). After that it deletes the snapshot at the source's next sync. Deleting a source deletes its snapshots.
 
 Limits keep every box fast. A sync that goes past one fails and names it.
 

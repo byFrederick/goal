@@ -53,7 +53,13 @@ const (
 // KnowledgeSnapshotKey is the bucket key of a source's snapshot zip:
 // orgs/<org-id>/knowledge/<source-id>/<snapshot-id>.zip.
 func KnowledgeSnapshotKey(org OrgID, source KnowledgeSourceID, snapshot KnowledgeSnapshotID) string {
-	return OrgPrefix(org) + "knowledge/" + string(source) + "/" + string(snapshot) + ".zip"
+	return KnowledgeSourcePrefix(org, source) + string(snapshot) + ".zip"
+}
+
+// KnowledgeSourcePrefix is the bucket prefix of every snapshot zip of a source:
+// orgs/<org-id>/knowledge/<source-id>/. An upload's original (KnowledgeKey) is outside it.
+func KnowledgeSourcePrefix(org OrgID, source KnowledgeSourceID) string {
+	return OrgPrefix(org) + "knowledge/" + string(source) + "/"
 }
 
 // KnowledgeSnapshot is one zip a sync wrote: its files, the Markdown they hold and the zip's own

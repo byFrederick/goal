@@ -61,13 +61,24 @@ type Knowledge interface {
 
 	// PutSnapshot records a sync's snapshot s of the lease's source with files, every file it
 	// holds, and makes it the source's current snapshot, in one transaction: files replace the
-	// current files, and the snapshots before stay until retention deletes them. It returns s as
+	// current files, and the snapshots before stay until retention deletes them
+	// (ExpiredSnapshots, DeleteSnapshots). It returns s as
 	// stored, with its zip's key (domain.KnowledgeSnapshotKey). Its rules are
 	// KnowledgeSnapshot.Check's (domain.ErrInvalid), and s.Source is the lease's; ErrLeaseLost,
 	// changing nothing, once another claim took the source.
 	PutSnapshot(ctx context.Context, l domain.SourceLease, s domain.KnowledgeSnapshot, files []domain.KnowledgeFile) (domain.KnowledgeSnapshot, error)
 	// Snapshots are the source name's snapshots, newest first. ErrNotFound for an unknown source.
 	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
+	// ExpiredSnapshots are the lease's source's snapshots retention deletes (ADR 0038 decision 3),
+	// oldest first: those that are not its current snapshot, that no running agent run pinned
+	// (domain.EventKnowledgePinned), and whose next snapshot was made at or before before, so
+	// each was replaced at least the retention window ago. ErrLeaseLost once another claim took
+	// the source.
+	ExpiredSnapshots(ctx context.Context, l domain.SourceLease, before time.Time) ([]domain.KnowledgeSnapshot, error)
+	// DeleteSnapshots deletes the rows of the lease's source's snapshots ids, skipping its current
+	// snapshot and ids it does not have; the caller deletes their zips first. ErrLeaseLost,
+	// deleting nothing, once another claim took the source.
+	DeleteSnapshots(ctx context.Context, l domain.SourceLease, ids []domain.KnowledgeSnapshotID) error
 	// Files are one page of a source's current files (KnowledgeFileQuery): in path order, after
 	// q.After, at most q.Limit up to domain.MaxFilePage, and with q.Prefix those whose path, or
 	// title in any case, starts with it. ErrNotFound for an unknown source.
