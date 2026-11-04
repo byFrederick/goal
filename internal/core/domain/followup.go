@@ -16,6 +16,9 @@ const MaxFollowUps = 10
 // MaxFollowUpText is a follow-up's most characters; longer text is cut.
 const MaxFollowUpText = 2000
 
+// maxFollowUpReason is a follow-up's reason's most characters; it may quote the entry.
+const maxFollowUpReason = 500
+
 // ReasonFollowUpNoText is why an entry that is neither a string nor an object with text is
 // dropped.
 const ReasonFollowUpNoText = "the entry is not a string or an object with text"
@@ -155,6 +158,7 @@ func followUpFrom(raw json.RawMessage) FollowUp {
 	if bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) && json.Unmarshal(raw, &o) == nil && strings.TrimSpace(o.Text) != "" {
 		f := FollowUp{Text: followUpText(o.Text), State: FollowUpWaiting}
 		f.Target, f.For, f.Start, f.Reason = followUpTarget(o.For, o.Start)
+		f.Reason = truncate(f.Reason, maxFollowUpReason)
 
 		return f
 	}

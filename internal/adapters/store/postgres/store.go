@@ -823,8 +823,8 @@ func lockItem(ctx context.Context, q *db.Queries, item uuid.UUID, id domain.Item
 	return cur, nil
 }
 
-// transition applies t to the locked item cur: the lease, the guard, the move, its events and
-// audit entry.
+// transition applies t to the locked item cur: the lease, the guard, the move, its events, its
+// follow-ups and audit entry.
 func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Transition) (db.WorkItem, error) {
 	// Releasing first is safe: a failed guard below rolls the release back, its lease span too.
 	if err := releaseOrTake(ctx, q, cur.ID, t); err != nil {
@@ -842,6 +842,10 @@ func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Tra
 	}
 
 	if err := appendEvents(ctx, q, t.Events); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	if err := keepFollowUps(ctx, q, cur, t.FollowUps, t.At); err != nil {
 		return db.WorkItem{}, err
 	}
 

@@ -70,6 +70,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
 		{"Edges_OpenNeedsOfItems", testOpenNeeds},
 		{"Parts_AssembleCreatesPartsWithPlannedEdges", testAssembleCreatesParts},
+		{"FollowUps_KeptWithTheTransition", testFollowUpsKeptWithTheTransition},
+		{"FollowUps_RerunKeepsAndDedupes", testFollowUpsRerunKeepsAndDedupes},
 		{"Parts_AssembleRetryReturnsTheParts", testAssembleRetry},
 		{"Parts_AssembleRefusesAndWritesNothing", testAssembleRefused},
 		{"Parts_AssembleRefusesAPart", testAssembleRefusesAPart},
