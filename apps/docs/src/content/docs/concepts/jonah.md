@@ -38,7 +38,7 @@ A review is one agent run of kind `jonah` per factory, in a box it can only read
 - the open observations of earlier reviews, each with its id and its count so far;
 - the knowledge sources that apply to every run, and the factory memory.
 
-Goal's own prompt tells it to group the evidence by cause and propose one change per cause, as small as it can be, citing its items. It must not repeat a rejected proposal or something a recent version already did. When a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice, it says so. It returns observations and proposals.
+Goal's own prompt tells it to group the evidence by cause and propose one change per cause, as small as it can be, citing its items. It must not repeat a rejected proposal or something a recent version already did. When a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice, it says so. It returns observations, proposals and memory facts (see [Memory facts](#memory-facts)).
 
 An observation is a cause with the items it rests on and a count. Observations persist across reviews: a review that sees a cause again names the open observation, adds its items and adds its own count to the count so far. An observation is *watching* until a proposal addresses it, then *proposed*. One whose cause is not a definition problem is *not Jonah's*, and later reviews no longer update it.
 
@@ -46,7 +46,7 @@ A proposal is one hypothesis, stored as a set of exact edits. Each edit names a 
 
 goald drops a proposal, and logs `jonah proposal dropped` with the reason, when:
 
-- it edits a file outside the allowlist. A proposal may edit `factory.yaml` and the `.md`, `.yaml` and `.json` files under `agents/`, `skills/`, `rules/` and `contracts/`. It may not edit scripts, `evals/` or any other file.
+- it edits a file outside the allowlist. A proposal may edit `factory.yaml` and the `.md`, `.yaml` and `.json` files under `agents/`, `skills/`, `rules/` and `contracts/`. It may not edit scripts, `evals/` or any other file. It may not edit `memory.yaml` either: memory changes only through memory facts.
 - it changes a part of `factory.yaml` outside the allowlist. A proposal may change an agent's `model` (to a model the organization's policy allows) and `skills`, the `skills` list (local `./skills/` sources only), `rules`, `contracts`, and a station's `wip`, `buffer` and `gate.maxRework`. goald compares the parsed file before and after. Agents and skills are matched by name and stations by id. A change to anything else is refused, including a station's checks, kind, action or agents, tools, budgets, triggers, intake, environments and `learning`, and a reorder of agents or stations.
 - an old text does not occur exactly once in the version's file, or it gives whole content for a file that exists;
 - the definition with its edits applied has a blocking problem that the version did not have;
@@ -60,6 +60,18 @@ goald drops a proposal, and logs `jonah proposal dropped` with the reason, when:
 - Edit applies the replacements to the draft's copy of each file, so the person can continue in the builder. It is refused with `draft-conflict` when an old text no longer occurs exactly once in the draft.
 - Reject needs a reason, and later reviews read it.
 - To undo a published proposal, use Undo this change (see the next section). Restore also works, but it reverts everything published since.
+
+## Memory facts
+
+A review may propose facts for the factory's memory, `memory.yaml`, but only in a person's own words. Memory goes into every run's prompt, so goald keeps a fact only when it can check that a person wrote it.
+
+- **The source.** A fact is the words of a person's note, answer to an agent's question, or send-back reason (a reject, a gate's reject or a move), when they hold beyond their item. An example is "Phones are 390 wide; check 375 too". Jonah gives each fact's text and the items it comes from, such as `#12`.
+- **The check.** goald keeps a fact only when every item it names finished in the review's window, and each of them has an event by a person whose text holds the fact word for word. Runs of spaces and line breaks count as one space. A paraphrase is dropped, and so is anything an agent or a check wrote, because a fact inferred from agents' runs could carry injected instructions into every later prompt.
+- **Also dropped:** a fact over 300 characters, one with an invisible or bidirectional Unicode character, and one that memory already has. goald logs `jonah fact dropped` with the reason, never the fact's text.
+- **One proposal per review.** goald writes the review's kept facts into one proposal of `memory.yaml`, titled with the number of facts it adds. Each new entry has `from`, its items as `<factory>#<number>`, and `added`, the day the review finished. Its evidence quotes each matched event. goald writes the whole file again, so comments in `memory.yaml` are not kept.
+- **Near the limits.** Memory holds at most 50 entries and 8 KB. A fact may name in `replaces` the facts it replaces, which the proposal removes. A fact that names a fact memory does not have is dropped, and so is a fact that would still take memory past a limit.
+- **An open memory proposal** is carried into the new one, which supersedes it, so no proposed fact is lost.
+- A memory proposal is not held to `proposeAfter`: one person's checked words are the evidence. It moves no number, and it runs no tries. A person approves, edits or rejects it like any other proposal.
 
 ## The watch on every change
 
@@ -86,7 +98,7 @@ goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). 
 - **The window:** a review reads what finished since the last successful review ended, or the last 30 days before the first. A failed review does not move it.
 - **Retries:** a review whose run fails or whose answer does not parse is tried again, at most twice. After the third failure it ends `failed`, and its error shows as the last review in `GET …/jonah`. A spent budget or a deleted version fails it at once.
 
-Learned facts, eval cases proposed by a review, and judges proposed by a review are not part of reviews yet.
+Eval cases proposed by a review, and judges proposed by a review, are not part of reviews yet.
 
 A goald without judges or evals shows the Judges, Evals and Bake-offs pages empty, with creating a judge, an eval case or a bake-off not available yet.
 
