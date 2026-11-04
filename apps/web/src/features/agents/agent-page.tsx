@@ -32,8 +32,8 @@ import {
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
-import { TryModelButton } from './try-model-dialog';
 import { blockedSentence, reasonLabel, reasonShare } from './sentences';
+import { TryModelButton } from './try-model-dialog';
 import { type AgentView, agentViews } from './views';
 
 const none = '—';

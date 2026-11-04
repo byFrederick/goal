@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { ApiError } from '@goal/api-client';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { toast } from 'sonner';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getItemTeardown, keepTest } from '../../api/client';
 import { builderMetaQuery, keys, teardownQuery } from '../../api/queries';
 import type { BuilderMeta, Factory, Teardown } from '../../api/types';
@@ -10,7 +11,11 @@ import { renderFactoryPage } from '../../test/route';
 import { TeardownTab } from './teardown-tab';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }));
-vi.mock(import('../../api/client'), async (original) => ({ ...(await original()), getItemTeardown: vi.fn(), keepTest: vi.fn() }));
+vi.mock(import('../../api/client'), async (original) => ({
+  ...(await original()),
+  getItemTeardown: vi.fn(),
+  keepTest: vi.fn(),
+}));
 
 afterEach(() => {
   cleanup();

@@ -112,8 +112,8 @@ export function TryModelButton({
               <div className="flex items-center gap-1 text-secondary font-control text-ink">
                 Estimate
                 <InfoTip label="How the estimate is worked out">
-                  Three tries on each of the agent’s newest finished items, each costing what its original run cost.
-                  The tries come out of Jonah’s budget.
+                  Three tries on each of the agent’s newest finished items, each costing what its original run cost. The
+                  tries come out of Jonah’s budget.
                 </InfoTip>
               </div>
               <Skeleton
