@@ -818,6 +818,8 @@ export interface Definitions {
   connectionNames: (factory: Factory) => string[];
   /** The knowledge sources the factory's current version may search. */
   knowledgeSourceNames: (factory: Factory) => string[];
+  /** The agents the factory's current version declares. */
+  agentNames: (factory: Factory) => string[];
   /** The lanes the current version's stations route by, sorted: the lanes an item may be set to. */
   laneNames: (factory: Factory) => string[];
   /** A file of the factory's draft, else of its current version. */
@@ -1974,6 +1976,10 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     knowledgeSourceNames: (f) => {
       const read = currentModel(f);
       return read ? knowledgeSourceNames(read) : [];
+    },
+    agentNames: (f) => {
+      const read = currentModel(f);
+      return list(((read?.agents ?? {}) as Json).agents).map((a) => String(a.name));
     },
     laneNames: (f) => {
       const read = currentModel(f);

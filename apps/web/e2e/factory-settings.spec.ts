@@ -35,6 +35,7 @@ test('Runtime points at environments and Notifications shows the Slack secret', 
   await expect(runtime.getByText('Tools', { exact: true })).toHaveCount(0);
   const slack = page.getByRole('region', { name: 'Notifications' });
   await expect(slack.getByText('Sent with the secret slack-bot.')).toBeVisible();
+  await expect(slack.getByRole('alert')).toHaveCount(0);
   await expect(slack.getByRole('link', { name: 'Change in organization settings' })).toHaveAttribute(
     'href',
     '/o/acme/settings',
