@@ -23,6 +23,19 @@ test('the overview shows the two proposals waiting, the policy and what Jonah no
   await expectNoHorizontalScroll(page);
 });
 
+test('what Jonah noticed sits right under After publish, not below its placeholder', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/o/acme/f/software/jonah');
+  const after = page.getByRole('region', { name: /After publish/ });
+  const noticed = page.getByRole('region', { name: /What Jonah noticed this week/ });
+  await expect(after).toBeVisible();
+  await expect(noticed).toBeVisible();
+  const afterBox = await after.boundingBox();
+  const noticedBox = await noticed.boundingBox();
+  if (!afterBox || !noticedBox) throw new Error('both regions need a box');
+  expect(noticedBox.y - (afterBox.y + afterBox.height)).toBeLessThan(24);
+});
+
 test('the tabs are Overview, Proposals and Tests, each at its own address', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
   const tabs = page.getByRole('navigation', { name: 'Jonah' });
