@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Factory, Inbox, KnowledgePreview, KnowledgeSourceList, Problem } from '@goal/api-client';
+import type { Factory, Inbox, KnowledgeSourceList } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
 
