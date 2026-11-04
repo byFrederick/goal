@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getItemTeardown } from '../../api/client';
+import { ApiError } from '@goal/api-client';
+import { toast } from 'sonner';
+import { getItemTeardown, keepTest } from '../../api/client';
 import { builderMetaQuery, keys, teardownQuery } from '../../api/queries';
 import type { BuilderMeta, Factory, Teardown } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { TeardownTab } from './teardown-tab';
 
-vi.mock(import('../../api/client'), async (original) => ({ ...(await original()), getItemTeardown: vi.fn() }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }));
+vi.mock(import('../../api/client'), async (original) => ({ ...(await original()), getItemTeardown: vi.fn(), keepTest: vi.fn() }));
 
 afterEach(() => {
   cleanup();
@@ -123,14 +126,14 @@ const finished: Teardown = {
   ],
 };
 
-function renderTab(answer: () => Promise<Teardown>) {
+function renderTab(answer: () => Promise<Teardown>, can: string[] = []) {
   vi.mocked(getItemTeardown).mockImplementation(answer);
   return renderFactoryPage({
     page: () => <TeardownTab number={147} />,
     path: 'items/$ref',
     location: 'items/147?tab=teardown',
     org,
-    factory,
+    factory: { ...factory, can },
     seed: [[builderMetaQuery(org.id).queryKey, meta]],
   });
 }
@@ -238,5 +241,46 @@ describe('the Teardown tab', () => {
     const q = teardownQuery('org-1', 'goal#147');
     expect(q.queryKey.slice(0, 4)).toEqual(keys.item('org-1', 'goal#147'));
     expect((q as { refetchInterval?: unknown }).refetchInterval).toBeUndefined();
+  });
+});
+
+describe('Keep as a test', () => {
+  it('is offered with definition:edit at a station the item passed the first time, and keeps it', async () => {
+    vi.mocked(keepTest).mockResolvedValue({
+      id: 't1',
+      item: { id: 'i1', number: 147, title: 'Add a retry cap' },
+      station: 'spec',
+      kept_by: 'user:u1',
+      kept_at: '2026-10-26T10:00:00Z',
+      last_result: null,
+    });
+    renderTab(async () => finished, ['definition:edit']);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep as a test' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Keep as a test' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep as a test' }));
+
+    await waitFor(() =>
+      expect(vi.mocked(keepTest).mock.calls[0]?.slice(1)).toEqual(['factory-1', { item: 147, station: 'spec' }]),
+    );
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Kept #147 as a test at Spec.'));
+  });
+
+  it('is not offered without definition:edit', async () => {
+    renderTab(async () => finished);
+    await screen.findByRole('table', { name: 'Runs' });
+    expect(screen.queryByRole('button', { name: 'Keep as a test' })).toBeNull();
+  });
+
+  it('says what goald refused', async () => {
+    vi.mocked(keepTest).mockRejectedValue(
+      new ApiError({ type: 'x', title: 'Conflict', status: 409, code: 'kept-test-exists' }),
+    );
+    renderTab(async () => finished, ['definition:edit']);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep as a test' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Keep as a test' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep as a test' }));
+    expect(await within(dialog).findByText('This item is already kept as a test at Spec.')).toBeTruthy();
   });
 });

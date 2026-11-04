@@ -35,7 +35,11 @@ import type {
   ItemState,
   JonahOverview,
   JonahReview,
+  DraftKeptTests,
+  KeepTestRequest,
+  KeptTest,
   KeptTestList,
+  ModelProposalResult,
   LeadTimeBridge,
   Me,
   Member,
@@ -733,4 +737,41 @@ export async function listStandingRules(org: string, signal?: AbortSignal): Prom
 /** Revokes a rule: its agent asks again from its next run (connection:manage, a sign-in from the last 10 minutes; 409 standing-rule-revoked, 404 for an unknown rule). */
 export function revokeStandingRule(org: string, rule: string): Promise<StandingRule> {
   return unwrap(goal.DELETE(orgPath('/standing-rules/{rule}'), { params: { path: { org, rule } } }));
+}
+
+/** Keeps a past item as a test at a station it passed the first time (keepTest). Needs definition:edit. */
+export function keepTest(org: string, factory: string, body: KeepTestRequest): Promise<KeptTest> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/jonah/tests'), { params: { path: { org, factory } }, body }));
+}
+
+/**
+ * Tries another model for an agent (proposeAgentModel). Without `confirm` it answers the estimate and stores
+ * nothing; with it, the estimate and the stored proposal. 422 model-not-allowed, agent-not-triable and
+ * no-finished-items, and 409 learning-budget-exhausted, are the dialog's to show.
+ */
+export function proposeAgentModel(
+  org: string,
+  factory: string,
+  agent: string,
+  model: string,
+  confirm: boolean,
+): Promise<ModelProposalResult> {
+  return unwrap(
+    goal.POST(orgPath('/factories/{factory}/agents/{agent}/model-proposal'), {
+      params: { path: { org, factory, agent } },
+      body: { model, confirm },
+    }),
+  );
+}
+
+/** Starts the kept tests the open draft reaches and answers them with their results so far (startDraftKeptTests). */
+export function startDraftKeptTests(org: string, factory: string): Promise<DraftKeptTests> {
+  return unwrap(goal.POST(orgPath('/factories/{factory}/draft/kept-tests'), { params: { path: { org, factory } } }));
+}
+
+/** The open draft's kept tests and their results; starts nothing (getDraftKeptTests). */
+export function getDraftKeptTests(org: string, factory: string, signal?: AbortSignal): Promise<DraftKeptTests> {
+  return unwrap(
+    goal.GET(orgPath('/factories/{factory}/draft/kept-tests'), { params: { path: { org, factory } }, ...cancel(signal) }),
+  );
 }
