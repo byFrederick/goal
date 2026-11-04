@@ -40,11 +40,8 @@ export type FactoryPath =
   | '/o/$org/f/$factory/settings'
   | '/o/$org/f/$factory/jonah'
   | '/o/$org/f/$factory/jonah/proposals/$number'
-  | '/o/$org/f/$factory/jonah/bake-offs'
-  | '/o/$org/f/$factory/jonah/bake-offs/$bakeOff'
-  | '/o/$org/f/$factory/jonah/evals'
-  | '/o/$org/f/$factory/jonah/judges'
-  | '/o/$org/f/$factory/jonah/judges/$judge';
+  | '/o/$org/f/$factory/jonah/proposals'
+  | '/o/$org/f/$factory/jonah/tests';
 /** Paths of the organization's screens; their only param is its slug. */
 export type OrgPath =
   | '/o/$org'
@@ -115,7 +112,7 @@ export const factoryScreens: readonly FactoryScreen[] = [
     available: true,
     filters: '/o/$org/knowledge',
   },
-  // Jonah's overview, Proposals and Bake-offs are built (ADR 0034, ADR 0029); its Judges and Evals are reached from its tabs.
+  // Jonah's Overview, Proposals and Tests are its three tabs (ADR 0039).
   {
     id: 'jonah',
     label: 'Jonah',

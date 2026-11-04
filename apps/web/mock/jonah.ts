@@ -1,8 +1,9 @@
 // Jonah in the mock API (contracts/api/openapi.yaml, tag jonah): a factory's overview (its policy, the proposals
 // waiting, the month's cost and the week's observations), its proposals by state, and a manual review. A seeded
 // factory (the Software factory, by name) starts with the picture's two waiting proposals, an applied one, four
-// observations and $6.40 this month. A review answers 409 review-loop-not-running while no review loop runs
-// (software#344 ships it): nothing is queued.
+// observations and $6.40 this month. A manual review answers 202 with a queued review, and 409 review-in-flight
+// for the next one while it is queued. The Tests tab's kept tests are listed and removed; Undo answers 409
+// proposal-not-published, as no seeded proposal is published.
 // A proposal's page reads its files and evidence, and its approve, edit and reject record the decision. Proposal 8
 // is the flagged case: approving it answers 409 draft-open, as a factory with an open draft does.
 import type { ServerResponse } from 'node:http';
@@ -10,6 +11,8 @@ import type {
   JonahObservation,
   JonahOverview,
   JonahPolicy,
+  JonahReview,
+  KeptTest,
   Proposal,
   ProposalEntry,
   ProposalFile,
@@ -39,6 +42,10 @@ export interface MockJonah {
 interface FactoryJonah {
   /** The decisions made on proposals, by number: what a person approved, edited or rejected. */
   decisions: Map<number, Decision>;
+  /** The kept tests a person removed, by id. */
+  removed: Set<string>;
+  /** The queued review, once a person asked for one. */
+  review: JonahReview | undefined;
 }
 
 /** A decision on a proposal: its new state and what the decision left behind. */
@@ -58,6 +65,23 @@ const problem = (res: ServerResponse, status: number, title: string, code: strin
   json(res, status, { title, status, code, ...(detail ? { detail } : {}) });
 
 /** The policy the Software factory's learning.jonah sets, with the defaults the rest of the factories read. */
+/** The Software factory's four kept tests (tests.jpg), kept by the local user over the last weeks. */
+function softwareKeptTests(now: number): KeptTest[] {
+  const kept = (id: string, number: number, title: string, station: string, daysAgo: number): KeptTest => ({
+    id,
+    item: { id: `item-${number}`, number, title },
+    station,
+    kept_by: 'user:local',
+    kept_at: new Date(now - daysAgo * 86_400_000).toISOString(),
+  });
+  return [
+    kept('kept-1', 451, 'A sidebar request gets the frontend lane', 'spec', 7),
+    kept('kept-2', 418, 'Needs you header in the top bar', 'build', 4),
+    kept('kept-3', 493, 'Phone fixes on three screens', 'build', 3),
+    kept('kept-4', 497, 'Board column header meta', 'review', 4),
+  ];
+}
+
 const softwarePolicy: JonahPolicy = {
   enabled: true,
   propose_after: 5,
@@ -277,7 +301,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
   const jonahOf = (id: string): FactoryJonah => {
     let j = byFactory.get(id);
     if (!j) {
-      j = { decisions: new Map() };
+      j = { decisions: new Map(), removed: new Set(), review: undefined };
       byFactory.set(id, j);
     }
     return j;
@@ -302,7 +326,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
     reset,
     async handle(org, rest, method, url, res, readBody) {
       const m = rest.match(
-        /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews)(?:\/(\d+)(?:\/(approve|edit|reject))?)?)?$/,
+        /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews|tests)(?:\/([^/]+)(?:\/(approve|edit|reject|undo))?)?)?$/,
       );
       if (!m) return false;
       const f = factory(org.id, decodeURIComponent(m[1] ?? ''));
@@ -313,8 +337,27 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       const j = jonahOf(f.id);
       const now = clock();
       const route = m[2];
-      const number = m[3] === undefined ? undefined : Number(m[3]);
+      const number = m[3] !== undefined && /^\d+$/.test(m[3]) ? Number(m[3]) : undefined;
       const action = m[4];
+
+      if (route === 'tests') {
+        const tests = seeded(f.name) ? softwareKeptTests(now).filter((t) => !j.removed.has(t.id)) : [];
+        if (m[3] === undefined && method === 'GET') {
+          json(res, 200, { tests });
+          return true;
+        }
+        if (m[3] !== undefined && method === 'DELETE') {
+          if (!tests.some((t) => t.id === m[3])) {
+            problem(res, 404, 'Kept test not found', 'kept-test-not-found', m[3]);
+            return true;
+          }
+          j.removed.add(m[3]);
+          res.statusCode = 204;
+          res.end();
+          return true;
+        }
+        return false;
+      }
 
       if (route === 'proposals' && number !== undefined) {
         const detail = seeded(f.name) ? softwareDetail(now, number) : undefined;
@@ -328,6 +371,10 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
           return true;
         }
         if (method !== 'POST' || action === undefined) return false;
+        if (action === 'undo') {
+          problem(res, 409, 'Proposal not published', 'proposal-not-published', m[3]);
+          return true;
+        }
         if (decided) {
           problem(res, 409, 'Proposal already decided', 'proposal-decided', m[3]);
           return true;
@@ -382,13 +429,12 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       }
 
       if (route === 'reviews' && method === 'POST') {
-        problem(
-          res,
-          409,
-          'Review loop not running',
-          'review-loop-not-running',
-          "Reviews start when Jonah's review loop ships",
-        );
+        if (j.review) {
+          problem(res, 409, 'A review is in flight', 'review-in-flight', 'A review is pending or running.');
+          return true;
+        }
+        j.review = { id: 'review-1', state: 'pending', trigger: 'manual', created_at: new Date(now).toISOString() };
+        json(res, 202, j.review);
         return true;
       }
 

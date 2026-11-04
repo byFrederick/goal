@@ -252,8 +252,8 @@ describe('the sidebar', () => {
     expect(screen.queryByText(/waiting for your review/)).toBeNull();
   });
 
-  it('keeps Jonah current on its Evals page', async () => {
-    renderSidebar({ at: '/o/acme/f/goal/jonah/evals' });
+  it('keeps Jonah current on its Tests page', async () => {
+    renderSidebar({ at: '/o/acme/f/goal/jonah/tests' });
 
     expect(
       within(await nav())
