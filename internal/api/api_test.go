@@ -542,6 +542,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.notifications = porttest.NewNotificationPreferences()
 
 	connections := h.connections(t, tenancy)
+	h.intake.UseSecrets(h.secrets)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,

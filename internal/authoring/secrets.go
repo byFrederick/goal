@@ -37,6 +37,9 @@ const (
 	// CodeMergeNeedsCodeHost: a station merges, but runtime.repository has no token, so nothing
 	// could merge the item's pull requests.
 	CodeMergeNeedsCodeHost = "merge-needs-code-host"
+	// CodeSecretSignsWebhook: a {{secret}} reference names a secret an organization webhook is
+	// signed by, which no run may hold, or it could forge deliveries (ADR 0040 decision 15).
+	CodeSecretSignsWebhook = "secret-signs-webhook"
 )
 
 // FixMoveToSecrets is the label of plain-key's fix.
@@ -45,13 +48,20 @@ const FixMoveToSecrets = "Move to Secrets"
 // keyNameSuffixes end the names of variables that usually hold a key.
 var keyNameSuffixes = []string{"_TOKEN", "_KEY", "_SECRET", "_PASSWORD"}
 
+// WebhookSecrets lists the secrets the organization of ctx's webhooks are signed by
+// (ports.Intake's WebhookSecretUses).
+type WebhookSecrets interface {
+	WebhookSecretUses(ctx context.Context) ([]domain.WebhookSecretUse, error)
+}
+
 // KnowledgeSources lists the organization of ctx's knowledge sources (ports.Knowledge's Sources).
 type KnowledgeSources interface {
 	Sources(ctx context.Context) ([]domain.KnowledgeSource, error)
 }
 
 // SecretsCheck is the credentials check from ADR 0037 on: every {{secret}} the definition refers
-// to exists (secret-missing) and is open to the factory (secret-not-in-scope); no environment
+// to exists (secret-missing), signs no webhook (secret-signs-webhook) and is open to the factory
+// (secret-not-in-scope); no environment
 // sets a variable the platform keeps (reserved-env) or holds a key as plain text (plain-key);
 // every knowledge source it lists exists (knowledge-source-unknown), reads with no secret closed
 // to the factory (knowledge-secret-not-in-scope) and, a warning, does not copy the factory's own
@@ -62,6 +72,9 @@ type SecretsCheck struct {
 	// Knowledge lists the organization's knowledge sources (goald wires the knowledge store); nil
 	// is an organization without any.
 	Knowledge KnowledgeSources
+	// Webhooks lists the secrets the organization's webhooks are signed by (goald wires the
+	// intake store); nil is an organization without webhooks.
+	Webhooks WebhookSecrets
 }
 
 var _ Credentials = SecretsCheck{}
@@ -80,9 +93,20 @@ func (c SecretsCheck) Check(ctx context.Context, f *config.Factory) ([]domain.De
 		}
 	}
 
-	r := &secretsRun{f: f, secrets: make(map[string]domain.Secret, len(list))}
+	r := &secretsRun{f: f, secrets: make(map[string]domain.Secret, len(list)), signs: map[string][]string{}}
 	for _, s := range list {
 		r.secrets[s.Name] = s
+	}
+
+	if c.Webhooks != nil {
+		uses, err := c.Webhooks.WebhookSecretUses(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list webhook secrets: %w", err)
+		}
+
+		for _, u := range uses {
+			r.signs[u.Secret] = append(r.signs[u.Secret], u.Webhook)
+		}
 	}
 
 	r.references()
@@ -97,7 +121,9 @@ func (c SecretsCheck) Check(ctx context.Context, f *config.Factory) ([]domain.De
 type secretsRun struct {
 	f       *config.Factory
 	secrets map[string]domain.Secret
-	out     []domain.DefinitionProblem
+	// signs are the webhooks each secret signs, by secret name.
+	signs map[string][]string
+	out   []domain.DefinitionProblem
 }
 
 func (r *secretsRun) add(l config.Location, sev domain.ProblemSeverity, code, msg string, fixes ...domain.ProblemFix) {
@@ -106,8 +132,8 @@ func (r *secretsRun) add(l config.Location, sev domain.ProblemSeverity, code, ms
 	r.out = append(r.out, p)
 }
 
-// references reports each {{secret}} that names no secret of the organization, or one whose
-// scope leaves the factory out.
+// references reports each {{secret}} that names no secret of the organization, one a webhook is
+// signed by, or one whose scope leaves the factory out.
 func (r *secretsRun) references() {
 	factory := domain.FactoryID(r.f.Metadata.ID)
 
@@ -118,6 +144,10 @@ func (r *secretsRun) references() {
 		case !ok:
 			r.add(ref.Location, domain.SeverityError, CodeSecretMissing, fmt.Sprintf(
 				"%s: the organization has no secret named %s; create it on the Secrets page", ref.Where, ref.Name))
+		case len(r.signs[ref.Name]) > 0:
+			r.add(ref.Location, domain.SeverityError, CodeSecretSignsWebhook, fmt.Sprintf(
+				"%s: the secret %s signs the webhook %s, and no run may hold it, or it could forge deliveries; use another secret",
+				ref.Where, ref.Name, strings.Join(r.signs[ref.Name], ", ")))
 		case !s.Scope.Allows(factory):
 			r.add(ref.Location, domain.SeverityError, CodeSecretNotInScope, fmt.Sprintf(
 				"%s: the secret %s is not open to this factory; add the factory to its scope on the Secrets page", ref.Where, ref.Name))

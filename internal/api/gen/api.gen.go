@@ -2139,6 +2139,36 @@ func (e WebhookKind) Valid() bool {
 	}
 }
 
+// Defines values for WebhookSender.
+const (
+	WebhookSenderGithub    WebhookSender = "github"
+	WebhookSenderGitlab    WebhookSender = "gitlab"
+	WebhookSenderPagerduty WebhookSender = "pagerduty"
+	WebhookSenderSentry    WebhookSender = "sentry"
+	WebhookSenderStandard  WebhookSender = "standard"
+	WebhookSenderToken     WebhookSender = "token"
+)
+
+// Valid indicates whether the value is a known member of the WebhookSender enum.
+func (e WebhookSender) Valid() bool {
+	switch e {
+	case WebhookSenderGithub:
+		return true
+	case WebhookSenderGitlab:
+		return true
+	case WebhookSenderPagerduty:
+		return true
+	case WebhookSenderSentry:
+		return true
+	case WebhookSenderStandard:
+		return true
+	case WebhookSenderToken:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetAccessParamsBy.
 const (
 	GetAccessParamsByFactory GetAccessParamsBy = "factory"
@@ -3122,6 +3152,37 @@ type CreatedPersonalToken struct {
 	Token PersonalToken `json:"token"`
 }
 
+// CreatedWebhook A new webhook, with the value of the secret goald generated for it, never readable again
+type CreatedWebhook struct {
+	// Address The path senders post to, /hooks/{id}, on goald's public origin
+	Address   string    `json:"address"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Days The last 7 UTC days, oldest first, today last, each zero-filled
+	Days    []WebhookDeliveryDay `json:"days"`
+	Enabled bool                 `json:"enabled"`
+	Id      string               `json:"id"`
+	Name    string               `json:"name"`
+
+	// Openings The factories it is open to, by factory id
+	Openings []WebhookOpening `json:"openings"`
+
+	// Secret The name of the organization secret that signs it
+	Secret string `json:"secret"`
+
+	// SecretValue The generated secret's value, to paste into the sender: 64 lower-case hex characters, or for sender standard whsec_ and the base64 of 32 bytes. null when the webhook uses an existing secret.
+	SecretValue *string `json:"secret_value"`
+
+	// Sender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+	Sender WebhookSender `json:"sender"`
+
+	// Token The token sender's settings; null for another sender
+	Token *WebhookTokenSettings `json:"token"`
+
+	// Triggers The triggers of the published definitions of the factories it is open to that use it (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger
+	Triggers []WebhookTrigger `json:"triggers"`
+}
+
 // CreatedWebhookEndpoint An endpoint with its signing secret, answered only by createWebhookEndpoint and rotateWebhookSecret and never readable again.
 type CreatedWebhookEndpoint struct {
 	// Address The path senders post to, /hooks/{id}, on goald's public origin
@@ -3132,7 +3193,7 @@ type CreatedWebhookEndpoint struct {
 	Days []WebhookDeliveryDay `json:"days"`
 	Id   string               `json:"id"`
 
-	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
+	// Kind A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
 	Kind WebhookKind `json:"kind"`
 	Name string      `json:"name"`
 
@@ -3142,8 +3203,11 @@ type CreatedWebhookEndpoint struct {
 	// Secret The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret field takes it.
 	Secret string `json:"secret"`
 
-	// SecretName The label the screens show for its signing secret, <name>-hook-secret. The secret is sealed on the endpoint, not a credential, so no credential has this name.
+	// SecretName A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it.
 	SecretName string `json:"secret_name"`
+
+	// Sender Its sender; a factory endpoint of kind generic reads as standard
+	Sender WebhookSender `json:"sender"`
 
 	// Triggers The names of the current definition's triggers it feeds, in definition order
 	Triggers []string `json:"triggers"`
@@ -5349,6 +5413,21 @@ type NewSecret struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// NewWebhook defines model for NewWebhook.
+type NewWebhook struct {
+	// Name A slug of 3 to 40 characters, unique in the organization, and none of github, gitlab, standard, pagerduty, sentry, token, schedule and webhook
+	Name string `json:"name"`
+
+	// Secret The name of an existing secret that signs it; absent: goald creates webhook-<name> with a generated value
+	Secret *string `json:"secret,omitempty"`
+
+	// Sender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+	Sender WebhookSender `json:"sender"`
+
+	// Token The token sender's settings
+	Token *WebhookTokenSettings `json:"token,omitempty"`
+}
+
 // NewWebhookEndpoint defines model for NewWebhookEndpoint.
 type NewWebhookEndpoint struct {
 	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
@@ -5830,7 +5909,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -5859,6 +5938,9 @@ type Problem struct {
 	Sha256 *string `json:"sha256,omitempty"`
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
+
+	// Triggers webhook-in-use only, the published triggers that use the webhook
+	Triggers *[]WebhookTrigger `json:"triggers,omitempty"`
 
 	// TryEstimate learning-budget-exhausted of Try again only, the estimate it refused
 	TryEstimate *TryProposalEstimate `json:"try_estimate,omitempty"`
@@ -7598,6 +7680,34 @@ type WatchSide struct {
 // WatchVerdict helped or worse: the 90% interval of after minus before clears the minimum effect (5 points for a rate, 10% of before for cost and lead time); no_change: it lies inside that minimum; too_early: neither yet; no_clear_change: still neither after 14 days or 150 items after the change
 type WatchVerdict string
 
+// Webhook One of the organization's webhooks, never a secret's value
+type Webhook struct {
+	// Address The path senders post to, /hooks/{id}, on goald's public origin
+	Address   string    `json:"address"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Days The last 7 UTC days, oldest first, today last, each zero-filled
+	Days    []WebhookDeliveryDay `json:"days"`
+	Enabled bool                 `json:"enabled"`
+	Id      string               `json:"id"`
+	Name    string               `json:"name"`
+
+	// Openings The factories it is open to, by factory id
+	Openings []WebhookOpening `json:"openings"`
+
+	// Secret The name of the organization secret that signs it
+	Secret string `json:"secret"`
+
+	// Sender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+	Sender WebhookSender `json:"sender"`
+
+	// Token The token sender's settings; null for another sender
+	Token *WebhookTokenSettings `json:"token"`
+
+	// Triggers The triggers of the published definitions of the factories it is open to that use it (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger
+	Triggers []WebhookTrigger `json:"triggers"`
+}
+
 // WebhookDelivery defines model for WebhookDelivery.
 type WebhookDelivery struct {
 	Id string `json:"id"`
@@ -7666,7 +7776,7 @@ type WebhookDeliveryRequest struct {
 // WebhookDeliveryRequestBodyEncoding text: the body is valid UTF-8 and given as is; base64: it is not, and is given in standard base64
 type WebhookDeliveryRequestBodyEncoding string
 
-// WebhookEndpoint A factory's webhook endpoint, never its signing secret
+// WebhookEndpoint A webhook endpoint open to the factory, never its signing secret
 type WebhookEndpoint struct {
 	// Address The path senders post to, /hooks/{id}, on goald's public origin
 	Address   string    `json:"address"`
@@ -7676,15 +7786,18 @@ type WebhookEndpoint struct {
 	Days []WebhookDeliveryDay `json:"days"`
 	Id   string               `json:"id"`
 
-	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
+	// Kind A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
 	Kind WebhookKind `json:"kind"`
 	Name string      `json:"name"`
 
 	// RotatedAt When its secret was last replaced; null when it never was
 	RotatedAt *time.Time `json:"rotated_at"`
 
-	// SecretName The label the screens show for its signing secret, <name>-hook-secret. The secret is sealed on the endpoint, not a credential, so no credential has this name.
+	// SecretName A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it.
 	SecretName string `json:"secret_name"`
+
+	// Sender Its sender; a factory endpoint of kind generic reads as standard
+	Sender WebhookSender `json:"sender"`
 
 	// Triggers The names of the current definition's triggers it feeds, in definition order
 	Triggers []string `json:"triggers"`
@@ -7697,6 +7810,58 @@ type WebhookEndpointList struct {
 
 // WebhookKind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
 type WebhookKind string
+
+// WebhookList defines model for WebhookList.
+type WebhookList struct {
+	Webhooks []Webhook `json:"webhooks"`
+}
+
+// WebhookOpening The webhook is open to a factory
+type WebhookOpening struct {
+	// Factory The factory's metadata.id
+	Factory string `json:"factory"`
+
+	// Repositories The repositories (owner/name) whose deliveries reach the factory; null or absent: every one
+	Repositories *[]string `json:"repositories,omitempty"`
+}
+
+// WebhookPatch defines model for WebhookPatch.
+type WebhookPatch struct {
+	// Close The metadata.id of factories to close it to
+	Close *[]string `json:"close,omitempty"`
+
+	// Enabled false: its address answers 404 until enabled again
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Name A new name
+	Name *string `json:"name,omitempty"`
+
+	// Open Factories to open it to, or whose opening's repositories to replace
+	Open *[]WebhookOpening `json:"open,omitempty"`
+}
+
+// WebhookSender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+type WebhookSender string
+
+// WebhookTokenSettings The token sender's settings
+type WebhookTokenSettings struct {
+	// EventPath The body's dot path of the event name, such as event.type; empty for none
+	EventPath *string `json:"event_path,omitempty"`
+
+	// Header The header that carries the value; Authorization (as Bearer <value>) when empty
+	Header *string `json:"header,omitempty"`
+
+	// IdPath The body's dot path of a delivery id; empty for none
+	IdPath *string `json:"id_path,omitempty"`
+}
+
+// WebhookTrigger A trigger of a factory's published definition that uses the webhook
+type WebhookTrigger struct {
+	// Factory The factory's metadata.id
+	Factory     string `json:"factory"`
+	FactoryName string `json:"factory_name"`
+	Trigger     string `json:"trigger"`
+}
 
 // WeekCost defines model for WeekCost.
 type WeekCost struct {
@@ -7798,6 +7963,9 @@ type VersionSelector = string
 
 // WebhookEndpointRef defines model for WebhookEndpointRef.
 type WebhookEndpointRef = string
+
+// WebhookRef defines model for WebhookRef.
+type WebhookRef = string
 
 // WorkTypeFilter defines model for WorkTypeFilter.
 type WorkTypeFilter = string
@@ -8212,6 +8380,14 @@ type GetTemplateParams struct {
 	Version *int `form:"version,omitempty" json:"version,omitempty"`
 }
 
+// ListOrgWebhookDeliveriesParams defines parameters for ListOrgWebhookDeliveries.
+type ListOrgWebhookDeliveriesParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After The next_after of the previous page; deliveries received before it
+	After *string `form:"after,omitempty" json:"after,omitempty"`
+}
+
 // ListAuthEventsParams defines parameters for ListAuthEvents.
 type ListAuthEventsParams struct {
 	// Before The cursor of the next page (next_before); events with a smaller id
@@ -8413,6 +8589,12 @@ type SetSignupDomainJSONRequestBody = SignupDomainInput
 
 // TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
 type TransferOwnershipJSONRequestBody = TransferRequest
+
+// CreateWebhookJSONRequestBody defines body for CreateWebhook for application/json ContentType.
+type CreateWebhookJSONRequestBody = NewWebhook
+
+// PatchWebhookJSONRequestBody defines body for PatchWebhook for application/json ContentType.
+type PatchWebhookJSONRequestBody = WebhookPatch
 
 // AddPlatformAdminJSONRequestBody defines body for AddPlatformAdmin for application/json ContentType.
 type AddPlatformAdminJSONRequestBody = NewPlatformAdmin
@@ -9805,16 +9987,16 @@ type ClientInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
 	UpdateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListWebhookEndpoints The factory's webhook endpoints
+	// ListWebhookEndpoints The webhook endpoints open to the factory
 	//
-	// By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+	// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks (the `ListWebhookEndpoints` operationId).
 	ListWebhookEndpoints(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateWebhookEndpointWithBody Create a webhook endpoint
 	//
-	// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -9823,7 +10005,7 @@ type ClientInterface interface {
 
 	// CreateWebhookEndpoint Create a webhook endpoint
 	//
-	// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -9832,7 +10014,7 @@ type ClientInterface interface {
 
 	// DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
 	//
-	// Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
 	DeleteWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9846,14 +10028,14 @@ type ClientInterface interface {
 
 	// GetWebhookDelivery One delivery with its request
 	//
-	// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+	// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery} (the `GetWebhookDelivery` operationId).
 	GetWebhookDelivery(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RotateWebhookSecret Replace an endpoint's signing secret
 	//
-	// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate (the `RotateWebhookSecret` operationId).
 	RotateWebhookSecret(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10696,6 +10878,77 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
 	TransferOwnership(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListWebhooks The organization's webhooks
+	//
+	// By name, each with its sender, the name of the secret that signs it, its openings, the triggers of the published definitions that use it and its deliveries of the last 7 UTC days. Never a secret's value.
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks (the `ListWebhooks` operationId).
+	ListWebhooks(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateWebhookWithBody Create a webhook
+	//
+	// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+	CreateWebhookWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateWebhook Create a webhook
+	//
+	// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+	CreateWebhook(ctx context.Context, org OrgRef, body CreateWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteWebhook Delete a webhook, its openings and its deliveries
+	//
+	// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/webhooks/{webhook} (the `DeleteWebhook` operationId).
+	DeleteWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetWebhook One webhook
+	//
+	// 404 webhook-not-found for a webhook the organization does not have.
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook} (the `GetWebhook` operationId).
+	GetWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchWebhookWithBody Open, close, limit, rename, enable or disable a webhook
+	//
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+	PatchWebhookWithBody(ctx context.Context, org OrgRef, webhook WebhookRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchWebhook Open, close, limit, rename, enable or disable a webhook
+	//
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+	PatchWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, body PatchWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
+	//
+	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
+	ListOrgWebhookDeliveries(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOrgWebhookDelivery One delivery with its request
+	//
+	// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery} (the `GetOrgWebhookDelivery` operationId).
+	GetOrgWebhookDelivery(ctx context.Context, org OrgRef, webhook WebhookRef, delivery string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListPlatformAdmins The install's platform admins, earliest first
 	//
@@ -13177,9 +13430,9 @@ func (c *Client) UpdateSavedView(ctx context.Context, org OrgRef, factory Factor
 	return c.Client.Do(req)
 }
 
-// ListWebhookEndpoints The factory's webhook endpoints
+// ListWebhookEndpoints The webhook endpoints open to the factory
 //
-// By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks (the `ListWebhookEndpoints` operationId).
 func (c *Client) ListWebhookEndpoints(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -13196,7 +13449,7 @@ func (c *Client) ListWebhookEndpoints(ctx context.Context, org OrgRef, factory F
 
 // CreateWebhookEndpointWithBody Create a webhook endpoint
 //
-// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13215,7 +13468,7 @@ func (c *Client) CreateWebhookEndpointWithBody(ctx context.Context, org OrgRef, 
 
 // CreateWebhookEndpoint Create a webhook endpoint
 //
-// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13234,7 +13487,7 @@ func (c *Client) CreateWebhookEndpoint(ctx context.Context, org OrgRef, factory 
 
 // DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
 //
-// Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
 //
 // Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
 func (c *Client) DeleteWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -13268,7 +13521,7 @@ func (c *Client) ListWebhookDeliveries(ctx context.Context, org OrgRef, factory 
 
 // GetWebhookDelivery One delivery with its request
 //
-// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery} (the `GetWebhookDelivery` operationId).
 func (c *Client) GetWebhookDelivery(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -13285,7 +13538,7 @@ func (c *Client) GetWebhookDelivery(ctx context.Context, org OrgRef, factory Fac
 
 // RotateWebhookSecret Replace an endpoint's signing secret
 //
-// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate (the `RotateWebhookSecret` operationId).
 func (c *Client) RotateWebhookSecret(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -15179,6 +15432,167 @@ func (c *Client) TransferOwnershipWithBody(ctx context.Context, org OrgRef, cont
 // Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
 func (c *Client) TransferOwnership(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTransferOwnershipRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListWebhooks The organization's webhooks
+//
+// By name, each with its sender, the name of the secret that signs it, its openings, the triggers of the published definitions that use it and its deliveries of the last 7 UTC days. Never a secret's value.
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks (the `ListWebhooks` operationId).
+func (c *Client) ListWebhooks(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListWebhooksRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateWebhookWithBody Create a webhook
+//
+// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+func (c *Client) CreateWebhookWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateWebhookRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateWebhook Create a webhook
+//
+// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+func (c *Client) CreateWebhook(ctx context.Context, org OrgRef, body CreateWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateWebhookRequest(c.Server, org, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DeleteWebhook Delete a webhook, its openings and its deliveries
+//
+// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with DELETE /v1/orgs/{org}/webhooks/{webhook} (the `DeleteWebhook` operationId).
+func (c *Client) DeleteWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteWebhookRequest(c.Server, org, webhook)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetWebhook One webhook
+//
+// 404 webhook-not-found for a webhook the organization does not have.
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook} (the `GetWebhook` operationId).
+func (c *Client) GetWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWebhookRequest(c.Server, org, webhook)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchWebhookWithBody Open, close, limit, rename, enable or disable a webhook
+//
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+func (c *Client) PatchWebhookWithBody(ctx context.Context, org OrgRef, webhook WebhookRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchWebhookRequestWithBody(c.Server, org, webhook, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PatchWebhook Open, close, limit, rename, enable or disable a webhook
+//
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+func (c *Client) PatchWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, body PatchWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchWebhookRequest(c.Server, org, webhook, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
+//
+// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
+func (c *Client) ListOrgWebhookDeliveries(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListOrgWebhookDeliveriesRequest(c.Server, org, webhook, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetOrgWebhookDelivery One delivery with its request
+//
+// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery} (the `GetOrgWebhookDelivery` operationId).
+func (c *Client) GetOrgWebhookDelivery(ctx context.Context, org OrgRef, webhook WebhookRef, delivery string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOrgWebhookDeliveryRequest(c.Server, org, webhook, delivery)
 	if err != nil {
 		return nil, err
 	}
@@ -25336,6 +25750,351 @@ func NewTransferOwnershipRequestWithBody(server string, org OrgRef, contentType 
 	return req, nil
 }
 
+// NewListWebhooksRequest constructs an http.Request for the ListWebhooks method
+func NewListWebhooksRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateWebhookRequest calls the generic CreateWebhook builder with application/json body
+func NewCreateWebhookRequest(server string, org OrgRef, body CreateWebhookJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateWebhookRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewCreateWebhookRequestWithBody constructs an http.Request for the CreateWebhook method, with any body, and a specified content type
+func NewCreateWebhookRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteWebhookRequest constructs an http.Request for the DeleteWebhook method
+func NewDeleteWebhookRequest(server string, org OrgRef, webhook WebhookRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "webhook", webhook, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetWebhookRequest constructs an http.Request for the GetWebhook method
+func NewGetWebhookRequest(server string, org OrgRef, webhook WebhookRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "webhook", webhook, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchWebhookRequest calls the generic PatchWebhook builder with application/json body
+func NewPatchWebhookRequest(server string, org OrgRef, webhook WebhookRef, body PatchWebhookJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchWebhookRequestWithBody(server, org, webhook, "application/json", bodyReader)
+}
+
+// NewPatchWebhookRequestWithBody constructs an http.Request for the PatchWebhook method, with any body, and a specified content type
+func NewPatchWebhookRequestWithBody(server string, org OrgRef, webhook WebhookRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "webhook", webhook, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListOrgWebhookDeliveriesRequest constructs an http.Request for the ListOrgWebhookDeliveries method
+func NewListOrgWebhookDeliveriesRequest(server string, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "webhook", webhook, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks/%s/deliveries", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.After != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetOrgWebhookDeliveryRequest constructs an http.Request for the GetOrgWebhookDelivery method
+func NewGetOrgWebhookDeliveryRequest(server string, org OrgRef, webhook WebhookRef, delivery string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "webhook", webhook, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "delivery", delivery, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/webhooks/%s/deliveries/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListPlatformAdminsRequest constructs an http.Request for the ListPlatformAdmins method
 func NewListPlatformAdminsRequest(server string) (*http.Request, error) {
 	var err error
@@ -26784,9 +27543,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
 	UpdateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error)
 
-	// ListWebhookEndpointsWithResponse The factory's webhook endpoints
+	// ListWebhookEndpointsWithResponse The webhook endpoints open to the factory
 	//
-	// By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+	// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -26795,7 +27554,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateWebhookEndpointWithBodyWithResponse Create a webhook endpoint
 	//
-	// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -26804,7 +27563,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateWebhookEndpointWithResponse Create a webhook endpoint
 	//
-	// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -26813,7 +27572,7 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteWebhookEndpointWithResponse Delete a webhook endpoint and its deliveries
 	//
-	// Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -26831,7 +27590,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetWebhookDeliveryWithResponse One delivery with its request
 	//
-	// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+	// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -26840,7 +27599,7 @@ type ClientWithResponsesInterface interface {
 
 	// RotateWebhookSecretWithResponse Replace an endpoint's signing secret
 	//
-	// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -27777,6 +28536,87 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/transfer (the `TransferOwnership` operationId).
 	TransferOwnershipWithResponse(ctx context.Context, org OrgRef, body TransferOwnershipJSONRequestBody, reqEditors ...RequestEditorFn) (*TransferOwnershipResponse, error)
+
+	// ListWebhooksWithResponse The organization's webhooks
+	//
+	// By name, each with its sender, the name of the secret that signs it, its openings, the triggers of the published definitions that use it and its deliveries of the last 7 UTC days. Never a secret's value.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks (the `ListWebhooks` operationId).
+	ListWebhooksWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListWebhooksResponse, error)
+
+	// CreateWebhookWithBodyWithResponse Create a webhook
+	//
+	// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+	CreateWebhookWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWebhookResponse, error)
+
+	// CreateWebhookWithResponse Create a webhook
+	//
+	// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+	CreateWebhookWithResponse(ctx context.Context, org OrgRef, body CreateWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWebhookResponse, error)
+
+	// DeleteWebhookWithResponse Delete a webhook, its openings and its deliveries
+	//
+	// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/webhooks/{webhook} (the `DeleteWebhook` operationId).
+	DeleteWebhookWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*DeleteWebhookResponse, error)
+
+	// GetWebhookWithResponse One webhook
+	//
+	// 404 webhook-not-found for a webhook the organization does not have.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook} (the `GetWebhook` operationId).
+	GetWebhookWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*GetWebhookResponse, error)
+
+	// PatchWebhookWithBodyWithResponse Open, close, limit, rename, enable or disable a webhook
+	//
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+	PatchWebhookWithBodyWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchWebhookResponse, error)
+
+	// PatchWebhookWithResponse Open, close, limit, rename, enable or disable a webhook
+	//
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+	PatchWebhookWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, body PatchWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchWebhookResponse, error)
+
+	// ListOrgWebhookDeliveriesWithResponse One page of a webhook's deliveries, newest first
+	//
+	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
+	ListOrgWebhookDeliveriesWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*ListOrgWebhookDeliveriesResponse, error)
+
+	// GetOrgWebhookDeliveryWithResponse One delivery with its request
+	//
+	// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery} (the `GetOrgWebhookDelivery` operationId).
+	GetOrgWebhookDeliveryWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, delivery string, reqEditors ...RequestEditorFn) (*GetOrgWebhookDeliveryResponse, error)
 
 	// ListPlatformAdminsWithResponse The install's platform admins, earliest first
 	//
@@ -36898,6 +37738,335 @@ func (r TransferOwnershipResponse) ContentType() string {
 	return ""
 }
 
+type ListWebhooksResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListWebhooksResponse) GetJSON200() *WebhookList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListWebhooksResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListWebhooksResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListWebhooksResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListWebhooksResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListWebhooksResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateWebhookResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *CreatedWebhook
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateWebhookResponse) GetJSON201() *CreatedWebhook {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateWebhookResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateWebhookResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateWebhookResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateWebhookResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteWebhookResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DeleteWebhookResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DeleteWebhookResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteWebhookResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteWebhookResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetWebhookResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Webhook
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetWebhookResponse) GetJSON200() *Webhook {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetWebhookResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetWebhookResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetWebhookResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetWebhookResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PatchWebhookResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Webhook
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PatchWebhookResponse) GetJSON200() *Webhook {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PatchWebhookResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PatchWebhookResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchWebhookResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PatchWebhookResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListOrgWebhookDeliveriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookDeliveryPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListOrgWebhookDeliveriesResponse) GetJSON200() *WebhookDeliveryPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListOrgWebhookDeliveriesResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListOrgWebhookDeliveriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListOrgWebhookDeliveriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListOrgWebhookDeliveriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListOrgWebhookDeliveriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetOrgWebhookDeliveryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *WebhookDeliveryRequest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetOrgWebhookDeliveryResponse) GetJSON200() *WebhookDeliveryRequest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetOrgWebhookDeliveryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetOrgWebhookDeliveryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOrgWebhookDeliveryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOrgWebhookDeliveryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetOrgWebhookDeliveryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListPlatformAdminsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -39127,9 +40296,9 @@ func (c *ClientWithResponses) UpdateSavedViewWithResponse(ctx context.Context, o
 	return ParseUpdateSavedViewResponse(rsp)
 }
 
-// ListWebhookEndpointsWithResponse The factory's webhook endpoints
+// ListWebhookEndpointsWithResponse The webhook endpoints open to the factory
 //
-// By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -39144,7 +40313,7 @@ func (c *ClientWithResponses) ListWebhookEndpointsWithResponse(ctx context.Conte
 
 // CreateWebhookEndpointWithBodyWithResponse Create a webhook endpoint
 //
-// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -39159,7 +40328,7 @@ func (c *ClientWithResponses) CreateWebhookEndpointWithBodyWithResponse(ctx cont
 
 // CreateWebhookEndpointWithResponse Create a webhook endpoint
 //
-// An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -39174,7 +40343,7 @@ func (c *ClientWithResponses) CreateWebhookEndpointWithResponse(ctx context.Cont
 
 // DeleteWebhookEndpointWithResponse Delete a webhook endpoint and its deliveries
 //
-// Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -39204,7 +40373,7 @@ func (c *ClientWithResponses) ListWebhookDeliveriesWithResponse(ctx context.Cont
 
 // GetWebhookDeliveryWithResponse One delivery with its request
 //
-// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -39219,7 +40388,7 @@ func (c *ClientWithResponses) GetWebhookDeliveryWithResponse(ctx context.Context
 
 // RotateWebhookSecretWithResponse Replace an endpoint's signing secret
 //
-// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -40791,6 +41960,141 @@ func (c *ClientWithResponses) TransferOwnershipWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTransferOwnershipResponse(rsp)
+}
+
+// ListWebhooksWithResponse The organization's webhooks
+//
+// By name, each with its sender, the name of the secret that signs it, its openings, the triggers of the published definitions that use it and its deliveries of the last 7 UTC days. Never a secret's value.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks (the `ListWebhooks` operationId).
+func (c *ClientWithResponses) ListWebhooksWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListWebhooksResponse, error) {
+	rsp, err := c.ListWebhooks(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListWebhooksResponse(rsp)
+}
+
+// CreateWebhookWithBodyWithResponse Create a webhook
+//
+// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+func (c *ClientWithResponses) CreateWebhookWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWebhookResponse, error) {
+	rsp, err := c.CreateWebhookWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateWebhookResponse(rsp)
+}
+
+// CreateWebhookWithResponse Create a webhook
+//
+// An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/webhooks (the `CreateWebhook` operationId).
+func (c *ClientWithResponses) CreateWebhookWithResponse(ctx context.Context, org OrgRef, body CreateWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWebhookResponse, error) {
+	rsp, err := c.CreateWebhook(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateWebhookResponse(rsp)
+}
+
+// DeleteWebhookWithResponse Delete a webhook, its openings and its deliveries
+//
+// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/webhooks/{webhook} (the `DeleteWebhook` operationId).
+func (c *ClientWithResponses) DeleteWebhookWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*DeleteWebhookResponse, error) {
+	rsp, err := c.DeleteWebhook(ctx, org, webhook, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteWebhookResponse(rsp)
+}
+
+// GetWebhookWithResponse One webhook
+//
+// 404 webhook-not-found for a webhook the organization does not have.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook} (the `GetWebhook` operationId).
+func (c *ClientWithResponses) GetWebhookWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*GetWebhookResponse, error) {
+	rsp, err := c.GetWebhook(ctx, org, webhook, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetWebhookResponse(rsp)
+}
+
+// PatchWebhookWithBodyWithResponse Open, close, limit, rename, enable or disable a webhook
+//
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+func (c *ClientWithResponses) PatchWebhookWithBodyWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchWebhookResponse, error) {
+	rsp, err := c.PatchWebhookWithBody(ctx, org, webhook, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchWebhookResponse(rsp)
+}
+
+// PatchWebhookWithResponse Open, close, limit, rename, enable or disable a webhook
+//
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /v1/orgs/{org}/webhooks/{webhook} (the `PatchWebhook` operationId).
+func (c *ClientWithResponses) PatchWebhookWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, body PatchWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchWebhookResponse, error) {
+	rsp, err := c.PatchWebhook(ctx, org, webhook, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchWebhookResponse(rsp)
+}
+
+// ListOrgWebhookDeliveriesWithResponse One page of a webhook's deliveries, newest first
+//
+// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
+func (c *ClientWithResponses) ListOrgWebhookDeliveriesWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*ListOrgWebhookDeliveriesResponse, error) {
+	rsp, err := c.ListOrgWebhookDeliveries(ctx, org, webhook, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListOrgWebhookDeliveriesResponse(rsp)
+}
+
+// GetOrgWebhookDeliveryWithResponse One delivery with its request
+//
+// The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery} (the `GetOrgWebhookDelivery` operationId).
+func (c *ClientWithResponses) GetOrgWebhookDeliveryWithResponse(ctx context.Context, org OrgRef, webhook WebhookRef, delivery string, reqEditors ...RequestEditorFn) (*GetOrgWebhookDeliveryResponse, error) {
+	rsp, err := c.GetOrgWebhookDelivery(ctx, org, webhook, delivery, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOrgWebhookDeliveryResponse(rsp)
 }
 
 // ListPlatformAdminsWithResponse The install's platform admins, earliest first
@@ -47248,6 +48552,233 @@ func ParseTransferOwnershipResponse(rsp *http.Response) (*TransferOwnershipRespo
 	return response, nil
 }
 
+// ParseListWebhooksResponse parses an HTTP response from a ListWebhooksWithResponse call
+func ParseListWebhooksResponse(rsp *http.Response) (*ListWebhooksResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListWebhooksResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateWebhookResponse parses an HTTP response from a CreateWebhookWithResponse call
+func ParseCreateWebhookResponse(rsp *http.Response) (*CreateWebhookResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateWebhookResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CreatedWebhook
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteWebhookResponse parses an HTTP response from a DeleteWebhookWithResponse call
+func ParseDeleteWebhookResponse(rsp *http.Response) (*DeleteWebhookResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteWebhookResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetWebhookResponse parses an HTTP response from a GetWebhookWithResponse call
+func ParseGetWebhookResponse(rsp *http.Response) (*GetWebhookResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetWebhookResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Webhook
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchWebhookResponse parses an HTTP response from a PatchWebhookWithResponse call
+func ParsePatchWebhookResponse(rsp *http.Response) (*PatchWebhookResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchWebhookResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Webhook
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListOrgWebhookDeliveriesResponse parses an HTTP response from a ListOrgWebhookDeliveriesWithResponse call
+func ParseListOrgWebhookDeliveriesResponse(rsp *http.Response) (*ListOrgWebhookDeliveriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListOrgWebhookDeliveriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookDeliveryPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetOrgWebhookDeliveryResponse parses an HTTP response from a GetOrgWebhookDeliveryWithResponse call
+func ParseGetOrgWebhookDeliveryResponse(rsp *http.Response) (*GetOrgWebhookDeliveryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOrgWebhookDeliveryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookDeliveryRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListPlatformAdminsResponse parses an HTTP response from a ListPlatformAdminsWithResponse call
 func ParseListPlatformAdminsResponse(rsp *http.Response) (*ListPlatformAdminsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -47708,7 +49239,7 @@ type ServerInterface interface {
 	// UpdateSavedView Rename a view and replace its filters
 	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
 	UpdateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef)
-	// ListWebhookEndpoints The factory's webhook endpoints
+	// ListWebhookEndpoints The webhook endpoints open to the factory
 	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
 	ListWebhookEndpoints(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// CreateWebhookEndpoint Create a webhook endpoint
@@ -47954,6 +49485,27 @@ type ServerInterface interface {
 	// TransferOwnership Hand the organization to an admin
 	// (POST /v1/orgs/{org}/transfer)
 	TransferOwnership(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// ListWebhooks The organization's webhooks
+	// (GET /v1/orgs/{org}/webhooks)
+	ListWebhooks(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// CreateWebhook Create a webhook
+	// (POST /v1/orgs/{org}/webhooks)
+	CreateWebhook(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// DeleteWebhook Delete a webhook, its openings and its deliveries
+	// (DELETE /v1/orgs/{org}/webhooks/{webhook})
+	DeleteWebhook(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef)
+	// GetWebhook One webhook
+	// (GET /v1/orgs/{org}/webhooks/{webhook})
+	GetWebhook(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef)
+	// PatchWebhook Open, close, limit, rename, enable or disable a webhook
+	// (PATCH /v1/orgs/{org}/webhooks/{webhook})
+	PatchWebhook(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef)
+	// ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
+	// (GET /v1/orgs/{org}/webhooks/{webhook}/deliveries)
+	ListOrgWebhookDeliveries(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef, params ListOrgWebhookDeliveriesParams)
+	// GetOrgWebhookDelivery One delivery with its request
+	// (GET /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery})
+	GetOrgWebhookDelivery(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef, delivery string)
 	// ListPlatformAdmins The install's platform admins, earliest first
 	// (GET /v1/platform/admins)
 	ListPlatformAdmins(w http.ResponseWriter, r *http.Request)
@@ -55706,6 +57258,271 @@ func (siw *ServerInterfaceWrapper) TransferOwnership(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListWebhooks operation middleware
+func (siw *ServerInterfaceWrapper) ListWebhooks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWebhooks(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWebhook operation middleware
+func (siw *ServerInterfaceWrapper) CreateWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWebhook(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWebhook operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhook" -------------
+	var webhook WebhookRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhook", r.PathValue("webhook"), &webhook, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhook", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWebhook(w, r, org, webhook)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWebhook operation middleware
+func (siw *ServerInterfaceWrapper) GetWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhook" -------------
+	var webhook WebhookRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhook", r.PathValue("webhook"), &webhook, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhook", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWebhook(w, r, org, webhook)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PatchWebhook operation middleware
+func (siw *ServerInterfaceWrapper) PatchWebhook(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhook" -------------
+	var webhook WebhookRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhook", r.PathValue("webhook"), &webhook, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhook", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchWebhook(w, r, org, webhook)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrgWebhookDeliveries operation middleware
+func (siw *ServerInterfaceWrapper) ListOrgWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhook" -------------
+	var webhook WebhookRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhook", r.PathValue("webhook"), &webhook, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhook", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListOrgWebhookDeliveriesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrgWebhookDeliveries(w, r, org, webhook, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrgWebhookDelivery operation middleware
+func (siw *ServerInterfaceWrapper) GetOrgWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "webhook" -------------
+	var webhook WebhookRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "webhook", r.PathValue("webhook"), &webhook, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "webhook", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "delivery" -------------
+	var delivery string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "delivery", r.PathValue("delivery"), &delivery, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "delivery", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrgWebhookDelivery(w, r, org, webhook, delivery)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListPlatformAdmins operation middleware
 func (siw *ServerInterfaceWrapper) ListPlatformAdmins(w http.ResponseWriter, r *http.Request) {
 
@@ -56059,6 +57876,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate", wrapper.RotateWebhookSecret)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries", wrapper.ListWebhookDeliveries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}", wrapper.GetWebhookDelivery)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/webhooks", wrapper.ListWebhooks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/webhooks", wrapper.CreateWebhook)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/webhooks/{webhook}", wrapper.DeleteWebhook)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/webhooks/{webhook}", wrapper.GetWebhook)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/webhooks/{webhook}", wrapper.PatchWebhook)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/webhooks/{webhook}/deliveries", wrapper.ListOrgWebhookDeliveries)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery}", wrapper.GetOrgWebhookDelivery)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views", wrapper.ListSavedViews)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views", wrapper.CreateSavedView)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/views/{view}", wrapper.DeleteSavedView)
@@ -64113,6 +65937,282 @@ func (response TransferOwnershipdefaultApplicationProblemPlusJSONResponse) Visit
 	return err
 }
 
+type ListWebhooksRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type ListWebhooksResponseObject interface {
+	VisitListWebhooksResponse(w http.ResponseWriter) error
+}
+
+type ListWebhooks200JSONResponse WebhookList
+
+func (response ListWebhooks200JSONResponse) VisitListWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWebhooksdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListWebhooksdefaultApplicationProblemPlusJSONResponse) VisitListWebhooksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWebhookRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *CreateWebhookJSONRequestBody
+}
+
+type CreateWebhookResponseObject interface {
+	VisitCreateWebhookResponse(w http.ResponseWriter) error
+}
+
+type CreateWebhook201JSONResponse CreatedWebhook
+
+func (response CreateWebhook201JSONResponse) VisitCreateWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWebhookdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateWebhookdefaultApplicationProblemPlusJSONResponse) VisitCreateWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWebhookRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Webhook WebhookRef `json:"webhook"`
+}
+
+type DeleteWebhookResponseObject interface {
+	VisitDeleteWebhookResponse(w http.ResponseWriter) error
+}
+
+type DeleteWebhook204Response struct {
+}
+
+func (response DeleteWebhook204Response) VisitDeleteWebhookResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWebhookdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteWebhookdefaultApplicationProblemPlusJSONResponse) VisitDeleteWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWebhookRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Webhook WebhookRef `json:"webhook"`
+}
+
+type GetWebhookResponseObject interface {
+	VisitGetWebhookResponse(w http.ResponseWriter) error
+}
+
+type GetWebhook200JSONResponse Webhook
+
+func (response GetWebhook200JSONResponse) VisitGetWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWebhookdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetWebhookdefaultApplicationProblemPlusJSONResponse) VisitGetWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchWebhookRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Webhook WebhookRef `json:"webhook"`
+	Body    *PatchWebhookJSONRequestBody
+}
+
+type PatchWebhookResponseObject interface {
+	VisitPatchWebhookResponse(w http.ResponseWriter) error
+}
+
+type PatchWebhook200JSONResponse Webhook
+
+func (response PatchWebhook200JSONResponse) VisitPatchWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PatchWebhookdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PatchWebhookdefaultApplicationProblemPlusJSONResponse) VisitPatchWebhookResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListOrgWebhookDeliveriesRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Webhook WebhookRef `json:"webhook"`
+	Params  ListOrgWebhookDeliveriesParams
+}
+
+type ListOrgWebhookDeliveriesResponseObject interface {
+	VisitListOrgWebhookDeliveriesResponse(w http.ResponseWriter) error
+}
+
+type ListOrgWebhookDeliveries200JSONResponse WebhookDeliveryPage
+
+func (response ListOrgWebhookDeliveries200JSONResponse) VisitListOrgWebhookDeliveriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListOrgWebhookDeliveriesdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListOrgWebhookDeliveriesdefaultApplicationProblemPlusJSONResponse) VisitListOrgWebhookDeliveriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgWebhookDeliveryRequestObject struct {
+	Org      OrgRef     `json:"org"`
+	Webhook  WebhookRef `json:"webhook"`
+	Delivery string     `json:"delivery"`
+}
+
+type GetOrgWebhookDeliveryResponseObject interface {
+	VisitGetOrgWebhookDeliveryResponse(w http.ResponseWriter) error
+}
+
+type GetOrgWebhookDelivery200JSONResponse WebhookDeliveryRequest
+
+func (response GetOrgWebhookDelivery200JSONResponse) VisitGetOrgWebhookDeliveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetOrgWebhookDeliverydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetOrgWebhookDeliverydefaultApplicationProblemPlusJSONResponse) VisitGetOrgWebhookDeliveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListPlatformAdminsRequestObject struct {
 }
 
@@ -64594,7 +66694,7 @@ type StrictServerInterface interface {
 	// UpdateSavedView Rename a view and replace its filters
 	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
 	UpdateSavedView(ctx context.Context, request UpdateSavedViewRequestObject) (UpdateSavedViewResponseObject, error)
-	// ListWebhookEndpoints The factory's webhook endpoints
+	// ListWebhookEndpoints The webhook endpoints open to the factory
 	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
 	ListWebhookEndpoints(ctx context.Context, request ListWebhookEndpointsRequestObject) (ListWebhookEndpointsResponseObject, error)
 	// CreateWebhookEndpoint Create a webhook endpoint
@@ -64840,6 +66940,27 @@ type StrictServerInterface interface {
 	// TransferOwnership Hand the organization to an admin
 	// (POST /v1/orgs/{org}/transfer)
 	TransferOwnership(ctx context.Context, request TransferOwnershipRequestObject) (TransferOwnershipResponseObject, error)
+	// ListWebhooks The organization's webhooks
+	// (GET /v1/orgs/{org}/webhooks)
+	ListWebhooks(ctx context.Context, request ListWebhooksRequestObject) (ListWebhooksResponseObject, error)
+	// CreateWebhook Create a webhook
+	// (POST /v1/orgs/{org}/webhooks)
+	CreateWebhook(ctx context.Context, request CreateWebhookRequestObject) (CreateWebhookResponseObject, error)
+	// DeleteWebhook Delete a webhook, its openings and its deliveries
+	// (DELETE /v1/orgs/{org}/webhooks/{webhook})
+	DeleteWebhook(ctx context.Context, request DeleteWebhookRequestObject) (DeleteWebhookResponseObject, error)
+	// GetWebhook One webhook
+	// (GET /v1/orgs/{org}/webhooks/{webhook})
+	GetWebhook(ctx context.Context, request GetWebhookRequestObject) (GetWebhookResponseObject, error)
+	// PatchWebhook Open, close, limit, rename, enable or disable a webhook
+	// (PATCH /v1/orgs/{org}/webhooks/{webhook})
+	PatchWebhook(ctx context.Context, request PatchWebhookRequestObject) (PatchWebhookResponseObject, error)
+	// ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
+	// (GET /v1/orgs/{org}/webhooks/{webhook}/deliveries)
+	ListOrgWebhookDeliveries(ctx context.Context, request ListOrgWebhookDeliveriesRequestObject) (ListOrgWebhookDeliveriesResponseObject, error)
+	// GetOrgWebhookDelivery One delivery with its request
+	// (GET /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery})
+	GetOrgWebhookDelivery(ctx context.Context, request GetOrgWebhookDeliveryRequestObject) (GetOrgWebhookDeliveryResponseObject, error)
 	// ListPlatformAdmins The install's platform admins, earliest first
 	// (GET /v1/platform/admins)
 	ListPlatformAdmins(ctx context.Context, request ListPlatformAdminsRequestObject) (ListPlatformAdminsResponseObject, error)
@@ -70431,6 +72552,209 @@ func (sh *strictHandler) TransferOwnership(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TransferOwnershipResponseObject); ok {
 		if err := validResponse.VisitTransferOwnershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWebhooks operation middleware
+func (sh *strictHandler) ListWebhooks(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request ListWebhooksRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWebhooks(ctx, request.(ListWebhooksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWebhooks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWebhooksResponseObject); ok {
+		if err := validResponse.VisitListWebhooksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWebhook operation middleware
+func (sh *strictHandler) CreateWebhook(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request CreateWebhookRequestObject
+
+	request.Org = org
+
+	var body CreateWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWebhook(ctx, request.(CreateWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWebhookResponseObject); ok {
+		if err := validResponse.VisitCreateWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWebhook operation middleware
+func (sh *strictHandler) DeleteWebhook(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef) {
+	var request DeleteWebhookRequestObject
+
+	request.Org = org
+	request.Webhook = webhook
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWebhook(ctx, request.(DeleteWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWebhookResponseObject); ok {
+		if err := validResponse.VisitDeleteWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetWebhook operation middleware
+func (sh *strictHandler) GetWebhook(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef) {
+	var request GetWebhookRequestObject
+
+	request.Org = org
+	request.Webhook = webhook
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetWebhook(ctx, request.(GetWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetWebhookResponseObject); ok {
+		if err := validResponse.VisitGetWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchWebhook operation middleware
+func (sh *strictHandler) PatchWebhook(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef) {
+	var request PatchWebhookRequestObject
+
+	request.Org = org
+	request.Webhook = webhook
+
+	var body PatchWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchWebhook(ctx, request.(PatchWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchWebhookResponseObject); ok {
+		if err := validResponse.VisitPatchWebhookResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListOrgWebhookDeliveries operation middleware
+func (sh *strictHandler) ListOrgWebhookDeliveries(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef, params ListOrgWebhookDeliveriesParams) {
+	var request ListOrgWebhookDeliveriesRequestObject
+
+	request.Org = org
+	request.Webhook = webhook
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListOrgWebhookDeliveries(ctx, request.(ListOrgWebhookDeliveriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListOrgWebhookDeliveries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListOrgWebhookDeliveriesResponseObject); ok {
+		if err := validResponse.VisitListOrgWebhookDeliveriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOrgWebhookDelivery operation middleware
+func (sh *strictHandler) GetOrgWebhookDelivery(w http.ResponseWriter, r *http.Request, org OrgRef, webhook WebhookRef, delivery string) {
+	var request GetOrgWebhookDeliveryRequestObject
+
+	request.Org = org
+	request.Webhook = webhook
+	request.Delivery = delivery
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOrgWebhookDelivery(ctx, request.(GetOrgWebhookDeliveryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOrgWebhookDelivery")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOrgWebhookDeliveryResponseObject); ok {
+		if err := validResponse.VisitGetOrgWebhookDeliveryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

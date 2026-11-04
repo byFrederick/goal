@@ -126,6 +126,7 @@ function endpointOf(
     id,
     name,
     kind,
+    sender: kind === 'github' ? 'github' : 'standard',
     address: `/hooks/${id}`,
     secret_name: `${name}-hook-secret`,
     created_at: '2026-10-01T00:00:00Z',

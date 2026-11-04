@@ -58,6 +58,49 @@ func (s *Secrets) Delete(ctx context.Context, name string, by domain.Actor) erro
 	return s.t.delete(ctx, name, by)
 }
 
+// OpenSigning implements ports.OrgSecrets: it reads the sealed values alone, so it appends no
+// audit entry and sets no last use.
+func (s *Secrets) OpenSigning(ctx context.Context, id domain.SecretID) (domain.SigningSecret, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.SigningSecret{}, domain.ErrNoOrg
+	}
+
+	uid, err := parseID("secret", string(id))
+	if err != nil {
+		return domain.SigningSecret{}, err
+	}
+
+	r, err := fetch(ctx, s.t.s.read, func(q *db.Queries) (db.SigningSecretRow, error) { return q.SigningSecret(ctx, uid) })
+
+	switch {
+	case notFound(err):
+		return domain.SigningSecret{}, fmt.Errorf("secret %s: %w", id, ports.ErrNotFound)
+	case err != nil:
+		return domain.SigningSecret{}, fmt.Errorf("secret %s: %w", id, err)
+	case s.t.key.Active() == "":
+		return domain.SigningSecret{}, ports.ErrNoMasterKey
+	}
+
+	plain, err := s.t.key.Open(r.KeyID, r.Nonce, r.Ciphertext, domain.SecretAAD(org, id, r.KeyID))
+	if err != nil {
+		return domain.SigningSecret{}, fmt.Errorf("secret %s: %w", id, err)
+	}
+
+	out := domain.SigningSecret{Current: string(plain)}
+
+	if r.PreviousLive && r.PreviousKeyID != nil {
+		prev, err := s.t.key.Open(*r.PreviousKeyID, r.PreviousNonce, r.PreviousCiphertext, domain.SecretAAD(org, id, *r.PreviousKeyID))
+		if err != nil {
+			return domain.SigningSecret{}, fmt.Errorf("previous value of secret %s: %w", id, err)
+		}
+
+		out.Previous, out.PreviousUntil = string(prev), utc(r.PreviousUntil)
+	}
+
+	return out, nil
+}
+
 // Resolve implements ports.OrgSecrets.
 func (s *Secrets) Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error) {
 	return s.t.resolve(ctx, names, use)
@@ -240,6 +283,11 @@ func (t secretTable) patchIn(ctx context.Context, q *db.Queries, org domain.OrgI
 		if s, err = t.seal(org, out.ID, *p.Replace); err != nil {
 			return domain.Secret{}, err
 		}
+
+		// A secret a webhook is signed by keeps the value it had (ADR 0040 decision 15).
+		if err := q.KeepPreviousSecret(ctx, r.ID); err != nil {
+			return domain.Secret{}, err
+		}
 	}
 
 	at, err := q.UpdateSecret(ctx, db.UpdateSecretParams{
@@ -319,6 +367,15 @@ func (t secretTable) delete(ctx context.Context, name string, by domain.Actor) e
 
 		if notifies {
 			return fmt.Errorf("%s %q is used by the Slack notification setting: %w", t.kind.noun, name, ports.ErrConflict)
+		}
+
+		hooks, err := q.SecretWebhooks(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		if len(hooks) > 0 {
+			return fmt.Errorf("%s %q is used by webhooks %s: %w", t.kind.noun, name, strings.Join(hooks, ", "), ports.ErrConflict)
 		}
 
 		id, err := q.DeleteSecret(ctx, name)
@@ -518,6 +575,25 @@ func resealSecrets(ctx context.Context, q *db.Queries, key ports.MasterKey) (int
 
 	return resealRows(key, "secret", rows, secretAAD, func(id uuid.UUID, s sealedValue) error {
 		return q.ResealSecret(ctx, db.ResealSecretParams{KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
+	})
+}
+
+// resealPreviousSecrets drops the previous values that have lapsed, then reseals a batch of the
+// rest sealed under another key than key's active one, and returns how many it resealed.
+func resealPreviousSecrets(ctx context.Context, q *db.Queries, key ports.MasterKey) (int, error) {
+	if err := q.ClearLapsedPreviousSecrets(ctx); err != nil {
+		return 0, err
+	}
+
+	rows, err := q.StalePreviousSecrets(ctx, db.StalePreviousSecretsParams{Active: key.Active(), Batch: rekeyBatch})
+	if err != nil {
+		return 0, err
+	}
+
+	stale := convertRows(rows, func(r db.StalePreviousSecretsRow) db.StaleSealedSecretsRow { return db.StaleSealedSecretsRow(r) })
+
+	return resealRows(key, "previous value of secret", stale, secretAAD, func(id uuid.UUID, s sealedValue) error {
+		return q.ResealPreviousSecret(ctx, db.ResealPreviousSecretParams{KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
 	})
 }
 
