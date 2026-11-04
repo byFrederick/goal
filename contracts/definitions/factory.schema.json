@@ -433,14 +433,15 @@
             },
             "modelAgrees": {
               "type": "object",
-              "description": "The model check, run last: passes when a model answers yes to the question about the event, which it reads as untrusted data.",
+              "deprecated": true,
+              "description": "Ignored (ADR 0040): the model check is removed. A trigger that has it skips every event that reaches it, and the definition loads with the warning field-ignored: turn the trigger into a check.",
               "required": ["question"],
               "additionalProperties": false,
               "properties": {
-                "question": { "type": "string", "description": "The yes or no question the model answers about the event: not blank, at most 500 characters." },
-                "key": { "$ref": "#/$defs/secretRef", "description": "The {{secret}} that pays for the check; runtime.modelKey when unset." },
+                "question": { "type": "string", "description": "The yes or no question the model answered. Ignored." },
+                "key": { "$ref": "#/$defs/secretRef", "description": "The {{secret}} that paid for the check. Ignored." },
                 "connection": { "type": "string", "description": "Removed by ADR 0037 (moved-to-environment): set key. Accepted so versions published before still load and run until Goal converts them." },
-                "model": { "type": "string", "description": "The model asked; the default model when unset." }
+                "model": { "type": "string", "description": "The model asked. Ignored." }
               }
             }
           }
@@ -455,8 +456,8 @@
             "station": { "type": "string", "description": "The station id the item starts at." },
             "lane": { "type": "string", "description": "The item's lane: a key of that station's route." },
             "expedite": { "type": "boolean", "description": "Put the item in the expedite flow." },
-            "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.<path>}} any field of its body." },
-            "brief": { "type": "string", "description": "The item's brief; {{field}} and {{payload.<path>}} placeholders take the event's values, which reach agents only as untrusted data." },
+            "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.<path>}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters." },
+            "brief": { "type": "string", "description": "The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/<name>.md), as an agent's prompt is; {{field}} and {{payload.<path>}} placeholders take the event's values, which reach agents only as untrusted data." },
             "trusted": { "type": "boolean", "description": "File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set." }
           }
         },
@@ -565,7 +566,8 @@
         },
         "intake": {
           "type": "array",
-          "description": "Deprecated and ignored: nothing reads it, and board.triggers replaces it (ADR 0026). Still accepted so existing definitions load.",
+          "deprecated": true,
+          "description": "Ignored: board.triggers replaces it (ADR 0026, ADR 0040). Still accepted so existing definitions load, with the warning field-ignored.",
           "items": {
             "type": "object",
             "required": ["source"],
