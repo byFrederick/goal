@@ -32,6 +32,11 @@ type TryDefinitions interface {
 		output json.RawMessage) error
 }
 
+// ItemEvents reads an item's events, paged; ports.Store satisfies it.
+type ItemEvents interface {
+	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+}
+
 // WaitingItems reads the items waiting at a station; ports.Store satisfies it.
 type WaitingItems interface {
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)
@@ -44,9 +49,11 @@ type TryDeps struct {
 	Tries       ports.PastTries
 	Definitions TryDefinitions
 	Waiting     WaitingItems
-	Runner      TaskRunner
-	Clock       ports.Clock
-	Log         *slog.Logger
+	// Events reads the items' events a try at a gate station is graded by.
+	Events ItemEvents
+	Runner TaskRunner
+	Clock  ports.Clock
+	Log    *slog.Logger
 }
 
 // TryConfig sets the try loop's times and its cap.
@@ -418,8 +425,7 @@ func tryError(format string, a ...any) domain.PastTryResult {
 // being carried out is verdict error: a proposal, version or original run that is gone, a run
 // with no recorded commit, an agent that can no longer be tried, or a RunTask error (a commit
 // that is gone, a lost box, a prepare or setup that failed). A run that ended is done with its
-// diff, its cost and its run: not fixed when it succeeded but code graded it so (grade), and
-// otherwise with no verdict, for the grader. Only a failed read or a cancelled ctx is an error.
+// diff, its cost and its run, graded as grade says. Only a failed read or a cancelled ctx is an error.
 func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResult, error) {
 	if try.Attempts > MaxTryAttempts {
 		return tryError("the try did not finish in %d attempts", MaxTryAttempts), nil
@@ -477,24 +483,42 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 		return res, nil
 	}
 
-	return s.grade(ctx, p, line, try, run)
+	return s.grade(ctx, p, line, try, in.Run, run)
 }
 
-// grade is the result of try's run that ended, with its diff, cost and run, graded by code (ADR
-// 0039 decision 10) when the run succeeded, as the station checks a line's run: its output against
-// the station's contract as p changes it, then the station's checks, which RunTask ran in the
-// try's box. The first that fails makes it not fixed with what failed as its reason; a try that
-// passes both, or whose run failed, stays without a verdict, for the grader. A contract that
-// cannot be checked makes it an error, and a cancelled ctx an error.
-func (s *Tries) grade(ctx context.Context, p domain.Proposal, line domain.Line, try domain.PastTry, run domain.RunResult,
+// grade is the result of try's run that ended, with its diff, cost and run (ADR 0039 decision 10).
+// Code grades it first when the run succeeded, as the station checks a line's run: its output
+// against the station's contract as p changes it, then the station's checks, which RunTask ran in
+// the try's box. The first that fails makes it not fixed with what failed as its reason. A contract
+// that cannot be checked makes it an error, and a cancelled ctx an error. A try at a gate station,
+// whose proposal changes the gate's own agent, rules or contract, is then graded by people
+// (gradeByPeople); any other try that passes both, or whose run failed, stays without a verdict,
+// for the grader.
+func (s *Tries) grade(ctx context.Context, p domain.Proposal, line domain.Line, try domain.PastTry, orig domain.Run,
+	run domain.RunResult,
 ) (domain.PastTryResult, error) {
 	res := domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}
-	if run.Status != domain.RunSucceeded {
+	st, _ := line.Station(try.Station)
+
+	if run.Status == domain.RunSucceeded {
+		var err error
+		if res, err = s.gradeByCode(ctx, p, st, run, res); err != nil || res.Verdict != "" {
+			return res, err
+		}
+	}
+
+	if st.Gate == nil {
+		// The model grader grades the try here (software#620); until then it waits without a verdict.
 		return res, nil
 	}
 
-	st, _ := line.Station(try.Station)
+	return s.gradeByPeople(ctx, line, try, orig, run, res)
+}
 
+// gradeByCode is res graded by st's contract as p changes it, then by st's checks: not fixed when
+// one fails, an error when the contract cannot be checked, and unchanged when both pass.
+func (s *Tries) gradeByCode(ctx context.Context, p domain.Proposal, st domain.Station, run domain.RunResult, res domain.PastTryResult,
+) (domain.PastTryResult, error) {
 	if st.Output != "" {
 		err := s.d.Definitions.ValidateProposed(ctx, p.VersionID, p.Edits, st.Output, run.Output)
 
@@ -516,6 +540,68 @@ func (s *Tries) grade(ctx context.Context, p domain.Proposal, line domain.Line, 
 	res.Reason = truncate(res.Reason, domain.MaxPastTryReason)
 
 	return res, nil
+}
+
+// gradeByPeople grades res, a try at a gate station, by what people did with its item after orig
+// started (domain.GateTruthOf), never by a model nor by the gate's own reasons (ADR 0039 decision
+// 10): fixed when the try's decision matches, not fixed when it differs or the try gave no gate
+// verdict, and unknown when people's verdicts don't decide it.
+func (s *Tries) gradeByPeople(ctx context.Context, line domain.Line, try domain.PastTry, orig domain.Run, run domain.RunResult,
+	res domain.PastTryResult,
+) (domain.PastTryResult, error) {
+	v, err := domain.ParseVerdict(run.Output)
+
+	switch {
+	case run.Status != domain.RunSucceeded:
+		res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("the try's run %s, so it gave no gate verdict", run.Status)
+	case err != nil:
+		res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("the try's output is not a gate verdict: %v", err)
+	default:
+		events, err := s.itemEvents(ctx, try.ItemID)
+		if err != nil {
+			return domain.PastTryResult{}, err
+		}
+
+		truth := domain.GateTruthOf(events, line, try.Station, orig.StartedAt)
+
+		switch {
+		case truth.Decision == "":
+			res.Verdict, res.Reason = domain.PastTryUnknown,
+				"no person's verdict or merge decides the item yet: it is still open, was cancelled, or only the gate agent sent it back"
+		case truth.Decision == v.Decision:
+			res.Verdict, res.Reason = domain.PastTryFixed, fmt.Sprintf("the try decided %s, as people did: %s", v.Decision, truth.Reason)
+		default:
+			res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("the try decided %s, but people decided %s: %s", v.Decision,
+				truth.Decision, truth.Reason)
+		}
+	}
+
+	res.Reason = truncate(res.Reason, domain.MaxPastTryReason)
+
+	return res, nil
+}
+
+// tryEventPage is how many of an item's events itemEvents reads at a time.
+const tryEventPage = 500
+
+// itemEvents are all of item id's events, in append order.
+func (s *Tries) itemEvents(ctx context.Context, id domain.ItemID) ([]domain.Event, error) {
+	var all []domain.Event
+
+	for after := int64(0); ; {
+		events, err := s.d.Events.ItemEvents(ctx, id, after, tryEventPage)
+		if err != nil {
+			return nil, fmt.Errorf("read the events of item %s: %w", id, err)
+		}
+
+		all = append(all, events...)
+
+		if len(events) < tryEventPage {
+			return all, nil
+		}
+
+		after = events[len(events)-1].ID
+	}
 }
 
 // proposedLine is p's version with its edits applied, or why a try of p cannot run on it: the
