@@ -174,6 +174,87 @@ func (q *Queries) FinishTry(ctx context.Context, arg FinishTryParams) (uuid.UUID
 	return id, err
 }
 
+const graderHitRates = `-- name: GraderHitRates :one
+SELECT count(*) FILTER (WHERE result = 'original' AND answer = 'not_fixed') AS original_hits,
+       count(*) FILTER (WHERE result = 'original') AS original_total,
+       count(*) FILTER (WHERE result = 'final' AND answer = 'fixed') AS final_hits,
+       count(*) FILTER (WHERE result = 'final') AS final_total
+FROM grader_checks WHERE proposal_id = $1
+`
+
+type GraderHitRatesRow struct {
+	OriginalHits  int64
+	OriginalTotal int64
+	FinalHits     int64
+	FinalTotal    int64
+}
+
+// The proposal's original checks read as not_fixed and final checks read as fixed, of each.
+func (q *Queries) GraderHitRates(ctx context.Context, proposalID uuid.UUID) (GraderHitRatesRow, error) {
+	row := q.db.QueryRow(ctx, graderHitRates, proposalID)
+	var i GraderHitRatesRow
+	err := row.Scan(
+		&i.OriginalHits,
+		&i.OriginalTotal,
+		&i.FinalHits,
+		&i.FinalTotal,
+	)
+	return i, err
+}
+
+const insertGraderCheck = `-- name: InsertGraderCheck :one
+INSERT INTO grader_checks (id, factory_id, proposal_id, item_id, result, answer, reason, run_id, cost_usd, checked_at)
+SELECT $1, p.factory_id, p.id, w.id, $2, $3, $4, $5,
+       $6, $7
+FROM jonah_proposals p
+JOIN work_items w ON w.id = $8 AND w.factory_id = p.factory_id
+WHERE p.id = $9
+RETURNING id, org_id, factory_id, proposal_id, item_id, result, answer, reason, run_id, cost_usd, checked_at
+`
+
+type InsertGraderCheckParams struct {
+	ID         uuid.UUID
+	Result     string
+	Answer     string
+	Reason     string
+	RunID      *uuid.UUID
+	CostUsd    float64
+	CheckedAt  time.Time
+	ItemID     uuid.UUID
+	ProposalID uuid.UUID
+}
+
+// A check of the grader (00109, ADR 0039 decision 10) in its proposal's factory, on an item of
+// that factory. No row when the proposal is not the organization's or the item not its factory's.
+func (q *Queries) InsertGraderCheck(ctx context.Context, arg InsertGraderCheckParams) (GraderCheck, error) {
+	row := q.db.QueryRow(ctx, insertGraderCheck,
+		arg.ID,
+		arg.Result,
+		arg.Answer,
+		arg.Reason,
+		arg.RunID,
+		arg.CostUsd,
+		arg.CheckedAt,
+		arg.ItemID,
+		arg.ProposalID,
+	)
+	var i GraderCheck
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ProposalID,
+		&i.ItemID,
+		&i.Result,
+		&i.Answer,
+		&i.Reason,
+		&i.RunID,
+		&i.CostUsd,
+		&i.CheckedAt,
+	)
+	return i, err
+}
+
 const insertTry = `-- name: InsertTry :one
 INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
@@ -293,6 +374,42 @@ func (q *Queries) OutputsBefore(ctx context.Context, arg OutputsBeforeParams) ([
 	for rows.Next() {
 		var i OutputsBeforeRow
 		if err := rows.Scan(&i.Station, &i.Output); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const proposalGraderChecks = `-- name: ProposalGraderChecks :many
+SELECT id, org_id, factory_id, proposal_id, item_id, result, answer, reason, run_id, cost_usd, checked_at FROM grader_checks WHERE proposal_id = $1 ORDER BY checked_at, id
+`
+
+func (q *Queries) ProposalGraderChecks(ctx context.Context, proposalID uuid.UUID) ([]GraderCheck, error) {
+	rows, err := q.db.Query(ctx, proposalGraderChecks, proposalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GraderCheck
+	for rows.Next() {
+		var i GraderCheck
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.FactoryID,
+			&i.ProposalID,
+			&i.ItemID,
+			&i.Result,
+			&i.Answer,
+			&i.Reason,
+			&i.RunID,
+			&i.CostUsd,
+			&i.CheckedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

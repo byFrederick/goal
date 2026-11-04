@@ -92,3 +92,89 @@ func TestAgentItem_LineResult(t *testing.T) {
 		}
 	}
 }
+
+func TestNewGraderCheck_Check(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
+	ok := NewGraderCheck{ProposalID: "p", ItemID: "i", Result: GraderCheckOriginal, Answer: PastTryNotFixed, Reason: "the test still fails", CheckedAt: at}
+
+	tests := []struct {
+		name   string
+		change func(*NewGraderCheck)
+		ok     bool
+	}{
+		{name: "the original read as not fixed", change: func(*NewGraderCheck) {}, ok: true},
+		{name: "the final read as fixed, with its run and cost", change: func(n *NewGraderCheck) {
+			n.Result, n.Answer, n.RunID, n.CostUSD = GraderCheckFinal, PastTryFixed, "r", 0.02
+		}, ok: true},
+		{name: "an unknown answer", change: func(n *NewGraderCheck) { n.Answer = PastTryUnknown }, ok: true},
+		{name: "no proposal", change: func(n *NewGraderCheck) { n.ProposalID = "" }},
+		{name: "no item", change: func(n *NewGraderCheck) { n.ItemID = "" }},
+		{name: "a result that is neither", change: func(n *NewGraderCheck) { n.Result = "latest" }},
+		{name: "no result", change: func(n *NewGraderCheck) { n.Result = "" }},
+		{name: "an error answer", change: func(n *NewGraderCheck) { n.Answer = PastTryError }},
+		{name: "no answer", change: func(n *NewGraderCheck) { n.Answer = "" }},
+		{name: "a blank reason", change: func(n *NewGraderCheck) { n.Reason = " \n" }},
+		{name: "a reason past its bound", change: func(n *NewGraderCheck) { n.Reason = strings.Repeat("é", MaxGraderCheckReason+1) }},
+		{name: "a negative cost", change: func(n *NewGraderCheck) { n.CostUSD = -0.01 }},
+		{name: "no time", change: func(n *NewGraderCheck) { n.CheckedAt = time.Time{} }},
+	}
+
+	for _, tt := range tests {
+		n := ok
+		tt.change(&n)
+
+		err := n.Check()
+		if tt.ok != (err == nil) {
+			t.Errorf("%s: Check = %v; want ok %v", tt.name, err, tt.ok)
+		}
+
+		if err != nil && !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: Check = %v; want ErrInvalid", tt.name, err)
+		}
+	}
+}
+
+func TestGraderCheck_Hit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		result GraderCheckResult
+		answer PastTryVerdict
+		hit    bool
+	}{
+		{GraderCheckOriginal, PastTryNotFixed, true},
+		{GraderCheckOriginal, PastTryFixed, false},
+		{GraderCheckOriginal, PastTryUnknown, false},
+		{GraderCheckFinal, PastTryFixed, true},
+		{GraderCheckFinal, PastTryNotFixed, false},
+		{GraderCheckFinal, PastTryUnknown, false},
+	}
+
+	for _, tt := range tests {
+		if got := (GraderCheck{Result: tt.result, Answer: tt.answer}).Hit(); got != tt.hit {
+			t.Errorf("Hit of the %s result read as %s = %v; want %v", tt.result, tt.answer, got, tt.hit)
+		}
+	}
+}
+
+func TestHitRatesOf_CountsEachResult(t *testing.T) {
+	t.Parallel()
+
+	got := HitRatesOf([]GraderCheck{
+		{Result: GraderCheckOriginal, Answer: PastTryNotFixed},
+		{Result: GraderCheckFinal, Answer: PastTryFixed},
+		{Result: GraderCheckOriginal, Answer: PastTryNotFixed},
+		{Result: GraderCheckFinal, Answer: PastTryUnknown},
+	})
+
+	want := GraderHitRates{OriginalHits: 2, OriginalTotal: 2, FinalHits: 1, FinalTotal: 2}
+	if got != want {
+		t.Errorf("HitRatesOf = %+v; want %+v", got, want)
+	}
+
+	if got := HitRatesOf(nil); got != (GraderHitRates{}) {
+		t.Errorf("HitRatesOf of no checks = %+v; want zero", got)
+	}
+}
