@@ -80,6 +80,24 @@ for (const colorScheme of ['light', 'dark'] as const) {
   }
 }
 
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the Ask input and the status links are 44 px targets at 390 px, ${colorScheme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openBasics(page);
+    for (const target of [
+      page.getByRole('textbox', { name: 'Ask the factory to change its definition' }),
+      page.getByRole('link', { name: '3 changes in 2 sections' }),
+      page.getByRole('link', { name: /^1 problem$/ }),
+    ]) {
+      await expect(target).toBeVisible();
+      expect((await target.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    }
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+  });
+}
+
 test('Definition opens the Line from the sidebar or the drawer', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
   if (isPhone(page)) {

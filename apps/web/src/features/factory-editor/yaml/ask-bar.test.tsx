@@ -75,6 +75,12 @@ describe('the ask bar layout', () => {
     expect(send.className).toContain('max-md:size-11');
   });
 
+  it('makes the input itself 44 px tall below md', async () => {
+    const input = await renderBar();
+    expect(input.className).toContain('max-md:min-h-11');
+    expect(input.className).toContain('text-body');
+  });
+
   it('keeps its hint, hidden below md so the bar stays one row on a phone', async () => {
     const input = await renderBar();
     const hint = screen.getByText('Becomes an item, reviewed like any change');
