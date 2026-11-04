@@ -32,6 +32,12 @@ import (
 // that fails coming back as the result's FailedCheck. A diff that cannot be read or a check that
 // cannot be run is an error, as the try's infrastructure failed.
 //
+// A grade (a run of kind try on a domain.TaskKindGrade bundle, ADR 0039 decision 10) is recorded
+// as a try is, so its cost is Jonah's too. Its token names the try and the result it grades, which
+// the gateway serves it; its agent gets the model's access alone, as a Jonah run's does. It reads
+// no diff and runs no check: the result carries the worker's answer (domain.ParseGradeAnswer
+// reads it) and its cost.
+//
 // A Jonah run (ADR 0034 decision 1) holds no lease and works no item, so no item event is written
 // for it: its sandbox's prepare gets no repository's git login, as it clones none, and its agent
 // only the model connection's env. Without pins of its own, it pins the newest snapshot of each of
@@ -189,7 +195,7 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 
 	res, lost := e.agent(ctx, t, runID, agentEnv, scrub)
 
-	if lost == nil && t.Kind == domain.RunKindTry {
+	if lost == nil && t.Kind == domain.RunKindTry && t.Bundle == domain.TaskKindTry {
 		lost = e.tryEnded(ctx, t, runID, &res, scrub)
 	}
 
@@ -412,7 +418,7 @@ func (e *Engine) gatewayToken(ctx context.Context, req domain.RunRequest, runID 
 		Kind: req.Bundle, OrgID: req.OrgID, FactoryID: req.FactoryID, VersionID: req.Version, ItemID: req.Item, Station: req.Station,
 		Agent: req.Agent, RunID: runID, Connections: req.Connections, Model: req.Model, DeniedCommands: req.DeniedCommands,
 		Knowledge: req.Knowledge, Branch: req.Branch, Base: req.Base, WindowStart: unixSeconds(req.WindowStart, false), WindowEnd: unixSeconds(req.WindowEnd, true),
-		Manual: req.Manual, NoEnvironment: req.NoEnvironment, TryOf: req.TryOf, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
+		Manual: req.Manual, NoEnvironment: req.NoEnvironment, TryOf: req.TryOf, GradeOf: req.GradeOf, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("gateway token: %w", err)

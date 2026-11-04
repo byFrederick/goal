@@ -40,8 +40,8 @@ type runEnv struct {
 // runEnv resolves the run's connections, each use audited as connection.used: the request's model
 // and repository connections and its own. It opens the credentials they refer to and the ones
 // listed for the run's agent (ADR 0017 decisions 5 to 7), each use audited as credential.used by
-// the port. A Jonah run (ADR 0017 decision 1) gets only the model connection's env, so after
-// resolving it keeps only the credentials the model connection refers to. The line runs
+// the port. A Jonah run (ADR 0017 decision 1) and a grade get only the model connection's env,
+// so after resolving it keeps only the credentials the model connection refers to. The line runs
 // (domain.Line.Refusal), so it has a model connection. A request with a model key is of a version
 // on secrets, which opens no connection or credential (secretEnv); of its runs only a station's
 // opens the repository token, since a Jonah review clones nothing.
@@ -75,7 +75,7 @@ func (e *Engine) connectionEnv(ctx context.Context, req domain.RunRequest, own [
 		return runEnv{}, err
 	}
 
-	if req.Kind == domain.RunKindJonah {
+	if req.Kind == domain.RunKindJonah || req.Bundle == domain.TaskKindGrade {
 		modelRefs := conns[req.ModelConnection].refs
 
 		opened = slices.DeleteFunc(opened, func(rc domain.ResolvedCredential) bool {
