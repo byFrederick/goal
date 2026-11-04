@@ -675,27 +675,13 @@ func TestVersions_BackfillsMissingCounts(t *testing.T) {
 		}
 	}
 
-	stored := func() []*domain.VersionCounts {
-		vs, err := h.store.Versions(h.ctx, f, 0, 10)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		out := make([]*domain.VersionCounts, 0, len(vs))
-		for _, v := range vs {
-			out = append(out, v.Counts)
-		}
-
-		return out
-	}
-
 	blobs.fail.Store(true)
 
 	if _, err := h.svc.Versions(h.ctx, f, 0, 10); !errors.Is(err, errBucketDown) {
 		t.Errorf("list while the bucket is down = %v, want %v", err, errBucketDown)
 	}
 
-	for i, c := range stored() {
+	for i, c := range h.storedCounts(t, f) {
 		if c != nil {
 			t.Errorf("version %d got counts %+v from a failed tree read, want none", 3-i, *c)
 		}
@@ -708,17 +694,7 @@ func TestVersions_BackfillsMissingCounts(t *testing.T) {
 	for _, round := range []string{"first list", "second list"} {
 		blobs.reads.Store(0)
 
-		page, err := h.svc.Versions(h.ctx, f, 0, 10)
-		if err != nil {
-			t.Fatalf("%s: %v", round, err)
-		}
-
-		got := make([]authoring.Counts, 0, len(page.Versions))
-		for _, v := range page.Versions {
-			got = append(got, v.Counts)
-		}
-
-		if !slices.Equal(got, want) {
+		if got := h.listedCounts(t, f); !slices.Equal(got, want) {
 			t.Errorf("%s counts = %+v, want %+v", round, got, want)
 		}
 
@@ -729,9 +705,43 @@ func TestVersions_BackfillsMissingCounts(t *testing.T) {
 
 	wantStored := []domain.VersionCounts{{}, {Stations: 4, Agents: 1}, {Stations: 4, Agents: 1}}
 
-	for i, c := range stored() {
+	for i, c := range h.storedCounts(t, f) {
 		if c == nil || *c != wantStored[i] {
 			t.Errorf("version %d stored counts %v, want %+v", 3-i, c, wantStored[i])
 		}
 	}
+}
+
+// listedCounts lists a factory's versions and returns their counts, newest first.
+func (h *harness) listedCounts(t *testing.T, f domain.FactoryID) []authoring.Counts {
+	t.Helper()
+
+	page, err := h.svc.Versions(h.ctx, f, 0, authoring.MaxVersionPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make([]authoring.Counts, 0, len(page.Versions))
+	for _, v := range page.Versions {
+		out = append(out, v.Counts)
+	}
+
+	return out
+}
+
+// storedCounts returns the counts the store keeps for a factory's versions, newest first.
+func (h *harness) storedCounts(t *testing.T, f domain.FactoryID) []*domain.VersionCounts {
+	t.Helper()
+
+	vs, err := h.store.Versions(h.ctx, f, 0, authoring.MaxVersionPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make([]*domain.VersionCounts, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, v.Counts)
+	}
+
+	return out
 }
