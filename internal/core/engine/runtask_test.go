@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -60,6 +61,10 @@ func TestRunTask_Jonah(t *testing.T) {
 		t.Fatalf("%d prepares and %d agent runs; want one of each", len(prepares), len(runs))
 	}
 
+	if res.RunID == "" || res.RunID != prepares[0].Sandbox.RunID {
+		t.Errorf("RunTask's run = %q, want the recorded run %q", res.RunID, prepares[0].Sandbox.RunID)
+	}
+
 	expectNoClone(t, prepares[0])
 	expectOnlyModelEnv(t, runs[0].Env)
 	h.expectJonahRun(t, prepares[0].Sandbox.RunID)
@@ -71,6 +76,52 @@ func TestRunTask_Jonah(t *testing.T) {
 	}
 
 	h.expectSandboxes(t, 0)
+}
+
+// A Jonah run pins the newest snapshot of each of the line's knowledge sources that applies to
+// every run, and none scoped to an agent, a station, a lane or a work type (ADR 0039 decision 4).
+func TestRunTask_JonahPinsTheFactoryWideKnowledge(t *testing.T) {
+	t.Parallel()
+
+	line := connLine()
+	line.Knowledge = []domain.KnowledgeEntry{
+		{Name: "runbooks", AppliesTo: domain.RuleScope{Agents: []string{agWorker}}},
+		{Name: kbHandbook},
+	}
+
+	h := newHarness(t, line, func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`)}
+	})
+	h.store.AddFactory(testOrg, factoryID)
+
+	kb := h.knowledgeBase(t)
+	kb.putSnapshot(t, kbHandbook, "h1")
+	kb.putSnapshot(t, "runbooks", "r1")
+	h.e = h.engine(t, h.store)
+
+	if _, err := h.e.RunTask(t.Context(), jonahRequest()); err != nil {
+		t.Fatalf("RunTask: %v", err)
+	}
+
+	want := []domain.KnowledgePin{{Source: kbHandbook, Snapshot: "h1"}}
+	if got := h.pinsOf(t, 0); !reflect.DeepEqual(got, want) {
+		t.Errorf("jonah run's pins = %+v, want %+v", got, want)
+	}
+}
+
+// A run that fails still names its record.
+func TestRunTask_FailedRunNamesItsRecord(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, connLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
+		return domain.RunResult{Status: domain.RunFailed, Error: "out of turns"}
+	})
+	h.store.AddFactory(testOrg, factoryID)
+
+	res, err := h.e.RunTask(t.Context(), jonahRequest())
+	if err != nil || res.Status != domain.RunFailed || res.RunID == "" {
+		t.Errorf("RunTask = %+v, %v; want a failed result naming its run", res, err)
+	}
 }
 
 // expectJonahToken checks a Jonah run's token: of kind jonah, manual, with no item, station or

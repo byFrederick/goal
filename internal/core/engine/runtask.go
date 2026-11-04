@@ -25,7 +25,9 @@ import (
 //
 // A Jonah run (ADR 0034 decision 1) holds no lease and works no item, so no item event is written
 // for it: its sandbox's prepare gets no repository's git login, as it clones none, and its agent
-// only the model connection's env. The line's claims run through the same lifecycle (runOnce),
+// only the model connection's env. Without pins of its own, it pins the newest snapshot of each of
+// its line's knowledge sources scoped to no agent, station, lane or work type. The result names
+// the run's record (RunResult.RunID) once one was started, with an error too. The line's claims run through the same lifecycle (runOnce),
 // with a sandbox their attempts share and their output's checks under the same heartbeat.
 func (e *Engine) RunTask(ctx context.Context, req domain.RunRequest) (domain.RunResult, error) {
 	if err := req.Check(); err != nil {
@@ -34,6 +36,22 @@ func (e *Engine) RunTask(ctx context.Context, req domain.RunRequest) (domain.Run
 
 	req.Timeout = cmp.Or(req.Timeout, e.cfg.TaskTimeout)
 	ctx = domain.WithOrg(ctx, req.OrgID)
+
+	// A Jonah review reads the line's knowledge that applies to every run (ADR 0039 decision 4).
+	if req.Kind == domain.RunKindJonah && req.Knowledge == nil {
+		e.mu.RLock()
+		l, ok := e.lines[req.FactoryID]
+		e.mu.RUnlock()
+
+		if ok && l.OrgID == req.OrgID {
+			pins, err := e.pinSources(ctx, l, domain.RuleTarget{})
+			if err != nil {
+				return domain.RunResult{}, err
+			}
+
+			req.Knowledge = pins
+		}
+	}
 
 	var b box
 	defer e.deleteBox(ctx, e.log.With(slog.String("factory", string(req.FactoryID)), slog.String("kind", string(req.Kind))), &b)
@@ -83,7 +101,10 @@ func (e *Engine) runTask(ctx context.Context, t runTask) (domain.RunResult, erro
 	defer stop()
 
 	if t.Lease == nil {
-		return e.runInBox(taskCtx, t, runID)
+		res, err := e.runInBox(taskCtx, t, runID)
+		res.RunID = runID
+
+		return res, err
 	}
 
 	// Heartbeat from before the start: pulling the image, preparing the sandbox and the checks
@@ -98,6 +119,7 @@ func (e *Engine) runTask(ctx context.Context, t runTask) (domain.RunResult, erro
 	beats.Go(func() { lost = e.heartbeat(beatCtx, *t.Lease, stop) })
 
 	res, err := e.runInBox(taskCtx, t, runID)
+	res.RunID = runID
 
 	stopBeat()
 	beats.Wait()
