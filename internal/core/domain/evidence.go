@@ -203,6 +203,7 @@ func BuildEvidence(in EvidenceInput) map[string][]byte {
 	}
 
 	numbers := map[DefinitionVersionID]int{}
+
 	for _, v := range in.Versions {
 		if v.Number > 0 {
 			numbers[v.ID] = v.Number
@@ -305,50 +306,66 @@ func (x *evItem) readRun(r Run, medians map[string]StationMedian) {
 // readEvent records what e adds to the item's evidence; held says, by station, whether the
 // item's last waiting_human there was a hold.
 func (x *evItem) readEvent(e Event, line []string, held map[string]bool) {
-	person := byPerson(e)
+	if read, ok := eventReaders[e.Kind]; ok {
+		read(x, e, line, held)
+	}
 
-	switch e.Kind {
-	case EventGateRejected:
+	if byPerson(e) && (slices.Contains(helpTouches, e.Kind) || (e.Kind == EventApproved && held[e.Station])) {
+		x.touches = append(x.touches, e)
+	}
+}
+
+// eventReaders read what an event of their kind adds to an item's evidence (readEvent).
+var eventReaders = map[EventKind]func(x *evItem, e Event, line []string, held map[string]bool){
+	EventGateRejected: func(x *evItem, e Event, _ []string, _ map[string]bool) {
 		sender := senderAgent
-		if person {
+		if byPerson(e) {
 			sender = senderPerson
 		}
 
 		x.sendBack(e, sender, e.Station, cmp.Or(dataText(e, evKeyCategory), string(e.Kind)), dataText(e, evKeyReason))
-	case EventRejected:
-		if person {
+	},
+	EventRejected: func(x *evItem, e Event, _ []string, _ map[string]bool) {
+		if byPerson(e) {
 			x.sendBack(e, senderPerson, e.Station, string(e.Kind), dataText(e, evKeyReason))
 		}
-	case EventCheckFailed:
+	},
+	EventCheckFailed: func(x *evItem, e Event, _ []string, _ map[string]bool) {
 		x.sendBack(e, senderCheck, e.Station, string(e.Kind), checkReason(e))
-	case EventContractFailed:
+	},
+	EventContractFailed: func(x *evItem, e Event, _ []string, _ map[string]bool) {
 		x.sendBack(e, senderCheck, e.Station, string(e.Kind), dataText(e, "error"))
-	case EventMoved:
+	},
+	EventMoved: func(x *evItem, e Event, line []string, _ map[string]bool) {
 		from, to := cmp.Or(dataText(e, evKeyFrom), e.Station), dataText(e, evKeyTo)
-		if person && linePlace(line, to) < linePlace(line, from) {
+		if byPerson(e) && linePlace(line, to) < linePlace(line, from) {
 			x.sendBack(e, senderPerson, from, string(e.Kind), dataText(e, evKeyReason))
 		}
-	case EventWaitingHuman:
+	},
+	EventWaitingHuman: func(_ *evItem, e Event, _ []string, held map[string]bool) {
 		held[e.Station] = dataText(e, evKeyReason) != ""
-	case EventBlocked:
-		x.failures = append(x.failures, evFailure{Cause: causeBlocked, Station: e.Station, Run: e.RunID, Reason: dataText(e, evKeyReason), At: e.At})
-	case EventRunRetried:
-		x.failures = append(x.failures, evFailure{Cause: causeRunRetried, Station: e.Station, Run: e.RunID, Reason: dataText(e, evKeyReason), At: e.At})
-	case EventKnowledgePinned:
+	},
+	EventBlocked:    func(x *evItem, e Event, _ []string, _ map[string]bool) { x.fail(e, causeBlocked) },
+	EventRunRetried: func(x *evItem, e Event, _ []string, _ map[string]bool) { x.fail(e, causeRunRetried) },
+	EventKnowledgePinned: func(x *evItem, e Event, _ []string, _ map[string]bool) {
 		x.knowledge[e.RunID] = append(x.knowledge[e.RunID], pinnedSnapshots(e)...)
-	case EventQuestionAsked:
-		x.questions = append(x.questions, evQuestion{Station: e.Station, Asker: cmp.Or(dataText(e, "agent"), e.Actor), Question: dataText(e, "question"), At: e.At})
-	case EventQuestionAnswered:
-		x.answer(e)
-	case EventNote:
-		if person {
+	},
+	EventQuestionAsked: func(x *evItem, e Event, _ []string, _ map[string]bool) {
+		x.questions = append(x.questions, evQuestion{
+			Station: e.Station, Asker: cmp.Or(dataText(e, "agent"), e.Actor), Question: dataText(e, "question"), At: e.At,
+		})
+	},
+	EventQuestionAnswered: func(x *evItem, e Event, _ []string, _ map[string]bool) { x.answer(e) },
+	EventNote: func(x *evItem, e Event, _ []string, _ map[string]bool) {
+		if byPerson(e) {
 			x.notes = append(x.notes, evNote{Station: e.Station, By: e.Actor, Text: dataText(e, "text"), At: e.At})
 		}
-	}
+	},
+}
 
-	if person && (slices.Contains(helpTouches, e.Kind) || (e.Kind == EventApproved && held[e.Station])) {
-		x.touches = append(x.touches, e)
-	}
+// fail records e, a blocked or run_retried event, as a failed run of cause.
+func (x *evItem) fail(e Event, cause string) {
+	x.failures = append(x.failures, evFailure{Cause: cause, Station: e.Station, Run: e.RunID, Reason: dataText(e, evKeyReason), At: e.At})
 }
 
 func (x *evItem) sendBack(e Event, sender, station, category, reason string) {
@@ -393,8 +410,8 @@ func (x *evItem) readDisagreements(line []string) {
 	}
 }
 
-// crossed counts and clears each gate send-back in rejected that a person's move from from to to
-// went to or past.
+// crossed counts and clears each gate send-back in rejected that a person's move went to or past:
+// the move leaves the gate's station or one before it for the gate's station or one after it.
 func (x *evItem) crossed(rejected map[string]bool, line []string, from, to string) {
 	f, t := linePlace(line, from), linePlace(line, to)
 
@@ -406,8 +423,8 @@ func (x *evItem) crossed(rejected map[string]bool, line []string, from, to strin
 	}
 }
 
-// sentBackPast counts and clears each gate pass in passed that a person's send-back from from to
-// to undid: from a later station to the gate or before it. An unknown to counts.
+// sentBackPast counts and clears each gate pass in passed that a person's send-back undid: one
+// that leaves a station after the gate's for the gate's or one before it. An unknown target counts.
 func (x *evItem) sentBackPast(passed map[string]bool, line []string, from, to string) {
 	f := linePlace(line, from)
 

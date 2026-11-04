@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -11,9 +12,17 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
+// The evidence tests' stations and data keys.
+const (
+	evBuild  = "build"
+	evReason = "reason"
+	evText   = "text"
+	evFrom   = "from"
+)
+
 // The evidence tests' line, in order, and its window.
 var (
-	evLine  = []string{"intake", "build", "review", "approve", "done"}
+	evLine  = []string{"intake", evBuild, "review", "approve", "done"}
 	evSince = time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
 	evUntil = evSince.Add(24 * time.Hour)
 )
@@ -29,7 +38,7 @@ func evItem(n int64, runs []domain.Run, events ...domain.Event) domain.EvidenceI
 	}
 
 	for i := range events {
-		events[i].ID, events[i].ItemID = int64(n*1000)+int64(i), it.ID
+		events[i].ID, events[i].ItemID = n*1000+int64(i), it.ID
 	}
 
 	return domain.EvidenceItem{Item: it, FinishedAt: evAt(600), Runs: runs, Events: events}
@@ -38,9 +47,7 @@ func evItem(n int64, runs []domain.Run, events ...domain.Event) domain.EvidenceI
 // person is an event a person made at station: data.actor user:ada.
 func person(kind domain.EventKind, station string, at time.Time, data map[string]any) domain.Event {
 	d := map[string]any{"actor": "user:ada"}
-	for k, v := range data {
-		d[k] = v
-	}
+	maps.Copy(d, data)
 
 	return domain.Event{Kind: kind, Station: station, At: at, Actor: "Ada", Data: d}
 }
@@ -105,21 +112,21 @@ func TestEvidence_ItemFiles(t *testing.T) {
 	t.Parallel()
 
 	runs := []domain.Run{
-		evRun("r1", "build", "engineer", "ver-3", 12, 0.4),
+		evRun("r1", evBuild, "engineer", "ver-3", 12, 0.4),
 		evRun("r2", "review", "reviewer", "ver-3", 3, 0.1),
-		evRun("r3", "build", "engineer", "ver-unknown", 5, 0.2),
+		evRun("r3", evBuild, "engineer", "ver-unknown", 5, 0.2),
 	}
 	runs[2].Result.Status = domain.RunFailed
 
 	it := evItem(7, runs,
-		agent(domain.EventKnowledgePinned, "build", "engineer", evAt(1), map[string]any{
+		agent(domain.EventKnowledgePinned, evBuild, "engineer", evAt(1), map[string]any{
 			"snapshots": []any{map[string]any{"source": "handbook", "snapshot": "snap-1"}},
 		}),
-		agent(domain.EventToolCall, "build", "engineer", evAt(2), map[string]any{"tool": "Bash", "input": "TOOL-INPUT"}),
-		agent(domain.EventGateRejected, "review", "reviewer", evAt(3), map[string]any{"reason": "No tests for the handler.\nAdd one.", "category": "missing-tests"}),
-		agent(domain.EventQuestionAsked, "build", "engineer", evAt(4), map[string]any{"question": "Which port?", "agent": "engineer"}),
-		person(domain.EventQuestionAnswered, "build", evAt(5), map[string]any{"answer": "Use 8080."}),
-		person(domain.EventNote, "build", evAt(6), map[string]any{"text": "Mind the timeout."}),
+		agent(domain.EventToolCall, evBuild, "engineer", evAt(2), map[string]any{"tool": "Bash", "input": "TOOL-INPUT"}),
+		agent(domain.EventGateRejected, "review", "reviewer", evAt(3), map[string]any{evReason: "No tests for the handler.\nAdd one.", "category": "missing-tests"}),
+		agent(domain.EventQuestionAsked, evBuild, "engineer", evAt(4), map[string]any{"question": "Which port?", "agent": "engineer"}),
+		person(domain.EventQuestionAnswered, evBuild, evAt(5), map[string]any{"answer": "Use 8080."}),
+		person(domain.EventNote, evBuild, evAt(6), map[string]any{evText: "Mind the timeout."}),
 	)
 	it.Events[0].RunID = "r1"
 
@@ -153,7 +160,7 @@ func TestEvidence_ItemFiles(t *testing.T) {
 func TestEvidence_OnlyItemsThatNeededHelp(t *testing.T) {
 	t.Parallel()
 
-	run := func(id string) []domain.Run { return []domain.Run{evRun(id, "build", "engineer", "", 10, 1)} }
+	run := func(id string) []domain.Run { return []domain.Run{evRun(id, evBuild, "engineer", "", 10, 1)} }
 	failed := func(id, why string) []domain.Run {
 		r := run(id)
 		r[0].Result.Status, r[0].Result.Error = domain.RunFailed, why
@@ -167,26 +174,26 @@ func TestEvidence_OnlyItemsThatNeededHelp(t *testing.T) {
 		events []domain.Event
 		want   bool
 	}{
-		{"an agent gate's rejection", nil, []domain.Event{agent(domain.EventGateRejected, "review", "reviewer", evAt(1), map[string]any{"reason": "x"})}, true},
-		{"a person gate's rejection", nil, []domain.Event{person(domain.EventGateRejected, "review", evAt(1), map[string]any{"reason": "x"})}, true},
-		{"a person's reject", nil, []domain.Event{person(domain.EventRejected, "approve", evAt(1), map[string]any{"reason": "x"})}, true},
-		{"a failed check", nil, []domain.Event{agent(domain.EventCheckFailed, "build", domain.ActorEngine, evAt(1), map[string]any{"command": "go test", "exit_code": 1})}, true},
-		{"a failed contract", nil, []domain.Event{agent(domain.EventContractFailed, "build", domain.ActorEngine, evAt(1), map[string]any{"error": "bad"})}, true},
-		{"a person's move upstream", nil, []domain.Event{person(domain.EventMoved, "approve", evAt(1), map[string]any{"from": "approve", "to": "build", "reason": "x"})}, true},
-		{"a person's move downstream", nil, []domain.Event{person(domain.EventMoved, "build", evAt(1), map[string]any{"from": "build", "to": "review"})}, true},
-		{"a note", nil, []domain.Event{person(domain.EventNote, "build", evAt(1), map[string]any{"text": "x"})}, true},
-		{"an answer", nil, []domain.Event{person(domain.EventQuestionAnswered, "build", evAt(1), map[string]any{"answer": "x"})}, true},
-		{"a retry", nil, []domain.Event{person(domain.EventRetried, "build", evAt(1), nil)}, true},
-		{"a dependency added", nil, []domain.Event{person(domain.EventEdgeAdded, "build", evAt(1), map[string]any{"needs": "item-9"})}, true},
-		{"a dependency removed", nil, []domain.Event{person(domain.EventEdgeRemoved, "build", evAt(1), map[string]any{"needs": "item-9"})}, true},
+		{"an agent gate's rejection", nil, []domain.Event{agent(domain.EventGateRejected, "review", "reviewer", evAt(1), map[string]any{evReason: "x"})}, true},
+		{"a person gate's rejection", nil, []domain.Event{person(domain.EventGateRejected, "review", evAt(1), map[string]any{evReason: "x"})}, true},
+		{"a person's reject", nil, []domain.Event{person(domain.EventRejected, "approve", evAt(1), map[string]any{evReason: "x"})}, true},
+		{"a failed check", nil, []domain.Event{agent(domain.EventCheckFailed, evBuild, domain.ActorEngine, evAt(1), map[string]any{"command": "go test", "exit_code": 1})}, true},
+		{"a failed contract", nil, []domain.Event{agent(domain.EventContractFailed, evBuild, domain.ActorEngine, evAt(1), map[string]any{"error": "bad"})}, true},
+		{"a person's move upstream", nil, []domain.Event{person(domain.EventMoved, "approve", evAt(1), map[string]any{evFrom: "approve", "to": evBuild, evReason: "x"})}, true},
+		{"a person's move downstream", nil, []domain.Event{person(domain.EventMoved, evBuild, evAt(1), map[string]any{evFrom: evBuild, "to": "review"})}, true},
+		{"a note", nil, []domain.Event{person(domain.EventNote, evBuild, evAt(1), map[string]any{evText: "x"})}, true},
+		{"an answer", nil, []domain.Event{person(domain.EventQuestionAnswered, evBuild, evAt(1), map[string]any{"answer": "x"})}, true},
+		{"a retry", nil, []domain.Event{person(domain.EventRetried, evBuild, evAt(1), nil)}, true},
+		{"a dependency added", nil, []domain.Event{person(domain.EventEdgeAdded, evBuild, evAt(1), map[string]any{"needs": "item-9"})}, true},
+		{"a dependency removed", nil, []domain.Event{person(domain.EventEdgeRemoved, evBuild, evAt(1), map[string]any{"needs": "item-9"})}, true},
 		{"an approval after a hold", nil, []domain.Event{
-			agent(domain.EventWaitingHuman, "review", domain.ActorEngine, evAt(1), map[string]any{"reason": "rejected after 3 reworks (max 3)"}),
+			agent(domain.EventWaitingHuman, "review", domain.ActorEngine, evAt(1), map[string]any{evReason: "rejected after 3 reworks (max 3)"}),
 			person(domain.EventApproved, "review", evAt(2), map[string]any{"planned": false}),
 		}, true},
-		{"a blocked item", nil, []domain.Event{agent(domain.EventBlocked, "build", domain.ActorEngine, evAt(1), map[string]any{"reason": "sandbox failed"})}, true},
+		{"a blocked item", nil, []domain.Event{agent(domain.EventBlocked, evBuild, domain.ActorEngine, evAt(1), map[string]any{evReason: "sandbox failed"})}, true},
 		{"a run out of turns", failed("r-turns", "error_max_turns: reached 40 turns"), nil, true},
 		{"a run out of its budget", failed("r-budget", "error_max_budget_usd"), nil, true},
-		{"a run retried after a lost sandbox", nil, []domain.Event{agent(domain.EventRunRetried, "build", domain.ActorEngine, evAt(1), map[string]any{"reason": "sandbox lost"})}, true},
+		{"a run retried after a lost sandbox", nil, []domain.Event{agent(domain.EventRunRetried, evBuild, domain.ActorEngine, evAt(1), map[string]any{evReason: "sandbox lost"})}, true},
 		{"a clean pass", run("r-clean"), []domain.Event{
 			agent(domain.EventGateApproved, "review", "reviewer", evAt(1), nil),
 			agent(domain.EventWaitingHuman, "approve", domain.ActorEngine, evAt(2), nil),
@@ -203,7 +210,7 @@ func TestEvidence_OnlyItemsThatNeededHelp(t *testing.T) {
 			n := int64(i + 1)
 			files := build(t, domain.EvidenceInput{
 				Items:   []domain.EvidenceItem{evItem(n, c.runs, c.events...)},
-				Medians: []domain.StationMedian{{Station: "build", CostUSD: 1, Turns: 10, Runs: 20}},
+				Medians: []domain.StationMedian{{Station: evBuild, CostUSD: 1, Turns: 10, Runs: 20}},
 			})
 
 			if _, got := files[fmt.Sprintf("items/%d.md", n)]; got != c.want {
@@ -212,7 +219,7 @@ func TestEvidence_OnlyItemsThatNeededHelp(t *testing.T) {
 		})
 	}
 
-	late := evItem(99, nil, person(domain.EventNote, "build", evAt(1), map[string]any{"text": "x"}))
+	late := evItem(99, nil, person(domain.EventNote, evBuild, evAt(1), map[string]any{evText: "x"}))
 	late.FinishedAt = evUntil
 
 	if files := build(t, domain.EvidenceInput{Items: []domain.EvidenceItem{late}}); len(files) != 2 {
@@ -225,7 +232,7 @@ func TestEvidence_OnlyItemsThatNeededHelp(t *testing.T) {
 func TestEvidence_OutlierAtThreeTimesMedian(t *testing.T) {
 	t.Parallel()
 
-	medians := []domain.StationMedian{{Station: "build", CostUSD: 1, Turns: 10, Runs: 30}}
+	medians := []domain.StationMedian{{Station: evBuild, CostUSD: 1, Turns: 10, Runs: 30}}
 
 	cases := []struct {
 		name    string
@@ -234,9 +241,9 @@ func TestEvidence_OutlierAtThreeTimesMedian(t *testing.T) {
 		usd     float64
 		want    bool
 	}{
-		{"just under on both", "build", 29, 2.99, false},
-		{"three times the cost", "build", 10, 3, true},
-		{"three times the turns", "build", 30, 1, true},
+		{"just under on both", evBuild, 29, 2.99, false},
+		{"three times the cost", evBuild, 10, 3, true},
+		{"three times the turns", evBuild, 30, 1, true},
 		{"a station without a median", "review", 300, 300, false},
 	}
 
@@ -269,8 +276,8 @@ func TestEvidence_TruncatesAt4KB(t *testing.T) {
 	long := strings.Repeat("b", 4095) + "é" + "TAIL" // é straddles the 4 KB boundary
 
 	it := evItem(1, nil,
-		person(domain.EventRejected, "approve", evAt(1), map[string]any{"reason": long}),
-		person(domain.EventNote, "build", evAt(2), map[string]any{"text": whole}),
+		person(domain.EventRejected, "approve", evAt(1), map[string]any{evReason: long}),
+		person(domain.EventNote, evBuild, evAt(2), map[string]any{evText: whole}),
 	)
 
 	f := build(t, domain.EvidenceInput{Items: []domain.EvidenceItem{it}})["items/1.md"]
@@ -290,16 +297,16 @@ func TestEvidence_ReadmeCounts(t *testing.T) {
 
 	items := []domain.EvidenceItem{
 		evItem(1, nil,
-			agent(domain.EventGateRejected, "review", "reviewer", evAt(1), map[string]any{"reason": "x", "category": "missing-tests"}),
-			agent(domain.EventGateRejected, "review", "reviewer", evAt(2), map[string]any{"reason": "y", "category": "missing-tests"}),
-			agent(domain.EventCheckFailed, "build", domain.ActorEngine, evAt(3), map[string]any{"command": "go vet", "exit_code": 1}),
-			person(domain.EventNote, "build", evAt(4), map[string]any{"text": "x"}),
+			agent(domain.EventGateRejected, "review", "reviewer", evAt(1), map[string]any{evReason: "x", "category": "missing-tests"}),
+			agent(domain.EventGateRejected, "review", "reviewer", evAt(2), map[string]any{evReason: "y", "category": "missing-tests"}),
+			agent(domain.EventCheckFailed, evBuild, domain.ActorEngine, evAt(3), map[string]any{"command": "go vet", "exit_code": 1}),
+			person(domain.EventNote, evBuild, evAt(4), map[string]any{evText: "x"}),
 		),
 		evItem(2, nil,
-			person(domain.EventRejected, "approve", evAt(1), map[string]any{"reason": "wrong"}),
-			person(domain.EventNote, "build", evAt(2), map[string]any{"text": "x"}),
-			person(domain.EventRetried, "build", evAt(3), nil),
-			agent(domain.EventRunRetried, "build", domain.ActorEngine, evAt(4), map[string]any{"reason": "sandbox lost"}),
+			person(domain.EventRejected, "approve", evAt(1), map[string]any{evReason: "wrong"}),
+			person(domain.EventNote, evBuild, evAt(2), map[string]any{evText: "x"}),
+			person(domain.EventRetried, evBuild, evAt(3), nil),
+			agent(domain.EventRunRetried, evBuild, domain.ActorEngine, evAt(4), map[string]any{evReason: "sandbox lost"}),
 		),
 		evItem(3, nil, agent(domain.EventGateApproved, "review", "reviewer", evAt(1), nil)),
 	}
@@ -324,26 +331,26 @@ func TestEvidence_GatePersonDisagreements(t *testing.T) {
 	t.Parallel()
 
 	reject := func(at int) domain.Event {
-		return agent(domain.EventGateRejected, "review", "reviewer", evAt(at), map[string]any{"reason": "x"})
+		return agent(domain.EventGateRejected, "review", "reviewer", evAt(at), map[string]any{evReason: "x"})
 	}
 	pass := func(at int) domain.Event { return agent(domain.EventGateApproved, "review", "reviewer", evAt(at), nil) }
 	move := func(at int, from, to string) domain.Event {
-		return person(domain.EventMoved, from, evAt(at), map[string]any{"from": from, "to": to, "reason": "x"})
+		return person(domain.EventMoved, from, evAt(at), map[string]any{evFrom: from, "to": to, evReason: "x"})
 	}
 	rejectBy := func(at int, from, to string) []domain.Event {
 		return []domain.Event{
-			person(domain.EventRejected, from, evAt(at), map[string]any{"reason": "x"}),
-			agent(domain.EventMoved, from, "Ada", evAt(at), map[string]any{"from": from, "to": to}),
+			person(domain.EventRejected, from, evAt(at), map[string]any{evReason: "x"}),
+			agent(domain.EventMoved, from, "Ada", evAt(at), map[string]any{evFrom: from, "to": to}),
 		}
 	}
 
 	items := []domain.EvidenceItem{
-		evItem(1, nil, reject(1), move(2, "build", "approve")),                                 // moved past the send-back
-		evItem(2, nil, reject(1), move(2, "build", "review")),                                  // moved to the gate without rework
-		evItem(3, nil, reject(1), pass(2), move(3, "build", "approve")),                        // the gate passed it itself first
-		evItem(4, nil, append([]domain.Event{pass(1)}, rejectBy(2, "approve", "build")...)...), // its pass sent back
+		evItem(1, nil, reject(1), move(2, evBuild, "approve")),                                 // moved past the send-back
+		evItem(2, nil, reject(1), move(2, evBuild, "review")),                                  // moved to the gate without rework
+		evItem(3, nil, reject(1), pass(2), move(3, evBuild, "approve")),                        // the gate passed it itself first
+		evItem(4, nil, append([]domain.Event{pass(1)}, rejectBy(2, "approve", evBuild)...)...), // its pass sent back
 		evItem(5, nil, pass(1), move(2, "approve", "review")),                                  // moved back to the gate
-		evItem(6, nil, pass(1), move(2, "approve", "build"), move(3, "approve", "build")),      // each pass counts once
+		evItem(6, nil, pass(1), move(2, "approve", evBuild), move(3, "approve", evBuild)),      // each pass counts once
 		evItem(7, nil, append([]domain.Event{pass(1)}, rejectBy(2, "intake", "intake")...)...), // a reject before the gate
 	}
 

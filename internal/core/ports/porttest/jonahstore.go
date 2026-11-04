@@ -525,22 +525,23 @@ func (s *Store) EvidenceItems(ctx context.Context, factory domain.FactoryID, sin
 // finishedAt is when it finished: a done item's DoneAt, a cancelled one's latest cancelled event.
 // Callers hold s.mu.
 func (s *Store) finishedAt(it *domain.Item) (time.Time, bool) {
-	switch it.State {
-	case domain.StateDone:
+	if it.State == domain.StateDone {
 		return it.DoneAt, !it.DoneAt.IsZero()
-	case domain.StateCancelled:
-		var at time.Time
+	}
 
-		for _, e := range s.events {
-			if e.ItemID == it.ID && e.Kind == domain.EventCancelled && e.At.After(at) {
-				at = e.At
-			}
-		}
-
-		return at, !at.IsZero()
-	default:
+	if it.State != domain.StateCancelled {
 		return time.Time{}, false
 	}
+
+	var at time.Time
+
+	for _, e := range s.events {
+		if e.ItemID == it.ID && e.Kind == domain.EventCancelled && e.At.After(at) {
+			at = e.At
+		}
+	}
+
+	return at, !at.IsZero()
 }
 
 // itemRuns are item's runs, oldest first. Callers hold s.mu.

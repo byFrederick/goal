@@ -748,7 +748,7 @@ func testJonahEvidenceItems(f *fixture) {
 	f.finish(t, f.create(t, domain.NewItem{Title: "late"}), until, false)
 	f.cancel(t, f.create(t, domain.NewItem{Title: "cancelled late"}), until)
 	f.create(t, domain.NewItem{Title: "open"})
-	f.finish(t, f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Title: "elsewhere"}), since, false)
+	f.finish(t, f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Title: "another factory's"}), since, false)
 
 	got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 10)
 	if err != nil {
@@ -758,6 +758,27 @@ func testJonahEvidenceItems(f *fixture) {
 	if len(got) != 2 || got[0].Item.ID != a.ID || got[1].Item.ID != b.ID {
 		t.Fatalf("EvidenceItems = %+v, want %s then %s", got, a.ID, b.ID)
 	}
+
+	expectEvidenceItems(t, got, a, since)
+
+	if got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 1); err != nil || len(got) != 1 || got[0].Item.ID != a.ID {
+		t.Errorf("EvidenceItems limit 1 = %+v, %v; want only the latest finished", got, err)
+	}
+
+	other := domain.WithOrg(t.Context(), f.NewOrg(t))
+	if got, err := f.Jonah.EvidenceItems(other, f.factory, since, until, 10); err != nil || len(got) != 0 {
+		t.Errorf("other org's EvidenceItems = %+v, %v; want none", got, err)
+	}
+
+	if _, err := f.Jonah.EvidenceItems(t.Context(), f.factory, since, until, 10); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("EvidenceItems without an org: %v, want ErrNoOrg", err)
+	}
+}
+
+// expectEvidenceItems checks got, testJonahEvidenceItems's items a and then the cancelled one:
+// when each finished, a's fields and run, and each one's milestone events.
+func expectEvidenceItems(t *testing.T, got []domain.EvidenceItem, a domain.Item, since time.Time) {
+	t.Helper()
 
 	if !got[0].FinishedAt.Equal(since.Add(30*time.Minute)) || !got[1].FinishedAt.Equal(since.Add(10*time.Minute)) {
 		t.Errorf("finished at %s and %s, want 30 and 10 minutes into the window", got[0].FinishedAt, got[1].FinishedAt)
@@ -773,19 +794,6 @@ func testJonahEvidenceItems(f *fixture) {
 
 	expectMilestones(t, got[0].Events, []domain.EventKind{domain.EventNote, domain.EventGateRejected}, domain.PerTurnKinds)
 	expectMilestones(t, got[1].Events, []domain.EventKind{domain.EventCancelled}, nil)
-
-	if got, err := f.Jonah.EvidenceItems(f.ctx(t), f.factory, since, until, 1); err != nil || len(got) != 1 || got[0].Item.ID != a.ID {
-		t.Errorf("EvidenceItems limit 1 = %+v, %v; want only the latest finished", got, err)
-	}
-
-	other := domain.WithOrg(t.Context(), f.NewOrg(t))
-	if got, err := f.Jonah.EvidenceItems(other, f.factory, since, until, 10); err != nil || len(got) != 0 {
-		t.Errorf("other org's EvidenceItems = %+v, %v; want none", got, err)
-	}
-
-	if _, err := f.Jonah.EvidenceItems(t.Context(), f.factory, since, until, 10); !errors.Is(err, domain.ErrNoOrg) {
-		t.Errorf("EvidenceItems without an org: %v, want ErrNoOrg", err)
-	}
 }
 
 // expectMilestones checks that events, in append order, hold every kind of want in that order

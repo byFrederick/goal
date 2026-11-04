@@ -41,6 +41,7 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 | `/goal/agent/prompt.md` | the agent's prompt, appended to Claude Code's system prompt |
 | `/goal/agent/skills/<name>/SKILL.md` | one folder per skill that ships in the factory, with its other files |
 | `/goal/agent/output.schema.json` | the station's output contract (JSON Schema, without `$schema`), only when the station has one; for a part (ADR 0012) without the `plan` property and its `required` entry, since a part never plans an assembly |
+| `/goal/evidence/` | a Jonah review's evidence (ADR 0039 decisions 1 and 2), only in a Jonah review's bundle: `README.md` (send-backs by station, sender and category, touches by kind, failed runs by cause, outliers, gate–person disagreements and the items listed), `versions.md` (the versions published in the review's window, with who published each and its message) and `items/<number>.md` (one per item finished in the window that needed help: its title, body, type and lane, runs, send-backs, failed runs, outliers, questions and answers, notes and touches); jonah mode does not read it yet |
 | `/workspace` | the factory's repository on the item's branch, or empty; the agent's working directory |
 | `/knowledge/<source>/` | each knowledge snapshot the run pinned, unpacked read-only (files `0444`, folders `0555`; ADR 0038); `/knowledge` itself is in the image, owned by the box's user, and empty without snapshots |
 | `/home/node` | `HOME`: Claude Code's config dir (`.claude`), mise's global config, git's credential helpers |
@@ -214,12 +215,13 @@ A Jonah review (ADR 0034) reads one factory's sent-back events, its definition f
       "propose_after": 5,
       "manual": false
     } },
-  "files": {}
+  "files": { "evidence/README.md": "<base64>", "evidence/versions.md": "<base64>", "evidence/items/12.md": "<base64>" }
 }
 ```
 
 - `files` are the factory's definition files in the folders a proposal may edit (`factory.yaml`, `agents/`, `skills/`, `rules/`, `contracts/`), each with its `sha256` and its text. Each file is cut to 20,000 characters (`maxJonahFile`).
 - `events` are the sent-back touches in the review's window; `id` is what a proposal's evidence points at. `rejected` are the proposals rejected in the last 90 days, with the reasons a person gave.
+- The bundle's `files` are the review's evidence, written to `/goal/evidence/` (the table above). goald builds it from the items' milestone events, never their tool calls, and cuts each reason, note, question, answer and version message at 4 KB.
 - `propose_after` is the policy's `proposeAfter`. `manual` is true when a person asked for the review: a threshold review (`manual` false) proposes an observation only when its count reaches `propose_after`; a manual one may propose below it.
 
 `goal-agent run` with a `jonah` block reads no `prompt.md` and installs no skills (`src/jonah.ts`). It makes one Agent SDK query:
