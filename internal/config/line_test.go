@@ -688,7 +688,7 @@ func TestLine_JonahPolicyDefaults(t *testing.T) {
 	t.Parallel()
 
 	withModel := edited(runtimeModel, runtimeModel+"    model: "+jonahRuntimeModel+"\n")
-	want := domain.JonahPolicy{Enabled: true, ProposeAfter: 5, WeeklyUSD: 10, Model: jonahRuntimeModel}
+	want := domain.JonahPolicy{Enabled: true, ProposeAfter: 3, Share: 0.05, Model: jonahRuntimeModel}
 
 	for name, doc := range map[string]string{
 		"no learning":  withModel,
@@ -730,17 +730,17 @@ func TestLine_CarriesJonahPolicy(t *testing.T) {
 	}{
 		{
 			name:  "all keys",
-			jonah: "{ enabled: true, proposeAfter: 3, weeklyUsd: 2.5, model: claude-haiku-5-5 }",
-			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 3, WeeklyUSD: 2.5, Model: "claude-haiku-5-5"},
+			jonah: "{ enabled: true, proposeAfter: 4, share: 2.5%, model: claude-haiku-5-5 }",
+			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 4, Share: 0.025, Model: "claude-haiku-5-5"},
 		},
 		{
 			name:  "off",
 			jonah: "{ enabled: false }",
-			want:  domain.JonahPolicy{ProposeAfter: 5, WeeklyUSD: 10, Model: jonahRuntimeModel},
+			want:  domain.JonahPolicy{ProposeAfter: 3, Share: 0.05, Model: jonahRuntimeModel},
 		},
 		{
 			name:  "no spend",
-			jonah: "{ weeklyUsd: 0, proposeAfter: 50 }",
+			jonah: "{ share: 0%, proposeAfter: 50 }",
 			want:  domain.JonahPolicy{Enabled: true, ProposeAfter: 50, Model: jonahRuntimeModel},
 		},
 	}
@@ -769,7 +769,8 @@ func TestLoad_RefusesBadJonahPolicy(t *testing.T) {
 	t.Parallel()
 
 	for _, jonah := range []string{
-		"proposeAfter: 0", "proposeAfter: 51", "proposeAfter: 2.5", "weeklyUsd: -1", "enabled: sometimes", "cadence: daily",
+		"proposeAfter: 0", "proposeAfter: 51", "proposeAfter: 2.5", "share: 120%", "share: five", "share: 5", "share: -1%",
+		"enabled: sometimes", "cadence: daily",
 	} {
 		doc := baseFactory + "  learning:\n    jonah:\n      " + jonah + " #here\n"
 		line := markedLine(doc)

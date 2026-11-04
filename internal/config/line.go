@@ -3,6 +3,7 @@ package config
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -131,8 +132,8 @@ func jonahPolicy(learning *Learning, runtimeModel string) domain.JonahPolicy {
 		p.ProposeAfter = *j.ProposeAfter
 	}
 
-	if j.WeeklyUSD != nil {
-		p.WeeklyUSD = *j.WeeklyUSD
+	if share, ok := percent(j.Share); ok {
+		p.Share = share
 	}
 
 	if j.Model != "" {
@@ -140,6 +141,22 @@ func jonahPolicy(learning *Learning, runtimeModel string) domain.JonahPolicy {
 	}
 
 	return p
+}
+
+// percent reads a percent string such as "5%" or "2.5%" as a fraction; false for anything else.
+// The schema's pattern keeps it to 0% to 100%.
+func percent(s string) (float64, bool) {
+	n, ok := strings.CutSuffix(s, "%")
+	if !ok {
+		return 0, false
+	}
+
+	v, err := strconv.ParseFloat(n, 64)
+	if err != nil || v < 0 || v > 100 {
+		return 0, false
+	}
+
+	return v / 100, true
 }
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
