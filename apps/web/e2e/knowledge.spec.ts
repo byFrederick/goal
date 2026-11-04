@@ -249,3 +249,40 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test.describe('phone tap areas at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 900 } });
+
+  test('a failing source with two actions puts them in a row under its message', async ({ page }) => {
+    await page.goto('/o/acme/knowledge');
+    const alert = page.getByRole('alert').filter({ hasText: 'product-specs' });
+    const message = alert.locator('div').first();
+    await expect(alert.getByRole('link')).toHaveCount(2);
+    const m = await message.boundingBox();
+    expect(m?.width ?? 0).toBeGreaterThanOrEqual(240);
+    for (const link of await alert.getByRole('link').all()) {
+      const b = await link.boundingBox();
+      expect(b?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(b?.y ?? 0).toBeGreaterThanOrEqual((m?.y ?? 0) + (m?.height ?? 0) - 0.5);
+    }
+  });
+
+  test('file links in Most read and in Files found keep their hit areas apart', async ({ page }) => {
+    const apart = async (links: ReturnType<Page['locator']>) => {
+      const boxes = await links.evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom };
+        }),
+      );
+      expect(boxes.length).toBeGreaterThan(1);
+      for (let i = 1; i < boxes.length; i++) {
+        expect(boxes[i]!.top, `row ${i} starts below row ${i - 1}`).toBeGreaterThanOrEqual(boxes[i - 1]!.bottom - 0.5);
+      }
+    };
+    await page.goto('/o/acme/knowledge');
+    await apart(page.getByRole('table', { name: 'Most read files' }).getByRole('link'));
+    await page.goto('/o/acme/knowledge?q=md');
+    await apart(page.getByRole('list', { name: 'Files found' }).getByRole('link'));
+  });
+});

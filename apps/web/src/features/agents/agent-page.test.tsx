@@ -17,7 +17,6 @@ import {
 import type { AgentStats, Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
-import { touchLink } from '../../ui/touch-target';
 import { DraftSession } from '../factory-editor/draft/session';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
@@ -496,11 +495,12 @@ describe('the states', () => {
 });
 
 describe('phone tap targets on the agent page', () => {
-  it('gives each rejection-reason button the touchLink classes', async () => {
+  it('gives each rejection-reason button a 44 px row of its own below 768 px', async () => {
     await renderPage('overview');
     const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
     const button = within(reasons).getByRole('button', { name: /No test for a new empty or error state/ });
-    for (const cls of touchLink.split(' ')) expect(button.classList.contains(cls)).toBe(true);
+    expect(button.classList.contains('max-md:min-h-11')).toBe(true);
+    expect(button.classList.contains('max-md:py-4')).toBe(false);
   });
 });
 
