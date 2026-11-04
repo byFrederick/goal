@@ -99,8 +99,8 @@ func TestTries_TriedKeepsKeptTestsApart(t *testing.T) {
 
 	at := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
 	tries := []domain.PastTry{
-		{ItemID: "a", Attempt: 1, Station: "build", State: domain.PastTryQueued, CreatedAt: at, CostUSD: 0.25},
-		{ItemID: "a", KeptTestID: "k", Attempt: 1, Station: "build", State: domain.PastTryQueued, CreatedAt: at, CostUSD: 0.5},
+		{ItemID: "a", Attempt: 1, Station: stationBuild, State: domain.PastTryQueued, CreatedAt: at, CostUSD: 0.25},
+		{ItemID: "a", KeptTestID: "k", Attempt: 1, Station: stationBuild, State: domain.PastTryQueued, CreatedAt: at, CostUSD: 0.5},
 	}
 
 	got, ok := jonah.TriedOf(tries, domain.JonahBudget{BudgetUSD: 2})

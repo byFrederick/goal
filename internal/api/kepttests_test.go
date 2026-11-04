@@ -303,10 +303,8 @@ func TestJonah_DraftKeptTestsStartAndReuse(t *testing.T) {
 	// A proposal with exactly the draft's content tried the second test, and it passed.
 	h.triedKeptTest(t, tried, key)
 
-	if got := h.draftKeptTests(t, http.MethodGet); got.State != gen.DraftKeptTestsStateDone || len(got.Tests) != 2 {
-		t.Fatalf("GET = %+v, want both tests, nothing started", got)
-	} else if r := resultOf(got, fresh.Id); r != "" {
-		t.Errorf("GET result of the fresh test = %q, want null", r)
+	if got := h.draftKeptTests(t, http.MethodGet); got.State != gen.DraftKeptTestsStateDone || len(got.Tests) != 2 || resultOf(got, fresh.Id) != "" {
+		t.Fatalf("GET = %+v, want both tests, the fresh one not started", got)
 	}
 
 	got := h.draftKeptTests(t, http.MethodPost)
@@ -325,11 +323,19 @@ func TestJonah_DraftKeptTestsStartAndReuse(t *testing.T) {
 		t.Errorf("publish try = %+v, want the fresh test's, with no proposal and the draft's prompt", pub)
 	}
 
+	h.wantLastResults(t, tried.Id, fresh.Id)
+}
+
+// wantLastResults fails t unless line's kept test passed has last result passed and running has
+// none yet.
+func (h *harness) wantLastResults(t *testing.T, passed, running string) {
+	t.Helper()
+
 	for _, k := range h.keptTests(t, lineTests) {
 		switch {
-		case k.Id == tried.Id && (k.LastResult == nil || k.LastResult.Result != gen.KeptTestLastResultResultPassed):
+		case k.Id == passed && (k.LastResult == nil || k.LastResult.Result != gen.KeptTestLastResultResultPassed):
 			t.Errorf("last result of the tried test = %+v, want passed", k.LastResult)
-		case k.Id == fresh.Id && k.LastResult != nil:
+		case k.Id == running && k.LastResult != nil:
 			t.Errorf("last result of a test whose try runs = %+v, want null", k.LastResult)
 		}
 	}

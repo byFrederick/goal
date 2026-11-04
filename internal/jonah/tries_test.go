@@ -640,7 +640,7 @@ func TestTries_FailingCheckIsNotFixed(t *testing.T) {
 	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 		return domain.RunResult{
 			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: tryDiff, RunID: tryRunID,
-			FailedCheck: &domain.FailedCheck{Command: "make test", ExitCode: 2, Output: "FAIL TestNotes"},
+			FailedCheck: &domain.FailedCheck{Command: checkMakeTest, ExitCode: 2, Output: "FAIL TestNotes"},
 		}, nil
 	}
 
@@ -722,7 +722,7 @@ func TestTries_PassingChecksAwaitTheGrader(t *testing.T) {
 	} {
 		w := newTryWorld(t, 1)
 		org := w.orgs[0]
-		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = contractNote, []string{"make test"} })
+		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = contractNote, checksMakeTest })
 		w.queued(org, 1)
 		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 			return domain.RunResult{Status: tt.status, Output: json.RawMessage(`{}`), Diff: tryDiff, RunID: tryRunID}, nil
@@ -806,7 +806,7 @@ func TestTries_KeptTestPassesOnlyWithChecksAndGateVerdict(t *testing.T) {
 	}{
 		{name: "passing checks", res: ok(`{}`), verdict: domain.PastTryFixed, why: "it passed"},
 		{name: "a failing check", res: domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), FailedCheck: &domain.FailedCheck{
-			Command: "make test", ExitCode: 1,
+			Command: checksMakeTest[0], ExitCode: 1,
 		}}, verdict: domain.PastTryNotFixed, why: "check `make test` exited 1"},
 		{name: "a failed run", res: domain.RunResult{Status: domain.RunFailed, Error: "max turns"}, verdict: domain.PastTryNotFixed, why: "the run failed: max turns"},
 		{name: "a lost box", err: fmt.Errorf("agent: %w", ports.ErrSandboxLost), verdict: domain.PastTryError, why: "sandbox"},
@@ -817,7 +817,7 @@ func TestTries_KeptTestPassesOnlyWithChecksAndGateVerdict(t *testing.T) {
 		w := newTryWorld(t, 1)
 		org := w.orgs[0]
 		w.defs.build(org, func(s *domain.Station) {
-			s.Checks = []string{"make test"}
+			s.Checks = checksMakeTest
 			if tt.gate {
 				s.Gate = &domain.Gate{OnReject: stSpec, MaxRework: 1}
 			}
@@ -855,3 +855,9 @@ func TestTries_KeptTestPassesOnlyWithChecksAndGateVerdict(t *testing.T) {
 		}
 	}
 }
+
+// checksMakeTest are the grading tests' station checks.
+var checksMakeTest = []string{checkMakeTest}
+
+// checkMakeTest is a station check the grading tests name.
+const checkMakeTest = "make test"

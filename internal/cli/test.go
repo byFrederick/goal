@@ -13,12 +13,15 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
+// cmdTest is goal test.
+const cmdTest = "test"
+
 // testCommand is goal test: the factory's kept tests (ADR 0039 decision 12), past items a person
 // keeps at a station they passed the first time, which every change that reaches the station is
 // tried on: kept, listed with each one's last result, and removed.
 func testCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) > 0 {
-		if handler, ok := map[string]command{"keep": testKeep, "list": testList, "rm": testRemove}[args[0]]; ok {
+		if handler, ok := map[string]command{"keep": testKeep, subList: testList, "rm": testRemove}[args[0]]; ok {
 			return handler(ctx, out, getenv, args[1:])
 		}
 	}

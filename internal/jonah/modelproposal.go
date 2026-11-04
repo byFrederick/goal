@@ -234,25 +234,12 @@ func (m *ModelProposals) propose(ctx context.Context, f domain.FactoryID, line d
 		}
 	}
 
-	if len(est.kept) > 0 {
-		edited, err := domain.ApplyEdits(files, edits)
-		if err != nil {
-			return domain.Proposal{}, fmt.Errorf("model proposal: apply the edit: %w", err)
-		}
-
-		key := domain.ContentKey(edited)
-
-		for _, k := range est.kept {
-			model := ""
-			if k.run.Agent == est.Agent {
-				model = est.Model
-			}
-
-			for attempt := 1; attempt <= domain.ModelTriesPerItem; attempt++ {
-				tries = append(tries, k.try(line, key, attempt, model))
-			}
-		}
+	kept, err := keptModelTries(line, files, edits, est)
+	if err != nil {
+		return domain.Proposal{}, err
 	}
+
+	tries = append(tries, kept...)
 
 	if n.Supersedes, err = m.overlapping(ctx, f, edits, files); err != nil {
 		return domain.Proposal{}, err
@@ -276,6 +263,36 @@ func (m *ModelProposals) propose(ctx context.Context, f domain.FactoryID, line d
 		slog.String("agent", est.Agent), slog.String("model", est.Model), slog.Int("tries", len(queued)))
 
 	return p, nil
+}
+
+// keptModelTries are domain.ModelTriesPerItem tries of each of est's kept tests, on est's model
+// for a run of its agent, with the content key of files with edits applied.
+func keptModelTries(line domain.Line, files map[string][]byte, edits []domain.ProposalEdit, est ModelEstimate) ([]domain.NewPastTry, error) {
+	if len(est.kept) == 0 {
+		return nil, nil
+	}
+
+	edited, err := domain.ApplyEdits(files, edits)
+	if err != nil {
+		return nil, fmt.Errorf("model proposal: apply the edit: %w", err)
+	}
+
+	key := domain.ContentKey(edited)
+
+	var out []domain.NewPastTry
+
+	for _, k := range est.kept {
+		model := ""
+		if k.run.Agent == est.Agent {
+			model = est.Model
+		}
+
+		for attempt := 1; attempt <= domain.ModelTriesPerItem; attempt++ {
+			out = append(out, k.try(line, key, attempt, model))
+		}
+	}
+
+	return out, nil
 }
 
 // agentStations are the agent stations of l that agent works, as its own or in a route: what a

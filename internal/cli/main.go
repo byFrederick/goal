@@ -410,7 +410,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalCommand, "bake-off": bakeOffCommand, "spend": spend,
-		"judge": judgeCommand, "jonah": jonahCommand, "test": testCommand, "agent": agentCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
+		"judge": judgeCommand, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

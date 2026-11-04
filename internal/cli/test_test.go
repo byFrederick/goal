@@ -18,7 +18,7 @@ func goalTest(t *testing.T, api string, args ...string) (string, error) {
 
 	var buf bytes.Buffer
 
-	err := run(t.Context(), append([]string{"test"}, args...), &printer{w: &buf}, testEnv(t, api, map[string]string{envOrg: orgAcme}), nil)
+	err := run(t.Context(), append([]string{cmdTest}, args...), &printer{w: &buf}, testEnv(t, api, map[string]string{envOrg: orgAcme}), nil)
 
 	return buf.String(), err
 }
@@ -30,7 +30,7 @@ func TestTest_KeepListRemove(t *testing.T) {
 	t.Parallel()
 
 	at := time.Date(2026, 11, 4, 9, 30, 0, 0, time.UTC)
-	kept := gen.KeptTest{Id: "k1", Item: gen.KeptTestItem{Id: "i12", Number: 12, Title: "Fix the lease"}, Station: "build", KeptBy: "user:ada", KeptAt: at}
+	kept := gen.KeptTest{Id: "k1", Item: gen.KeptTestItem{Id: "i12", Number: 12, Title: "Fix the lease"}, Station: stModelBuild, KeptBy: "user:ada", KeptAt: at}
 	run := "r1"
 	passed := kept
 	passed.Id, passed.Item.Number, passed.Item.Title = "k2", 9, "Add a page"
@@ -44,12 +44,12 @@ func TestTest_KeepListRemove(t *testing.T) {
 		"DELETE " + webTests + "/other": {http.StatusConflict, jonahRefusal(http.StatusNotFound, "kept-test-not-found")},
 	})
 
-	got, err := goalTest(t, srv.URL, "keep", "12", "--station", "build")
+	got, err := goalTest(t, srv.URL, "keep", "12", "--station", stModelBuild)
 	if err != nil || got != "kept #12 Fix the lease at build as test k1\n" {
 		t.Errorf("goal test keep = %q, %v", got, err)
 	}
 
-	got, err = goalTest(t, srv.URL, "list", "--factory", searchFactory)
+	got, err = goalTest(t, srv.URL, subList, "--factory", searchFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestTest_KeepListRemove(t *testing.T) {
 		t.Error("goal test rm of a refused id = nil, want goald's refusal")
 	}
 
-	for _, bad := range [][]string{{"keep", "12"}, {"keep", "twelve", "--station", "build"}, {"rm"}, {"list", "extra"}, {"run"}, {}} {
+	for _, bad := range [][]string{{"keep", "12"}, {"keep", "twelve", "--station", stModelBuild}, {"rm"}, {subList, argExtra}, {"run"}, {}} {
 		if _, err := goalTest(t, srv.URL, bad...); !errors.Is(err, errUsage) {
 			t.Errorf("goal test %v = %v, want the usage", bad, err)
 		}
@@ -95,7 +95,7 @@ func TestTest_KeepConflictIsOneLine(t *testing.T) {
 		"POST " + webTests: {http.StatusConflict, jonahRefusal(http.StatusConflict, "not-passed-first-time")},
 	})
 
-	if _, err := goalTest(t, srv.URL, "keep", "12", "--station", "build"); err == nil || err.Error() != testConflicts["not-passed-first-time"] {
+	if _, err := goalTest(t, srv.URL, "keep", "12", "--station", stModelBuild); err == nil || err.Error() != testConflicts["not-passed-first-time"] {
 		t.Errorf("goal test keep of an item sent back = %v, want %q", err, testConflicts["not-passed-first-time"])
 	}
 }

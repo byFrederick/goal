@@ -142,20 +142,23 @@ func TestPastTry_KeptResult(t *testing.T) {
 	}
 }
 
+// promptPath is the prompt file the content-key test changes.
+const promptPath = "agents/w.md"
+
 // A content key depends only on the files: a version with whole-file edits that make it another
 // version's files has that version's key.
 func TestPastTry_ContentKeyOfAppliedEdits(t *testing.T) {
 	t.Parallel()
 
-	base := map[string][]byte{"factory.yaml": []byte("a: 1\n"), "agents/w.md": []byte("# w\n")}
-	draft := map[string][]byte{"factory.yaml": []byte("a: 1\n"), "agents/w.md": []byte("# w, test first\n")}
+	base := map[string][]byte{"factory.yaml": []byte("a: 1\n"), promptPath: []byte("# w\n")}
+	draft := map[string][]byte{"factory.yaml": []byte("a: 1\n"), promptPath: []byte("# w, test first\n")}
 
-	edited, err := ApplyEdits(base, []ProposalEdit{{Path: "agents/w.md", Replacements: []Replacement{{Old: "# w\n", New: "# w, test first\n"}}}})
+	edited, err := ApplyEdits(base, []ProposalEdit{{Path: promptPath, Replacements: []Replacement{{Old: "# w\n", New: "# w, test first\n"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	whole, err := ApplyEdits(base, []ProposalEdit{{Path: "agents/w.md", Content: "# w, test first\n", BaseSHA256: string(HashBlob(base["agents/w.md"]))}})
+	whole, err := ApplyEdits(base, []ProposalEdit{{Path: promptPath, Content: "# w, test first\n", BaseSHA256: string(HashBlob(base[promptPath]))}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +167,7 @@ func TestPastTry_ContentKeyOfAppliedEdits(t *testing.T) {
 		t.Error("the key of base with the edits differs from the draft's with the same files")
 	}
 
-	if ContentKey(base) == ContentKey(draft) || string(base["agents/w.md"]) != "# w\n" {
+	if ContentKey(base) == ContentKey(draft) || string(base[promptPath]) != "# w\n" {
 		t.Error("the key of other files matches, or ApplyEdits changed its input")
 	}
 }

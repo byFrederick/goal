@@ -63,23 +63,9 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 			return fmt.Errorf("proposal %s has tries: %w", proposal, ports.ErrConflict)
 		}
 
-		out = make([]domain.PastTry, 0, len(tries))
+		out, err = insertTries(ctx, q, f, p, row.Number, tries, at)
 
-		for _, n := range tries {
-			t, err := insertTry(ctx, q, f, p, n, at)
-			if err != nil {
-				return err
-			}
-
-			try, err := pastTryFrom(t, row.Number)
-			if err != nil {
-				return err
-			}
-
-			out = append(out, try)
-		}
-
-		return nil
+		return err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("queue past tries: %w", err)
@@ -88,23 +74,47 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 	return out, nil
 }
 
-// tryKeys are a new try's item, original run and kept test (nil without one), and its new id.
-func tryKeys(n domain.NewPastTry) (id, item, run uuid.UUID, kept *uuid.UUID, err error) {
-	if item, err = parseID("item", string(n.ItemID)); err != nil {
-		return
+// insertTries inserts tries of proposal p, numbered number, in order.
+func insertTries(ctx context.Context, q *db.Queries, f, p uuid.UUID, number int64, tries []domain.NewPastTry, at time.Time) ([]domain.PastTry, error) {
+	out := make([]domain.PastTry, 0, len(tries))
+
+	for _, n := range tries {
+		t, err := insertTry(ctx, q, f, p, n, at)
+		if err != nil {
+			return nil, err
+		}
+
+		try, err := pastTryFrom(t, number)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, try)
 	}
 
-	if run, err = parseID("run", string(n.OriginalRunID)); err != nil {
-		return
+	return out, nil
+}
+
+// tryKeys are a new try's new id, item, original run and kept test (nil without one).
+func tryKeys(n domain.NewPastTry) (uuid.UUID, uuid.UUID, uuid.UUID, *uuid.UUID, error) {
+	item, err := parseID("item", string(n.ItemID))
+	if err != nil {
+		return uuid.UUID{}, uuid.UUID{}, uuid.UUID{}, nil, err
 	}
 
-	if kept, err = optionalID("kept test", string(n.KeptTestID)); err != nil {
-		return
+	run, err := parseID("run", string(n.OriginalRunID))
+	if err != nil {
+		return uuid.UUID{}, uuid.UUID{}, uuid.UUID{}, nil, err
 	}
 
-	id, err = newID()
+	kept, err := optionalID("kept test", string(n.KeptTestID))
+	if err != nil {
+		return uuid.UUID{}, uuid.UUID{}, uuid.UUID{}, nil, err
+	}
 
-	return
+	id, err := newID()
+
+	return id, item, run, kept, err
 }
 
 // insertTry inserts one try of proposal p: ErrNotFound for an item, run or kept test that is not
@@ -144,12 +154,8 @@ func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID,
 	}
 
 	for _, n := range tries {
-		if err := n.Check(); err != nil {
+		if err := n.CheckPublish(); err != nil {
 			return nil, fmt.Errorf("queue publish tries: %w", err)
-		}
-
-		if n.ProposalID != "" || n.KeptTestID == "" {
-			return nil, fmt.Errorf("queue publish tries: a publish's try has a kept test and no proposal: %w", domain.ErrInvalid)
 		}
 	}
 
@@ -172,31 +178,14 @@ func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID,
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		for _, n := range tries {
-			id, item, run, kept, err := tryKeys(n)
+			t, ok, err := insertPublishTry(ctx, q, db.InsertPublishTryParams{FactoryID: f, VersionID: &v, Edits: raw, CreatedAt: at}, n)
 			if err != nil {
 				return err
 			}
 
-			t, err := q.InsertPublishTry(ctx, db.InsertPublishTryParams{
-				ID: id, FactoryID: f, ItemID: item, Attempt: clampLimit(n.TryAttempt()), Station: n.Station, OriginalRunID: run, Model: n.Model,
-				KeptTestID: kept, ContentKey: &n.ContentKey, VersionID: &v, Edits: raw, CreatedAt: at,
-			})
-
-			switch {
-			case notFound(err):
-				continue
-			case isForeignKeyViolation(err):
-				return fmt.Errorf("item %s, run %s or kept test %s: %w", n.ItemID, n.OriginalRunID, n.KeptTestID, ports.ErrNotFound)
-			case err != nil:
-				return fmt.Errorf("insert try: %w", err)
+			if ok {
+				out = append(out, t)
 			}
-
-			try, err := pastTryFrom(t, 0)
-			if err != nil {
-				return err
-			}
-
-			out = append(out, try)
 		}
 
 		return nil
@@ -206,6 +195,34 @@ func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID,
 	}
 
 	return out, nil
+}
+
+// insertPublishTry inserts n as a publish's try with p's factory, version, edits and time: false
+// when a publish's try of its kept test, content key and attempt exists, ErrNotFound for an item,
+// run or kept test that is not the organization's.
+func insertPublishTry(ctx context.Context, q *db.Queries, p db.InsertPublishTryParams, n domain.NewPastTry) (domain.PastTry, bool, error) {
+	id, item, run, kept, err := tryKeys(n)
+	if err != nil {
+		return domain.PastTry{}, false, err
+	}
+
+	p.ID, p.ItemID, p.Attempt, p.Station, p.OriginalRunID, p.Model = id, item, clampLimit(n.TryAttempt()), n.Station, run, n.Model
+	p.KeptTestID, p.ContentKey = kept, &n.ContentKey
+
+	t, err := q.InsertPublishTry(ctx, p)
+
+	switch {
+	case notFound(err):
+		return domain.PastTry{}, false, nil
+	case isForeignKeyViolation(err):
+		return domain.PastTry{}, false, fmt.Errorf("item %s, run %s or kept test %s: %w", n.ItemID, n.OriginalRunID, n.KeptTestID, ports.ErrNotFound)
+	case err != nil:
+		return domain.PastTry{}, false, fmt.Errorf("insert try: %w", err)
+	}
+
+	out, err := pastTryFrom(t, 0)
+
+	return out, err == nil, err
 }
 
 // nonNil is edits, or an empty list for none: tries.edits is an array.

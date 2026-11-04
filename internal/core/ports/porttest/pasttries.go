@@ -116,12 +116,8 @@ func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID,
 	}
 
 	for _, n := range tries {
-		if err := n.Check(); err != nil {
+		if err := n.CheckPublish(); err != nil {
 			return nil, fmt.Errorf("queue publish tries: %w", err)
-		}
-
-		if n.ProposalID != "" || n.KeptTestID == "" {
-			return nil, fmt.Errorf("queue publish tries: a publish's try has a kept test and no proposal: %w", domain.ErrInvalid)
 		}
 	}
 
@@ -129,20 +125,7 @@ func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID,
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
-	var due []domain.NewPastTry
-
-	for _, n := range tries {
-		if !slices.ContainsFunc(s.jonah.tries, func(r jonahRow[domain.PastTry]) bool {
-			return r.org == org && r.row.ProposalID == "" && r.row.KeptTestID == n.KeptTestID && r.row.ContentKey == n.ContentKey &&
-				r.row.Attempt == n.TryAttempt()
-		}) && !slices.ContainsFunc(due, func(d domain.NewPastTry) bool {
-			return d.KeptTestID == n.KeptTestID && d.ContentKey == n.ContentKey && d.TryAttempt() == n.TryAttempt()
-		}) {
-			due = append(due, n)
-		}
-	}
-
-	out, err := s.newPastTries(org, factory, "", 0, due, at)
+	out, err := s.newPastTries(org, factory, "", 0, s.duePublishTries(org, tries), at)
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +136,28 @@ func (s *Store) QueuePublishTries(ctx context.Context, factory domain.FactoryID,
 	}
 
 	return out, nil
+}
+
+// duePublishTries are those of tries whose kept test, content key and attempt no publish's try of
+// org has, each once, as tries_publish_key keeps them. Callers hold s.mu.
+func (s *Store) duePublishTries(org domain.OrgID, tries []domain.NewPastTry) []domain.NewPastTry {
+	var due []domain.NewPastTry
+
+	same := func(n domain.NewPastTry, kept domain.KeptTestID, key string, attempt int) bool {
+		return n.KeptTestID == kept && n.ContentKey == key && n.TryAttempt() == attempt
+	}
+
+	for _, n := range tries {
+		had := slices.ContainsFunc(s.jonah.tries, func(r jonahRow[domain.PastTry]) bool {
+			return r.org == org && r.row.ProposalID == "" && same(n, r.row.KeptTestID, r.row.ContentKey, r.row.Attempt)
+		})
+
+		if !had && !slices.ContainsFunc(due, func(d domain.NewPastTry) bool { return same(n, d.KeptTestID, d.ContentKey, d.TryAttempt()) }) {
+			due = append(due, n)
+		}
+	}
+
+	return due
 }
 
 // KeptTestTries implements ports.PastTries.
@@ -227,7 +232,22 @@ func (s *Store) ClaimPastTry(ctx context.Context, factory domain.FactoryID, now 
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
-	running, next, publish := 0, -1, -1
+	running, next := s.nextPastTry(org, factory, now)
+	if next < 0 || running >= limit {
+		return domain.PastTry{}, fmt.Errorf("claim past try of factory %s: %w", factory, ports.ErrNotFound)
+	}
+
+	t := &s.jonah.tries[next].row
+	t.State, t.LeaseUntil, t.Attempts = domain.PastTryRunning, now.Add(lease), t.Attempts+1
+
+	return *t, nil
+}
+
+// nextPastTry is how many of org's factory's tries run under a live lease at now, and the index of
+// the one a claim takes: the oldest due publish's try, else the oldest due try; -1 for none.
+// Callers hold s.mu.
+func (s *Store) nextPastTry(org domain.OrgID, factory domain.FactoryID, now time.Time) (running, next int) {
+	next, publish := -1, -1
 
 	for i, r := range s.jonah.tries {
 		if r.org != org || r.row.FactoryID != factory {
@@ -239,12 +259,15 @@ func (s *Store) ClaimPastTry(ctx context.Context, factory domain.FactoryID, now 
 			running++
 		}
 
-		due := r.row.State == domain.PastTryQueued || (r.row.State == domain.PastTryRunning && !live)
-		if due && next < 0 {
+		if r.row.State != domain.PastTryQueued && (r.row.State != domain.PastTryRunning || live) {
+			continue
+		}
+
+		if next < 0 {
 			next = i
 		}
 
-		if due && publish < 0 && r.row.ProposalID == "" {
+		if publish < 0 && r.row.ProposalID == "" {
 			publish = i
 		}
 	}
@@ -253,14 +276,7 @@ func (s *Store) ClaimPastTry(ctx context.Context, factory domain.FactoryID, now 
 		next = publish
 	}
 
-	if next < 0 || running >= limit {
-		return domain.PastTry{}, fmt.Errorf("claim past try of factory %s: %w", factory, ports.ErrNotFound)
-	}
-
-	t := &s.jonah.tries[next].row
-	t.State, t.LeaseUntil, t.Attempts = domain.PastTryRunning, now.Add(lease), t.Attempts+1
-
-	return *t, nil
+	return running, next
 }
 
 // FinishPastTry implements ports.PastTries.

@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -143,6 +144,15 @@ func (n NewPastTry) Check() error {
 	return nil
 }
 
+// CheckPublish is Check for a publish's try: it names a kept test and no proposal.
+func (n NewPastTry) CheckPublish() error {
+	if n.ProposalID != "" || n.KeptTestID == "" {
+		return fmt.Errorf("past try: a publish's try has a kept test and no proposal: %w", ErrInvalid)
+	}
+
+	return n.Check()
+}
+
 // TryAttempt is n's attempt as stored: 1 when it names none.
 func (n NewPastTry) TryAttempt() int { return max(n.Attempt, 1) }
 
@@ -165,9 +175,7 @@ func ContentKey(files map[string][]byte) string {
 // files unchanged. ErrEditDoesNotApply when an edit does not apply.
 func ApplyEdits(files map[string][]byte, edits []ProposalEdit) (map[string][]byte, error) {
 	out := make(map[string][]byte, len(files)+len(edits))
-	for p, b := range files {
-		out[p] = b
-	}
+	maps.Copy(out, files)
 
 	for _, e := range edits {
 		content, ok := out[e.Path]

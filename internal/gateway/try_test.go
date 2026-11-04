@@ -213,7 +213,7 @@ func TestBundle_TryOfAPublishGetsTheDraftsFiles(t *testing.T) {
 	edits := []domain.ProposalEdit{{Path: engineerPrompt, Content: "# engineer, from the draft\n", BaseSHA256: string(domain.HashBlob([]byte("# engineer\n")))}}
 
 	tries, err := h.store.QueuePublishTries(ctx, factoryID, version, edits, []domain.NewPastTry{{
-		KeptTestID: k.ID, ContentKey: "key", ItemID: proposed.ItemID, Station: tryStation, OriginalRunID: proposed.OriginalRunID, Model: "claude-sonnet-5-5",
+		KeptTestID: k.ID, ContentKey: "key", ItemID: proposed.ItemID, Station: tryStation, OriginalRunID: proposed.OriginalRunID, Model: proposed.Model,
 	}}, h.clock.Now())
 	if err != nil {
 		t.Fatal(err)

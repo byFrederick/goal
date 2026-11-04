@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -460,31 +461,32 @@ func TestModelProposals_ConfirmQueuesThreeTriesPerKeptTest(t *testing.T) {
 		t.Errorf("estimate %d tries at $%v, want 6 at $6: three of the item and three of its kept test", est.Tries, est.EstimateUSD)
 	}
 
+	w.expectKeptTries(p, k.ID)
+}
+
+// expectKeptTries fails the test unless p's kept-test tries are three of test, at build on the new
+// model, with the content key of the files p's edits make.
+func (w *modelWorld) expectKeptTries(p domain.Proposal, test domain.KeptTestID) {
+	w.t.Helper()
+
 	edited, err := domain.ApplyEdits(w.defs.files, p.Edits)
 	if err != nil {
-		t.Fatal(err)
+		w.t.Fatal(err)
 	}
 
 	tries, err := w.store.ProposalPastTries(w.ctx(), p.ID)
 	if err != nil {
-		t.Fatal(err)
+		w.t.Fatal(err)
 	}
 
-	var kept []domain.PastTry
-
-	for _, tr := range tries {
-		if tr.KeptTestID != "" {
-			kept = append(kept, tr)
-		}
+	tries = slices.DeleteFunc(tries, func(tr domain.PastTry) bool { return tr.KeptTestID == "" })
+	if len(tries) != domain.ModelTriesPerItem {
+		w.t.Fatalf("kept-test tries = %+v, want three", tries)
 	}
 
-	if len(kept) != domain.ModelTriesPerItem {
-		t.Fatalf("kept-test tries = %+v, want three", kept)
-	}
-
-	for i, tr := range kept {
-		if tr.KeptTestID != k.ID || tr.Attempt != i+1 || tr.Model != modelNew || tr.Station != stBuild || tr.ContentKey != domain.ContentKey(edited) {
-			t.Errorf("kept-test try %+v, want attempt %d of test %s at %s on %s with the proposed content's key", tr, i+1, k.ID, stBuild, modelNew)
+	for i, tr := range tries {
+		if tr.KeptTestID != test || tr.Attempt != i+1 || tr.Model != modelNew || tr.Station != stBuild || tr.ContentKey != domain.ContentKey(edited) {
+			w.t.Errorf("kept-test try %+v, want attempt %d of test %s at %s on %s with the proposed content's key", tr, i+1, test, stBuild, modelNew)
 		}
 	}
 }

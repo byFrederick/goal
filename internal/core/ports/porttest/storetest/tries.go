@@ -469,15 +469,16 @@ func testTriesPublishFirst(f *fixture) {
 	older := f.newTries(t, p, f.create(t, domain.NewItem{}))
 	k := f.keep(t, f.create(t, domain.NewItem{}), stWork, 1)
 
-	queued, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, p.VersionID, publishEdits, []domain.NewPastTry{f.keptTry(t, k, "key-1", 1)}, t1.Add(time.Minute))
-	if err != nil || len(queued) != 1 {
-		t.Fatalf("QueuePublishTries = %+v, %v; want one try", queued, err)
-	}
+	queued := f.queuePublish(t, p.VersionID, 1, f.keptTry(t, k, "key-1", 1))
 
 	got, err := f.Tries.PastTry(f.ctx(t), queued[0].ID)
-	if err != nil || got.ProposalID != "" || got.ProposalNumber != 0 || got.KeptTestID != k.ID || got.ContentKey != "key-1" ||
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.ProposalID != "" || got.ProposalNumber != 0 || got.KeptTestID != k.ID || got.ContentKey != "key-1" ||
 		got.VersionID != p.VersionID || !reflect.DeepEqual(got.Edits, publishEdits) {
-		t.Errorf("PastTry of a publish's try = %+v, %v; want no proposal, test %s, key-1, version %s and its edits", got, err, k.ID, p.VersionID)
+		t.Errorf("PastTry of a publish's try = %+v; want no proposal, test %s, key-1, version %s and its edits", got, k.ID, p.VersionID)
 	}
 
 	claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, t1.Add(time.Hour), ttl, 2)
@@ -514,33 +515,47 @@ func testTriesReusedByContent(f *fixture) {
 		t.Fatalf("QueuePastTries of a cited item's try and its kept test's = %+v, %v; want both", ofProposal, err)
 	}
 
-	publish := []domain.NewPastTry{f.keptTry(t, other, "key-1", 1)}
+	publish := f.keptTry(t, other, "key-1", 1)
+	first := f.queuePublish(t, p.VersionID, 1, publish)
+	f.queuePublish(t, p.VersionID, 0, publish)
+	f.queuePublish(t, p.VersionID, 1, f.keptTry(t, other, "key-2", 1))
 
-	first, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, p.VersionID, publishEdits, publish, t1.Add(time.Minute))
-	if err != nil || len(first) != 1 {
-		t.Fatalf("QueuePublishTries = %+v, %v; want one", first, err)
-	}
-
-	again, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, p.VersionID, publishEdits, publish, t1.Add(2*time.Minute))
-	if err != nil || len(again) != 0 {
-		t.Errorf("QueuePublishTries again = %+v, %v; want none queued", again, err)
-	}
-
-	if _, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, p.VersionID, publishEdits, []domain.NewPastTry{f.keptTry(t, other, "key-2", 1)}, t1); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := f.Tries.KeptTestTries(f.ctx(t), f.factory, "key-1")
-	if err != nil || len(got) != 2 || got[0].ID != ofProposal[1].ID || got[1].ID != first[0].ID {
-		t.Errorf("KeptTestTries of key-1 = %+v, %v; want the proposal's kept-test try then the publish's", got, err)
-	}
+	f.expectKeyTries(t, "key-1", ofProposal[1].ID, first[0].ID)
 
 	if err := f.Kept.RemoveKeptTest(f.ctx(t), f.factory, k.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err = f.Tries.KeptTestTries(f.ctx(t), f.factory, "key-1")
-	if err != nil || len(got) != 1 || got[0].ID != first[0].ID {
-		t.Errorf("KeptTestTries after removing the test = %+v, %v; want only the other test's", got, err)
+	f.expectKeyTries(t, "key-1", first[0].ID)
+}
+
+// queuePublish queues tries as a publish's on version and fails t unless it queued want of them.
+func (f *fixture) queuePublish(t *testing.T, version domain.DefinitionVersionID, want int, tries ...domain.NewPastTry) []domain.PastTry {
+	t.Helper()
+
+	got, err := f.Tries.QueuePublishTries(f.ctx(t), f.factory, version, publishEdits, tries, t1.Add(time.Minute))
+	if err != nil || len(got) != want {
+		t.Fatalf("QueuePublishTries = %+v, %v; want %d queued", got, err, want)
+	}
+
+	return got
+}
+
+// expectKeyTries fails t unless the factory's kept-test tries of key are want, in order.
+func (f *fixture) expectKeyTries(t *testing.T, key string, want ...domain.PastTryID) {
+	t.Helper()
+
+	got, err := f.Tries.KeptTestTries(f.ctx(t), f.factory, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make([]domain.PastTryID, len(got))
+	for i, g := range got {
+		ids[i] = g.ID
+	}
+
+	if !reflect.DeepEqual(ids, want) {
+		t.Errorf("KeptTestTries of %s = %v, want %v", key, ids, want)
 	}
 }
