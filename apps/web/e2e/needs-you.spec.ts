@@ -14,13 +14,24 @@ test('the page lists what waits on you, with the count in the top bar', async ({
   await expectNoHorizontalScroll(page);
 });
 
-test('the Alerts tab lists the failing source and the conversion that waits on the factory', async ({ page }) => {
+test('the Alerts tab opens the failing source and the conversion that waits on the factory', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
   await page.getByRole('radio', { name: /^Alerts/ }).check({ force: true });
   await expect(page).toHaveURL(/type=alert/);
   const list = page.getByRole('list', { name: /Waiting on you/ });
-  await expect(list.getByText('dashboards does not sync')).toBeVisible();
-  await expect(list.getByText(/conversion|aws-prod/i).first()).toBeVisible();
+
+  await list.getByRole('link', { name: /dashboards, which .* reads, does not sync/ }).click();
+  const detail = page.getByRole('article');
+  await expect(detail.getByRole('heading', { name: /^dashboards, which .* reads, does not sync$/ })).toBeVisible();
+  await expect(list.getByText(/ \d+ times$/).first()).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Open dashboards' })).toBeVisible();
+
+  await list.getByRole('link', { name: /could not move to secrets/ }).click();
+  await expect(detail.getByRole('heading', { name: /could not move to secrets$/ })).toBeVisible();
+  await expect(detail.getByText(/connection aws-prod uses the aws kind/)).toBeVisible();
+  await expect(detail.getByText(/connection zendesk-prod has no secret/)).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Open the definition' })).toBeVisible();
+  await expect(page.getByText(/expedite/i)).toHaveCount(0);
 });
 
 test('the Decisions tab writes its type to the URL and hides the alerts', async ({ page }) => {

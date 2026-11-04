@@ -36,6 +36,13 @@ On the item page and in Needs you, the Approve button approves, the Deny button 
 
 On a phone, Needs you shows the list first. Choosing an entry opens only that entry, with Back in the top bar to return to the list where you left it.
 
+## Fix an alert about a source or a conversion
+
+Two alerts on the Alerts tab of Needs you are about a factory, not an item.
+
+- **A source does not sync.** The title reads "product-specs, which Software reads, does not sync", with the factory's title or else its name. The second line is the source's last error and the number of failed syncs, such as "Confluence refused the token 3 times". The time on the row is how long ago the source last changed, not the time of its last good sync. The detail has **Open product-specs**, which opens the source's page.
+- **A factory could not move to secrets.** The title reads "Software could not move to secrets", and the second line says why. The detail lists each problem to fix, one per line, and says the factory keeps running on its current version until a version on secrets is published. **Open the definition** opens the factory's definition editor.
+
 ## Send back
 
 Send an item back to rework when its output is not good enough. A reason is required, and the next run reads it.

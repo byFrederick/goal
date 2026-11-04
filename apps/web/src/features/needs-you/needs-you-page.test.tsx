@@ -353,7 +353,7 @@ describe('Needs you: deciding a Decision', () => {
       knowledge_source: { source: 'handbook', error: '401 from the code host', failed_syncs: 3 },
     };
     renderPage({
-      search: { entry: failing.id },
+      search: { entry: failing.id, type: 'alert' },
       seed: [
         [inboxQuery(org.id).queryKey, inbox([failing])],
         [factoriesQuery(org.id).queryKey, factories()],
@@ -361,12 +361,94 @@ describe('Needs you: deciding a Decision', () => {
     });
 
     expect(await screen.findByText('401 from the code host', { selector: 'p' })).toBeTruthy();
-    expect(screen.getAllByText('handbook does not sync').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('handbook, which Software reads, does not sync').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/last sync|synced since/i)).toBeNull();
     expect(
       screen.getByText(/The last 3 syncs of handbook failed, so Software reads the files from before/),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open handbook' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+  });
+});
+
+describe('Needs you: a conversion that could not move to secrets', () => {
+  it('shows the factory, the reason, what to fix and a link to the definition', async () => {
+    const conversion: InboxEntry = {
+      ...alert,
+      id: 'conversion:factory-1',
+      kind: 'conversion',
+      factory,
+      andon: null,
+      conversion: {
+        reason: 'Connection aws-prod uses the aws kind.',
+        problems: ['connection aws-prod uses the aws kind', 'connection zendesk-prod has no secret'],
+      },
+    };
+    renderPage({
+      search: { entry: conversion.id, type: 'alert' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([conversion])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    expect((await screen.findAllByText('Software could not move to secrets')).length).toBeGreaterThan(0);
+    expect(screen.getByText('connection aws-prod uses the aws kind', { selector: 'li' })).toBeTruthy();
+    expect(screen.getByText('connection zendesk-prod has no secret', { selector: 'li' })).toBeTruthy();
+    expect(
+      screen.getByText(/keeps running on its current version until a version on secrets is published/),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open the definition' }).getAttribute('href')).toContain('/definition');
+    expect(screen.queryByText(/expedite/i)).toBeNull();
+  });
+});
+
+describe('Needs you: the rows of the two alerts', () => {
+  it('says which factory reads a failing source, and the error and its count under it', async () => {
+    const failing: InboxEntry = {
+      ...alert,
+      id: 'knowledge_source:factory-1:handbook',
+      kind: 'knowledge_source',
+      factory,
+      andon: null,
+      knowledge_source: { source: 'handbook', error: 'Confluence refused the token', failed_syncs: 3 },
+    };
+    renderPage({
+      search: { type: 'alert' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([failing])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const row = await screen.findByRole('link', { name: /handbook, which Software reads, does not sync/ });
+    expect(within(row).getByText('Confluence refused the token 3 times')).toBeTruthy();
+    expect(within(row).queryByText(/synced since|last sync/i)).toBeNull();
+  });
+
+  it('names the factory that could not move to secrets and gives the reason under it', async () => {
+    const conversion: InboxEntry = {
+      ...alert,
+      id: 'conversion:factory-1',
+      kind: 'conversion',
+      factory,
+      andon: null,
+      conversion: {
+        reason: 'Connection aws-prod uses the aws kind.',
+        problems: ['connection aws-prod uses the aws kind'],
+      },
+    };
+    renderPage({
+      search: { type: 'alert' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([conversion])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const row = await screen.findByRole('link', { name: /Software could not move to secrets/ });
+    expect(within(row).getByText('Connection aws-prod uses the aws kind.')).toBeTruthy();
+    expect(within(row).queryByText(/expedite/i)).toBeNull();
   });
 });
 

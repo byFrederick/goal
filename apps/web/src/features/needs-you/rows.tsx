@@ -23,14 +23,24 @@ export function titleOf(entry: InboxEntry): string {
   if (entry.kind === 'question' && entry.question) return `${entry.question.agent}: ${entry.question.text}`;
   if (entry.kind === 'tool_approval' && entry.tool_approval) return approvalTitle(entry.tool_approval);
   if (entry.item) return entry.item.title;
-  if (entry.kind === 'knowledge_source' && entry.knowledge_source)
-    return `${entry.knowledge_source.source} does not sync`;
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) return syncFailureTitle(entry);
+  if (entry.kind === 'conversion') return conversionTitle(entry);
   if (entry.kind === 'watch_worse' && entry.watch) return watchWorseTitle(entry.watch);
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
   }
   return humanize(entry.kind);
+}
+
+/** A failing source's title: the source, and the factory that reads it, "product-specs, which Software reads, does not sync". */
+export function syncFailureTitle(entry: InboxEntry): string {
+  return `${entry.knowledge_source?.source ?? 'A source'}, which ${entry.factory.title ?? entry.factory.name} reads, does not sync`;
+}
+
+/** A conversion entry's title: the factory that could not move to secrets. */
+export function conversionTitle(entry: InboxEntry): string {
+  return `${entry.factory.title ?? entry.factory.name} could not move to secrets`;
 }
 
 /** A watch_worse entry's title: the proposal and the number that got worse, "Proposal 14 made sent-back rate worse". */
@@ -49,6 +59,11 @@ export function approvalTitle(approval: { agent: string; tool: string }): string
 /** The line under the title: the item and its station, or the factory when no item is involved. */
 function whereOf(entry: InboxEntry): string {
   const station = humanize(entry.station ?? entry.item?.station ?? '');
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
+    const k = entry.knowledge_source;
+    return `${k.error || 'The sync failed'} ${k.failed_syncs} times`;
+  }
+  if (entry.kind === 'conversion' && entry.conversion) return entry.conversion.reason;
   if ((entry.kind === 'question' || entry.kind === 'tool_approval') && entry.item) {
     return `#${entry.item.number} at ${station}, run paused`;
   }
