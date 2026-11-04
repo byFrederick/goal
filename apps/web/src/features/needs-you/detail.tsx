@@ -21,7 +21,7 @@ import { QuestionCard } from '../items/question-card';
 import { watchText, watchVerdicts } from '../jonah/jonah-format';
 import { UndoThisChange } from '../jonah/undo-button';
 import { decisionOf } from './actions';
-import { ageOf, approvalTitle, watchWorseTitle } from './rows';
+import { ageOf, approvalTitle, conversionTitle, syncFailureTitle, watchWorseTitle } from './rows';
 import { typeLabel, typeOf } from './types';
 
 export interface DetailProps {
@@ -156,8 +156,8 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
 
 function kindTitle(entry: InboxEntry): string {
   if (entry.kind === 'watch_worse' && entry.watch) return watchWorseTitle(entry.watch);
-  if (entry.kind === 'knowledge_source' && entry.knowledge_source)
-    return `${entry.knowledge_source.source} does not sync`;
+  if (entry.kind === 'knowledge_source' && entry.knowledge_source) return syncFailureTitle(entry);
+  if (entry.kind === 'conversion') return conversionTitle(entry);
   if (entry.kind === 'andon') return 'Line stopped';
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
@@ -175,7 +175,8 @@ function alertSummary(entry: InboxEntry, station: string): string {
   if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
     return `The last ${entry.knowledge_source.failed_syncs} syncs of ${entry.knowledge_source.source} failed.`;
   }
-  return 'It waits in the expedite lane.';
+  if (entry.kind === 'conversion') return 'Its conversion to secrets is blocked.';
+  return 'It needs your attention.';
 }
 
 /** One labelled line of facts: the label in a fixed column, the value beside it. */
@@ -353,6 +354,29 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
         <p className="m-0 text-secondary">
           <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: k.source }}>
             Open {k.source}
+          </Link>
+        </p>
+      </section>
+    );
+  }
+  if (entry.kind === 'conversion' && entry.conversion) {
+    const factory = entry.factory.name;
+    return (
+      <section
+        aria-label="What to fix"
+        className="flex flex-col gap-2 rounded-card border border-line bg-card p-4 md:p-5"
+      >
+        <ul className="m-0 flex list-none flex-col gap-2 p-0 text-body text-ink">
+          {entry.conversion.problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+        <p className="m-0 text-secondary text-muted">
+          The factory keeps running on its current version until a version on secrets is published.
+        </p>
+        <p className="m-0 text-secondary">
+          <Link to="/o/$org/f/$factory/definition" params={{ org: org.slug, factory }}>
+            Open the definition
           </Link>
         </p>
       </section>
