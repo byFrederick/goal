@@ -1,6 +1,6 @@
 # ADR 0034 — Jonah proposals: reviews of sent-back runs propose definition changes, approved by publishing
 
-Status: accepted · 2026-10-28 · Amends [ADR 0002](0002-jonah-evals.md) (its phase 5 amendment, decisions 2 and 5) · Builds on [ADR 0014](0014-factory-rules.md) (`rules/` in a definition), [ADR 0016](0016-ui-revamp.md) (the screens are binding) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (run boxes and connections)
+Status: accepted · 2026-10-28 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (reviews read every send-back, touch and failed run as files, once a day; edits are stored replacements inside an allowlist; memory facts quoted from people) · Amends [ADR 0002](0002-jonah-evals.md) (its phase 5 amendment, decisions 2 and 5) · Builds on [ADR 0014](0014-factory-rules.md) (`rules/` in a definition), [ADR 0016](0016-ui-revamp.md) (the screens are binding) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (run boxes and connections)
 
 ## Context
 

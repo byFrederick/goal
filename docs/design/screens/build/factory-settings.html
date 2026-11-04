@@ -212,6 +212,14 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
             <div class="fr"><span class="lb">Parts that touch the same files</span><div><div class="seg" role="group" aria-label="Overlap"><button type="button" aria-pressed="true">Take turns</button><button type="button" aria-pressed="false">Work side by side</button></div><span class="hp">A merge conflict sends the part back to Build on a fresh branch.</span></div></div>
           </section>
 
+          <section class="sct" id="jonah" aria-labelledby="j-h">
+            <h2 id="j-h">Jonah</h2>
+            <div class="fr"><span class="lb">Jonah</span><div><div class="seg" role="group" aria-label="Jonah"><button type="button" aria-pressed="true">On</button><button type="button" aria-pressed="false">Off</button></div><span class="hp">Proposes changes for you to approve.</span></div></div>
+            <div class="fr"><span class="lb">Proposes after</span><div><div class="inl"><input class="inp sm" type="text" value="3" style="width: 52px" aria-label="Items alike"> items with the same cause</div></div></div>
+            <div class="fr"><span class="lb">Budget</span><div><div class="inl"><input class="inp sm" type="text" value="5" style="width: 52px" aria-label="Budget share"> % of the line’s spend</div><span class="hp">$52 this week, $14 used. It never stops the line.</span></div></div>
+            <div class="fr"><label class="lb" for="jm">Model</label><div><select id="jm" class="inp" style="max-width: 260px"><option>claude-opus-5-5</option><option>claude-sonnet-5-5</option></select></div></div>
+          </section>
+
           <section class="sct" id="notifications" aria-labelledby="n-h">
             <h2 id="n-h">Notifications</h2>
             <div class="fr"><label for="nc">Slack channel</label><div><span class="pre"><span>#</span><input id="nc" type="text" value="goal-dev"></span><span class="hp">Sent with the secret slack-bot.</span></div></div>
@@ -241,7 +249,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
           <a href="#repo">Repository</a>
           <a href="#runtime">Runtime</a>
           <a href="#budgets">Budgets and targets</a>
-          <a href="#flow">Flow</a>
+          <a href="#flow">Flow</a><a href="#jonah">Jonah</a>
           <a href="#notifications">Notifications</a>
           <a href="#members">People with access</a>
           <a href="#danger">Danger zone</a>
