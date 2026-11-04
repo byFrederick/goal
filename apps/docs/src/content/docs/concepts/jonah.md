@@ -111,19 +111,43 @@ Tries run only while Jonah is on, while no item waits at an agent station, and w
 - **The cost and the time:** what the tries cost together, and the seconds from the first try queued to the last one finished, once all are done.
 - **The state:** `trying` while a try is queued or running, `done` when every try is done, and `budget_used`, shown as "Not tried: budget used", while a try is still queued and Jonah's budget has run out. Queued tries run once the 7-day window has room again.
 
-Today only code grades a try. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason. A try that passes both stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
+Today only code grades a try of a cited item. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason. A try that passes both stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) are not shown yet: `grader` is absent.
+
+A proposal that reaches a station is also tried on that station's [kept tests](#kept-tests): one try of each, or three for a model proposal. `tried.kept_tests` lists each of those tries with the test's item number, its station, its attempt and its result: `running` while it is queued or runs, then `passed`, `failed` or `error`. A proposal tried before kept tests ran on proposals has none.
 
 ## Kept tests
 
-A kept test is a past item that a person keeps, at a station it passed the first time, as a test. The item must keep passing there. A failing kept test will warn when you publish a change that reaches its station, and it never blocks a publish.
+A kept test is a past item that a person keeps, at a station it passed the first time, as a test. The item must keep passing there. Every change that reaches the station is tried on it: each proposal, and the draft you are about to publish. A failing kept test warns, and it never blocks a publish.
 
 An item passed a station the first time when it was claimed there once, no gate rejected it there, and it then moved on. Its first run there must also have finished with its commit recorded, because a test reruns that run. An item sent back to the station counts as failing only once it is claimed there again.
 
-- `GET …/jonah/tests` lists the factory's kept tests by station in line order, then newest first. Each shows the item's number and title, the station, who kept it and when. It needs `factory:read`.
+- `GET …/jonah/tests` lists the factory's kept tests by station in line order, then newest first. Each shows the item's number and title, the station, who kept it and when, and `last_result`: the result of its newest finished try from a proposal or a publish (`passed`, `failed` or `error`), when it finished and the try's run. `last_result` is null for a test never run. It needs `factory:read`.
 - `POST …/jonah/tests` with `{"item": <number>, "station": "<id>"}` keeps one. It needs `definition:edit`. It is refused with 404 `item-not-found` for an unknown item, 400 for a station that is not an agent station of the current line, 409 `not-passed-first-time` when the item did not pass the station the first time, and 409 `kept-test-exists` when the item is kept at that station already.
 - `DELETE …/jonah/tests/{test}` removes one, and the item stays. It needs `definition:edit` and answers 404 `kept-test-not-found` for an unknown test.
 
-Deleting the factory or the organization removes its kept tests. Today kept tests exist only in the API: there is no `goal test` command or Tests tab yet, and publishing does not run them yet.
+From the CLI:
+
+- `goal test keep <item> --station S [--factory F]` keeps an item, by its number, as a test at a station.
+- `goal test list [--factory F]` lists the kept tests: station, item number and title, last result and when, who kept it, and the test's id.
+- `goal test rm <id> [--factory F]` removes one.
+
+Removing a kept test removes its tries. Deleting the factory or the organization removes its kept tests. The Tests tab in the web app is not built yet.
+
+### When a kept test passes
+
+A kept test's try reruns the item's first run at the station, on the changed definition, in a box with only the model key. It passes when its run succeeds, its output satisfies the station's contract, the station's checks pass and, at a station with a gate, the output approves, as the gate did for the item the first time. Any other outcome fails it, with why: a failing check, a broken contract, a gate that rejects, or a run that failed. A try that could not be carried out, such as a lost box or a commit that is gone, is `error`, never `failed`.
+
+### Kept tests at publish
+
+When the publish dialog opens, it calls `POST …/draft/kept-tests` (`definition:publish`). goald finds the agent stations the draft reaches, the ones whose agent gets something different, and queues one try of each kept test there. The try runs on the current version with the draft's files. `GET …/draft/kept-tests` (`factory:read`) answers the same and starts nothing.
+
+- **Reuse:** each try records a key of the exact content it runs on. A kept test that already has a try of the draft's content, from a proposal or an earlier publish, reuses it and queues nothing. So publishing a tried proposal does not rerun its kept tests, and calling the route again starts nothing new.
+- **Order:** a publish's tries are claimed before any proposal's. Like every try, they wait while an item waits at an agent station, and while Jonah's budget for the last 7 days is used up.
+- **The answer:** `state` is `trying`, `done` or `budget_used`, as for a proposal's tries. Each test comes with its `result`: null until its try is queued, then `running`, `passed`, `failed` or `error`, with the reason, the error and the try's run.
+- **Tests that can't be tried** are answered `error` with why, and nothing is queued for them: a station whose agent needs MCP servers or secrets, an item with no finished first run there, a draft that deletes a file, or a factory with Jonah off.
+- **No draft:** the route answers 404 `no-draft`.
+
+Publishing never reads these results: a failing kept test is a warning. Approving a proposal publishes it without the dialog and starts no kept tests of its own.
 
 ## Where the review loop stands
 
