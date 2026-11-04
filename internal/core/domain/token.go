@@ -21,18 +21,13 @@ const TaskAudience = "goal-gateway"
 // TaskKind is what kind of task a token is for: empty for a production run of a line's item.
 type TaskKind string
 
-// TaskKindEval is one try of an eval case (ADR 0025 decision 4). Its token names no connection,
-// so the gateway serves it only the knowledge tools: an eval never pushes, comments or calls an
-// outside API. The model connection reaches the agent's box apart from the token.
-const TaskKindEval TaskKind = "eval"
-
 // TaskKindDraftRequest is a draft request's box (ADR 0021 decision 2): it names the request and
 // the draft revision whose files it starts from, and no item, station or connection. The gateway
 // serves it only its bundle, with the draft's files and no repository.
 const TaskKindDraftRequest TaskKind = "draft_request"
 
-// TaskKindJonah is a Jonah review's run (ADR 0034 decision 1). Like an eval's, its token names
-// no connection, and it carries the review's window: the gateway serves it the factory's
+// TaskKindJonah is a Jonah review's run (ADR 0034 decision 1). Its token names no
+// connection, and it carries the review's window: the gateway serves it the factory's
 // definition files, its sent-back events in that window and its recently rejected proposals,
 // and no MCP tool.
 const TaskKindJonah TaskKind = "jonah"
@@ -56,9 +51,9 @@ const TaskKindGrade TaskKind = "grade"
 type TaskClaims struct {
 	// Audience is always TaskAudience: SignTaskToken sets it and VerifyTaskToken requires it.
 	Audience string `json:"aud"`
-	// Kind is empty for a production task, TaskKindEval for an eval try, TaskKindJonah for a
-	// Jonah review, TaskKindDraftRequest for a draft request's box, TaskKindTry for a try of a
-	// past item and TaskKindGrade for a grade.
+	// Kind is empty for a production task, TaskKindJonah for a Jonah review,
+	// TaskKindDraftRequest for a draft request's box, TaskKindTry for a try of a past item and
+	// TaskKindGrade for a grade.
 	Kind      TaskKind  `json:"k,omitempty"`
 	OrgID     OrgID     `json:"o"`
 	FactoryID FactoryID `json:"f"`
@@ -183,10 +178,10 @@ func VerifyTaskToken(key []byte, token string, now time.Time) (TaskClaims, error
 	return c, nil
 }
 
-// checkKind refuses an eval, Jonah or draft request task's claims that name what its kind does not
+// checkKind refuses a Jonah or draft request task's claims that name what its kind does not
 // have, and any other task's that name a Jonah window or a draft request.
 func (c TaskClaims) checkKind() error {
-	if err := c.checkEvalAndJonah(); err != nil {
+	if err := c.checkJonah(); err != nil {
 		return err
 	}
 
@@ -201,12 +196,10 @@ func (c TaskClaims) checkKind() error {
 	return c.checkDraftRequest()
 }
 
-// checkEvalAndJonah refuses an eval or Jonah task's claims that name a connection, a Jonah task's
-// without a window, and a window or Manual on any other kind of task.
-func (c TaskClaims) checkEvalAndJonah() error {
+// checkJonah refuses a Jonah task's claims that name a connection or have no window, and a window
+// or Manual on any other kind of task.
+func (c TaskClaims) checkJonah() error {
 	switch {
-	case c.Kind == TaskKindEval && len(c.Connections) > 0:
-		return fmt.Errorf("%w: an eval task names connections", ErrBadTaskToken)
 	case c.Kind == TaskKindJonah && len(c.Connections) > 0:
 		return fmt.Errorf("%w: a jonah task names connections", ErrBadTaskToken)
 	case c.Kind == TaskKindJonah && (c.WindowStart <= 0 || c.WindowEnd <= c.WindowStart):
