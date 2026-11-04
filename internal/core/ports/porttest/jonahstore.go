@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -490,4 +491,119 @@ func cloneProposals(ps []domain.Proposal) []domain.Proposal {
 	}
 
 	return out
+}
+
+// EvidenceItems implements ports.JonahStore.
+func (s *Store) EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.EvidenceItem{}
+
+	for id, it := range s.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		if at, ok := s.finishedAt(it); ok && inWindow(at, since, until) {
+			out = append(out, domain.EvidenceItem{Item: *it, FinishedAt: at, Runs: s.itemRuns(id), Events: s.milestones(id)})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.EvidenceItem) int {
+		return cmp.Or(b.FinishedAt.Compare(a.FinishedAt), cmp.Compare(a.Item.ID, b.Item.ID))
+	})
+
+	return out[:min(len(out), max(limit, 0))], nil
+}
+
+// finishedAt is when it finished: a done item's DoneAt, a cancelled one's latest cancelled event.
+// Callers hold s.mu.
+func (s *Store) finishedAt(it *domain.Item) (time.Time, bool) {
+	if it.State == domain.StateDone {
+		return it.DoneAt, !it.DoneAt.IsZero()
+	}
+
+	if it.State != domain.StateCancelled {
+		return time.Time{}, false
+	}
+
+	var at time.Time
+
+	for _, e := range s.events {
+		if e.ItemID == it.ID && e.Kind == domain.EventCancelled && e.At.After(at) {
+			at = e.At
+		}
+	}
+
+	return at, !at.IsZero()
+}
+
+// itemRuns are item's runs, oldest first. Callers hold s.mu.
+func (s *Store) itemRuns(item domain.ItemID) []domain.Run {
+	out := []domain.Run{}
+
+	for _, r := range s.runs {
+		if r.ItemID == item {
+			out = append(out, *r)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.Run) int { return cmp.Or(a.StartedAt.Compare(b.StartedAt), cmp.Compare(a.ID, b.ID)) })
+
+	return out
+}
+
+// milestones are item's events but those of domain.PerTurnKinds, in append order. Callers hold
+// s.mu.
+func (s *Store) milestones(item domain.ItemID) []domain.Event {
+	out := []domain.Event{}
+
+	for _, e := range s.events {
+		if e.ItemID == item && !slices.Contains(domain.PerTurnKinds, e.Kind) {
+			out = append(out, e)
+		}
+	}
+
+	return out
+}
+
+// StationRunMedians implements ports.JonahStore.
+func (s *Store) StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	costs, turns := map[string][]float64{}, map[string][]float64{}
+
+	for id, r := range s.runs {
+		if !s.runVisible(r, org) || r.FactoryID != factory || cmp.Or(s.jonah.runKinds[id], domain.RunKindStation) != domain.RunKindStation ||
+			r.Result.Status == domain.RunRunning || !inWindow(r.StartedAt, since, until) {
+			continue
+		}
+
+		costs[r.Station] = append(costs[r.Station], r.Result.CostUSD)
+		turns[r.Station] = append(turns[r.Station], float64(r.Result.Turns))
+	}
+
+	out := []domain.StationMedian{}
+
+	for _, st := range slices.Sorted(maps.Keys(costs)) {
+		slices.Sort(costs[st])
+		slices.Sort(turns[st])
+		out = append(out, domain.StationMedian{
+			Station: st, CostUSD: percentileOf(costs[st], 0.5), Turns: percentileOf(turns[st], 0.5), Runs: len(costs[st]),
+		})
+	}
+
+	return out, nil
 }

@@ -106,6 +106,187 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 	return i, err
 }
 
+const evidenceEvents = `-- name: EvidenceEvents :many
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
+WHERE item_id = ANY($1::uuid[]) AND NOT (kind = ANY($2::text[]))
+ORDER BY item_id, id
+`
+
+type EvidenceEventsParams struct {
+	ItemIds []uuid.UUID
+	PerTurn []string
+}
+
+// The events of the items but those of the per-turn kinds, by item in append order
+// (item_events_item_idx).
+func (q *Queries) EvidenceEvents(ctx context.Context, arg EvidenceEventsParams) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, evidenceEvents, arg.ItemIds, arg.PerTurn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evidenceItems = `-- name: EvidenceItems :many
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, f.finished_at::timestamptz AS finished_at
+FROM (
+  SELECT d.id, d.done_at AS finished_at FROM work_items d
+  WHERE d.factory_id = $1 AND d.state = 'done'
+    AND d.done_at >= $2::timestamptz AND d.done_at < $3::timestamptz
+  UNION ALL
+  SELECT c.item_id, max(c.at) FROM item_events c
+  JOIN work_items cw ON cw.id = c.item_id AND cw.state = 'cancelled'
+  WHERE c.factory_id = $1 AND c.kind = 'cancelled' AND c.at >= $2::timestamptz
+  GROUP BY c.item_id
+  HAVING max(c.at) < $3::timestamptz
+) f
+JOIN work_items w ON w.id = f.id
+ORDER BY f.finished_at DESC, w.id
+LIMIT $4
+`
+
+type EvidenceItemsParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+	MaxItems  int32
+}
+
+type EvidenceItemsRow struct {
+	WorkItem   WorkItem
+	FinishedAt time.Time
+}
+
+// The factory's items finished in [since, until), the most recently finished first, at most
+// max_items: a done item by its done_at (work_items_done_at_idx), a cancelled one by its latest
+// cancelled event (item_events_factory_at_idx; a later one past until keeps it out).
+func (q *Queries) EvidenceItems(ctx context.Context, arg EvidenceItemsParams) ([]EvidenceItemsRow, error) {
+	rows, err := q.db.Query(ctx, evidenceItems,
+		arg.FactoryID,
+		arg.Since,
+		arg.Until,
+		arg.MaxItems,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EvidenceItemsRow
+	for rows.Next() {
+		var i EvidenceItemsRow
+		if err := rows.Scan(
+			&i.WorkItem.ID,
+			&i.WorkItem.FactoryID,
+			&i.WorkItem.Number,
+			&i.WorkItem.ParentID,
+			&i.WorkItem.Type,
+			&i.WorkItem.Lane,
+			&i.WorkItem.Title,
+			&i.WorkItem.Body,
+			&i.WorkItem.Station,
+			&i.WorkItem.State,
+			&i.WorkItem.ClassOfService,
+			&i.WorkItem.Priority,
+			&i.WorkItem.Size,
+			&i.WorkItem.ReworkCount,
+			&i.WorkItem.CostUsd,
+			&i.WorkItem.Outputs,
+			&i.WorkItem.CreatedAt,
+			&i.WorkItem.UpdatedAt,
+			&i.WorkItem.DoneAt,
+			&i.WorkItem.OrgID,
+			&i.WorkItem.PartKey,
+			&i.WorkItem.PartPaths,
+			&i.WorkItem.Paths,
+			&i.WorkItem.BaseCommit,
+			&i.WorkItem.Trigger,
+			&i.WorkItem.Source,
+			&i.WorkItem.IntegrationBranch,
+			&i.WorkItem.IntegrationLandAt,
+			&i.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const evidenceRuns = `-- name: EvidenceRuns :many
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs WHERE item_id = ANY($1::uuid[]) ORDER BY item_id, started_at, id
+`
+
+// The runs of the items, by item, oldest first (agent_runs_item_id_idx).
+func (q *Queries) EvidenceRuns(ctx context.Context, itemIds []uuid.UUID) ([]AgentRun, error) {
+	rows, err := q.db.Query(ctx, evidenceRuns, itemIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentRun
+	for rows.Next() {
+		var i AgentRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.Station,
+			&i.Agent,
+			&i.Model,
+			&i.SessionID,
+			&i.Status,
+			&i.Turns,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostUsd,
+			&i.Error,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.OrgID,
+			&i.DefinitionVersionID,
+			&i.Kind,
+			&i.Brief,
+			&i.Output,
+			&i.BranchHead,
+			&i.BaseHead,
+			&i.PushedHead,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishJonahReview = `-- name: FinishJonahReview :one
 UPDATE jonah_reviews
 SET state = $1, error = $2, run_id = $3, finished_at = $4::timestamptz,
@@ -699,6 +880,58 @@ func (q *Queries) StationFlowSpans(ctx context.Context, arg StationFlowSpansPara
 	var i StationFlowSpansRow
 	err := row.Scan(&i.Passed, &i.P85Seconds)
 	return i, err
+}
+
+const stationRunMedians = `-- name: StationRunMedians :many
+SELECT station,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd)::float8 AS cost_usd,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY turns)::float8 AS turns,
+       count(*)::bigint AS runs
+FROM agent_runs
+WHERE factory_id = $1 AND kind = 'station' AND status <> 'running'
+  AND started_at >= $2::timestamptz AND started_at < $3::timestamptz
+GROUP BY station
+ORDER BY station
+`
+
+type StationRunMediansParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+	Until     time.Time
+}
+
+type StationRunMediansRow struct {
+	Station string
+	CostUsd float64
+	Turns   float64
+	Runs    int64
+}
+
+// The median cost and turns of the factory's finished station runs started in [since, until), by
+// station (agent_runs_factory_started_idx).
+func (q *Queries) StationRunMedians(ctx context.Context, arg StationRunMediansParams) ([]StationRunMediansRow, error) {
+	rows, err := q.db.Query(ctx, stationRunMedians, arg.FactoryID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StationRunMediansRow
+	for rows.Next() {
+		var i StationRunMediansRow
+		if err := rows.Scan(
+			&i.Station,
+			&i.CostUsd,
+			&i.Turns,
+			&i.Runs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const stationSentBack = `-- name: StationSentBack :one

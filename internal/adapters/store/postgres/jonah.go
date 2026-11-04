@@ -540,6 +540,108 @@ func (s *Store) StationFlow(ctx context.Context, factory domain.FactoryID, stati
 	return out, nil
 }
 
+// EvidenceItems implements ports.JonahStore over work_items, agent_runs and item_events, in one
+// snapshot.
+func (s *Store) EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, fmt.Errorf("evidence items: %w", err)
+	}
+
+	out, err := fetch(ctx, s.read, func(q *db.Queries) ([]domain.EvidenceItem, error) {
+		return evidenceItems(ctx, q, db.EvidenceItemsParams{FactoryID: f, Since: since, Until: until, MaxItems: clampLimit(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("evidence items of factory %s from %s to %s: %w", factory, since, until, err)
+	}
+
+	return out, nil
+}
+
+// evidenceItems reads the finished items p selects, then their runs and milestone events.
+func evidenceItems(ctx context.Context, q *db.Queries, p db.EvidenceItemsParams) ([]domain.EvidenceItem, error) {
+	rows, err := q.EvidenceItems(ctx, p)
+	if err != nil {
+		return nil, fmt.Errorf("items: %w", err)
+	}
+
+	out := make([]domain.EvidenceItem, len(rows))
+	ids := make([]uuid.UUID, len(rows))
+	at := make(map[uuid.UUID]int, len(rows))
+
+	for i, r := range rows {
+		it, err := itemFrom(r.WorkItem)
+		if err != nil {
+			return nil, err
+		}
+
+		out[i] = domain.EvidenceItem{Item: it, FinishedAt: r.FinishedAt.UTC(), Runs: []domain.Run{}, Events: []domain.Event{}}
+		ids[i], at[r.WorkItem.ID] = r.WorkItem.ID, i
+	}
+
+	runs, err := q.EvidenceRuns(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("runs: %w", err)
+	}
+
+	for _, r := range runs {
+		i := at[*r.ItemID]
+		out[i].Runs = append(out[i].Runs, runFrom(r))
+	}
+
+	perTurn := make([]string, len(domain.PerTurnKinds))
+	for i, k := range domain.PerTurnKinds {
+		perTurn[i] = string(k)
+	}
+
+	events, err := q.EvidenceEvents(ctx, db.EvidenceEventsParams{ItemIds: ids, PerTurn: perTurn})
+	if err != nil {
+		return nil, fmt.Errorf("events: %w", err)
+	}
+
+	for _, r := range events {
+		e, err := eventFrom(r)
+		if err != nil {
+			return nil, err
+		}
+
+		i := at[r.ItemID]
+		out[i].Events = append(out[i].Events, e)
+	}
+
+	return out, nil
+}
+
+// StationRunMedians implements ports.JonahStore over agent_runs.
+func (s *Store) StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, fmt.Errorf("station run medians: %w", err)
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.StationRunMediansRow, error) {
+		return q.StationRunMedians(ctx, db.StationRunMediansParams{FactoryID: f, Since: since, Until: until})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("station run medians of factory %s from %s to %s: %w", factory, since, until, err)
+	}
+
+	out := make([]domain.StationMedian, len(rows))
+	for i, r := range rows {
+		out[i] = domain.StationMedian{Station: r.Station, CostUSD: r.CostUsd, Turns: r.Turns, Runs: int(r.Runs)}
+	}
+
+	return out, nil
+}
+
 func jonahReviewFrom(r db.JonahReview) domain.JonahReview {
 	out := domain.JonahReview{
 		ID: domain.JonahReviewID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()),
