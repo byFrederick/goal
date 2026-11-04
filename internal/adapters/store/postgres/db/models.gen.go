@@ -318,6 +318,16 @@ type JudgeScore struct {
 	ScoredAt   *time.Time
 }
 
+type KeptTest struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	FactoryID uuid.UUID
+	ItemID    uuid.UUID
+	Station   string
+	KeptBy    string
+	KeptAt    time.Time
+}
+
 type Lease struct {
 	ItemID      uuid.UUID
 	FactoryID   uuid.UUID
