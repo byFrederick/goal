@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/factorymodel"
+	"golang.org/x/sync/errgroup"
 )
 
 // SelectorKind says which version a VersionSelector names.
@@ -207,29 +209,97 @@ func (s *Service) Versions(ctx context.Context, f domain.FactoryID, before, limi
 		page.NextBefore = vs[limit-1].Number
 	}
 
-	for _, v := range vs {
-		info, err := s.versionInfo(ctx, rec, v)
-		if err != nil {
-			return VersionPage{}, err
-		}
+	if err := s.fillCounts(ctx, vs); err != nil {
+		return VersionPage{}, err
+	}
 
-		page.Versions = append(page.Versions, info)
+	for _, v := range vs {
+		page.Versions = append(page.Versions, versionInfo(rec, v))
 	}
 
 	return page, nil
 }
 
-func (s *Service) versionInfo(ctx context.Context, rec ports.FactoryRecord, v domain.DefinitionVersion) (VersionInfo, error) {
-	m, _, err := s.versionModel(s.tree(ctx, v.Manifest))
-	if err != nil && !isParseError(err) {
-		return VersionInfo{}, err
+// backfillLimit bounds the version trees read at once to compute counts a version lacks.
+const backfillLimit = 8
+
+// fillCounts gives every version in vs its counts: the stored ones, else computed from its
+// tree, at most backfillLimit at a time, and stored so the next list reads no tree. A version
+// whose tree cannot be read fails the call; a failed save only logs.
+func (s *Service) fillCounts(ctx context.Context, vs []domain.DefinitionVersion) error {
+	missing := make([]int, 0, len(vs))
+
+	for i, v := range vs {
+		if v.Counts == nil {
+			missing = append(missing, i)
+		}
 	}
 
-	return VersionInfo{
-		DefinitionVersion: v,
-		Current:           rec.Current != nil && rec.Current.ID == v.ID,
-		Counts:            counts(nil, m, Comparison{}),
-	}, nil
+	if len(missing) == 0 {
+		return nil
+	}
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(backfillLimit)
+
+	for _, i := range missing {
+		g.Go(func() error {
+			c, err := s.treeCounts(gctx, vs[i].Manifest)
+			if err != nil {
+				return fmt.Errorf("count version %d: %w", vs[i].Number, err)
+			}
+
+			vs[i].Counts = &c
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	for _, i := range missing {
+		if vs[i].State != domain.VersionPublished {
+			continue
+		}
+
+		if err := s.store.SetVersionCounts(ctx, vs[i].ID, *vs[i].Counts); err != nil {
+			s.log.WarnContext(ctx, "authoring.version_counts_not_saved",
+				slog.String("version", string(vs[i].ID)), slog.Any("error", err))
+		}
+	}
+
+	return nil
+}
+
+// treeCounts reads a version's counts from its tree; a factory.yaml that does not parse counts
+// as the empty model.
+func (s *Service) treeCounts(ctx context.Context, m domain.Manifest) (domain.VersionCounts, error) {
+	model, _, err := s.versionModel(s.tree(ctx, m))
+	if err != nil && !isParseError(err) {
+		return domain.VersionCounts{}, err
+	}
+
+	return versionCounts(model), nil
+}
+
+// versionCounts are the counts a version keeps: the list's, without contracts or changes.
+func versionCounts(m Model) domain.VersionCounts {
+	c := counts(nil, m, Comparison{})
+
+	return domain.VersionCounts{Stations: c.Stations, Agents: c.Agents, Skills: c.Skills, Connections: c.Connections}
+}
+
+// versionInfo is v as the history lists it; v has its counts (fillCounts).
+func versionInfo(rec ports.FactoryRecord, v domain.DefinitionVersion) VersionInfo {
+	info := VersionInfo{DefinitionVersion: v, Current: rec.Current != nil && rec.Current.ID == v.ID}
+
+	if c := v.Counts; c != nil {
+		info.Counts = Counts{Stations: c.Stations, Agents: c.Agents, Skills: c.Skills, Connections: c.Connections}
+	}
+
+	return info
 }
 
 // FileInfo is one file of a version.
@@ -263,10 +333,12 @@ func (s *Service) Version(ctx context.Context, f domain.FactoryID, sel VersionSe
 		return VersionDetail{}, fmt.Errorf("the source of %s is a starting tree: %w", f, ErrVersionNotFound)
 	}
 
-	info, err := s.versionInfo(ctx, rec, *v)
-	if err != nil {
+	one := []domain.DefinitionVersion{*v}
+	if err := s.fillCounts(ctx, one); err != nil {
 		return VersionDetail{}, err
 	}
+
+	info := versionInfo(rec, one[0])
 
 	files, err := s.fileInfos(ctx, v.Manifest)
 	if err != nil {
