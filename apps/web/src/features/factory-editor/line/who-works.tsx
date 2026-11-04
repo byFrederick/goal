@@ -6,7 +6,9 @@ import { Link } from '@tanstack/react-router';
 import { Users } from 'lucide-react';
 import { useState } from 'react';
 import type { ModelStation } from '../../../shared/definition/model';
+import { cn } from '../../../ui/cn';
 import { Select } from '../../../ui/select';
+import { touchLinkWide } from '../../../ui/touch-target';
 import { addAgent, setLibrarian, setRoute, setStationField, slug } from '../draft/ops';
 import { useSection } from '../draft/use-draft';
 import { hasExternalIntake, intakeSummary, stationLabel } from './labels';
@@ -51,10 +53,10 @@ export function WhoWorks({
           <Link
             to="."
             search={(prev) => ({ ...prev, mode: 'yaml' as const })}
-            className="text-[13px] text-ink-soft underline underline-offset-3 hover:text-link"
-            aria-label={`Edit the intake of ${label} in YAML`}
+            className={cn('text-[13px] text-ink-soft underline underline-offset-3 hover:text-link', touchLinkWide)}
           >
             Edit in YAML
+            <span className="sr-only">: the intake of {label}</span>
           </Link>
         ) : null}
       </span>

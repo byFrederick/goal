@@ -187,7 +187,7 @@ export function StationRow({
             type="button"
             {...drag.handle}
             aria-label={`Drag ${label}, station ${n} of ${stations.length}`}
-            className="group/handle flex h-11 w-10 touch-none items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums transition-colors duration-(--duration-quick) hover:bg-panel md:h-7 md:cursor-grab"
+            className="group/handle flex h-11 w-11 touch-none items-center justify-center rounded-chip bg-shell text-[13px] font-semibold tabular-nums transition-colors duration-(--duration-quick) hover:bg-panel md:h-7 md:w-10 md:cursor-grab"
           >
             <span className="group-hover/handle:hidden">{n}</span>
             <GripVertical size={14} strokeWidth={1.5} aria-hidden="true" className="hidden group-hover/handle:block" />
@@ -322,7 +322,7 @@ export function StationRow({
         <Disclosure
           defaultOpen={selected || problems.length > 0}
           summary={<span className="text-[13px] text-muted">Rules of {label}</span>}
-          triggerClassName="min-h-9 px-0 md:min-h-8"
+          triggerClassName="min-h-11 px-0 md:min-h-8"
         >
           <StationRules station={station} index={index} invalid={invalid} describedBy={describedBy} />
         </Disclosure>

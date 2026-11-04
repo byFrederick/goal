@@ -268,6 +268,9 @@ describe('the Jonah overview, its four states', () => {
     ]);
 
     expect(await screen.findByText(/Nothing waits for you/)).toBeTruthy();
+    const all = screen.getByRole('link', { name: 'All proposals' });
+    expect(all.className).toContain('underline');
+    expect(all.className).not.toContain('no-underline');
     expect(screen.getByText('Nothing published is watched yet.')).toBeTruthy();
     expect(screen.getByText(/Nothing yet\./)).toBeTruthy();
   });
