@@ -50,17 +50,24 @@ export function Preview({ environment, adds }: { environment: string; adds: Temp
           Nothing yet. Fill in the fields above.
         </p>
       ) : (
-        <pre className="m-0 max-w-full overflow-x-auto rounded-control border border-line bg-shell py-2 font-mono text-secondary">
-          {lines.map((line, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: lines repeat, their place is their identity
-            <span key={i} className="grid grid-cols-[1.75rem_minmax(0,1fr)] bg-ok-tint text-ok-ink">
-              <span aria-hidden="true" className="select-none text-center">
-                +
+        <section
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+          tabIndex={0}
+          aria-label={`Adds to ${envPath(environment)}`}
+          className="max-w-full overflow-x-auto rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+        >
+          <pre className="m-0 w-max min-w-full rounded-control border border-line bg-shell py-2 font-mono text-secondary">
+            {lines.map((line, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: lines repeat, their place is their identity
+              <span key={i} className="grid grid-cols-[1.75rem_minmax(0,1fr)] bg-ok-tint text-ok-ink">
+                <span aria-hidden="true" className="select-none text-center">
+                  +
+                </span>
+                <span className="whitespace-pre pr-3">{line}</span>
               </span>
-              <span className="whitespace-pre pr-3">{line}</span>
-            </span>
-          ))}
-        </pre>
+            ))}
+          </pre>
+        </section>
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 // and 390 px, in light and dark, nothing goes past the viewport edge, no text is clipped, and a phone's
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
 import { expect, test } from '@playwright/test';
-import { expectNoClippedElements, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoClippedElements, expectNoHorizontalScroll } from './support';
 
 const sizes = [
   { width: 1440, height: 1000 },
@@ -54,4 +54,5 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   for (const box of boxes.filter((b) => b.width > 8 && b.height > 8)) {
     expect(box.height, `${box.name} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
   }
+  await expectAccessible(page);
 });

@@ -120,7 +120,7 @@ export function TokenField({
             autoCapitalize="off"
             spellCheck={false}
             className={cn(
-              'h-8 min-w-[110px] flex-1 border-0 bg-transparent px-1.5 text-base text-ink placeholder:text-muted focus-visible:outline-none md:text-sm',
+              'h-11 min-w-[110px] md:h-8 flex-1 border-0 bg-transparent px-1.5 text-base text-ink placeholder:text-muted focus-visible:outline-none md:text-sm',
               mono && 'font-mono',
             )}
           />
