@@ -40,11 +40,11 @@ async function call(
 }
 
 describe('the mock Jonah API', () => {
-  it('reads the picture: two proposals waiting, $6.40 this month and the four observations', async () => {
+  it('reads the picture: three proposals waiting, $6.40 this month and the four observations', async () => {
     const { status, body } = await call(jonah(), '/factories/software/jonah', 'GET');
 
     expect(status).toBe(200);
-    expect(body.waiting).toBe(2);
+    expect(body.waiting).toBe(3);
     expect(body.month_cost_usd).toBe(6.4);
     expect(body.policy.approver_roles).toEqual(['owner', 'admin']);
     expect(body.observations).toHaveLength(4);
@@ -59,10 +59,10 @@ describe('the mock Jonah API', () => {
   it('lists the proposals newest first, and only those in the state the query names', async () => {
     const api = jonah();
     const all = await call(api, '/factories/software/jonah/proposals', 'GET');
-    expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7, 6]);
+    expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8, 7, 6]);
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8, 7]);
   });
 
   it('queues a manual review with 202 and answers 409 review-in-flight to the next while it waits', async () => {
@@ -181,7 +181,7 @@ describe('the mock Jonah API', () => {
     expect(rejected.body).toMatchObject({ number: 7, state: 'rejected' });
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8]);
   });
 
   it('answers Try again with an estimate, then with the new tries once confirmed, and refuses over budget', async () => {

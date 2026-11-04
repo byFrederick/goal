@@ -223,7 +223,7 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
 }
 
 /** Details: what it affects, what it publishes as, what is watched, who may approve. Open on a desktop, shut on a phone. */
-function DetailsCard({ p, reviewers }: { p: Proposal; reviewers: string | undefined }) {
+function DetailsCard({ p, reviewers, kind }: { p: Proposal; reviewers: string | undefined; kind: ProposalKind }) {
   const figures = p.estimate ? estimateOf(p.estimate) : undefined;
   const open = typeof window === 'undefined' || (window.matchMedia?.('(min-width: 768px)').matches ?? true);
   return (
@@ -231,7 +231,9 @@ function DetailsCard({ p, reviewers }: { p: Proposal; reviewers: string | undefi
       <Disclosure summary={<span className="text-heading">Details</span>} defaultOpen={open}>
         <dl className="m-0 flex flex-col gap-3 px-2 pt-1 pb-3">
           <DetailRow label="Affects">{p.agents.length > 0 ? p.agents.join(', ') : p.paths.join(', ')}</DetailRow>
-          <DetailRow label="Found in">{plural(p.evidence_count, 'item', 'items')} sent back</DetailRow>
+          {kind === 'model' ? null : (
+            <DetailRow label="Found in">{plural(p.evidence_count, 'item', 'items')} sent back</DetailRow>
+          )}
           <DetailRow label="Publishes">
             v{p.publishes_as_version}; running items keep v{p.made_against_version}
           </DetailRow>
@@ -414,44 +416,46 @@ export function ProposalPage({ number }: { number: number }) {
             <ModelTries tried={tried} model={modelOfProposal(p.files)} action={tryAgain} />
           ) : null}
 
-          <SectionCard
-            title={
-              <span className="inline-flex items-center gap-1">
-                Why
-                <InfoTip label="What Why shows">
-                  Each item that prompted this proposal, with the reason it was sent back.
-                </InfoTip>
-              </span>
-            }
-            aside={
-              <span className="text-secondary text-muted">
-                {p.evidence.length} of {plural(p.evidence_count, 'item', 'items')}
-              </span>
-            }
-          >
-            <ul className="m-0 flex list-none flex-col p-0">
-              {p.evidence.map((evidence) => (
-                <li
-                  key={`${evidence.item_ref}:${evidence.quote}`}
-                  className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0"
-                >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="text-muted tabular-nums">{itemNumber(evidence.item_ref)}</span>
-                    <span className="min-w-0 font-control text-ink break-words">{evidence.item_title}</span>
-                    {evidence.station ? (
-                      <span className="ml-auto text-secondary text-muted">{evidence.station}</span>
-                    ) : null}
-                  </div>
-                  <p className="m-0 text-secondary text-ink-soft break-words">&ldquo;{evidence.quote}&rdquo;</p>
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
+          {kind === 'model' ? null : (
+            <SectionCard
+              title={
+                <span className="inline-flex items-center gap-1">
+                  Why
+                  <InfoTip label="What Why shows">
+                    Each item that prompted this proposal, with the reason it was sent back.
+                  </InfoTip>
+                </span>
+              }
+              aside={
+                <span className="text-secondary text-muted">
+                  {p.evidence.length} of {plural(p.evidence_count, 'item', 'items')}
+                </span>
+              }
+            >
+              <ul className="m-0 flex list-none flex-col p-0">
+                {p.evidence.map((evidence) => (
+                  <li
+                    key={`${evidence.item_ref}:${evidence.quote}`}
+                    className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="text-muted tabular-nums">{itemNumber(evidence.item_ref)}</span>
+                      <span className="min-w-0 font-control text-ink break-words">{evidence.item_title}</span>
+                      {evidence.station ? (
+                        <span className="ml-auto text-secondary text-muted">{evidence.station}</span>
+                      ) : null}
+                    </div>
+                    <p className="m-0 text-secondary text-ink-soft break-words">&ldquo;{evidence.quote}&rdquo;</p>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
           {kind === 'definition' && tried ? <TriedPanel tried={tried} action={tryAgain} /> : null}
-          <DetailsCard p={p} reviewers={reviewers} />
+          <DetailsCard p={p} reviewers={reviewers} kind={kind} />
         </div>
       </div>
     </div>
