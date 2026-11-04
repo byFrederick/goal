@@ -290,7 +290,9 @@ s3://<bucket>/
   orgs/<org-id>/knowledge/<source-id>/<snapshot-id>.zip   a source's knowledge snapshot (ADR 0038), one zip of Markdown files per sync that changed something
 
 PostgreSQL
-  definition_versions   one row per draft or published version: manifest {path → sha256}, number, revision, author, publisher
+  definition_versions   one row per draft or published version: manifest {path → sha256}, number, revision, author, publisher,
+                        and a published version's counts (stations, agents, skills, connections), so the version list reads no files;
+                        publish stores them, and the first list computes and stores those of an older version that has none
   definition_blobs      the hashes each org has stored
   factories.current_version_id          the published version that runs; publish and restore move it in one transaction
   agent_runs.definition_version_id      the version a run started on, and finishes on

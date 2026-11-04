@@ -214,8 +214,13 @@ func (d *Definitions) Publish(ctx context.Context, p ports.Publish) (domain.Defi
 
 		number := int(f.LastVersionNumber) + 1
 
+		counts, err := countsJSON(p.Counts)
+		if err != nil {
+			return err
+		}
+
 		row, err := q.PublishDraft(ctx, db.PublishDraftParams{
-			ID: open.ID, Number: int32ptr(number), Message: p.Message, PublishedBy: p.By.Ref(),
+			ID: open.ID, Number: int32ptr(number), Message: p.Message, PublishedBy: p.By.Ref(), Counts: counts,
 		})
 		if err != nil {
 			return versionRuleError(err)
@@ -246,6 +251,29 @@ func (d *Definitions) Publish(ctx context.Context, p ports.Publish) (domain.Defi
 	}
 
 	return v, nil
+}
+
+// SetVersionCounts implements ports.DefinitionStore. Row-level security keeps it to the
+// organization's versions.
+func (d *Definitions) SetVersionCounts(ctx context.Context, id domain.DefinitionVersionID, c domain.VersionCounts) error {
+	vid, err := parseID("definition version", string(id))
+	if err != nil {
+		return orgFirst(ctx, err)
+	}
+
+	counts, err := countsJSON(&c)
+	if err != nil {
+		return err
+	}
+
+	err = d.store.inTx(ctx, func(q *db.Queries) error {
+		return q.SetVersionCounts(ctx, db.SetVersionCountsParams{ID: vid, Counts: counts})
+	})
+	if err != nil {
+		return fmt.Errorf("set counts of definition version %s: %w", id, err)
+	}
+
+	return nil
 }
 
 // Restore implements ports.DefinitionStore.
