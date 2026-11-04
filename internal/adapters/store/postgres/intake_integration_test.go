@@ -319,7 +319,7 @@ func seedWebhook(t *testing.T, d connectionsDB, org domain.OrgID, name string) d
 
 // Migration 00115: another organization sees no webhook opening; goal_app cannot change a
 // webhook's token settings, nor an opening's webhook or factory, and its keys refuse a secret or a
-// factory the organization does not have (00116 grants the conversion UPDATE on sender, secret_id
+// factory the organization does not have (00117 grants the conversion UPDATE on sender, secret_id
 // and factory_id); the database refuses
 // a reserved name and the delete of a secret a webhook uses, and a rename of the secret follows;
 // goal_connection_key_ids skips the webhook's null key id; the purge removes both.
