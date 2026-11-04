@@ -368,6 +368,54 @@ func (s *Store) FinishPastTry(ctx context.Context, claimed domain.PastTry, r dom
 	return out, nil
 }
 
+// RecordPastTryRun implements ports.PastTries: an update fenced by the claim's lease.
+func (s *Store) RecordPastTryRun(ctx context.Context, claimed domain.PastTry, run domain.RunID, diff string, cost float64) (domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.PastTry{}, domain.ErrNoOrg
+	}
+
+	if err := domain.CheckPastTryRun(run, diff, cost); err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	id, err := uuid.Parse(string(claimed.ID))
+	if err != nil || claimed.LeaseUntil.IsZero() {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, ports.ErrLeaseLost)
+	}
+
+	rid, err := parseID("run", string(run))
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	var out domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		_, err := q.RecordTryRun(ctx, db.RecordTryRunParams{TryRunID: &rid, Diff: diff, CostUsd: cost, ID: id, LeaseUntil: claimed.LeaseUntil})
+		if notFound(err) {
+			return ports.ErrLeaseLost
+		}
+
+		if err != nil {
+			return err
+		}
+
+		row, err := q.TryByID(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		out = pastTryFrom(row.Try, row.ProposalNumber)
+
+		return nil
+	})
+	if err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	return out, nil
+}
+
 // PastTryTarget implements ports.PastTries.
 func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station string) (domain.Run, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {

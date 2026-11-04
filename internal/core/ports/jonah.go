@@ -256,6 +256,11 @@ type PastTries interface {
 	// FinishPastTry ends the claimed try done as r says. claimed is what ClaimPastTry returned;
 	// ErrLeaseLost unless the try still runs under that lease. r must pass Check.
 	FinishPastTry(ctx context.Context, claimed domain.PastTry, r domain.PastTryResult) (domain.PastTry, error)
+	// RecordPastTryRun stores the claimed try's run, diff and cost while it still runs, before it
+	// is graded (ADR 0039 decision 10): a later claim then grades it without running it again.
+	// claimed is what ClaimPastTry returned; ErrLeaseLost unless the try still runs under that
+	// lease. domain.ErrInvalid for no run, a negative cost or a diff past domain.MaxPastTryDiff.
+	RecordPastTryRun(ctx context.Context, claimed domain.PastTry, run domain.RunID, diff string, cost float64) (domain.PastTry, error)
 	// PastTryTarget is the run a try of item at station reruns: the item's newest finished run of
 	// kind station there that was a claim's first run (its branch head recorded). ErrNotFound when
 	// it has none.

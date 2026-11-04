@@ -271,6 +271,39 @@ func (s *Store) FinishPastTry(ctx context.Context, claimed domain.PastTry, r dom
 	return domain.PastTry{}, fmt.Errorf("finish past try %s: %w", claimed.ID, ports.ErrLeaseLost)
 }
 
+// RecordPastTryRun implements ports.PastTries.
+func (s *Store) RecordPastTryRun(ctx context.Context, claimed domain.PastTry, run domain.RunID, diff string, cost float64) (domain.PastTry, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.PastTry{}, err
+	}
+
+	if err := domain.CheckPastTryRun(run, diff, cost); err != nil {
+		return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, err)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	for i := range s.jonah.tries {
+		t := &s.jonah.tries[i].row
+		if s.jonah.tries[i].org != org || t.ID != claimed.ID {
+			continue
+		}
+
+		if t.State != domain.PastTryRunning || !t.LeaseUntil.Equal(claimed.LeaseUntil) {
+			break
+		}
+
+		t.TryRunID, t.Diff, t.CostUSD = run, diff, cost
+
+		return *t, nil
+	}
+
+	return domain.PastTry{}, fmt.Errorf("record past try %s's run: %w", claimed.ID, ports.ErrLeaseLost)
+}
+
 // PastTryTarget implements ports.PastTries.
 func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station string) (domain.Run, error) {
 	org, err := orgOf(ctx)

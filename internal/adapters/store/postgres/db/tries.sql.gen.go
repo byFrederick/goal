@@ -525,6 +525,35 @@ func (q *Queries) ProposalTries(ctx context.Context, proposalID uuid.UUID) ([]Pr
 	return items, nil
 }
 
+const recordTryRun = `-- name: RecordTryRun :one
+UPDATE tries SET try_run_id = $1, diff = $2, cost_usd = $3
+WHERE id = $4 AND state = 'running' AND lease_until = $5::timestamptz
+RETURNING id
+`
+
+type RecordTryRunParams struct {
+	TryRunID   *uuid.UUID
+	Diff       string
+	CostUsd    float64
+	ID         uuid.UUID
+	LeaseUntil time.Time
+}
+
+// Stores a running try's run, diff and cost under the lease its claim returned, before it is
+// graded. No row when the lease is lost.
+func (q *Queries) RecordTryRun(ctx context.Context, arg RecordTryRunParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, recordTryRun,
+		arg.TryRunID,
+		arg.Diff,
+		arg.CostUsd,
+		arg.ID,
+		arg.LeaseUntil,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const runByID = `-- name: RunByID :one
 SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs WHERE id = $1
 `

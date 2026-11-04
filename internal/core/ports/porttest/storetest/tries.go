@@ -23,6 +23,8 @@ var triesTests = []struct {
 	{"Tries_AgentDoneItemsNewestFirst", testTriesAgentDoneItems},
 	{"Tries_ClaimCappedPerFactoryAndLeased", testTriesClaim},
 	{"Tries_FinishStoresVerdictAndReason", testTriesGraded},
+	{"Tries_RecordRunUnderTheLease", testTriesRecordRun},
+	{"Tries_RecordRunKeptForTheNextClaim", testTriesRecordRunKept},
 	{"Tries_TargetIsNewestFirstRunOfAClaim", testTriesTarget},
 	{"Tries_InputHasBriefAndEarlierOutputs", testTriesInput},
 	{"Tries_TryRunWithoutItemIsJonahs", testTriesRunWithoutItem},
@@ -237,6 +239,72 @@ func (f *fixture) finishGraded(want domain.PastTry, v domain.PastTryVerdict, run
 	done, err := f.Tries.FinishPastTry(f.ctx(t), claimed, res)
 	if err != nil || done.Verdict != v || done.Reason != res.Reason {
 		t.Fatalf("FinishPastTry = %+v, %v; want verdict %s with its reason", done, err, v)
+	}
+}
+
+// A try's run, diff and cost are recorded while it runs under its claim's lease, and the try stays
+// running; a record under a lost lease, of no run or of a negative cost is refused.
+func testTriesRecordRun(f *fixture) {
+	t := f.t
+	p := f.triedProposal(t, t1)
+	f.newTries(t, p, f.create(t, domain.NewItem{}))
+	now := t1.Add(time.Hour)
+	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
+
+	claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now, ttl, 2)
+	if err != nil {
+		t.Fatalf("ClaimPastTry: %v", err)
+	}
+
+	_, err = f.Tries.RecordPastTryRun(f.ctx(t), claimed, "", "diff", 0.25)
+	expect(t, "RecordPastTryRun of no run", err, domain.ErrInvalid)
+
+	_, err = f.Tries.RecordPastTryRun(f.ctx(t), claimed, run, "diff", -1)
+	expect(t, "RecordPastTryRun of a negative cost", err, domain.ErrInvalid)
+
+	got, err := f.Tries.RecordPastTryRun(f.ctx(t), claimed, run, "diff --git a/x b/x\n", 0.25)
+	if err != nil || got.State != domain.PastTryRunning || got.TryRunID != run || got.Diff != "diff --git a/x b/x\n" || got.CostUSD != 0.25 ||
+		!got.LeaseUntil.Equal(claimed.LeaseUntil) {
+		t.Fatalf("RecordPastTryRun = %+v, %v; want the try still running under its lease, with its run, diff and cost", got, err)
+	}
+
+	again, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now.Add(ttl), ttl, 2)
+	if err != nil || again.ID != claimed.ID {
+		t.Fatalf("ClaimPastTry after the lease ended = %+v, %v; want the try again", again, err)
+	}
+
+	_, err = f.Tries.RecordPastTryRun(f.ctx(t), claimed, run, "diff", 0.25)
+	expect(t, "RecordPastTryRun under a lost lease", err, ports.ErrLeaseLost)
+
+	if _, err := f.Tries.FinishPastTry(f.ctx(t), again, domain.PastTryResult{Verdict: domain.PastTryError, Error: "x", At: now}); err != nil {
+		t.Fatalf("FinishPastTry: %v", err)
+	}
+
+	_, err = f.Tries.RecordPastTryRun(f.ctx(t), again, run, "diff", 0.25)
+	expect(t, "RecordPastTryRun of a done try", err, ports.ErrLeaseLost)
+}
+
+// A claim made after the lease of a try with a recorded run ended returns the try with that run,
+// diff and cost, for grading without running it again.
+func testTriesRecordRunKept(f *fixture) {
+	t := f.t
+	p := f.triedProposal(t, t1)
+	f.newTries(t, p, f.create(t, domain.NewItem{}))
+	now := t1.Add(time.Hour)
+	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
+
+	claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now, ttl, 2)
+	if err != nil {
+		t.Fatalf("ClaimPastTry: %v", err)
+	}
+
+	if _, err := f.Tries.RecordPastTryRun(f.ctx(t), claimed, run, "the diff", 0.5); err != nil {
+		t.Fatalf("RecordPastTryRun: %v", err)
+	}
+
+	again, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now.Add(ttl), ttl, 2)
+	if err != nil || again.TryRunID != run || again.Diff != "the diff" || again.CostUSD != 0.5 || again.Attempts != 2 {
+		t.Errorf("ClaimPastTry after the lease ended = %+v, %v; want attempt 2 with the recorded run, diff and cost", again, err)
 	}
 }
 

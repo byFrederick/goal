@@ -215,6 +215,21 @@ func (r PastTryResult) checkVerdict() error {
 	return nil
 }
 
+// CheckPastTryRun reports what makes a try's run impossible to record before its grade, wrapping
+// ErrInvalid: no run, a negative cost or a diff past MaxPastTryDiff.
+func CheckPastTryRun(run RunID, diff string, cost float64) error {
+	switch {
+	case run == "":
+		return fmt.Errorf("past try run: no run: %w", ErrInvalid)
+	case cost < 0:
+		return fmt.Errorf("past try run: negative cost: %w", ErrInvalid)
+	case len(diff) > MaxPastTryDiff:
+		return fmt.Errorf("past try run: the diff is over %d bytes: %w", MaxPastTryDiff, ErrInvalid)
+	}
+
+	return nil
+}
+
 // PastTryInput is what a try reruns (ADR 0039 decision 9): the original run as the store recorded
 // it, with its brief and heads, and the item's outputs by station from the runs that finished
 // before the original run started.
