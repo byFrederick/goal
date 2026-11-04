@@ -279,8 +279,9 @@ func TestMemoryFacts_RefusesUnquoted(t *testing.T) {
 				t.Errorf("facts dropped for %v, want [%s]", got, tc.reason)
 			}
 
-			if strings.Contains(w.log.String(), "390 wide") {
-				t.Errorf("the log holds a fact's text: %s", w.log)
+			// The first 40 characters, so a leak of the long fact's start is caught too.
+			if text := tc.fact.Text[:min(len(tc.fact.Text), 40)]; strings.Contains(w.log.String(), text) {
+				t.Errorf("the log holds the fact's text %q: %s", text, w.log)
 			}
 		})
 	}

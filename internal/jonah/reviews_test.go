@@ -183,12 +183,22 @@ func newReviewWorldAt(t *testing.T, now time.Time) *reviewWorld {
 	}
 	w.loop = jonah.NewReviews(jonah.ReviewDeps{
 		Orgs: tn, Jonah: store, Definitions: w.defs, Runner: w.runner, Check: config.ProposalCheck{}, Policies: policies{},
-		Clock: clock, Log: slog.New(slog.NewJSONHandler(w.log, nil)),
+		Clock: clock, Log: slog.New(slog.NewJSONHandler(w.log, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 	}, jonah.ReviewConfig{Timeout: reviewTimeout, Margin: reviewMargin})
 
 	w.lineSpend(reviewLineUSD, now.Add(-time.Hour))
 
 	return w
+}
+
+// dropTime removes each record's time, so a check that the log lacks some text never matches
+// the clock's digits.
+func dropTime(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+
+	return a
 }
 
 // bytesOf is files as bytes.
