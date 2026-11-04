@@ -315,6 +315,9 @@ func TestSchema_DefinitionRules(t *testing.T) {
 		args []any
 	}{
 		{"edit a published version", "UPDATE definition_versions SET manifest = '{}' WHERE id = $1", []any{string(f.v1.ID)}},
+		{"edit a published version with its counts", `UPDATE definition_versions SET counts = '{"stations": 1}', message = 'changed'
+			WHERE id = $1`, []any{string(f.v1.ID)}},
+		{"store counts that are no object", "UPDATE definition_versions SET counts = '[]' WHERE id = $1", []any{string(f.v1.ID)}},
 		{"delete a published version", "DELETE FROM definition_versions WHERE id = $1", []any{string(f.v1.ID)}},
 		{"point at a draft", "UPDATE factories SET current_version_id = $1 WHERE id = $2", []any{string(f.draft.ID), string(f.factory.ID)}},
 		{"open a second draft", `INSERT INTO definition_versions (id, factory_id, state, manifest, created_by, updated_by)
@@ -349,6 +352,18 @@ func TestSchema_DefinitionRules(t *testing.T) {
 
 	if got, err := f.defs.Version(domain.WithOrg(t.Context(), f.org), f.v1.ID); err != nil || got.State != domain.VersionPublished {
 		t.Errorf("v1 after the refusals = %+v, %v; want it published as it was", got, err)
+	}
+
+	// A published version without counts may be given them once, and then keeps them.
+	for i, want := range []bool{true, false} {
+		err := inOrgTx(t, f.pool, f.org, func(tx pgx.Tx) error {
+			_, err := tx.Exec(t.Context(), `UPDATE definition_versions SET counts = '{"stations": 1}' WHERE id = $1`, string(f.v1.ID))
+
+			return err
+		})
+		if (err == nil) != want {
+			t.Errorf("giving v1 counts, time %d: %v; want allowed %v", i+1, err, want)
+		}
 	}
 }
 
