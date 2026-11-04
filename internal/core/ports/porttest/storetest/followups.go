@@ -1,7 +1,9 @@
 package storetest
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ var followUpsTests = []struct {
 }{
 	{"FollowUps_KeptWithTheTransition", testFollowUpsKeptWithTheTransition},
 	{"FollowUps_RerunKeepsAndDedupes", testFollowUpsRerunKeepsAndDedupes},
+	{"FollowUps_OverLongForGoesToTriage", testFollowUpsOverLongForGoesToTriage},
 }
 
 // followUpsOf are the follow-ups a run at the work station wrote, in output order.
@@ -149,5 +152,31 @@ func testFollowUpsRerunKeepsAndDedupes(f *fixture) {
 		followUpsOf(second, triageFollowUp("Name the new metric"))...)
 	if got := f.keptFollowUps(t, it); !reflect.DeepEqual(got, want) {
 		t.Errorf("follow-ups after a rerun = %+v\nwant %+v", got, want)
+	}
+}
+
+// An output whose for names a factory longer than the store keeps still passes its transition:
+// FollowUpsFrom sends that entry to triage, so an agent's output cannot fail the transaction that
+// accepts it.
+func testFollowUpsOverLongForGoesToTriage(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	_, l := f.claim(t, work, 0, t1)
+	run := f.startRun(t, it.ID, t1)
+
+	out := json.RawMessage(`{"followups":[{"text":"Long ref","for":"` + strings.Repeat("a", 101) + `#3"}]}`)
+	parsed := domain.FollowUpsFrom(out, "followups")
+
+	tr := next(it, l, t1.Add(time.Minute))
+	tr.FollowUps = followUpsOf(run, parsed...)
+
+	if _, err := f.Store.Transition(f.ctx(t), tr); err != nil {
+		t.Fatalf("Transition with an over-long for: %v; want it kept as triage", err)
+	}
+
+	got := f.keptFollowUps(t, it)
+	if len(got) != 1 || got[0].Target != domain.FollowUpTriage || got[0].For != nil || got[0].Reason == "" {
+		t.Errorf("kept follow-ups = %+v; want one for triage with a reason", got)
 	}
 }

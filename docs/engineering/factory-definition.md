@@ -128,7 +128,7 @@ board:
 - **Entry shape.** An entry is a string or an object:
   - A string is text only, for triage.
   - An object has `text` (required) and optionally `for` or `start`. `for` is an open item `<factory>#<number>` that gets the follow-up as a note. `start` is `{at, in, after}` as an item's start, with `title` (required) and optionally `type`, `lane`, `repositories` and `factory`: the follow-up becomes an item of its own. With both, `start` wins. With neither, it goes to triage.
-  - A `for` or `start` that does not parse sends the follow-up to triage, with the reason.
+  - A `for` or `start` that does not parse, or a `for` whose factory is longer than 100 characters, sends the follow-up to triage, with the reason.
   - Any other entry, such as a number or an object without text, is kept as dropped, with the reason.
 - **Where it goes.** Each kept follow-up is `waiting` with its target (a note, a start or triage), `delivered`, `filed` with its item, or `dropped` with its reason. goald records the target as written. It does not yet deliver notes or file items from follow-ups, so every kept follow-up stays as it was written.
 - **Plain-array contract.** A station contract that declares the mapped property must declare it as a plain array of strings or objects: no `$ref`, no `maxItems`, and no `required` on its items. Load refuses any other declaration (`follow-ups-not-plain-array`), because a strict shape could fail a run over a note.

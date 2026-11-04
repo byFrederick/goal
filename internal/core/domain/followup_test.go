@@ -64,7 +64,8 @@ func TestFollowUpsFrom(t *testing.T) {
 			name: "a target that does not parse goes to triage with the reason", field: fieldFollowUps,
 			out: `{"followups":[{"text":"a","for":"#12"},{"text":"b","start":{"in":"soon","title":"B"}},` +
 				`{"text":"c","start":{"in":"7d"}},{"text":"d","start":{"at":"2026-12-01","in":"7d","title":"D"}},` +
-				`{"text":"e","start":{"after":["nope"],"title":"E"}},{"text":"f","start":"tomorrow"},{"text":"g","for":12}]}`,
+				`{"text":"e","start":{"after":["nope"],"title":"E"}},{"text":"f","start":"tomorrow"},{"text":"g","for":12},` +
+				`{"text":"h","for":"` + strings.Repeat("a", maxFollowUpFactory+1) + `#3"}]}`,
 			want: []FollowUp{
 				triage("a", `for "#12" is not an item ref <factory>#<number>`),
 				triage("b", `start: wait "soon" is not a number of hours, days or weeks, as in 36h, 7d or 2w`),
@@ -73,6 +74,7 @@ func TestFollowUpsFrom(t *testing.T) {
 				triage("e", `start: after "nope" is not an item ref <factory>#<number>`),
 				triage("f", "start is not an object of at, in, after and title"),
 				triage("g", "for is not an item ref <factory>#<number>"),
+				triage("h", fmt.Sprintf("for names a factory longer than %d characters", maxFollowUpFactory)),
 			},
 		},
 		{

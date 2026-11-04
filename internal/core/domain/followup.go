@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // MaxFollowUps is how many entries of an output's follow-ups field goald reads (ADR 0040
@@ -15,6 +16,10 @@ const MaxFollowUps = 10
 
 // MaxFollowUpText is a follow-up's most characters; longer text is cut.
 const MaxFollowUpText = 2000
+
+// maxFollowUpFactory is the most characters of a for's factory the store keeps (the for_factory
+// column's bound); a longer one sends the entry to triage.
+const maxFollowUpFactory = 100
 
 // maxFollowUpReason is a follow-up's reason's most characters; it may quote the entry.
 const maxFollowUpReason = 500
@@ -196,6 +201,10 @@ func followUpTarget(forRaw, startRaw json.RawMessage) (FollowUpTarget, *ItemRef,
 		ref, ok := ParseItemRef(s)
 		if !ok {
 			return FollowUpTriage, nil, nil, fmt.Sprintf("for %q is not an item ref <factory>#<number>", s)
+		}
+
+		if utf8.RuneCountInString(ref.Factory) > maxFollowUpFactory {
+			return FollowUpTriage, nil, nil, fmt.Sprintf("for names a factory longer than %d characters", maxFollowUpFactory)
 		}
 
 		return FollowUpNote, &ref, nil, ""
