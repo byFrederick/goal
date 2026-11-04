@@ -347,7 +347,7 @@ describe('the drawer', () => {
 describe('the tab bar', () => {
   it('links Needs you to /o/$org/needs-you, with the count it waits on', async () => {
     renderShell({ at: '/o/acme/f/software' });
-    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    const needs = within(await tabs()).getByRole('link', { name: /Needs you/ });
     expect(needs.getAttribute('href')).toBe('/o/acme/needs-you');
     expect(needs.getAttribute('aria-disabled')).toBeNull();
   });
@@ -355,7 +355,7 @@ describe('the tab bar', () => {
   it('draws the Needs you count as an orange 18 px pill that rolls and enters', async () => {
     attention = { waiting_on_you: 3, factories: [] };
     renderShell({ at: '/o/acme/f/software' });
-    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    const needs = within(await tabs()).getByRole('link', { name: /Needs you/ });
     const pill = await waitFor(() => {
       const found = needs.querySelector('span[aria-hidden="true"].bg-you');
       if (!found) throw new Error('no count yet');
