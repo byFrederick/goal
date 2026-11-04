@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"net/netip"
 	"strings"
 	"sync"
@@ -741,6 +742,10 @@ func (h *harness) call(t *testing.T, method, path, body string, out any) int {
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {
 			t.Fatalf("%s %s: decode %s: %v", method, path, raw, err)
+		}
+
+		if paths, err := nullArraysOf(reflect.TypeOf(out), raw); err == nil && len(paths) > 0 {
+			t.Errorf("%s %s: null where the contract has an array, at %s: %s", method, path, strings.Join(paths, ", "), raw)
 		}
 	}
 

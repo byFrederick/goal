@@ -322,7 +322,7 @@ func addUse(r *gen.AccessRow, u accessUse, status gen.AccessStatus, secrets map[
 
 	r.Uses = append(r.Uses, out)
 	r.Status = worse(r.Status, status)
-	r.Secrets = slices.Compact(slices.Sorted(slices.Values(append(r.Secrets, u.secrets...))))
+	r.Secrets = nonNil(slices.Compact(slices.Sorted(slices.Values(append(r.Secrets, u.secrets...))))) // Sorted of none is nil
 	secretDates(r, u.secrets, secrets)
 }
 

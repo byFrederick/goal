@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -139,6 +140,51 @@ func TestAccess_Grouping(t *testing.T) {
 
 	refused(t, "an unknown grouping", h.request(t, http.MethodGet, accessPath+"?by=team", "", nil), http.StatusBadRequest, "")
 	refused(t, "an unknown factory", h.request(t, http.MethodGet, accessPath+"?factory=nope", "", nil), http.StatusNotFound, "factory-not-found")
+}
+
+// An MCP server that uses no secret, as docs (a remote server without headers), answers its row
+// with an empty list of secrets, never null, under every grouping that shows it.
+func TestAccess_ServerWithoutSecretsHasEmptyList(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.publishAccess(t)
+
+	for _, by := range []string{"reach", "factory", "secret"} {
+		r := h.request(t, http.MethodGet, accessPath+"?by="+by, "", nil)
+		if r.status != http.StatusOK {
+			t.Fatalf("by %s: status %d %s", by, r.status, r.body)
+		}
+
+		var raw struct {
+			Groups []struct {
+				Rows []map[string]json.RawMessage `json:"rows"`
+			} `json:"groups"`
+		}
+		if err := json.Unmarshal(r.body, &raw); err != nil {
+			t.Fatalf("by %s: decode %s: %v", by, r.body, err)
+		}
+
+		var found []string
+		for _, g := range raw.Groups {
+			for _, row := range g.Rows {
+				if string(row["name"]) == `"`+serverDocs+`"` {
+					found = append(found, string(row["secrets"]))
+				}
+			}
+		}
+
+		// By secret, docs has no secret to group under, so no group holds it.
+		if want := map[bool]int{true: 0, false: 1}[by == "secret"]; len(found) != want {
+			t.Errorf("by %s: %d docs rows, want %d: %s", by, len(found), want, r.body)
+		}
+
+		for _, secrets := range found {
+			if secrets != "[]" {
+				t.Errorf("by %s: docs secrets = %s, want []", by, secrets)
+			}
+		}
+	}
 }
 
 // Each row's status: a missing secret, a failed test, a tested or untested remote server, ok;
