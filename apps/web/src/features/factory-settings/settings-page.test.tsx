@@ -191,7 +191,17 @@ describe('Factory settings page', () => {
     await renderSettings({ can: ['factory:archive', 'factory:delete'], members: [] });
 
     const ids = Array.from(document.querySelectorAll('section[id]')).map((section) => section.id);
-    expect(ids).toEqual(['general', 'repository', 'runtime', 'budgets', 'flow', 'jonah', 'notifications', 'people', 'danger']);
+    expect(ids).toEqual([
+      'general',
+      'repository',
+      'runtime',
+      'budgets',
+      'flow',
+      'jonah',
+      'notifications',
+      'people',
+      'danger',
+    ]);
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     expect(
       within(nav)
