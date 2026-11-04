@@ -12,7 +12,7 @@ Knowledge is folders of files that agents read before they act, plus the factory
 A source has a name, a kind, a read-when line and the settings of its kind.
 
 - **Name:** a slug of 3 to 40 lowercase letters, digits and dashes. It is the source's folder in every run, `/knowledge/<name>/`, and it never changes.
-- **Read-when line:** one line of at most 160 characters that tells agents when to open the source, such as "How to fix what pages us. Read before acting on an alert." The pages ask for it as "When should agents read it?" Every run's prompt shows it, so say when to read the files, not only what they are.
+- **Read-when line:** one line of at most 160 characters that tells agents when to open the source, such as "How to fix what pages us. Read before acting on an alert." The pages ask for it as "When should agents read it?" Every run's prompt shows it, so say when to read the files, not only what they are. Each snapshot keeps the line it was written with. An edited line reaches new runs after the source's next sync, which starts right after you save the edit, even when no file changed; a run that already started keeps the line of the snapshot it pinned.
 - **Kind:** where the files come from.
 
 | Kind | Where the files come from |
@@ -29,6 +29,7 @@ A sync reads the source, converts what is not Markdown, and writes a snapshot, o
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
 - A file that looks like it holds a key stays out.
+- goald keeps the current snapshot, any snapshot a running run pinned, and a replaced snapshot for at least the longest a claim can last (about 4 hours by default). After that it deletes the snapshot at the source's next sync. Deleting a source deletes its snapshots.
 
 Limits keep every box fast. A sync that goes past one fails and names it.
 
@@ -69,7 +70,7 @@ A draft that goes past a limit fails its checks at publish: `memory-too-long` fo
 
 ## Reads
 
-Goal counts how often runs read each file and search each folder under `/knowledge`, by day, source, path and factory. The Knowledge page shows each source's reads of the last 7 days and the most read files. A source's page shows the reads of each of its files. `goal knowledge reads` prints the same counts.
+Goal counts how often runs read each file and search each folder under `/knowledge`, by day, source, path and factory. The Knowledge page shows each source's reads of the last 7 days and the most read files. A source's page shows the reads of each of its files. `goal knowledge reads` prints the same counts. Each run's trace also records the files it read and the folders it searched as one `knowledge_read` event, listing at most 200 paths.
 
 ## In the web app
 

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,6 +17,10 @@ const (
 	srcID     = "src"
 	docsTitle = "Docs"
 	docsName  = "docs"
+
+	pathDisk     = "/knowledge/runbooks/db/disk.md"
+	pathRunbooks = "/knowledge/runbooks"
+	fileDisk     = "db/disk.md"
 )
 
 func TestCheckFilePath_RelativeCleanAndBounded(t *testing.T) {
@@ -205,11 +210,11 @@ func TestKnowledgeTouch_CountsAReadAndAGrep(t *testing.T) {
 		want       KnowledgeTouch
 		ok         bool
 	}{
-		{tool: toolRead, path: "/knowledge/runbooks/db/disk.md", want: KnowledgeTouch{Source: srcRunbooks, Path: "db/disk.md"}, ok: true},
-		{tool: toolGrep, path: "/knowledge/runbooks", want: KnowledgeTouch{Source: srcRunbooks, Path: KnowledgeSourceRoot, Search: true}, ok: true},
+		{tool: toolRead, path: pathDisk, want: KnowledgeTouch{Source: srcRunbooks, Path: fileDisk}, ok: true},
+		{tool: toolGrep, path: pathRunbooks, want: KnowledgeTouch{Source: srcRunbooks, Path: KnowledgeSourceRoot, Search: true}, ok: true},
 		{tool: "Glob", path: "/knowledge/runbooks/db/", want: KnowledgeTouch{Source: srcRunbooks, Path: "db", Search: true}, ok: true},
-		{tool: toolRead, path: "/knowledge/runbooks/x/../db/disk.md", want: KnowledgeTouch{Source: srcRunbooks, Path: "db/disk.md"}, ok: true},
-		{tool: toolRead, path: "/knowledge/runbooks"},
+		{tool: toolRead, path: "/knowledge/runbooks/x/../db/disk.md", want: KnowledgeTouch{Source: srcRunbooks, Path: fileDisk}, ok: true},
+		{tool: toolRead, path: pathRunbooks},
 		{tool: toolGrep, path: "/knowledge"},
 		{tool: toolRead, path: "/workspace/knowledge/runbooks/a.md"},
 		{tool: toolRead, path: "knowledge/runbooks/a.md"},
@@ -224,12 +229,12 @@ func TestKnowledgeTouch_CountsAReadAndAGrep(t *testing.T) {
 	}
 
 	day := time.Date(2026, 11, 3, 15, 0, 0, 0, time.UTC)
-	tally := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: "handbook", Snapshot: "h1"}})
+	tally := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: srcHandbook, Snapshot: "h1"}})
 
 	for _, c := range [][2]string{
-		{toolRead, "/knowledge/runbooks/db/disk.md"},
-		{toolRead, "/knowledge/runbooks/db/disk.md"},
-		{toolGrep, "/knowledge/runbooks"},
+		{toolRead, pathDisk},
+		{toolRead, pathDisk},
+		{toolGrep, pathRunbooks},
 		{toolRead, "/knowledge/unpinned/a.md"},
 		{toolRead, "/workspace/README.md"},
 	} {
@@ -243,7 +248,7 @@ func TestKnowledgeTouch_CountsAReadAndAGrep(t *testing.T) {
 	got := tally.Reads(map[string]KnowledgeSourceID{srcRunbooks: "r-id"}, "f", day)
 	want := []KnowledgeFileReads{
 		{Source: "r-id", Path: KnowledgeSourceRoot, Factory: "f", Day: KnowledgeDay(day), Searches: 1},
-		{Source: "r-id", Path: "db/disk.md", Factory: "f", Day: KnowledgeDay(day), Reads: 2},
+		{Source: "r-id", Path: fileDisk, Factory: "f", Day: KnowledgeDay(day), Reads: 2},
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -252,5 +257,65 @@ func TestKnowledgeTouch_CountsAReadAndAGrep(t *testing.T) {
 
 	if got := tally.Reads(nil, "f", day); len(got) != 0 {
 		t.Errorf("Reads without the sources' ids = %+v, want none", got)
+	}
+}
+
+// Touched lists each touched pinned source's reads and searches once, sorted, and past
+// MaxKnowledgeTouchedPaths in all leaves the rest out, counted in More.
+func TestKnowledgeTally_Touched(t *testing.T) {
+	t.Parallel()
+
+	tally := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: srcHandbook, Snapshot: "h1"}})
+
+	for _, c := range [][2]string{
+		{toolRead, pathDisk},
+		{toolRead, pathDisk},
+		{toolRead, "/knowledge/runbooks/a.md"},
+		{toolGrep, pathRunbooks},
+		{toolGrep, "/knowledge/handbook/hr"},
+		{toolRead, "/knowledge/unpinned/a.md"},
+	} {
+		tally.Add(c[0], c[1])
+	}
+
+	want := []KnowledgeTouched{
+		{Source: srcHandbook, Searches: []string{"hr"}},
+		{Source: srcRunbooks, Reads: []string{fileA, fileDisk}, Searches: []string{KnowledgeSourceRoot}},
+	}
+	if got := tally.Touched(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Touched = %+v\nwant %+v", got, want)
+	}
+
+	if got := NewKnowledgeTally(nil).Touched(); len(got) != 0 {
+		t.Errorf("Touched of no touches = %+v, want none", got)
+	}
+
+	big := NewKnowledgeTally([]KnowledgePin{{Source: srcRunbooks, Snapshot: "r1"}, {Source: srcHandbook, Snapshot: "h1"}})
+	for i := range 500 {
+		big.Add(toolRead, fmt.Sprintf("/knowledge/handbook/f%03d.md", i))
+		big.Add(toolRead, fmt.Sprintf("/knowledge/runbooks/f%03d.md", i))
+	}
+
+	got := big.Touched()
+	if len(got) != 2 {
+		t.Fatalf("Touched of two sources = %d sources", len(got))
+	}
+
+	listed, more := 0, 0
+	for _, s := range got {
+		listed += len(s.Reads) + len(s.Searches)
+		more += s.More
+
+		if len(s.Reads)+len(s.Searches)+s.More != 500 {
+			t.Errorf("source %s lists %d and leaves out %d, want 500 in all", s.Source, len(s.Reads)+len(s.Searches), s.More)
+		}
+	}
+
+	if listed != MaxKnowledgeTouchedPaths || more != 1000-MaxKnowledgeTouchedPaths {
+		t.Errorf("Touched lists %d paths and leaves out %d; want %d and %d", listed, more, MaxKnowledgeTouchedPaths, 1000-MaxKnowledgeTouchedPaths)
+	}
+
+	if got[0].Reads[0] != "f000.md" {
+		t.Errorf("first listed read = %q, want the first by path", got[0].Reads[0])
 	}
 }

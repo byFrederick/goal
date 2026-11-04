@@ -38,8 +38,13 @@ VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg
         CASE WHEN sqlc.arg(kind)::text = 'live' THEN NULL ELSE now() END, sqlc.arg(created_by));
 
 -- name: UpdateKnowledgeSource :one
+-- A new read-when line makes a source that writes snapshots due at once, so its next snapshot
+-- carries the line; read_when on the right is the row's old line.
 UPDATE knowledge_sources
-SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
+SET next_sync_at = CASE WHEN sqlc.narg(read_when)::text IS NOT NULL AND read_when IS DISTINCT FROM sqlc.narg(read_when)::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        ELSE next_sync_at END,
+    title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
     secret_id = coalesce(sqlc.narg(secret_id)::uuid, secret_id), read_when = coalesce(sqlc.narg(read_when)::text, read_when),
     sync_every = CASE WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN sync_every
                       ELSE make_interval(secs => sqlc.narg(sync_every_seconds)::bigint) END,
@@ -147,6 +152,32 @@ SELECT id, source_id, files, failed, bytes, zip_bytes, changes, read_when, zip_k
 FROM knowledge_snapshots
 WHERE source_id = sqlc.arg(source_id)
 ORDER BY created_at DESC, id DESC;
+
+-- name: ExpiredKnowledgeSnapshots :many
+-- The source's snapshots retention deletes, oldest first: not its current one, pinned by no
+-- running agent run (its knowledge_pinned event names the snapshot), and replaced, its next
+-- snapshot made, at or before before.
+SELECT s.id, s.source_id, s.files, s.failed, s.bytes, s.zip_bytes, s.changes, s.read_when, s.zip_key, s.created_at
+FROM (
+  SELECT ks.*, lead(ks.created_at) OVER (ORDER BY ks.created_at, ks.id) AS replaced_at
+  FROM knowledge_snapshots ks
+  WHERE ks.source_id = sqlc.arg(source_id)
+) s
+JOIN knowledge_sources src ON src.id = s.source_id
+WHERE s.id IS DISTINCT FROM src.current_snapshot_id
+  AND s.replaced_at <= sqlc.arg(before)::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM agent_runs r JOIN item_events e ON e.run_id = r.id
+    WHERE r.status = 'running' AND e.kind = 'knowledge_pinned'
+      AND e.data -> 'snapshots' @> jsonb_build_array(jsonb_build_object('snapshot', s.id::text)))
+ORDER BY s.created_at, s.id;
+
+-- name: DeleteKnowledgeSnapshots :exec
+-- The source's snapshots ids, but never its current one.
+DELETE FROM knowledge_snapshots s
+USING knowledge_sources src
+WHERE s.source_id = sqlc.arg(source_id) AND s.id = ANY (sqlc.arg(ids)::uuid[])
+  AND src.id = s.source_id AND s.id IS DISTINCT FROM src.current_snapshot_id;
 
 -- name: KnowledgeFiles :many
 -- One page of a source's current files in path order (byte order: path is COLLATE "C"), after a

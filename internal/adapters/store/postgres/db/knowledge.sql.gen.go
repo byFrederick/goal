@@ -97,6 +97,24 @@ func (q *Queries) DeleteKnowledgeFiles(ctx context.Context, sourceID uuid.UUID) 
 	return err
 }
 
+const deleteKnowledgeSnapshots = `-- name: DeleteKnowledgeSnapshots :exec
+DELETE FROM knowledge_snapshots s
+USING knowledge_sources src
+WHERE s.source_id = $1 AND s.id = ANY ($2::uuid[])
+  AND src.id = s.source_id AND s.id IS DISTINCT FROM src.current_snapshot_id
+`
+
+type DeleteKnowledgeSnapshotsParams struct {
+	SourceID uuid.UUID
+	Ids      []uuid.UUID
+}
+
+// The source's snapshots ids, but never its current one.
+func (q *Queries) DeleteKnowledgeSnapshots(ctx context.Context, arg DeleteKnowledgeSnapshotsParams) error {
+	_, err := q.db.Exec(ctx, deleteKnowledgeSnapshots, arg.SourceID, arg.Ids)
+	return err
+}
+
 const deleteKnowledgeSource = `-- name: DeleteKnowledgeSource :exec
 DELETE FROM knowledge_sources WHERE id = $1
 `
@@ -113,6 +131,75 @@ DELETE FROM knowledge_uploads WHERE id = $1
 func (q *Queries) DeleteKnowledgeUpload(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteKnowledgeUpload, id)
 	return err
+}
+
+const expiredKnowledgeSnapshots = `-- name: ExpiredKnowledgeSnapshots :many
+SELECT s.id, s.source_id, s.files, s.failed, s.bytes, s.zip_bytes, s.changes, s.read_when, s.zip_key, s.created_at
+FROM (
+  SELECT ks.id, ks.org_id, ks.source_id, ks.files, ks.failed, ks.bytes, ks.zip_bytes, ks.changes, ks.read_when, ks.zip_key, ks.created_at, lead(ks.created_at) OVER (ORDER BY ks.created_at, ks.id) AS replaced_at
+  FROM knowledge_snapshots ks
+  WHERE ks.source_id = $1
+) s
+JOIN knowledge_sources src ON src.id = s.source_id
+WHERE s.id IS DISTINCT FROM src.current_snapshot_id
+  AND s.replaced_at <= $2::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM agent_runs r JOIN item_events e ON e.run_id = r.id
+    WHERE r.status = 'running' AND e.kind = 'knowledge_pinned'
+      AND e.data -> 'snapshots' @> jsonb_build_array(jsonb_build_object('snapshot', s.id::text)))
+ORDER BY s.created_at, s.id
+`
+
+type ExpiredKnowledgeSnapshotsParams struct {
+	SourceID uuid.UUID
+	Before   time.Time
+}
+
+type ExpiredKnowledgeSnapshotsRow struct {
+	ID        uuid.UUID
+	SourceID  uuid.UUID
+	Files     int32
+	Failed    int32
+	Bytes     int64
+	ZipBytes  int64
+	Changes   []byte
+	ReadWhen  string
+	ZipKey    string
+	CreatedAt time.Time
+}
+
+// The source's snapshots retention deletes, oldest first: not its current one, pinned by no
+// running agent run (its knowledge_pinned event names the snapshot), and replaced, its next
+// snapshot made, at or before before.
+func (q *Queries) ExpiredKnowledgeSnapshots(ctx context.Context, arg ExpiredKnowledgeSnapshotsParams) ([]ExpiredKnowledgeSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, expiredKnowledgeSnapshots, arg.SourceID, arg.Before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpiredKnowledgeSnapshotsRow
+	for rows.Next() {
+		var i ExpiredKnowledgeSnapshotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceID,
+			&i.Files,
+			&i.Failed,
+			&i.Bytes,
+			&i.ZipBytes,
+			&i.Changes,
+			&i.ReadWhen,
+			&i.ZipKey,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const finishKnowledgeSync = `-- name: FinishKnowledgeSync :execrows
@@ -804,8 +891,11 @@ func (q *Queries) UnheldBlobs(ctx context.Context, blobs []string) ([]string, er
 
 const updateKnowledgeSource = `-- name: UpdateKnowledgeSource :one
 UPDATE knowledge_sources
-SET title = coalesce($1::text, title), config = coalesce($2::jsonb, config),
-    secret_id = coalesce($3::uuid, secret_id), read_when = coalesce($4::text, read_when),
+SET next_sync_at = CASE WHEN $1::text IS NOT NULL AND read_when IS DISTINCT FROM $1::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        ELSE next_sync_at END,
+    title = coalesce($2::text, title), config = coalesce($3::jsonb, config),
+    secret_id = coalesce($4::uuid, secret_id), read_when = coalesce($1::text, read_when),
     sync_every = CASE WHEN $5::bigint IS NULL THEN sync_every
                       ELSE make_interval(secs => $5::bigint) END,
     updated_at = now()
@@ -814,20 +904,22 @@ RETURNING id
 `
 
 type UpdateKnowledgeSourceParams struct {
+	ReadWhen         *string
 	Title            *string
 	Config           []byte
 	SecretID         *uuid.UUID
-	ReadWhen         *string
 	SyncEverySeconds *int64
 	Name             string
 }
 
+// A new read-when line makes a source that writes snapshots due at once, so its next snapshot
+// carries the line; read_when on the right is the row's old line.
 func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledgeSourceParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, updateKnowledgeSource,
+		arg.ReadWhen,
 		arg.Title,
 		arg.Config,
 		arg.SecretID,
-		arg.ReadWhen,
 		arg.SyncEverySeconds,
 		arg.Name,
 	)

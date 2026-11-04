@@ -37,6 +37,8 @@ type Knowledge struct {
 
 type knowledgeOrg struct {
 	sources map[string]*fakeSource // by name
+	// pinned are the snapshots running agent runs pinned (Pin).
+	pinned map[domain.KnowledgeSnapshotID]bool
 }
 
 type fakeSource struct {
@@ -136,7 +138,7 @@ func (k *Knowledge) readsConnection(org domain.OrgID, id domain.ConnectionID) bo
 func (k *Knowledge) org(org domain.OrgID) *knowledgeOrg {
 	o, ok := k.orgs[org]
 	if !ok {
-		o = &knowledgeOrg{sources: map[string]*fakeSource{}}
+		o = &knowledgeOrg{sources: map[string]*fakeSource{}, pinned: map[domain.KnowledgeSnapshotID]bool{}}
 		k.orgs[org] = o
 	}
 
@@ -314,21 +316,36 @@ func (k *Knowledge) UpdateSource(ctx context.Context, name string, p domain.Know
 			s.src.SyncEvery = *p.SyncEvery
 		}
 
-		if p.ReadWhen != nil {
-			s.src.ReadWhen = *p.ReadWhen
-		}
+		now := time.Now().UTC()
+		newReadWhen(&s.src, p.ReadWhen, now)
 
 		if p.Secret != nil {
 			s.src.Secret = *p.Secret
 		}
 
-		s.src.UpdatedAt = time.Now().UTC()
+		s.src.UpdatedAt = now
 		out = o.view(s)
 
 		return nil
 	})
 
 	return out, err
+}
+
+// newReadWhen sets src's read-when line to line when it differs, and then makes a source that
+// writes snapshots (upload, repository, Confluence) due at now.
+func newReadWhen(src *domain.KnowledgeSource, line *string, now time.Time) {
+	if line == nil || *line == src.ReadWhen {
+		return
+	}
+
+	src.ReadWhen = *line
+
+	switch src.Kind {
+	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
+		src.NextSyncAt = &now
+	case domain.SourceSynced, domain.SourceLive:
+	}
 }
 
 // ConvertSource implements ports.Knowledge.
