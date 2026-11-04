@@ -863,9 +863,41 @@ func TestJonah_ProposalTried(t *testing.T) {
 		t.Errorf("kept tests = %+v, want %+v", tried.KeptTests, wantKept)
 	}
 
+	wantGrader(t, h, fmt.Sprintf("/v1/orgs/acme/factories/line/jonah/proposals/%d", made.Proposal.Number), claimed, it)
+
 	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
 	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
 		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
+	}
+}
+
+// wantGrader records checks of the grader on it for claimed's proposal, at path, and fails t
+// unless its tried shows each hit rate as hits over checks, 0 without checks, and adds the checks'
+// cost to the tries' $1.25.
+func wantGrader(t *testing.T, h *harness, path string, claimed domain.PastTry, it domain.Item) {
+	t.Helper()
+
+	ctx := inOrg(t)
+	check := func(r domain.GraderCheckResult, answer domain.PastTryVerdict) {
+		t.Helper()
+
+		if _, err := h.store.RecordGraderCheck(ctx, domain.NewGraderCheck{
+			ProposalID: claimed.ProposalID, ItemID: it.ID, Result: r, Answer: answer, Reason: "the grader's reason", CostUSD: 0.25, CheckedAt: h.clock.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	check(domain.GraderCheckOriginal, domain.PastTryNotFixed)
+
+	if g := h.getProposal(t, path).Tried; g.Grader == nil || g.Grader.OriginalHitRate != 1 || g.Grader.FinalHitRate != 0 || g.CostUsd != 1.5 {
+		t.Errorf("tried = %+v, want the grader's original hit rate 1, its final 0 with no final check, and $1.50 with the check", g)
+	}
+
+	check(domain.GraderCheckFinal, domain.PastTryNotFixed) // a miss: the final should read fixed
+
+	if g := h.getProposal(t, path).Tried; g.Grader == nil || g.Grader.OriginalHitRate != 1 || g.Grader.FinalHitRate != 0 || g.CostUsd != 1.75 {
+		t.Errorf("tried = %+v, want hit rates 1 and 0 and $1.75 with both checks", g)
 	}
 }
 

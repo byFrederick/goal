@@ -60,6 +60,7 @@ type JonahTryAgain interface {
 type PastTryReads interface {
 	ProposalPastTries(ctx context.Context, proposal domain.ProposalID) ([]domain.PastTry, error)
 	AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error)
+	ProposalGraderChecks(ctx context.Context, proposal domain.ProposalID) ([]domain.GraderCheck, error)
 }
 
 // JonahModels estimates and makes a model proposal as the person in ctx; its refusals are
@@ -519,26 +520,65 @@ func (s *server) proposalTried(ctx context.Context, f domain.FactoryID, p domain
 		out.Seconds = &secs
 	}
 
+	if err := s.triedGrader(ctx, p, out); err != nil {
+		return nil, err
+	}
+
 	for _, k := range tried.KeptTests {
 		out.KeptTests = append(out.KeptTests, s.triedKeptTestOut(ctx, f, k))
 	}
 
 	for _, it := range tried.Items {
-		ref, title := s.itemRef(ctx, f, it.ItemID)
-		e := gen.TriedItem{ItemRef: ref, ItemTitle: title, Station: it.Station, Tries: make([]gen.TriedTry, 0, len(it.Tries))}
-
-		if line, ok := lines[it.ItemID]; ok {
-			e.LineResult = &line
-		}
-
-		for _, t := range it.Tries {
-			e.Tries = append(e.Tries, triedTryOut(t))
-		}
-
-		out.Items = append(out.Items, e)
+		out.Items = append(out.Items, s.triedItemOut(ctx, f, it, lines))
 	}
 
 	return out, nil
+}
+
+// triedItemOut is it as a proposal's tried shows it, with its line result from lines when it has one.
+func (s *server) triedItemOut(ctx context.Context, f domain.FactoryID, it jonah.TriedItem, lines map[domain.ItemID]string) gen.TriedItem {
+	ref, title := s.itemRef(ctx, f, it.ItemID)
+	e := gen.TriedItem{ItemRef: ref, ItemTitle: title, Station: it.Station, Tries: make([]gen.TriedTry, 0, len(it.Tries))}
+
+	if line, ok := lines[it.ItemID]; ok {
+		e.LineResult = &line
+	}
+
+	for _, t := range it.Tries {
+		e.Tries = append(e.Tries, triedTryOut(t))
+	}
+
+	return e
+}
+
+// triedGrader sets out's grader from p's checks of the grader (ADR 0039 decision 10), once it has
+// any, and adds their cost to out's: each hit rate is its hits over its checks, 0 without checks.
+func (s *server) triedGrader(ctx context.Context, p domain.Proposal, out *gen.ProposalTried) error {
+	checks, err := s.jonah.Tries.ProposalGraderChecks(ctx, p.ID)
+	if err != nil {
+		return fmt.Errorf("read the grader's checks of proposal %d: %w", p.Number, err)
+	}
+
+	if len(checks) == 0 {
+		return nil
+	}
+
+	rate := func(hits, total int) float64 {
+		if total == 0 {
+			return 0
+		}
+
+		return float64(hits) / float64(total)
+	}
+
+	r := domain.HitRatesOf(checks)
+	out.Grader = &gen.TriedGrader{OriginalHitRate: rate(r.OriginalHits, r.OriginalTotal), FinalHitRate: rate(r.FinalHits, r.FinalTotal)}
+
+	for _, c := range checks {
+		out.CostUsd += c.CostUSD
+	}
+
+	return nil
 }
 
 // triedKeptTestOut is a proposal's try of a kept test as its tried shows it: the test by its

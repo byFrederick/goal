@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -140,9 +141,14 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 		t: t, store: store, tn: porttest.NewTenancy(clock.Now).WithStore(store), clock: clock,
 		defs:      &tryDefs{lines: map[domain.OrgID]domain.Line{}, reached: map[string][]string{}},
 		factories: map[domain.OrgID]domain.FactoryID{},
-		runner: &taskRunner{answer: func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-			return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: "diff --git a/x b/x\n", RunID: tryRunID}, nil
-		}},
+		runner:    &taskRunner{},
+	}
+	w.runner.answer = func(ctx context.Context, req domain.RunRequest) (domain.RunResult, error) {
+		if req.Bundle == domain.TaskKindGrade {
+			return w.recorded(ctx, req, rightGrade(req.GradeOf)), nil
+		}
+
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: "diff --git a/x b/x\n", RunID: tryRunID}, nil
 	}
 
 	for i := range orgs {
@@ -165,7 +171,8 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 	}
 
 	w.loop = jonah.NewTries(jonah.TryDeps{
-		Orgs: w.tn, Jonah: store, Tries: store, Kept: store, Definitions: w.defs, Waiting: store, Events: store, Runner: w.runner, Clock: clock,
+		Orgs: w.tn, Jonah: store, Tries: store, Kept: store, Definitions: w.defs, Waiting: store, Events: store, Runs: store,
+		Runner: w.runner, Clock: clock,
 	}, jonah.TryConfig{Timeout: tryTimeout, Margin: time.Minute})
 
 	return w
@@ -173,8 +180,63 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 
 func (w *tryWorld) ctx(org domain.OrgID) context.Context { return domain.WithOrg(w.t.Context(), org) }
 
-// pastItem is a done item of org's factory whose build run, started at, recorded a commit (first)
-// and cost $100 of the line's spend.
+// recorded is res, the result of the grade run req, recorded in the store as RunTask records a
+// grade: a run of kind try without an item, so its cost is Jonah's.
+func (w *tryWorld) recorded(ctx context.Context, req domain.RunRequest, res domain.RunResult) domain.RunResult {
+	w.t.Helper()
+
+	id, err := w.store.StartRun(ctx, ports.NewRun{FactoryID: req.FactoryID, Station: req.Station, Agent: req.Agent, StartedAt: w.clock.Now(), Kind: domain.RunKindTry})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	if err := w.store.FinishRun(ctx, id, res, w.clock.Now()); err != nil {
+		w.t.Fatal(err)
+	}
+
+	res.RunID = id
+
+	return res
+}
+
+// gradeCost is what each of the fake grader's runs costs.
+const gradeCost = 0.01
+
+// grade is a grade run's result that answers verdict with a reason naming the result of.
+func grade(of domain.GradeOf, verdict domain.PastTryVerdict) domain.RunResult {
+	out, _ := json.Marshal(domain.GradeAnswer{Reason: "the grader on the " + string(of) + " result", Verdict: verdict})
+
+	return domain.RunResult{Status: domain.RunSucceeded, Output: out, CostUSD: gradeCost}
+}
+
+// rightGrade is the answer of a grader that reads each result right: the original not fixed,
+// the final and the try fixed.
+func rightGrade(of domain.GradeOf) domain.RunResult {
+	if of == domain.GradeOriginal {
+		return grade(of, domain.PastTryNotFixed)
+	}
+
+	return grade(of, domain.PastTryFixed)
+}
+
+// gradesOf are the results reqs' grade runs grade, in order.
+func gradesOf(reqs []domain.RunRequest) []domain.GradeOf {
+	var out []domain.GradeOf
+
+	for _, r := range reqs {
+		if r.Bundle == domain.TaskKindGrade {
+			out = append(out, r.GradeOf)
+		}
+	}
+
+	return out
+}
+
+// originalOutput is the output of a past item's build run.
+const originalOutput = `{"draft":true}`
+
+// pastItem is a done item of org's factory whose build run, started at, recorded a commit (first),
+// output originalOutput and cost $100 of the line's spend.
 func (w *tryWorld) pastItem(org domain.OrgID, at time.Time, first bool) (domain.Item, domain.RunID) {
 	w.t.Helper()
 
@@ -199,7 +261,8 @@ func (w *tryWorld) pastItem(org domain.OrgID, at time.Time, first bool) (domain.
 		w.t.Fatal(err)
 	}
 
-	if err := w.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: 100}, at.Add(time.Minute)); err != nil {
+	if err := w.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(originalOutput), CostUSD: 100},
+		at.Add(time.Minute)); err != nil {
 		w.t.Fatal(err)
 	}
 
@@ -433,8 +496,10 @@ func TestTries_ClaimsFairlyAcrossOrgs(t *testing.T) {
 		t.Errorf("Work finished %d tries; want 5", n)
 	}
 
+	runs := slices.DeleteFunc(w.runner.requests(), func(r domain.RunRequest) bool { return r.Bundle == domain.TaskKindGrade })
+
 	var order []domain.FactoryID
-	for _, r := range w.runner.requests() {
+	for _, r := range runs {
 		order = append(order, r.FactoryID)
 	}
 
@@ -443,7 +508,7 @@ func TestTries_ClaimsFairlyAcrossOrgs(t *testing.T) {
 		t.Errorf("tries ran for %v; want %v, the organizations in turn", order, want)
 	}
 
-	for _, r := range w.runner.requests() {
+	for _, r := range runs {
 		if r.Kind != domain.RunKindTry || r.Item != "" || r.Lease != nil || r.Commit != tryHead || r.Bundle != domain.TaskKindTry ||
 			r.TryOf == "" || len(r.Connections) != 0 || r.Timeout != tryTimeout {
 			t.Errorf("request %+v; want a try of the recorded commit with no item, lease or connection", r)
@@ -604,8 +669,8 @@ func TestTries_MissingCommitIsError(t *testing.T) {
 	}
 }
 
-// A run that ends is stored done with no verdict, for grading: its diff, cost and run. The past
-// item's cost stays as it was.
+// A run that ends is stored done with the grader's verdict, its diff, its cost with the grade's and
+// its run. The past item's cost stays as it was.
 func TestTries_FinishedRunStoresDiffAndCost(t *testing.T) {
 	t.Parallel()
 
@@ -616,8 +681,9 @@ func TestTries_FinishedRunStoresDiffAndCost(t *testing.T) {
 	w.sweep()
 
 	got := w.onlyTry(org)
-	if got.State != domain.PastTryDone || got.Verdict != "" || got.Diff != "diff --git a/x b/x\n" || got.CostUSD != 0.25 || got.TryRunID != tryRunID {
-		t.Errorf("try = %+v; want done with no verdict, the run's diff, cost and run", got)
+	if got.State != domain.PastTryDone || got.Verdict != domain.PastTryFixed || got.Diff != "diff --git a/x b/x\n" || got.CostUSD != 0.25+gradeCost ||
+		got.TryRunID != tryRunID {
+		t.Errorf("try = %+v; want done and fixed, the run's diff, its cost with the grade's and its run", got)
 	}
 
 	if after, err := w.store.Item(w.ctx(org), it.ID); err != nil || after.CostUSD != 100 {
@@ -707,35 +773,341 @@ func TestTries_ContractOfTheProposalIsChecked(t *testing.T) {
 	}
 }
 
-// A try whose output passes its contract and checks, or whose agent run failed, stays done with
-// no verdict, for the grader; a failed run's output is not validated.
-func TestTries_PassingChecksAwaitTheGrader(t *testing.T) {
+// gradedItem is a past item of org whose build run started at started and was sent back by a
+// person for reason, then built again and accepted: its original and final results.
+func (w *tryWorld) gradedItem(org domain.OrgID, started time.Time, reason string) domain.Item {
+	w.t.Helper()
+
+	ctx := w.ctx(org)
+	it, _ := w.pastItem(org, started, true)
+
+	err := w.store.AppendEvents(ctx, domain.Event{
+		FactoryID: w.factories[org], ItemID: it.ID, At: started.Add(10 * time.Minute), Kind: domain.EventRejected, Station: stBuild, Actor: "grace",
+		Data: map[string]any{"reason": reason},
+	})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	id, err := w.store.StartRun(ctx, ports.NewRun{FactoryID: w.factories[org], ItemID: it.ID, Station: stBuild, Agent: tryAgent, StartedAt: started.Add(20 * time.Minute)})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{"tests":true}`), CostUSD: 1}
+	if err := w.store.FinishRun(ctx, id, res, started.Add(30*time.Minute)); err != nil {
+		w.t.Fatal(err)
+	}
+
+	return it
+}
+
+// A try that passes code grading at a station that is not a gate is graded by the grader: first the
+// grader is checked on the item's original and final results, each check stored with its answer,
+// cost and run, then one grade run grades the try, whose answer and reason the try takes and whose
+// cost it adds. Each grade run is a try-kind run on a grade bundle with the current line's model
+// and the model's access alone.
+func TestTries_GraderGradesTry(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	it := w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
+	p := w.propose(org, writerPath, it)
+	w.sweep()
+
+	got := w.onlyTry(org)
+	if got.Verdict != domain.PastTryFixed || got.Reason != "the grader on the try result" || got.CostUSD != 0.25+gradeCost || got.TryRunID != tryRunID {
+		t.Errorf("try = %+v; want fixed with the grader's reason, its cost with the grade's", got)
+	}
+
+	wantGradeRequests(t, w.runner.requests(), org, w.factories[org], got.ID)
+	wantHits(t, w, org, p, it)
+}
+
+// wantHits fails t unless p has the grader's original then final check of it, both hits, each
+// with its cost and run.
+func wantHits(t *testing.T, w *tryWorld, org domain.OrgID, p domain.Proposal, it domain.Item) {
+	t.Helper()
+
+	checks, err := w.store.ProposalGraderChecks(w.ctx(org), p.ID)
+	if err != nil || len(checks) != 2 || checks[0].Result != domain.GraderCheckOriginal || checks[1].Result != domain.GraderCheckFinal ||
+		!checks[0].Hit() || !checks[1].Hit() || checks[0].CostUSD != gradeCost || checks[1].RunID == "" || checks[0].ItemID != it.ID {
+		t.Errorf("checks = %+v, %v; want the original then the final check, both hits, with their cost and run", checks, err)
+	}
+}
+
+// wantGradeRequests fails t unless reqs are the try's run then grades of the original, the final
+// and the try: each a try-kind run on a grade bundle with the current line's model and the
+// model's access alone.
+func wantGradeRequests(t *testing.T, reqs []domain.RunRequest, org domain.OrgID, f domain.FactoryID, try domain.PastTryID) {
+	t.Helper()
+
+	if g := gradesOf(reqs); !slices.Equal(g, []domain.GradeOf{domain.GradeOriginal, domain.GradeFinal, domain.GradeTry}) || len(reqs) != 4 {
+		t.Fatalf("grades %v of %d runs; want the original, the final, then the try, after the try's run", g, len(reqs))
+	}
+
+	for _, r := range reqs[1:] {
+		want := domain.RunRequest{
+			OrgID: org, FactoryID: f, Version: tryVersion, Kind: domain.RunKindTry, Station: stBuild, Agent: tryAgent,
+			Model: reviewModel, Bundle: domain.TaskKindGrade, TryOf: try, GradeOf: r.GradeOf, ModelConnection: modelConn,
+			Size: domain.SandboxSmall, Timeout: tryTimeout,
+		}
+		if !reflect.DeepEqual(r, want) {
+			t.Errorf("grade request =\n%+v\nwant\n%+v", r, want)
+		}
+
+		if err := r.Check(); err != nil {
+			t.Errorf("grade request Check: %v", err)
+		}
+	}
+}
+
+// When the grader misreads the item's original or final result, or the item has no final result,
+// the try is unknown, its reason naming the misread result, and the try gets no grade run. A
+// grade with no valid answer counts as unknown.
+func TestTries_GraderMissMakesUnknown(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
-		name      string
-		status    domain.RunStatus
-		validated int
+		name    string
+		answer  func(of domain.GradeOf) domain.RunResult
+		noFinal bool
+		grades  []domain.GradeOf
+		reason  string
 	}{
-		{name: "passing", status: domain.RunSucceeded, validated: 1},
-		{name: "a failed run", status: domain.RunFailed, validated: 0},
+		{
+			name:   "the original read as fixed",
+			answer: func(of domain.GradeOf) domain.RunResult { return grade(of, domain.PastTryFixed) },
+			grades: []domain.GradeOf{domain.GradeOriginal, domain.GradeFinal}, reason: "misread the item's original result",
+		},
+		{
+			name:   "the final read as not fixed",
+			answer: func(of domain.GradeOf) domain.RunResult { return grade(of, domain.PastTryNotFixed) },
+			grades: []domain.GradeOf{domain.GradeOriginal, domain.GradeFinal}, reason: "misread the item's final result",
+		},
+		{
+			name: "no valid answer on the final",
+			answer: func(of domain.GradeOf) domain.RunResult {
+				if of == domain.GradeFinal {
+					return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{"verdict":"maybe"}`), CostUSD: gradeCost}
+				}
+
+				return rightGrade(of)
+			},
+			grades: []domain.GradeOf{domain.GradeOriginal, domain.GradeFinal}, reason: "no valid answer",
+		},
+		{
+			name: "no final result", answer: rightGrade, noFinal: true,
+			grades: []domain.GradeOf{domain.GradeOriginal}, reason: "no final accepted result",
+		},
 	} {
-		w := newTryWorld(t, 1)
-		org := w.orgs[0]
-		w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = contractNote, checksMakeTest })
-		w.queued(org, 1)
-		w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-			return domain.RunResult{Status: tt.status, Output: json.RawMessage(`{}`), Diff: tryDiff, RunID: tryRunID}, nil
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := newTryWorld(t, 1)
+			org := w.orgs[0]
+
+			var it domain.Item
+			if tt.noFinal {
+				it = w.unacceptedItem(org)
+			} else {
+				it = w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
+			}
+
+			w.propose(org, writerPath, it)
+			w.sweep()
+
+			w.runner.answer = func(ctx context.Context, req domain.RunRequest) (domain.RunResult, error) {
+				if req.Bundle == domain.TaskKindGrade {
+					return w.recorded(ctx, req, tt.answer(req.GradeOf)), nil
+				}
+
+				return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, RunID: tryRunID}, nil
+			}
+
+			got := w.onlyTry(org)
+			if got.Verdict != domain.PastTryUnknown || !strings.Contains(got.Reason, tt.reason) || got.CostUSD != 0.25 {
+				t.Errorf("try = %+v; want unknown with a reason naming %q, the try's cost alone", got, tt.reason)
+			}
+
+			if g := gradesOf(w.runner.requests()); !slices.Equal(g, tt.grades) {
+				t.Errorf("grades = %v; want %v and none of the try", g, tt.grades)
+			}
+		})
+	}
+}
+
+// unacceptedItem is a past item of org whose one build run, a claim's first, failed: it has no
+// final accepted result.
+func (w *tryWorld) unacceptedItem(org domain.OrgID) domain.Item {
+	w.t.Helper()
+
+	ctx := w.ctx(org)
+
+	it, err := w.store.CreateItem(ctx, domain.NewItem{FactoryID: w.factories[org], Title: "past", Station: stBuild})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	at := rt0.Add(-time.Hour)
+
+	id, err := w.store.StartRun(ctx, ports.NewRun{FactoryID: w.factories[org], ItemID: it.ID, Station: stBuild, Agent: tryAgent, StartedAt: at})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	if err := w.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", BranchHead: tryHead}); err != nil {
+		w.t.Fatal(err)
+	}
+
+	if err := w.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunFailed, CostUSD: 100}, at.Add(time.Minute)); err != nil {
+		w.t.Fatal(err)
+	}
+
+	return it
+}
+
+// The grader is checked once per proposal and item: a second try of the item (Try again) reads
+// the stored checks and runs one grade, of itself.
+func TestTries_GraderChecksOncePerItem(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	it := w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack)
+	p := w.propose(org, writerPath, it)
+	w.sweep()
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("Work finished %d tries; want 1", n)
+	}
+
+	if _, err := w.store.AddPastTries(w.ctx(org), w.factories[org], p.ID, []domain.PastTryAdd{{ItemID: it.ID, Tries: 1}}, rt0); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("Work finished %d tries; want the second", n)
+	}
+
+	want := []domain.GradeOf{domain.GradeOriginal, domain.GradeFinal, domain.GradeTry, domain.GradeTry}
+	if g := gradesOf(w.runner.requests()); !slices.Equal(g, want) {
+		t.Errorf("grades = %v; want %v", g, want)
+	}
+
+	if checks, err := w.store.ProposalGraderChecks(w.ctx(org), p.ID); err != nil || len(checks) != 2 {
+		t.Errorf("checks = %+v, %v; want the item's two", checks, err)
+	}
+
+	for _, tr := range w.tries(org, p) {
+		if tr.Verdict != domain.PastTryFixed {
+			t.Errorf("try %d = %+v; want fixed", tr.Attempt, tr)
+		}
+	}
+}
+
+// A try whose agent run failed at a station that is not a gate is not fixed, as it passes no code
+// grading: its output is not validated and the grader never sees it.
+func TestTries_FailedRunIsNotFixed(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	w.defs.build(org, func(s *domain.Station) { s.Output, s.Checks = contractNote, []string{"make test"} })
+	w.queued(org, 1)
+	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+		return domain.RunResult{Status: domain.RunFailed, Error: "the agent gave up", Diff: tryDiff, RunID: tryRunID, CostUSD: 0.25}, nil
+	}
+
+	got := w.onlyTry(org)
+	if got.Verdict != domain.PastTryNotFixed || !strings.Contains(got.Reason, "the agent gave up") || got.Diff != tryDiff || got.CostUSD != 0.25 {
+		t.Errorf("try = %+v; want not fixed with the run's error as its reason, its diff and cost", got)
+	}
+
+	if w.defs.validated != 0 || len(gradesOf(w.runner.requests())) != 0 {
+		t.Errorf("%d validations, grades %v; want none", w.defs.validated, gradesOf(w.runner.requests()))
+	}
+}
+
+// A try whose run used up Jonah's share waits under its lease with its run recorded, and its
+// proposal's tries show budget_used; a later claim with budget left grades it from the recorded
+// run without running it again.
+func TestTries_GraderWaitsForBudget(t *testing.T) {
+	t.Parallel()
+
+	w := newTryWorld(t, 1)
+	org := w.orgs[0]
+	f := w.factories[org]
+	it := w.gradedItem(org, rt0.Add(-2*time.Hour), sendBack) // the line spent $101: Jonah's 5% is $5.05
+	p := w.propose(org, writerPath, it)
+	w.sweep()
+
+	w.runner.answer = func(ctx context.Context, req domain.RunRequest) (domain.RunResult, error) {
+		if req.Bundle == domain.TaskKindGrade {
+			return w.recorded(ctx, req, rightGrade(req.GradeOf)), nil
 		}
 
-		got := w.onlyTry(org)
-		if got.State != domain.PastTryDone || got.Verdict != "" || got.Reason != "" || got.Diff != tryDiff {
-			t.Errorf("%s: try = %+v; want done with no verdict, for the grader", tt.name, got)
-		}
+		w.jonahSpent(ctx, f, 6)
 
-		if w.defs.validated != tt.validated {
-			t.Errorf("%s: %d validations; want %d", tt.name, w.defs.validated, tt.validated)
-		}
+		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CostUSD: 0.25, Diff: tryDiff, RunID: tryRunID}, nil
+	}
+
+	if n := w.work(); n != 0 {
+		t.Fatalf("Work finished %d tries; want none past the budget", n)
+	}
+
+	waiting := w.tries(org, p)[0]
+	if waiting.State != domain.PastTryRunning || waiting.TryRunID != tryRunID || waiting.Diff != tryDiff || len(gradesOf(w.runner.requests())) != 0 {
+		t.Fatalf("try = %+v, grades %v; want running with its run recorded and no grade", waiting, gradesOf(w.runner.requests()))
+	}
+
+	if st := w.triedState(org, p); st != jonah.TriedBudgetUsed {
+		t.Errorf("tried state = %s; want budget_used", st)
+	}
+
+	w.pastItem(org, rt0, false) // $100 more of the line's spend: $10.05 of share
+	w.clock.Advance(tryTimeout + time.Minute + time.Second)
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("Work finished %d tries; want the waiting one", n)
+	}
+
+	got := w.tries(org, p)[0]
+	if got.Verdict != domain.PastTryFixed || got.CostUSD != 0.25+gradeCost || got.Attempts != 2 {
+		t.Errorf("try = %+v; want fixed on its second attempt, its cost with the grade's", got)
+	}
+
+	if reqs := w.runner.requests(); len(reqs)-len(gradesOf(reqs)) != 1 {
+		t.Errorf("%d try runs; want the one, never run again", len(reqs)-len(gradesOf(reqs)))
+	}
+}
+
+// triedState is where p's tries are, as its page shows them, with Jonah's budget now.
+func (w *tryWorld) triedState(org domain.OrgID, p domain.Proposal) jonah.TriedState {
+	w.t.Helper()
+
+	spend, err := w.store.JonahSpendSince(w.ctx(org), p.FactoryID, w.clock.Now().Add(-jonah.BudgetWindow))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	tried, _ := jonah.TriedOf(w.tries(org, p), domain.DefaultJonahPolicy().Budget(spend))
+
+	return tried.State
+}
+
+// jonahSpent records a Jonah run of factory f that cost usd.
+func (w *tryWorld) jonahSpent(ctx context.Context, f domain.FactoryID, usd float64) {
+	w.t.Helper()
+
+	id, err := w.store.StartRun(ctx, ports.NewRun{FactoryID: f, Agent: "jonah", StartedAt: w.clock.Now(), Kind: domain.RunKindJonah})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+
+	if err := w.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, w.clock.Now()); err != nil {
+		w.t.Fatal(err)
 	}
 }
 
