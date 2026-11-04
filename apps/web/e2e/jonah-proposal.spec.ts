@@ -2,6 +2,7 @@
 // draft and Reject records a reason. Not run in the box: Playwright needs a browser, which the box does not have.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -22,7 +23,7 @@ test('the page shows proposal 7 as pictured: the estimate, the two diffs, the fo
 });
 
 test('the memory proposal shows its facts, the people it quotes and that no try ran', async ({ page }) => {
-  await page.goto('/o/acme/f/software/jonah/proposals/9');
+  await page.goto('/o/acme/f/software/jonah/proposals/10');
   await expect(
     page.getByRole('heading', { level: 1, name: /Add 3 facts from answers, notes and send-backs/ }),
   ).toBeVisible();
@@ -141,6 +142,36 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.screenshot({ path: `test-results/jonah-proposal-${width}-${scheme}.png`, fullPage: true });
     });
   }
+}
+
+test('the tries ⓘ is 44×44 and does not lie over Try again at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  const again = page.getByRole('button', { name: 'Try again' });
+  await expect(again).toBeVisible();
+  for (const name of ['How tries work', 'How model tries work']) {
+    const tip = page.getByRole('button', { name });
+    if ((await tip.count()) === 0) continue;
+    await expectTarget44(tip, name);
+    await expectNoOverlap(tip, again, `${name} and Try again`);
+  }
+});
+
+// Not run in the box: Playwright needs a browser, which the box does not have.
+for (const width of [375, 768, 1440]) {
+  test(`a model proposal shows no evidence lines at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/software/jonah/proposals');
+    const card = page.getByRole('article', { name: /frontend-engineer on claude-haiku-5-5/ });
+    await expect(card).toBeVisible();
+    await expect(card.getByText(/runs sent back/)).toHaveCount(0);
+
+    await page.goto('/o/acme/f/software/jonah/proposals/10');
+    await expect(page.getByRole('heading', { level: 1, name: /frontend-engineer on claude-haiku-5-5/ })).toBeVisible();
+    await expect(page.getByText('Found in')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Why/ })).toHaveCount(0);
+    await expect(page.getByText(/runs sent back/)).toHaveCount(0);
+  });
 }
 
 test('Reject with a reason works from More actions at 375 px', async ({ page }) => {

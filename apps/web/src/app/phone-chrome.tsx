@@ -96,7 +96,7 @@ export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef 
         <GoalMark size="shell" />
       </button>
       {back ? <div className="flex-none">{back}</div> : null}
-      <p className="m-0 min-w-16 flex-1 truncate text-heading text-ink">{title}</p>
+      <TopBarTitle title={title} />
       <TopBarActions>{actions}</TopBarActions>
     </header>
   );
@@ -393,5 +393,26 @@ function FactoryTab({ org, factory, to, exact = false, label, icon: Icon }: Fact
     <Link to={to} params={{ org: org.slug, factory }} activeOptions={{ exact }} className={tab}>
       {body}
     </Link>
+  );
+}
+
+/** The title, truncating its words but never a trailing number ("Proposal 10" keeps its 10). */
+function TopBarTitle({ title }: { title: string | undefined }) {
+  const parts = title?.match(/^(.+?)(\s+#?\d+)$/);
+  return (
+    <p className="m-0 flex min-w-16 flex-1 text-heading text-ink">
+      {parts ? (
+        <>
+          <span className="min-w-0 truncate" title={title}>
+            {parts[1]}
+          </span>
+          <span className="shrink-0 whitespace-pre">{parts[2]}</span>
+        </>
+      ) : (
+        <span className="min-w-0 truncate" title={title}>
+          {title}
+        </span>
+      )}
+    </p>
   );
 }

@@ -113,7 +113,7 @@ export function StatusLine({
           to="/o/$org/f/$factory/definition/$section"
           params={{ ...params, section: place.section }}
           search={placeSearch(place)}
-          className="inline-flex items-center gap-1 max-md:min-h-11 text-rework-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-rework-ink"
+          className={`max-md:min-h-11 inline-flex items-center gap-1 text-rework-ink underline underline-offset-3 transition-colors duration-(--duration-quick) hover:text-rework-ink`}
         >
           <TriangleAlert size={14} strokeWidth={1.75} aria-hidden="true" />
           {plural(problemCount, 'problem')}

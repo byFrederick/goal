@@ -194,7 +194,13 @@ function TimeByStation({ td: data }: { td: Teardown }) {
           {data.stations.map((s) => (
             <tr key={s.station}>
               <th scope="row" className={cn(td, 'text-left font-normal')}>
-                <Chip>{humanize(s.station)}</Chip>
+                <div className="max-w-[4.5rem] min-[1000px]:max-w-[5.5rem]">
+                  <Chip className="max-w-full">
+                    <span className="truncate" title={humanize(s.station)}>
+                      {humanize(s.station)}
+                    </span>
+                  </Chip>
+                </div>
               </th>
               <td className={cn(td, 'w-full')}>
                 <StationBar station={s} total={data.total.total_seconds} />
@@ -261,7 +267,12 @@ function Runs({ td: data, keepable, number }: { td: Teardown; keepable: string[]
           </>
         ) : null}
       </header>
-      <div className="overflow-x-auto max-[1000px]:hidden">
+      <section
+        aria-label="Runs table"
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a sideways scroller must be reachable by keyboard
+        tabIndex={0}
+        className="overflow-x-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-run max-[1000px]:hidden"
+      >
         <table className="w-full border-collapse text-secondary">
           <caption className="sr-only">Runs</caption>
           <thead>
@@ -326,7 +337,7 @@ function Runs({ td: data, keepable, number }: { td: Teardown; keepable: string[]
             </tr>
           </tfoot>
         </table>
-      </div>
+      </section>
       <ol aria-label="Runs" className="m-0 hidden list-none p-0 max-[1000px]:block">
         {data.runs.map((r) => (
           <li key={r.id} className={listItem}>

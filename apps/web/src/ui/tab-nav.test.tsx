@@ -75,3 +75,54 @@ describe('TabNav', () => {
     width.mockRestore();
   });
 });
+
+/** Gives every element a 100 px box laid end to end by DOM order, in a 150 px viewport. */
+function stubBoxes() {
+  const left = vi.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.parentElement
+      ? [...this.parentElement.children].filter((c) => !c.hasAttribute('aria-hidden')).indexOf(this) * 100
+      : 0;
+  });
+  const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(100);
+  const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(150);
+  return () => {
+    left.mockRestore();
+    width.mockRestore();
+    client.mockRestore();
+  };
+}
+
+describe('TabNav scrolling', () => {
+  const tabs = (current: string) => (
+    <TabNav label="Agent">
+      {['Overview', 'Tests', 'Runs'].map((t) => (
+        <a key={t} href={`/${t}`} aria-current={t === current ? 'page' : undefined} className={tabNavItem}>
+          {t}
+        </a>
+      ))}
+    </TabNav>
+  );
+
+  it('scrolls its own row so the current link is in view, never the page', () => {
+    const restore = stubBoxes();
+    const page = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    render(tabs('Runs'));
+    expect(screen.getByRole('navigation', { name: 'Agent' }).scrollLeft).toBe(150);
+    expect(page).not.toHaveBeenCalled();
+    page.mockRestore();
+    restore();
+  });
+
+  it('leaves the scroll alone on a re-render with the same link and on resize', () => {
+    const restore = stubBoxes();
+    const { rerender } = render(tabs('Runs'));
+    const nav = screen.getByRole('navigation', { name: 'Agent' });
+    nav.scrollLeft = 40;
+    rerender(tabs('Runs'));
+    window.dispatchEvent(new Event('resize'));
+    expect(nav.scrollLeft).toBe(40);
+    rerender(tabs('Overview'));
+    expect(nav.scrollLeft).toBe(0);
+    restore();
+  });
+});

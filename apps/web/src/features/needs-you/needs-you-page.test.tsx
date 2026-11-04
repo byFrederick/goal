@@ -852,6 +852,8 @@ describe('Needs you: a proposal that made its number worse', () => {
     expect(screen.getByText(/Send-backs at build/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Undo this change/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /^Open [a-z]+#\d+/ })).toBeNull();
+    // The same Button size as Open proposal and Open the Floor beside it.
+    expect(screen.getByRole('button', { name: /Undo this change/ }).className).toContain('h-8');
   });
 
   it('writes the undo proposal for the entry’s factory', async () => {
