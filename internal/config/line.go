@@ -310,7 +310,7 @@ func station(st Station) domain.Station {
 // ADR 0040 decision 14 read as its forms: github.check_run.failed as github.check_run with
 // conclusion failure, github.issues.labeled as github.issues with action labeled, and
 // webhook.<endpoint>[.<event>] as <endpoint>[.<event>]. An event trigger without limits.perHour
-// takes domain.DefaultPerHour.
+// takes domain.DefaultPerHour, and a check without limits.perCheck domain.DefaultCheckPerCheck.
 // trigger is t as the engine runs it, its create and check brief files read.
 func (f *Factory) trigger(t Trigger) domain.Trigger {
 	tr := trigger(t)
@@ -366,7 +366,7 @@ func trigger(t Trigger) domain.Trigger {
 	}
 
 	if l := t.Limits; l != nil {
-		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PerHour: l.PerHour, PauseOnBudget: l.PauseOnBudget}
+		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PerHour: l.PerHour, PerCheck: l.PerCheck, PauseOnBudget: l.PauseOnBudget}
 	}
 
 	if ch := t.Check; ch != nil {
@@ -375,6 +375,7 @@ func trigger(t Trigger) domain.Trigger {
 			Agent: ch.Agent, Brief: ch.Brief, MaxUSD: cmp.Or(ch.MaxUSD, domain.DefaultCheckMaxUSD),
 			Timeout: cmp.Or(timeout, domain.DefaultCheckTimeout),
 		}
+		out.Limits.PerCheck = cmp.Or(out.Limits.PerCheck, domain.DefaultCheckPerCheck)
 	}
 
 	if out.On != domain.OnSchedule && out.Limits.PerHour == 0 {

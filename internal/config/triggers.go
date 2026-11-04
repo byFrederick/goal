@@ -60,6 +60,9 @@ func (c *checker) triggers() {
 
 		if t.Check != nil {
 			c.check(t, base)
+		} else if t.Limits != nil && t.Limits.PerCheck > 0 {
+			c.errorf(checkTriggers, codePerCheckWithoutCheck, append(slices.Clone(base), "limits", "perCheck"),
+				"trigger %s: limits.perCheck caps what one check files, and the trigger has no check", t.Name)
 		}
 	}
 }

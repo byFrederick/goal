@@ -468,6 +468,7 @@
           "properties": {
             "perDay": { "type": "integer", "minimum": 1, "description": "At most this many items created by the trigger since the start of the UTC day." },
             "perHour": { "type": "integer", "minimum": 1, "description": "At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none." },
+            "perCheck": { "type": "integer", "minimum": 1, "description": "Only with check: at most this many items one check files; what is over it is skipped, \"over the limit\". Defaults to 5. A check's perDay counts the items the trigger filed, not its firings." },
             "pauseOnBudget": { "type": "boolean", "description": "Skip events while the factory's budget is spent (today the weekly budget)." }
           }
         },

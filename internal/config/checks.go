@@ -115,6 +115,9 @@ const (
 	codeCheckCronTooOften     = "check-cron-too-often"
 	codeCheckTimeoutInvalid   = "check-timeout-invalid"
 	codeCheckToolsNotReadOnly = "check-tools-not-read-only"
+	// codePerCheckWithoutCheck: limits.perCheck on a trigger without a check, which files one item
+	// a firing.
+	codePerCheckWithoutCheck = "per-check-without-check"
 
 	codeCronInvalid        = "cron-invalid"
 	codeTimeZoneInvalid    = "time-zone-invalid"

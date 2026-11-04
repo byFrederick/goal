@@ -281,6 +281,11 @@ type TriggerFiring struct {
 	RunID      RunID
 	CostUSD    float64
 	Decisions  string
+	// Try marks a try check (Try on the trigger's page): Applied says what it would do, and it
+	// files, notes and saves nothing. Applied is what a done check did; CheckedAt when it ended.
+	Try       bool
+	Applied   *CheckApplied
+	CheckedAt time.Time
 }
 
 // Check refuses a firing that misses its factory, trigger, event or key, has an unknown source or
@@ -298,6 +303,8 @@ func (f TriggerFiring) Check() error {
 		return fmt.Errorf("firing outcome %q must be created, skipped, missed or checked: %w", f.Outcome, ErrInvalid)
 	case (f.Outcome == FiringChecked) != (f.CheckState != ""):
 		return fmt.Errorf("only a checked firing has a check state, and it always does: %w", ErrInvalid)
+	case f.Try && f.Outcome != FiringChecked:
+		return fmt.Errorf("only a checked firing is a try: %w", ErrInvalid)
 	case f.ItemID != "" && f.Outcome != FiringCreated:
 		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
 	case f.At.IsZero():
