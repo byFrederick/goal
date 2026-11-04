@@ -305,21 +305,44 @@ func station(st Station) domain.Station {
 	return out
 }
 
-// trigger maps one of board.triggers; an unset enabled is enabled.
+// trigger maps one of board.triggers; an unset enabled is enabled. The keys triggers wrote before
+// ADR 0040 decision 14 read as its forms: github.check_run.failed as github.check_run with
+// conclusion failure, github.issues.labeled as github.issues with action labeled, and
+// webhook.<endpoint>[.<event>] as <endpoint>[.<event>]. An event trigger without limits.perHour
+// takes domain.DefaultPerHour.
 func trigger(t Trigger) domain.Trigger {
 	out := domain.Trigger{
 		Name: t.Name, Enabled: t.Enabled == nil || *t.Enabled, On: t.On, Cron: t.Cron, TimeZone: t.TimeZone,
 		Create: domain.TriggerCreate{
 			Type: t.Create.Type, Station: t.Create.Station, Lane: t.Create.Lane, Expedite: t.Create.Expedite,
-			Title: t.Create.Title, Brief: t.Create.Brief,
+			Title: t.Create.Title, Brief: t.Create.Brief, Trusted: t.Create.Trusted,
 		},
 	}
 
 	if f := t.Filter; f != nil {
 		out.Filter = domain.TriggerFilter{
-			Branch: f.Branch, Repo: f.Repo, Label: f.Label, Paths: slices.Clone(f.Paths), Authors: slices.Clone(f.Authors),
-			SkipBots: f.SkipBots,
+			Branch: f.Branch, Repo: slices.Clone(f.Repo), Label: f.Label, Action: slices.Clone(f.Action),
+			Conclusion: slices.Clone(f.Conclusion), Paths: slices.Clone(f.Paths), Authors: slices.Clone(f.Authors), SkipBots: f.SkipBots,
 		}
+
+		for path, vs := range f.Match {
+			if out.Filter.Match == nil {
+				out.Filter.Match = map[string][]string{}
+			}
+
+			out.Filter.Match[path] = slices.Clone(vs)
+		}
+	}
+
+	switch {
+	case t.On == domain.OnCheckRunFailed:
+		out.On = "github.check_run"
+		out.Filter.Conclusion = append(out.Filter.Conclusion, "failure")
+	case t.On == domain.OnIssuesLabeled:
+		out.On = "github.issues"
+		out.Filter.Action = append(out.Filter.Action, "labeled")
+	case strings.HasPrefix(t.On, webhookPrefix):
+		out.On = strings.TrimPrefix(t.On, webhookPrefix)
 	}
 
 	if o := t.Only; o != nil {
@@ -330,11 +353,18 @@ func trigger(t Trigger) domain.Trigger {
 	}
 
 	if l := t.Limits; l != nil {
-		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PauseOnBudget: l.PauseOnBudget}
+		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PerHour: l.PerHour, PauseOnBudget: l.PauseOnBudget}
+	}
+
+	if out.On != domain.OnSchedule && out.Limits.PerHour == 0 {
+		out.Limits.PerHour = domain.DefaultPerHour
 	}
 
 	return out
 }
+
+// webhookPrefix starts the on: key of a factory endpoint's trigger as written before ADR 0040.
+const webhookPrefix = "webhook."
 
 func agent(a Agent, sources map[string]string) domain.AgentSpec {
 	out := domain.AgentSpec{

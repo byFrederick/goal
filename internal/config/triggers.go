@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
@@ -51,7 +52,82 @@ func (c *checker) triggers() {
 		if t.Only != nil && t.Only.ModelAgrees != nil {
 			c.modelQuestion(t, base)
 		}
+
+		if t.On != onSchedule {
+			c.deliveries(trigger(t), base)
+		}
 	}
+}
+
+// deliveries checks an event trigger's on: in its sender form: it names an event, its filters
+// read only fields the sender's event table gives it (DeliveryRefusals), and create.trusted is
+// allowed for the sender. Publish checks the webhook form, which needs the organization's
+// webhooks.
+func (c *checker) deliveries(t domain.Trigger, base []string) {
+	sender, _, event := domain.ParseOn(t.On)
+	if sender == "" {
+		return
+	}
+
+	if event == "" {
+		c.errorf(CheckDeliveries, codeOnNeedsEvent, append(slices.Clone(base), "on"),
+			"trigger %s: on: %s names a sender without an event; write %s.<event>, such as %s.check_run", t.Name, sender, sender, sender)
+
+		return
+	}
+
+	for _, r := range DeliveryRefusals(t, sender, event) {
+		c.errorf(CheckDeliveries, r.Code, append(slices.Clone(base), r.Key), "trigger %s: %s", t.Name, r.Message)
+	}
+}
+
+// DeliveryRefusal is one reason a trigger can't take a sender's event as it is written: its
+// problem code, the trigger's key it is about (filter or create) and the message.
+type DeliveryRefusal struct {
+	Code, Key, Message string
+}
+
+// filterKeys are the filter keys that read each normalized field, for messages.
+var filterKeys = map[string]string{
+	domain.FieldBranch: "filter.branch", domain.FieldRepo: "filter.repo", domain.FieldLabel: "filter.label",
+	domain.FieldAction: "filter.action", domain.FieldConclusion: "filter.conclusion", domain.FieldPaths: "filter.paths",
+	domain.FieldAuthor: "filter.authors or filter.skipBots",
+}
+
+// DeliveryRefusals are why t can't take sender's event as written (ADR 0040 decisions 14 and
+// 21): each filter that reads a field the sender's event table doesn't give it, so it never
+// matches, and create.trusted where it is refused (domain.Trigger.TrustedRefusal).
+func DeliveryRefusals(t domain.Trigger, sender domain.WebhookSender, event string) []DeliveryRefusal {
+	var out []DeliveryRefusal
+
+	if event != "" {
+		tb := eventTable(sender, event)
+		for _, f := range tb.Unsupplied(t.Filter.Needs()) {
+			out = append(out, DeliveryRefusal{
+				Code: CodeFilterUnsupplied, Key: "filter",
+				Message: fmt.Sprintf("%s.%s carries no %s, so %s never matches", sender, event, f, filterKeys[f]),
+			})
+		}
+	}
+
+	if why := t.TrustedRefusal(sender); why != "" {
+		out = append(out, DeliveryRefusal{Code: CodeTrustedRefused, Key: "create", Message: why})
+	}
+
+	return out
+}
+
+// eventTable is the shipped sender catalog's table for sender's event; empty when it has none,
+// or the catalog does not load (its own tests keep it loading).
+func eventTable(sender domain.WebhookSender, event string) domain.EventTable {
+	c, err := senders.Shipped()
+	if err != nil {
+		return domain.EventTable{}
+	}
+
+	tb, _ := c.EventTable(sender, event)
+
+	return tb
 }
 
 // modelQuestion checks the model check's question: not empty once trimmed and at most

@@ -25,13 +25,18 @@ const triggerBlock = `    workTypes: [fix, feature]
       - name: red-main
         enabled: false
         on: github.check_run.failed
-        filter: { branch: main, repo: acme/app, paths: ["**/*.go"], authors: [acme-bot], skipBots: true }
+        filter: { branch: main, repo: acme/app, authors: [acme-bot], skipBots: true }
         only: { failuresInARow: 2, dedupe: check.name }
         create: { type: fix, station: work, expedite: true, title: "Fix {{check.name}}" }
         limits: { perDay: 3, pauseOnBudget: true }
       - name: deploy-alert
         on: webhook.deploys.failed
         create: { type: fix, station: inbox }
+      - name: pushes
+        on: github.push
+        filter: { repo: [acme/app, acme/web], paths: ["**/*.go"], match: { head_commit.author.name: [jo, al], forced: "false" } }
+        create: { type: fix, station: inbox, title: "Push {{payload.after}}" }
+        limits: { perHour: 4 }
 `
 
 // withTriggers is baseFactory with triggerBlock in its board, after the given replacements of
@@ -140,8 +145,35 @@ var triggerRows = []struct {
 		code: codeSchemaRequired, message: []string{"question"},
 	},
 	{
-		name: "event not allowed", doc: withTriggers("        on: github.check_run.failed\n", "        on: slack.message #here\n"),
+		name: "event not allowed", doc: withTriggers("        on: github.check_run.failed\n", "        on: Slack.Message #here\n"),
 		code: codeSchemaInvalid, message: []string{"spec.board.triggers[1].on"},
+	},
+	{
+		name: "a sender without an event", doc: withTriggers("        on: github.check_run.failed\n", "        on: github #here\n"),
+		code: codeOnNeedsEvent, message: []string{"trigger red-main", "github.<event>"},
+	},
+	{
+		name: "a filter the sender's event never supplies",
+		doc:  withTriggers("repo: acme/app, authors:", `repo: acme/app, paths: ["**/*.go"], authors:`, "skipBots: true }\n", "skipBots: true } #here\n"),
+		code: CodeFilterUnsupplied, message: []string{"trigger red-main", "github.check_run carries no paths", "filter.paths"},
+	},
+	{
+		name: "a label on a push", doc: withTriggers("filter: { repo: [acme/app", "filter: { label: bug, repo: [acme/app", `forced: "false" } }`+"\n", `forced: "false" } } #here`+"\n"),
+		code: CodeFilterUnsupplied, message: []string{"trigger pushes", "github.push carries no label"},
+	},
+	{
+		name: "trusted on a GitHub sender with authors", doc: withTriggers("expedite: true,", "expedite: true, trusted: true,"),
+	},
+	{
+		name: "trusted on a GitHub sender without authors",
+		doc:  withTriggers(`create: { type: fix, station: inbox, title: "Push`, `create: { type: fix, station: inbox, trusted: true, title: "Push`, `{{payload.after}}" }`+"\n", `{{payload.after}}" } #here`+"\n"),
+		code: CodeTrustedRefused, message: []string{"trigger pushes", "filter.authors"},
+	},
+	{
+		name: "trusted on the gitlab sender",
+		doc: withTriggers("        on: github.push\n", "        on: gitlab.push\n", `create: { type: fix, station: inbox, title: "Push`,
+			`create: { type: fix, station: inbox, trusted: true, title: "Push`, `{{payload.after}}" }`+"\n", `{{payload.after}}" } #here`+"\n"),
+		code: CodeTrustedRefused, message: []string{"trigger pushes", "gitlab sender"},
 	},
 	{
 		name: "unknown key in create", doc: withTriggers("          lane: backend\n", "          lane: backend\n          colour: red #here\n"),
@@ -212,7 +244,7 @@ func TestLoad_ParsesTriggers(t *testing.T) {
 		},
 		{
 			Name: "shop-incident", On: "webhook.shop-alerts.failed",
-			Filter: &TriggerFilter{Repo: "acme/shop", SkipBots: true},
+			Filter: &TriggerFilter{Repo: StringList{"acme/shop"}, SkipBots: true},
 			Only: &TriggerOnly{
 				FailuresInARow: 2, Dedupe: "service", ModelAgrees: &TriggerModelAgrees{Question: "Is this a real outage rather than a blip?"},
 			},
@@ -226,5 +258,27 @@ func TestLoad_ParsesTriggers(t *testing.T) {
 
 	if got := f.Spec.Board.Triggers; !reflect.DeepEqual(got, want) {
 		t.Errorf("triggers =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// A live version whose trigger has a refusal of the deliveries check (written before ADR 0040
+// decision 14) still loads, so its factory keeps running; publish refuses it.
+func TestLoad_KeepsDeliveryRefusals(t *testing.T) {
+	t.Parallel()
+
+	doc := withTriggers("repo: acme/app, authors:", `repo: acme/app, paths: ["**/*.go"], authors:`)
+
+	_, problems := Check(checkTree(doc, nil))
+	if len(problems) != 1 || problems[0].Check != CheckDeliveries || !problems[0].Blocking() {
+		t.Fatalf("problems = %+v; want one blocking deliveries problem", problems)
+	}
+
+	f, err := Load(checkTree(doc, nil))
+	if err != nil {
+		t.Fatalf("Load = %v; want it to load", err)
+	}
+
+	if got := f.Line().Triggers[1].On; got != "github.check_run" {
+		t.Errorf("red-main on = %q; want github.check_run", got)
 	}
 }

@@ -345,12 +345,48 @@ type Trigger struct {
 
 // TriggerFilter holds filters on an event's fields; every one set must match.
 type TriggerFilter struct {
-	Branch   string   `json:"branch,omitempty"`
-	Repo     string   `json:"repo,omitempty"`
-	Label    string   `json:"label,omitempty"`
-	Paths    []string `json:"paths,omitempty"`
-	Authors  []string `json:"authors,omitempty"`
-	SkipBots bool     `json:"skipBots,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// Repo, Action and Conclusion take one value or a list, any of which matches.
+	Repo       StringList `json:"repo,omitempty"`
+	Action     StringList `json:"action,omitempty"`
+	Conclusion StringList `json:"conclusion,omitempty"`
+	Label      string     `json:"label,omitempty"`
+	Paths      []string   `json:"paths,omitempty"`
+	Authors    []string   `json:"authors,omitempty"`
+	SkipBots   bool       `json:"skipBots,omitempty"`
+	// Match maps a dot path into the payload to a value or a list of values; all must match.
+	Match map[string]StringList `json:"match,omitempty"`
+}
+
+// StringList is a value written as one string or a list of strings.
+type StringList []string
+
+// UnmarshalJSON reads one string as a list of it.
+func (l *StringList) UnmarshalJSON(b []byte) error {
+	var one string
+	if err := json.Unmarshal(b, &one); err == nil {
+		*l = StringList{one}
+
+		return nil
+	}
+
+	var many []string
+	if err := json.Unmarshal(b, &many); err != nil {
+		return fmt.Errorf("a string or a list of strings: %w", err)
+	}
+
+	*l = many
+
+	return nil
+}
+
+// MarshalJSON writes a list of one as that string.
+func (l StringList) MarshalJSON() ([]byte, error) {
+	if len(l) == 1 {
+		return json.Marshal(l[0])
+	}
+
+	return json.Marshal([]string(l))
 }
 
 // TriggerOnly holds the checks made before an item is created.
@@ -379,11 +415,15 @@ type TriggerCreate struct {
 	Expedite bool   `json:"expedite,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Brief    string `json:"brief,omitempty"`
+	// Trusted files a delivery's item trusted (ADR 0040 decision 21).
+	Trusted bool `json:"trusted,omitempty"`
 }
 
 // TriggerLimits caps what a trigger creates.
 type TriggerLimits struct {
-	PerDay        int  `json:"perDay,omitempty"`
+	PerDay int `json:"perDay,omitempty"`
+	// PerHour is domain.DefaultPerHour for an event trigger that sets none.
+	PerHour       int  `json:"perHour,omitempty"`
 	PauseOnBudget bool `json:"pauseOnBudget,omitempty"`
 }
 
@@ -605,7 +645,7 @@ func Load(files fs.FS) (*Factory, error) {
 	var errs []error
 
 	for _, p := range problems {
-		skipped := p.Check == checkRemoved || p.Check == checkMoved || oldPath && p.Check == checkEnvironments
+		skipped := p.Check == checkRemoved || p.Check == checkMoved || p.Check == CheckDeliveries || oldPath && p.Check == checkEnvironments
 		if p.Blocking() && !skipped {
 			errs = append(errs, problemError(p))
 		}

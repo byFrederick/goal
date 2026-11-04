@@ -33,6 +33,10 @@ const (
 	// checkMoved: no key ADR 0037 moved to environment files is left. Load skips it, so versions
 	// published before still run on the old path until Goal converts them.
 	checkMoved = "moved"
+	// CheckDeliveries: what a trigger's on: names and filters can match, and whether it may be
+	// trusted (ADR 0040 decisions 14 and 21). Publish refuses it; Load skips it, so a live version
+	// written before keeps running.
+	CheckDeliveries = "deliveries"
 )
 
 // Problem codes config reports. They are stable: the UI, the CLI and tests key on them.
@@ -107,6 +111,13 @@ const (
 	codeTimeZoneInvalid      = "time-zone-invalid"
 	codePlaceholderInvalid   = "placeholder-invalid"
 	codeModelQuestionInvalid = "model-question-invalid"
+
+	// codeOnNeedsEvent: on: names a sender with no event (github, not github.check_run).
+	codeOnNeedsEvent = "on-needs-event"
+	// CodeFilterUnsupplied: a filter reads a field the event never supplies, so it never matches.
+	CodeFilterUnsupplied = "filter-unsupplied"
+	// CodeTrustedRefused: create.trusted on a sender or webhook that may not be trusted.
+	CodeTrustedRefused = "trusted-refused"
 
 	codeEnvironmentNameInvalid    = "environment-name-invalid"
 	codeEnvironmentNameMismatch   = "environment-name-mismatch"

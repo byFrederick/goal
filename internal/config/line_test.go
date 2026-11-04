@@ -661,15 +661,15 @@ func TestLine_Triggers(t *testing.T) {
 			Create: domain.TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep"},
 		},
 		{
-			Name: "shop-incident", Enabled: true, On: "webhook.shop-alerts.failed",
-			Filter: domain.TriggerFilter{Repo: "acme/shop", SkipBots: true},
+			Name: "shop-incident", Enabled: true, On: "shop-alerts.failed",
+			Filter: domain.TriggerFilter{Repo: []string{"acme/shop"}, SkipBots: true},
 			Only: domain.TriggerOnly{
 				FailuresInARow: 2, Dedupe: "service", ModelAgrees: &domain.ModelAgrees{Question: "Is this a real outage rather than a blip?"},
 			},
 			Create: domain.TriggerCreate{
 				Type: workIncident, Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",
 			},
-			Limits: domain.TriggerLimits{PerDay: 3, PauseOnBudget: true},
+			Limits: domain.TriggerLimits{PerDay: 3, PerHour: domain.DefaultPerHour, PauseOnBudget: true},
 		},
 	}
 
@@ -680,6 +680,28 @@ func TestLine_Triggers(t *testing.T) {
 	off := false
 	if got := trigger(Trigger{Name: "off", Enabled: &off, On: domain.OnSchedule}); got.Enabled {
 		t.Error("a trigger with enabled: false maps as enabled")
+	}
+
+	// The keys written before ADR 0040 decision 14 read as its forms, with their filters.
+	old := []struct {
+		on, want string
+		filter   domain.TriggerFilter
+	}{
+		{domain.OnCheckRunFailed, "github.check_run", domain.TriggerFilter{Branch: "main", Conclusion: []string{"failure"}}},
+		{domain.OnIssuesLabeled, "github.issues", domain.TriggerFilter{Branch: "main", Action: []string{"labeled"}}},
+		{"webhook.deploys", "deploys", domain.TriggerFilter{Branch: "main"}},
+		{"github.push", "github.push", domain.TriggerFilter{Branch: "main"}},
+	}
+
+	for _, o := range old {
+		got := trigger(Trigger{Name: "t", On: o.on, Filter: &TriggerFilter{Branch: "main"}, Limits: &TriggerLimits{PerHour: 4}})
+		if got.On != o.want || !reflect.DeepEqual(got.Filter, o.filter) || got.Limits.PerHour != 4 {
+			t.Errorf("on %s maps to on %s, filter %+v, perHour %d; want %s, %+v, 4", o.on, got.On, got.Filter, got.Limits.PerHour, o.want, o.filter)
+		}
+	}
+
+	if got := trigger(Trigger{Name: "s", On: domain.OnSchedule}); got.Limits.PerHour != 0 {
+		t.Errorf("a schedule's perHour = %d; want none", got.Limits.PerHour)
 	}
 }
 

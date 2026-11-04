@@ -26,6 +26,11 @@ func TestFollowUpFiling_Landing(t *testing.T) {
 		{"a cancelled root drops it", triage, Item{State: StateDone}, StateCancelled, FollowUpLanding{Drop: true, Reason: ReasonFollowUpCancelled}},
 		{"three deep drops it", start, Item{State: StateDone, Generation: 3}, StateDone, FollowUpLanding{Drop: true, Reason: ReasonFollowUpThreeDeep}},
 		{"two deep still files", start, Item{State: StateDone, Generation: 2}, StateDone, FollowUpLanding{File: true}},
+		{"an untrusted start waits for its own triage", start, Item{State: StateDone, Untrusted: true}, StateDone, FollowUpLanding{Untrusted: true}},
+		{"an untrusted note waits for its own triage", FollowUp{Target: FollowUpNote, State: FollowUpWaiting},
+			Item{State: StateDone, Untrusted: true}, StateDone, FollowUpLanding{Untrusted: true}},
+		{"untrusted cancelled work drops it", start, Item{State: StateCancelled, Untrusted: true}, StateCancelled,
+			FollowUpLanding{Drop: true, Reason: ReasonFollowUpCancelled}},
 	}
 
 	for _, tt := range tests {

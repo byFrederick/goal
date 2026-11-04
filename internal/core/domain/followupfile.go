@@ -33,24 +33,33 @@ const (
 	ReasonFollowUpCapped    = "the factory already took 20 follow-up items in the last 24 hours"
 )
 
-// FollowUpLanding is what happens to a waiting start or triage follow-up when its work lands or
-// is cancelled (ADR 0040 decisions 8 and 21): Drop with Reason, or File it when it is a start and
-// its source may have follow-ups filed. Anything else joins the triage item.
+// ReasonUntrustedFollowUps is the reason an untrusted item's own triage item is filed paused with
+// (ADR 0040 decision 21).
+const ReasonUntrustedFollowUps = "Its follow-ups come from work that read outside text. Check them, then resume."
+
+// FollowUpLanding is what happens to a waiting follow-up when its work lands or is cancelled (ADR
+// 0040 decisions 8 and 21): Drop with Reason, File it when it is a start and its source may have
+// follow-ups filed, or, for an untrusted source, join a triage item of its own (Untrusted).
+// Anything else joins the triage item.
 type FollowUpLanding struct {
-	Drop   bool
-	File   bool
-	Reason string
+	Drop      bool
+	File      bool
+	Untrusted bool
+	Reason    string
 }
 
-// LandFollowUp is what happens to f, a waiting start or triage follow-up of src, when its root
-// (src, or src's assembly) reached state root: dropped when src or its root was cancelled or src
-// is MaxFollowUpGeneration deep, filed when it is a start, and to triage otherwise.
+// LandFollowUp is what happens to f, a waiting follow-up of src, when its root (src, or src's
+// assembly) reached state root: dropped when src or its root was cancelled or src is
+// MaxFollowUpGeneration deep, to the untrusted triage item of its own when src is untrusted
+// (never delivered or filed on its own), filed when it is a start, and to triage otherwise.
 func LandFollowUp(f FollowUp, src Item, root ItemState) FollowUpLanding {
 	switch {
 	case src.State == StateCancelled || root == StateCancelled:
 		return FollowUpLanding{Drop: true, Reason: ReasonFollowUpCancelled}
 	case src.Generation >= MaxFollowUpGeneration:
 		return FollowUpLanding{Drop: true, Reason: ReasonFollowUpThreeDeep}
+	case src.Untrusted:
+		return FollowUpLanding{Untrusted: true}
 	case f.Target == FollowUpStart && f.Start != nil:
 		return FollowUpLanding{File: true}
 	default:
@@ -233,6 +242,16 @@ func TriageFileRequest(factory FactoryID, es []TriageEntry, at time.Time) FileRe
 	if len(es) > 0 {
 		r.Type = es[0].Type
 	}
+
+	return r
+}
+
+// UntrustedTriageFileRequest is the filing of the triage item of its own for es, the follow-ups of
+// untrusted work that landed (ADR 0040 decision 21): TriageFileRequest's, untrusted and with no
+// start, since it is filed paused (ReasonUntrustedFollowUps) and a person resumes it.
+func UntrustedTriageFileRequest(factory FactoryID, es []TriageEntry, at time.Time) FileRequest {
+	r := TriageFileRequest(factory, es, at)
+	r.Untrusted, r.Start = true, nil
 
 	return r
 }

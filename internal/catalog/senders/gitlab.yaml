@@ -12,4 +12,32 @@ spec:
     header: X-Gitlab-Event-UUID
   event:
     paths: [object_kind]
-  events: {}
+  # The event table (ADR 0040 decision 14), by object_kind.
+  events:
+    push:
+      branch: {paths: [ref], trimPrefix: refs/heads/}
+      sha: checkout_sha
+      repo: project.path_with_namespace
+      author: user_username
+      paths: {paths: [commits.added, commits.modified, commits.removed]}
+    merge_request:
+      action: object_attributes.action
+      mr.number: object_attributes.iid
+      mr.title: object_attributes.title
+      mr.url: object_attributes.url
+      branch: object_attributes.source_branch
+      repo: project.path_with_namespace
+      author: user.username
+    pipeline:
+      conclusion: object_attributes.status
+      branch: object_attributes.ref
+      sha: object_attributes.sha
+      repo: project.path_with_namespace
+      author: user.username
+    issue:
+      action: object_attributes.action
+      issue.number: object_attributes.iid
+      issue.title: object_attributes.title
+      issue.url: object_attributes.url
+      repo: project.path_with_namespace
+      author: user.username
