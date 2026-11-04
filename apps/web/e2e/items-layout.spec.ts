@@ -1,7 +1,8 @@
 // Items against the mock: every column shows at 1440, the view tabs stay on one line at 768, and the
 // pictures for the pull request.
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, lengthenTitles } from './support';
+import { expectAccessible, expectNoHorizontalScroll, lengthenTitles } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 const items = '/o/acme/f/goal/items';
 
@@ -121,5 +122,20 @@ for (const colorScheme of ['light', 'dark'] as const) {
       );
       expect(link$?.height ?? 0).toBeGreaterThanOrEqual(43.5);
     }
+  });
+}
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`gives row checkboxes 44 px targets that do not overlap at 390 px, ${colorScheme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme });
+    await page.goto(items);
+    const boxes = page.getByRole('table', { name: 'Items' }).getByRole('checkbox', { name: /^Select / });
+    await expect(boxes.first()).toBeVisible();
+    const first = boxes.nth(0).locator('xpath=..');
+    const second = boxes.nth(1).locator('xpath=..');
+    await expectTarget44(first, 'the first row checkbox');
+    await expectNoOverlap(first, second, 'adjacent row checkboxes');
+    await expectAccessible(page);
   });
 }
