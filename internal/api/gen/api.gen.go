@@ -4917,6 +4917,9 @@ type KnowledgeCheck struct {
 	// Files How many files it lists; 0 when access failed
 	Files int `json:"files"`
 
+	// FirstFiles The paths, as the sync would write them under /knowledge/<name>/, of the first 8 files the listing yields, in listing order. Empty when access failed or for an upload source not saved yet.
+	FirstFiles []string `json:"first_files"`
+
 	// Limits A source's limits (ADR 0038 decision 4)
 	Limits KnowledgeLimits `json:"limits"`
 

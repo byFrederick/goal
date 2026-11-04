@@ -509,11 +509,16 @@ func (b *snapshotBuilder) changed(first bool) bool {
 // hashChars is the length of the collision suffix's hash, in hex digits.
 const hashChars = 8
 
-// path is item's file path in the snapshot: an upload's file name, a repository file's path, a
-// Confluence page's title and id in its folder (the top when the folder would not make a file's
-// path), as Markdown (.md); another item at the same path gets its id's short hash before the
-// extension.
+// path is item's file path in the snapshot (itemPath), among the paths the snapshot has taken.
 func (b *snapshotBuilder) path(kind domain.KnowledgeSourceKind, item domain.SourceItem) string {
+	return itemPath(kind, item, b.paths)
+}
+
+// itemPath is item's file path in a snapshot of a source of kind: an upload's file name, a
+// repository file's path, a Confluence page's title and id in its folder (the top when the folder
+// would not make a file's path), as Markdown (.md); an item at a path in taken gets its id's short
+// hash before the extension. The sync and the Check both name files with it.
+func itemPath(kind domain.KnowledgeSourceKind, item domain.SourceItem, taken map[string]bool) string {
 	var name string
 
 	switch kind {
@@ -534,7 +539,7 @@ func (b *snapshotBuilder) path(kind domain.KnowledgeSourceKind, item domain.Sour
 	}
 
 	p := markdownName(name)
-	if !b.paths[p] {
+	if !taken[p] {
 		return p
 	}
 

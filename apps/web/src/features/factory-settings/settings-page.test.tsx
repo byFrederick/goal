@@ -12,6 +12,11 @@ vi.mock(import('../../api/client'), async (original) => ({
   listMembers: vi.fn(async () => []),
 }));
 
+vi.mock(import('../../api/org-notifications'), async (original) => ({
+  ...(await original()),
+  getOrgNotificationSettings: vi.fn(async () => ({ slack_secret: 'slack-bot' })),
+}));
+
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -186,13 +191,22 @@ describe('Factory settings page', () => {
     await renderSettings({ can: ['factory:archive', 'factory:delete'], members: [] });
 
     const ids = Array.from(document.querySelectorAll('section[id]')).map((section) => section.id);
-    expect(ids).toEqual(['general', 'repository', 'runtime', 'budgets', 'flow', 'people', 'danger']);
+    expect(ids).toEqual(['general', 'repository', 'runtime', 'budgets', 'flow', 'notifications', 'people', 'danger']);
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     expect(
       within(nav)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['General', 'Repository', 'Runtime', 'Budgets and targets', 'Flow', 'People with access', 'Danger zone']);
+    ).toEqual([
+      'General',
+      'Repository',
+      'Runtime',
+      'Budgets and targets',
+      'Flow',
+      'Notifications',
+      'People with access',
+      'Danger zone',
+    ]);
   });
 
   it('shows Loading in each settings group while the draft loads', async () => {

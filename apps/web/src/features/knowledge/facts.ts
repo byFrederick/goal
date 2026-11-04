@@ -18,7 +18,10 @@ export function fromDetail(s: KnowledgeSource): string {
     const folders = s.config.include ? ` ${s.config.include.split(/[,\n]/)[0]?.trim() ?? ''}` : '';
     return `${repositoryName(s.config.repository ?? '')}${folders}`.trim();
   }
-  if (s.kind === 'confluence' || s.config.spaces) return `Space ${s.config.spaces ?? ''}`.trim();
+  if (s.kind === 'confluence' || s.config.spaces) {
+    const space = `Space ${s.config.spaces ?? ''}`.trim();
+    return s.config.root_page ? `${space}, page ${s.config.root_page}` : space;
+  }
   return s.connection ?? '';
 }
 

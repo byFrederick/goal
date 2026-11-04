@@ -1,4 +1,4 @@
-// Secrets (ADR 0037) against the mock: acme's nine secrets as the Secrets picture shows them, the filters in the
+// Secrets (ADR 0037) against the mock: acme's nine secrets and slack-bot as the Secrets picture shows them, the filters in the
 // URL, the New secret sheet, a secret's page with Replace value, settings and a delete that a use blocks, and
 // Import with its dry run. No value is read back from anywhere. Not run in the box (no browser): it runs in CI with
 // `task web:e2e`.
@@ -11,12 +11,12 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 test.describe('the Secrets list', () => {
-  test('lists the nine secrets, warns about the one that expires soon, and shows no value', async ({ page }) => {
+  test('lists the ten secrets, warns about the one that expires soon, and shows no value', async ({ page }) => {
     await page.goto('/o/acme/secrets');
     await expect(page).toHaveTitle('Secrets · Acme · Goal');
 
     const table = page.getByRole('table', { name: 'Secrets of Acme' });
-    await expect(table.getByRole('row')).toHaveCount(10);
+    await expect(table.getByRole('row')).toHaveCount(11);
     await expect(table.getByRole('row').filter({ hasText: 'cloudflare-deploy' })).toContainText('3 days');
     await expect(page.getByRole('region', { name: 'Expiring' })).toContainText('cloudflare-deploy expires in 3 days');
     await expectAccessible(page);

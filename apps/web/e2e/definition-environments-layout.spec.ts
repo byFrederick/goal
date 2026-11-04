@@ -114,6 +114,24 @@ test('Add to draft writes the tool into the environment file and the YAML view s
   await expect(page.getByText('mcp.sentry.dev')).toBeVisible();
 });
 
+for (const scheme of schemes) {
+  for (const width of widths) {
+    test.describe(`Test again on a server card, ${scheme} at ${width} px`, () => {
+      test.use({ viewport: { width, height: 900 }, colorScheme: scheme });
+
+      test('testing a server opens its card and offers Test again, inside the viewport', async ({ page }) => {
+        await page.goto('/o/acme/f/goal/definition/environments');
+        await expect(page.getByRole('heading', { name: 'The box' })).toBeVisible();
+        await page.getByRole('button', { name: 'Test servers' }).click();
+        const again = page.getByRole('button', { name: 'Test linear' });
+        await expect(again).toHaveText('Test again');
+        await expectNoHorizontalScroll(page);
+        await expectNoClippedElements(page);
+      });
+    });
+  }
+}
+
 // At 768 the sidebar takes its width, so the catalog and the detail show one at a time, as on a phone.
 test.describe('Add a tool at 768 px with the sidebar', () => {
   test.use({ viewport: { width: 768, height: 900 } });

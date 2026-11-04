@@ -234,15 +234,34 @@ function seed(now: number, by: Actor): MockSource[] {
       ],
     },
     {
+      source: source(4, {
+        name: 'product-specs',
+        title: 'Product specs',
+        kind: 'confluence',
+        secret: 'confluence-token',
+        config: { site: 'https://acme.atlassian.net', email: 'bot@example.com', spaces: 'PROD', root_page: '12345' },
+        status: 'failed',
+        last_error: 'Confluence refused the token',
+        last_synced_at: at(-2 * hourMs),
+        next_sync_at: at(hourMs),
+      }),
+      docs: [
+        doc('product-specs', 'launch-checklist.md', '# Launch checklist\n\nWho signs off before a release goes out.', {
+          indexed_at: at(-2 * hourMs),
+        }),
+      ],
+    },
+    {
       source: source(3, {
         name: 'support-macros',
         title: 'Support macros',
         kind: 'synced',
         connection: 'github',
         config: { repository: 'https://github.com/acme/support-macros', include: '**/*.md' },
-        sync_every_seconds: 86_400,
+        // Only when someone presses Sync (ADR 0038 decision 1): no next sync.
+        sync_every_seconds: 0,
         last_synced_at: at(-6 * hourMs),
-        next_sync_at: at(18 * hourMs),
+        next_sync_at: null,
       }),
       docs: [
         doc(
@@ -344,7 +363,8 @@ export function createKnowledge({
     s.source.last_synced_at = new Date(now).toISOString();
     // goald's FinishKnowledgeSync moves updated_at too: a form keyed by it would lose its edits.
     s.source.updated_at = s.source.last_synced_at;
-    s.source.next_sync_at = new Date(now + s.source.sync_every_seconds * 1000).toISOString();
+    s.source.next_sync_at =
+      s.source.sync_every_seconds === 0 ? null : new Date(now + s.source.sync_every_seconds * 1000).toISOString();
     event(org, s);
   };
 
@@ -362,7 +382,8 @@ export function createKnowledge({
     if (!kind)
       return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, repository, confluence, synced or live`);
     if ((kind === 'synced' || kind === 'repository' || kind === 'confluence') && connection === '') {
-      if (every < 900) return refuse(res, 400, 'a source syncs at most every 15 minutes');
+      if (every !== 0 && every < 900)
+        return refuse(res, 400, 'a source syncs at most every 15 minutes, or only on demand (0)');
       if (named(org.id, name))
         return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
       return createOn(org, req, res, {
@@ -383,7 +404,8 @@ export function createKnowledge({
         kind === 'upload' ? 'an upload source reads no connection' : `a ${kind} source reads a connection`,
       );
     }
-    if (every < 900) return refuse(res, 400, 'a source syncs at most every 15 minutes');
+    if (every !== 0 && every < 900)
+      return refuse(res, 400, 'a source syncs at most every 15 minutes, or only on demand (0)');
     const hook = connection ? connectionSync(org.id, connection) : '';
     if (hook === undefined) return refuse(res, 404, `connection "${connection}" not found`, 'connection-not-found');
     if (kind === 'synced' && hook === '') {
@@ -434,7 +456,7 @@ export function createKnowledge({
         sync_every_seconds: every,
         status: 'idle',
         last_synced_at: null,
-        next_sync_at: kind === 'live' ? null : now,
+        next_sync_at: kind === 'live' || every === 0 ? null : now,
         latest_snapshot: null,
         used_by: { factories: [], readers: [] },
         created_by: by,
@@ -458,9 +480,12 @@ export function createKnowledge({
     const title = typeof b.title === 'string' ? b.title.trim() : s.source.title;
     const every = typeof b.sync_every_seconds === 'number' ? b.sync_every_seconds : s.source.sync_every_seconds;
     if (title.length === 0 || title.length > 120) return refuse(res, 400, 'a source title has 1 to 120 characters');
-    if (every < 900) return refuse(res, 400, 'a source syncs at most every 15 minutes');
+    if (every !== 0 && every < 900)
+      return refuse(res, 400, 'a source syncs at most every 15 minutes, or only on demand (0)');
     s.source.title = title;
     s.source.sync_every_seconds = every;
+    if (every === 0) s.source.next_sync_at = null;
+    else if (!s.source.next_sync_at) s.source.next_sync_at = new Date(clock()).toISOString();
     if (b.config !== undefined) s.source.config = strings(b.config);
     if (s.source.kind === 'synced' && typeof b.secret === 'string' && b.secret !== '') s.source.secret = b.secret;
     s.source.updated_at = new Date(clock()).toISOString();
@@ -614,6 +639,7 @@ export function createKnowledge({
         send(res, 200, {
           access: { ok: true },
           files: 12,
+          first_files: ['db/disk.md', 'db/backups.md', 'k8s/pods.md'],
           bytes: 2_400_000,
           limits: { files: 20000, bytes: 50 << 20, file_bytes: 5 << 20 },
           over_limit: [],

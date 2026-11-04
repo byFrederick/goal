@@ -40,6 +40,7 @@ describe('the Check panel', () => {
     const answer: KnowledgeCheck = {
       access: { ok: true },
       files: 212,
+      first_files: ['db/disk.md', 'k8s/pods.md'],
       bytes: 3 * 1024 * 1024,
       limits,
       over_limit: ['files'],
@@ -65,6 +66,7 @@ describe('the Check panel', () => {
     check.mockResolvedValue({
       access: { ok: false, error: 'the token was refused' },
       files: 0,
+      first_files: [],
       limits,
       over_limit: [],
       warnings: [],
@@ -83,5 +85,55 @@ describe('the Check panel', () => {
     renderPanel(null);
     expect((screen.getByRole('button', { name: 'Check' }) as HTMLButtonElement).disabled).toBe(true);
     await waitFor(() => expect(check).not.toHaveBeenCalled());
+  });
+
+  describe('First files', () => {
+    const base: KnowledgeCheck = {
+      access: { ok: true },
+      files: 212,
+      first_files: ['db/disk.md', 'k8s/pods.md'],
+      limits,
+      over_limit: [],
+      warnings: [],
+      line: '/knowledge/runbooks — x.',
+    };
+
+    it('lists the paths and says how many more there are', async () => {
+      check.mockResolvedValue(base);
+      renderPanel(input);
+      await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+      const card = await screen.findByRole('region', { name: 'First files' });
+      expect(card.textContent).toContain('db/disk.md');
+      expect(card.textContent).toContain('k8s/pods.md');
+      expect(card.textContent).toContain('and 210 more');
+    });
+
+    it('says nothing more when the list holds every file', async () => {
+      check.mockResolvedValue({ ...base, files: 2 });
+      renderPanel(input);
+      await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+      const card = await screen.findByRole('region', { name: 'First files' });
+      expect(card.textContent).not.toContain('more');
+    });
+
+    it('is hidden when access failed or the list is empty', async () => {
+      check.mockResolvedValueOnce({ ...base, access: { ok: false, error: 'No' } });
+      renderPanel(input);
+      await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+      await screen.findByText('Couldn’t read the source');
+      expect(screen.queryByRole('region', { name: 'First files' })).toBeNull();
+      check.mockResolvedValueOnce({ ...base, first_files: [] });
+      await userEvent.click(screen.getByRole('button', { name: 'Check again' }));
+      await screen.findByText('Access works');
+      expect(screen.queryByRole('region', { name: 'First files' })).toBeNull();
+    });
+
+    it('shows its skeleton while the check runs', async () => {
+      check.mockReturnValue(new Promise(() => {}));
+      renderPanel(input);
+      await userEvent.click(screen.getByRole('button', { name: 'Check' }));
+      const card = await screen.findByRole('region', { name: 'First files' });
+      expect(card.querySelector('[aria-busy="true"]')).not.toBeNull();
+    });
   });
 });
