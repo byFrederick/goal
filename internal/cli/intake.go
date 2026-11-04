@@ -209,8 +209,7 @@ func printTrigger(out *printer, factory string, d *gen.IntakeTriggerDetail) {
 }
 
 // triggersTry is goal triggers try <factory> <trigger> --event ID [--json]: what the trigger would
-// do now with one of its 20 newest events. Nothing is created, but the model check runs and its
-// cost is spent.
+// do now with one of its 20 newest events. Nothing is created.
 func triggersTry(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs, orgFlag, asJSON := intakeFlags("triggers try")
 	event := fs.String("event", "", "the event's id (the ID column of goal triggers show)")
@@ -246,7 +245,7 @@ func triggersTry(ctx context.Context, out *printer, getenv func(string) string, 
 }
 
 // printTry prints a dry run: whether the event matched, its outcome, each step, the item it would
-// create and the model check, then that nothing was created. Event-shaped text goes through
+// create, then that nothing was created. Event-shaped text goes through
 // oneLine, so it cannot break the layout.
 func printTry(out *printer, trigger string, tr *gen.TriggerTry) {
 	matched := "did not match"

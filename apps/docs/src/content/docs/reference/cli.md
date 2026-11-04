@@ -785,7 +785,7 @@ Flags: `--json`.
 goal triggers show <factory> <trigger> [--json]
 ```
 
-a trigger, what its items did in the last 7 days and its recent events: created, merged or skipped
+a trigger, what its items did in the last 7 days and its recent events: created, merged, skipped or missed
 
 Flags: `--json`.
 
@@ -795,7 +795,7 @@ Flags: `--json`.
 goal triggers try <factory> <trigger> --event ID [--json]
 ```
 
-dry-run the trigger on one of its 20 newest events (ID from goal triggers show): whether it matched, each step and why, the item it would create; nothing is created, but the model check runs and its cost is spent
+dry-run the trigger on one of its 20 newest events (ID from goal triggers show): whether it matched, each step and why, the item it would create; a schedule's events, and a delivery's while its webhook keeps it; nothing is created
 
 Flags: `--event ID`, `--json`.
 

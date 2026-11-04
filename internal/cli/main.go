@@ -253,13 +253,14 @@ const usage = `usage:
                                                   created in the last 7 days, and why one may not be
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
-                                                  and its recent events: created, merged or skipped
+                                                  and its recent events: created, merged, skipped
+                                                  or missed
   goal triggers try <factory> <trigger> --event ID [--json]
                                                   dry-run the trigger on one of its 20 newest events
                                                   (ID from goal triggers show): whether it matched,
-                                                  each step and why, the item it would create; nothing
-                                                  is created, but the model check runs and its cost is
-                                                  spent
+                                                  each step and why, the item it would create; a
+                                                  schedule's events, and a delivery's while its webhook
+                                                  keeps it; nothing is created
   goal webhooks list [--json]                     the organization's webhooks: sender, address, the
                                                   secret that signs them, the factories they are open
                                                   to, the triggers that use them, deliveries in 7
