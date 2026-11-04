@@ -24,14 +24,31 @@ const (
 // WebhookSecretSize is the length in bytes of a signing secret goald generates.
 const WebhookSecretSize = 32
 
-// WebhookEndpoint is one webhook endpoint of a factory (ADR 0026 decision 2). Its signing secret
-// is sealed on its row and is never part of it.
+// WebhookEndpoint is one webhook endpoint of a factory (ADR 0026 decision 2), whose signing
+// secret is sealed on its row and is never part of it, or one webhook of the organization (ADR
+// 0040 decision 12), signed by an organization secret and open to some factories.
 type WebhookEndpoint struct {
-	ID        WebhookEndpointID
+	ID WebhookEndpointID
+	// FactoryID is the factory endpoint's factory; "" for the organization's webhook.
 	FactoryID FactoryID
-	// Name is a slug unique within the factory, the one a trigger's on: webhook.<name> names.
-	Name      string
-	Kind      WebhookKind
+	// Name is a slug unique within the factory, the one a trigger's on: webhook.<name> names; an
+	// organization webhook's is unique in the organization and never a reserved one.
+	Name string
+	// Kind is a factory endpoint's; "" for the organization's webhook.
+	Kind WebhookKind
+	// Sender is the organization webhook's, and Kind.Sender() for a factory endpoint.
+	Sender WebhookSender
+	// SecretID and Secret are the organization secret that signs the organization's webhook; ""
+	// for a factory endpoint.
+	SecretID SecretID
+	Secret   string
+	// Enabled is false for a webhook turned off; a factory endpoint is always on.
+	Enabled bool
+	// Token is the token sender's settings; zero for another sender.
+	Token TokenSettings
+	// Openings are the factories the organization's webhook is open to, by factory id; none for a
+	// factory endpoint.
+	Openings  []WebhookOpening
 	CreatedAt time.Time
 	// RotatedAt is when its secret was last replaced; nil when it never was.
 	RotatedAt *time.Time

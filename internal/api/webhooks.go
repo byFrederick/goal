@@ -11,8 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	openapi_types "github.com/oapi-codegen/runtime/types"
-
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -51,6 +49,10 @@ const codeWebhookNotFound = "webhook-not-found"
 // webhookProblem answers the webhook rules with their codes. Without a master key the detail is
 // fixed: it says what to set, never what the store said.
 func webhookProblem(err error) (gen.Problem, bool) {
+	if p, ok := webhookInUseProblem(err); ok {
+		return p, true
+	}
+
 	answers := []struct {
 		err    error
 		status int
@@ -113,34 +115,16 @@ func (s *server) ListWebhookEndpoints(ctx context.Context, req gen.ListWebhookEn
 		return nil, err
 	}
 
-	today := utcDay(s.clock.Now())
-	since := today.AddDate(0, 0, 1-deliveryDays)
-
-	days, err := s.intake.DeliveryDays(ctx, fid, since)
+	days, err := s.webhookDays(ctx, fid)
 	if err != nil {
 		return nil, err
-	}
-
-	counts := map[domain.WebhookEndpointID]map[time.Time]domain.DeliveryDay{}
-	for _, d := range days {
-		if counts[d.EndpointID] == nil {
-			counts[d.EndpointID] = map[time.Time]domain.DeliveryDay{}
-		}
-
-		counts[d.EndpointID][d.Day] = d
 	}
 
 	out := gen.ListWebhookEndpoints200JSONResponse{Endpoints: make([]gen.WebhookEndpoint, 0, len(endpoints))}
 
 	for _, e := range endpoints {
 		o := endpointOut(e, f)
-
-		for i := range deliveryDays {
-			day := since.AddDate(0, 0, i)
-			c := counts[e.ID][day]
-			o.Days = append(o.Days, gen.WebhookDeliveryDay{Day: openapi_types.Date{Time: day}, Delivered: c.Delivered, Refused: c.Refused})
-		}
-
+		o.Days = days.of(e.ID)
 		out.Endpoints = append(out.Endpoints, o)
 	}
 
@@ -183,6 +167,10 @@ func (s *server) DeleteWebhookEndpoint(ctx context.Context, req gen.DeleteWebhoo
 		return nil, err
 	}
 
+	if err := s.deletable(ctx, e); err != nil {
+		return nil, err
+	}
+
 	if err := s.intake.DeleteEndpoint(ctx, e.ID); err != nil {
 		return nil, webhookError(err)
 	}
@@ -196,29 +184,43 @@ func (s *server) ListWebhookDeliveries(ctx context.Context, req gen.ListWebhookD
 		return nil, err
 	}
 
+	page, err := s.deliveryPage(ctx, e.ID, req.Params.Limit, req.Params.After)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.ListWebhookDeliveries200JSONResponse(page), nil
+}
+
+// deliveryPage is one page of endpoint id's deliveries, newest first, after the cursor after.
+func (s *server) deliveryPage(ctx context.Context, id domain.WebhookEndpointID, limitIn *int, afterIn *string) (gen.WebhookDeliveryPage, error) {
 	limit := defaultDeliveryLimit
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
+	if limitIn != nil {
+		limit = *limitIn
 	}
 
 	if limit < 1 || limit > maxDeliveryLimit {
-		return nil, fmt.Errorf("%w: limit %d is not between 1 and %d", errWebhookInvalid, limit, maxDeliveryLimit)
+		return gen.WebhookDeliveryPage{}, fmt.Errorf("%w: limit %d is not between 1 and %d", errWebhookInvalid, limit, maxDeliveryLimit)
 	}
 
-	var after domain.DeliveryCursor
-	if req.Params.After != nil {
-		if after, err = cursorIn(*req.Params.After); err != nil {
-			return nil, err
+	var (
+		after domain.DeliveryCursor
+		err   error
+	)
+
+	if afterIn != nil {
+		if after, err = cursorIn(*afterIn); err != nil {
+			return gen.WebhookDeliveryPage{}, err
 		}
 	}
 
 	// One more than the page tells whether another page follows.
-	ds, err := s.intake.ListDeliveries(ctx, e.ID, after, limit+1)
+	ds, err := s.intake.ListDeliveries(ctx, id, after, limit+1)
 	if err != nil {
-		return nil, webhookError(err)
+		return gen.WebhookDeliveryPage{}, webhookError(err)
 	}
 
-	out := gen.ListWebhookDeliveries200JSONResponse{Deliveries: make([]gen.WebhookDelivery, 0, min(len(ds), limit))}
+	out := gen.WebhookDeliveryPage{Deliveries: make([]gen.WebhookDelivery, 0, min(len(ds), limit))}
 
 	if len(ds) > limit {
 		ds = ds[:limit]
@@ -229,7 +231,7 @@ func (s *server) ListWebhookDeliveries(ctx context.Context, req gen.ListWebhookD
 	for _, d := range ds {
 		o, err := s.deliveryOut(ctx, d)
 		if err != nil {
-			return nil, err
+			return gen.WebhookDeliveryPage{}, err
 		}
 
 		out.Deliveries = append(out.Deliveries, o)
@@ -244,22 +246,32 @@ func (s *server) GetWebhookDelivery(ctx context.Context, req gen.GetWebhookDeliv
 		return nil, err
 	}
 
-	d, err := s.intake.Delivery(ctx, e.ID, domain.WebhookDeliveryID(req.Delivery))
+	out, err := s.deliveryRequest(ctx, e.ID, req.Delivery)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetWebhookDelivery200JSONResponse(out), nil
+}
+
+// deliveryRequest is endpoint id's delivery with its headers and body.
+func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointID, delivery string) (gen.WebhookDeliveryRequest, error) {
+	d, err := s.intake.Delivery(ctx, id, domain.WebhookDeliveryID(delivery))
 	if errors.Is(err, ports.ErrNotFound) {
-		return nil, fmt.Errorf("%w: %w", errWebhookDeliveryNotFound, err)
+		return gen.WebhookDeliveryRequest{}, fmt.Errorf("%w: %w", errWebhookDeliveryNotFound, err)
 	}
 
 	if err != nil {
-		return nil, err
+		return gen.WebhookDeliveryRequest{}, err
 	}
 
 	o, err := s.deliveryOut(ctx, d)
 	if err != nil {
-		return nil, err
+		return gen.WebhookDeliveryRequest{}, err
 	}
 
 	// Signature headers were never kept; dropping them again keeps that true whatever a store holds.
-	out := gen.GetWebhookDelivery200JSONResponse{
+	out := gen.WebhookDeliveryRequest{
 		Id: o.Id, ReceivedAt: o.ReceivedAt, Outcome: o.Outcome, Reason: o.Reason, Item: o.Item,
 		Headers: domain.StoredHeaders(d.Headers), Body: string(d.Body), BodyEncoding: gen.BodyText,
 	}
@@ -284,8 +296,8 @@ func (s *server) webhookEndpoint(ctx context.Context, factoryRef, id string) (*c
 		return nil, domain.WebhookEndpoint{}, webhookError(err)
 	}
 
-	if e.FactoryID != domain.FactoryID(f.Metadata.ID) {
-		return nil, domain.WebhookEndpoint{}, fmt.Errorf("%w: endpoint %s is not factory %s's", errWebhookNotFound, id, f.Metadata.ID)
+	if !e.OpenTo(domain.FactoryID(f.Metadata.ID)) {
+		return nil, domain.WebhookEndpoint{}, fmt.Errorf("%w: endpoint %s is not open to factory %s", errWebhookNotFound, id, f.Metadata.ID)
 	}
 
 	return f, e, nil
@@ -314,12 +326,21 @@ func (s *server) deliveryOut(ctx context.Context, d domain.WebhookDelivery) (gen
 	return out, nil
 }
 
-// endpointOut is an endpoint as the contract has it, without its days, never its secret: what it
-// feeds is the triggers of f's current definition whose on names it.
+// endpointOut is an endpoint open to f as the contract has it, without its days, never its
+// secret: what it feeds is the triggers of f's current definition whose on names it. An
+// organization webhook reads as kind github or generic, and names the secret that signs it.
 func endpointOut(e domain.WebhookEndpoint, f *config.Factory) gen.WebhookEndpoint {
+	kind, secret := e.Kind, e.Name+"-hook-secret"
+	if e.OrgLevel() {
+		kind, secret = domain.WebhookGeneric, e.Secret
+		if e.Sender == domain.SenderGitHub {
+			kind = domain.WebhookGitHub
+		}
+	}
+
 	out := gen.WebhookEndpoint{
-		Id: string(e.ID), Name: e.Name, Kind: gen.WebhookKind(e.Kind), Address: "/hooks/" + string(e.ID), SecretName: e.Name + "-hook-secret",
-		CreatedAt: e.CreatedAt, RotatedAt: e.RotatedAt, Triggers: []string{}, Days: make([]gen.WebhookDeliveryDay, 0, deliveryDays),
+		Id: string(e.ID), Name: e.Name, Kind: gen.WebhookKind(kind), Sender: gen.WebhookSender(e.Sender), Address: "/hooks/" + string(e.ID),
+		SecretName: secret, CreatedAt: e.CreatedAt, RotatedAt: e.RotatedAt, Triggers: []string{}, Days: make([]gen.WebhookDeliveryDay, 0, deliveryDays),
 	}
 
 	on := "webhook." + e.Name
@@ -338,7 +359,7 @@ func createdOut(s domain.WebhookSecret, f *config.Factory) gen.CreatedWebhookEnd
 	e := endpointOut(s.Endpoint, f)
 
 	return gen.CreatedWebhookEndpoint{
-		Id: e.Id, Name: e.Name, Kind: e.Kind, Address: e.Address, SecretName: e.SecretName, CreatedAt: e.CreatedAt, RotatedAt: e.RotatedAt,
+		Id: e.Id, Name: e.Name, Kind: e.Kind, Sender: e.Sender, Address: e.Address, SecretName: e.SecretName, CreatedAt: e.CreatedAt, RotatedAt: e.RotatedAt,
 		Triggers: e.Triggers, Days: e.Days, Secret: hex.EncodeToString(s.Secret),
 	}
 }

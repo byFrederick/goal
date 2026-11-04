@@ -93,12 +93,17 @@ tags:
       draft and publish operations.
   - name: webhooks
     description: >-
-      A factory's webhook endpoints (ADR 0026 decisions 2 and 3): the addresses other systems post
-      to, POST /hooks/{endpoint id}, each with a signing secret sealed under the platform's master
-      key and shown only in the answers that create the endpoint and rotate its secret, and the
-      log of the deliveries each received, kept 30 days. Anyone who sees the factory reads them;
-      its editors (and the organization's owners and admins) create, rotate and delete endpoints,
-      after a recent sign-in, never with a key or a personal token.
+      The organization's webhooks (ADR 0040 decisions 12 and 15) and, for one release, a factory's
+      webhook endpoints (ADR 0026 decisions 2 and 3). An organization webhook is connected once per
+      sender, such as a GitHub organization or PagerDuty, signed by an organization secret named
+      by the webhook, and opened to factories, each opening optionally limited to some
+      repositories. Owners and admins list and read webhooks (webhook:read) and create, change and
+      delete them (webhook:manage, after a recent sign-in, never with a key or a personal token);
+      only webhook:manage reads a delivery's headers and body, since an organization webhook
+      carries every repository's events. The factory routes list the endpoints open to the
+      factory and their deliveries to anyone who sees the factory; a factory endpoint's signing
+      secret is sealed under the platform's master key and shown only in the answers that create
+      it and rotate it. Deliveries are kept 30 days.
   - name: views
     description: >-
       A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
@@ -2864,11 +2869,13 @@ paths:
       operationId: listWebhookEndpoints
       x-goal-scope: factory:read
       tags: [webhooks]
-      summary: The factory's webhook endpoints
+      summary: The webhook endpoints open to the factory
       description: >-
-        By name, each with its address, kind, the label of its signing secret, the triggers of the
-        factory's current definition it feeds (those whose on is webhook.<name> or starts with
-        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+        By name, the factory's own endpoints and the organization's webhooks open to it, each with
+        its address, kind, sender, the name of its signing secret, the triggers of the factory's
+        current definition it feeds (those whose on is webhook.<name> or starts with
+        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one
+        release beside listWebhooks.
       responses:
         "200":
           description: The endpoints
@@ -2882,8 +2889,9 @@ paths:
       tags: [webhooks]
       summary: Create a webhook endpoint
       description: >-
-        An endpoint with a new signing secret, answered here once and never again: copy it to the
-        sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409
+        A factory endpoint with a new signing secret, answered here once and never again: copy it
+        to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400
+        webhook-invalid for a name that is not a slug or an unknown kind; 409
         webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while
         goald has no master key. Needs a sign-in from the last 10 minutes.
       requestBody:
@@ -2909,8 +2917,9 @@ paths:
       tags: [webhooks]
       summary: Delete a webhook endpoint and its deliveries
       description: >-
-        Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory
-        does not have. Needs a sign-in from the last 10 minutes.
+        Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to
+        the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a
+        sign-in from the last 10 minutes.
       responses:
         "204": { description: Deleted }
         default: { $ref: "#/components/responses/Problem" }
@@ -2927,7 +2936,8 @@ paths:
       description: >-
         A new signing secret, answered here once and never again; the old one stops opening at
         once, so the sender's requests are refused until it has the new one. 404
-        webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
+        webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is
+        replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
         from the last 10 minutes.
       responses:
         "200":
@@ -2977,12 +2987,166 @@ paths:
         schema: { type: string }
     get:
       operationId: getWebhookDelivery
-      x-goal-scope: factory:read
+      x-goal-scope: webhook:manage
       tags: [webhooks]
       summary: One delivery with its request
       description: >-
         The request as received: its headers (names lower-cased, never a signature header) and its
-        body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+        body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found
+        for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
+      responses:
+        "200":
+          description: The delivery
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listWebhooks
+      x-goal-scope: webhook:read
+      tags: [webhooks]
+      summary: The organization's webhooks
+      description: >-
+        By name, each with its sender, the name of the secret that signs it, its openings, the
+        triggers of the published definitions that use it and its deliveries of the last 7 UTC
+        days. Never a secret's value.
+      responses:
+        "200":
+          description: The webhooks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createWebhook
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Create a webhook
+      description: >-
+        An enabled webhook, open to no factory. Without secret, it creates the secret
+        webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with
+        a generated value answered here once as secret_value; with secret, it is signed by that
+        existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400
+        webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule
+        and webhook), an unknown sender, or token settings on a sender other than token; 404
+        secret-not-found for a secret the organization does not have; 409 webhook-name-taken for
+        a name an endpoint of the organization has, secret-name-taken when the generated secret's
+        name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from
+        the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewWebhook" }
+      responses:
+        "201":
+          description: The webhook, with the generated secret's value when it made one
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedWebhook" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks/{webhook}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/WebhookRef"
+    get:
+      operationId: getWebhook
+      x-goal-scope: webhook:read
+      tags: [webhooks]
+      summary: One webhook
+      description: 404 webhook-not-found for a webhook the organization does not have.
+      responses:
+        "200":
+          description: The webhook
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: patchWebhook
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Open, close, limit, rename, enable or disable a webhook
+      description: >-
+        open opens the webhook to each factory, or replaces the repositories an opening is limited
+        to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory
+        both opened and closed, or a repository list over 100; 404 webhook-not-found, and
+        factory-not-found for a factory the organization does not have; 409 webhook-name-taken;
+        409 webhook-in-use, with triggers, when a rename or a close would leave published triggers
+        that use the webhook without it: publish them without it first. Needs a sign-in from the
+        last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebhookPatch" }
+      responses:
+        "200":
+          description: The webhook as changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteWebhook
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Delete a webhook, its openings and its deliveries
+      description: >-
+        Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409
+        webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the
+        last 10 minutes.
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks/{webhook}/deliveries:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/WebhookRef"
+    get:
+      operationId: listOrgWebhookDeliveries
+      x-goal-scope: webhook:read
+      tags: [webhooks]
+      summary: One page of a webhook's deliveries, newest first
+      description: >-
+        What the webhook received in the last 30 days, each with its outcome, without its headers
+        and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not
+        answer; 404 webhook-not-found.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: after
+          in: query
+          description: The next_after of the previous page; deliveries received before it
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deliveries, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/WebhookRef"
+      - name: delivery
+        in: path
+        required: true
+        description: The delivery's id
+        schema: { type: string }
+    get:
+      operationId: getOrgWebhookDelivery
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: One delivery with its request
+      description: >-
+        The request as received: its headers (names lower-cased, never a signature header) and its
+        body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
       responses:
         "200":
           description: The delivery
@@ -4779,6 +4943,12 @@ components:
       required: true
       description: The saved view's id
       schema: { type: string }
+    WebhookRef:
+      name: webhook
+      in: path
+      required: true
+      description: The organization webhook's name or id
+      schema: { type: string }
     WebhookEndpointRef:
       name: endpoint
       in: path
@@ -4996,6 +5166,9 @@ components:
             Secrets (ADR 0037): secret-not-found (404), secret-invalid (400),
             secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use),
             secrets-unavailable (503: goald has no master key).
+            Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404),
+            webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with
+            triggers naming each trigger that uses it), webhooks-unavailable (503).
             Environment tests (ADR 0037 decision 9): environment-not-found,
             environment-server-not-found and template-not-found (404), environment-test-invalid
             (400).
@@ -5038,6 +5211,10 @@ components:
           type: array
           description: secret-in-use only, what uses the secret
           items: { $ref: "#/components/schemas/SecretUse" }
+        triggers:
+          type: array
+          description: webhook-in-use only, the published triggers that use the webhook
+          items: { $ref: "#/components/schemas/WebhookTrigger" }
     AuthMode:
       type: string
       enum: [session, none]
@@ -9588,18 +9765,24 @@ components:
           items: { $ref: "#/components/schemas/WebhookEndpoint" }
     WebhookEndpoint:
       type: object
-      description: A factory's webhook endpoint, never its signing secret
-      required: [id, name, kind, address, secret_name, created_at, rotated_at, triggers, days]
+      description: A webhook endpoint open to the factory, never its signing secret
+      required: [id, name, kind, sender, address, secret_name, created_at, rotated_at, triggers, days]
       properties:
         id: { type: string }
         name: { type: string }
-        kind: { $ref: "#/components/schemas/WebhookKind" }
+        kind:
+          allOf: [{ $ref: "#/components/schemas/WebhookKind" }]
+          description: A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
+        sender:
+          allOf: [{ $ref: "#/components/schemas/WebhookSender" }]
+          description: Its sender; a factory endpoint of kind generic reads as standard
         address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
         secret_name:
           type: string
           description: >-
-            The label the screens show for its signing secret, <name>-hook-secret. The secret is
-            sealed on the endpoint, not a credential, so no credential has this name.
+            A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the
+            endpoint, so no secret has this name; an organization webhook's is the name of the
+            organization secret that signs it.
         created_at: { type: string, format: date-time }
         rotated_at: { type: string, format: date-time, nullable: true, description: When its secret was last replaced; null when it never was }
         triggers:
@@ -9612,6 +9795,119 @@ components:
           minItems: 7
           maxItems: 7
           items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
+    WebhookSender:
+      type: string
+      enum: [github, gitlab, standard, pagerduty, sentry, token]
+      description: >-
+        How a webhook is signed and names its events (ADR 0040 decision 12). github:
+        X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks'
+        webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token:
+        a shared value in one header, for a sender that can do nothing else.
+    WebhookTokenSettings:
+      type: object
+      description: The token sender's settings
+      properties:
+        header: { type: string, description: "The header that carries the value; Authorization (as Bearer <value>) when empty", maxLength: 100 }
+        event_path: { type: string, description: "The body's dot path of the event name, such as event.type; empty for none", maxLength: 200 }
+        id_path: { type: string, description: "The body's dot path of a delivery id; empty for none", maxLength: 200 }
+    WebhookOpening:
+      type: object
+      description: The webhook is open to a factory
+      required: [factory]
+      properties:
+        factory: { type: string, description: "The factory's metadata.id" }
+        repositories:
+          type: array
+          nullable: true
+          maxItems: 100
+          description: "The repositories (owner/name) whose deliveries reach the factory; null or absent: every one"
+          items: { type: string }
+    WebhookTrigger:
+      type: object
+      description: A trigger of a factory's published definition that uses the webhook
+      required: [factory, factory_name, trigger]
+      properties:
+        factory: { type: string, description: "The factory's metadata.id" }
+        factory_name: { type: string }
+        trigger: { type: string }
+    NewWebhook:
+      type: object
+      required: [name, sender]
+      properties:
+        name:
+          type: string
+          description: "A slug of 3 to 40 characters, unique in the organization, and none of github, gitlab, standard, pagerduty, sentry, token, schedule and webhook"
+        sender: { $ref: "#/components/schemas/WebhookSender" }
+        secret:
+          type: string
+          description: "The name of an existing secret that signs it; absent: goald creates webhook-<name> with a generated value"
+        token: { $ref: "#/components/schemas/WebhookTokenSettings" }
+    WebhookPatch:
+      type: object
+      properties:
+        name: { type: string, description: A new name, under NewWebhook's rules }
+        enabled: { type: boolean, description: "false: its address answers 404 until enabled again" }
+        open:
+          type: array
+          description: Factories to open it to, or whose opening's repositories to replace
+          items: { $ref: "#/components/schemas/WebhookOpening" }
+        close:
+          type: array
+          description: The metadata.id of factories to close it to
+          items: { type: string }
+    WebhookList:
+      type: object
+      required: [webhooks]
+      properties:
+        webhooks:
+          type: array
+          items: { $ref: "#/components/schemas/Webhook" }
+    Webhook:
+      type: object
+      description: One of the organization's webhooks, never a secret's value
+      required: [id, name, sender, address, secret, enabled, token, openings, triggers, created_at, days]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sender: { $ref: "#/components/schemas/WebhookSender" }
+        address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
+        secret: { type: string, description: The name of the organization secret that signs it }
+        enabled: { type: boolean }
+        token:
+          description: The token sender's settings; null for another sender
+          allOf: [{ $ref: "#/components/schemas/WebhookTokenSettings" }]
+          nullable: true
+        openings:
+          type: array
+          description: The factories it is open to, by factory id
+          items: { $ref: "#/components/schemas/WebhookOpening" }
+        triggers:
+          type: array
+          description: >-
+            The triggers of the published definitions of the factories it is open to that use it
+            (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger
+          items: { $ref: "#/components/schemas/WebhookTrigger" }
+        created_at: { type: string, format: date-time }
+        days:
+          type: array
+          description: The last 7 UTC days, oldest first, today last, each zero-filled
+          minItems: 7
+          maxItems: 7
+          items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
+    CreatedWebhook:
+      description: A new webhook, with the value of the secret goald generated for it, never readable again
+      allOf:
+        - $ref: "#/components/schemas/Webhook"
+        - type: object
+          required: [secret_value]
+          properties:
+            secret_value:
+              type: string
+              nullable: true
+              description: >-
+                The generated secret's value, to paste into the sender: 64 lower-case hex
+                characters, or for sender standard whsec_ and the base64 of 32 bytes. null when
+                the webhook uses an existing secret.
     WebhookDeliveryDay:
       type: object
       required: [day, delivered, refused]

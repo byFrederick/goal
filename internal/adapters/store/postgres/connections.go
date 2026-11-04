@@ -1011,7 +1011,8 @@ func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 // reseals.
 const rekeyBatch = 100
 
-// Rekey reseals every connection, credential and webhook signing secret of every organization
+// Rekey reseals every connection, credential (a secret's previous value too, dropping the ones
+// that have lapsed) and webhook signing secret of every organization
 // that is sealed under another master key than key's active one (`goal db rekey`, spec 4 §5.2,
 // ADR 0017, ADR 0026), rekeyBatch per transaction, and returns how many it resealed. s's pool
 // connects as goal_owner, which row-level security does not bind: rekeying is the install's, not
@@ -1023,7 +1024,9 @@ func Rekey(ctx context.Context, s *Store, key ports.MasterKey) (int, error) {
 
 	total := 0
 
-	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){resealConnections, resealSecrets, resealWebhookSecrets} {
+	for _, batch := range []func(context.Context, *db.Queries, ports.MasterKey) (int, error){
+		resealConnections, resealSecrets, resealPreviousSecrets, resealWebhookSecrets,
+	} {
 		for {
 			var n int
 

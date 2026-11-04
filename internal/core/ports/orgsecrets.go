@@ -26,13 +26,20 @@ type OrgSecrets interface {
 	Create(ctx context.Context, n domain.NewSecret, by domain.Actor) (domain.Secret, error)
 	// Patch changes a secret's metadata (secret.updated), the result checked with
 	// domain.CheckSecret, and with Replace its value (secret.value_replaced): runs that start
-	// afterwards open the new one. ErrNotFound when there is none, ErrNameTaken when another secret
+	// afterwards open the new one. A secret an organization webhook is signed by keeps its
+	// previous value for domain.PreviousSecretKept after a Replace (OpenSigning). ErrNotFound when there is none, ErrNameTaken when another secret
 	// has the new name, ErrNoMasterKey for Replace without a master key.
 	Patch(ctx context.Context, name string, p domain.SecretPatch, by domain.Actor) (domain.Secret, error)
 	// Delete deletes a secret (secret.deleted). ErrNotFound when there is none; ErrConflict,
 	// deleting nothing, while a connection refers to it as {{name}}, a knowledge source reads with
-	// it or the Slack notification setting (NotificationSettings) uses it, naming them.
+	// it, the Slack notification setting (NotificationSettings) uses it or an organization
+	// webhook is signed by it, naming them.
 	Delete(ctx context.Context, name string, by domain.Actor) error
+	// OpenSigning opens secret id for checking a webhook delivery's signature (ADR 0040 decision
+	// 15): its value and, until it lapses, its previous one. It writes no audit entry and leaves
+	// last_used_at, as it runs on every delivery. ErrNotFound when there is none,
+	// ErrNoMasterKey without a master key.
+	OpenSigning(ctx context.Context, id domain.SecretID) (domain.SigningSecret, error)
 	// Resolve opens the named secrets for use's run, audits each as secret.used with the factory,
 	// agent and run, and sets last_used_at. ErrNotFound names the first unknown one, and
 	// ErrSecretNotAllowed the first whose scope leaves out use.Factory; then nothing is recorded.
