@@ -133,7 +133,7 @@ func TestIntake_DeliveryItemIsUntrusted(t *testing.T) {
 	}
 
 	it := h.item(t, e.ItemID)
-	if !it.Untrusted || it.Origin != domain.OriginTrigger || it.Title != "unit failed on abc123" || it.Source != domain.ItemFromGitHub {
+	if !it.Untrusted || it.Origin != domain.OriginTrigger || it.Title != `"unit" failed on "abc123"` || it.Source != domain.ItemFromGitHub {
 		t.Errorf("item = %+v; want untrusted from GitHub, titled from the event", it)
 	}
 

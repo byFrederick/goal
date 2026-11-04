@@ -23,6 +23,9 @@ const (
 	OriginFollowUp Origin = "follow-up"
 )
 
+// Origins are every origin, in the order Intake lists them: the one list of them in Go.
+var Origins = []Origin{OriginPerson, OriginPlan, OriginTrigger, OriginFollowUp}
+
 // Via is how a person filed an item. Values match work_items.via.
 type Via string
 
@@ -128,7 +131,7 @@ func File(l Line, r FileRequest) (NewItem, error) {
 // checkOrigin checks r's origin, via and class, then its lineage.
 func checkOrigin(r FileRequest) error {
 	switch {
-	case !slices.Contains([]Origin{OriginPerson, OriginPlan, OriginTrigger, OriginFollowUp}, r.Origin):
+	case !slices.Contains(Origins, r.Origin):
 		return fmt.Errorf("unknown origin %q: %w", r.Origin, ErrInvalid)
 	case r.Via != "" && r.Origin != OriginPerson:
 		return fmt.Errorf("only a person files through %q, not a %s: %w", r.Via, r.Origin, ErrInvalid)

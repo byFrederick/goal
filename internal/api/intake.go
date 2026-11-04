@@ -75,8 +75,12 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 		return nil, err
 	}
 
-	out := gen.GetIntake200JSONResponse{Triggers: []gen.IntakeTrigger{}}
+	out := gen.GetIntake200JSONResponse{Triggers: []gen.IntakeTrigger{}, Suggestions: []gen.TriggerSuggestion{}}
 	tallySources(&out, w)
+
+	for _, t := range l.Suggestions() {
+		out.Suggestions = append(out.Suggestions, suggestion(t))
+	}
 
 	if len(l.Triggers) == 0 {
 		return out, nil
@@ -190,17 +194,6 @@ func triggerTry(t domain.TriggerTry) gen.TriggerTry {
 		}{Brief: it.Body, Expedite: it.Class == domain.ClassExpedite, Lane: optional(it.Lane), Station: it.Station, Title: it.Title, Type: it.Type}
 	}
 
-	if m := e.Model; m != nil {
-		out.ModelCheck = &struct {
-			CostUsd      float64 `json:"cost_usd"`
-			InputTokens  int     `json:"input_tokens"`
-			Model        string  `json:"model"`
-			OutputTokens int     `json:"output_tokens"`
-			Reason       string  `json:"reason"`
-			Worth        bool    `json:"worth"`
-		}{CostUsd: m.CostUSD, InputTokens: m.InputTokens, Model: m.Model, OutputTokens: m.OutputTokens, Reason: m.Reason, Worth: m.Worth}
-	}
-
 	return out
 }
 
@@ -279,7 +272,7 @@ func (s *server) triggerReads(ctx context.Context, factory domain.FactoryID) (tr
 // trigger is t as Intake shows it.
 func (r triggerReads) trigger(t domain.Trigger) gen.IntakeTrigger {
 	out := gen.IntakeTrigger{
-		Name: t.Name, Enabled: t.Enabled, On: t.On, Source: gen.IntakeTriggerSource(triggerSource(t)), When: t.On,
+		Name: t.Name, Enabled: t.Enabled, On: t.On, Source: gen.IntakeTriggerSource(triggerSource(t)), When: triggerWhen(t),
 		Days: r.days[t.Name], Problem: r.problem(t),
 	}
 
@@ -287,11 +280,26 @@ func (r triggerReads) trigger(t domain.Trigger) gen.IntakeTrigger {
 		out.Days = make([]int, intakeDays)
 	}
 
+	out.Create.Type, out.Create.Station, out.Create.Lane, out.Create.Expedite = t.Create.Type, t.Create.Station, optional(t.Create.Lane), t.Create.Expedite
+
+	return out
+}
+
+// triggerWhen is a plain summary of when t fires: its cron and time zone for a schedule, its
+// event key otherwise.
+func triggerWhen(t domain.Trigger) string {
 	if t.On == domain.OnSchedule {
-		out.When = t.Cron + ", " + cmp.Or(t.TimeZone, "UTC")
+		return t.Cron + ", " + cmp.Or(t.TimeZone, "UTC")
 	}
 
-	out.Create.Type, out.Create.Station, out.Create.Lane, out.Create.Expedite = t.Create.Type, t.Create.Station, optional(t.Create.Lane), t.Create.Expedite
+	return t.On
+}
+
+// suggestion is a disabled trigger t as Intake offers it.
+func suggestion(t domain.Trigger) gen.TriggerSuggestion {
+	out := gen.TriggerSuggestion{Name: t.Name, On: t.On, Source: gen.TriggerSuggestionSource(triggerSource(t)), When: triggerWhen(t)}
+	out.Create.Type, out.Create.Station, out.Create.Lane = t.Create.Type, t.Create.Station, optional(t.Create.Lane)
+	out.Create.Expedite, out.Create.Title = t.Create.Expedite, t.Create.Title
 
 	return out
 }
@@ -375,6 +383,8 @@ func intakeEvent(e domain.FiringEntry) gen.IntakeEvent {
 	}
 
 	switch {
+	case f.Outcome == domain.FiringMissed:
+		out.Outcome, out.Reason, out.Missed = gen.IntakeEventOutcomeMissed, optional(f.Reason), f.Missed
 	case f.Outcome == domain.FiringSkipped:
 		out.Outcome, out.Reason = gen.IntakeEventOutcomeSkipped, optional(cmp.Or(f.Reason, "skipped"))
 	case e.Merged:

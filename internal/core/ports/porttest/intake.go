@@ -627,6 +627,25 @@ func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointI
 	return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of endpoint %s: %w", id, endpoint, ports.ErrNotFound)
 }
 
+// DeliveryBySender implements ports.Intake.
+func (in *Intake) DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.deliveries {
+		if r.org == org && r.d.EndpointID == webhook && deliveryID != "" && r.d.DeliveryID == deliveryID {
+			return cloneDelivery(r.d), nil
+		}
+	}
+
+	return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of webhook %s: %w", deliveryID, webhook, ports.ErrNotFound)
+}
+
 // DeliveryDays implements ports.Intake.
 func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
 	org, err := orgOf(ctx)
@@ -1326,6 +1345,38 @@ func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger
 	}
 
 	return out, nil
+}
+
+// PruneFirings implements ports.Intake.
+func (in *Intake) PruneFirings(ctx context.Context, factory domain.FactoryID, before time.Time) (int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	in.d.mu.Lock()
+	old := slices.Clone(in.d.firings)
+	in.d.mu.Unlock()
+
+	open := map[domain.ItemID]bool{}
+
+	in.store.mu.Lock()
+	for _, r := range old {
+		if r.f.ItemID != "" {
+			open[r.f.ItemID] = in.openLocked(r.org, r.f.ItemID)
+		}
+	}
+	in.store.mu.Unlock()
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	n := len(in.d.firings)
+	in.d.firings = slices.DeleteFunc(in.d.firings, func(r firingRow) bool {
+		return r.org == org && r.f.FactoryID == factory && r.f.At.Before(before) && !open[r.f.ItemID]
+	})
+
+	return n - len(in.d.firings), nil
 }
 
 // items are copies of org's items of factory created at or after since.

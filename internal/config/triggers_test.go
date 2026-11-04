@@ -133,15 +133,11 @@ var triggerRows = []struct {
 		code: codePlaceholderInvalid, message: []string{redMain, "create.title", "{{check..name}}"},
 	},
 	{
-		name: "model check", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "Is this a real regression?", key: "{{haiku-key}}", model: claude-haiku-5-5 } }`),
+		name: "brief file not found", doc: withTriggers(`          brief: "Look at {{check.name}} on {{repo}}"`, `          brief: ./triggers/sweep.md #here`),
+		code: codeBriefNotFound, message: []string{sweep, "./triggers/sweep.md", "not found"},
 	},
 	{
-		name: "model check with a blank question", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "   " } } #here`),
-		code: codeModelQuestionInvalid, message: []string{redMain, "only.modelAgrees.question", "empty"},
-	},
-	{
-		name: "model check with a question too long", doc: withTriggers("dedupe: check.name }", `dedupe: check.name, modelAgrees: { question: "`+strings.Repeat("why ", 126)+`" } } #here`),
-		code: codeModelQuestionInvalid, message: []string{redMain, "only.modelAgrees.question", "500"},
+		name: "brief that only mentions a file", doc: withTriggers(`          brief: "Look at {{check.name}} on {{repo}}"`, `          brief: "Read ./triggers/sweep.md first"`),
 	},
 	{
 		name: "model check without a question", doc: withTriggers("dedupe: check.name }", "dedupe: check.name, modelAgrees: { model: claude-haiku-5-5 } } #here"),
@@ -243,7 +239,7 @@ func TestLoad_ParsesTriggers(t *testing.T) {
 	want := []Trigger{
 		{
 			Name: "morning-sweep", On: "schedule", Cron: "0 8 * * MON-FRI", TimeZone: "Europe/Berlin",
-			Create: TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep"},
+			Create: TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep", Brief: "./triggers/morning-sweep.md"},
 		},
 		{
 			Name: "shop-incident", On: "webhook.shop-alerts.failed",
@@ -262,7 +258,15 @@ func TestLoad_ParsesTriggers(t *testing.T) {
 	if got := f.Spec.Board.Triggers; !reflect.DeepEqual(got, want) {
 		t.Errorf("triggers =\n%+v\nwant\n%+v", got, want)
 	}
+
+	// A brief that names a file of the definition is that file's text (ADR 0040 decision 17).
+	if got := f.Line().Triggers[0].Create.Brief; got != supportSweepBrief {
+		t.Errorf("morning-sweep's brief = %q; want the text of ./triggers/morning-sweep.md", got)
+	}
 }
+
+// supportSweepBrief is testdata/.support/triggers/morning-sweep.md.
+const supportSweepBrief = "Sweep the inbox: answer what you can and route the rest.\n"
 
 // A live version whose trigger has a refusal of the deliveries check (written before ADR 0040
 // decision 14) still loads, so its factory keeps running; publish refuses it.

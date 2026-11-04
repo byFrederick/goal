@@ -1737,7 +1737,7 @@ export interface paths {
         };
         /**
          * Where the factory's newest items came from, and its triggers
-         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
          */
         get: operations["getIntake"];
         put?: never;
@@ -1793,7 +1793,7 @@ export interface paths {
         put?: never;
         /**
          * Try the trigger with one of its past events, creating nothing
-         * @description A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+         * @description A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
          */
         post: operations["tryIntakeTrigger"];
         delete?: never;
@@ -6214,6 +6214,25 @@ export interface components {
             };
             /** @description The current definition's board.triggers, in definition order */
             triggers: components["schemas"]["IntakeTrigger"][];
+            /** @description The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers. */
+            suggestions: components["schemas"]["TriggerSuggestion"][];
+        };
+        TriggerSuggestion: {
+            name: string;
+            /** @enum {string} */
+            source: "schedule" | "webhook" | "github";
+            /** @description The trigger's event key, as in the definition */
+            on: string;
+            /** @description As IntakeTrigger's when: the cron and its time zone for a schedule, the event key otherwise */
+            when: string;
+            create: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+                /** @description create.title as written, with its {{field}} placeholders; empty when the definition sets none */
+                title: string;
+            };
         };
         IntakeTrigger: {
             name: string;
@@ -6262,26 +6281,31 @@ export interface components {
             title: string;
             /** @description The event key it matched */
             event: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it fired; for missed, the gap's last instant
+             */
             at: string;
             /**
-             * @description created an item; merged once that item has been merged; skipped with the reason
+             * @description created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late
              * @enum {string}
              */
-            outcome: "created" | "merged" | "skipped";
+            outcome: "created" | "merged" | "skipped" | "missed";
             /**
              * Format: int64
              * @description The item it created; null when it created none or that item is gone
              */
             item_number: number | null;
-            /** @description Why it was skipped; null otherwise */
+            /** @description Why it was skipped or what it missed; null otherwise */
             reason: string | null;
+            /** @description How many schedule instants a missed event covers; 0 for any other outcome */
+            missed: number;
         };
         TriggerTryRequest: {
-            /** @description The id of one of the trigger's 20 newest events */
+            /** @description The id of one of the trigger's 20 newest events: a schedule's, or a delivery's while its webhook keeps it (30 days) */
             firing: string;
         };
-        /** @description What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup. */
+        /** @description What the saved trigger would do with the event now. Every string shaped by the event (the item's title and brief, a step's reason) is text to show as text, never markup. */
         TriggerTry: {
             /** @description The firing tried */
             firing: string;
@@ -6294,7 +6318,7 @@ export interface components {
             outcome: "would_create" | "skipped";
             /** @description The reason a skipped firing would record (the step, a colon and why); null for would_create */
             reason: string | null;
-            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
+            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then a deprecated modelAgrees, which always skips), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
             steps: components["schemas"]["TriggerTryStep"][];
             /** @description The item it would create; null when the create step was not reached */
             item: {
@@ -6307,7 +6331,7 @@ export interface components {
                 /** @description The item's body, create.brief rendered, then the event's fields marked as untrusted data */
                 brief: string;
             } | null;
-            /** @description The model check's answer; null when it did not run or gave no answer */
+            /** @description Deprecated and always null; the model check is removed (ADR 0040 decision 18) */
             model_check: {
                 /** @description The model answered yes */
                 worth: boolean;

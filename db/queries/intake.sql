@@ -183,6 +183,11 @@ LIMIT sqlc.arg(max_rows);
 SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
 WHERE endpoint_id = sqlc.arg(endpoint_id) AND id = sqlc.arg(id);
 
+-- name: WebhookDeliveryBySender :one
+-- The webhook's kept delivery with the sender's id, for trying a trigger on it.
+SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, delivery_id, event, receipt, duplicates FROM webhook_deliveries
+WHERE endpoint_id = sqlc.arg(endpoint_id) AND delivery_id = sqlc.arg(delivery_id)::text;
+
 -- name: WebhookDeliveryDays :many
 -- The factory's endpoints' deliveries since the instant, per endpoint and UTC day; each endpoint's
 -- rows come from webhook_deliveries_endpoint_idx (endpoint_id, received_at).
@@ -209,14 +214,14 @@ SELECT goal_prune_webhook_ledger(sqlc.arg(before)::timestamptz)::bigint AS delet
 
 -- name: InsertTriggerFiring :one
 -- Returns nothing (no rows) when the trigger already has a firing with this key.
-INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, at)
+INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(trigger), sqlc.arg(source), sqlc.arg(event_key), sqlc.arg(idempotency_key),
-        sqlc.arg(dedupe), sqlc.arg(outcome), sqlc.arg(reason), sqlc.narg(item_id), sqlc.arg(at))
+        sqlc.arg(dedupe), sqlc.arg(outcome), sqlc.arg(reason), sqlc.narg(item_id), sqlc.arg(missed), sqlc.arg(at))
 ON CONFLICT (org_id, factory_id, trigger, idempotency_key) DO NOTHING
 RETURNING id;
 
 -- name: TriggerFiringByKey :one
-SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, at FROM trigger_firings
+SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at FROM trigger_firings
 WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND idempotency_key = sqlc.arg(idempotency_key);
 
 -- name: TriggerFailureStreak :one
@@ -284,7 +289,7 @@ ORDER BY 1, 2;
 
 -- name: TriggerFirings :many
 -- The trigger's firings newest first, with their items' numbers (0 for none) and merged events.
-SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.at,
+SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.missed, f.at,
        coalesce(w.number, 0)::bigint AS item_number,
        EXISTS (SELECT 1 FROM item_events e WHERE e.item_id = f.item_id AND e.kind = 'merged') AS merged
 FROM trigger_firings f
@@ -292,3 +297,10 @@ LEFT JOIN work_items w ON w.id = f.item_id
 WHERE f.factory_id = sqlc.arg(factory_id) AND f.trigger = sqlc.arg(trigger)
 ORDER BY f.at DESC, f.id DESC
 LIMIT sqlc.arg(max_rows);
+
+-- name: PruneTriggerFirings :execrows
+-- The factory's firings from before the instant, but for those whose item is still open, which
+-- only.dedupe reads (ADR 0040 decision 16).
+DELETE FROM trigger_firings f
+WHERE f.factory_id = sqlc.arg(factory_id) AND f.at < sqlc.arg(before)
+  AND NOT EXISTS (SELECT 1 FROM work_items w WHERE w.id = f.item_id AND w.state NOT IN ('done', 'cancelled'));

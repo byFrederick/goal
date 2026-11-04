@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -329,5 +330,32 @@ func checkLargeBlock(t *testing.T) {
 
 	if !strings.Contains(block, `"author": "jo"`) {
 		t.Errorf("a cut block lost the author: %q", block[:200])
+	}
+}
+
+// A trigger's title quotes each event value, cut to 200 characters and on one line, and cuts the
+// whole title to the item's 300 (ADR 0040 decision 16); an empty one is the trigger's name.
+func TestRenderTemplate_EventTitleQuotedAndCut(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("a", 500) + "\n" + strings.Repeat("b", 500)
+	ev := domain.IntakeEvent{Fields: map[string]string{"check.name": long, "repo": "acme/app"}}
+
+	got := domain.EventTitle("{{check.name}} failed", ev, "red-main")
+	if want := `"` + strings.Repeat("a", 200) + `" failed`; got != want {
+		t.Errorf("title = %q; want the value quoted and cut to 200", got)
+	}
+
+	if got := domain.EventTitle("{{x}}", domain.IntakeEvent{Fields: map[string]string{"x": "a\nb\tc d\x00"}}, "t"); got != `"a b c d"` {
+		t.Errorf("title = %q; want every control character a space", got)
+	}
+
+	whole := domain.EventTitle("{{check.name}} {{check.name}} on {{repo}}", ev, "red-main")
+	if n := utf8.RuneCountInString(whole); n != domain.MaxItemTitle {
+		t.Errorf("a title of two long values has %d characters; want %d", n, domain.MaxItemTitle)
+	}
+
+	if got := domain.EventTitle("  ", ev, "red-main"); got != "Red main" {
+		t.Errorf("an empty title = %q; want the trigger's name", got)
 	}
 }

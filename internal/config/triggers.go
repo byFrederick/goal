@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -20,8 +18,9 @@ const onSchedule = "schedule"
 var eventField = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 
 // triggers checks board.triggers (ADR 0026): unique names, references to the definition's own
-// work types, stations and lanes, a schedule's cron and time zone, and the create templates'
-// placeholders. The schema has already checked each trigger's shape.
+// work types, stations and lanes, a schedule's cron and time zone, a brief file that exists, and
+// the create templates' placeholders, a brief file's included. The schema has already checked
+// each trigger's shape.
 func (c *checker) triggers() {
 	b := c.f.Spec.Board
 	dup(c, "trigger", names(b.Triggers, func(t Trigger) string { return t.Name }), "board", "triggers", keyName)
@@ -41,16 +40,17 @@ func (c *checker) triggers() {
 			c.schedule(t, base)
 		}
 
-		for _, tpl := range []struct{ key, text string }{{"title", t.Create.Title}, {"brief", t.Create.Brief}} {
+		brief := t.Create.Brief
+		if file, ok := BriefFile(brief); ok {
+			brief = c.briefFile(t, file, create)
+		}
+
+		for _, tpl := range []struct{ key, text string }{{"title", t.Create.Title}, {"brief", brief}} {
 			if bad := badPlaceholder(tpl.text); bad != "" {
 				c.errorf(checkTriggers, codePlaceholderInvalid, append(slices.Clone(create), tpl.key),
 					"trigger %s: create.%s has a malformed placeholder %q; a placeholder is {{field}} or {{field.sub}}",
 					t.Name, tpl.key, bad)
 			}
-		}
-
-		if t.Only != nil && t.Only.ModelAgrees != nil {
-			c.modelQuestion(t, base)
 		}
 
 		if t.On != onSchedule {
@@ -130,20 +130,27 @@ func eventTable(sender domain.WebhookSender, event string) domain.EventTable {
 	return tb
 }
 
-// modelQuestion checks the model check's question: not empty once trimmed and at most
-// domain.MaxModelQuestion characters.
-func (c *checker) modelQuestion(t Trigger, base []string) {
-	path := append(slices.Clone(base), "only", "modelAgrees", "question")
-	q := strings.TrimSpace(t.Only.ModelAgrees.Question)
+// briefPath is a create.brief that names a Markdown file of the definition instead of holding the
+// brief (ADR 0040 decision 17), as an agent's prompt does.
+var briefPath = regexp.MustCompile(`^\./triggers/[A-Za-z0-9][A-Za-z0-9._-]*\.md$`)
 
-	switch n := utf8.RuneCountInString(q); {
-	case n == 0:
-		c.errorf(checkTriggers, codeModelQuestionInvalid, path,
-			"trigger %s: only.modelAgrees.question is empty; write the yes or no question the model answers", t.Name)
-	case n > domain.MaxModelQuestion:
-		c.errorf(checkTriggers, codeModelQuestionInvalid, path,
-			"trigger %s: only.modelAgrees.question has %d characters; it may have at most %d", t.Name, n, domain.MaxModelQuestion)
+// BriefFile is the file brief names, when it is one path of the form ./triggers/<name>.md and
+// nothing else; Load reads the item's brief from it.
+func BriefFile(brief string) (string, bool) {
+	brief = strings.TrimSpace(brief)
+
+	return brief, briefPath.MatchString(brief)
+}
+
+// briefFile checks that t's brief file exists, as an agent's prompt must, and returns its text
+// ("" when it doesn't).
+func (c *checker) briefFile(t Trigger, file string, create []string) string {
+	text, ok := c.f.briefText(file)
+	if !ok {
+		c.errorf(checkReferences, codeBriefNotFound, append(slices.Clone(create), "brief"), "trigger %s brief: %s not found", t.Name, file)
 	}
+
+	return text
 }
 
 // triggerPlace checks that create.station is a station and create.lane a lane of its route.
@@ -166,7 +173,7 @@ func (c *checker) triggerPlace(t Trigger, create []string) {
 
 // schedule checks a schedule trigger's cron and time zone. The schema requires the cron.
 func (c *checker) schedule(t Trigger, base []string) {
-	if why := cronProblem(t.Cron); why != "" {
+	if why := domain.CronProblem(t.Cron); why != "" {
 		c.errorf(checkTriggers, codeCronInvalid, append(slices.Clone(base), "cron"),
 			"trigger %s: cron %q must be five fields (minute, hour, day-of-month, month, day-of-week): %s",
 			t.Name, t.Cron, why)
@@ -180,89 +187,6 @@ func (c *checker) schedule(t Trigger, base []string) {
 		c.errorf(checkTriggers, codeTimeZoneInvalid, append(slices.Clone(base), "timeZone"),
 			"trigger %s: timeZone %q is not an IANA time zone this install knows", t.Name, t.TimeZone)
 	}
-}
-
-// cronField is one field of a five-field cron: its range and, for months and weekdays, the
-// names that stand for lo, lo+1….
-type cronField struct {
-	name   string
-	lo, hi int
-	names  []string
-}
-
-var cronFields = [5]cronField{
-	{name: "minute", lo: 0, hi: 59},
-	{name: "hour", lo: 0, hi: 23},
-	{name: "day of month", lo: 1, hi: 31},
-	{name: "month", lo: 1, hi: 12, names: []string{"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"}},
-	{name: "day of week", lo: 0, hi: 6, names: []string{"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"}},
-}
-
-// cronProblem says why expr is not a standard five-field cron, "" when it is. It takes numbers,
-// *, ranges (a-b), steps (*/n, a-b/n), lists and month and weekday names, and nothing looser
-// (no @descriptors, no ?, no seconds), so the engine's parser may be stricter but never sees
-// a cron this check let through that it would read differently.
-func cronProblem(expr string) string {
-	fields := strings.Fields(expr)
-	if len(fields) != len(cronFields) {
-		return fmt.Sprintf("it has %d", len(fields))
-	}
-
-	for i, f := range fields {
-		if why := cronFields[i].problem(f); why != "" {
-			return cronFields[i].name + " " + why
-		}
-	}
-
-	return ""
-}
-
-func (cf cronField) problem(field string) string {
-	for part := range strings.SplitSeq(field, ",") {
-		base, step, stepped := strings.Cut(part, "/")
-		if stepped {
-			if n, err := strconv.Atoi(step); err != nil || n < 1 {
-				return fmt.Sprintf("%q has a step that is not a whole number of at least 1", part)
-			}
-		}
-
-		if base == "*" {
-			continue
-		}
-
-		from, to, ranged := strings.Cut(base, "-")
-		if !ranged && stepped {
-			return fmt.Sprintf("%q steps from a single value; use a range or *", part)
-		}
-
-		if !ranged {
-			to = from
-		}
-
-		lo, okLo := cf.value(from)
-		hi, okHi := cf.value(to)
-		ok := okLo && okHi
-
-		switch {
-		case !ok:
-			return fmt.Sprintf("%q is not a value in %d-%d", part, cf.lo, cf.hi)
-		case lo > hi:
-			return fmt.Sprintf("%q runs backwards", part)
-		}
-	}
-
-	return ""
-}
-
-// value reads a number in the field's range, or one of its names in any case.
-func (cf cronField) value(s string) (int, bool) {
-	if i := slices.Index(cf.names, strings.ToUpper(s)); i >= 0 {
-		return cf.lo + i, true
-	}
-
-	n, err := strconv.Atoi(s)
-
-	return n, err == nil && n >= cf.lo && n <= cf.hi
 }
 
 // badPlaceholder is the first malformed {{…}} in s, "" when every placeholder is a dotted event

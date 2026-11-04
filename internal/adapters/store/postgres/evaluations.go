@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -214,7 +215,8 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 
 	if _, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 		ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
-		IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: itemID, At: f.At,
+		IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: itemID,
+		Missed: int32(min(f.Missed, math.MaxInt32)), At: f.At,
 	}); err != nil {
 		return domain.TriggerFiring{}, false, err
 	}

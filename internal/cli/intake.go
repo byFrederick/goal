@@ -293,15 +293,7 @@ func printTry(out *printer, trigger string, tr *gen.TriggerTry) {
 		out.printf("Item: none would be created\n")
 	}
 
-	if m := tr.ModelCheck; m != nil {
-		out.printf("Model check: worth %s, %s, %d in and %d out tokens, cost %s\n",
-			yesNo(m.Worth), m.Model, m.InputTokens, m.OutputTokens, fmt.Sprintf("$%.4f", m.CostUsd))
-		out.printf("  Reason  %s\n", oneLine(m.Reason))
-	} else {
-		out.printf("Model check: did not run\n")
-	}
-
-	out.printf("Nothing was created: this was a dry run (a model check's cost is still spent)\n")
+	out.printf("Nothing was created: this was a dry run\n")
 }
 
 // creates is what a trigger creates: its work type, the station it starts at, and expedite and

@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,5 +92,47 @@ func TestCron_ParseRefusesWhatConfigRefuses(t *testing.T) {
 
 	if _, err := domain.ParseCron("* * * * *", "Mars/Olympus"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("an unknown time zone = %v; want ErrInvalid", err)
+	}
+}
+
+// Between counts the instants after after and at or before upTo, with the first and the last of
+// them, and stops counting at limit.
+func TestCron_BetweenCountsTheInstantsOfAGap(t *testing.T) {
+	t.Parallel()
+
+	hourly, err := domain.ParseCron("0 * * * *", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	from := time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)
+
+	first, last, n := hourly.Between(from, from.Add(5*time.Hour+30*time.Minute), 100)
+	if n != 5 || !first.Equal(from.Add(time.Hour)) || !last.Equal(from.Add(5*time.Hour)) {
+		t.Errorf("Between = %s, %s, %d; want 11:00, 15:00 and 5", first, last, n)
+	}
+
+	if _, _, n := hourly.Between(from, from.Add(59*time.Minute), 100); n != 0 {
+		t.Errorf("Between with no instant = %d; want 0", n)
+	}
+
+	if first, last, n := hourly.Between(from, from.Add(24*time.Hour), 3); n != 3 || !first.Equal(from.Add(time.Hour)) || !last.Equal(from.Add(3*time.Hour)) {
+		t.Errorf("Between capped at 3 = %s, %s, %d; want 11:00, 13:00 and 3", first, last, n)
+	}
+}
+
+// CronProblem is why an expression is not a five-field cron, naming the field, and "" for one
+// ParseCron reads.
+func TestCron_ProblemNamesTheField(t *testing.T) {
+	t.Parallel()
+
+	for expr, want := range map[string]string{
+		"0 6 * * MON-FRI": "", "0 6 * *": "it has 4", "60 6 * * *": "minute", "0 6 * * FRI-MON": "day of week",
+		"*/0 6 * * *": "minute", "@daily": "it has 1",
+	} {
+		got := domain.CronProblem(expr)
+		if want == "" && got != "" || want != "" && !strings.Contains(got, want) {
+			t.Errorf("CronProblem(%q) = %q; want it to name %q", expr, got, want)
+		}
 	}
 }

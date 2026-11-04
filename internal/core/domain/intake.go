@@ -114,6 +114,10 @@ const MaxDeliveryBody = 1 << 20
 // DeliveryRetention is how long deliveries are kept (ADR 0026 decision 2).
 const DeliveryRetention = 30 * 24 * time.Hour
 
+// FiringRetention is how long trigger firings are kept (ADR 0040 decision 16), but for one whose
+// item is still open, which only.dedupe reads.
+const FiringRetention = 90 * 24 * time.Hour
+
 // SignatureHeaders are the headers that authenticate a request, lower-cased: every sender's
 // signature or token header (internal/catalog/senders) and today's generic X-Goal-Signature. A
 // delivery never keeps them, and 00118's CHECK on webhook_deliveries refuses them.
@@ -238,6 +242,9 @@ const (
 	FiringCreated FiringOutcome = "created"
 	// FiringSkipped created none; the reason names the step and why.
 	FiringSkipped FiringOutcome = "skipped"
+	// FiringMissed is a schedule's gap (ADR 0040 decision 16): Missed of its instants passed by
+	// more than the schedule's window while no goald fired them, and none is fired late.
+	FiringMissed FiringOutcome = "missed"
 )
 
 // maxIntakeText is the longest reason, dedupe value or idempotency key the log keeps.
@@ -261,11 +268,15 @@ type TriggerFiring struct {
 	Reason  string
 	// ItemID is the item it created, for FiringCreated; "" otherwise or once that item is gone.
 	ItemID ItemID
-	At     time.Time
+	// Missed is how many instants a FiringMissed covers; 0 for any other outcome.
+	Missed int
+	// At is when it fired; for FiringMissed, the gap's last instant.
+	At time.Time
 }
 
 // Check refuses a firing that misses its factory, trigger, event or key, has an unknown source or
-// outcome, or names an item when it created none; the error wraps ErrInvalid.
+// outcome, names an item when it created none, or counts missed instants unless it is a schedule's
+// missed firing, which counts at least one; the error wraps ErrInvalid.
 func (f TriggerFiring) Check() error {
 	if err := f.checkEvent(); err != nil {
 		return err
@@ -274,8 +285,12 @@ func (f TriggerFiring) Check() error {
 	switch {
 	case utf8.RuneCountInString(f.Dedupe) > maxIntakeText || utf8.RuneCountInString(f.Reason) > maxIntakeText:
 		return fmt.Errorf("a firing's dedupe value and reason are at most %d characters: %w", maxIntakeText, ErrInvalid)
-	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped:
-		return fmt.Errorf("firing outcome %q must be created or skipped: %w", f.Outcome, ErrInvalid)
+	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped && f.Outcome != FiringMissed:
+		return fmt.Errorf("firing outcome %q must be created, skipped or missed: %w", f.Outcome, ErrInvalid)
+	case (f.Outcome == FiringMissed) != (f.Missed > 0) || f.Missed < 0:
+		return fmt.Errorf("only a missed firing counts missed instants, at least one: %w", ErrInvalid)
+	case f.Outcome == FiringMissed && f.Source != TriggerSchedule:
+		return fmt.Errorf("only a schedule misses instants: %w", ErrInvalid)
 	case f.ItemID != "" && f.Outcome != FiringCreated:
 		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
 	case f.At.IsZero():
