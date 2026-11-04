@@ -17,12 +17,13 @@ import (
 )
 
 // Jonah reads what a Jonah review's bundle holds besides its definition files (ADR 0034
-// decision 1, ADR 0039 decision 4): the factory's sent-back events in the review's window, its
-// proposals, the items and station medians its evidence is built from (ADR 0039 decision 2), and
+// decision 1, ADR 0039 decisions 4 and 5): the factory's sent-back events in the review's
+// window, its proposals, its open observations, the items and station medians its evidence is built from (ADR 0039 decision 2), and
 // what its review runs spent. ports.JonahStore satisfies it.
 type Jonah interface {
 	SentBackBetween(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.SentBack, error)
 	Proposals(ctx context.Context, q ports.ProposalQuery) ([]domain.Proposal, error)
+	OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
 	EvidenceItems(ctx context.Context, factory domain.FactoryID, since, until time.Time, limit int) ([]domain.EvidenceItem, error)
 	StationRunMedians(ctx context.Context, factory domain.FactoryID, since, until time.Time) ([]domain.StationMedian, error)
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
@@ -45,14 +46,17 @@ const (
 	// evidenceVersionLimit the factory's latest versions read for versions.md and the runs' numbers.
 	evidenceItemLimit    = 200
 	evidenceVersionLimit = 100
+	// observationLimit caps the open observations the bundle holds, the latest updated first.
+	observationLimit = 200
 	// The bundle's folders and files, under the box's /goal (apps/worker/README.md, jonah mode):
-	// the version's files, the evidence, the proposals, the index of the version's files and the
-	// sent-back events a proposal cites.
-	definitionDir = "definition/"
-	evidenceDir   = "evidence/"
-	proposalsDir  = "proposals/"
-	filesIndex    = "files.md"
-	eventsFile    = "events.md"
+	// the version's files, the evidence, the proposals, the index of the version's files, the
+	// sent-back events a proposal cites and the open observations a review updates.
+	definitionDir    = "definition/"
+	evidenceDir      = "evidence/"
+	proposalsDir     = "proposals/"
+	filesIndex       = "files.md"
+	eventsFile       = "events.md"
+	observationsFile = "observations.md"
 )
 
 // bundleJonah is spec.jonah, what goal-agent's jonah mode reads (apps/worker/src/spec.ts Jonah):
@@ -66,8 +70,8 @@ type bundleJonah struct {
 // jonahBundle is the bundle of a Jonah review's run (ADR 0039 decision 4), as files under the
 // box's /goal: every text file of c's version under definitionDir with their sha256 in filesIndex,
 // the factory's sent-back events in c's window in eventsFile, its open proposals and those
-// published or rejected within decidedWithin of now under proposalsDir, and the evidence under
-// evidenceDir. Its spec has the line's knowledge that applies to every run, pinned by c, and the
+// published or rejected within decidedWithin of now under proposalsDir, its open observations in
+// observationsFile, and the evidence under evidenceDir. Its spec has the line's knowledge that applies to every run, pinned by c, and the
 // weekly budget left as max_usd. It names no item, repository, connection, tool or rule, and
 // records nothing. The version must be c's factory's in c's organization (ctx).
 func (g *Gateway) jonahBundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
@@ -91,7 +95,7 @@ func (g *Gateway) jonahBundle(ctx context.Context, c domain.TaskClaims) (runBund
 		return runBundle{}, err
 	}
 
-	for _, add := range []func(context.Context, domain.TaskClaims, map[string][]byte) error{g.jonahDefinition, g.jonahEvents, g.jonahProposals} {
+	for _, add := range []func(context.Context, domain.TaskClaims, map[string][]byte) error{g.jonahDefinition, g.jonahEvents, g.jonahProposals, g.jonahObservations} {
 		if err := add(ctx, c, files); err != nil {
 			return runBundle{}, err
 		}
@@ -143,7 +147,7 @@ func (g *Gateway) jonahDefinition(ctx context.Context, c domain.TaskClaims, out 
 
 	var b strings.Builder
 
-	b.WriteString("# The definition's files\n\nEach file of the current version is under `/goal/definition/`. A proposal edits only a file marked yes, and gives the sha256 below as its `base_sha256` (empty for a new file).\n\n")
+	b.WriteString("# The definition's files\n\nEach file of the current version is under `/goal/definition/`. A proposal edits only a file marked yes: an existing file by exact replacements, whose old text occurs exactly once in it, and a new file by its whole content.\n\n")
 	b.WriteString("| Path | sha256 | A proposal may edit it |\n|---|---|---|\n")
 
 	for _, p := range slices.Sorted(maps.Keys(files)) {
@@ -243,6 +247,67 @@ func (g *Gateway) proposalsOf(ctx context.Context, factory domain.FactoryID, sta
 	}
 
 	return out, nil
+}
+
+// jonahObservations adds observationsFile: the factory's open (watching or proposed)
+// observations, the latest updated first, each with the id a review's observation gives to
+// update it, its count so far and its items (ADR 0039 decision 5).
+func (g *Gateway) jonahObservations(ctx context.Context, c domain.TaskClaims, out map[string][]byte) error {
+	obs, err := g.jonah.OpenObservations(ctx, c.FactoryID, observationLimit)
+	if err != nil {
+		return fmt.Errorf("open observations of factory %s: %w", c.FactoryID, err)
+	}
+
+	var b strings.Builder
+
+	b.WriteString("# Open observations\n\nThe causes earlier reviews saw and still watch or propose. An observation of the same cause gives its id, and its count adds to the count so far.\n")
+
+	if len(obs) == 0 {
+		b.WriteString("\nNone yet.\n")
+	}
+
+	for _, o := range obs {
+		fmt.Fprintf(&b, "\n## %s\n\n- id: `%s`\n- State: %s\n- Count so far: %d\n- Items: %s\n", oneLine(o.Summary), o.ID, o.State, o.Count,
+			g.itemRefs(ctx, o.ItemIDs))
+
+		if o.Detail != "" {
+			fmt.Fprintf(&b, "\n%s\n", quoted(o.Detail))
+		}
+	}
+
+	out[observationsFile] = []byte(b.String())
+
+	return nil
+}
+
+// observationItems caps the items observationsFile names per observation.
+const observationItems = 20
+
+// itemRefs are ids as #<number>, the first observationItems of them and how many more; an item
+// that cannot be read keeps its id.
+func (g *Gateway) itemRefs(ctx context.Context, ids []domain.ItemID) string {
+	if len(ids) == 0 {
+		return "none"
+	}
+
+	refs := make([]string, 0, min(len(ids), observationItems))
+
+	for _, id := range ids[:min(len(ids), observationItems)] {
+		ref := string(id)
+		if g.items != nil {
+			if it, err := g.items.Item(ctx, id); err == nil {
+				ref = "#" + strconv.FormatInt(it.Number, 10)
+			}
+		}
+
+		refs = append(refs, ref)
+	}
+
+	if more := len(ids) - len(refs); more > 0 {
+		refs = append(refs, fmt.Sprintf("and %d more", more))
+	}
+
+	return strings.Join(refs, ", ")
 }
 
 // proposalFile is p as a review reads it: its number, title, state, files and summary, and when it

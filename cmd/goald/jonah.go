@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/store/postgres"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/definitions"
@@ -14,11 +15,13 @@ import (
 
 // jonahReviewLoop is the Jonah review loop (ADR 0034, ADR 0039 decision 3): daily reviews queued
 // from store, each queued review run by eng as a jonah-kind run on its version in defs, within s.JonahReview's times.
+// Its proposals are checked by config's definition check against the organization policy's models.
 func jonahReviewLoop(s settings, store *postgres.Store, defs *definitions.Cache, eng *engine.Engine, clock ports.Clock,
 	log *slog.Logger,
 ) *jonah.Reviews {
 	return jonah.NewReviews(jonah.ReviewDeps{
-		Orgs: store, Jonah: store, Definitions: defs, Runner: eng, Clock: clock, Log: log,
+		Orgs: store, Jonah: store, Definitions: defs, Runner: eng, Check: config.ProposalCheck{},
+		Policies: postgres.NewOrgPolicies(store, s.modelIDs()), Clock: clock, Log: log,
 	}, s.JonahReview)
 }
 
