@@ -31,7 +31,7 @@ func TestIntake_Conformance(t *testing.T) {
 			Secrets: func(key ports.MasterKey) ports.OrgSecrets { return NewSecrets(d.store, key) },
 			Key:     func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
 			Store:   d.store,
-			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
+			NewOrg:  func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
 			NewFactory: func(t *testing.T, org domain.OrgID) domain.FactoryID {
 				t.Helper()
 
