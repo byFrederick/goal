@@ -109,7 +109,7 @@ import (
 )
 
 // EventToolCall is the kind of the audit event every gateway tool call appends.
-const EventToolCall domain.EventKind = "gateway_tool_call"
+const EventToolCall = domain.EventGatewayToolCall
 
 // Definitions returns a published definition version. The gateway reads the version a task's
 // run started on (its token's v claim), so the run sees that version's agents and connections
