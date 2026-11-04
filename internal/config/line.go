@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strconv"
@@ -73,12 +74,7 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	for _, t := range s.Board.Triggers {
-		tr := trigger(t)
-		if file, ok := BriefFile(t.Create.Brief); ok {
-			tr.Create.Brief, _ = f.briefText(file)
-		}
-
-		l.Triggers = append(l.Triggers, tr)
+		l.Triggers = append(l.Triggers, f.trigger(t))
 	}
 
 	l.WorkTypes = slices.Clone(s.Board.WorkTypes)
@@ -315,6 +311,20 @@ func station(st Station) domain.Station {
 // conclusion failure, github.issues.labeled as github.issues with action labeled, and
 // webhook.<endpoint>[.<event>] as <endpoint>[.<event>]. An event trigger without limits.perHour
 // takes domain.DefaultPerHour.
+// trigger is t as the engine runs it, its create and check brief files read.
+func (f *Factory) trigger(t Trigger) domain.Trigger {
+	tr := trigger(t)
+	if file, ok := BriefFile(t.Create.Brief); ok {
+		tr.Create.Brief, _ = f.briefText(file)
+	}
+
+	if file, ok := BriefFile(tr.CheckBrief()); ok {
+		tr.Check.Brief, _ = f.briefText(file)
+	}
+
+	return tr
+}
+
 func trigger(t Trigger) domain.Trigger {
 	out := domain.Trigger{
 		Name: t.Name, Enabled: t.Enabled == nil || *t.Enabled, On: t.On, Cron: t.Cron, TimeZone: t.TimeZone,
@@ -357,6 +367,14 @@ func trigger(t Trigger) domain.Trigger {
 
 	if l := t.Limits; l != nil {
 		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PerHour: l.PerHour, PauseOnBudget: l.PauseOnBudget}
+	}
+
+	if ch := t.Check; ch != nil {
+		timeout, _ := time.ParseDuration(ch.Timeout) // Check refuses one that does not parse
+		out.Check = &domain.TriggerCheck{
+			Agent: ch.Agent, Brief: ch.Brief, MaxUSD: cmp.Or(ch.MaxUSD, domain.DefaultCheckMaxUSD),
+			Timeout: cmp.Or(timeout, domain.DefaultCheckTimeout),
+		}
 	}
 
 	if out.On != domain.OnSchedule && out.Limits.PerHour == 0 {

@@ -95,7 +95,8 @@ func (e *Engine) FireSchedules(ctx context.Context, now time.Time) (ScheduleTick
 }
 
 // fireSchedule records t's missed gap, if it has one, then fires t when it is an enabled
-// schedule trigger due at now, and returns what it recorded.
+// schedule trigger due at now, and returns what it recorded. A trigger with a check queues one
+// (queueCheck) instead of filing an item.
 func (e *Engine) fireSchedule(ctx context.Context, l domain.Line, t domain.Trigger, now time.Time) ([]domain.TriggerFiring, error) {
 	if !t.Enabled || t.On != domain.OnSchedule {
 		return nil, nil
@@ -123,6 +124,15 @@ func (e *Engine) fireSchedule(ctx context.Context, l domain.Line, t domain.Trigg
 	}
 
 	key := at.UTC().Format(time.RFC3339)
+
+	if t.Check != nil {
+		f, err := e.queueCheck(ctx, l, t, key, now)
+		if err != nil {
+			return out, err
+		}
+
+		return append(out, f), nil
+	}
 
 	f, err := e.fire(ctx, l, t, domain.IntakeEvent{
 		FactoryID: l.FactoryID, Source: domain.TriggerSchedule, Key: domain.OnSchedule,

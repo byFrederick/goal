@@ -109,6 +109,13 @@ const (
 	// running.
 	codeEvalsIgnored = "evals-ignored"
 
+	// codeCheckCronTooOften: a check's cron fires more often than every 5 minutes (ADR 0040
+	// decision 19). codeCheckTimeoutInvalid: its timeout is not a duration of at most an hour.
+	// codeCheckToolsNotReadOnly, a warning: its agent may use tools that aren't read-only.
+	codeCheckCronTooOften     = "check-cron-too-often"
+	codeCheckTimeoutInvalid   = "check-timeout-invalid"
+	codeCheckToolsNotReadOnly = "check-tools-not-read-only"
+
 	codeCronInvalid        = "cron-invalid"
 	codeTimeZoneInvalid    = "time-zone-invalid"
 	codePlaceholderInvalid = "placeholder-invalid"

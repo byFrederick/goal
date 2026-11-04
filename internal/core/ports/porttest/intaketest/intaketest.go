@@ -81,6 +81,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	tests = append(tests, convertTests...)
 	tests = append(tests, evaluationTests...)
 	tests = append(tests, trimTests...)
+	tests = append(tests, checkTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

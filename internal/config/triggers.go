@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -56,7 +57,101 @@ func (c *checker) triggers() {
 		if t.On != onSchedule {
 			c.deliveries(trigger(t), base)
 		}
+
+		if t.Check != nil {
+			c.check(t, base)
+		}
 	}
+}
+
+// maxCheckTimeout is the longest check.timeout.
+const maxCheckTimeout = time.Hour
+
+// check checks a schedule trigger's check (ADR 0040 decision 19): an agent of the definition, a
+// brief file that exists, a timeout of at most an hour, and a cron that fires at most every 5
+// minutes; and warns when the agent may use tools that aren't read-only. The schema allows a
+// check only on a schedule.
+func (c *checker) check(t Trigger, base []string) {
+	at := append(slices.Clone(base), "check")
+
+	i := slices.IndexFunc(c.f.Spec.Agents, func(a Agent) bool { return a.Name == t.Check.Agent })
+	if i < 0 {
+		c.errorf(checkReferences, codeUnknownAgent, append(slices.Clone(at), "agent"), "trigger %s: check.agent %q is not an agent", t.Name, t.Check.Agent)
+	} else if why := c.notReadOnly(c.f.Spec.Agents[i]); len(why) > 0 {
+		c.warnf(checkTriggers, codeCheckToolsNotReadOnly, append(slices.Clone(at), "agent"),
+			"trigger %s: check agent %s may use tools that aren't read-only (%s); give a check's agent read-only tools",
+			t.Name, t.Check.Agent, strings.Join(why, ", "))
+	}
+
+	if file, ok := BriefFile(t.Check.Brief); ok {
+		if _, found := c.f.briefText(file); !found {
+			c.errorf(checkReferences, codeBriefNotFound, append(slices.Clone(at), "brief"), "trigger %s check brief: %s not found", t.Name, file)
+		}
+	}
+
+	if t.Check.Timeout != "" {
+		if d, err := time.ParseDuration(t.Check.Timeout); err != nil || d <= 0 || d > maxCheckTimeout {
+			c.errorf(checkTriggers, codeCheckTimeoutInvalid, append(slices.Clone(at), "timeout"),
+				"trigger %s: check.timeout %q must be a duration such as 5m, at most %s", t.Name, t.Check.Timeout, maxCheckTimeout)
+		}
+	}
+
+	cron, err := domain.ParseCron(t.Cron, t.TimeZone)
+	if err != nil {
+		return // schedule reports it
+	}
+
+	if gap := cron.MinInterval(); gap > 0 && gap < domain.CheckCronFloor {
+		c.errorf(checkTriggers, codeCheckCronTooOften, append(slices.Clone(base), "cron"),
+			"trigger %s: cron %q fires every %s, and a check may run at most every %s", t.Name, t.Cron, gap, domain.CheckCronFloor)
+	}
+}
+
+// writeRules are the tool rules of the built-ins that edit, run or start subagents.
+var writeRules = []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "Task"}
+
+// notReadOnly names what of a's tools may not be read-only: the built-in edit, run or subagents
+// groups it allows, its allow rules for those tools, and each MCP server of its environment with a
+// tool it allows (a server whose tools name no mode allows them all). It judges by the definition
+// alone: MCP tool annotations are not kept.
+func (c *checker) notReadOnly(a Agent) []string {
+	var why []string
+
+	if b := a.Builtins; b != nil {
+		for _, g := range []struct{ key, mode string }{{"edit", b.Edit}, {"run", b.Run.Mode}, {"subagents", b.Subagents}} {
+			if g.mode == BuiltinAllowed {
+				why = append(why, "builtins."+g.key)
+			}
+		}
+	}
+
+	if a.Tools != nil {
+		for _, rule := range a.Tools.Allow {
+			if name, _, _ := strings.Cut(rule, "("); slices.Contains(writeRules, name) {
+				why = append(why, "tools.allow "+rule)
+			}
+		}
+	}
+
+	env := a.Environment
+	if env == "" {
+		env = domain.DefaultEnvironment
+	}
+
+	for _, e := range c.f.environments {
+		if e.Name != env {
+			continue
+		}
+
+		for _, name := range slices.Sorted(maps.Keys(e.Spec.MCP)) {
+			tools := e.Spec.MCP[name].Tools
+			if len(tools) == 0 || slices.Contains(slices.Collect(maps.Values(tools)), string(domain.ToolModeAllow)) {
+				why = append(why, "mcp "+name)
+			}
+		}
+	}
+
+	return why
 }
 
 // deliveries checks an event trigger's on: in its sender form: it names an event, its filters

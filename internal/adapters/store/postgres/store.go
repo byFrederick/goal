@@ -457,11 +457,11 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	kind := cmp.Or(r.Kind, domain.RunKindStation)
 
-	// Only Jonah's runs, a review or a try, may work no item (00079, 00102); they write no
+	// Only Jonah's runs, a review or a try, and checks may work no item (00079, 00102, 00122); they write no
 	// run_started item event.
 	var item *uuid.UUID
 
-	if r.ItemID != "" || !kind.Jonahs() {
+	if r.ItemID != "" || !kind.Itemless() {
 		id, err := parseID("item", string(r.ItemID))
 		if err != nil {
 			return "", err

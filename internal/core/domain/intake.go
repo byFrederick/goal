@@ -245,6 +245,9 @@ const (
 	// FiringMissed is a schedule's gap (ADR 0040 decision 16): Missed of its instants passed by
 	// more than the schedule's window while no goald fired them, and none is fired late.
 	FiringMissed FiringOutcome = "missed"
+	// FiringChecked queued a check (ADR 0040 decision 19): it files nothing itself, and its Check
+	// says where the check is.
+	FiringChecked FiringOutcome = "checked"
 )
 
 // maxIntakeText is the longest reason, dedupe value or idempotency key the log keeps.
@@ -272,6 +275,12 @@ type TriggerFiring struct {
 	Missed int
 	// At is when it fired; for FiringMissed, the gap's last instant.
 	At time.Time
+	// CheckState is where a FiringChecked's check is, "" for any other outcome; RunID, CostUSD
+	// and Decisions are its run's and its answer's once it ran, and Reason says why it failed.
+	CheckState CheckState
+	RunID      RunID
+	CostUSD    float64
+	Decisions  string
 }
 
 // Check refuses a firing that misses its factory, trigger, event or key, has an unknown source or
@@ -285,8 +294,10 @@ func (f TriggerFiring) Check() error {
 	switch {
 	case utf8.RuneCountInString(f.Dedupe) > maxIntakeText || utf8.RuneCountInString(f.Reason) > maxIntakeText:
 		return fmt.Errorf("a firing's dedupe value and reason are at most %d characters: %w", maxIntakeText, ErrInvalid)
-	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped && f.Outcome != FiringMissed:
-		return fmt.Errorf("firing outcome %q must be created, skipped or missed: %w", f.Outcome, ErrInvalid)
+	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped && f.Outcome != FiringMissed && f.Outcome != FiringChecked:
+		return fmt.Errorf("firing outcome %q must be created, skipped, missed or checked: %w", f.Outcome, ErrInvalid)
+	case (f.Outcome == FiringChecked) != (f.CheckState != ""):
+		return fmt.Errorf("only a checked firing has a check state, and it always does: %w", ErrInvalid)
 	case f.ItemID != "" && f.Outcome != FiringCreated:
 		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
 	case f.At.IsZero():

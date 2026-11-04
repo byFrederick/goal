@@ -42,6 +42,9 @@ type Trigger struct {
 	Only     TriggerOnly
 	Create   TriggerCreate
 	Limits   TriggerLimits
+	// Check, set only on a schedule trigger, makes each firing queue a check instead of filing an
+	// item (ADR 0040 decision 19); nil files as create says.
+	Check *TriggerCheck
 }
 
 // TriggerFilter holds filters on an event; every one set must match.

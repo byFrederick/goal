@@ -113,7 +113,9 @@ type Intake interface {
 	// the open item of the trigger with f's dedupe value and the items it created since the UTC
 	// day began and in the hour before f.At, and when limits skip them (domain.FireLimits.Skip)
 	// records f skipped with that reason; else it files item as CreateItem does and records f
-	// with it. A skipped f with no item is recorded as it is. f must pass Check
+	// with it. A skipped f with no item is recorded as it is. A checked f (queued, ADR 0040
+	// decision 19) is recorded as it is unless the trigger already has a check queued or
+	// running, when it is recorded skipped with domain.StillChecking. f must pass Check
 	// (domain.ErrInvalid).
 	Fire(ctx context.Context, f domain.TriggerFiring, item *domain.NewItem, limits domain.FireLimits) (domain.TriggerFiring, bool, error)
 	// UnnamedDays are the webhook's daily counts of accepted deliveries no enabled trigger named,
@@ -156,9 +158,31 @@ type Intake interface {
 	// its item's number and whether that item has a merged event.
 	Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error)
 	// PruneFirings deletes the factory's firings from before before, except those whose item is
-	// still open (neither done nor cancelled), which only.dedupe reads, and returns how many went
-	// (ADR 0040 decision 16).
+	// still open (neither done nor cancelled), which only.dedupe reads, and checks still queued or
+	// running, and returns how many went (ADR 0040 decision 16).
 	PruneFirings(ctx context.Context, factory domain.FactoryID, before time.Time) (int, error)
+	// ClaimCheck leases the factory's oldest queued check (ADR 0040 decision 19) to holder until
+	// now+lease with a new token, FOR UPDATE SKIP LOCKED, and returns its firing, now running,
+	// with the lease. A running check takes a slot as a lease does: the claim checks the
+	// organization's and the factory's slot caps first, counting leases and running checks, and
+	// returns ErrOrgFull or ErrFactoryFull when one is reached; ErrNotFound when none is queued.
+	ClaimCheck(ctx context.Context, factory domain.FactoryID, holder string, now time.Time, lease time.Duration) (domain.TriggerFiring, domain.CheckLease, error)
+	// HeartbeatCheck extends l's check to until; ErrLeaseLost when it no longer runs under l's
+	// token.
+	HeartbeatCheck(ctx context.Context, l domain.CheckLease, until time.Time) error
+	// FinishCheck ends l's check as r says (r must pass Check, domain.ErrInvalid), in one
+	// transaction: its state, run, cost, decisions or failure reason, and, for a done r with
+	// Saved, the trigger's saved state, which a failed one leaves as it was. ErrLeaseLost when the
+	// check no longer runs under l's token.
+	FinishCheck(ctx context.Context, l domain.CheckLease, r domain.CheckResult) error
+	// ExpireChecks fails the factory's running checks whose lease ended by now, with
+	// domain.CheckLeaseExpired, and returns how many.
+	ExpireChecks(ctx context.Context, factory domain.FactoryID, now time.Time) (int, error)
+	// CheckInput is what the trigger's next check is given: its open items, newest first, at most
+	// domain.MaxCheckOpenItems; the keys whose items closed since now-domain.CheckClosedWindow,
+	// newest first, at most domain.MaxCheckClosed; its newest done check's decisions; and the state saved for it. An item's key
+	// is the dedupe value of the firing that filed it.
+	CheckInput(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckInput, error)
 }
 
 // SenderEvents are the senders' event tables (ADR 0040 decision 14): which normalized fields an

@@ -208,6 +208,17 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 		}
 	}
 
+	if f.Outcome == domain.FiringChecked {
+		live, err := q.LiveTriggerCheck(ctx, db.LiveTriggerCheckParams{FactoryID: factory, Trigger: f.Trigger})
+		if err != nil {
+			return domain.TriggerFiring{}, false, fmt.Errorf("live check: %w", err)
+		}
+
+		if live {
+			f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
+		}
+	}
+
 	itemID, err := optionalID("item", string(f.ItemID))
 	if err != nil {
 		return domain.TriggerFiring{}, false, err
@@ -216,7 +227,7 @@ func fireInTx(ctx context.Context, q *db.Queries, factory, id uuid.UUID, f domai
 	if _, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 		ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
 		IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: itemID,
-		Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At,
+		Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At, CheckState: checkStateArg(f.CheckState),
 	}); err != nil {
 		return domain.TriggerFiring{}, false, err
 	}
