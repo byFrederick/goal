@@ -223,8 +223,8 @@ type FinishKnowledgeSyncParams struct {
 	LeaseToken uuid.UUID
 }
 
-// The next sync is at plus the interval unless the source was made due since its claim (due).
-// Nothing when another claim took the source (its token).
+// The next sync is at plus the interval unless the source was made due since its claim (due);
+// none for an on-demand source, whose NULL sync_every makes the sum NULL (00100). Nothing when another claim took the source (its token).
 func (q *Queries) FinishKnowledgeSync(ctx context.Context, arg FinishKnowledgeSyncParams) (int64, error) {
 	result, err := q.db.Exec(ctx, finishKnowledgeSync,
 		arg.Error,
@@ -325,7 +325,8 @@ const insertKnowledgeSource = `-- name: InsertKnowledgeSource :exec
 INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, read_when, sync_every, next_sync_at, created_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7,
         $8,
-        make_interval(secs => $9::bigint),
+        CASE WHEN $9::bigint = 0 THEN NULL
+             ELSE make_interval(secs => $9::bigint) END,
         CASE WHEN $4::text = 'live' THEN NULL ELSE now() END, $10)
 `
 
@@ -342,7 +343,8 @@ type InsertKnowledgeSourceParams struct {
 	CreatedBy        string
 }
 
-// org_id comes from its default, goal_org(). A live source never syncs.
+// org_id comes from its default, goal_org(). A live source never syncs; sync_every_seconds 0 is
+// on demand (a NULL sync_every, 00100), due once now for its first snapshot.
 func (q *Queries) InsertKnowledgeSource(ctx context.Context, arg InsertKnowledgeSourceParams) error {
 	_, err := q.db.Exec(ctx, insertKnowledgeSource,
 		arg.ID,
@@ -563,7 +565,7 @@ func (q *Queries) KnowledgeSourceKind(ctx context.Context, id uuid.UUID) (string
 const knowledgeSources = `-- name: KnowledgeSources :many
 
 SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
-       extract(epoch FROM s.sync_every)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
+       coalesce(extract(epoch FROM s.sync_every), 0)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at
 FROM knowledge_sources s
 LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
@@ -891,35 +893,40 @@ func (q *Queries) UnheldBlobs(ctx context.Context, blobs []string) ([]string, er
 
 const updateKnowledgeSource = `-- name: UpdateKnowledgeSource :one
 UPDATE knowledge_sources
-SET next_sync_at = CASE WHEN $1::text IS NOT NULL AND read_when IS DISTINCT FROM $1::text
-                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
-                        ELSE next_sync_at END,
-    title = coalesce($2::text, title), config = coalesce($3::jsonb, config),
-    secret_id = coalesce($4::uuid, secret_id), read_when = coalesce($1::text, read_when),
+SET title = coalesce($1::text, title), config = coalesce($2::jsonb, config),
+    secret_id = coalesce($3::uuid, secret_id), read_when = coalesce($4::text, read_when),
     sync_every = CASE WHEN $5::bigint IS NULL THEN sync_every
+                      WHEN $5::bigint = 0 THEN NULL
                       ELSE make_interval(secs => $5::bigint) END,
+    next_sync_at = CASE WHEN $4::text IS NOT NULL AND read_when IS DISTINCT FROM $4::text
+                             AND kind IN ('upload', 'repository', 'confluence') THEN now()
+                        WHEN $5::bigint IS NULL THEN next_sync_at
+                        WHEN $5::bigint = 0 THEN NULL
+                        WHEN kind <> 'live' AND next_sync_at IS NULL THEN now()
+                        ELSE next_sync_at END,
     updated_at = now()
 WHERE name = $6
 RETURNING id
 `
 
 type UpdateKnowledgeSourceParams struct {
-	ReadWhen         *string
 	Title            *string
 	Config           []byte
 	SecretID         *uuid.UUID
+	ReadWhen         *string
 	SyncEverySeconds *int64
 	Name             string
 }
 
-// A new read-when line makes a source that writes snapshots due at once, so its next snapshot
-// carries the line; read_when on the right is the row's old line.
+// sync_every_seconds 0 makes the source on demand, not due until Sync (00100); an interval makes
+// an on-demand source that is not live due at once. A new read-when line makes a source that
+// writes snapshots due at once, so its next snapshot carries the line. The CASEs read the row as it was.
 func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledgeSourceParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, updateKnowledgeSource,
-		arg.ReadWhen,
 		arg.Title,
 		arg.Config,
 		arg.SecretID,
+		arg.ReadWhen,
 		arg.SyncEverySeconds,
 		arg.Name,
 	)

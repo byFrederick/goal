@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -128,7 +127,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 		err = q.InsertKnowledgeSource(ctx, db.InsertKnowledgeSourceParams{
 			ID: id, Name: n.Name, Title: n.Title, Kind: string(n.Kind), ConnectionID: conn, SecretID: secret, Config: config, ReadWhen: n.ReadWhen,
-			SyncEverySeconds: wholeSeconds(cmp.Or(n.SyncEvery, domain.DefaultSyncEvery)), CreatedBy: by.Ref(),
+			SyncEverySeconds: wholeSeconds(n.Every()), CreatedBy: by.Ref(),
 		})
 		if violates(err, sourceNameKey) {
 			return fmt.Errorf("knowledge source %q: %w", n.Name, ports.ErrNameTaken)

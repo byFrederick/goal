@@ -5088,7 +5088,7 @@ type KnowledgeSource struct {
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
 
-	// NextSyncAt When it is due next; null for a live source
+	// NextSyncAt When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync
 	NextSyncAt *time.Time `json:"next_sync_at"`
 
 	// ReadWhen The line that tells agents when to open it; empty when it has none
@@ -5100,7 +5100,7 @@ type KnowledgeSource struct {
 	// Status syncing while a goald holds it; failed after a sync that stopped (last_error says why)
 	Status KnowledgeSourceStatus `json:"status"`
 
-	// SyncEverySeconds How often it syncs
+	// SyncEverySeconds How often it syncs, in seconds: at least 900, or 0 when it syncs only when someone presses Sync
 	SyncEverySeconds int `json:"sync_every_seconds"`
 
 	// SyncFailures How many syncs failed in a row; a successful one resets it, and three show the source in Needs you
@@ -5152,9 +5152,11 @@ type KnowledgeSourcePatch struct {
 	ReadWhen *KnowledgeReadWhen `json:"read_when,omitempty"`
 
 	// Secret A synced source's new secret: it reads with it from its next sync
-	Secret           *SecretName `json:"secret,omitempty"`
-	SyncEverySeconds *int        `json:"sync_every_seconds,omitempty"`
-	Title            *string     `json:"title,omitempty"`
+	Secret *SecretName `json:"secret,omitempty"`
+
+	// SyncEverySeconds How often it syncs, in seconds: at least 900, or 0 to sync only when someone presses Sync. 0 clears the next sync; an interval on an on-demand source makes it due at once
+	SyncEverySeconds *int    `json:"sync_every_seconds,omitempty"`
+	Title            *string `json:"title,omitempty"`
 }
 
 // KnowledgeSourceReader defines model for KnowledgeSourceReader.
@@ -5572,7 +5574,7 @@ type NewKnowledgeSource struct {
 	// Secret The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories.
 	Secret *SecretName `json:"secret,omitempty"`
 
-	// SyncEverySeconds How often it syncs (default 3600)
+	// SyncEverySeconds How often it syncs, in seconds: at least 900 (default 3600), or 0 to sync only when someone presses Sync. A new source syncs once when it is created either way
 	SyncEverySeconds *int   `json:"sync_every_seconds,omitempty"`
 	Title            string `json:"title"`
 }

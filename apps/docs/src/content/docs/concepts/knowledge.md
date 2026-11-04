@@ -25,7 +25,7 @@ Website, Notion and Google Drive show on the Add a source page as later. A Repos
 
 ## Sync, snapshots and limits
 
-A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour or every day, or when someone presses **Sync now**. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
+A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour, every day, or only when someone presses **Sync now**. Every source syncs once when it is created. After that, an on-demand source syncs only when someone presses **Sync now**, and between syncs it has no next sync. If its sync fails, it doesn't retry on its own: press **Sync now** again. In the API it has `sync_every_seconds` 0 and `next_sync_at` null. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
 - A file that looks like it holds a key stays out.

@@ -144,6 +144,40 @@ func TestKnowledge_SourcesCreateChangeAndSync(t *testing.T) {
 	h.syncedOnASecret(t)
 }
 
+// A source set to sync_every_seconds 0 syncs only when someone presses Sync: it has no next
+// sync, no claim takes it until Sync, and the sync Sync asked for leaves it with none again.
+func TestKnowledge_OnDemandSource(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createHandbook(t)
+
+	patched := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPatch, handbookPath, `{"sync_every_seconds":0}`, nil), http.StatusOK)
+	if patched.SyncEverySeconds != 0 || patched.NextSyncAt != nil {
+		t.Fatalf("patched = %s; want sync_every_seconds 0 and next_sync_at null", body(t, patched))
+	}
+
+	h.syncWhenPressed(t)
+
+	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodGet, handbookPath, "", nil), http.StatusOK)
+	if got.SyncEverySeconds != 0 || got.NextSyncAt != nil {
+		t.Errorf("after the sync = %s; want it still on demand with next_sync_at null", body(t, got))
+	}
+
+	created := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath,
+		`{"name":"notes","title":"Notes","kind":"upload","sync_every_seconds":0}`, nil), http.StatusCreated)
+	if created.SyncEverySeconds != 0 || created.NextSyncAt == nil {
+		t.Errorf("created on demand = %s; want sync_every_seconds 0, due once for its first snapshot", body(t, created))
+	}
+
+	for _, n := range []string{"1", "899"} {
+		refused(t, "create every "+n+"s", h.request(t, http.MethodPost, sourcesPath,
+			`{"name":"often","title":"Often","kind":"upload","sync_every_seconds":`+n+`}`, nil), http.StatusBadRequest, "")
+		refused(t, "patch to every "+n+"s", h.request(t, http.MethodPatch, handbookPath, `{"sync_every_seconds":`+n+`}`, nil),
+			http.StatusBadRequest, "")
+	}
+}
+
 // A PATCH with a new read_when makes a synced-once source due at once, so its next snapshot carries
 // the line; a PATCH of only the title, or of the same read_when, keeps its next sync.
 func TestKnowledge_ReadWhenPatchMakesTheSourceDue(t *testing.T) {
@@ -176,6 +210,46 @@ func TestKnowledge_ReadWhenPatchMakesTheSourceDue(t *testing.T) {
 	got := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPatch, handbookPath, `{"read_when":"Read when you plan leave."}`, nil), http.StatusOK)
 	if got.ReadWhen != "Read when you plan leave." || got.NextSyncAt == nil || got.NextSyncAt.After(time.Now()) {
 		t.Errorf("PATCH of a new read_when = %q due %v; want the new line, due now", got.ReadWhen, got.NextSyncAt)
+	}
+}
+
+// syncWhenPressed checks that no claim takes the on-demand handbook until Sync, which makes it
+// due once, and finishes the sync that claim started.
+func (h *harness) syncWhenPressed(t *testing.T) {
+	t.Helper()
+
+	later := time.Now().Add(48 * time.Hour)
+	claim := func() *domain.SourceClaim {
+		t.Helper()
+
+		c, err := h.kb.ClaimSource(t.Context(), later, later.Add(time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return c
+	}
+
+	if c := claim(); c != nil {
+		t.Fatalf("ClaimSource of an on-demand source before Sync = %+v; want none", c)
+	}
+
+	if r := h.request(t, http.MethodPost, handbookPath+"/sync", "", nil); r.status != http.StatusAccepted {
+		t.Fatalf("sync = %d %s; want 202", r.status, r.body)
+	}
+
+	c := claim()
+	if c == nil || c.Source.Name != srcHandbook {
+		t.Fatalf("ClaimSource after Sync = %+v; want handbook", c)
+	}
+
+	if again := claim(); again != nil {
+		t.Errorf("a second ClaimSource after one Sync = %+v; want none", again)
+	}
+
+	in := domain.WithOrg(t.Context(), c.Org)
+	if err := h.kb.FinishSync(in, c.Lease, domain.SyncResult{At: later, Due: *c.Source.NextSyncAt}); err != nil {
+		t.Fatal(err)
 	}
 }
 
