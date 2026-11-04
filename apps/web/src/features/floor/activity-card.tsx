@@ -69,7 +69,7 @@ function Feed({ activity }: { activity: Activity }) {
             </time>
             <span
               aria-hidden="true"
-              className={cn('mt-[7px] size-1.5 shrink-0 rounded-full', dotTone[activityTone(event.kind)])}
+              className={cn('mt-2 size-1.5 shrink-0 rounded-full', dotTone[activityTone(event.kind)])}
             />
             <p className="m-0 min-w-0 flex-1 break-words text-body text-ink">
               <span className="font-semibold">{head}</span>

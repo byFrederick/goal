@@ -296,7 +296,7 @@ describe('AgentsPage', () => {
     const actual = await vi.importActual<typeof import('../../api/client')>('../../api/client');
 
     try {
-      renderPage(seeded(line, []).slice(0, 1));
+      renderPage(seeded(line, []).slice(0, 2));
 
       expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
     } finally {
