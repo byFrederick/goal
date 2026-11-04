@@ -138,6 +138,27 @@ board:
 
 `board.flow.followUpsFrom` lists the factories, by `metadata.id`, whose follow-ups this factory accepts. It is empty by default, so only the factory's own follow-ups reach it; a note from any other factory goes to triage.
 
+### Closing an item: `board.flow.outputs.close`
+
+`board.flow.outputs.close` names the output property whose text closes the item when nothing is left to do ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 11). With the key unset, no output closes its item.
+
+```yaml
+board:
+  flow:
+    outputs:
+      close: close
+```
+
+```json
+{ "close": "Nothing to do: the index this asks for already exists." }
+```
+
+- **Which items.** Only an item whose origin is `trigger` or `follow-up`, such as a triage item, can be closed. A person's item and a part never can.
+- **The text.** goald trims it. Empty or only whitespace closes nothing, and the item moves on as usual. Otherwise it must be 10 to 500 characters.
+- **Refusals.** The output fails its check, and goes back to the agent with the reason like any other bad output, when the item is a person's or a part, when the same output also has a `plan` on a line that materializes plans, or when the text is outside the limits or not a string. The reason tells the agent to ask a person instead ([ADR 0018](../adr/0018-agents-ask-questions.md)). The check runs before the plan is assembled, so an item never becomes an assembly and is closed in the same step.
+- **The outcome.** The transition that accepts the output cancels the item at its station: state `cancelled`, lease outcome `advanced`. Its `cancelled` event has the agent as actor and data `reason` (the text), `station`, `agent` and `closed: true`, and the audit log gets `item.cancelled` by the agent. This is not a person's Cancel, which takes a running run's lease. A gate that rejects ignores the close.
+- **Follow-ups of a closed triage item** keep File, as those of any cancelled triage item do, so a person can take any of them back.
+
 ## Station context
 
 A station's optional `context` list names what goald preloads into the `GOAL_FEEDBACK` of every run at the station. Its only value is `inflight` ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) decision 1); a station without `context` gets nothing preloaded.

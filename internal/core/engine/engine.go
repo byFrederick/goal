@@ -197,6 +197,9 @@ func (c Config) LongestClaim() time.Duration {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyStation is the event and audit data key naming the station an item was at.
+const keyStation = "station"
+
 // keyRule is the event data key of the factory rule a rule_violated event counts.
 const keyRule = "rule"
 
