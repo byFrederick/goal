@@ -179,7 +179,9 @@ func (h *harness) wantKeepRefusals(t *testing.T) {
 // version with the edits applied, and the stations it reaches factorymodel.StationsReached's.
 type tryLines struct{ c *definitions.Cache }
 
-func (d tryLines) CurrentLines(ctx context.Context) ([]domain.Line, error) { return d.c.CurrentLines(ctx) }
+func (d tryLines) CurrentLines(ctx context.Context) ([]domain.Line, error) {
+	return d.c.CurrentLines(ctx)
+}
 
 func (d tryLines) ProposedLine(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit) (domain.Line, []string, error) {
 	before, err := d.c.VersionFiles(ctx, v)
