@@ -77,6 +77,7 @@ const kept = (id: string, number: number, result: string | null, extra: object =
 beforeEach(() => {
   state.hasDraft = true;
   startDraftKeptTests.mockResolvedValue({ state: 'done', tests: [] });
+  getDraftKeptTests.mockResolvedValue({ state: 'done', tests: [] });
 });
 
 afterEach(() => {
