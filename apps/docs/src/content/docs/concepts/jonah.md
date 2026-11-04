@@ -88,6 +88,14 @@ When a Jonah proposal's own number gets worse, Needs you shows a `watch_worse` e
 
 Undo this change (`POST …/jonah/proposals/{number}/undo`, which needs `definition:edit`) writes a new proposal whose replacements are the published ones reversed, checked against the current version, whatever has been published since. The new proposal names the one it undoes, waits in Proposals like any other and publishes only when a person approves it. A file the proposal added stays in place; the reversed edits stop referring to it. The undo is refused with `undo-conflict`, naming the file, when the text the change wrote no longer appears exactly once. While an undo of the proposal is open, the Needs you entry goes away and a second undo is refused with `undo-open`.
 
+## Try another model
+
+Try another model proposes a different model for one agent, as an ordinary proposal. Run `goal agent try-model <agent> <model>`, or call `POST …/agents/{agent}/model-proposal` (it needs `definition:edit`).
+
+- **The estimate comes first.** Goal picks the agent's five newest finished items: done items whose first run of a claim by the agent is at a station of the current version that can be tried. It shows how each went on the line, such as "passed first time, $0.42" or "sent back 2 times at review, $1.10". It plans three tries per item and prices them at each item's original run cost × 3. It also shows what is left of Jonah's budget. Nothing is stored yet. `goal agent try-model` asks before it goes on; `--yes` skips the question.
+- **Then the proposal.** Once you confirm, goald writes a proposal against the current version. Its one edit is a replacement in `factory.yaml` that changes the agent's `model`, checked like a review's edits. Its evidence is the items with their line results. Three tries per item are queued with it, each rerunning the item's original run on the new model, in a box with only the model key; they run while Jonah is on for the factory. From there you approve, edit or reject it like any other proposal, and the watch follows it once it is published.
+- **Refusals.** The model must be one the organization's policy allows, and not the agent's model already (`model-not-allowed`). An agent that needs MCP servers or secrets cannot be tried (`agent-not-triable`). An agent with no finished item gets `no-finished-items`. Tries that would cost more than what is left of Jonah's budget get `learning-budget-exhausted`, with the estimate.
+
 The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in the repository). The evals and judges are described by ADR 0002 and ADR 0025 there.
 
 ## Where the review loop stands
@@ -106,6 +114,7 @@ A goald without judges or evals shows the Judges, Evals and Bake-offs pages empt
 
 - The Jonah overview shows each judge's pass rate over the last 30 days against its pass mark: the latest period in black, the earlier ones in grey, and the pass mark as a dashed line. Each chart opens that judge.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
+- `goal agent try-model` proposes another model for an agent.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
 - `goal spend` shows what runs cost, judges and reviews included.
 
