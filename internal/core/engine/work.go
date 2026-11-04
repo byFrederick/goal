@@ -775,7 +775,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c), By: agentActor(c)})
 
 		return
-	case v != nil && (c.noMerge || c.item.Untrusted) && c.station.Action == domain.ActionMerge:
+	case v != nil && c.waitsForPerson() && c.station.Action == domain.ActionMerge:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		t.To, t.Outcome = domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, domain.LeaseEscalated
 		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{keyReason: noMergeReason(c.item)}))
@@ -1006,6 +1006,12 @@ func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {
 	}
 
 	return a, nil
+}
+
+// waitsForPerson is whether an approved merge is left to a person: the organization policy lets no
+// agent merge, or the item came from outside text (ADR 0040 decision 21).
+func (c claimed) waitsForPerson() bool {
+	return c.noMerge || c.item.Untrusted
 }
 
 // noMergeReason is why an approved merge waits for a person: the item came from outside text
