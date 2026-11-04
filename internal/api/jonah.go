@@ -15,11 +15,13 @@ import (
 )
 
 // JonahDeps serve the Jonah routes (ADR 0034). Store reads reviews, proposals and observations
-// (a ports.JonahStore satisfies it) and Decisions decides proposals and queues reviews
-// (*jonah.Decider satisfies it, over NewJonahAuthoring).
+// (a ports.JonahStore satisfies it), Decisions decides proposals and queues reviews
+// (*jonah.Decider satisfies it, over NewJonahAuthoring), and Watches reads the watch on every
+// published change (ADR 0039 decision 14) for versions, proposals and the inbox; nil shows none.
 type JonahDeps struct {
 	Store     JonahReads
 	Decisions JonahDecisions
+	Watches   ports.Watches
 }
 
 // JonahReads are the reads of ports.JonahStore the Jonah routes make.
@@ -33,11 +35,13 @@ type JonahReads interface {
 
 // JonahDecisions decide proposals and queue manual reviews as the person in ctx; their refusals
 // are domain.ErrProposalDraftOpen, ErrProposalStale, ErrProposalDraftConflict, ErrReviewInFlight,
-// ErrLearningBudgetExhausted and ports.ErrProposalDecided.
+// ErrLearningBudgetExhausted and ports.ErrProposalDecided, and Undo's ErrProposalNotPublished,
+// ErrUndoConflict and ports.ErrConflict.
 type JonahDecisions interface {
 	Approve(ctx context.Context, f domain.FactoryID, number int64) (domain.Proposal, domain.DefinitionVersion, error)
 	Edit(ctx context.Context, f domain.FactoryID, number int64) (domain.Proposal, int64, error)
 	Reject(ctx context.Context, f domain.FactoryID, number int64, reason string) (domain.Proposal, error)
+	Undo(ctx context.Context, f domain.FactoryID, number int64) (domain.Proposal, error)
 	QueueReview(ctx context.Context, f domain.FactoryID, version domain.DefinitionVersionID, policy domain.JonahPolicy) (domain.JonahReview, error)
 }
 
@@ -275,13 +279,24 @@ func (s *server) GetProposal(ctx context.Context, req gen.GetProposalRequestObje
 		return nil, err
 	}
 
+	out, err := s.proposalOut(ctx, rec, p)
+	if err != nil {
+		return nil, err
+	}
+
+	return gen.GetProposal200JSONResponse(out), nil
+}
+
+// proposalOut is p of rec with its files, evidence, versions, the proposal it undoes and the
+// watch of its own number.
+func (s *server) proposalOut(ctx context.Context, rec ports.FactoryRecord, p domain.Proposal) (gen.Proposal, error) {
 	made, err := s.versions.Version(ctx, p.VersionID)
 	if err != nil {
-		return nil, fmt.Errorf("read version %s of proposal %d: %w", p.VersionID, p.Number, err)
+		return gen.Proposal{}, fmt.Errorf("read version %s of proposal %d: %w", p.VersionID, p.Number, err)
 	}
 
 	e := proposalEntry(p)
-	out := gen.GetProposal200JSONResponse{
+	out := gen.Proposal{
 		Number: e.Number, Title: e.Title, State: e.State, CreatedAt: e.CreatedAt, Paths: e.Paths, Agents: e.Agents,
 		Estimate: e.Estimate, EvidenceCount: e.EvidenceCount, Summary: p.Summary,
 		Evidence:           make([]gen.ProposalEvidence, 0, len(p.Evidence)),
@@ -289,7 +304,7 @@ func (s *server) GetProposal(ctx context.Context, req gen.GetProposalRequestObje
 	}
 
 	if out.Files, err = s.proposalFilesOut(ctx, rec.ID, p, made.Number); err != nil {
-		return nil, err
+		return gen.Proposal{}, err
 	}
 
 	for _, ev := range p.Evidence {
@@ -306,7 +321,7 @@ func (s *server) GetProposal(ctx context.Context, req gen.GetProposalRequestObje
 	if p.PublishedVersionID != "" {
 		v, err := s.versions.Version(ctx, p.PublishedVersionID)
 		if err != nil {
-			return nil, fmt.Errorf("read the version proposal %d published: %w", p.Number, err)
+			return gen.Proposal{}, fmt.Errorf("read the version proposal %d published: %w", p.Number, err)
 		}
 
 		out.PublishedVersion = &v.Number
@@ -318,6 +333,21 @@ func (s *server) GetProposal(ctx context.Context, req gen.GetProposalRequestObje
 
 	if p.DecidedBy != "" {
 		out.DecidedBy, out.DecidedAt = &p.DecidedBy, &p.DecidedAt
+	}
+
+	if p.Undoes != "" {
+		numbers, err := s.proposalNumbers(ctx, rec.ID)
+		if err != nil {
+			return gen.Proposal{}, err
+		}
+
+		if n, ok := numbers[p.Undoes]; ok {
+			out.Undoes = &n
+		}
+	}
+
+	if out.Watch, err = s.proposalWatch(ctx, p); err != nil {
+		return gen.Proposal{}, err
 	}
 
 	return out, nil
@@ -561,6 +591,20 @@ func (a *JonahAuthoring) Head(ctx context.Context, f domain.FactoryID) (current 
 // CurrentFile is path in f's current version.
 func (a *JonahAuthoring) CurrentFile(ctx context.Context, f domain.FactoryID, path string) ([]byte, bool, error) {
 	return a.file(ctx, f, authoring.SelectCurrent, path)
+}
+
+// VersionFile is path in f's published version.
+func (a *JonahAuthoring) VersionFile(ctx context.Context, f domain.FactoryID, version domain.DefinitionVersionID, path string) ([]byte, bool, error) {
+	file, err := a.defs.VersionFileByID(ctx, f, version, path)
+	if errors.Is(err, authoring.ErrFileNotFound) {
+		return nil, false, nil
+	}
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	return file.Content, true, nil
 }
 
 // DraftFile is path in f's open draft.

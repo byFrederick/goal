@@ -29,6 +29,7 @@ var jonahTests = []struct {
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},
 	{"Jonah_DecideProposalOnlyOnce", testJonahDecide},
+	{"Jonah_UndoProposalOncePerProposal", testJonahUndo},
 	{"Jonah_OtherOrgInvisible", testJonahTenancy},
 	{"Jonah_SpendSinceSumsJonahRuns", testJonahSpend},
 	{"Jonah_SentBackBetweenListsWindow", testJonahSentBackBetween},
@@ -501,6 +502,39 @@ func testJonahDecide(f *fixture) {
 	}
 
 	f.expectNoProposal(t, 9)
+}
+
+// An undo proposal has no review, takes the factory's next number and names the proposal it
+// reverses; a second refuses with ErrConflict while the first is proposed, and is stored once
+// the first is rejected.
+func testJonahUndo(f *fixture) {
+	t := f.t
+	_, made := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{Proposals: []domain.NewProposal{proposal("a", "rules/a.md")}})
+	version := f.NewVersion(t, f.org, f.factory)
+	undo := proposal("Undo proposal 1: a", "rules/a.md")
+
+	u, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, made[0].ID, version, undo, t1)
+	if err != nil {
+		t.Fatalf("UndoProposal: %v", err)
+	}
+
+	if u.Number != 2 || u.Undoes != made[0].ID || u.ReviewID != "" || u.VersionID != version || u.State != domain.ProposalProposed {
+		t.Errorf("undo %+v, want proposal 2 undoing %s on %s without a review", u, made[0].ID, version)
+	}
+
+	if got, _ := f.Jonah.Proposal(f.ctx(t), f.factory, 2); got.Undoes != made[0].ID || got.ReviewID != "" {
+		t.Errorf("read back %+v, want it to undo %s", got, made[0].ID)
+	}
+
+	if _, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, made[0].ID, version, undo, t1); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("second undo: %v, want ErrConflict", err)
+	}
+
+	f.decide(t, 2, domain.ProposalDecision{State: domain.ProposalRejected, RejectReason: "keep it", By: ada, At: t1})
+
+	if again, err := f.Jonah.UndoProposal(f.ctx(t), f.factory, made[0].ID, version, undo, t1); err != nil || again.Number != 3 {
+		t.Errorf("undo after the first was rejected: %+v, %v; want proposal 3", again, err)
+	}
 }
 
 // expectNoProposal checks that the factory has no proposal of number to read or decide.

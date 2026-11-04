@@ -171,6 +171,11 @@ type JonahStore interface {
 	// must pass Check; ErrNotFound when there is no such proposal, ErrProposalDecided when it
 	// is no longer proposed.
 	DecideProposal(ctx context.Context, factory domain.FactoryID, number int64, d domain.ProposalDecision) (domain.Proposal, error)
+	// UndoProposal stores n as a proposal of the factory with its next number, made against
+	// version, that reverses the proposal undoes (Undo this change, ADR 0039 decision 15): it has
+	// no review. n must pass Check (domain.ErrInvalid); ErrConflict when an undo of that proposal
+	// is proposed, published or applied.
+	UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal, at time.Time) (domain.Proposal, error)
 	// Observations is the factory's latest observations, newest first, at most limit.
 	Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
 	// JonahSpendSince sums the cost of the factory's runs of kind jonah started at or after

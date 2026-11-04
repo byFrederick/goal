@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,6 +34,8 @@ type definition struct {
 	number   int
 	draft    map[string]string
 	revision int64
+	// published are the files of each version Publish published, by number.
+	published map[int]map[string]string
 	// gate refuses every publish, keeping the draft, when set.
 	gate      bool
 	discarded int
@@ -55,6 +59,22 @@ func (d *definition) CurrentFile(_ context.Context, _ domain.FactoryID, path str
 	defer d.mu.Unlock()
 
 	c, ok := d.current[path]
+
+	return []byte(c), ok, nil
+}
+
+func (d *definition) VersionFile(_ context.Context, _ domain.FactoryID, version domain.DefinitionVersionID, path string) ([]byte, bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	files := d.published[0]
+	if n, err := strconv.Atoi(strings.TrimPrefix(string(version), "v")); err == nil && n == d.number {
+		files = d.current
+	} else if err == nil && d.published[n] != nil {
+		files = d.published[n]
+	}
+
+	c, ok := files[path]
 
 	return []byte(c), ok, nil
 }
@@ -108,6 +128,11 @@ func (d *definition) Publish(_ context.Context, _ domain.FactoryID, _ int64, exp
 		return domain.DefinitionVersion{}, false, errors.New("base moved")
 	}
 
+	if d.published == nil {
+		d.published = map[int]map[string]string{}
+	}
+
+	d.published[d.number] = d.current
 	d.current, d.draft = d.draft, nil
 	d.number++
 
@@ -409,6 +434,95 @@ func TestDecide_QueueReview(t *testing.T) {
 	if _, err := f.dc.QueueReview(ctx, factory, versionID(1), policy); !errors.Is(err, domain.ErrLearningBudgetExhausted) {
 		t.Errorf("review over budget = %v, want ErrLearningBudgetExhausted", err)
 	}
+}
+
+// publishFile publishes path as content on top of the current version, as a person's later
+// publish does.
+func (f *decideFixture) publishFile(ctx context.Context, t *testing.T, path, content string) {
+	t.Helper()
+
+	if _, _, err := f.def.OpenDraft(ctx, factory); err != nil {
+		t.Fatal(err)
+	}
+
+	rev, err := f.def.WriteFile(ctx, factory, path, []byte(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := f.def.Publish(ctx, factory, rev, versionID(f.def.number), "later"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Undo this change reverses the published edit against the current version, after a later
+// publish changed the same file elsewhere, and publishes nothing; the file the proposal added is
+// left. A second undo waits for the first to be decided.
+func TestDecider_UndoReversesAfterLaterPublish(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t)
+
+	if _, _, err := f.dc.Approve(ctx, factory, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	f.publishFile(ctx, t, agentPath, "# writer\nAttach a screenshot.\nBe brief.\n")
+
+	undo, err := f.dc.Undo(ctx, factory, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first := f.state(ctx, t)
+	now := f.def.current[agentPath]
+
+	want := []domain.ProposalFile{{Path: agentPath, BaseSHA256: string(domain.HashBlob([]byte(now))), Content: "# writer\nBe brief.\n"}}
+	if undo.Number != 2 || undo.Undoes != first.ID || undo.State != domain.ProposalProposed || undo.VersionID != versionID(3) ||
+		!reflect.DeepEqual(undo.Files, want) {
+		t.Errorf("undo = %+v, want proposal 2 undoing proposal 1 against v3 with %+v", undo, want)
+	}
+
+	if f.def.number != 3 || f.def.draft != nil {
+		t.Errorf("after the undo the factory is at v%d with draft %v; want v3 and no draft: nothing publishes", f.def.number, f.def.draft)
+	}
+
+	if got := f.audit.actions(); got[len(got)-1] != domain.AuditProposalUndo {
+		t.Errorf("audit = %v, want %s last", got, domain.AuditProposalUndo)
+	}
+
+	if _, err := f.dc.Undo(ctx, factory, 1); !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("second undo = %v, want ErrConflict", err)
+	}
+}
+
+func TestDecider_UndoRefusals(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a proposal never published", func(t *testing.T) {
+		t.Parallel()
+
+		f, ctx := newDecideFixture(t)
+		if _, err := f.dc.Undo(ctx, factory, 1); !errors.Is(err, domain.ErrProposalNotPublished) {
+			t.Errorf("undo = %v, want ErrProposalNotPublished", err)
+		}
+	})
+
+	t.Run("the changed text is gone", func(t *testing.T) {
+		t.Parallel()
+
+		f, ctx := newDecideFixture(t)
+		if _, _, err := f.dc.Approve(ctx, factory, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		f.publishFile(ctx, t, agentPath, "# writer\nAttach two screenshots.\n")
+
+		_, err := f.dc.Undo(ctx, factory, 1)
+		if !errors.Is(err, domain.ErrUndoConflict) || !strings.Contains(err.Error(), agentPath) {
+			t.Errorf("undo = %v, want ErrUndoConflict naming %s", err, agentPath)
+		}
+	})
 }
 
 // A failed review never moves the window: the next manual review starts where the last done one

@@ -380,7 +380,7 @@ func TestJonah_Permissions(t *testing.T) {
 	h.as(acmeMember(domain.FactoryViewer))
 
 	for _, c := range []struct{ path, body string }{
-		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", rejectBody}, {acmeJonah + "/reviews", ""},
+		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", rejectBody}, {path + "/undo", ""}, {acmeJonah + "/reviews", ""},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body)
 		wantProblem(t, "a viewer's POST "+c.path, code, p, http.StatusForbidden, "forbidden")
@@ -509,7 +509,7 @@ func (h *harness) wantProposalPages(t *testing.T, stored []domain.Proposal) {
 	e := second.Proposals[0]
 	got := fmt.Sprint(e.Paths, e.Agents, e.EvidenceCount, val(e.Estimate))
 	want := fmt.Sprint([]string{writerFile, rulePath}, []string{writerAgent}, 1,
-		gen.ProposalEstimate{Metric: gen.SentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUsd: 0.05})
+		gen.ProposalEstimate{Metric: gen.ProposalEstimateMetricSentBackRate, Station: reviewStation, Before: 0.4, After: 0.2, CostPerItemUsd: 0.05})
 
 	if got != want {
 		t.Errorf("entry = %s, want %s", got, want)

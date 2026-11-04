@@ -2353,6 +2353,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+         * @description Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+         */
+        post: operations["undoProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/jonah/reviews": {
         parameters: {
             query?: never;
@@ -6092,6 +6119,64 @@ export interface components {
             decided_by?: string;
             /** Format: date-time */
             decided_at?: string;
+            /**
+             * Format: int64
+             * @description The number of the proposal this one reverses (Undo this change)
+             */
+            undoes?: number;
+            /** @description The watch of the proposal's own number (estimate.metric at estimate.station) since Approve published it; absent until the first watch sweep after the publish */
+            watch?: components["schemas"]["Watch"];
+        };
+        /**
+         * @description sent_back_rate: the share of items a person sent back at the station; cost_per_item: the USD of an item's runs there; lead_time_p85: the 85th percentile of an item's time there, in seconds. Lower is better for each.
+         * @enum {string}
+         */
+        WatchMetric: "sent_back_rate" | "cost_per_item" | "lead_time_p85";
+        /**
+         * @description helped or worse: the 90% interval of after minus before clears the minimum effect (5 points for a rate, 10% of before for cost and lead time); no_change: it lies inside that minimum; too_early: neither yet; no_clear_change: still neither after 14 days or 150 items after the change
+         * @enum {string}
+         */
+        WatchVerdict: "too_early" | "helped" | "worse" | "no_change" | "no_clear_change";
+        WatchSide: {
+            /** @description The items counted on this side */
+            items: number;
+            /**
+             * Format: double
+             * @description The metric over them
+             */
+            value: number;
+        };
+        /** @description A 90% interval of after minus before */
+        WatchInterval: {
+            /** Format: double */
+            low: number;
+            /** Format: double */
+            high: number;
+        };
+        /** @description One published change watched at one station on one metric (ADR 0039 decision 14). Each item's outcome at the station counts for the definition version of its run there: before covers the versions since the last change that reached the station, after the change's version and those after it until the next change that reaches the station. */
+        Watch: {
+            station: string;
+            metric: components["schemas"]["WatchMetric"];
+            /**
+             * Format: int64
+             * @description The Jonah proposal whose own number this is; absent for a person's publish
+             */
+            proposal?: number;
+            before: components["schemas"]["WatchSide"];
+            after: components["schemas"]["WatchSide"];
+            /** @description null while either side has fewer than two items */
+            interval: components["schemas"]["WatchInterval"] | null;
+            verdict: components["schemas"]["WatchVerdict"];
+            /**
+             * Format: date-time
+             * @description When the change was published
+             */
+            opened_at: string;
+            /**
+             * Format: date-time
+             * @description When the verdict became final; null while it is watched
+             */
+            closed_at: string | null;
         };
         ProposalReject: {
             reason: string;
@@ -6974,12 +7059,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo)
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -6989,7 +7074,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -7014,6 +7099,8 @@ export interface components {
             conversion?: components["schemas"]["InboxConversion"] | null;
             /** @description Why the knowledge source does not sync; absent or null for other kinds */
             knowledge_source?: components["schemas"]["InboxKnowledgeSource"] | null;
+            /** @description The watch of a watch_worse entry, with its proposal's number; absent or null for other kinds */
+            watch?: components["schemas"]["Watch"] | null;
         };
         /** @description A knowledge source whose last syncs failed, shown under each factory that lists it. */
         InboxKnowledgeSource: {
@@ -7517,6 +7604,8 @@ export interface components {
             /** @description This is the version that runs */
             current: boolean;
             counts: components["schemas"]["DefinitionCounts"];
+            /** @description The watches of this version's change, by station and metric: a Jonah proposal's own number, or the send-back rate and cost per item at each station it reaches; empty for a change not watched yet and absent for a draft */
+            watches?: components["schemas"]["Watch"][];
         };
         VersionDetail: components["schemas"]["Version"] & {
             files: components["schemas"]["FileInfo"][];
@@ -11980,6 +12069,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalDecided"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    undoProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The proposal's number in its factory, from 1 */
+                number: components["parameters"]["ProposalNumber"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The undo proposal */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
                 };
             };
             default: components["responses"]["Problem"];

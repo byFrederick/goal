@@ -261,7 +261,7 @@ type JonahProposal struct {
 	OrgID              uuid.UUID
 	FactoryID          uuid.UUID
 	Number             int64
-	ReviewID           uuid.UUID
+	ReviewID           *uuid.UUID
 	VersionID          uuid.UUID
 	State              string
 	Title              string
@@ -275,6 +275,7 @@ type JonahProposal struct {
 	DecidedBy          *string
 	DecidedAt          *time.Time
 	CreatedAt          time.Time
+	Undoes             *uuid.UUID
 }
 
 type JonahReview struct {
@@ -350,6 +351,26 @@ type SavedView struct {
 	Filters   []byte
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type Watch struct {
+	ID           uuid.UUID
+	OrgID        uuid.UUID
+	FactoryID    uuid.UUID
+	VersionID    uuid.UUID
+	ProposalID   *uuid.UUID
+	Station      string
+	Metric       string
+	BeforeN      int32
+	BeforeValue  float64
+	AfterN       int32
+	AfterValue   float64
+	IntervalLow  *float64
+	IntervalHigh *float64
+	Verdict      string
+	OpenedAt     time.Time
+	ClosedAt     *time.Time
+	UpdatedAt    time.Time
 }
 
 type WorkItem struct {

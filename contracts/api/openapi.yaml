@@ -2851,6 +2851,31 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ProposalDecided" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - $ref: "#/components/parameters/ProposalNumber"
+    post:
+      operationId: undoProposal
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+      description: >-
+        Works out the replacements the proposal's publish made, from each file in the version it
+        was made against and its published content, and reverses them against the current
+        version, whatever has published since. A file the proposal added is left. The new
+        proposal is proposed, with undoes set, and publishes only when a person approves it. 409
+        proposal-not-published when the proposal was never published; undo-conflict, naming the
+        file, when a reversed replacement's text no longer occurs exactly once; undo-open while
+        an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+      responses:
+        "201":
+          description: The undo proposal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Proposal" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/jonah/reviews:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -7572,6 +7597,63 @@ components:
             reject_reason: { type: string }
             decided_by: { type: string, description: "The actor ref of who decided it" }
             decided_at: { type: string, format: date-time }
+            undoes: { type: integer, format: int64, description: The number of the proposal this one reverses (Undo this change) }
+            watch:
+              description: >-
+                The watch of the proposal's own number (estimate.metric at estimate.station) since
+                Approve published it; absent until the first watch sweep after the publish
+              allOf:
+                - $ref: "#/components/schemas/Watch"
+    WatchMetric:
+      type: string
+      description: >-
+        sent_back_rate: the share of items a person sent back at the station; cost_per_item: the
+        USD of an item's runs there; lead_time_p85: the 85th percentile of an item's time there,
+        in seconds. Lower is better for each.
+      enum: [sent_back_rate, cost_per_item, lead_time_p85]
+    WatchVerdict:
+      type: string
+      description: >-
+        helped or worse: the 90% interval of after minus before clears the minimum effect (5
+        points for a rate, 10% of before for cost and lead time); no_change: it lies inside that
+        minimum; too_early: neither yet; no_clear_change: still neither after 14 days or 150 items
+        after the change
+      enum: [too_early, helped, worse, no_change, no_clear_change]
+    WatchSide:
+      type: object
+      required: [items, value]
+      properties:
+        items: { type: integer, description: The items counted on this side }
+        value: { type: number, format: double, description: The metric over them }
+    WatchInterval:
+      type: object
+      description: A 90% interval of after minus before
+      required: [low, high]
+      properties:
+        low: { type: number, format: double }
+        high: { type: number, format: double }
+    Watch:
+      type: object
+      description: >-
+        One published change watched at one station on one metric (ADR 0039 decision 14). Each
+        item's outcome at the station counts for the definition version of its run there: before
+        covers the versions since the last change that reached the station, after the change's
+        version and those after it until the next change that reaches the station.
+      required: [station, metric, before, after, interval, verdict, opened_at, closed_at]
+      properties:
+        station: { type: string }
+        metric: { $ref: "#/components/schemas/WatchMetric" }
+        proposal: { type: integer, format: int64, description: The Jonah proposal whose own number this is; absent for a person's publish }
+        before: { $ref: "#/components/schemas/WatchSide" }
+        after: { $ref: "#/components/schemas/WatchSide" }
+        interval:
+          description: null while either side has fewer than two items
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/WatchInterval"
+        verdict: { $ref: "#/components/schemas/WatchVerdict" }
+        opened_at: { type: string, format: date-time, description: When the change was published }
+        closed_at: { type: string, format: date-time, nullable: true, description: When the verdict became final; null while it is watched }
     ProposalReject:
       type: object
       required: [reason]
@@ -8557,8 +8639,10 @@ components:
         conversion: a factory Goal could not move from connections to secrets and environment files
         (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and
         publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038
-        decision 3), once for each factory that lists it
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source]
+        decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got
+        worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo
+        this change (POST …/jonah/proposals/{number}/undo)
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8567,7 +8651,8 @@ components:
           type: string
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
-            andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
+            andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>,
+            watch_worse:<proposal id>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -8581,7 +8666,8 @@ components:
           format: date-time
           description: >-
             Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation
-            (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
+            (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the
+            watch's last update (watch_worse)
         item:
           description: The item it is about, or null for an entry that is about no item
           nullable: true
@@ -8633,6 +8719,11 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/InboxKnowledgeSource"
+        watch:
+          description: The watch of a watch_worse entry, with its proposal's number; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/Watch"
     InboxKnowledgeSource:
       type: object
       description: A knowledge source whose last syncs failed, shown under each factory that lists it.
@@ -9214,6 +9305,13 @@ components:
           allOf: [{ $ref: "#/components/schemas/Actor" }]
         current: { type: boolean, description: This is the version that runs }
         counts: { $ref: "#/components/schemas/DefinitionCounts" }
+        watches:
+          type: array
+          description: >-
+            The watches of this version's change, by station and metric: a Jonah proposal's own
+            number, or the send-back rate and cost per item at each station it reaches; empty for a
+            change not watched yet and absent for a draft
+          items: { $ref: "#/components/schemas/Watch" }
     VersionDetail:
       allOf:
         - $ref: "#/components/schemas/Version"

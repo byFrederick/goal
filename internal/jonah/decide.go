@@ -22,6 +22,9 @@ type Authoring interface {
 	Head(ctx context.Context, f domain.FactoryID) (current domain.DefinitionVersionID, draftOpen bool, err error)
 	// CurrentFile is path's content in the current version; ok false when it has no such file.
 	CurrentFile(ctx context.Context, f domain.FactoryID, path string) (content []byte, ok bool, err error)
+	// VersionFile is path's content in the published version; ok false when it has no such
+	// file.
+	VersionFile(ctx context.Context, f domain.FactoryID, version domain.DefinitionVersionID, path string) (content []byte, ok bool, err error)
 	// DraftFile is path's content in the open draft; ok false when it has no such file.
 	DraftFile(ctx context.Context, f domain.FactoryID, path string) (content []byte, ok bool, err error)
 	// OpenDraft opens a draft from the current version, or returns the open one with created
@@ -42,6 +45,7 @@ type Authoring interface {
 type Proposals interface {
 	Proposal(ctx context.Context, factory domain.FactoryID, number int64) (domain.Proposal, error)
 	DecideProposal(ctx context.Context, factory domain.FactoryID, number int64, d domain.ProposalDecision) (domain.Proposal, error)
+	UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal, at time.Time) (domain.Proposal, error)
 	QueueJonahReview(ctx context.Context, n domain.NewJonahReview) (domain.JonahReview, error)
 	LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error)
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
@@ -252,6 +256,117 @@ func (dc *Decider) Reject(ctx context.Context, f domain.FactoryID, number int64,
 	}
 
 	return decided, nil
+}
+
+// maxUndoTitle is a proposal's longest title, which an undo's "Undo proposal N: " prefix may cut.
+const maxUndoTitle = 200
+
+// Undo writes Undo this change for proposal number of f (ADR 0039 decision 15): a new proposal,
+// made against the current version, that reverses the published change's replacements. They are
+// worked out from the file each edit was made against and its published content, and reversed
+// against each file now, so the undo works whatever has published since. A file the change added
+// is left: the reversed edits stop referring to it. Nothing publishes: the undo waits for a
+// person like any proposal.
+//
+// It refuses with domain.ErrProposalNotPublished for a proposal never published,
+// domain.ErrUndoConflict, naming the file, when a reversed edit's text no longer occurs exactly
+// once, and ports.ErrConflict while an undo of the proposal is proposed, published or applied.
+func (dc *Decider) Undo(ctx context.Context, f domain.FactoryID, number int64) (domain.Proposal, error) {
+	by, err := actor(ctx)
+	if err != nil {
+		return domain.Proposal{}, err
+	}
+
+	p, err := dc.d.Proposals.Proposal(ctx, f, number)
+	if err != nil {
+		return domain.Proposal{}, fmt.Errorf("read proposal %d: %w", number, err)
+	}
+
+	if p.State != domain.ProposalPublished || p.PublishedVersionID == "" {
+		return domain.Proposal{}, fmt.Errorf("undo proposal %d, %s: %w", number, p.State, domain.ErrProposalNotPublished)
+	}
+
+	current, _, err := dc.d.Authoring.Head(ctx, f)
+	if err != nil {
+		return domain.Proposal{}, fmt.Errorf("undo proposal %d: %w", number, err)
+	}
+
+	files, err := dc.reversed(ctx, f, p)
+	if err != nil {
+		return domain.Proposal{}, err
+	}
+
+	title := "Undo proposal " + strconv.FormatInt(p.Number, 10) + ": " + p.Title
+	if r := []rune(title); len(r) > maxUndoTitle {
+		title = string(r[:maxUndoTitle])
+	}
+
+	now := dc.d.Clock.Now().UTC()
+
+	undo, err := dc.d.Proposals.UndoProposal(ctx, f, p.ID, current, domain.NewProposal{
+		Title: title, Files: files,
+		Summary: "Reverses the change proposal " + strconv.FormatInt(p.Number, 10) + " published, against the current version.",
+	}, now)
+	if err != nil {
+		return domain.Proposal{}, fmt.Errorf("undo proposal %d: %w", number, err)
+	}
+
+	if err := dc.d.Audit.Append(ctx, domain.AuditEntry{
+		At: now, Actor: by, Action: domain.AuditProposalUndo, TargetKind: domain.AuditTargetProposal, TargetID: string(undo.ID),
+		FactoryID: f, Data: map[string]any{"number": undo.Number, "undoes": p.Number},
+	}); err != nil {
+		return domain.Proposal{}, fmt.Errorf("audit proposal %d: %w", undo.Number, err)
+	}
+
+	return undo, nil
+}
+
+// reversed are p's edited files as they are now with p's change reversed, each based on its
+// current content. A file p added, or whose edit changed nothing, is left out.
+func (dc *Decider) reversed(ctx context.Context, f domain.FactoryID, p domain.Proposal) ([]domain.ProposalFile, error) {
+	var out []domain.ProposalFile
+
+	for _, file := range p.Files {
+		if file.BaseSHA256 == "" {
+			continue
+		}
+
+		base, ok, err := dc.d.Authoring.VersionFile(ctx, f, p.VersionID, file.Path)
+		if err != nil {
+			return nil, fmt.Errorf("undo proposal %d: read %s as it was: %w", p.Number, file.Path, err)
+		}
+
+		if !ok {
+			return nil, fmt.Errorf("undo proposal %d: %s is not in the version it was made against: %w", p.Number, file.Path, domain.ErrUndoConflict)
+		}
+
+		reps := domain.ReplacementsOf(string(base), file.Content)
+		if len(reps) == 0 {
+			continue
+		}
+
+		now, ok, err := dc.d.Authoring.CurrentFile(ctx, f, file.Path)
+		if err != nil {
+			return nil, fmt.Errorf("undo proposal %d: read %s: %w", p.Number, file.Path, err)
+		}
+
+		if !ok {
+			return nil, fmt.Errorf("undo proposal %d: %s is gone: %w", p.Number, file.Path, domain.ErrUndoConflict)
+		}
+
+		content, err := domain.ApplyReplacements(string(now), domain.ReverseReplacements(reps))
+		if err != nil {
+			return nil, fmt.Errorf("undo proposal %d: %s: %w: %w", p.Number, file.Path, domain.ErrUndoConflict, err)
+		}
+
+		out = append(out, domain.ProposalFile{Path: file.Path, BaseSHA256: string(domain.HashBlob(now)), Content: content})
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("undo proposal %d: no edit to reverse: %w", p.Number, domain.ErrUndoConflict)
+	}
+
+	return out, nil
 }
 
 // QueueReview queues a manual review of f on version, under policy (decision 2): it reads what

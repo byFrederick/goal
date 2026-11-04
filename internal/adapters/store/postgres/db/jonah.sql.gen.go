@@ -58,7 +58,7 @@ UPDATE jonah_proposals
 SET state = $1, published_version_id = $2, reject_reason = $3,
     decided_by = $4, decided_at = $5::timestamptz
 WHERE factory_id = $6 AND number = $7 AND state = 'proposed'
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes
 `
 
 type DecideProposalParams struct {
@@ -102,6 +102,7 @@ func (q *Queries) DecideProposal(ctx context.Context, arg DecideProposalParams) 
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.Undoes,
 	)
 	return i, err
 }
@@ -474,14 +475,14 @@ INSERT INTO jonah_proposals (id, factory_id, number, review_id, version_id, titl
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11::text[],
         $12)
-RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes
 `
 
 type InsertProposalParams struct {
 	ID        uuid.UUID
 	FactoryID uuid.UUID
 	Number    int64
-	ReviewID  uuid.UUID
+	ReviewID  *uuid.UUID
 	VersionID uuid.UUID
 	Title     string
 	Summary   string
@@ -527,6 +528,67 @@ func (q *Queries) InsertProposal(ctx context.Context, arg InsertProposalParams) 
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.Undoes,
+	)
+	return i, err
+}
+
+const insertUndoProposal = `-- name: InsertUndoProposal :one
+INSERT INTO jonah_proposals (id, factory_id, number, undoes, version_id, title, summary, files, paths, created_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9::text[], $10)
+RETURNING id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes
+`
+
+type InsertUndoProposalParams struct {
+	ID        uuid.UUID
+	FactoryID uuid.UUID
+	Number    int64
+	Undoes    *uuid.UUID
+	VersionID uuid.UUID
+	Title     string
+	Summary   string
+	Files     []byte
+	Paths     []string
+	CreatedAt time.Time
+}
+
+// An undo proposal: no review, undoes the proposal it reverses. The undo key's conflict means
+// one is already proposed, published or applied.
+func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposalParams) (JonahProposal, error) {
+	row := q.db.QueryRow(ctx, insertUndoProposal,
+		arg.ID,
+		arg.FactoryID,
+		arg.Number,
+		arg.Undoes,
+		arg.VersionID,
+		arg.Title,
+		arg.Summary,
+		arg.Files,
+		arg.Paths,
+		arg.CreatedAt,
+	)
+	var i JonahProposal
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ReviewID,
+		&i.VersionID,
+		&i.State,
+		&i.Title,
+		&i.Summary,
+		&i.Files,
+		&i.Evidence,
+		&i.Estimate,
+		&i.Paths,
+		&i.PublishedVersionID,
+		&i.RejectReason,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.CreatedAt,
+		&i.Undoes,
 	)
 	return i, err
 }
@@ -685,7 +747,7 @@ func (q *Queries) LatestObservations(ctx context.Context, arg LatestObservations
 }
 
 const proposalByNumber = `-- name: ProposalByNumber :one
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at FROM jonah_proposals WHERE factory_id = $1 AND number = $2
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes FROM jonah_proposals WHERE factory_id = $1 AND number = $2
 `
 
 type ProposalByNumberParams struct {
@@ -715,12 +777,13 @@ func (q *Queries) ProposalByNumber(ctx context.Context, arg ProposalByNumberPara
 		&i.DecidedBy,
 		&i.DecidedAt,
 		&i.CreatedAt,
+		&i.Undoes,
 	)
 	return i, err
 }
 
 const proposals = `-- name: Proposals :many
-SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at FROM jonah_proposals
+SELECT id, org_id, factory_id, number, review_id, version_id, state, title, summary, files, evidence, estimate, paths, published_version_id, reject_reason, decided_by, decided_at, created_at, undoes FROM jonah_proposals
 WHERE factory_id = $1
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::bigint IS NULL OR number < $3::bigint)
@@ -770,6 +833,7 @@ func (q *Queries) Proposals(ctx context.Context, arg ProposalsParams) ([]JonahPr
 			&i.DecidedBy,
 			&i.DecidedAt,
 			&i.CreatedAt,
+			&i.Undoes,
 		); err != nil {
 			return nil, err
 		}

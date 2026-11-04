@@ -85,7 +85,7 @@ func TestJonah_ProposalChecks(t *testing.T) {
 
 		return s.inTx(ctx, func(q *db.Queries) error {
 			_, err := q.InsertProposal(ctx, db.InsertProposalParams{
-				ID: uuid.Must(uuid.NewV7()), FactoryID: review.FactoryID, Number: 99, ReviewID: review.ID, VersionID: review.VersionID,
+				ID: uuid.Must(uuid.NewV7()), FactoryID: review.FactoryID, Number: 99, ReviewID: &review.ID, VersionID: review.VersionID,
 				Title: "raw", Files: raw, Evidence: []byte("[]"), Estimate: []byte("{}"), Paths: paths, CreatedAt: jonahAt,
 			})
 

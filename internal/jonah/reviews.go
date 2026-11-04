@@ -442,6 +442,8 @@ func before(metric domain.ProposalMetric, f domain.StationFlow) float64 {
 		return rate
 	case domain.MetricLeadTimeP85:
 		return f.LeadTimeP85.Hours()
+	case domain.MetricCostPerItem: // a watch's metric, never a proposal's estimate
+		return 0
 	default:
 		return 0
 	}
