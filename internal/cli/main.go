@@ -29,8 +29,7 @@ const usage = `usage:
                                                   proxy, run goald (and, with sign-in, Mailpit and the auth
                                                   service); --compose runs goald and the auth service as
                                                   compose services too, and returns once they are healthy
-  goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
-           [--at <time> | --in <wait>] [--after <item>]...
+  goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach] [--at <time> | --in <wait>] [--after <item>]...
                                                   submit a work item and follow it until a human or done
                                                   (--type: one of the factory's work types; default its
                                                   first, none when it declares none); with a start it
