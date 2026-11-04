@@ -21,6 +21,13 @@ func (c *Cache) Rules(ctx context.Context, id domain.DefinitionVersionID, run do
 		return nil, err
 	}
 
+	return rulesOf(v, run)
+}
+
+// rulesOf is Rules of v.
+func rulesOf(v *version, run domain.RuleTarget) ([]domain.RunRule, error) {
+	id := v.id
+
 	declared := make([]domain.Rule, 0, len(v.factory.Spec.Rules))
 	hashes := make(map[string]domain.BlobHash, len(v.factory.Spec.Rules))
 

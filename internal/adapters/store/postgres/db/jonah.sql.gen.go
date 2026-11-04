@@ -597,8 +597,8 @@ func (q *Queries) InsertUndoProposal(ctx context.Context, arg InsertUndoProposal
 }
 
 const jonahSpendSince = `-- name: JonahSpendSince :one
-SELECT coalesce(sum(cost_usd) FILTER (WHERE kind <> 'jonah'), 0)::float8 AS line_usd,
-  coalesce(sum(cost_usd) FILTER (WHERE kind = 'jonah'), 0)::float8 AS jonah_usd
+SELECT coalesce(sum(cost_usd) FILTER (WHERE kind NOT IN ('jonah', 'try')), 0)::float8 AS line_usd,
+  coalesce(sum(cost_usd) FILTER (WHERE kind IN ('jonah', 'try')), 0)::float8 AS jonah_usd
 FROM agent_runs
 WHERE factory_id = $1 AND started_at >= $2
 `
@@ -613,8 +613,8 @@ type JonahSpendSinceRow struct {
 	JonahUsd float64
 }
 
-// The cost of the factory's runs started at or after since, the line's (every kind but jonah) and
-// Jonah's: Jonah's budget is a share of the first (ADR 0039 decision 16). Row-level security
+// The cost of the factory's runs started at or after since, the line's (station runs) and Jonah's
+// (its reviews and tries): Jonah's budget is a share of the first (ADR 0039 decision 16). Row-level security
 // scopes it to the organization; agent_runs_factory_started_idx serves the range.
 func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams) (JonahSpendSinceRow, error) {
 	row := q.db.QueryRow(ctx, jonahSpendSince, arg.FactoryID, arg.Since)

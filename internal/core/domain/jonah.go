@@ -48,14 +48,20 @@ const (
 	AuditTargetJonahReview = "jonah_review"
 )
 
-// RunKind is whose run an agent run is: a line's, at a station, or a Jonah review's (ADR 0034).
+// RunKind is whose run an agent run is: a line's, at a station, a Jonah review's (ADR 0034) or a
+// try of a past item (ADR 0039 decision 9).
 type RunKind string
 
 // Run kinds. A run with no kind is a station run.
 const (
 	RunKindStation RunKind = "station"
 	RunKindJonah   RunKind = "jonah"
+	RunKindTry     RunKind = "try"
 )
+
+// Jonahs reports whether a run of kind k is Jonah's: a review or a try. Jonah's runs work no item
+// and are paid from Jonah's share, never the line's spend (ADR 0039 decision 16).
+func (k RunKind) Jonahs() bool { return k == RunKindJonah || k == RunKindTry }
 
 // JonahActor is Jonah as the actor of what goald does for it: the daily reviews it queues and
 // the proposals its new ones supersede.
@@ -264,7 +270,7 @@ const (
 var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|memory\.yaml|(agents|skills|rules|contracts)/.+\.(md|yaml|json))$`)
 
 // ProposalPathAllowed reports whether a proposal may edit path: one under the allowlist, without
-// a . or .. segment or a control character. 00102's goal_jonah_paths_allowed checks the same.
+// a . or .. segment or a control character. 00103's goal_jonah_paths_allowed checks the same.
 func ProposalPathAllowed(path string) bool {
 	if !proposalPathPattern.MatchString(path) || strings.ContainsFunc(path, unicode.IsControl) {
 		return false
