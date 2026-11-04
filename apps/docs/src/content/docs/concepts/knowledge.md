@@ -66,7 +66,7 @@ A factory's memory is `memory.yaml`, a file next to `factory.yaml` in the defini
 
 A draft that goes past a limit fails its checks at publish: `memory-too-long` for an entry over 300 characters, `memory-too-big` for a file over 8 KiB or 50 entries. A version whose only change is `memory.yaml` publishes without the eval gate.
 
-`goal memory list`, `add` and `rm` edit the memory in the factory's draft. `goal memory add --publish` publishes the draft too.
+`goal memory add` and `rm` edit the memory in the factory's draft, opening one when none is open. `goal memory add --publish` publishes the draft too. `goal memory list` opens no draft: it shows the open draft's memory, or the current version's when no draft is open.
 
 ## Reads
 

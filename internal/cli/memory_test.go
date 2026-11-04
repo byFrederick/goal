@@ -53,3 +53,39 @@ func TestMemory_AddPublish(t *testing.T) {
 		[]string{"added fact 1", "published acme v2"})
 	expectOutput(t, "the current version", g.draftFile(t, "current", "memory.yaml"), []string{"Deploys go out on Tuesdays"})
 }
+
+// goal memory list reads the open draft's memory.yaml, or the current version's when no draft is
+// open, and never opens a draft.
+func TestMemory_ListOpensNoDraft(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+	g.mustGoal(t, "factory", "push", newCopy(t, nil), "--publish")
+	g.mustGoal(t, cmdMemory, "add", orgAcme, "Deploys go out on Tuesdays", "--publish")
+
+	opens := func() int {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+
+		return g.opens
+	}
+
+	before := opens()
+
+	expectOutput(t, "list of the current version", g.mustGoal(t, cmdMemory, subList, orgAcme), []string{"1. Deploys go out on Tuesdays"})
+
+	if n := opens() - before; n != 0 {
+		t.Errorf("list with no draft made %d OpenDraft requests, want none", n)
+	}
+
+	g.mustGoal(t, cmdMemory, "add", orgAcme, "Staging resets on Mondays")
+
+	before = opens()
+
+	expectOutput(t, "list of the draft", g.mustGoal(t, cmdMemory, subList, orgAcme),
+		[]string{"1. Deploys go out on Tuesdays", "2. Staging resets on Mondays"})
+
+	if n := opens() - before; n != 0 {
+		t.Errorf("list with a draft made %d OpenDraft requests, want none", n)
+	}
+}

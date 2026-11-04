@@ -88,6 +88,8 @@ type defGoald struct {
 	mu sync.Mutex
 	// beforeTree runs once before the next PUT …/draft/tree is served.
 	beforeTree func()
+	// opens counts the OpenDraft requests (POST …/draft) served.
+	opens int
 }
 
 func newDefGoald(t *testing.T) *defGoald {
@@ -184,6 +186,12 @@ func newDefGoald(t *testing.T) *defGoald {
 		}
 	}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/draft") {
+			g.mu.Lock()
+			g.opens++
+			g.mu.Unlock()
+		}
+
 		if r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/draft/tree") {
 			g.mu.Lock()
 			hook := g.beforeTree

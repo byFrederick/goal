@@ -74,7 +74,7 @@ object, required.
   - `roleArn`: string matching `^arn:aws:iam::\d{12}:role/.+$`, required; only when `type` is `"aws"`.
   - `region`: string; only when `type` is `"aws"`.
 - `knowledge`: object.
-  - `sources`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$` or object. The organization's knowledge sources the factory's runs read (ADR 0038 decision 5), at most 10 (knowledge-too-many). An entry is a source's name, or an object that also says which runs read it (appliesTo) and when (readWhen).
+  - `sources`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$` or object. The organization's knowledge sources the factory's runs read (ADR 0038 decision 5), at most 10 (knowledge-too-many), each listed once (knowledge-source-duplicate). An entry is a source's name, or an object that also says which runs read it (appliesTo) and when (readWhen).
     - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. The organization's knowledge source.
     - `appliesTo`: object. The runs that read the source: ADR 0014's rule scope, matched as a rule's appliesTo is. A run matches when every key set names its agent, station, lane or work type. Without appliesTo, every run reads it.
       - `agents`: array of string.
