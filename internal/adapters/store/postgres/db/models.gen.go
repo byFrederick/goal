@@ -205,6 +205,20 @@ type FactoryRecord struct {
 	ArchivedBy        *string
 }
 
+type GraderCheck struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	FactoryID  uuid.UUID
+	ProposalID uuid.UUID
+	ItemID     uuid.UUID
+	Result     string
+	Answer     string
+	Reason     string
+	RunID      *uuid.UUID
+	CostUsd    float64
+	CheckedAt  time.Time
+}
+
 type ItemEdge struct {
 	OrgID     uuid.UUID
 	ItemID    uuid.UUID

@@ -119,3 +119,25 @@ JOIN agent_runs r ON r.id = pick.id
 WHERE w.factory_id = sqlc.arg(factory_id) AND w.state = 'done' AND w.done_at IS NOT NULL
 ORDER BY w.done_at DESC, w.id
 LIMIT sqlc.arg(max_items);
+
+-- name: InsertGraderCheck :one
+-- A check of the grader (00109, ADR 0039 decision 10) in its proposal's factory, on an item of
+-- that factory. No row when the proposal is not the organization's or the item not its factory's.
+INSERT INTO grader_checks (id, factory_id, proposal_id, item_id, result, answer, reason, run_id, cost_usd, checked_at)
+SELECT sqlc.arg(id), p.factory_id, p.id, w.id, sqlc.arg(result), sqlc.arg(answer), sqlc.arg(reason), sqlc.narg(run_id),
+       sqlc.arg(cost_usd), sqlc.arg(checked_at)
+FROM jonah_proposals p
+JOIN work_items w ON w.id = sqlc.arg(item_id) AND w.factory_id = p.factory_id
+WHERE p.id = sqlc.arg(proposal_id)
+RETURNING *;
+
+-- name: ProposalGraderChecks :many
+SELECT * FROM grader_checks WHERE proposal_id = sqlc.arg(proposal_id) ORDER BY checked_at, id;
+
+-- name: GraderHitRates :one
+-- The proposal's original checks read as not_fixed and final checks read as fixed, of each.
+SELECT count(*) FILTER (WHERE result = 'original' AND answer = 'not_fixed') AS original_hits,
+       count(*) FILTER (WHERE result = 'original') AS original_total,
+       count(*) FILTER (WHERE result = 'final' AND answer = 'fixed') AS final_hits,
+       count(*) FILTER (WHERE result = 'final') AS final_total
+FROM grader_checks WHERE proposal_id = sqlc.arg(proposal_id);

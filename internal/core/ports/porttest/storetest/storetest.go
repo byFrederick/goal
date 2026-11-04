@@ -44,6 +44,8 @@ type Harness struct {
 	NewVersion func(t *testing.T, org domain.OrgID, factory domain.FactoryID) domain.DefinitionVersionID
 	// Audit reads the audit entries the store writes with its changes.
 	Audit ports.Audit
+	// DeleteFactory deletes factory of org and every row of it, as goal_delete_factory does.
+	DeleteFactory func(t *testing.T, org domain.OrgID, factory domain.FactoryID)
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -163,8 +165,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 	tests = append(tests, jonahTests...)
-	tests = append(tests, triesTests...)
-	tests = append(tests, keptTestsTests...)
+	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
