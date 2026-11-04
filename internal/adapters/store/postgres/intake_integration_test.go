@@ -404,7 +404,7 @@ func purgeRemovesWebhooks(t *testing.T, d connectionsDB, org domain.OrgID) {
 	}
 }
 
-// Migration 00116: another organization sees no ledger id or daily count; goal_app may change a
+// Migration 00117: another organization sees no ledger id or daily count; goal_app may change a
 // delivery's duplicates and a count's count only, deletes ledger ids but no count; the database
 // refuses a signature header, a refused delivery with a body and a second row for one delivery id;
 // without an organization the ledger's prune goes through its definer.

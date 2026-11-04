@@ -116,7 +116,7 @@ const DeliveryRetention = 30 * 24 * time.Hour
 
 // SignatureHeaders are the headers that authenticate a request, lower-cased: every sender's
 // signature or token header (internal/catalog/senders) and today's generic X-Goal-Signature. A
-// delivery never keeps them, and 00116's CHECK on webhook_deliveries refuses them.
+// delivery never keeps them, and 00117's CHECK on webhook_deliveries refuses them.
 var SignatureHeaders = []string{
 	"x-hub-signature-256", "x-hub-signature", "x-goal-signature", "x-gitlab-token", "webhook-signature",
 	"x-pagerduty-signature", "sentry-hook-signature", "authorization",

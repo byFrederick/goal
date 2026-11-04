@@ -116,7 +116,7 @@ VALUES (sqlc.arg(id), sqlc.arg(endpoint_id), sqlc.arg(received_at), sqlc.arg(hea
         sqlc.arg(reason), sqlc.narg(item_id));
 
 -- name: InsertReceivedDelivery :one
--- A delivery the receiver keeps a row of (00116): an accepted one with its id, event and body, or
+-- A delivery the receiver keeps a row of (00117): an accepted one with its id, event and body, or
 -- a refused one with metadata only.
 INSERT INTO webhook_deliveries (id, endpoint_id, received_at, headers, body, outcome, reason, delivery_id, event, receipt)
 VALUES (sqlc.arg(id), sqlc.arg(endpoint_id), sqlc.arg(received_at), sqlc.arg(headers), sqlc.arg(body), sqlc.arg(outcome),

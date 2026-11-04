@@ -153,7 +153,7 @@ type InsertReceivedDeliveryParams struct {
 	Receipt    *string
 }
 
-// A delivery the receiver keeps a row of (00116): an accepted one with its id, event and body, or
+// A delivery the receiver keeps a row of (00117): an accepted one with its id, event and body, or
 // a refused one with metadata only.
 func (q *Queries) InsertReceivedDelivery(ctx context.Context, arg InsertReceivedDeliveryParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, insertReceivedDelivery,
