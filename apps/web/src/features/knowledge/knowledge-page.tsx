@@ -76,6 +76,13 @@ export function KnowledgePage() {
                 : ''}
             </Callout>
           </div>
+          {s.secret ? (
+            <Button asChild variant="white" className="h-11 md:h-8.5">
+              <Link to="/o/$org/secrets/$secret" params={{ org: org.slug, secret: s.secret }}>
+                Replace value
+              </Link>
+            </Button>
+          ) : null}
           <Button asChild variant="white" className="h-11 md:h-8.5">
             <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: s.name }}>
               Open source

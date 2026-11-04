@@ -95,6 +95,25 @@ describe('the Knowledge page', () => {
     );
   });
 
+  it('offers Replace value before Open source when the failing source has a secret, and only Open source without', async () => {
+    renderKnowledge({
+      page: KnowledgePage,
+      route: '/',
+      location: '/o/acme/knowledge',
+      seed: seed([runbooks, { ...specs, secret: 'confluence-token' }]),
+    });
+    const alert = (await screen.findAllByRole('alert'))[0] as HTMLElement;
+    const links = within(alert).getAllByRole('link');
+    expect(links.map((l) => l.textContent)).toEqual(['Replace value', 'Open source']);
+    expect(links[0]?.getAttribute('href')).toBe('/o/acme/secrets/confluence-token');
+  });
+
+  it('shows only Open source for a failing source without a secret', async () => {
+    renderKnowledge({ page: KnowledgePage, route: '/', location: '/o/acme/knowledge', seed: seed() });
+    const alert = (await screen.findAllByRole('alert'))[0] as HTMLElement;
+    expect(within(alert).queryByRole('link', { name: 'Replace value' })).toBeNull();
+  });
+
   it('lists the most read files, most first, leaving out searches of a whole source', async () => {
     renderKnowledge({ page: KnowledgePage, route: '/', location: '/o/acme/knowledge', seed: seed() });
 

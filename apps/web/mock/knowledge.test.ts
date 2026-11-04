@@ -49,11 +49,12 @@ async function upload<T>(source: string, files: Record<string, string>): Promise
 }
 
 describe('the mock knowledge base', () => {
-  it('starts acme with the three synced sources the knowledge picture shows', async () => {
+  it('starts acme with the four sources the knowledge picture shows', async () => {
     const { body } = await call<KnowledgeSourceList>(sources);
     expect(body.sources.map((s) => [s.name, s.kind, s.status, s.latest_snapshot?.files ?? 0])).toEqual([
       ['dashboards', 'synced', 'failed', 1],
       ['goal-docs', 'synced', 'idle', 5],
+      ['product-specs', 'confluence', 'failed', 1],
       ['support-macros', 'synced', 'idle', 1],
     ]);
     const files = await call<KnowledgeFilePage>(`${sources}/goal-docs/files`);
@@ -101,6 +102,23 @@ describe('the mock knowledge base', () => {
     expect((await call<Problem>(`${sources}/handbook/uploads?path=leave.md`, 'DELETE')).body.code).toBe(
       'knowledge-file-not-found',
     );
+  });
+
+  it('takes sync_every_seconds 0 with no next sync, and stores a Confluence root_page', async () => {
+    const made = await call<KnowledgeSource>(sources, 'POST', {
+      name: 'wiki-pages',
+      title: 'Wiki pages',
+      kind: 'confluence',
+      secret: 'confluence-token',
+      sync_every_seconds: 0,
+      config: { site: 'https://acme.atlassian.net', email: 'bot@example.com', spaces: 'ENG', root_page: '777' },
+    });
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ sync_every_seconds: 0, next_sync_at: null, config: { root_page: '777' } });
+    const later = await call<KnowledgeSource>(`${sources}/wiki-pages`, 'PATCH', { sync_every_seconds: 3600 });
+    expect(later.body.next_sync_at).not.toBeNull();
+    const back = await call<KnowledgeSource>(`${sources}/wiki-pages`, 'PATCH', { sync_every_seconds: 0 });
+    expect(back.body.next_sync_at).toBeNull();
   });
 
   it('refuses as goald does', async () => {

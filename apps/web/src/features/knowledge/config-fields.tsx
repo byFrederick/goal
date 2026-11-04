@@ -60,6 +60,12 @@ const readers: Record<string, FieldSpec[]> = {
       placeholder: 'ENG, SUP',
       help: () => 'Space keys, separated by commas.',
     },
+    {
+      name: 'root_page',
+      label: 'Root page (optional)',
+      placeholder: '12345',
+      help: () => 'A page id. Only that page and the pages under it are read. Empty reads the whole spaces.',
+    },
   ],
 };
 
@@ -88,6 +94,10 @@ export function configErrors(reader: string | undefined, config: Config): Record
   const repository = (config.repository ?? '').trim();
   if (reader === 'gitdocs' && repository !== '' && !/^https:\/\/[^/\s]+\/\S+$/.test(repository)) {
     errors.repository = 'An https URL, such as https://github.com/acme/docs.';
+  }
+  const rootPage = (config.root_page ?? '').trim();
+  if (reader === 'confluence' && rootPage !== '' && !/^\d+$/.test(rootPage)) {
+    errors.root_page = 'A page id is digits only, such as 12345.';
   }
   return errors;
 }

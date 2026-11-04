@@ -503,7 +503,10 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
             errors={submitted ? errors : {}}
             onChange={(c) => edits.set('config', c)}
           />
-          <Field label="Sync every" help="At least 15 minutes. Only changed documents are fetched again.">
+          <Field
+            label="Sync every"
+            help="On demand, or at least every 15 minutes. Only changed documents are fetched again."
+          >
             <NativeSelect value={every} onChange={(e) => edits.set('every', Number(e.target.value))}>
               {choices.map((c) => (
                 <option key={c.seconds} value={c.seconds}>
