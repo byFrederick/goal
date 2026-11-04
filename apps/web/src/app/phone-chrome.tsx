@@ -342,7 +342,7 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
       to="/o/$org/needs-you"
       params={{ org: org.slug }}
       className={tab}
-      aria-label={waiting > 0 ? `Needs you, ${waiting} waiting on you` : 'Needs you'}
+      aria-label={waiting > 0 ? `${waiting} Needs you, waiting on you` : 'Needs you'}
     >
       <span className="relative">
         <Inbox size={20} strokeWidth={1.5} aria-hidden="true" />
@@ -354,7 +354,7 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
             <NumberRoll value={waiting} />
           </span>
         ) : null}
-      </span>
+      </span>{' '}
       Needs you
     </Link>
   );

@@ -109,7 +109,7 @@ test('the Tests tab shows each kept test’s last result and links a run to its 
   await expect(kept.getByText('Failed')).toBeVisible();
   await expect(kept.getByText('Error', { exact: true })).toBeVisible();
   await expect(kept.getByText('Not run yet')).toBeVisible();
-  await kept.getByRole('link', { name: /Passed on/ }).click();
+  await kept.getByRole('link', { name: /^Passed / }).click();
   await expect(page).toHaveURL(/\/items\/451\?tab=trace/);
 });
 
