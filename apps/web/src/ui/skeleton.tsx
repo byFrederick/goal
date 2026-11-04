@@ -1,6 +1,8 @@
 // A placeholder that waits in the slot of the content it stands for (MOTION.md, Loading): the
-// placeholder pulses once, then both layers cross-fade with a 2 px blur to the content. The two layers
-// share one grid cell, so the swap moves nothing. While it waits, the wrapper is aria-busy and says
+// placeholder pulses once, then both layers cross-fade with a 2 px blur to the content. While it
+// waits the two layers share one grid cell, so the swap does not move the slot. Once ready, the faded
+// placeholder leaves the flow (absolute, clipped to the slot), so the content alone sets the slot's
+// height: content shorter than its placeholder shrinks the slot. While it waits, the wrapper is aria-busy and says
 // "Loading" to a screen reader; the content is inert, so nothing in it takes focus before it shows.
 import type { ReactNode } from 'react';
 import { cn } from './cn';
@@ -16,13 +18,13 @@ interface SkeletonProps {
 
 export function Skeleton({ ready, placeholder, children, className }: SkeletonProps) {
   return (
-    <div aria-busy={ready ? undefined : true} className={cn('grid grid-cols-[minmax(0,1fr)]', className)}>
+    <div aria-busy={ready ? undefined : true} className={cn('relative grid grid-cols-[minmax(0,1fr)]', className)}>
       {ready ? null : <span className="sr-only">Loading</span>}
       <div
         aria-hidden="true"
         className={cn(
           'col-start-1 row-start-1 min-w-0 transition-[opacity,filter] duration-(--duration-slow) ease-in-out',
-          ready && 'pointer-events-none opacity-0 blur-(--blur-small)',
+          ready && 'pointer-events-none absolute inset-0 overflow-hidden opacity-0 blur-(--blur-small)',
         )}
       >
         <div className="animate-skeleton-pulse">{placeholder}</div>
