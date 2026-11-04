@@ -111,3 +111,35 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('Reject with a reason works from More actions at 375 px', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Reject with a reason' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Reject with a reason' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Reason' }).fill('Put the screenshot rule in the pull request template.');
+  await dialog.getByRole('button', { name: 'Reject proposal' }).click();
+  await expect(page.getByText(/^Rejected/).first()).toBeVisible();
+});
+
+test('at 768 px the last crumb stays visible and overlaps no action', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  const bar = page.getByRole('banner');
+  const crumb = await bar.getByText('Proposal 7', { exact: true }).boundingBox();
+  expect(crumb).not.toBeNull();
+  expect(crumb?.width ?? 0).toBeGreaterThan(40);
+  for (const name of ['Edit', 'Reject with a reason', 'Approve and publish v22']) {
+    const box = await bar
+      .getByRole('button', { name })
+      .or(bar.getByRole('link', { name, exact: true }))
+      .first()
+      .boundingBox();
+    expect(box).not.toBeNull();
+    const apart =
+      (crumb?.x ?? 0) + (crumb?.width ?? 0) <= (box?.x ?? 0) || (crumb?.y ?? 0) + (crumb?.height ?? 0) <= (box?.y ?? 0);
+    expect(apart).toBe(true);
+  }
+});
