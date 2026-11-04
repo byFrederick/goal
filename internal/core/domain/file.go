@@ -62,7 +62,9 @@ type FileRequest struct {
 	Untrusted bool
 	// Assembly is the item a part belongs to, required for OriginPlan and refused otherwise.
 	Assembly *Item
-	At       time.Time
+	// Start is when the item may start (ADR 0040 decision 3); nil starts it as soon as it can.
+	Start *StartRequest
+	At    time.Time
 }
 
 // File turns a filing request into a checked NewItem the same way for every origin (ADR 0040
@@ -72,8 +74,10 @@ type FileRequest struct {
 // follow-up's and a part's item enters at the line's first station, a part at its assembly's,
 // and a trigger's at the station it names, which must be on the line. Via is only a person's,
 // the generation is never negative and 0 for a person and a trigger, a person's item is never
-// untrusted, and a part's generation and untrusted are its assembly's. Every refusal is
-// ErrInvalid.
+// untrusted, and a part's generation and untrusted are its assembly's. A start is resolved at
+// r.At (StartRequest.Resolve): its time becomes StartAt and its open after items After. An item
+// placed at a later station than the line's first has started when it is filed. Every refusal
+// is ErrInvalid.
 func File(l Line, r FileRequest) (NewItem, error) {
 	n := NewItem{
 		FactoryID: l.FactoryID, Lane: strings.TrimSpace(r.Lane), Title: strings.TrimSpace(r.Title), Body: r.Body,
@@ -104,7 +108,18 @@ func File(l Line, r FileRequest) (NewItem, error) {
 		return NewItem{}, fmt.Errorf("file an item: %w", err)
 	}
 
-	// The start (ADR 0040 decision 3) is checked here once a request carries one (software#645).
+	if r.Start != nil {
+		s, err := r.Start.Resolve(l.FactoryID, r.At)
+		if err != nil {
+			return NewItem{}, fmt.Errorf("file an item: start: %w", err)
+		}
+
+		n.StartAt, n.After = s.At, s.After
+	}
+
+	if first, err := l.First(); err == nil && n.Station != first.ID {
+		n.StartedAt = r.At
+	}
 
 	return n, nil
 }

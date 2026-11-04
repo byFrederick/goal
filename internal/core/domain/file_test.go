@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -48,7 +49,7 @@ func TestFile_PersonEntersAtTheFirstStation(t *testing.T) {
 		State: StateQueued, Class: ClassStandard, CreatedAt: fileAt, Source: ItemFromCLI,
 		Origin: OriginPerson, Via: ViaCLI, CreatedBy: ada,
 	}
-	if n != want {
+	if !reflect.DeepEqual(n, want) {
 		t.Errorf("File = %+v\nwant %+v", n, want)
 	}
 }
@@ -165,5 +166,96 @@ func TestFile_AnyLaneWhenNothingRoutes(t *testing.T) {
 
 	if n, err := File(l, FileRequest{Origin: OriginPerson, Title: "t", Lane: fileLaneNone}); err != nil || n.Lane != fileLaneNone {
 		t.Errorf("lane %q, err %v; want infra", n.Lane, err)
+	}
+}
+
+// A wait becomes a time from filing, a time without a zone is read in the person's zone, a done
+// after item is met and left out, and an open one is kept once.
+func TestFile_StartResolvesAtFiling(t *testing.T) {
+	t.Parallel()
+
+	open := &Item{ID: "open", FactoryID: "f", State: StateQueued}
+	done := &Item{ID: "done", FactoryID: "f", State: StateDone}
+
+	n, err := File(fileLine(), FileRequest{
+		Origin: OriginPerson, By: ada, Title: "Later", At: fileAt,
+		Start: &StartRequest{In: "36h", After: []After{{Ref: "f#1", Item: open}, {Ref: "f#2", Item: done}, {Ref: "open", Item: open}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := fileAt.Add(36 * time.Hour); !n.StartAt.Equal(want) || !reflect.DeepEqual(n.After, []ItemID{"open"}) {
+		t.Errorf("start = %v after %v, want %v after [open]", n.StartAt, n.After, want)
+	}
+
+	if !n.StartedAt.IsZero() {
+		t.Errorf("StartedAt = %v at the first station, want zero", n.StartedAt)
+	}
+
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip("no tzdata:", err)
+	}
+
+	n, err = File(fileLine(), FileRequest{
+		Origin: OriginPerson, Title: "At nine", At: fileAt, Start: &StartRequest{At: "2026-11-05T09:00", Zone: berlin},
+	})
+	if want := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC); err != nil || !n.StartAt.Equal(want) {
+		t.Errorf("start = %v, %v; want %v (09:00 in Berlin)", n.StartAt, err, want)
+	}
+
+	n, err = File(fileLine(), FileRequest{Origin: OriginPerson, Title: "Zoned", At: fileAt, Start: &StartRequest{At: "2026-11-05T09:00:00Z", Zone: berlin}})
+	if want := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC); err != nil || !n.StartAt.Equal(want) {
+		t.Errorf("start = %v, %v; want %v (its own zone)", n.StartAt, err, want)
+	}
+}
+
+// Waits take hours, days and weeks.
+func TestFile_StartWaits(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[string]time.Duration{"36h": 36 * time.Hour, "7d": 7 * 24 * time.Hour, "2w": 14 * 24 * time.Hour} {
+		if got, err := ParseWait(in); err != nil || got != want {
+			t.Errorf("ParseWait(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+}
+
+// A start more than 365 days ahead, with both a time and a wait, a bad wait or time, or an after
+// item that is cancelled, unknown or of another factory is refused.
+func TestFile_StartRefuses(t *testing.T) {
+	t.Parallel()
+
+	for name, s := range map[string]StartRequest{
+		"too far":         {In: "53w"},
+		"too far at":      {At: "2027-11-05T09:00:00Z"},
+		"both":            {At: "2026-11-05", In: "1d"},
+		"bad wait":        {In: "3 days"},
+		"zero wait":       {In: "0d"},
+		"minutes":         {In: "30m"},
+		"bad time":        {At: "tomorrow"},
+		"cancelled after": {After: []After{{Ref: "f#3", Item: &Item{ID: "c", FactoryID: "f", State: StateCancelled}}}},
+		"unknown after":   {After: []After{{Ref: "f#9"}}},
+		"other factory":   {After: []After{{Ref: "g#1", Item: &Item{ID: "g", FactoryID: "g", State: StateQueued}}}},
+	} {
+		_, err := File(fileLine(), FileRequest{Origin: OriginPerson, Title: "Later", At: fileAt, Start: &s})
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: File = %v, want ErrInvalid", name, err)
+		}
+	}
+
+	if _, err := File(fileLine(), FileRequest{Origin: OriginPerson, Title: "Year", At: fileAt, Start: &StartRequest{In: "52w"}}); err != nil {
+		t.Errorf("52 weeks ahead: %v, want accepted", err)
+	}
+}
+
+// An item a trigger places past the first station has started when it is filed.
+func TestFile_StartedAtALaterStation(t *testing.T) {
+	t.Parallel()
+
+	n, err := File(fileLine(), FileRequest{Origin: OriginTrigger, Title: "Nightly", Station: fileMake, At: fileAt})
+	if err != nil || !n.StartedAt.Equal(fileAt) {
+		t.Errorf("StartedAt = %v, %v; want %v", n.StartedAt, err, fileAt)
 	}
 }
