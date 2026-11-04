@@ -186,13 +186,22 @@ describe('Factory settings page', () => {
     await renderSettings({ can: ['factory:archive', 'factory:delete'], members: [] });
 
     const ids = Array.from(document.querySelectorAll('section[id]')).map((section) => section.id);
-    expect(ids).toEqual(['general', 'repository', 'runtime', 'budgets', 'flow', 'people', 'danger']);
+    expect(ids).toEqual(['general', 'repository', 'runtime', 'budgets', 'flow', 'jonah', 'people', 'danger']);
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     expect(
       within(nav)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['General', 'Repository', 'Runtime', 'Budgets and targets', 'Flow', 'People with access', 'Danger zone']);
+    ).toEqual([
+      'General',
+      'Repository',
+      'Runtime',
+      'Budgets and targets',
+      'Flow',
+      'Jonah',
+      'People with access',
+      'Danger zone',
+    ]);
   });
 
   it('shows Loading in each settings group while the draft loads', async () => {
