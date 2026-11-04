@@ -24,7 +24,7 @@ export const jonahTools = ['Read', 'Grep', 'Glob'];
 /** The folders a review's tools may reach: what prepare wrote from the bundle, and the knowledge. */
 const jonahRoots = [paths.goal, paths.knowledge];
 
-/** The folders a proposal may edit, besides factory.yaml. Never evals/: eval cases and judges change only by a person. */
+/** The folders a proposal may edit, besides factory.yaml. Never evals/, which goald ignores (ADR 0039 decision 21). */
 const jonahDirs = ['agents', 'skills', 'rules', 'contracts'];
 
 /** The kinds of file a proposal may edit under jonahDirs (ADR 0039 decision 6): no script or other file. */

@@ -117,61 +117,6 @@ type EnvironmentTest struct {
 	Tools       []string
 }
 
-type EvalResult struct {
-	EvalRunID  uuid.UUID
-	OrgID      uuid.UUID
-	CaseName   string
-	CaseSha256 string
-	Try        int32
-	State      string
-	LeaseUntil *time.Time
-	RunID      *uuid.UUID
-	CheckedBy  string
-	Detail     []byte
-	CostUsd    float64
-	Turns      int32
-	Arm        int16
-	DurationMs int64
-}
-
-type EvalRun struct {
-	ID            uuid.UUID
-	OrgID         uuid.UUID
-	FactoryID     uuid.UUID
-	VersionID     *uuid.UUID
-	ContentSha256 string
-	Trigger       string
-	Cases         *string
-	State         string
-	EstimateUsd   float64
-	CostUsd       float64
-	CreatedBy     string
-	CreatedAt     time.Time
-	FinishedAt    *time.Time
-	Kind          string
-	Station       *string
-	Agent         *string
-	TriesPerCase  *int16
-}
-
-type EvalRunArm struct {
-	EvalRunID      uuid.UUID
-	OrgID          uuid.UUID
-	Arm            int16
-	Model          string
-	IsCurrent      bool
-	SummarizedAt   *time.Time
-	Tries          *int32
-	Passed         *int32
-	Errors         *int32
-	CostPerItemUsd *float64
-	MsPerItem      *int64
-	MeanTurns      *float64
-	Judge          *string
-	JudgedShare    *float64
-	PerCase        []byte
-}
-
 type FactoryConversion struct {
 	OrgID       uuid.UUID
 	FactoryID   uuid.UUID
@@ -310,27 +255,6 @@ type JonahReview struct {
 	CreatedBy   string
 	CreatedAt   time.Time
 	FinishedAt  *time.Time
-}
-
-type JudgeScore struct {
-	ID         uuid.UUID
-	OrgID      uuid.UUID
-	FactoryID  uuid.UUID
-	VersionID  uuid.UUID
-	Judge      string
-	RunID      *uuid.UUID
-	ItemID     *uuid.UUID
-	State      string
-	Outcome    *string
-	Score      *float64
-	Passed     *bool
-	Reason     string
-	CostUsd    float64
-	JudgeRunID *uuid.UUID
-	LeaseUntil *time.Time
-	LeaseToken *uuid.UUID
-	CreatedAt  time.Time
-	ScoredAt   *time.Time
 }
 
 type KeptTest struct {

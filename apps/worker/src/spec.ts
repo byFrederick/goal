@@ -131,41 +131,6 @@ export const DraftRequest = z.object({
 });
 export type DraftRequest = z.infer<typeof DraftRequest>;
 
-/** A judge's outcome (ADR 0025): its score from 0 to 1, its label and what it means. */
-export const JudgeOutcome = z.object({
-  score: z.number().min(0).max(1),
-  label: z.string().min(1).max(40),
-  meaning: z.string().min(1).max(300),
-});
-export type JudgeOutcome = z.infer<typeof JudgeOutcome>;
-
-/**
- * What a judge reads: a finished run (its events, its spec and its pull request diff) or an eval
- * try (the case's brief, the agent's output and the git diff), each as text.
- */
-export const JudgeMaterial = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('run'), events: z.string(), spec: z.string(), diff: z.string() }),
-  z.object({ kind: z.literal('eval_try'), brief: z.string(), output: z.string(), diff: z.string() }),
-]);
-export type JudgeMaterial = z.infer<typeof JudgeMaterial>;
-
-/**
- * Judge mode (ADR 0025): the judge evals/judges/<slug>.md, its rubric (the file's Markdown body),
- * its outcomes and pass mark, and the material it scores.
- */
-export const Judge = z.object({
-  slug: z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/),
-  rubric: z.string().min(1),
-  outcomes: z
-    .array(JudgeOutcome)
-    .min(1)
-    .refine((os) => new Set(os.map((o) => o.label)).size === os.length, 'outcome labels are unique')
-    .refine((os) => new Set(os.map((o) => o.score)).size === os.length, 'outcome scores are unique'),
-  pass_mark: z.number().min(0).max(1),
-  material: JudgeMaterial,
-});
-export type Judge = z.infer<typeof Judge>;
-
 /**
  * Jonah mode (ADR 0034, ADR 0039 decision 4): the review's policy. Everything it reads is a file
  * of the bundle under /goal (definition/, evidence/, proposals/, files.md, events.md, observations.md).
@@ -195,7 +160,7 @@ export type Grade = z.infer<typeof Grade>;
 
 const taskFields = z.object({
   factory_id: z.string().min(1),
-  /** Empty only in definition mode, judge mode and Jonah mode, which need no item. */
+  /** Empty only in definition mode, Jonah mode and grade mode, which need no item. */
   item_id: z.string(),
   run_id: z.string().min(1),
   station: z.string(),
@@ -235,8 +200,6 @@ const taskFields = z.object({
   branch: z.string().optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
-  /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
-  judge: Judge.optional(),
   /** Jonah mode (ADR 0039 decision 4): the run reads its box with Read, Grep and Glob and returns observations and proposals. */
   jonah: Jonah.optional(),
   /** Grade mode (ADR 0039 decision 10): the run grades this result against the reason, in one model call without tools. */
@@ -246,29 +209,23 @@ const taskFields = z.object({
 type ModeFields = {
   item_id: string;
   draft_request?: DraftRequest | undefined;
-  judge?: Judge | undefined;
   jonah?: Jonah | undefined;
   grade?: Grade | undefined;
 };
 
-/** An item's run names its item; only definition, judge and Jonah mode may leave it empty. */
+/** An item's run names its item; only definition, Jonah and grade mode may leave it empty. */
 const itemNamed = (s: ModeFields) =>
-  s.draft_request !== undefined ||
-  s.judge !== undefined ||
-  s.jonah !== undefined ||
-  s.grade !== undefined ||
-  s.item_id.length > 0;
+  s.draft_request !== undefined || s.jonah !== undefined || s.grade !== undefined || s.item_id.length > 0;
 const itemMessage = {
-  message: 'item_id is required outside definition, judge, Jonah and grade mode',
+  message: 'item_id is required outside definition, Jonah and grade mode',
   path: ['item_id'],
 };
 
-/** A run is in one mode at most: a draft request's, a judge's or a Jonah review's. */
-const oneMode = (s: ModeFields) =>
-  [s.draft_request, s.judge, s.jonah, s.grade].filter((m) => m !== undefined).length <= 1;
+/** A run is in one mode at most: a draft request's, a Jonah review's or a grade's. */
+const oneMode = (s: ModeFields) => [s.draft_request, s.jonah, s.grade].filter((m) => m !== undefined).length <= 1;
 const modeMessage = {
-  message: 'a spec has at most one mode: a draft_request, a judge, a jonah or a grade (not both)',
-  path: ['judge'],
+  message: 'a spec has at most one mode: a draft_request, a jonah or a grade (not both)',
+  path: ['jonah'],
 };
 
 /** The task as /goal/spec.json holds it: the bundle's spec plus the gateway's URL. It holds no secrets. */
@@ -370,10 +327,6 @@ export const Bundle = z
   .refine((b) => (b.definition === undefined) === (b.spec.draft_request === undefined), {
     message: "a bundle's definition and its spec's draft_request come together",
     path: ['definition'],
-  })
-  .refine((b) => !(b.spec.judge && (b.repository || b.definition)), {
-    message: "a judge's bundle has no repository and no definition",
-    path: ['spec', 'judge'],
   })
   .refine((b) => !(b.spec.jonah && (b.repository || b.definition)), {
     message: "a jonah's bundle has no repository and no definition",

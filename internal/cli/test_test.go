@@ -36,7 +36,7 @@ func TestTest_KeepListRemove(t *testing.T) {
 	passed.Id, passed.Item.Number, passed.Item.Title = "k2", 9, "Add a page"
 	passed.LastResult = &gen.KeptTestLastResult{Result: gen.KeptTestLastResultResultFailed, At: at, RunId: &run}
 
-	srv, sent := evalGoald(t, map[string]evalAnswer{
+	srv, sent := routeGoald(t, map[string]goaldAnswer{
 		listFactoriesRoute:              {http.StatusOK, gen.FactoryList{Factories: []gen.Factory{{Id: "f1", Name: searchFactory}}}},
 		"POST " + webTests:              {http.StatusCreated, kept},
 		"GET " + webTests:               {http.StatusOK, gen.KeptTestList{Tests: []gen.KeptTest{kept, passed}}},
@@ -90,7 +90,7 @@ func TestTest_KeepListRemove(t *testing.T) {
 func TestTest_KeepConflictIsOneLine(t *testing.T) {
 	t.Parallel()
 
-	srv, _ := evalGoald(t, map[string]evalAnswer{
+	srv, _ := routeGoald(t, map[string]goaldAnswer{
 		listFactoriesRoute: {http.StatusOK, gen.FactoryList{Factories: []gen.Factory{{Id: "f1", Name: searchFactory}}}},
 		"POST " + webTests: {http.StatusConflict, jonahRefusal(http.StatusConflict, "not-passed-first-time")},
 	})

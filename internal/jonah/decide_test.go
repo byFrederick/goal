@@ -23,8 +23,8 @@ const (
 	rulePath  = "rules/evidence.md"
 )
 
-// errGate stands in for the eval gate's refusal, which keeps the draft open.
-var errGate = errors.New("evals pending")
+// errRefused stands in for a publish's refusal, such as definition-invalid.
+var errRefused = errors.New("definition invalid")
 
 // definition is an Authoring over one factory's files in memory: the current version's and an
 // open draft's, published as numbered versions.
@@ -37,7 +37,7 @@ type definition struct {
 	// published are the files of each version Publish published, by number.
 	published map[int]map[string]string
 	// gate refuses every publish, keeping the draft, when set.
-	gate      bool
+	refuse    bool
 	discarded int
 }
 
@@ -116,16 +116,16 @@ func (d *definition) WriteFile(_ context.Context, _ domain.FactoryID, path strin
 	return d.revision, nil
 }
 
-func (d *definition) Publish(_ context.Context, _ domain.FactoryID, _ int64, expected domain.DefinitionVersionID, _ string) (domain.DefinitionVersion, bool, error) {
+func (d *definition) Publish(_ context.Context, _ domain.FactoryID, _ int64, expected domain.DefinitionVersionID, _ string) (domain.DefinitionVersion, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if d.gate {
-		return domain.DefinitionVersion{}, true, errGate
+	if d.refuse {
+		return domain.DefinitionVersion{}, errRefused
 	}
 
 	if expected != versionID(d.number) {
-		return domain.DefinitionVersion{}, false, errors.New("base moved")
+		return domain.DefinitionVersion{}, errors.New("base moved")
 	}
 
 	if d.published == nil {
@@ -136,7 +136,7 @@ func (d *definition) Publish(_ context.Context, _ domain.FactoryID, _ int64, exp
 	d.current, d.draft = d.draft, nil
 	d.number++
 
-	return domain.DefinitionVersion{ID: versionID(d.number), Number: d.number}, false, nil
+	return domain.DefinitionVersion{ID: versionID(d.number), Number: d.number}, nil
 }
 
 func (d *definition) DiscardDraft(context.Context, domain.FactoryID, int64) error {
@@ -358,18 +358,18 @@ func TestDecide_ApproveRefusals(t *testing.T) {
 		})
 	}
 
-	t.Run("gate keeps the draft", func(t *testing.T) {
+	t.Run("a refused publish discards the draft", func(t *testing.T) {
 		t.Parallel()
 
 		f, ctx := newDecideFixture(t)
-		f.def.gate = true
+		f.def.refuse = true
 
-		if _, _, err := f.dc.Approve(ctx, factory, 1); !errors.Is(err, errGate) {
-			t.Fatalf("approve = %v, want the gate's refusal", err)
+		if _, _, err := f.dc.Approve(ctx, factory, 1); !errors.Is(err, errRefused) {
+			t.Fatalf("approve = %v, want the publish's refusal", err)
 		}
 
-		if f.def.draft == nil || f.def.discarded != 0 || f.state(ctx, t).State != domain.ProposalProposed {
-			t.Errorf("after the gate draft = %v, discarded %d; want it open and the proposal proposed", f.def.draft, f.def.discarded)
+		if f.def.draft != nil || f.def.discarded != 1 || f.state(ctx, t).State != domain.ProposalProposed {
+			t.Errorf("after the refusal draft = %v, discarded %d; want it discarded and the proposal proposed", f.def.draft, f.def.discarded)
 		}
 	})
 }
@@ -523,7 +523,7 @@ func (f *decideFixture) publishFile(ctx context.Context, t *testing.T, path, con
 		t.Fatal(err)
 	}
 
-	if _, _, err := f.def.Publish(ctx, factory, rev, versionID(f.def.number), "later"); err != nil {
+	if _, err := f.def.Publish(ctx, factory, rev, versionID(f.def.number), "later"); err != nil {
 		t.Fatal(err)
 	}
 }

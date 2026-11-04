@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -201,6 +203,18 @@ func ContentKey(files map[string][]byte) string {
 	}
 
 	return string(ManifestSHA256(m))
+}
+
+// ManifestSHA256 is the hash of a definition's content: the SHA-256 of "path\x00hash\n" for each
+// file, sorted by path. It does not depend on map order.
+func ManifestSHA256(m Manifest) BlobHash {
+	h := sha256.New()
+
+	for _, p := range slices.Sorted(maps.Keys(m)) {
+		_, _ = h.Write([]byte(p + "\x00" + string(m[p]) + "\n"))
+	}
+
+	return BlobHash(hex.EncodeToString(h.Sum(nil)))
 }
 
 // ApplyEdits is files with edits applied in order, as a proposal's try runs on them: a new map,

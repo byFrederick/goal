@@ -22,8 +22,8 @@ import (
 )
 
 // The folder of a definition's environment files (ADR 0037 decision 5), one
-// environments/<name>.yaml per environment, and the one every factory has, which an agent, judge
-// or eval case that names none gets.
+// environments/<name>.yaml per environment, and the one every factory has, which an agent that
+// names none gets.
 const (
 	EnvironmentsDir    = "environments"
 	DefaultEnvironment = "default"
@@ -312,12 +312,11 @@ func KnownForge(host string) string { return domain.KnownForge(host) }
 // each file is named as a slug, satisfies environment.schema.json, says its own name, lists
 // mise tool specs and writes references well; environments/default.yaml exists; every agent's
 // environment exists; a repository on another host names its forge; and no {{secret}} is
-// outside the places decision 6 allows. It records the names of the environments that exist for
-// the judges' and cases' checks.
+// outside the places decision 6 allows. It records the names of the environments that exist.
 func (c *checker) environments() {
-	for _, p := range evalFiles(c.f.files, EnvironmentsDir, ".yaml", ".yml") {
+	for _, p := range filesIn(c.f.files, EnvironmentsDir, ".yaml", ".yml") {
 		name := strings.TrimSuffix(path.Base(p), path.Ext(p))
-		if !evalName.MatchString(name) {
+		if !slugName.MatchString(name) {
 			c.problems = append(c.problems, Environment{file: p, Name: name}.Locate().Problem(checkEnvironments, codeEnvironmentNameInvalid,
 				domain.SeverityError, fmt.Sprintf("%s: the file name %q is the name agents refer to it by, so it must be a slug: "+
 					"3 to 40 lowercase letters, digits and hyphens, starting with a letter", p, name)))
@@ -532,4 +531,28 @@ func (c *checker) factoryPlacement() {
 				"%s: %q is not a {{secret}} reference; write the secret's name in double braces, such as {{model-key}}", displayPath(p[1:]), value)
 		}
 	})
+}
+
+// slugName is the form of an environment's name, its file name without the extension.
+var slugName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,38}[a-z0-9]$`)
+
+// filesIn lists the files of dir with one of exts, by path, skipping hidden ones; none when dir
+// does not exist.
+func filesIn(files fs.FS, dir string, exts ...string) []string {
+	entries, err := fs.ReadDir(files, dir)
+	if err != nil {
+		return nil
+	}
+
+	var out []string
+
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !slices.Contains(exts, path.Ext(e.Name())) {
+			continue
+		}
+
+		out = append(out, path.Join(dir, e.Name()))
+	}
+
+	return out
 }
