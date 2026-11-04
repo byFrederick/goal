@@ -32,7 +32,7 @@ func TestEngine_SubmitWithStartKeepsTheTimeAndLinksAfter(t *testing.T) {
 	h.setState(t, done, domain.StateDone)
 
 	it, err := h.submitWithStart(t, "later", &domain.StartRequest{
-		In: "2d", After: []domain.After{{Ref: "acme#1", Item: &open}, {Ref: "acme#2", Item: ptr(h.item(t, done.ID))}},
+		In: "2d", After: []domain.After{{Ref: "acme#1", Item: &open}, {Ref: "acme#2", Item: new(h.item(t, done.ID))}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -176,8 +176,6 @@ func TestEngine_SetStartRefusesAStartedOrClosedItem(t *testing.T) {
 		t.Errorf("SetStart of a cancelled item = %v; want ErrItemClosed", err)
 	}
 }
-
-func ptr[T any](v T) *T { return &v }
 
 // setState puts it in state where it is, as if it got there.
 func (h *harness) setState(t *testing.T, it domain.Item, state domain.ItemState) {

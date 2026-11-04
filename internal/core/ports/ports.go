@@ -94,7 +94,7 @@ type Store interface {
 	Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error)
 
 	// SetStart changes when an item may start to at, or clears it when at is zero (Start now),
-	// and appends a start_changed event by by at now. It returns the item after it: ErrNotFound
+	// and appends a start_changed event by the actor at now. It returns the item after it: ErrNotFound
 	// when it is missing and ErrConflict when it is no longer at from.
 	SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error)
 

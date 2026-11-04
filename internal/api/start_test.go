@@ -63,7 +63,7 @@ func TestItemStart_SubmitRefusesABadStart(t *testing.T) {
 }
 
 // PUT changes a start, DELETE clears it (Start now) and the inbox then releases the item; an item
-// that started, or is done, keeps its start.
+// that started keeps its start.
 func TestItemStart_PutAndDelete(t *testing.T) {
 	t.Parallel()
 
@@ -97,10 +97,20 @@ func TestItemStart_PutAndDelete(t *testing.T) {
 	if code := h.call(t, http.MethodDelete, acmeItem2Start, "", &prob); code != http.StatusConflict || deref(prob.Code) != "item-started" {
 		t.Errorf("delete after it started = %d %+v; want 409 item-started", code, prob)
 	}
+}
+
+// A done or cancelled item keeps its start.
+func TestItemStart_RefusesAClosedItem(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.submit(t)
 
 	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/acme%231/cancel", `{}`, nil); code != http.StatusOK {
 		t.Fatalf("cancel = %d", code)
 	}
+
+	var prob gen.Problem
 
 	if code := h.call(t, http.MethodPut, "/v1/orgs/acme/items/acme%231/start", `{"in":"1d"}`, &prob); code != http.StatusConflict || deref(prob.Code) != codeItemClosed {
 		t.Errorf("put on a cancelled item = %d %+v; want 409 %s", code, prob, codeItemClosed)

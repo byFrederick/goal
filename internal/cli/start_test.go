@@ -22,6 +22,13 @@ type startGoald struct {
 	bodies []map[string]any
 }
 
+// The item the start tests change, its factory and the wait flag.
+const (
+	startRef     = "goal#3"
+	startFactory = "goal"
+	flagIn       = "--in"
+)
+
 var startAt = time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
 
 func (g *startGoald) serve(t *testing.T) string {
@@ -49,7 +56,7 @@ func (g *startGoald) serve(t *testing.T) string {
 	mux.HandleFunc("POST /v1/orgs/acme/factories/{factory}/items", func(w http.ResponseWriter, r *http.Request) {
 		b := record("submit", r)
 
-		it := gen.Item{Id: "id-3", Ref: "goal#3", Title: "Later", Station: "inbox", State: gen.ItemStateQueued}
+		it := gen.Item{Id: "id-3", Ref: startRef, Title: "Later", Station: "inbox", State: gen.ItemStateQueued}
 		if s, ok := b["start"].(map[string]any); ok && (s["at"] != nil || s["in"] != nil) {
 			it.Start = &gen.ItemStart{At: startAt}
 		}
@@ -58,11 +65,11 @@ func (g *startGoald) serve(t *testing.T) string {
 	})
 	mux.HandleFunc("PUT /v1/orgs/acme/items/{item}/start", func(w http.ResponseWriter, r *http.Request) {
 		record("put", r)
-		reply(w, http.StatusOK, gen.Item{Ref: "goal#3", Start: &gen.ItemStart{At: startAt}})
+		reply(w, http.StatusOK, gen.Item{Ref: startRef, Start: &gen.ItemStart{At: startAt}})
 	})
 	mux.HandleFunc("DELETE /v1/orgs/acme/items/{item}/start", func(w http.ResponseWriter, r *http.Request) {
 		record("delete", r)
-		reply(w, http.StatusOK, gen.Item{Ref: "goal#3"})
+		reply(w, http.StatusOK, gen.Item{Ref: startRef})
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("goald got %s %s; want no other request (an item with a start is not followed)", r.Method, r.URL.Path)
@@ -83,7 +90,7 @@ func TestRun_WithAStartDoesNotFollow(t *testing.T) {
 	env := testEnv(t, g.serve(t), map[string]string{envOrg: orgAcme})
 
 	var out bytes.Buffer
-	if err := run(t.Context(), []string{"run", "goal", "Later", "--in", "36h", "--after", "goal#1", "--after", "goal#2"}, &printer{w: &out}, env, nil); err != nil {
+	if err := run(t.Context(), []string{"run", startFactory, "Later", flagIn, "36h", "--after", notedRef, "--after", closedRef}, &printer{w: &out}, env, nil); err != nil {
 		t.Fatalf("goal run: %v", err)
 	}
 
@@ -94,11 +101,11 @@ func TestRun_WithAStartDoesNotFollow(t *testing.T) {
 	}
 
 	start, _ := g.bodies[0]["start"].(map[string]any)
-	if after, _ := start["after"].([]any); start["in"] != "36h" || start["at"] != nil || len(after) != 2 || after[1] != "goal#2" {
+	if after, _ := start["after"].([]any); start["in"] != "36h" || start["at"] != nil || len(after) != 2 || after[1] != closedRef {
 		t.Errorf("start sent = %v; want in 36h after goal#1 and goal#2", start)
 	}
 
-	if err := run(t.Context(), []string{"run", "goal", "Later", "--at", "2026-11-05T09:00", "--in", "1d"}, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
+	if err := run(t.Context(), []string{"run", startFactory, "Later", "--at", "2026-11-05T09:00", flagIn, "1d"}, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
 		t.Errorf("goal run --at --in = %v; want a usage error", err)
 	}
 }
@@ -112,9 +119,9 @@ func TestStart_ChangesOrClearsTheStart(t *testing.T) {
 
 	var out bytes.Buffer
 	for _, args := range [][]string{
-		{verbStart, "goal#3", "--at", "2026-11-05T09:00"},
-		{verbStart, "goal#3", "--in", "2w"},
-		{verbStart, "goal#3", "--now"},
+		{verbStart, startRef, "--at", "2026-11-05T09:00"},
+		{verbStart, startRef, flagIn, "2w"},
+		{verbStart, startRef, "--now"},
 	} {
 		if err := run(t.Context(), args, &printer{w: &out}, env, nil); err != nil {
 			t.Fatalf("goal %v: %v", args, err)
@@ -142,10 +149,10 @@ func TestStart_UsageErrors(t *testing.T) {
 
 	for _, args := range [][]string{
 		{verbStart},
-		{verbStart, "goal#3"},
-		{verbStart, "goal#3", "--now", "--in", "1d"},
-		{verbStart, "goal#3", "--at", "2026-11-05", "--in", "1d"},
-		{verbStart, "goal#3", "goal#4", "--now"},
+		{verbStart, startRef},
+		{verbStart, startRef, "--now", flagIn, "1d"},
+		{verbStart, startRef, "--at", "2026-11-05", flagIn, "1d"},
+		{verbStart, startRef, "goal#4", "--now"},
 	} {
 		if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); !errors.Is(err, errUsage) {
 			t.Errorf("goal %v = %v; want a usage error", args, err)

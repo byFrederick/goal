@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"strings"
 	"time"
@@ -18,7 +20,7 @@ func (r *refsFlag) String() string { return strings.Join(*r, ",") }
 
 func (r *refsFlag) Set(v string) error {
 	if strings.TrimSpace(v) == "" {
-		return fmt.Errorf("an item ref is empty")
+		return errors.New("an item ref is empty")
 	}
 
 	*r = append(*r, strings.TrimSpace(v))
@@ -29,9 +31,7 @@ func (r *refsFlag) Set(v string) error {
 // startFlags are --at and --in, the start's time or wait.
 type startFlags struct{ at, in *string }
 
-func addStartFlags(fs interface {
-	String(name, value, usage string) *string
-}) startFlags {
+func addStartFlags(fs *flag.FlagSet) startFlags {
 	return startFlags{
 		at: fs.String("at", "", "start at this time: RFC 3339, or a date and time in your time zone (2026-11-05T09:00)"),
 		in: fs.String("in", "", "start after this wait: 36h, 7d or 2w"),

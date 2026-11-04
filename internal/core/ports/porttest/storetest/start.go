@@ -3,11 +3,28 @@ package storetest
 import (
 	"errors"
 	"reflect"
+	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
+
+// startTests are the cases of items' starts (ADR 0040 decisions 3 and 4).
+var startTests = []struct {
+	name string
+	test func(f *fixture)
+}{
+	{"ClaimNext_SkipsAFutureStart", testClaimSkipsAFutureStart},
+	{"Releasable_SkipsOpenNeedsAndFutureStarts", testReleasableSkipsOpenNeedsAndFutureStarts},
+	{"CreateItem_KeepsTheStartAndLinksAfter", testCreateItemWithAStart},
+	{"SetStart_ChangesAndClears", testSetStart},
+}
+
+// startBy is who changes the starts here, and titleLater an item that starts later.
+var startBy = domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
+
+const titleLater = "later"
 
 // Releasable lists, in pull order, only the waiting items with no open need and no start after
 // now, filtered before the limit; Waiting still lists them all.
@@ -16,7 +33,7 @@ func testReleasableSkipsOpenNeedsAndFutureStarts(f *fixture) {
 	ctx := f.ctx(t)
 
 	need := f.create(t, domain.NewItem{Title: "need", Station: stNext})
-	f.create(t, domain.NewItem{Title: "later", Station: stInbox, Class: domain.ClassExpedite, StartAt: t1.Add(time.Second)})
+	f.create(t, domain.NewItem{Title: titleLater, Station: stInbox, Class: domain.ClassExpedite, StartAt: t1.Add(time.Second)})
 	f.create(t, domain.NewItem{Title: "after", Station: stInbox, Priority: 5, After: []domain.ItemID{need.ID}})
 	due := f.create(t, domain.NewItem{Title: "due", Station: stInbox, StartAt: t1, CreatedAt: t0.Add(time.Second)})
 	now := f.create(t, domain.NewItem{Title: "now", Station: stInbox})
@@ -45,7 +62,7 @@ func testClaimSkipsAFutureStart(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 
-	later := f.create(t, domain.NewItem{Title: "later", Class: domain.ClassExpedite, StartAt: t1.Add(time.Minute)})
+	later := f.create(t, domain.NewItem{Title: titleLater, Class: domain.ClassExpedite, StartAt: t1.Add(time.Minute)})
 	now := f.create(t, domain.NewItem{Title: "now"})
 
 	if got, _ := f.claim(t, work, 0, t1); got.ID != now.ID {
@@ -66,8 +83,8 @@ func testCreateItemWithAStart(f *fixture) {
 	t := f.t
 
 	need := f.create(t, domain.NewItem{Title: "need"})
-	by := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
-	it := f.create(t, domain.NewItem{Title: "later", Station: stInbox, StartAt: t1, After: []domain.ItemID{need.ID}, CreatedBy: by})
+	by := startBy
+	it := f.create(t, domain.NewItem{Title: titleLater, Station: stInbox, StartAt: t1, After: []domain.ItemID{need.ID}, CreatedBy: by})
 
 	if got := f.item(t, it.ID); !got.StartAt.Equal(t1) || !got.StartedAt.IsZero() {
 		t.Errorf("start = %v, started %v; want %v, not started", got.StartAt, got.StartedAt, t1)
@@ -89,9 +106,9 @@ func testCreateItemWithAStart(f *fixture) {
 func testSetStart(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
-	by := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
+	by := startBy
 
-	it := f.create(t, domain.NewItem{Title: "later", Station: stInbox, StartAt: t1})
+	it := f.create(t, domain.NewItem{Title: titleLater, Station: stInbox, StartAt: t1})
 
 	changed, err := f.Store.SetStart(ctx, it.ID, it.Position(), t1.Add(time.Hour), by, t1)
 	if err != nil || !changed.StartAt.Equal(t1.Add(time.Hour)) || !changed.UpdatedAt.Equal(t1) {
@@ -103,11 +120,7 @@ func testSetStart(f *fixture) {
 		t.Fatalf("SetStart zero = %+v, %v; want no start", cleared, err)
 	}
 
-	events := f.Events(t, it.ID)
-	if n := len(events); n < 2 || events[n-2].Kind != domain.EventStartChanged || events[n-2].Data["start_at"] != "2026-10-23T11:00:00Z" ||
-		events[n-1].Kind != domain.EventStartChanged || events[n-1].Data["start_at"] != nil || events[n-1].Data["actor"] != by.Ref() {
-		t.Errorf("events = %+v; want two start_changed, the last without start_at", events)
-	}
+	f.twoStartChanges(t, it.ID, by)
 
 	if _, err := f.Store.SetStart(ctx, it.ID, domain.Position{Station: stWork, State: domain.StateQueued}, t1, by, t1); !errors.Is(err, ports.ErrConflict) {
 		t.Errorf("SetStart from elsewhere = %v; want ErrConflict", err)
@@ -115,5 +128,25 @@ func testSetStart(f *fixture) {
 
 	if _, err := f.Store.SetStart(ctx, missingItem, it.Position(), t1, by, t1); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("SetStart of a missing item = %v; want ErrNotFound", err)
+	}
+}
+
+// twoStartChanges checks that id's last two events are start_changed by by: to 11:00, then
+// cleared.
+func (f *fixture) twoStartChanges(t *testing.T, id domain.ItemID, by domain.Actor) {
+	t.Helper()
+
+	events := f.Events(t, id)
+	if len(events) < 2 {
+		t.Fatalf("events = %+v; want two start_changed", events)
+	}
+
+	changed, cleared := events[len(events)-2], events[len(events)-1]
+	if changed.Kind != domain.EventStartChanged || changed.Data["start_at"] != "2026-10-23T11:00:00Z" {
+		t.Errorf("event = %+v; want start_changed to 11:00", changed)
+	}
+
+	if cleared.Kind != domain.EventStartChanged || cleared.Data["start_at"] != nil || cleared.Data["actor"] != by.Ref() {
+		t.Errorf("event = %+v; want start_changed without start_at by %s", cleared, by.Ref())
 	}
 }

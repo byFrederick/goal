@@ -169,17 +169,17 @@ func TestFile_AnyLaneWhenNothingRoutes(t *testing.T) {
 	}
 }
 
-// A wait becomes a time from filing, a time without a zone is read in the person's zone, a done
-// after item is met and left out, and an open one is kept once.
+// A wait becomes a time from filing, a time without a zone is read in the person's zone, an after
+// item that is done is met and left out, and an open one is kept once.
 func TestFile_StartResolvesAtFiling(t *testing.T) {
 	t.Parallel()
 
 	open := &Item{ID: "open", FactoryID: "f", State: StateQueued}
-	done := &Item{ID: "done", FactoryID: "f", State: StateDone}
+	met := &Item{ID: "met", FactoryID: "f", State: StateDone}
 
 	n, err := File(fileLine(), FileRequest{
 		Origin: OriginPerson, By: ada, Title: "Later", At: fileAt,
-		Start: &StartRequest{In: "36h", After: []After{{Ref: "f#1", Item: open}, {Ref: "f#2", Item: done}, {Ref: "open", Item: open}}},
+		Start: &StartRequest{In: "36h", After: []After{{Ref: "f#1", Item: open}, {Ref: "f#2", Item: met}, {Ref: "open", Item: open}}},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -65,10 +65,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"ClaimNext_NoWork", testClaimNoWork},
 		{"ClaimNext_SlotTaken", testClaimSlotTaken},
 		{"ClaimNext_SkipsItemsWithOpenNeeds", testClaimSkipsOpenNeeds},
-		{"ClaimNext_SkipsAFutureStart", testClaimSkipsAFutureStart},
-		{"Releasable_SkipsOpenNeedsAndFutureStarts", testReleasableSkipsOpenNeedsAndFutureStarts},
-		{"CreateItem_KeepsTheStartAndLinksAfter", testCreateItemWithAStart},
-		{"SetStart_ChangesAndClears", testSetStart},
 		{"Edges_AddListRemove", testEdgesAddListRemove},
 		{"Edges_CycleRefused", testEdgesCycleRefused},
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
@@ -168,7 +164,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
-	tests = append(append(tests, jonahTests...), fileTests...)
+	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 
 	for _, tc := range tests {

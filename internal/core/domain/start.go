@@ -97,6 +97,7 @@ func (r StartRequest) Resolve(factory FactoryID, now time.Time) (Start, error) {
 		s.At, err = ParseStartTime(r.At, r.Zone)
 	case r.In != "":
 		var wait time.Duration
+
 		wait, err = ParseWait(r.In)
 		s.At = now.Add(wait)
 	}
