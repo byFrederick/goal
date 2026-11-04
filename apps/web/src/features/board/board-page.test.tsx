@@ -345,9 +345,28 @@ describe('BoardPage', () => {
     expect(filter.getAttribute('aria-expanded')).toBe('false');
     expect(filter.classList).toContain('size-11');
     expect(screen.getByRole('button', { name: 'New item' }).classList).toContain('size-11');
-    expect(screen.queryByRole('heading', { name: 'Board' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Inbox/ })).toBeNull();
     expect(screen.queryByText('Line running')).toBeNull();
+  });
+
+  it('gives the phone exactly one h1, Board, hidden from sight', async () => {
+    stubPhone();
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    await screen.findByRole('button', { name: 'Filter' });
+    const h1s = screen.getAllByRole('heading', { level: 1 });
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0]?.textContent).toBe('Board');
+    expect(h1s[0]?.classList).toContain('sr-only');
+  });
+
+  it('keeps exactly one visible h1, Board, on desktop', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    const h1s = await screen.findAllByRole('heading', { level: 1 });
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0]?.textContent).toBe('Board');
+    expect(h1s[0]?.classList).not.toContain('sr-only');
   });
 
   it('the Filter button shows the filters row and hides it again', async () => {
@@ -809,8 +828,8 @@ describe('board filters and grouping', () => {
     expect(within(columns).queryAllByRole('link', { name: /merged/ })).toHaveLength(0);
     expectShown([ADD, WIRE]);
     const [addCard, wireCard] = within(columns).getAllByRole('article');
-    expect(within(addCard as HTMLElement).getByRole('link', { name: 'Part 4 of 5 of PWA' })).toBeTruthy();
-    expect(within(wireCard as HTMLElement).getByRole('link', { name: 'Part 5 of 5 of PWA' })).toBeTruthy();
+    expect(within(addCard as HTMLElement).getByRole('link', { name: /^PWA.*4 of 5/ })).toBeTruthy();
+    expect(within(wireCard as HTMLElement).getByRole('link', { name: /^PWA.*5 of 5/ })).toBeTruthy();
     // Three of the five parts are merged: three filled pips on each part's card.
     for (const card of [addCard, wireCard] as HTMLElement[]) {
       expect(card.querySelectorAll('i.bg-ink')).toHaveLength(3);

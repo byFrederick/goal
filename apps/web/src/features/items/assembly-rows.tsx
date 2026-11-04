@@ -81,7 +81,7 @@ export function SelectBox({
     if (box.current) box.current.indeterminate = indeterminate;
   }, [indeterminate]);
   return (
-    <span className="flex size-11 items-center justify-center md:size-6">
+    <label className="flex size-11 items-center justify-center md:size-6">
       <input
         ref={box}
         type="checkbox"
@@ -90,7 +90,7 @@ export function SelectBox({
         onChange={onChange}
         className="m-0 size-4 cursor-pointer accent-run"
       />
-    </span>
+    </label>
   );
 }
 
