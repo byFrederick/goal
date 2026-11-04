@@ -67,6 +67,10 @@ export interface MockKnowledge {
   reset: (now: number) => void;
   /** The names of org's sources. */
   names: (org: string) => string[];
+  /** The sources of org as the API lists them. */
+  sources: (org: string) => KnowledgeSource[];
+  /** A source's current snapshot as the preview line needs it: its file count and read_when; undefined when it has none. */
+  indexOf: (org: string, name: string) => { files: number; read_when: string } | undefined;
   /** The names of org's sources that read the connection named connection. */
   readers: (org: string, connection: string) => string[];
   /** Serves the organization's knowledge routes; false for any other. */
@@ -153,6 +157,7 @@ function seed(now: number, by: Actor): MockSource[] {
     last_synced_at: at(-1 * dayMs),
     next_sync_at: at(-1 * dayMs + hourMs),
     latest_snapshot: null,
+    sync_failures: 0,
     used_by: { factories: [], readers: [] },
     created_by: by,
     created_at: at(-30 * dayMs),
@@ -170,6 +175,7 @@ function seed(now: number, by: Actor): MockSource[] {
         config: { repository: 'https://github.com/acme/dashboards', include: '**/*.md' },
         status: 'failed',
         last_error: 'the server refused the token',
+        sync_failures: 3,
         last_synced_at: at(-1 * hourMs),
         next_sync_at: at(hourMs),
       }),
@@ -242,12 +248,59 @@ function seed(now: number, by: Actor): MockSource[] {
         config: { site: 'https://acme.atlassian.net', email: 'bot@example.com', spaces: 'PROD', root_page: '12345' },
         status: 'failed',
         last_error: 'Confluence refused the token',
+        sync_failures: 3,
         last_synced_at: at(-2 * hourMs),
         next_sync_at: at(hourMs),
       }),
       docs: [
         doc('product-specs', 'launch-checklist.md', '# Launch checklist\n\nWho signs off before a release goes out.', {
           indexed_at: at(-2 * hourMs),
+        }),
+      ],
+    },
+    {
+      source: source(5, {
+        name: 'engineering-handbook',
+        title: 'Engineering handbook',
+        kind: 'repository',
+        read_when: 'You need how acme builds, reviews and ships code.',
+        config: { repository: 'https://github.com/acme/handbook', branch: 'main', include: 'docs/**/*.md' },
+        secret: 'github-token',
+        last_synced_at: at(-3 * hourMs),
+        next_sync_at: at(-3 * hourMs + 3_600_000),
+      }),
+      docs: [
+        doc(
+          'engineering-handbook',
+          'docs/code-review.md',
+          '# Code review\n\nOne reviewer approves each change. Say what you ran and what you could not.',
+          { url: blob('handbook', 'docs/code-review.md'), indexed_at: at(-3 * hourMs) },
+        ),
+        doc(
+          'engineering-handbook',
+          'docs/releases.md',
+          '# Releases\n\nShip from main. Roll back first and ask why second.',
+          { url: blob('handbook', 'docs/releases.md'), indexed_at: at(-3 * hourMs) },
+        ),
+      ],
+    },
+    {
+      source: source(6, {
+        name: 'brand-guide',
+        title: 'Brand guide',
+        kind: 'upload',
+        read_when: 'You write copy for customers of acme.',
+        sync_every_seconds: 0,
+        last_synced_at: at(-2 * dayMs),
+        next_sync_at: null,
+      }),
+      docs: [
+        doc('brand-guide', 'voice.md', '# Voice\n\nPlain and specific. Write to support@example.com for questions.', {
+          indexed_at: at(-2 * dayMs),
+        }),
+        doc('brand-guide', 'naming.txt', 'Product names: acme Cloud, acme Console.', {
+          mime: 'text/plain',
+          indexed_at: at(-2 * dayMs),
         }),
       ],
     },
@@ -359,6 +412,7 @@ export function createKnowledge({
       }
     }
     s.source.status = 'idle';
+    s.source.sync_failures = 0;
     delete s.source.last_error;
     s.source.last_synced_at = new Date(now).toISOString();
     // goald's FinishKnowledgeSync moves updated_at too: a form keyed by it would lose its edits.
@@ -458,6 +512,7 @@ export function createKnowledge({
         last_synced_at: null,
         next_sync_at: kind === 'live' || every === 0 ? null : now,
         latest_snapshot: null,
+        sync_failures: 0,
         used_by: { factories: [], readers: [] },
         created_by: by,
         created_at: now,
@@ -611,6 +666,11 @@ export function createKnowledge({
   return {
     reset,
     names: (org) => list(org).map((s) => s.source.name),
+    sources: (org) => list(org).map((s) => out(org, s)),
+    indexOf: (org, name) => {
+      const s = named(org, name);
+      return s && s.docs.length > 0 ? { files: s.docs.length, read_when: s.source.read_when } : undefined;
+    },
     readers: (org, connection) =>
       list(org)
         .filter((s) => s.source.connection === connection)
