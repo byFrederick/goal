@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -789,6 +791,8 @@ func proposalFrom(r db.JonahProposal) (domain.Proposal, error) {
 		out.Undoes = domain.ProposalID(r.Undoes.String())
 	}
 
+	out.Agent = deref(r.Agent)
+
 	if r.PublishedVersionID != nil {
 		out.PublishedVersionID = domain.DefinitionVersionID(r.PublishedVersionID.String())
 	}
@@ -808,4 +812,119 @@ func isCheckViolationErr(err error) bool {
 	pgErr, ok := errors.AsType[*pgconn.PgError](err)
 
 	return ok && pgErr.Code == checkViolation
+}
+
+// ProposeModel implements ports.JonahStore: the factory's next number, the proposal and its tries
+// in one transaction.
+func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, agent string,
+	n domain.NewProposal, tries []domain.NewPastTry, at time.Time,
+) (domain.Proposal, []domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.Proposal{}, nil, domain.ErrNoOrg
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	if strings.TrimSpace(agent) == "" {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: no agent: %w", domain.ErrInvalid)
+	}
+
+	p, err := modelProposalParams(factory, version, agent, n, at)
+	if err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	if tries, err = triesOf(domain.ProposalID(p.ID.String()), tries); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	var (
+		row    db.JonahProposal
+		queued = make([]domain.PastTry, 0, len(tries))
+	)
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		last, err := q.LastProposalNumber(ctx, p.FactoryID)
+		if err != nil {
+			return fmt.Errorf("last proposal number: %w", err)
+		}
+
+		p.Number = last + 1
+
+		if row, err = q.InsertModelProposal(ctx, p); err != nil {
+			return err
+		}
+
+		for _, n := range tries {
+			t, err := insertTry(ctx, q, p.FactoryID, p.ID, n, at)
+			if err != nil {
+				return err
+			}
+
+			queued = append(queued, pastTryFrom(t, p.Number))
+		}
+
+		return supersede(ctx, q, p.FactoryID, n.Supersedes, at)
+	})
+	if err != nil {
+		return domain.Proposal{}, nil, modelProposalError(agent, err)
+	}
+
+	out, err := proposalFrom(row)
+
+	return out, queued, err
+}
+
+// triesOf are tries of proposal, each checked.
+func triesOf(proposal domain.ProposalID, tries []domain.NewPastTry) ([]domain.NewPastTry, error) {
+	out := slices.Clone(tries)
+	for i := range out {
+		out[i].ProposalID = proposal
+		if err := out[i].Check(); err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
+}
+
+// modelProposalError is err, ProposeModel's transaction's, with the port's sentinel.
+func modelProposalError(agent string, err error) error {
+	switch {
+	case errors.Is(err, ports.ErrNotFound) || errors.Is(err, ports.ErrConflict):
+		return fmt.Errorf("propose model of agent %s: %w", agent, err)
+	case isForeignKeyViolation(err):
+		return fmt.Errorf("propose model of agent %s: %w: %w", agent, ports.ErrNotFound, err)
+	case isCheckViolationErr(err):
+		return fmt.Errorf("propose model of agent %s: %w: %w", agent, domain.ErrInvalid, err)
+	default:
+		return fmt.Errorf("propose model of agent %s: %w", agent, err)
+	}
+}
+
+// modelProposalParams are n's row as a model proposal of agent, made against version.
+func modelProposalParams(factory domain.FactoryID, version domain.DefinitionVersionID, agent string, n domain.NewProposal,
+	at time.Time,
+) (db.InsertModelProposalParams, error) {
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return db.InsertModelProposalParams{}, err
+	}
+
+	v, err := parseID("definition version", string(version))
+	if err != nil {
+		return db.InsertModelProposalParams{}, err
+	}
+
+	p, err := insertProposalParams(db.JonahReview{FactoryID: f, VersionID: v}, 0, n, at)
+	if err != nil {
+		return db.InsertModelProposalParams{}, err
+	}
+
+	return db.InsertModelProposalParams{
+		ID: p.ID, FactoryID: p.FactoryID, Agent: &agent, VersionID: p.VersionID, Title: p.Title, Summary: p.Summary, Edits: p.Edits,
+		Evidence: p.Evidence, Estimate: p.Estimate, Paths: p.Paths, CreatedAt: p.CreatedAt,
+	}, nil
 }

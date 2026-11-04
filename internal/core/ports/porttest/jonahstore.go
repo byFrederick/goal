@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -630,6 +631,68 @@ func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undo
 	s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
 
 	return cloneProposals([]domain.Proposal{p})[0], nil
+}
+
+// ProposeModel implements ports.JonahStore.
+func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, agent string,
+	n domain.NewProposal, tries []domain.NewPastTry, at time.Time,
+) (domain.Proposal, []domain.PastTry, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Proposal{}, nil, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	if strings.TrimSpace(agent) == "" || version == "" {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: it needs an agent and a version: %w", domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	if !s.ownsFactory(org, factory) {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: factory %s: %w", factory, ports.ErrNotFound)
+	}
+
+	var last int64
+
+	for _, p := range s.jonah.proposals {
+		if p.org == org && p.row.FactoryID == factory {
+			last = max(last, p.row.Number)
+		}
+	}
+
+	p := domain.Proposal{
+		ID: domain.ProposalID(s.newID()), FactoryID: factory, Number: last + 1, Agent: agent, VersionID: version,
+		State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Edits: cloneEdits(n.Edits),
+		Evidence: slices.Clone(n.Evidence), Estimate: n.Estimate, CreatedAt: at,
+	}
+
+	tries = slices.Clone(tries)
+	for i := range tries {
+		tries[i].ProposalID = p.ID
+		if err := tries[i].Check(); err != nil {
+			return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+		}
+	}
+
+	queued, err := s.newPastTries(org, factory, p.ID, p.Number, tries, at)
+	if err != nil {
+		return domain.Proposal{}, nil, fmt.Errorf("propose model: %w", err)
+	}
+
+	s.supersede(org, factory, n.Supersedes, at)
+	s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
+
+	for _, t := range queued {
+		s.jonah.tries = append(s.jonah.tries, jonahRow[domain.PastTry]{org: org, row: t})
+	}
+
+	return cloneProposals([]domain.Proposal{p})[0], queued, nil
 }
 
 // EvidenceItems implements ports.JonahStore.

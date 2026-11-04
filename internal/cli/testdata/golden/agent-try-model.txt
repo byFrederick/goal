@@ -1,0 +1,10 @@
+exit 0
+--- stdout
+try claude-opus-5-5 for frontend-engineer (now claude-haiku-5-5) on its 2 newest finished items, 3 tries each:
+ITEM    STATION  ON THE LINE                         TITLE
+web#12  build    passed first time, $0.42            Fix the login timeout
+web#9   build    sent back 2 times at review, $1.10  Add the export
+6 tries, about $4.50; $12.25 left of Jonah's budget
+Propose claude-opus-5-5 for frontend-engineer and queue its 6 tries? [y/N] ✓ proposal 7: Try claude-opus-5-5 for frontend-engineer, 6 tries queued
+see it with: goal jonah show 7 --factory web
+--- stderr

@@ -184,6 +184,16 @@ VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(undoes), 
         sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(paths)::text[], sqlc.arg(created_at))
 RETURNING *;
 
+-- name: InsertModelProposal :one
+-- A person's model proposal (Try another model, ADR 0039 decision 13): no review, the agent whose
+-- model it changes.
+INSERT INTO jonah_proposals (id, factory_id, number, agent, version_id, title, summary, edits, evidence, estimate, paths,
+                             created_at)
+VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(agent), sqlc.arg(version_id), sqlc.arg(title),
+        sqlc.arg(summary), sqlc.arg(edits), sqlc.arg(evidence), sqlc.arg(estimate), sqlc.arg(paths)::text[],
+        sqlc.arg(created_at))
+RETURNING *;
+
 -- name: EvidenceItems :many
 -- The factory's items finished in [since, until), the most recently finished first, at most
 -- max_items: a done item by its done_at (work_items_done_at_idx), a cancelled one by its latest

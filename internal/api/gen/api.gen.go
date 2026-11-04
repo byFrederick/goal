@@ -5541,6 +5541,71 @@ type MetricsSummary struct {
 	To               openapi_types.Date `json:"to"`
 }
 
+// ModelProposalEstimate defines model for ModelProposalEstimate.
+type ModelProposalEstimate struct {
+	Agent string `json:"agent"`
+
+	// BudgetLeftUsd What is left of Jonah's budget over the last 7 days
+	BudgetLeftUsd float64 `json:"budget_left_usd"`
+
+	// CurrentModel The agent's model now
+	CurrentModel string `json:"current_model"`
+
+	// EstimateUsd Each item's run cost × 3
+	EstimateUsd float64 `json:"estimate_usd"`
+
+	// Items The agent's newest finished items the tries run on, newest first, at most five
+	Items []ModelProposalItem `json:"items"`
+
+	// Model The model to try
+	Model string `json:"model"`
+
+	// Tries Three per item
+	Tries int `json:"tries"`
+}
+
+// ModelProposalItem defines model for ModelProposalItem.
+type ModelProposalItem struct {
+	// CostUsd What the item cost
+	CostUsd float64 `json:"cost_usd"`
+
+	// ItemRef <factory name>#<number>
+	ItemRef   string `json:"item_ref"`
+	ItemTitle string `json:"item_title"`
+
+	// LineResult How the item went on the line, as "passed first time, $0.42" or "sent back 2 times at review, $1.10"
+	LineResult string `json:"line_result"`
+
+	// RunCostUsd What the run the tries rerun cost
+	RunCostUsd float64 `json:"run_cost_usd"`
+
+	// RunId The item's run the tries rerun
+	RunId string `json:"run_id"`
+
+	// SentBack How many times the item was sent back
+	SentBack int `json:"sent_back"`
+
+	// Station The station of the run the tries rerun
+	Station string `json:"station"`
+}
+
+// ModelProposalRequest defines model for ModelProposalRequest.
+type ModelProposalRequest struct {
+	// Confirm Store the proposal and queue its tries; false answers the estimate only
+	Confirm *bool `json:"confirm,omitempty"`
+
+	// Model The model to try
+	Model string `json:"model"`
+}
+
+// ModelProposalResult defines model for ModelProposalResult.
+type ModelProposalResult struct {
+	Estimate ModelProposalEstimate `json:"estimate"`
+
+	// Proposal The stored proposal; absent from an estimate
+	Proposal *Proposal `json:"proposal,omitempty"`
+}
+
 // ModelSpend defines model for ModelSpend.
 type ModelSpend struct {
 	Model string  `json:"model"`
@@ -6234,7 +6299,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). Try another model (ADR 0039 decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with estimate and model_estimate).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -6252,6 +6317,9 @@ type Problem struct {
 
 	// Items The open items that keep a publish or restore from dropping stations
 	Items *ItemsAtRemovedStations `json:"items,omitempty"`
+
+	// ModelEstimate learning-budget-exhausted of a model proposal only, the estimate it refused
+	ModelEstimate *ModelProposalEstimate `json:"model_estimate,omitempty"`
 
 	// ParseError Where factory.yaml stops parsing
 	ParseError *ParseError `json:"parse_error,omitempty"`
@@ -8525,6 +8593,9 @@ type ValidateDefinitionJSONRequestBody = DefinitionFiles
 // CreateFactoryJSONRequestBody defines body for CreateFactory for application/json ContentType.
 type CreateFactoryJSONRequestBody = NewFactoryRequest
 
+// ProposeAgentModelJSONRequestBody defines body for ProposeAgentModel for application/json ContentType.
+type ProposeAgentModelJSONRequestBody = ModelProposalRequest
+
 // PullAndonJSONRequestBody defines body for PullAndon for application/json ContentType.
 type PullAndonJSONRequestBody = NewAndonPull
 
@@ -9439,6 +9510,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
 	ListFactoryActivity(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProposeAgentModelWithBody Try another model for an agent, as a proposal (ADR 0039 decision 13)
+	//
+	// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+	ProposeAgentModelWithBody(ctx context.Context, org OrgRef, factory FactoryRef, agent string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ProposeAgentModel Try another model for an agent, as a proposal (ADR 0039 decision 13)
+	//
+	// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+	ProposeAgentModel(ctx context.Context, org OrgRef, factory FactoryRef, agent string, body ProposeAgentModelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAgentStats One agent's work over a range of UTC days
 	//
@@ -12092,6 +12181,44 @@ func (c *Client) GetFactory(ctx context.Context, org OrgRef, factory FactoryRef,
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
 func (c *Client) ListFactoryActivity(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListFactoryActivityRequest(c.Server, org, factory, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProposeAgentModelWithBody Try another model for an agent, as a proposal (ADR 0039 decision 13)
+//
+// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+func (c *Client) ProposeAgentModelWithBody(ctx context.Context, org OrgRef, factory FactoryRef, agent string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProposeAgentModelRequestWithBody(c.Server, org, factory, agent, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ProposeAgentModel Try another model for an agent, as a proposal (ADR 0039 decision 13)
+//
+// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+func (c *Client) ProposeAgentModel(ctx context.Context, org OrgRef, factory FactoryRef, agent string, body ProposeAgentModelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewProposeAgentModelRequest(c.Server, org, factory, agent, body)
 	if err != nil {
 		return nil, err
 	}
@@ -17887,6 +18014,67 @@ func NewListFactoryActivityRequest(server string, org OrgRef, factory FactoryRef
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewProposeAgentModelRequest calls the generic ProposeAgentModel builder with application/json body
+func NewProposeAgentModelRequest(server string, org OrgRef, factory FactoryRef, agent string, body ProposeAgentModelJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewProposeAgentModelRequestWithBody(server, org, factory, agent, "application/json", bodyReader)
+}
+
+// NewProposeAgentModelRequestWithBody constructs an http.Request for the ProposeAgentModel method, with any body, and a specified content type
+func NewProposeAgentModelRequestWithBody(server string, org OrgRef, factory FactoryRef, agent string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "agent", agent, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/agents/%s/model-proposal", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -27197,6 +27385,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/activity (the `ListFactoryActivity` operationId).
 	ListFactoryActivityWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, params *ListFactoryActivityParams, reqEditors ...RequestEditorFn) (*ListFactoryActivityResponse, error)
 
+	// ProposeAgentModelWithBodyWithResponse Try another model for an agent, as a proposal (ADR 0039 decision 13)
+	//
+	// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+	ProposeAgentModelWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, agent string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProposeAgentModelResponse, error)
+
+	// ProposeAgentModelWithResponse Try another model for an agent, as a proposal (ADR 0039 decision 13)
+	//
+	// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+	ProposeAgentModelWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, agent string, body ProposeAgentModelJSONRequestBody, reqEditors ...RequestEditorFn) (*ProposeAgentModelResponse, error)
+
 	// GetAgentStatsWithResponse One agent's work over a range of UTC days
 	//
 	// Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
@@ -31106,6 +31312,61 @@ func (r ListFactoryActivityResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ListFactoryActivityResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ProposeAgentModelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ModelProposalResult
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ModelProposalResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ProposeAgentModelResponse) GetJSON200() *ModelProposalResult {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r ProposeAgentModelResponse) GetJSON201() *ModelProposalResult {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ProposeAgentModelResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ProposeAgentModelResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ProposeAgentModelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ProposeAgentModelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ProposeAgentModelResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -39622,6 +39883,36 @@ func (c *ClientWithResponses) ListFactoryActivityWithResponse(ctx context.Contex
 	return ParseListFactoryActivityResponse(rsp)
 }
 
+// ProposeAgentModelWithBodyWithResponse Try another model for an agent, as a proposal (ADR 0039 decision 13)
+//
+// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+func (c *ClientWithResponses) ProposeAgentModelWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, agent string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ProposeAgentModelResponse, error) {
+	rsp, err := c.ProposeAgentModelWithBody(ctx, org, factory, agent, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProposeAgentModelResponse(rsp)
+}
+
+// ProposeAgentModelWithResponse Try another model for an agent, as a proposal (ADR 0039 decision 13)
+//
+// Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal (the `ProposeAgentModel` operationId).
+func (c *ClientWithResponses) ProposeAgentModelWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, agent string, body ProposeAgentModelJSONRequestBody, reqEditors ...RequestEditorFn) (*ProposeAgentModelResponse, error) {
+	rsp, err := c.ProposeAgentModel(ctx, org, factory, agent, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseProposeAgentModelResponse(rsp)
+}
+
 // GetAgentStatsWithResponse One agent's work over a range of UTC days
 //
 // Tasks are the agent's leases that ended in the range with a finished outcome (advanced, rejected, escalated); sent back is the share of the advanced ones whose item another station later sent back for rework, grouped by the rejection's category or else its reason; runs (spend, median turns, denied tool calls) are those started in the range. The range is from to to, both included, at most 90 days, to not after today; without one it is the last 7 days. 400 for a bad range, 404 agent-not-found for an agent the factory does not declare.
@@ -44183,6 +44474,46 @@ func ParseListFactoryActivityResponse(rsp *http.Response) (*ListFactoryActivityR
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseProposeAgentModelResponse parses an HTTP response from a ProposeAgentModelWithResponse call
+func ParseProposeAgentModelResponse(rsp *http.Response) (*ProposeAgentModelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ProposeAgentModelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ModelProposalResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ModelProposalResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -49738,6 +50069,9 @@ type ServerInterface interface {
 	// ListFactoryActivity The factory's latest milestone events, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/activity)
 	ListFactoryActivity(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params ListFactoryActivityParams)
+	// ProposeAgentModel Try another model for an agent, as a proposal (ADR 0039 decision 13)
+	// (POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal)
+	ProposeAgentModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, agent string)
 	// GetAgentStats One agent's work over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats)
 	GetAgentStats(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, agent string, params GetAgentStatsParams)
@@ -51621,6 +51955,50 @@ func (siw *ServerInterfaceWrapper) ListFactoryActivity(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListFactoryActivity(w, r, org, factory, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ProposeAgentModel operation middleware
+func (siw *ServerInterfaceWrapper) ProposeAgentModel(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "agent" -------------
+	var agent string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "agent", r.PathValue("agent"), &agent, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "agent", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ProposeAgentModel(w, r, org, factory, agent)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -58697,6 +59075,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal", wrapper.ProposeAgentModel)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges", wrapper.ListJudges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges", wrapper.CreateJudge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/judges/{judge}", wrapper.GetJudge)
@@ -60455,6 +60834,62 @@ type ListFactoryActivitydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListFactoryActivitydefaultApplicationProblemPlusJSONResponse) VisitListFactoryActivityResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProposeAgentModelRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Agent   string     `json:"agent"`
+	Body    *ProposeAgentModelJSONRequestBody
+}
+
+type ProposeAgentModelResponseObject interface {
+	VisitProposeAgentModelResponse(w http.ResponseWriter) error
+}
+
+type ProposeAgentModel200JSONResponse ModelProposalResult
+
+func (response ProposeAgentModel200JSONResponse) VisitProposeAgentModelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProposeAgentModel201JSONResponse ModelProposalResult
+
+func (response ProposeAgentModel201JSONResponse) VisitProposeAgentModelResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProposeAgentModeldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ProposeAgentModeldefaultApplicationProblemPlusJSONResponse) VisitProposeAgentModelResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -67418,6 +67853,9 @@ type StrictServerInterface interface {
 	// ListFactoryActivity The factory's latest milestone events, newest first
 	// (GET /v1/orgs/{org}/factories/{factory}/activity)
 	ListFactoryActivity(ctx context.Context, request ListFactoryActivityRequestObject) (ListFactoryActivityResponseObject, error)
+	// ProposeAgentModel Try another model for an agent, as a proposal (ADR 0039 decision 13)
+	// (POST /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal)
+	ProposeAgentModel(ctx context.Context, request ProposeAgentModelRequestObject) (ProposeAgentModelResponseObject, error)
 	// GetAgentStats One agent's work over a range of UTC days
 	// (GET /v1/orgs/{org}/factories/{factory}/agents/{agent}/stats)
 	GetAgentStats(ctx context.Context, request GetAgentStatsRequestObject) (GetAgentStatsResponseObject, error)
@@ -69141,6 +69579,41 @@ func (sh *strictHandler) ListFactoryActivity(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListFactoryActivityResponseObject); ok {
 		if err := validResponse.VisitListFactoryActivityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ProposeAgentModel operation middleware
+func (sh *strictHandler) ProposeAgentModel(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, agent string) {
+	var request ProposeAgentModelRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Agent = agent
+
+	var body ProposeAgentModelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ProposeAgentModel(ctx, request.(ProposeAgentModelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ProposeAgentModel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ProposeAgentModelResponseObject); ok {
+		if err := validResponse.VisitProposeAgentModelResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

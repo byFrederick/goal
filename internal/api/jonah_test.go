@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/definitions"
 	"github.com/byFrederick/goal/internal/jonah"
 )
 
@@ -39,6 +41,7 @@ var (
 	_ api.JonahDecisions = (*jonah.Decider)(nil)
 	_ jonah.Authoring    = (*api.JonahAuthoring)(nil)
 	_ api.JonahReads     = ports.JonahStore(nil)
+	_ api.JonahModels    = (*jonah.ModelProposals)(nil)
 )
 
 // val is *p, or T's zero value for nil.
@@ -585,4 +588,205 @@ func TestJonah_Unavailable(t *testing.T) {
 
 	code, p := problemOfCall(t, h, http.MethodGet, acmeJonah, "")
 	wantProblem(t, "overview without a Jonah store", code, p, http.StatusServiceUnavailable, "jonah-unavailable")
+}
+
+// lineModels is the model-proposal route of line's agents.
+const lineModels = "/v1/orgs/acme/factories/line/agents/"
+
+// modelLines is jonah.ModelDefinitions over the definitions cache, with the harness's modelLine
+// change, when a test sets one, applied to each line it reads.
+type modelLines struct {
+	*definitions.Cache
+	h *harness
+}
+
+func (m modelLines) Line(ctx context.Context, id domain.DefinitionVersionID) (domain.Line, error) {
+	l, err := m.Cache.Line(ctx, id)
+	if err == nil && m.h.modelLine != nil {
+		l.Agents = slices.Clone(l.Agents)
+		m.h.modelLine(&l)
+	}
+
+	return l, err
+}
+
+// doneLineItem is a done item of line that backend built at build an hour ago, in a claim's first
+// run that cost usd, sent back once at merge; the line spent lineUSD more on another item.
+func (h *harness) doneLineItem(t *testing.T, usd, lineUSD float64) domain.Item {
+	t.Helper()
+
+	ctx := inOrg(t)
+	at := h.clock.Now().Add(-time.Hour)
+	it := h.seed(t, stBuild, domain.StateQueued, at)
+	version := h.lineRecord(t).Current.ID
+
+	for i, cost := range []float64{usd, lineUSD} {
+		item := it
+		if i == 1 {
+			item = h.seed(t, stBuild, domain.StateQueued, at)
+		}
+
+		id, err := h.store.StartRun(ctx, ports.NewRun{
+			FactoryID: lineID, DefinitionVersionID: version, ItemID: item.ID, Station: stBuild, Agent: bakeOffAgent, StartedAt: at,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", BranchHead: strings.Repeat("c", 40)}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: cost}, at.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := h.store.AppendEvents(ctx, domain.Event{
+		FactoryID: lineID, ItemID: it.ID, At: at.Add(2 * time.Minute), Kind: domain.EventRejected, Station: "merge", Actor: "user:ada",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	return h.move(t, it, domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.DoneAt = h.clock.Now() })
+}
+
+// lineRecord is line's record.
+func (h *harness) lineRecord(t *testing.T) ports.FactoryRecord {
+	t.Helper()
+
+	rec, err := h.defs.FactoryRecord(inOrg(t), lineID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return rec
+}
+
+func TestJonah_ModelProposalEstimate(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.doneLineItem(t, 2, 998) // the line spent $1,000: Jonah's budget is $50
+
+	var est gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`, &est); code != http.StatusOK {
+		t.Fatalf("estimate = %d, want 200", code)
+	}
+
+	if est.Proposal != nil {
+		t.Errorf("an estimate answered a proposal: %+v", est.Proposal)
+	}
+
+	wantModelEstimate(t, est.Estimate, it)
+
+	if page := h.proposalPageOf(t, "/v1/orgs/acme/factories/line/jonah/proposals"); len(page.Proposals) != 0 {
+		t.Errorf("an estimate stored %d proposals, want none", len(page.Proposals))
+	}
+
+	var made gen.ModelProposalResult
+	if code := h.call(t, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`","confirm":true}`, &made); code != http.StatusCreated {
+		t.Fatalf("confirm = %d, want 201", code)
+	}
+
+	if p := made.Proposal; p == nil || p.State != gen.ProposalStateProposed || len(p.Edits) != 1 || p.Edits[0].Path != yamlFile ||
+		len(p.Evidence) != 1 || made.Estimate.Tries != 3 {
+		t.Fatalf("confirm = %+v, want a proposed proposal of factory.yaml with its evidence and 3 tries", made)
+	}
+
+	if n := h.audited(t, domain.AuditProposalModel); n != 1 {
+		t.Errorf("%d %s entries, want 1", n, domain.AuditProposalModel)
+	}
+}
+
+// wantModelEstimate fails t unless e is backend's from bakeOffNow to modelOpus on it alone: sent
+// back once at merge, $2, so 3 tries at $6 against the $50 of Jonah's budget.
+func wantModelEstimate(t *testing.T, e gen.ModelProposalEstimate, it domain.Item) {
+	t.Helper()
+
+	if e.Agent != bakeOffAgent || e.CurrentModel != bakeOffNow || e.Model != modelOpus || len(e.Items) != 1 {
+		t.Fatalf("estimate = %+v, want one item of backend from %s to %s", e, bakeOffNow, modelOpus)
+	}
+
+	want := gen.ModelProposalItem{
+		ItemRef: fmt.Sprintf("line#%d", it.Number), ItemTitle: it.Title, Station: stBuild, RunId: e.Items[0].RunId, SentBack: 1,
+		LineResult: "sent back once at merge, $2.00", CostUsd: 2, RunCostUsd: 2,
+	}
+	if e.Items[0] != want || want.RunId == "" {
+		t.Errorf("item = %+v, want %+v", e.Items[0], want)
+	}
+
+	if e.Tries != 3 || e.EstimateUsd != 6 || e.BudgetLeftUsd != 50 {
+		t.Errorf("estimate %d tries, $%v, $%v left; want 3, $6 and $50", e.Tries, e.EstimateUsd, e.BudgetLeftUsd)
+	}
+}
+
+// proposalPageOf reads the first page of proposals at path.
+func (h *harness) proposalPageOf(t *testing.T, path string) gen.ProposalPage {
+	t.Helper()
+
+	var page gen.ProposalPage
+	if code := h.call(t, http.MethodGet, path, "", &page); code != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200", path, code)
+	}
+
+	return page
+}
+
+func TestJonah_ModelProposalRefusals(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.doneLineItem(t, 100, 900) // $300 of tries against a $50 budget
+
+	for _, c := range []struct {
+		what, agent, model string
+		status             int
+		code               string
+	}{
+		{"a model outside the policy", bakeOffAgent, bakeOffNow, http.StatusUnprocessableEntity, "model-not-allowed"},
+		{"the agent's own model", agentFrontend, modelHaiku, http.StatusUnprocessableEntity, "model-not-allowed"},
+		{"an agent with no finished item", agentFrontend, modelOpus, http.StatusUnprocessableEntity, "no-finished-items"},
+		{"an unknown agent", "nobody", modelOpus, http.StatusNotFound, "agent-not-found"},
+	} {
+		code, p := problemOfCall(t, h, http.MethodPost, lineModels+c.agent+"/model-proposal", `{"model":"`+c.model+`","confirm":true}`)
+		wantProblem(t, c.what, code, p, c.status, c.code)
+	}
+
+	code, p := problemOfCall(t, h, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "tries over Jonah's budget", code, p, http.StatusConflict, "learning-budget-exhausted")
+
+	if est := val(p.ModelEstimate); est.EstimateUsd != 300 || est.BudgetLeftUsd != 50 || len(est.Items) != 1 || val(p.Estimate).Usd != 300 {
+		t.Errorf("refused estimate = %+v, want $300 of tries against $50 left", p)
+	}
+
+	h.modelLine = func(l *domain.Line) {
+		for i := range l.Agents {
+			l.Agents[i].Connections = []string{"repo"}
+		}
+	}
+
+	code, p = problemOfCall(t, h, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "an agent that needs a connection", code, p, http.StatusUnprocessableEntity, "agent-not-triable")
+
+	if c := h.request(t, http.MethodPost, factoriesPath, `{"name":"support","title":"Support","start":{"kind":"blank"}}`, nil); c.status != http.StatusCreated {
+		t.Fatalf("create support = %d", c.status)
+	}
+
+	code, p = problemOfCall(t, h, http.MethodPost, factoriesPath+"/support/agents/writer/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "a factory never published", code, p, http.StatusNotFound, "version-not-found")
+
+	h.as(acmeMember(domain.FactoryViewer))
+
+	code, p = problemOfCall(t, h, http.MethodPost, acmeFactory+"/agents/"+writerAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "a viewer's model proposal", code, p, http.StatusForbidden, "forbidden")
+}
+
+func TestJonah_ModelProposalUnavailable(t *testing.T) {
+	t.Parallel()
+
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) { d.Jonah.Models = nil })
+
+	code, p := problemOfCall(t, h, http.MethodPost, lineModels+bakeOffAgent+"/model-proposal", `{"model":"`+modelOpus+`"}`)
+	wantProblem(t, "a model proposal without Try another model", code, p, http.StatusServiceUnavailable, "jonah-unavailable")
 }

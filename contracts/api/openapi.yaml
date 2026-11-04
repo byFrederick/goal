@@ -2600,6 +2600,54 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AgentStats" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: agent
+        in: path
+        required: true
+        description: The agent's name, as the factory's current version declares it
+        schema: { type: string }
+    post:
+      operationId: proposeAgentModel
+      x-goal-scope: definition:edit
+      tags: [learning]
+      summary: Try another model for an agent, as a proposal (ADR 0039 decision 13)
+      description: >-
+        Estimates first: with confirm false (the default) it answers 200 with the estimate and
+        stores nothing. The estimate names the agent's five newest finished items (done items
+        whose first run of a claim by the agent is at a station of the current version that can
+        be tried), how each went on the line, the tries (three per item), their cost (each item's
+        original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the
+        line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the
+        estimate and the proposal: an ordinary proposal against the current version whose one
+        edit is a replacement in factory.yaml that changes the agent's model, with three queued
+        tries per item at the item's station and run on the new model, superseding the open
+        proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422
+        model-not-allowed for a model the organization's policy does not allow or the agent's
+        model already; agent-not-triable for an agent that needs MCP servers or secrets;
+        no-finished-items when the agent has no finished item to try; 409
+        learning-budget-exhausted, with the estimate, when the tries cost more than what is left
+        of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503
+        jonah-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModelProposalRequest" }
+      responses:
+        "200":
+          description: The estimate; nothing is stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelProposalResult" }
+        "201":
+          description: The estimate and the stored proposal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelProposalResult" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/judges:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -5225,7 +5273,9 @@ components:
             and a publish's evals-pending (its eval run is queued or running, or it started one)
             and evals-failing (409, with eval_run_id and failing_cases); the draft stays open.
             Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off
-            (422).
+            (422). Try another model (ADR 0039 decision 13): model-not-allowed, agent-not-triable
+            and no-finished-items (422), learning-budget-exhausted (409, with estimate and
+            model_estimate).
         problems:
           type: array
           description: definition-invalid only, every problem of the definition (errors block the publish)
@@ -5256,6 +5306,9 @@ components:
         estimate:
           allOf: [{ $ref: "#/components/schemas/EvalEstimate" }]
           description: learning-budget-exhausted only, the estimate of the bake-off it refused
+        model_estimate:
+          allOf: [{ $ref: "#/components/schemas/ModelProposalEstimate" }]
+          description: learning-budget-exhausted of a model proposal only, the estimate it refused
         uses:
           type: array
           description: secret-in-use only, what uses the secret
@@ -7688,6 +7741,51 @@ components:
         item_title: { type: string }
         station: { type: string }
         quote: { type: string, description: The quoted reason it was sent back }
+    ModelProposalRequest:
+      type: object
+      required: [model]
+      properties:
+        model: { type: string, minLength: 1, description: The model to try, one the organization's policy allows }
+        confirm:
+          type: boolean
+          default: false
+          description: Store the proposal and queue its tries; false answers the estimate only
+    ModelProposalItem:
+      type: object
+      required: [item_ref, item_title, station, run_id, line_result, sent_back, cost_usd, run_cost_usd]
+      properties:
+        item_ref: { type: string, description: "<factory name>#<number>" }
+        item_title: { type: string }
+        station: { type: string, description: The station of the run the tries rerun }
+        run_id: { type: string, description: The item's run the tries rerun, its newest first run of a claim by the agent }
+        line_result:
+          type: string
+          description: How the item went on the line, as "passed first time, $0.42" or "sent back 2 times at review, $1.10"
+        sent_back: { type: integer, description: How many times the item was sent back, at any station }
+        cost_usd: { type: number, format: double, description: What the item cost }
+        run_cost_usd: { type: number, format: double, description: What the run the tries rerun cost }
+    ModelProposalEstimate:
+      type: object
+      required: [agent, current_model, model, items, tries, estimate_usd, budget_left_usd]
+      properties:
+        agent: { type: string }
+        current_model: { type: string, description: The agent's model now, the runtime's when it names none }
+        model: { type: string, description: The model to try }
+        items:
+          type: array
+          description: The agent's newest finished items the tries run on, newest first, at most five
+          items: { $ref: "#/components/schemas/ModelProposalItem" }
+        tries: { type: integer, description: Three per item }
+        estimate_usd: { type: number, format: double, description: Each item's run cost × 3, summed }
+        budget_left_usd: { type: number, format: double, description: What is left of Jonah's budget over the last 7 days }
+    ModelProposalResult:
+      type: object
+      required: [estimate]
+      properties:
+        estimate: { $ref: "#/components/schemas/ModelProposalEstimate" }
+        proposal:
+          allOf: [{ $ref: "#/components/schemas/Proposal" }]
+          description: The stored proposal; absent from an estimate
     Proposal:
       allOf:
         - $ref: "#/components/schemas/ProposalEntry"

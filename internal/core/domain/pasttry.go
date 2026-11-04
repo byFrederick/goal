@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -57,6 +58,9 @@ const (
 	MaxPastTryError = 2000
 	// MaxPastTryReason bounds the reason of a try's grade, in characters (tries.reason).
 	MaxPastTryReason = 2000
+	// ModelTriesPerItem is how many tries a model proposal (Try another model, ADR 0039 decision
+	// 13) gets per item, and the highest attempt a try of one item may have (tries.attempt).
+	ModelTriesPerItem = 3
 )
 
 // PastTryStartRef is the ref prepare points at the commit a try's agent starts from, once the
@@ -76,8 +80,11 @@ type PastTry struct {
 	// ProposalNumber is the proposal's number in its factory, read with the try.
 	ProposalNumber int64
 	ItemID         ItemID
-	Station        string
-	OriginalRunID  RunID
+	// Attempt numbers the proposal's tries of the item, from 1: a model proposal has
+	// ModelTriesPerItem of each.
+	Attempt       int
+	Station       string
+	OriginalRunID RunID
 	// TryRunID is the try's own run, of kind try; empty until it ran.
 	TryRunID RunID
 	Model    string
@@ -96,10 +103,11 @@ type PastTry struct {
 	FinishedAt time.Time
 }
 
-// NewPastTry is one try to queue.
+// NewPastTry is one try to queue. Attempt 0 is the first, as 1 is.
 type NewPastTry struct {
 	ProposalID    ProposalID
 	ItemID        ItemID
+	Attempt       int
 	Station       string
 	OriginalRunID RunID
 	Model         string
@@ -111,8 +119,15 @@ func (n NewPastTry) Check() error {
 		return fmt.Errorf("past try: it needs a proposal, an item, a station, an original run and a model: %w", ErrInvalid)
 	}
 
+	if n.Attempt < 0 || n.Attempt > ModelTriesPerItem {
+		return fmt.Errorf("past try: attempt %d is not 1 to %d: %w", n.Attempt, ModelTriesPerItem, ErrInvalid)
+	}
+
 	return nil
 }
+
+// TryAttempt is n's attempt as stored: 1 when it names none.
+func (n NewPastTry) TryAttempt() int { return max(n.Attempt, 1) }
 
 // PastTryResult is how a claimed try ended: done, with no verdict and its run's diff and cost,
 // graded with its reason, or with verdict error and why.
@@ -193,4 +208,50 @@ func (l Line) TriableAgent(name string) bool {
 	env, ok := l.Environment(a.Environment)
 
 	return ok && len(env.MCP) == 0 && len(env.Files) == 0
+}
+
+// AgentItem is one of an agent's finished items a model proposal is tried on (ADR 0039 decision
+// 13), with how it went on the line: Run is the item's newest finished run of the agent that was a
+// claim's first, the run a try reruns; SentBackAt are the stations of its rejected and
+// gate_rejected events, oldest first, one per send-back; CostUSD is what the item cost.
+type AgentItem struct {
+	ItemID     ItemID
+	ItemNumber int64
+	ItemTitle  string
+	Run        Run
+	SentBackAt []string
+	CostUSD    float64
+	DoneAt     time.Time
+}
+
+// LineResult is how a went on the line, in words: "passed first time, $0.42" or "sent back 2
+// times at review, $1.10".
+func (a AgentItem) LineResult() string {
+	cost := fmt.Sprintf("$%.2f", a.CostUSD)
+
+	switch n := len(a.SentBackAt); n {
+	case 0:
+		return "passed first time, " + cost
+	case 1:
+		return "sent back once at " + a.SentBackAt[0] + ", " + cost
+	default:
+		return fmt.Sprintf("sent back %d times at %s, %s", n, joinStations(a.SentBackAt), cost)
+	}
+}
+
+// joinStations is the distinct stations of at, in order, joined as a list in words.
+func joinStations(at []string) string {
+	var distinct []string
+
+	for _, s := range at {
+		if !slices.Contains(distinct, s) {
+			distinct = append(distinct, s)
+		}
+	}
+
+	if len(distinct) == 1 {
+		return distinct[0]
+	}
+
+	return strings.Join(distinct[:len(distinct)-1], ", ") + " and " + distinct[len(distinct)-1]
 }

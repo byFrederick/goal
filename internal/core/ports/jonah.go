@@ -179,6 +179,15 @@ type JonahStore interface {
 	// no review. n must pass Check (domain.ErrInvalid); ErrConflict when an undo of that proposal
 	// is proposed, published or applied. It supersedes n.Supersedes as FinishJonahReview does.
 	UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal, at time.Time) (domain.Proposal, error)
+	// ProposeModel stores n as a proposal of the factory with its next number, made against
+	// version, that changes agent's model (Try another model, ADR 0039 decision 13): it has no
+	// review. In the same transaction it queues tries, each set to the stored proposal, and
+	// supersedes n.Supersedes as FinishJonahReview does. n and every try must pass Check
+	// (domain.ErrInvalid, and nothing is stored); ErrNotFound when the factory, the version, an
+	// item or a run is not the organization's; ErrConflict for a try of an item and attempt
+	// given twice. It returns the proposal and its tries in order.
+	ProposeModel(ctx context.Context, factory domain.FactoryID, version domain.DefinitionVersionID, agent string, n domain.NewProposal,
+		tries []domain.NewPastTry, at time.Time) (domain.Proposal, []domain.PastTry, error)
 	// Observations is the factory's observations, the latest updated first, at most limit.
 	Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
 	// OpenObservations is the factory's watching and proposed observations, the latest updated
@@ -225,7 +234,7 @@ type ProposalQuery struct {
 // under a lease, so any instance may run it and a dead one's try is claimed again.
 type PastTries interface {
 	// QueuePastTries queues tries of the factory's proposal, all of them or none: ErrConflict when
-	// the proposal has tries already, ErrNotFound when the proposal, an item or a run is not the
+	// the proposal has tries already or an item and attempt is given twice, ErrNotFound when the proposal, an item or a run is not the
 	// organization's, and domain.ErrInvalid when a try fails Check. It returns them in order.
 	QueuePastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, tries []domain.NewPastTry, at time.Time) ([]domain.PastTry, error)
 	// ProposalPastTries is the proposal's tries, oldest first.
@@ -244,6 +253,11 @@ type PastTries interface {
 	// kind station there that was a claim's first run (its branch head recorded). ErrNotFound when
 	// it has none.
 	PastTryTarget(ctx context.Context, item domain.ItemID, station string) (domain.Run, error)
+	// AgentDoneItems are the factory's done items that agent has a finished run of kind station
+	// of that was a claim's first (its branch head recorded), the most recently done first, at
+	// most limit: what Try another model tries (ADR 0039 decision 13). Each has that newest run,
+	// the stations of its rejected and gate_rejected events, oldest first, and the item's cost.
+	AgentDoneItems(ctx context.Context, factory domain.FactoryID, agent string, limit int) ([]domain.AgentItem, error)
 	// PastTryInput is what run recorded, with its input and output, and its item's latest output
 	// of each station among the runs that ended before run started. ErrNotFound when there is no
 	// such run.

@@ -196,6 +196,7 @@ var operationScopes = map[string]string{
 	"patchSecret":                "secret:manage",
 	"pauseFactory":               "factory:manage",
 	"pauseItem":                  "item:operate",
+	"proposeAgentModel":          "definition:edit",
 	"publishDraft":               "definition:publish",
 	"pullAndon":                  "andon:manage",
 	"purgeFactory":               "factory:delete",
