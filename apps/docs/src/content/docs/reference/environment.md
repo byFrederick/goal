@@ -38,7 +38,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GITHUB_API_URL` | config | no | Retired: a github connection's host gives its API; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_TOKEN` | secret | no | Retired: a factory's repository.token, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_WEB_URL` | config | no | Retired: the repository's URL gives its host; goald ignores it and warns while it is set. |
-| `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues Jonah threshold reviews and runs the queued reviews. 1m when unset. |
+| `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues the daily Jonah reviews that are due and runs the queued reviews. 1m when unset. |
 | `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
 | `GOAL_JONAH_REVIEW_TIMEOUT` | config | no | The time limit of one Jonah review run. 30m when unset. |
 | `GOAL_KB_WORKERS` | config | no | How many knowledge sources one goald syncs at once (0: none). |

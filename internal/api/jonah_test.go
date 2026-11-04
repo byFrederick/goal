@@ -284,18 +284,53 @@ func TestJonah_RejectProposal(t *testing.T) {
 	wantProblem(t, "reject of an unknown proposal", code, p, http.StatusNotFound, "proposal-not-found")
 }
 
+// "Look for improvements now" queues a manual review at once; one in flight refuses a second, a
+// failed review's error shows on the overview, and a spent budget refuses another.
 func TestJonah_QueueReview(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
-	// No review loop runs yet (software#344): a review is refused before anything is queued.
-	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
-	wantProblem(t, "a review while no loop runs", code, p, http.StatusConflict, "review-loop-not-running")
-
-	if n := h.audited(t, domain.AuditReviewQueued); n != 0 {
-		t.Errorf("%d %s entries, want none", n, domain.AuditReviewQueued)
+	var r gen.JonahReview
+	if code := h.call(t, http.MethodPost, acmeJonah+"/reviews", "", &r); code != http.StatusAccepted {
+		t.Fatalf("queue review = %d, want 202", code)
 	}
+
+	if r.State != gen.JonahReviewStatePending || r.Trigger != gen.JonahReviewTriggerManual || r.Id == "" {
+		t.Errorf("queued review = %+v, want a pending manual review", r)
+	}
+
+	if n := h.audited(t, domain.AuditReviewQueued); n != 1 {
+		t.Errorf("%d %s entries, want 1", n, domain.AuditReviewQueued)
+	}
+
+	code, p := problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
+	wantProblem(t, "a second review while one is pending", code, p, http.StatusConflict, "review-in-flight")
+
+	claimed, err := h.store.ClaimJonahReview(inOrg(t), h.clock.Now(), time.Minute)
+	if err != nil || string(claimed.ID) != r.Id {
+		t.Fatalf("ClaimJonahReview = %+v, %v", claimed, err)
+	}
+
+	if _, _, err := h.store.FinishJonahReview(inOrg(t), claimed, domain.JonahReviewResult{
+		State: domain.JonahFailed, Error: "the review run ended failed: out of turns", At: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var ov gen.JonahOverview
+	if code := h.call(t, http.MethodGet, acmeJonah, "", &ov); code != http.StatusOK {
+		t.Fatalf("overview = %d, want 200", code)
+	}
+
+	if last := val(ov.LastReview); last.State != gen.JonahReviewStateFailed || val(last.Error) != "the review run ended failed: out of turns" {
+		t.Errorf("last review = %+v, want failed with its error", last)
+	}
+
+	h.jonahRun(t, 10)
+
+	code, p = problemOfCall(t, h, http.MethodPost, acmeJonah+"/reviews", "")
+	wantProblem(t, "a review over the weekly budget", code, p, http.StatusConflict, "learning-budget-exhausted")
 }
 
 // jonahRun records a finished review run of acme that cost usd, started an hour ago.

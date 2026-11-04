@@ -93,7 +93,7 @@ type settings struct {
 	// DefinitionCacheBytes bounds the files of the definition versions kept for runs that started
 	// on a version no longer current (GOAL_DEFINITION_CACHE_BYTES, default 64 MiB).
 	DefinitionCacheBytes int64
-	// JonahReviewEvery is how often goald sweeps for Jonah threshold reviews and works the queued
+	// JonahReviewEvery is how often goald sweeps for the daily Jonah reviews that are due and works the queued
 	// reviews (GOAL_JONAH_REVIEW_EVERY, default 1m). JonahReview bounds one review run
 	// (GOAL_JONAH_REVIEW_TIMEOUT, default 30m) and the time its lease adds beyond the run
 	// (GOAL_JONAH_REVIEW_LEASE_MARGIN, default 5m): a review whose goald died is claimed again
