@@ -456,6 +456,10 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 		return checked{}, err
 	}
 
+	if err := domain.CheckTriagePlan(c.item, plan); err != nil {
+		return checked{}, err
+	}
+
 	chk.plan = plan
 
 	return chk, nil

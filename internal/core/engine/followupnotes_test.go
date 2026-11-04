@@ -69,9 +69,10 @@ func TestEngine_TickDeliversFollowUpNotes(t *testing.T) {
 		t.Fatalf("follow-ups = %+v; want the first delivered", got)
 	}
 
-	if f := got[1]; f.Target != domain.FollowUpTriage || f.State != domain.FollowUpWaiting ||
+	// The source landed, so the same tick adds the note it could not deliver to the triage item.
+	if f := got[1]; f.Target != domain.FollowUpTriage || f.State != domain.FollowUpFiled || !h.item(t, f.FiledItem).Triage ||
 		!strings.HasSuffix(f.Reason, domain.ReasonNoteNoFactory) || !strings.Contains(f.Reason, "nowhere#4") {
-		t.Errorf("follow-up for an unknown factory = %+v; want it waiting for triage with the reason", f)
+		t.Errorf("follow-up for an unknown factory = %+v; want it in the triage item with the reason", f)
 	}
 
 	h.step(t)
