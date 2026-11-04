@@ -92,16 +92,16 @@ func TestProposalEdits_HiddenCharacters(t *testing.T) {
 	t.Parallel()
 
 	for s, want := range map[string]bool{
-		"plain text, é and 日本":  false,
-		"tab\tand\nnewline":     false,
-		"zero\u200Bwidth":       true,
-		"right\u200Fto left":    true,
-		"embed\u202Aing":        true,
-		"over\u202Eride":        true,
-		"word\u2060joiner":      true,
+		"plain text, é and 日本": false,
+		"tab\tand\nnewline":    false,
+		"zero\u200Bwidth":      true,
+		"right\u200Fto left":   true,
+		"embed\u202Aing":       true,
+		"over\u202Eride":       true,
+		"word\u2060joiner":     true,
 		"isolate\u2066d\u2069": true,
-		"bom\uFEFF":             true,
-		"tag\U000E0041s":        true,
+		"bom\uFEFF":            true,
+		"tag\U000E0041s":       true,
 	} {
 		if _, got := domain.HiddenCharacter(s); got != want {
 			t.Errorf("HiddenCharacter(%q) = %v, want %v", s, got, want)
