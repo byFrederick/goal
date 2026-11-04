@@ -12,7 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// The organization's webhooks (00114, ADR 0040 decisions 12 and 15): rows of webhook_endpoints
+// The organization's webhooks (00115, ADR 0040 decisions 12 and 15): rows of webhook_endpoints
 // without a factory, each signed by an organization secret named by id and open to the factories
 // of its webhook_openings rows.
 

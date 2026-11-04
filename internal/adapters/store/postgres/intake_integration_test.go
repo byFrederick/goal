@@ -211,7 +211,7 @@ func TestRekey_ResealsWebhookSecrets(t *testing.T) {
 }
 
 // As goal_app, another organization neither reads nor writes the intake tables' rows, goal_app
-// cannot rewrite an endpoint's id, organization, factory or kind (00114 grants its name and
+// cannot rewrite an endpoint's id, organization, factory or kind (00115 grants its name and
 // enabled, for renaming the organization's webhooks), nor change or delete a
 // delivery or a firing; only the definers reach across organizations.
 func TestIntake_RLSAndGrants(t *testing.T) {
@@ -317,7 +317,7 @@ func seedWebhook(t *testing.T, d connectionsDB, org domain.OrgID, name string) d
 	return w
 }
 
-// Migration 00114: another organization sees no webhook opening; goal_app cannot change a
+// Migration 00115: another organization sees no webhook opening; goal_app cannot change a
 // webhook's sender, secret or factory, nor an opening's webhook or factory; the database refuses
 // a reserved name and the delete of a secret a webhook uses, and a rename of the secret follows;
 // goal_connection_key_ids skips the webhook's null key id; the purge removes both.
