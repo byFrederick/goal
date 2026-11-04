@@ -98,6 +98,21 @@ Try another model proposes a different model for one agent, as an ordinary propo
 
 The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in the repository). The evals and judges are described by ADR 0002 and ADR 0025 there.
 
+## Tried on past items
+
+Before you decide a proposal, goald tries it on past items. A proposal that changes what an agent gets, at a station whose agents need no MCP server or secret, is tried once on each item it cites, at most five, newest first. Each try reruns the item's original run with the proposal applied, in a box with only the model key. A model proposal gets three tries per item. A proposal that changes only memory or the flow, or reaches only stations that can't be tried, has no tries.
+
+Tries run only while Jonah is on, while no item waits at an agent station, and while Jonah's budget for the last 7 days has money left. Their cost counts against that budget.
+
+`GET …/jonah/proposals/{number}` shows the tries as `tried`:
+
+- **Each item** with its tries by attempt. Each try is queued, running or done. A done try is `fixed` or `not_fixed`, with its reason first; `unknown` when its grade can't be trusted; or `error` when it could not be carried out, such as a lost box or a commit that is gone. An `error` is never counted as a failing try.
+- **A model proposal's items** show how each went on the line beside its three tries, such as "sent back once at merge, $2.00". An item that is no longer among the agent's newest finished items shows no line result.
+- **The cost and the time:** what the tries cost together, and the seconds from the first try queued to the last one finished, once all are done.
+- **The state:** `trying` while a try is queued or running, `done` when every try is done, and `budget_used`, shown as "Not tried: budget used", while a try is still queued and Jonah's budget has run out. Queued tries run once the 7-day window has room again.
+
+Today only code grades a try. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason. A try that passes both stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
+
 ## Kept tests
 
 A kept test is a past item that a person keeps, at a station it passed the first time, as a test. The item must keep passing there. A failing kept test will warn when you publish a change that reaches its station, and it never blocks a publish.

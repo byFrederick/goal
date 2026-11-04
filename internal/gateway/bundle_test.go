@@ -1924,3 +1924,46 @@ func TestBundle_EnvironmentNoEnvironmentDropsEnvFilesAndMCP(t *testing.T) {
 		}
 	}
 }
+
+// A published proposal's file ends with its watch: one line saying there is none before the first
+// watch sweep, then its metric, station, verdict and both sides (ADR 0039 decision 14).
+func TestServeRun_JonahBundleHoldsPublishedWatch(t *testing.T) {
+	t.Parallel()
+
+	h := newJonahHarness(t, harnessDeps{})
+	h.submit(t, factoryID, "Add a health endpoint", "") // the factory exists once an item does
+	h.decidedProposals(t)
+
+	published := string(h.fetchBundle(t, h.runServer(t), h.jonahClaims()).Files["proposals/published/4.md"])
+	if !strings.HasSuffix(published, "\n## Watch\n\nNo watch yet: the first watch sweep after the publish opens it.\n") {
+		t.Errorf("proposals/published/4.md =\n%s\nwant it to say it has no watch yet", published)
+	}
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	p, err := h.store.Proposal(ctx, factoryID, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.store.SaveWatch(ctx, domain.Watch{
+		FactoryID: factoryID, VersionID: version, ProposalID: p.ID, Station: tryStation, Metric: domain.MetricSentBackRate,
+		Before: domain.WatchSide{N: 12, Value: 0.25}, After: domain.WatchSide{N: 9, Value: 0.1}, Verdict: domain.WatchHelped,
+		OpenedAt: h.clock.Now(), UpdatedAt: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
+
+	want := "\n## Watch\n\n- sent_back_rate at build: helped; before 12 items, 0.25; after 9 items, 0.1\n"
+	if published := string(b.Files["proposals/published/4.md"]); !strings.HasSuffix(published, want) {
+		t.Errorf("proposals/published/4.md =\n%s\nwant it to end with %q", published, want)
+	}
+
+	for _, path := range []string{"proposals/proposed/3.md", "proposals/rejected/1.md"} {
+		if strings.Contains(string(b.Files[path]), "## Watch") {
+			t.Errorf("%s has a watch, want one only on a published proposal", path)
+		}
+	}
+}

@@ -187,6 +187,9 @@ type Deps struct {
 	// Jonah reads a Jonah review's sent-back events and rejected proposals for its bundle; nil
 	// answers a jonah token's bundle with 503 and changes nothing for other tokens.
 	Jonah Jonah
+	// Watches reads the watches of the published proposals a review's bundle holds (ADR 0039
+	// decisions 4 and 14); nil leaves the watch out of their files.
+	Watches ProposalWatches
 	// Tries and Proposed give a try of a past item its bundle (try.go): the try's record and its
 	// version with the proposal's edits applied to it. Without both, or without Jonah, a try
 	// token's bundle is 503.
@@ -242,6 +245,7 @@ type Gateway struct {
 	draftRequests DraftRequests
 	drafts        Drafts
 	jonah         Jonah // nil without Deps.Jonah
+	watches       ProposalWatches
 	// tries and proposed are nil without Deps.Tries and Deps.Proposed.
 	tries    Tries
 	proposed ProposedDefinitions
@@ -265,7 +269,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
 		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
-		tries: d.Tries, proposed: d.Proposed, cfg: cfg,
+		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)

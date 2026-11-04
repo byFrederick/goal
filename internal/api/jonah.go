@@ -413,15 +413,24 @@ func (s *server) proposalOut(ctx context.Context, rec ports.FactoryRecord, p dom
 		}
 	}
 
-	if out.Watch, err = s.proposalWatch(ctx, p); err != nil {
-		return gen.Proposal{}, err
-	}
-
-	if out.Tried, err = s.proposalTried(ctx, rec.ID, p); err != nil {
+	if err := s.withOutcomes(ctx, rec.ID, p, &out); err != nil {
 		return gen.Proposal{}, err
 	}
 
 	return out, nil
+}
+
+// withOutcomes sets out's watch of p's own number and how p did on past items.
+func (s *server) withOutcomes(ctx context.Context, f domain.FactoryID, p domain.Proposal, out *gen.Proposal) error {
+	var err error
+
+	if out.Watch, err = s.proposalWatch(ctx, p); err != nil {
+		return err
+	}
+
+	out.Tried, err = s.proposalTried(ctx, f, p)
+
+	return err
 }
 
 // triedLineItems bounds the agent's done items read for a model proposal's line results: as many

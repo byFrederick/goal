@@ -45,10 +45,9 @@ func TriedOf(tries []domain.PastTry, budget domain.JonahBudget) (Tried, bool) {
 	}
 
 	var (
-		out             = Tried{State: TriedDone}
-		at              = map[domain.ItemID]int{}
-		queued, running bool
-		first, last     time.Time
+		out         = Tried{State: triedState(tries, budget)}
+		at          = map[domain.ItemID]int{}
+		first, last time.Time
 	)
 
 	for _, t := range tries {
@@ -60,8 +59,6 @@ func TriedOf(tries []domain.PastTry, budget domain.JonahBudget) (Tried, bool) {
 
 		out.Items[i].Tries = append(out.Items[i].Tries, t)
 		out.CostUSD += t.CostUSD
-		queued = queued || t.State == domain.PastTryQueued
-		running = running || t.State == domain.PastTryRunning
 
 		if first.IsZero() || t.CreatedAt.Before(first) {
 			first = t.CreatedAt
@@ -76,14 +73,25 @@ func TriedOf(tries []domain.PastTry, budget domain.JonahBudget) (Tried, bool) {
 		slices.SortStableFunc(it.Tries, func(a, b domain.PastTry) int { return a.Attempt - b.Attempt })
 	}
 
-	switch {
-	case queued && budget.Exhausted():
-		out.State = TriedBudgetUsed
-	case queued || running:
-		out.State = TriedTrying
-	default:
+	if out.State == TriedDone {
 		out.Duration = last.Sub(first)
 	}
 
 	return out, true
+}
+
+// triedState is where tries are with budget as Jonah's budget now.
+func triedState(tries []domain.PastTry, budget domain.JonahBudget) TriedState {
+	in := func(st domain.PastTryState) bool {
+		return slices.ContainsFunc(tries, func(t domain.PastTry) bool { return t.State == st })
+	}
+
+	switch queued := in(domain.PastTryQueued); {
+	case queued && budget.Exhausted():
+		return TriedBudgetUsed
+	case queued || in(domain.PastTryRunning):
+		return TriedTrying
+	default:
+		return TriedDone
+	}
 }

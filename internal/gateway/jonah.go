@@ -30,6 +30,12 @@ type Jonah interface {
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (domain.JonahSpend, error)
 }
 
+// ProposalWatches reads the watches of proposals' own numbers (ADR 0039 decision 14), for the
+// organization in ctx; ports.Watches satisfies it.
+type ProposalWatches interface {
+	ProposalWatches(ctx context.Context, proposals []domain.ProposalID) ([]domain.Watch, error)
+}
+
 // errNoJonah answers a jonah token's bundle when the gateway has no Deps.Jonah: 503.
 var errNoJonah = errors.New("the gateway has no jonah store")
 
@@ -71,7 +77,7 @@ type bundleJonah struct {
 // jonahBundle is the bundle of a Jonah review's run (ADR 0039 decision 4), as files under the
 // box's /goal: every text file of c's version under definitionDir with their sha256 in filesIndex,
 // the factory's sent-back events in c's window in eventsFile, its open proposals and those
-// published or rejected within decidedWithin of now under proposalsDir, its open observations in
+// published (with their watch) or rejected within decidedWithin of now under proposalsDir, its open observations in
 // observationsFile, and the evidence under evidenceDir. Its spec has the line's knowledge that applies to every run, pinned by c, and the
 // weekly budget left as max_usd. It names no item, repository, connection, tool or rule, and
 // records nothing. The version must be c's factory's in c's organization (ctx).
@@ -204,7 +210,8 @@ func (g *Gateway) jonahEvents(ctx context.Context, c domain.TaskClaims, out map[
 }
 
 // jonahProposals adds a file under proposalsDir for each of the factory's open proposals and each
-// one published or rejected within decidedWithin of now, with its reason: proposals/<state>/<number>.md.
+// one published or rejected within decidedWithin of now, with its reason, and a published one with
+// its watch (ADR 0039 decision 14) when Deps.Watches is set: proposals/<state>/<number>.md.
 func (g *Gateway) jonahProposals(ctx context.Context, c domain.TaskClaims, out map[string][]byte) error {
 	since := g.clock.Now().Add(-decidedWithin)
 
@@ -214,12 +221,73 @@ func (g *Gateway) jonahProposals(ctx context.Context, c domain.TaskClaims, out m
 			return err
 		}
 
+		watches, err := g.publishedWatches(ctx, c.FactoryID, state, ps)
+		if err != nil {
+			return err
+		}
+
 		for _, p := range ps {
-			out[proposalsDir+string(state)+"/"+strconv.FormatInt(p.Number, 10)+".md"] = proposalFile(p)
+			file := proposalFile(p)
+			if watches != nil {
+				file = append(file, watchSection(watches[p.ID])...)
+			}
+
+			out[proposalsDir+string(state)+"/"+strconv.FormatInt(p.Number, 10)+".md"] = file
 		}
 	}
 
 	return nil
+}
+
+// publishedWatches are the watches of ps by proposal when they are published and Deps.Watches is
+// set, nil otherwise.
+func (g *Gateway) publishedWatches(ctx context.Context, factory domain.FactoryID, state domain.ProposalState, ps []domain.Proposal,
+) (map[domain.ProposalID][]domain.Watch, error) {
+	if g.watches == nil || state != domain.ProposalPublished || len(ps) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]domain.ProposalID, len(ps))
+	for i, p := range ps {
+		ids[i] = p.ID
+	}
+
+	list, err := g.watches.ProposalWatches(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("watches of the published proposals of factory %s: %w", factory, err)
+	}
+
+	out := make(map[domain.ProposalID][]domain.Watch, len(ps))
+	for _, w := range list {
+		out[w.ProposalID] = append(out[w.ProposalID], w)
+	}
+
+	return out, nil
+}
+
+// watchSection is a published proposal's watches as its file ends with them: each one's metric,
+// station, verdict and its before and after items and values, or one line saying it has none yet.
+func watchSection(ws []domain.Watch) []byte {
+	var b strings.Builder
+
+	b.WriteString("\n## Watch\n\n")
+
+	if len(ws) == 0 {
+		b.WriteString("No watch yet: the first watch sweep after the publish opens it.\n")
+
+		return []byte(b.String())
+	}
+
+	slices.SortFunc(ws, func(a, b domain.Watch) int {
+		return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Metric, b.Metric))
+	})
+
+	for _, w := range ws {
+		fmt.Fprintf(&b, "- %s at %s: %s; before %d items, %s; after %d items, %s\n", w.Metric, w.Station, w.Verdict, w.Before.N,
+			strconv.FormatFloat(w.Before.Value, 'g', 4, 64), w.After.N, strconv.FormatFloat(w.After.Value, 'g', 4, 64))
+	}
+
+	return []byte(b.String())
 }
 
 // proposalsOf are the factory's proposals in state, newest numbered first, at most proposalLimit of

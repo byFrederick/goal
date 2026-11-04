@@ -32,8 +32,12 @@ func TestTries_TriedState(t *testing.T) {
 		{"queued with budget left is trying", []domain.PastTry{try("a", 1, domain.PastTryQueued)}, left, jonah.TriedTrying},
 		{"running is trying", []domain.PastTry{try("a", 1, domain.PastTryDone), try("b", 1, domain.PastTryRunning)}, used, jonah.TriedTrying},
 		{"queued with the budget used", []domain.PastTry{try("a", 1, domain.PastTryDone), try("b", 1, domain.PastTryQueued)}, used, jonah.TriedBudgetUsed},
-		{"queued beside running with the budget used", []domain.PastTry{try("a", 1, domain.PastTryRunning), try("b", 1, domain.PastTryQueued)}, used,
-			jonah.TriedBudgetUsed},
+		{
+			"queued beside running with the budget used",
+			[]domain.PastTry{try("a", 1, domain.PastTryRunning), try("b", 1, domain.PastTryQueued)},
+			used,
+			jonah.TriedBudgetUsed,
+		},
 		{"all done", []domain.PastTry{try("a", 1, domain.PastTryDone), try("b", 1, domain.PastTryDone)}, used, jonah.TriedDone},
 	}
 

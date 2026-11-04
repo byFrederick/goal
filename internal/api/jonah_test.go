@@ -823,26 +823,30 @@ func TestJonah_ProposalTried(t *testing.T) {
 		t.Fatalf("tried = %+v, want one item trying at $1.25, no time, kept tests or grader yet", tried)
 	}
 
-	item := tried.Items[0]
+	wantTriedItem(t, tried.Items[0], it)
+
+	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
+	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
+		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
+	}
+}
+
+// wantTriedItem fails t unless item is it at the build station with its line result and three
+// tries: the first done and fixed with its reason, the other two queued.
+func wantTriedItem(t *testing.T, item gen.TriedItem, it domain.Item) {
+	t.Helper()
+
 	if item.ItemRef != fmt.Sprintf("line#%d", it.Number) || item.ItemTitle != it.Title || item.Station != stBuild ||
 		val(item.LineResult) != "sent back once at merge, $2.00" || len(item.Tries) != 3 {
 		t.Fatalf("item = %+v, want %s at %s with its line result and 3 tries", item, it.Title, stBuild)
 	}
 
-	first := item.Tries[0]
-	if first.Attempt != 1 || first.State != gen.TriedTryStateDone || val(first.Verdict) != gen.TriedTryVerdictFixed ||
-		val(first.Reason) != "The tests now cover the merge." || first.CostUsd != 1.25 || first.Error != nil {
-		t.Errorf("first try = %+v, want attempt 1 done and fixed with its reason", first)
+	want := []gen.TriedTry{
+		{Attempt: 1, State: gen.TriedTryStateDone, Verdict: new(gen.TriedTryVerdictFixed), Reason: new("The tests now cover the merge."), CostUsd: 1.25},
+		{Attempt: 2, State: gen.TriedTryStateQueued},
+		{Attempt: 3, State: gen.TriedTryStateQueued},
 	}
-
-	for i, try := range item.Tries[1:] {
-		if try.Attempt != i+2 || try.State != gen.TriedTryStateQueued || try.Verdict != nil || try.Reason != nil {
-			t.Errorf("try %d = %+v, want attempt %d queued without a verdict", i+2, try, i+2)
-		}
-	}
-
-	stored := h.review(t, []domain.NewProposal{{Title: "Tighten the rule", Edits: proposalFiles()}})
-	if p := h.getProposal(t, fmt.Sprintf("%s/%d", acmeProposals, stored[0].Number)); p.Tried != nil {
-		t.Errorf("a proposal with no tries has tried %+v", p.Tried)
+	if !reflect.DeepEqual(item.Tries, want) {
+		t.Errorf("tries = %+v, want %+v", item.Tries, want)
 	}
 }
