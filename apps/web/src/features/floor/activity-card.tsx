@@ -60,7 +60,7 @@ function Feed({ activity }: { activity: Activity }) {
           <li
             key={event.id}
             className={cn(
-              'flex items-center gap-3 border-b border-line py-2 last:border-b-0 first:pt-0',
+              'flex items-start gap-3 border-b border-line py-2 last:border-b-0 first:pt-0',
               before && !before.has(event.id) && 'motion-safe:animate-item-in',
             )}
           >
@@ -69,9 +69,9 @@ function Feed({ activity }: { activity: Activity }) {
             </time>
             <span
               aria-hidden="true"
-              className={cn('size-1.5 shrink-0 rounded-full', dotTone[activityTone(event.kind)])}
+              className={cn('mt-[7px] size-1.5 shrink-0 rounded-full', dotTone[activityTone(event.kind)])}
             />
-            <p className="m-0 min-w-0 flex-1 truncate text-body text-ink" title={`${head}${rest}`}>
+            <p className="m-0 min-w-0 flex-1 break-words text-body text-ink">
               <span className="font-semibold">{head}</span>
               <span className="text-ink-soft">{rest}</span>
             </p>

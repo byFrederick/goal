@@ -88,14 +88,9 @@ describe('planWaves', () => {
 });
 
 describe('spend', () => {
-  it('adds the assembly cost to its parts and shows no budget without a per-item budget', () => {
+  it('adds the assembly cost to its parts and derives no budget from them', () => {
     const parts = [part(1, { cost_usd: 1.5 }), part(2, { cost_usd: 0.25 })];
-    expect(spend({ cost_usd: 0.5 }, parts, null)).toEqual({ spent: 2.25, budget: null });
-  });
-
-  it('budgets each item times the parts in all', () => {
-    const parts = [part(1), part(2), part(3)];
-    expect(spend({ cost_usd: 0 }, parts, 4)).toEqual({ spent: 0, budget: 12 });
+    expect(spend({ cost_usd: 0.5 }, parts)).toBe(2.25);
   });
 });
 

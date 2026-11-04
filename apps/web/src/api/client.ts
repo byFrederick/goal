@@ -79,6 +79,24 @@ import type {
 
 export { ApiError, type StreamStatus };
 
+/** A request that got no answer from goald (the network failed), as opposed to a crash in the page's own code. */
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super('goald is not answering', { cause });
+    this.name = 'NetworkError';
+  }
+}
+
+/** fetch that marks a network failure as a NetworkError; a cancelled request keeps its own error. */
+async function fetchGoald(request: Request): Promise<Response> {
+  try {
+    return await fetch(request);
+  } catch (error) {
+    if (request.signal.aborted) throw error;
+    throw new NetworkError(error);
+  }
+}
+
 /** goald's origin; empty when the UI is served by goald itself or through the dev proxy. */
 export const apiBase: string = import.meta.env.VITE_API_URL ?? '';
 
@@ -90,7 +108,7 @@ export const goal = createGoalClient(apiBase, {
   headers: { Accept: 'application/json' },
   // 401 opens the sign-in page; 403 reauth-required asks the person to confirm it's them, then
   // sends the request once more (session.ts).
-  fetch: withSession((request) => fetch(request), sessionHandlers),
+  fetch: withSession(fetchGoald, sessionHandlers),
 });
 
 /** Request options openapi-fetch takes beside the parameters; `signal` cancels a query. */
