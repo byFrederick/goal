@@ -15,7 +15,6 @@ const shown = 'the full text is shown elsewhere on the row, or the text is short
 const allowed: Record<string, { count: number; reason: string }> = {
   'app/account-menu.tsx': { count: 3, reason: shown },
   'app/org-menu.tsx': { count: 1, reason: shown },
-  'app/phone-chrome.tsx': { count: 1, reason: shown },
   'app/sidebar-factories.tsx': { count: 3, reason: shown },
   'app/sidebar-search.tsx': { count: 8, reason: shown },
   'app/sidebar.tsx': { count: 4, reason: shown },

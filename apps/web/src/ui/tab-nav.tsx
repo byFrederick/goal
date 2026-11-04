@@ -59,6 +59,8 @@ export function TabNav({
       if (!animate) el.style.transition = 'none';
       el.style.opacity = '1';
       placePill(el, current);
+      // The row scrolls sideways on a phone; keep the current link in view, never animated.
+      current.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
       if (!animate) {
         void el.offsetWidth;
         el.style.transition = '';

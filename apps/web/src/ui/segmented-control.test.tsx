@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SegmentedControl } from './segmented-control';
 import { TooltipProvider } from './tooltip';
 
@@ -97,5 +97,25 @@ describe('SegmentedControl', () => {
     rerender(<SegmentedControl label="View" options={options} value="mine" onChange={() => {}} size="compact" />);
     expect(label()?.className).toContain('md:h-7');
     expect(label()?.className).toContain('h-11');
+  });
+});
+
+describe('SegmentedControl scrolling', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView ??= () => {};
+  });
+
+  it('scrolls the chosen option into view without smooth behavior', () => {
+    const scroll = vi
+      .spyOn(Element.prototype as { scrollIntoView(o?: unknown): void }, 'scrollIntoView')
+      .mockImplementation(() => {});
+    render(<SegmentedControl label="View" options={options} value="all" onChange={() => {}} />);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    scroll.mockRestore();
+  });
+
+  it('scrolls sideways inside its own box', () => {
+    render(<SegmentedControl label="View" options={options} value="all" onChange={() => {}} />);
+    expect(screen.getByRole('group', { name: 'View' }).className).toContain('overflow-x-auto');
   });
 });

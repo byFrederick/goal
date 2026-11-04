@@ -287,3 +287,22 @@ describe('Keep as a test', () => {
     expect(await within(dialog).findByText('This item is already kept as a test at Spec.')).toBeTruthy();
   });
 });
+
+describe('the Teardown tab at narrow widths', () => {
+  it('titles each station label with its full name', async () => {
+    const long: Teardown = {
+      ...finished,
+      stations: [{ station: 'approve_spec_and_publish', working_seconds: 1, waiting_seconds: 1, total_seconds: 2 }],
+    };
+    renderTab(async () => long);
+    const time = await screen.findByRole('table', { name: 'Time by station' });
+    const label = within(time).getByTitle('Approve spec and publish');
+    expect(label.className).toContain('truncate');
+  });
+
+  it('makes the runs scroller a focusable, named region', async () => {
+    renderTab(async () => finished);
+    const region = await screen.findByRole('region', { name: 'Runs table' });
+    expect(region.tabIndex).toBe(0);
+  });
+});

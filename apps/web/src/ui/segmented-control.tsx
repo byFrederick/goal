@@ -64,6 +64,8 @@ export function SegmentedControl<T extends string>({
       if (!animate) el.style.transition = 'none';
       el.style.opacity = '1';
       placePill(el, chosen);
+      // The options scroll sideways when they do not fit; keep the choice in view, never animated.
+      chosen.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
       if (!animate) {
         void el.offsetWidth;
         el.style.transition = '';
@@ -80,7 +82,7 @@ export function SegmentedControl<T extends string>({
     <fieldset
       aria-describedby={describedBy}
       className={cn(
-        'relative m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel',
+        'no-scrollbar relative m-0 inline-flex max-w-full min-w-0 shrink-0 gap-px overflow-x-auto rounded-control border border-line bg-panel',
         size === 'compact' ? 'p-1 md:p-px' : 'p-1',
         className,
       )}

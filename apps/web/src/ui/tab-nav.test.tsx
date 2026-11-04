@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TabNav, tabNavItem } from './tab-nav';
 
 afterEach(cleanup);
@@ -73,5 +73,31 @@ describe('TabNav', () => {
     );
     left.mockRestore();
     width.mockRestore();
+  });
+});
+
+describe('TabNav scrolling', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView ??= () => {};
+  });
+
+  it('scrolls the current link into view without smooth behavior', () => {
+    const scroll = vi
+      .spyOn(Element.prototype as { scrollIntoView(o?: unknown): void }, 'scrollIntoView')
+      .mockImplementation(() => {});
+    render(
+      <TabNav label="Agent">
+        <a href="/a" className={tabNavItem}>
+          Overview
+        </a>
+        <a href="/b" aria-current="page" className={tabNavItem}>
+          Tests
+        </a>
+      </TabNav>,
+    );
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(screen.getByRole('link', { name: 'Tests' }));
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    scroll.mockRestore();
   });
 });
