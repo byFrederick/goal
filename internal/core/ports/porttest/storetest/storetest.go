@@ -29,6 +29,8 @@ type Harness struct {
 	Jonah ports.JonahStore
 	// Tries keeps the same store's tries of past items.
 	Tries ports.PastTries
+	// Kept keeps the same store's kept tests.
+	Kept ports.KeptTests
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
@@ -162,6 +164,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}
 	tests = append(tests, jonahTests...)
 	tests = append(tests, triesTests...)
+	tests = append(tests, keptTestsTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
