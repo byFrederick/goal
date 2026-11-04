@@ -18,6 +18,7 @@ var triesTests = []struct {
 }{
 	{"Tries_QueuedOncePerProposal", testTriesQueuedOnce},
 	{"Tries_ClaimCappedPerFactoryAndLeased", testTriesClaim},
+	{"Tries_FinishStoresVerdictAndReason", testTriesGraded},
 	{"Tries_TargetIsNewestFirstRunOfAClaim", testTriesTarget},
 	{"Tries_InputHasBriefAndEarlierOutputs", testTriesInput},
 	{"Tries_TryRunWithoutItemIsJonahs", testTriesRunWithoutItem},
@@ -186,6 +187,44 @@ func (f *fixture) finishRan(second domain.PastTry, later time.Time) {
 	got, err := f.Tries.FinishPastTry(f.ctx(t), second, ok)
 	if err != nil || got.Verdict != "" || got.Diff != ok.Diff || got.CostUSD != ok.CostUSD || got.TryRunID != run {
 		t.Errorf("FinishPastTry of a run that ended = %+v, %v; want done with no verdict, its diff, cost and run", got, err)
+	}
+}
+
+// A finish stores a graded verdict with its reason, and ProposalPastTries and PastTry read both
+// back; a grade without its reason is refused.
+func testTriesGraded(f *fixture) {
+	t := f.t
+	p := f.triedProposal(t, t1)
+	tries := f.newTries(t, p, f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{}))
+	now := t1.Add(time.Hour)
+	run := f.pastRun(t, f.create(t, domain.NewItem{}), stNext, t1, false, "")
+
+	for i, v := range []domain.PastTryVerdict{domain.PastTryNotFixed, domain.PastTryFixed} {
+		claimed, err := f.Tries.ClaimPastTry(f.ctx(t), f.factory, now, ttl, 2)
+		if err != nil || claimed.ID != tries[i].ID {
+			t.Fatalf("ClaimPastTry = %+v, %v; want try %d", claimed, err, i)
+		}
+
+		_, err = f.Tries.FinishPastTry(f.ctx(t), claimed, domain.PastTryResult{Verdict: v, At: now})
+		expect(t, "FinishPastTry of a grade without its reason", err, domain.ErrInvalid)
+
+		res := domain.PastTryResult{Verdict: v, Reason: "check `make test` exited 2", Diff: "diff", CostUSD: 0.5, TryRunID: run, At: now}
+
+		done, err := f.Tries.FinishPastTry(f.ctx(t), claimed, res)
+		if err != nil || done.Verdict != v || done.Reason != res.Reason {
+			t.Fatalf("FinishPastTry = %+v, %v; want verdict %s with its reason", done, err, v)
+		}
+	}
+
+	got, err := f.Tries.ProposalPastTries(f.ctx(t), p.ID)
+	if err != nil || len(got) != 2 || got[0].Verdict != domain.PastTryNotFixed || got[1].Verdict != domain.PastTryFixed ||
+		got[0].Reason != "check `make test` exited 2" || got[0].Error != "" {
+		t.Errorf("ProposalPastTries = %+v, %v; want not fixed then fixed, each with its reason", got, err)
+	}
+
+	one, err := f.Tries.PastTry(f.ctx(t), tries[1].ID)
+	if err != nil || one.Verdict != domain.PastTryFixed || one.Reason != "check `make test` exited 2" {
+		t.Errorf("PastTry = %+v, %v; want fixed with its reason", one, err)
 	}
 }
 

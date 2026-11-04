@@ -3,6 +3,7 @@ package definitions
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
+
+var _ ports.Contracts = (*Proposed)(nil)
 
 // Proposed is a published version with a proposal's edits applied to its files: what a try of
 // the proposal on a past item runs (ADR 0039 decision 9). It keeps the version's id, organization
@@ -82,6 +85,16 @@ func (p *Proposed) Rules(_ context.Context, id domain.DefinitionVersionID, run d
 	}
 
 	return rulesOf(p.v, run)
+}
+
+// Validate is Cache.Validate of the proposed version: output against contract as the proposal's
+// edits leave it (ADR 0039 decision 10).
+func (p *Proposed) Validate(_ context.Context, id domain.DefinitionVersionID, contract string, output json.RawMessage) error {
+	if err := p.is(id); err != nil {
+		return err
+	}
+
+	return validate(p.v, contract, output)
 }
 
 // VersionFiles is Cache.VersionFiles of the proposed version.

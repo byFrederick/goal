@@ -373,6 +373,7 @@ type Try struct {
 	Attempts      int32
 	CreatedAt     time.Time
 	FinishedAt    *time.Time
+	Reason        string
 }
 
 type Watch struct {

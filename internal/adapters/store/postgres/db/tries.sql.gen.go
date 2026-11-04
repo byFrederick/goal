@@ -51,15 +51,16 @@ func (q *Queries) ClaimTry(ctx context.Context, arg ClaimTryParams) (uuid.UUID, 
 
 const finishTry = `-- name: FinishTry :one
 UPDATE tries
-SET state = 'done', verdict = $1, error = $2, diff = $3, cost_usd = $4,
-    try_run_id = $5, finished_at = $6::timestamptz, lease_until = NULL
-WHERE id = $7 AND state = 'running' AND lease_until = $8::timestamptz
+SET state = 'done', verdict = $1, error = $2, reason = $3, diff = $4, cost_usd = $5,
+    try_run_id = $6, finished_at = $7::timestamptz, lease_until = NULL
+WHERE id = $8 AND state = 'running' AND lease_until = $9::timestamptz
 RETURNING id
 `
 
 type FinishTryParams struct {
 	Verdict    *string
 	Error      string
+	Reason     string
 	Diff       string
 	CostUsd    float64
 	TryRunID   *uuid.UUID
@@ -73,6 +74,7 @@ func (q *Queries) FinishTry(ctx context.Context, arg FinishTryParams) (uuid.UUID
 	row := q.db.QueryRow(ctx, finishTry,
 		arg.Verdict,
 		arg.Error,
+		arg.Reason,
 		arg.Diff,
 		arg.CostUsd,
 		arg.TryRunID,
@@ -89,7 +91,7 @@ const insertTry = `-- name: InsertTry :one
 INSERT INTO tries (id, factory_id, proposal_id, item_id, station, original_run_id, model, created_at)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8)
-RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at
+RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason
 `
 
 type InsertTryParams struct {
@@ -134,6 +136,7 @@ func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, erro
 		&i.Attempts,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.Reason,
 	)
 	return i, err
 }
@@ -222,7 +225,7 @@ func (q *Queries) ProposalHasTries(ctx context.Context, proposalID uuid.UUID) (b
 }
 
 const proposalTries = `-- name: ProposalTries :many
-SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, p.number AS proposal_number FROM tries t
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, p.number AS proposal_number FROM tries t
 JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.proposal_id = $1
 ORDER BY t.created_at, t.id
@@ -261,6 +264,7 @@ func (q *Queries) ProposalTries(ctx context.Context, proposalID uuid.UUID) ([]Pr
 			&i.Try.Attempts,
 			&i.Try.CreatedAt,
 			&i.Try.FinishedAt,
+			&i.Try.Reason,
 			&i.ProposalNumber,
 		); err != nil {
 			return nil, err
@@ -309,7 +313,7 @@ func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 }
 
 const tryByID = `-- name: TryByID :one
-SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, p.number AS proposal_number FROM tries t
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, p.number AS proposal_number FROM tries t
 JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.id = $1
 `
@@ -341,6 +345,7 @@ func (q *Queries) TryByID(ctx context.Context, id uuid.UUID) (TryByIDRow, error)
 		&i.Try.Attempts,
 		&i.Try.CreatedAt,
 		&i.Try.FinishedAt,
+		&i.Try.Reason,
 		&i.ProposalNumber,
 	)
 	return i, err

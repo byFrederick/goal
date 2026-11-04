@@ -3,6 +3,7 @@ package jonah
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -23,6 +24,12 @@ type TryDefinitions interface {
 	// the organization has no such version, domain.ErrEditDoesNotApply when an edit does not apply
 	// to it.
 	ProposedLine(ctx context.Context, version domain.DefinitionVersionID, edits []domain.ProposalEdit) (domain.Line, []string, error)
+	// ValidateProposed checks output against contract as version with edits applied declares it
+	// (ports.Contracts on the proposed files, ADR 0039 decision 10): an error wrapping
+	// ports.ErrContractViolation when output does not satisfy it, and any other when it cannot be
+	// checked, as for a contract the proposed version does not have.
+	ValidateProposed(ctx context.Context, version domain.DefinitionVersionID, edits []domain.ProposalEdit, contract string,
+		output json.RawMessage) error
 }
 
 // WaitingItems reads the items waiting at a station; ports.Store satisfies it.
@@ -410,9 +417,9 @@ func tryError(format string, a ...any) domain.PastTryResult {
 // run runs try and returns its result to record (At unset). Anything that keeps the run from
 // being carried out is verdict error: a proposal, version or original run that is gone, a run
 // with no recorded commit, an agent that can no longer be tried, or a RunTask error (a commit
-// that is gone, a lost box, a prepare or setup that failed). A run that ended, however it did, is
-// done with no verdict, its diff, its cost and its run. Only a failed read or a cancelled ctx is
-// an error.
+// that is gone, a lost box, a prepare or setup that failed). A run that ended is done with its
+// diff, its cost and its run: not fixed when it succeeded but code graded it so (grade), and
+// otherwise with no verdict, for the grader. Only a failed read or a cancelled ctx is an error.
 func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResult, error) {
 	if try.Attempts > MaxTryAttempts {
 		return tryError("the try did not finish in %d attempts", MaxTryAttempts), nil
@@ -470,7 +477,45 @@ func (s *Tries) run(ctx context.Context, try domain.PastTry) (domain.PastTryResu
 		return res, nil
 	}
 
-	return domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}, nil
+	res := domain.PastTryResult{Diff: run.Diff, CostUSD: run.CostUSD, TryRunID: run.RunID}
+	if run.Status != domain.RunSucceeded {
+		return res, nil
+	}
+
+	return s.grade(ctx, p, line, try, run, res)
+}
+
+// grade is how code grades a try whose run succeeded (ADR 0039 decision 10), as the station
+// checks a line's run: its output against the station's contract as p changes it, then the
+// station's checks, which RunTask ran in the try's box. The first that fails makes res not fixed
+// with what failed as its reason; a try that passes both stays without a verdict, for the
+// grader. A contract that cannot be checked makes res an error, and a cancelled ctx an error.
+func (s *Tries) grade(ctx context.Context, p domain.Proposal, line domain.Line, try domain.PastTry, run domain.RunResult,
+	res domain.PastTryResult,
+) (domain.PastTryResult, error) {
+	st, _ := line.Station(try.Station)
+
+	if st.Output != "" {
+		err := s.d.Definitions.ValidateProposed(ctx, p.VersionID, p.Edits, st.Output, run.Output)
+
+		switch {
+		case errors.Is(err, ports.ErrContractViolation):
+			res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("the output does not satisfy contract %s: %v", st.Output, err)
+		case err != nil && ctx.Err() != nil:
+			return domain.PastTryResult{}, fmt.Errorf("check the output against contract %s: %w", st.Output, err)
+		case err != nil:
+			res.Verdict, res.Error = domain.PastTryError, fmt.Sprintf("contract %s could not be checked: %v", st.Output, err)
+		}
+	}
+
+	if res.Verdict == "" && run.FailedCheck != nil {
+		c := run.FailedCheck
+		res.Verdict, res.Reason = domain.PastTryNotFixed, fmt.Sprintf("check `%s` exited %d; the end of its output:\n%s", c.Command, c.ExitCode, c.Output)
+	}
+
+	res.Reason = truncate(res.Reason, domain.MaxPastTryReason)
+
+	return res, nil
 }
 
 // proposedLine is p's version with its edits applied, or why a try of p cannot run on it: the
@@ -490,7 +535,8 @@ func (s *Tries) proposedLine(ctx context.Context, p domain.Proposal) (domain.Lin
 	return line, "", nil
 }
 
-// tryRequest is try's run on line, from what orig recorded, or why it cannot run.
+// tryRequest is try's run on line, from what orig recorded, with the checks of its station on
+// line, or why it cannot run.
 func tryRequest(line domain.Line, try domain.PastTry, orig domain.Run) (domain.RunRequest, string) {
 	rt := line.Runtime
 
@@ -505,10 +551,15 @@ func tryRequest(line domain.Line, try domain.PastTry, orig domain.Run) (domain.R
 		return domain.RunRequest{}, fmt.Sprintf("agent %s can't be tried: it needs MCP servers or secrets", orig.Agent)
 	}
 
+	st, ok := line.Station(try.Station)
+	if !ok || st.Kind != domain.KindAgent {
+		return domain.RunRequest{}, fmt.Sprintf("station %s is not an agent station of the proposed line", try.Station)
+	}
+
 	req := domain.RunRequest{
 		FactoryID: try.FactoryID, Version: line.VersionID, Kind: domain.RunKindTry, Station: try.Station,
 		Agent: a.Name, Model: try.Model, Bundle: domain.TaskKindTry, TryOf: try.ID, Commit: orig.Input.BranchHead,
-		Repository: rt.Repository, ModelConnection: rt.ModelConnection, Size: rt.Size,
+		Repository: rt.Repository, ModelConnection: rt.ModelConnection, Size: rt.Size, Checks: st.Checks,
 	}
 
 	if line.OnSecrets() { // the model key alone (ADR 0037 decision 7)

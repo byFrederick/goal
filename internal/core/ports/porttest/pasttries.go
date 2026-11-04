@@ -195,7 +195,7 @@ func (s *Store) FinishPastTry(ctx context.Context, claimed domain.PastTry, r dom
 		}
 
 		t.State, t.LeaseUntil, t.FinishedAt = domain.PastTryDone, time.Time{}, r.At
-		t.Verdict, t.Error, t.Diff, t.CostUSD, t.TryRunID = r.Verdict, r.Error, r.Diff, r.CostUSD, r.TryRunID
+		t.Verdict, t.Error, t.Reason, t.Diff, t.CostUSD, t.TryRunID = r.Verdict, r.Error, r.Reason, r.Diff, r.CostUSD, r.TryRunID
 
 		return *t, nil
 	}
