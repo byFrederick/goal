@@ -226,6 +226,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs},
+		Grades: jonah.NewGrades(jonah.GradeDeps{Tries: store, Runs: store, Events: store}),
 	}, gateway.Config{Key: []byte(key)})
 	if err != nil {
 		return err

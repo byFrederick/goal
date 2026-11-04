@@ -126,12 +126,13 @@ func runWatches(ctx context.Context, log *slog.Logger, lock scheduleLock, watche
 
 // jonahTryLoop is the loop of tries of past items (ADR 0039 decisions 9 and 11): proposals'
 // tries queued from store, each run by eng as a try-kind run on the proposal's version in defs,
-// within s.JonahTry's times and cap.
+// within s.JonahTry's times and cap, and graded by eng's grade runs (ADR 0039 decision 10).
 func jonahTryLoop(s settings, store *postgres.Store, defs *definitions.Cache, eng *engine.Engine, clock ports.Clock,
 	log *slog.Logger,
 ) *jonah.Tries {
 	return jonah.NewTries(jonah.TryDeps{
-		Orgs: store, Jonah: store, Tries: store, Definitions: tryDefinitions{defs: defs}, Waiting: store, Events: store, Runner: eng, Clock: clock, Log: log,
+		Orgs: store, Jonah: store, Tries: store, Definitions: tryDefinitions{defs: defs}, Waiting: store, Events: store, Runs: store,
+		Runner: eng, Clock: clock, Log: log,
 	}, s.JonahTry)
 }
 
