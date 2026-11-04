@@ -863,7 +863,12 @@ func (s *Store) ProposeModel(ctx context.Context, factory domain.FactoryID, vers
 				return err
 			}
 
-			queued = append(queued, pastTryFrom(t, p.Number))
+			try, err := pastTryFrom(t, p.Number)
+			if err != nil {
+				return err
+			}
+
+			queued = append(queued, try)
 		}
 
 		return supersede(ctx, q, p.FactoryID, n.Supersedes, at)

@@ -108,7 +108,7 @@ WHERE t.id = (
     AND (SELECT count(*) FROM tries l
          WHERE l.factory_id = $2 AND l.state = 'running' AND l.lease_until > $3::timestamptz)
         < $4::bigint
-  ORDER BY d.created_at, d.id
+  ORDER BY (d.proposal_id IS NOT NULL), d.created_at, d.id
   LIMIT 1
   FOR UPDATE SKIP LOCKED)
 RETURNING t.id
@@ -122,8 +122,8 @@ type ClaimTryParams struct {
 }
 
 // The factory's oldest queued try, or running one whose lease ended by now, that no other
-// transaction holds, while fewer than max_running of its tries run under a live lease: running
-// until until, one more attempt (tries_due_idx).
+// transaction holds, a publish's (no proposal) before a proposal's, while fewer than max_running
+// of its tries run under a live lease: running until until, one more attempt (tries_due_idx).
 func (q *Queries) ClaimTry(ctx context.Context, arg ClaimTryParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, claimTry,
 		arg.Until,
@@ -174,35 +174,44 @@ func (q *Queries) FinishTry(ctx context.Context, arg FinishTryParams) (uuid.UUID
 	return id, err
 }
 
-const insertTry = `-- name: InsertTry :one
-INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, created_at)
+const insertPublishTry = `-- name: InsertPublishTry :one
+INSERT INTO tries (id, factory_id, item_id, attempt, station, original_run_id, model, kept_test_id, content_key, version_id, edits, created_at)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9)
-RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason, attempt
+        $7, $8, $9, $10, $11, $12)
+ON CONFLICT (org_id, kept_test_id, content_key, attempt) WHERE proposal_id IS NULL DO NOTHING
+RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason, attempt, kept_test_id, content_key, version_id, edits
 `
 
-type InsertTryParams struct {
+type InsertPublishTryParams struct {
 	ID            uuid.UUID
 	FactoryID     uuid.UUID
-	ProposalID    uuid.UUID
 	ItemID        uuid.UUID
 	Attempt       int32
 	Station       string
 	OriginalRunID uuid.UUID
 	Model         string
+	KeptTestID    *uuid.UUID
+	ContentKey    *string
+	VersionID     *uuid.UUID
+	Edits         []byte
 	CreatedAt     time.Time
 }
 
-func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, error) {
-	row := q.db.QueryRow(ctx, insertTry,
+// One kept-test try of a publish (00107): no proposal, its version and edits its own. No row when
+// the test has a publish's try of that content and attempt already (tries_publish_key).
+func (q *Queries) InsertPublishTry(ctx context.Context, arg InsertPublishTryParams) (Try, error) {
+	row := q.db.QueryRow(ctx, insertPublishTry,
 		arg.ID,
 		arg.FactoryID,
-		arg.ProposalID,
 		arg.ItemID,
 		arg.Attempt,
 		arg.Station,
 		arg.OriginalRunID,
 		arg.Model,
+		arg.KeptTestID,
+		arg.ContentKey,
+		arg.VersionID,
+		arg.Edits,
 		arg.CreatedAt,
 	)
 	var i Try
@@ -227,8 +236,142 @@ func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, erro
 		&i.FinishedAt,
 		&i.Reason,
 		&i.Attempt,
+		&i.KeptTestID,
+		&i.ContentKey,
+		&i.VersionID,
+		&i.Edits,
 	)
 	return i, err
+}
+
+const insertTry = `-- name: InsertTry :one
+INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, kept_test_id, content_key, created_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11)
+RETURNING id, org_id, factory_id, proposal_id, item_id, station, original_run_id, try_run_id, model, state, verdict, error, diff, cost_usd, lease_until, attempts, created_at, finished_at, reason, attempt, kept_test_id, content_key, version_id, edits
+`
+
+type InsertTryParams struct {
+	ID            uuid.UUID
+	FactoryID     uuid.UUID
+	ProposalID    *uuid.UUID
+	ItemID        uuid.UUID
+	Attempt       int32
+	Station       string
+	OriginalRunID uuid.UUID
+	Model         string
+	KeptTestID    *uuid.UUID
+	ContentKey    *string
+	CreatedAt     time.Time
+}
+
+// One try of a proposal: of an item it cites, or of a kept test with the content it runs on (00107).
+func (q *Queries) InsertTry(ctx context.Context, arg InsertTryParams) (Try, error) {
+	row := q.db.QueryRow(ctx, insertTry,
+		arg.ID,
+		arg.FactoryID,
+		arg.ProposalID,
+		arg.ItemID,
+		arg.Attempt,
+		arg.Station,
+		arg.OriginalRunID,
+		arg.Model,
+		arg.KeptTestID,
+		arg.ContentKey,
+		arg.CreatedAt,
+	)
+	var i Try
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ProposalID,
+		&i.ItemID,
+		&i.Station,
+		&i.OriginalRunID,
+		&i.TryRunID,
+		&i.Model,
+		&i.State,
+		&i.Verdict,
+		&i.Error,
+		&i.Diff,
+		&i.CostUsd,
+		&i.LeaseUntil,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.FinishedAt,
+		&i.Reason,
+		&i.Attempt,
+		&i.KeptTestID,
+		&i.ContentKey,
+		&i.VersionID,
+		&i.Edits,
+	)
+	return i, err
+}
+
+const keptTestTries = `-- name: KeptTestTries :many
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, t.kept_test_id, t.content_key, t.version_id, t.edits, coalesce(p.number, 0)::bigint AS proposal_number FROM tries t
+LEFT JOIN jonah_proposals p ON p.id = t.proposal_id
+WHERE t.factory_id = $1 AND t.content_key = $2 AND t.kept_test_id IS NOT NULL
+ORDER BY t.created_at, t.id
+`
+
+type KeptTestTriesParams struct {
+	FactoryID  uuid.UUID
+	ContentKey *string
+}
+
+type KeptTestTriesRow struct {
+	Try            Try
+	ProposalNumber int64
+}
+
+// The factory's kept-test tries of content, from any proposal or publish, oldest first (tries_content_idx).
+func (q *Queries) KeptTestTries(ctx context.Context, arg KeptTestTriesParams) ([]KeptTestTriesRow, error) {
+	rows, err := q.db.Query(ctx, keptTestTries, arg.FactoryID, arg.ContentKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KeptTestTriesRow
+	for rows.Next() {
+		var i KeptTestTriesRow
+		if err := rows.Scan(
+			&i.Try.ID,
+			&i.Try.OrgID,
+			&i.Try.FactoryID,
+			&i.Try.ProposalID,
+			&i.Try.ItemID,
+			&i.Try.Station,
+			&i.Try.OriginalRunID,
+			&i.Try.TryRunID,
+			&i.Try.Model,
+			&i.Try.State,
+			&i.Try.Verdict,
+			&i.Try.Error,
+			&i.Try.Diff,
+			&i.Try.CostUsd,
+			&i.Try.LeaseUntil,
+			&i.Try.Attempts,
+			&i.Try.CreatedAt,
+			&i.Try.FinishedAt,
+			&i.Try.Reason,
+			&i.Try.Attempt,
+			&i.Try.KeptTestID,
+			&i.Try.ContentKey,
+			&i.Try.VersionID,
+			&i.Try.Edits,
+			&i.ProposalNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockFactoryTries = `-- name: LockFactoryTries :exec
@@ -307,7 +450,7 @@ const proposalHasTries = `-- name: ProposalHasTries :one
 SELECT EXISTS (SELECT 1 FROM tries WHERE proposal_id = $1)::bool
 `
 
-func (q *Queries) ProposalHasTries(ctx context.Context, proposalID uuid.UUID) (bool, error) {
+func (q *Queries) ProposalHasTries(ctx context.Context, proposalID *uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, proposalHasTries, proposalID)
 	var column_1 bool
 	err := row.Scan(&column_1)
@@ -315,7 +458,7 @@ func (q *Queries) ProposalHasTries(ctx context.Context, proposalID uuid.UUID) (b
 }
 
 const proposalTries = `-- name: ProposalTries :many
-SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, p.number AS proposal_number FROM tries t
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, t.kept_test_id, t.content_key, t.version_id, t.edits, p.number AS proposal_number FROM tries t
 JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.proposal_id = $1
 ORDER BY t.created_at, t.id
@@ -326,7 +469,7 @@ type ProposalTriesRow struct {
 	ProposalNumber int64
 }
 
-func (q *Queries) ProposalTries(ctx context.Context, proposalID uuid.UUID) ([]ProposalTriesRow, error) {
+func (q *Queries) ProposalTries(ctx context.Context, proposalID *uuid.UUID) ([]ProposalTriesRow, error) {
 	rows, err := q.db.Query(ctx, proposalTries, proposalID)
 	if err != nil {
 		return nil, err
@@ -356,6 +499,10 @@ func (q *Queries) ProposalTries(ctx context.Context, proposalID uuid.UUID) ([]Pr
 			&i.Try.FinishedAt,
 			&i.Try.Reason,
 			&i.Try.Attempt,
+			&i.Try.KeptTestID,
+			&i.Try.ContentKey,
+			&i.Try.VersionID,
+			&i.Try.Edits,
 			&i.ProposalNumber,
 		); err != nil {
 			return nil, err
@@ -404,8 +551,8 @@ func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 }
 
 const tryByID = `-- name: TryByID :one
-SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, p.number AS proposal_number FROM tries t
-JOIN jonah_proposals p ON p.id = t.proposal_id
+SELECT t.id, t.org_id, t.factory_id, t.proposal_id, t.item_id, t.station, t.original_run_id, t.try_run_id, t.model, t.state, t.verdict, t.error, t.diff, t.cost_usd, t.lease_until, t.attempts, t.created_at, t.finished_at, t.reason, t.attempt, t.kept_test_id, t.content_key, t.version_id, t.edits, coalesce(p.number, 0)::bigint AS proposal_number FROM tries t
+LEFT JOIN jonah_proposals p ON p.id = t.proposal_id
 WHERE t.id = $1
 `
 
@@ -414,6 +561,7 @@ type TryByIDRow struct {
 	ProposalNumber int64
 }
 
+// A try with its proposal's number, 0 for a publish's try.
 func (q *Queries) TryByID(ctx context.Context, id uuid.UUID) (TryByIDRow, error) {
 	row := q.db.QueryRow(ctx, tryByID, id)
 	var i TryByIDRow
@@ -438,6 +586,10 @@ func (q *Queries) TryByID(ctx context.Context, id uuid.UUID) (TryByIDRow, error)
 		&i.Try.FinishedAt,
 		&i.Try.Reason,
 		&i.Try.Attempt,
+		&i.Try.KeptTestID,
+		&i.Try.ContentKey,
+		&i.Try.VersionID,
+		&i.Try.Edits,
 		&i.ProposalNumber,
 	)
 	return i, err

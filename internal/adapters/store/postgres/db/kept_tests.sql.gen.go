@@ -65,8 +65,15 @@ func (q *Queries) InsertKeptTest(ctx context.Context, arg InsertKeptTestParams) 
 }
 
 const keptTestByID = `-- name: KeptTestByID :one
-SELECT k.id, k.org_id, k.factory_id, k.item_id, k.station, k.kept_by, k.kept_at, w.number AS item_number, w.title AS item_title FROM kept_tests k
+SELECT k.id, k.org_id, k.factory_id, k.item_id, k.station, k.kept_by, k.kept_at, w.number AS item_number, w.title AS item_title,
+       l.result AS last_result, l.finished_at AS last_at, l.try_run_id AS last_run_id FROM kept_tests k
 JOIN work_items w ON w.id = k.item_id
+LEFT JOIN LATERAL (
+  SELECT t.verdict AS result, t.finished_at, t.try_run_id FROM tries t
+  WHERE t.kept_test_id = k.id AND t.state = 'done'
+  ORDER BY t.finished_at DESC, t.id DESC
+  LIMIT 1
+) l ON true
 WHERE k.id = $1
 `
 
@@ -74,6 +81,9 @@ type KeptTestByIDRow struct {
 	KeptTest   KeptTest
 	ItemNumber int64
 	ItemTitle  string
+	LastResult *string
+	LastAt     *time.Time
+	LastRunID  *uuid.UUID
 }
 
 func (q *Queries) KeptTestByID(ctx context.Context, id uuid.UUID) (KeptTestByIDRow, error) {
@@ -89,13 +99,23 @@ func (q *Queries) KeptTestByID(ctx context.Context, id uuid.UUID) (KeptTestByIDR
 		&i.KeptTest.KeptAt,
 		&i.ItemNumber,
 		&i.ItemTitle,
+		&i.LastResult,
+		&i.LastAt,
+		&i.LastRunID,
 	)
 	return i, err
 }
 
 const keptTests = `-- name: KeptTests :many
-SELECT k.id, k.org_id, k.factory_id, k.item_id, k.station, k.kept_by, k.kept_at, w.number AS item_number, w.title AS item_title FROM kept_tests k
+SELECT k.id, k.org_id, k.factory_id, k.item_id, k.station, k.kept_by, k.kept_at, w.number AS item_number, w.title AS item_title,
+       l.result AS last_result, l.finished_at AS last_at, l.try_run_id AS last_run_id FROM kept_tests k
 JOIN work_items w ON w.id = k.item_id
+LEFT JOIN LATERAL (
+  SELECT t.verdict AS result, t.finished_at, t.try_run_id FROM tries t
+  WHERE t.kept_test_id = k.id AND t.state = 'done'
+  ORDER BY t.finished_at DESC, t.id DESC
+  LIMIT 1
+) l ON true
 WHERE k.factory_id = $1 AND ($2::text = '' OR k.station = $2::text)
 ORDER BY k.kept_at DESC, k.id DESC
 `
@@ -109,9 +129,13 @@ type KeptTestsRow struct {
 	KeptTest   KeptTest
 	ItemNumber int64
 	ItemTitle  string
+	LastResult *string
+	LastAt     *time.Time
+	LastRunID  *uuid.UUID
 }
 
-// The factory's kept tests, only station's when it is not empty, newest first (kept_tests_factory_idx).
+// The factory's kept tests, only station's when it is not empty, newest first (kept_tests_factory_idx),
+// each with the verdict, finish and run of its newest finished try of any source (tries_kept_test_idx).
 func (q *Queries) KeptTests(ctx context.Context, arg KeptTestsParams) ([]KeptTestsRow, error) {
 	rows, err := q.db.Query(ctx, keptTests, arg.FactoryID, arg.Station)
 	if err != nil {
@@ -131,6 +155,9 @@ func (q *Queries) KeptTests(ctx context.Context, arg KeptTestsParams) ([]KeptTes
 			&i.KeptTest.KeptAt,
 			&i.ItemNumber,
 			&i.ItemTitle,
+			&i.LastResult,
+			&i.LastAt,
+			&i.LastRunID,
 		); err != nil {
 			return nil, err
 		}

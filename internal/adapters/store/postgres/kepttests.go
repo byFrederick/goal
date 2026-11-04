@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/byFrederick/goal/internal/adapters/store/postgres/db"
@@ -63,7 +65,7 @@ func (s *Store) KeepTest(ctx context.Context, n domain.NewKeptTest) (domain.Kept
 			return fmt.Errorf("read kept test: %w", err)
 		}
 
-		out, err = keptTestFrom(row.KeptTest, row.ItemNumber, row.ItemTitle)
+		out, err = keptTestFrom(row.KeptTest, row.ItemNumber, row.ItemTitle, keptLast{row.LastResult, row.LastAt, row.LastRunID})
 
 		return err
 	})
@@ -94,7 +96,7 @@ func (s *Store) KeptTests(ctx context.Context, factory domain.FactoryID, station
 
 	out := make([]domain.KeptTest, len(rows))
 	for i, r := range rows {
-		if out[i], err = keptTestFrom(r.KeptTest, r.ItemNumber, r.ItemTitle); err != nil {
+		if out[i], err = keptTestFrom(r.KeptTest, r.ItemNumber, r.ItemTitle, keptLast{r.LastResult, r.LastAt, r.LastRunID}); err != nil {
 			return nil, fmt.Errorf("kept tests of factory %s: %w", factory, err)
 		}
 	}
@@ -136,15 +138,34 @@ func (s *Store) RemoveKeptTest(ctx context.Context, factory domain.FactoryID, id
 	return nil
 }
 
-// keptTestFrom is a kept_tests row with its item's number and title.
-func keptTestFrom(k db.KeptTest, number int64, title string) (domain.KeptTest, error) {
+// keptLast is a kept test's newest finished try as the queries read it: its verdict, finish and
+// run, each NULL when it has none.
+type keptLast struct {
+	verdict *string
+	at      *time.Time
+	run     *uuid.UUID
+}
+
+// keptTestFrom is a kept_tests row with its item's number and title and its newest finished try.
+func keptTestFrom(k db.KeptTest, number int64, title string, last keptLast) (domain.KeptTest, error) {
 	by, err := domain.ActorFromRef(k.KeptBy)
 	if err != nil {
 		return domain.KeptTest{}, fmt.Errorf("kept test %s: %w", k.ID, err)
 	}
 
-	return domain.KeptTest{
+	out := domain.KeptTest{
 		ID: domain.KeptTestID(k.ID.String()), FactoryID: domain.FactoryID(k.FactoryID.String()), ItemID: domain.ItemID(k.ItemID.String()),
 		ItemNumber: number, ItemTitle: title, Station: k.Station, KeptBy: by, KeptAt: k.KeptAt.UTC(),
-	}, nil
+	}
+
+	if last.at != nil {
+		t := domain.PastTry{State: domain.PastTryDone, Verdict: domain.PastTryVerdict(deref(last.verdict))}
+		out.LastResult = &domain.KeptTestLast{Result: t.KeptResult(), At: last.at.UTC()}
+
+		if last.run != nil {
+			out.LastResult.RunID = domain.RunID(last.run.String())
+		}
+	}
+
+	return out, nil
 }
