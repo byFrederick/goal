@@ -392,7 +392,11 @@ func TestJonah_Permissions(t *testing.T) {
 	h.as(acmeMember(domain.FactoryViewer))
 
 	for _, c := range []struct{ path, body string }{
-		{path + "/approve", ""}, {path + "/edit", ""}, {path + "/reject", rejectBody}, {path + "/undo", ""}, {acmeJonah + "/reviews", ""},
+		{path + "/approve", ""},
+		{path + "/edit", ""},
+		{path + "/reject", rejectBody},
+		{path + "/undo", ""},
+		{acmeJonah + "/reviews", ""},
 		{acmeJonah + "/tests", keepBody(1, "inbox")},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, c.path, c.body)

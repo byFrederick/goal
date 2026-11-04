@@ -351,6 +351,9 @@ var probes = map[string]probe{
 	"rejectProposal":     {method: http.MethodPost, path: acmeProposals + "/1/reject", body: rejectBody, org: testOrg, factory: acmeID},
 	"undoProposal":       {method: http.MethodPost, path: acmeProposals + "/1/undo", org: testOrg, factory: acmeID},
 	"queueJonahReview":   {method: http.MethodPost, path: acmeJonah + "/reviews", org: testOrg, factory: acmeID},
+	"listKeptTests":      {method: http.MethodGet, path: acmeJonah + "/tests", org: testOrg, factory: acmeID},
+	"keepTest":           {method: http.MethodPost, path: acmeJonah + "/tests", body: `{"item":1,"station":"inbox"}`, org: testOrg, factory: acmeID},
+	"removeKeptTest":     {method: http.MethodDelete, path: acmeJonah + "/tests/1", org: testOrg, factory: acmeID},
 	// No run exists here; TestAPI_RunsOfAnItem checks that the run resolver passes the seam with its factory.
 	"getRun":           {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff", org: testOrg},
 	"listRunKnowledge": {method: http.MethodGet, path: "/v1/orgs/acme/runs/00000000-0000-7000-8000-ffffffffffff/knowledge", org: testOrg},

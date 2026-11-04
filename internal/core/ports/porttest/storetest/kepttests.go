@@ -38,17 +38,14 @@ func (f *fixture) keep(t *testing.T, it domain.Item, station string, at int) dom
 
 func testKeptTestsList(f *fixture) {
 	t := f.t
-	a := f.create(t, domain.NewItem{Title: "Fix the login"})
+	a := f.create(t, domain.NewItem{Title: "Mend the sign-in"})
 	b := f.create(t, domain.NewItem{Title: "Add a page"})
 
 	ka := f.keep(t, a, stWork, 1)
 	kb := f.keep(t, b, stWork, 2)
 	kn := f.keep(t, a, stNext, 3)
 
-	if ka.ID == "" || ka.ItemNumber != a.Number || ka.ItemTitle != "Fix the login" || ka.Station != stWork ||
-		ka.KeptBy.Ref() != domain.LocalUser.Ref() || !ka.KeptAt.Equal(t0.Add(time.Minute)) || ka.FactoryID != f.factory {
-		t.Errorf("KeepTest = %+v, want item %d at %s by the local user", ka, a.Number, stWork)
-	}
+	expectKept(t, ka, a, f.factory)
 
 	all, err := f.Kept.KeptTests(f.ctx(t), f.factory, "")
 	if err != nil {
@@ -151,6 +148,16 @@ func testKeptTestsTenancy(f *fixture) {
 
 	if got, err := f.Kept.KeptTests(f.ctx(t), f.factory, ""); err != nil || len(got) != 1 {
 		t.Errorf("KeptTests after another org's calls = %+v, %v; want the one kept", got, err)
+	}
+}
+
+// expectKept checks k is a's test at stWork, kept by the local user a minute after t0.
+func expectKept(t *testing.T, k domain.KeptTest, a domain.Item, factory domain.FactoryID) {
+	t.Helper()
+
+	if k.ID == "" || k.ItemNumber != a.Number || k.ItemTitle != a.Title || k.Station != stWork ||
+		k.KeptBy.Ref() != domain.LocalUser.Ref() || !k.KeptAt.Equal(t0.Add(time.Minute)) || k.FactoryID != factory {
+		t.Errorf("KeepTest = %+v, want item %d at %s by the local user", k, a.Number, stWork)
 	}
 }
 

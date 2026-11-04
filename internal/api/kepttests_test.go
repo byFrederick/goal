@@ -15,6 +15,9 @@ import (
 // lineTests are the line factory's kept tests; line has one agent station, build.
 const lineTests = "/v1/orgs/acme/factories/line/jonah/tests"
 
+// notPassed is the refusal of an item that did not pass the station the first time.
+const notPassed = "not-passed-first-time"
+
 // builtItem seeds an item of line with these events at build, and a finished first run of a
 // claim there (its branch head recorded) when run is set.
 func (h *harness) builtItem(t *testing.T, run bool, kinds ...domain.EventKind) domain.Item {
@@ -78,15 +81,7 @@ func TestJonah_KeptTests(t *testing.T) {
 	h := newHarness(t)
 	passed := h.builtItem(t, true, domain.EventClaimed, domain.EventMoved)
 
-	var kept gen.KeptTest
-	if code := h.call(t, http.MethodPost, lineTests, keepBody(passed.Number, stBuild), &kept); code != http.StatusCreated {
-		t.Fatalf("keep = %d, want 201", code)
-	}
-
-	if kept.Id == "" || kept.Item.Id != string(passed.ID) || kept.Item.Number != passed.Number || kept.Item.Title != passed.Title ||
-		kept.Station != stBuild || kept.KeptBy == "" || !kept.KeptAt.Equal(h.clock.Now()) {
-		t.Errorf("kept = %+v, want item %d at %s, kept now", kept, passed.Number, stBuild)
-	}
+	kept := h.keep(t, passed)
 
 	h.clock.Advance(time.Minute)
 
@@ -104,11 +99,7 @@ func TestJonah_KeptTests(t *testing.T) {
 
 	h.wantKeepRefusals(t)
 
-	code, p = problemOfCall(t, h, http.MethodDelete, acmeJonah+"/tests/"+kept.Id, "")
-	wantProblem(t, "remove line's test through acme", code, p, http.StatusNotFound, "kept-test-not-found")
-
-	code, p = problemOfCall(t, h, http.MethodDelete, lineTests+"/019a0000-0000-7000-8000-00000000dead", "")
-	wantProblem(t, "remove an unknown test", code, p, http.StatusNotFound, "kept-test-not-found")
+	h.wantRemoveRefusals(t, kept.Id)
 
 	if code := h.call(t, http.MethodDelete, lineTests+"/"+kept.Id, "", nil); code != http.StatusNoContent {
 		t.Fatalf("remove = %d, want 204", code)
@@ -117,6 +108,34 @@ func TestJonah_KeptTests(t *testing.T) {
 	if got := h.keptTests(t, lineTests); len(got) != 1 || got[0].Item.Number != second.Number {
 		t.Errorf("kept tests after removing = %+v, want the second item's only", got)
 	}
+}
+
+// keep keeps it at build and checks the answer.
+func (h *harness) keep(t *testing.T, it domain.Item) gen.KeptTest {
+	t.Helper()
+
+	var kept gen.KeptTest
+	if code := h.call(t, http.MethodPost, lineTests, keepBody(it.Number, stBuild), &kept); code != http.StatusCreated {
+		t.Fatalf("keep = %d, want 201", code)
+	}
+
+	if kept.Id == "" || kept.Item.Id != string(it.ID) || kept.Item.Number != it.Number || kept.Item.Title != it.Title ||
+		kept.Station != stBuild || kept.KeptBy == "" || !kept.KeptAt.Equal(h.clock.Now()) {
+		t.Errorf("kept = %+v, want item %d at %s, kept now", kept, it.Number, stBuild)
+	}
+
+	return kept
+}
+
+// wantRemoveRefusals checks that line's test id cannot be removed through acme, nor an unknown one.
+func (h *harness) wantRemoveRefusals(t *testing.T, id string) {
+	t.Helper()
+
+	code, p := problemOfCall(t, h, http.MethodDelete, acmeJonah+"/tests/"+id, "")
+	wantProblem(t, "remove line's test through acme", code, p, http.StatusNotFound, "kept-test-not-found")
+
+	code, p = problemOfCall(t, h, http.MethodDelete, lineTests+"/019a0000-0000-7000-8000-00000000dead", "")
+	wantProblem(t, "remove an unknown test", code, p, http.StatusNotFound, "kept-test-not-found")
 }
 
 // wantKeepRefusals checks the keeps that are refused, none of them stored.
@@ -137,10 +156,10 @@ func (h *harness) wantKeepRefusals(t *testing.T) {
 		{"an unknown item", keepBody(9999, stBuild), http.StatusNotFound, "item-not-found"},
 		{"a human station", keepBody(passed.Number, stMerge), http.StatusBadRequest, ""},
 		{"a station not in the line", keepBody(passed.Number, "nowhere"), http.StatusBadRequest, ""},
-		{"an item a gate rejected", keepBody(rejected.Number, stBuild), http.StatusConflict, "not-passed-first-time"},
-		{"an item claimed there twice", keepBody(twice.Number, stBuild), http.StatusConflict, "not-passed-first-time"},
-		{"an item not moved on", keepBody(notMoved.Number, stBuild), http.StatusConflict, "not-passed-first-time"},
-		{"an item with no finished first run", keepBody(noRun.Number, stBuild), http.StatusConflict, "not-passed-first-time"},
+		{"an item a gate rejected", keepBody(rejected.Number, stBuild), http.StatusConflict, notPassed},
+		{"an item claimed there twice", keepBody(twice.Number, stBuild), http.StatusConflict, notPassed},
+		{"an item not moved on", keepBody(notMoved.Number, stBuild), http.StatusConflict, notPassed},
+		{"an item with no finished first run", keepBody(noRun.Number, stBuild), http.StatusConflict, notPassed},
 	} {
 		code, p := problemOfCall(t, h, http.MethodPost, lineTests, c.body)
 		wantProblem(t, "keep "+c.what, code, p, c.status, c.code)

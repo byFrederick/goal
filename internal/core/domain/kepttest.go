@@ -56,19 +56,13 @@ func PassedFirstTime(events []Event, station string) bool {
 	claims, movedOn := 0, false
 
 	for _, e := range events {
-		switch e.Kind {
-		case EventClaimed:
-			if e.Station == station {
-				claims++
-			}
-		case EventGateRejected:
-			if e.Station == station {
-				return false
-			}
-		case EventMoved:
-			if claims > 0 && movedFrom(e) == station {
-				movedOn = true
-			}
+		switch {
+		case e.Kind == EventClaimed && e.Station == station:
+			claims++
+		case e.Kind == EventGateRejected && e.Station == station:
+			return false
+		case e.Kind == EventMoved && claims > 0 && movedFrom(e) == station:
+			movedOn = true
 		}
 	}
 

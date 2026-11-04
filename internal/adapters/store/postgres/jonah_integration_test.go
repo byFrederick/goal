@@ -51,13 +51,13 @@ func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, d
 	}
 
 	it, err := s.CreateItem(ctx, domain.NewItem{
-		FactoryID: factory, Type: typeTask, Title: "kept", Station: "work", State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: jonahAt,
+		FactoryID: factory, Type: typeTask, Title: "kept", Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, CreatedAt: jonahAt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := s.KeepTest(ctx, domain.NewKeptTest{FactoryID: factory, ItemID: it.ID, Station: "work", KeptBy: domain.LocalUser, KeptAt: jonahAt}); err != nil {
+	if _, err := s.KeepTest(ctx, domain.NewKeptTest{FactoryID: factory, ItemID: it.ID, Station: stWork, KeptBy: domain.LocalUser, KeptAt: jonahAt}); err != nil {
 		t.Fatal(err)
 	}
 
