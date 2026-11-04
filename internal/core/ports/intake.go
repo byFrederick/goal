@@ -75,9 +75,23 @@ type Intake interface {
 	// of the organization's webhooks for factory "", received at or after since,
 	// per endpoint and UTC day, by endpoint then day; a day without deliveries has no entry.
 	DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error)
-	// PruneDeliveries deletes the deliveries of every organization received before before, and
-	// returns how many; ctx needs no organization.
-	PruneDeliveries(ctx context.Context, before time.Time) (int, error)
+	// PruneDeliveries deletes, in every organization, the deliveries received more than
+	// domain.DeliveryRetention before now, and the ledger ids and daily counts more than
+	// domain.LedgerRetention before it, and returns how many rows went; ctx needs no organization.
+	PruneDeliveries(ctx context.Context, now time.Time) (int, error)
+	// Receive records what the receiver of POST /hooks/{webhook id} made of a delivery to the
+	// organization's webhook n.WebhookID (ADR 0040 decisions 12 and 13), in one transaction. A
+	// refused one keeps a row of its metadata, without an id, event or body. An accepted one's id
+	// goes into the webhook's ledger. When the ledger already holds it, nothing is created: the
+	// row the id first came with, while it is kept, counts one more duplicate, and the receipt is
+	// domain.ReceiptDuplicate with that row. Otherwise a delivery n.Named keeps its row and body
+	// (for domain.DeliveryRetention), and one no enabled trigger names only adds one to its UTC
+	// day's count (UnnamedDays). n must pass Check (domain.ErrInvalid); ErrNotFound for an unknown
+	// webhook.
+	Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error)
+	// UnnamedDays are the webhook's daily counts of accepted deliveries no enabled trigger named,
+	// from the UTC day of since on, by day; a day without one has no entry.
+	UnnamedDays(ctx context.Context, webhook domain.WebhookEndpointID, since time.Time) ([]domain.DeliveryCount, error)
 	// RecordFiring records f (with a new ID) and reports true, or reports false and records
 	// nothing when the factory's trigger already has a firing with f's idempotency key (ADR 0026
 	// decision 4); the firing returned is then the one recorded first. f must pass Check

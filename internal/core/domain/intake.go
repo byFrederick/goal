@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -113,8 +114,13 @@ const MaxDeliveryBody = 1 << 20
 // DeliveryRetention is how long deliveries are kept (ADR 0026 decision 2).
 const DeliveryRetention = 30 * 24 * time.Hour
 
-// signatureHeaders are the headers that authenticate a request; a delivery never keeps them.
-var signatureHeaders = map[string]bool{"x-goal-signature": true, "x-hub-signature-256": true, "x-hub-signature": true}
+// SignatureHeaders are the headers that authenticate a request, lower-cased: every sender's
+// signature or token header (internal/catalog/senders) and today's generic X-Goal-Signature. A
+// delivery never keeps them, and 00118's CHECK on webhook_deliveries refuses them.
+var SignatureHeaders = []string{
+	"x-hub-signature-256", "x-hub-signature", "x-goal-signature", "x-gitlab-token", "webhook-signature",
+	"x-pagerduty-signature", "sentry-hook-signature", "authorization",
+}
 
 // WebhookDelivery is one request an endpoint received.
 type WebhookDelivery struct {
@@ -128,6 +134,14 @@ type WebhookDelivery struct {
 	Reason  string
 	// ItemID is the item it created, for DeliveryCreated; "" otherwise or once that item is gone.
 	ItemID ItemID
+	// DeliveryID is the sender's id of an accepted delivery to an organization's webhook (or the
+	// hash of its body), Event its event and Receipt what the receiver made of it; all "" for a
+	// delivery recorded before the receiver and for a refused one's id and event.
+	DeliveryID string
+	Event      string
+	Receipt    DeliveryReceipt
+	// Duplicates counts the later deliveries with the same DeliveryID, which created nothing.
+	Duplicates int
 }
 
 // NewWebhookDelivery is a delivery to record. Headers may hold any names; recording lower-cases
@@ -159,13 +173,14 @@ func (n NewWebhookDelivery) Check() error {
 	return nil
 }
 
-// StoredHeaders are h as a delivery keeps them: names lower-cased, the signature headers dropped.
-func StoredHeaders(h map[string]string) map[string]string {
+// StoredHeaders are h as a delivery keeps them: names lower-cased, SignatureHeaders and the
+// headers also names (a token webhook's own header) dropped, whatever their case.
+func StoredHeaders(h map[string]string, also ...string) map[string]string {
 	out := make(map[string]string, len(h))
 
 	for name, v := range h {
 		name = strings.ToLower(name)
-		if !signatureHeaders[name] {
+		if !slices.Contains(SignatureHeaders, name) && !slices.ContainsFunc(also, func(a string) bool { return strings.EqualFold(a, name) }) {
 			out[name] = v
 		}
 	}

@@ -1,0 +1,18 @@
+# Sentry's integration webhooks: an HMAC-SHA256 of the body under the client secret, in hex.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: sentry
+  title: Sentry
+spec:
+  scheme: hmac
+  signature:
+    header: Sentry-Hook-Signature
+    encoding: hex
+  signed: body
+  secret: text
+  id:
+    header: Request-ID
+  event:
+    header: Sentry-Hook-Resource
+  events: {}

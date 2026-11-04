@@ -1,0 +1,20 @@
+# GitHub's organization and repository webhooks: an HMAC-SHA256 of the body, in hex, after sha256=.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: github
+  title: GitHub
+spec:
+  scheme: hmac
+  signature:
+    header: X-Hub-Signature-256
+    prefix: "sha256="
+    encoding: hex
+  signed: body
+  secret: text
+  id:
+    header: X-GitHub-Delivery
+  event:
+    header: X-GitHub-Event
+  # The event table (ADR 0040 decision 14): each event's normalized fields as dot paths.
+  events: {}

@@ -20,7 +20,8 @@ const scheduleWindow = 5 * time.Minute
 const scheduleInstant = "instant"
 
 // ScheduleTick is what one FireSchedules did: whether it held the schedule lock, the firings of
-// the schedule triggers that were due, and how many old deliveries it deleted.
+// the schedule triggers that were due, and how many old deliveries, ledger ids and counts it
+// deleted.
 type ScheduleTick struct {
 	Ran     bool
 	Firings []domain.TriggerFiring
@@ -28,7 +29,8 @@ type ScheduleTick struct {
 }
 
 // FireSchedules fires every loaded line's enabled schedule triggers that are due at now, and
-// deletes the webhook deliveries older than domain.DeliveryRetention, under the install's
+// deletes the webhook deliveries older than domain.DeliveryRetention and the ledger ids and daily
+// counts older than domain.LedgerRetention (ports.Intake.PruneDeliveries), under the install's
 // schedule lock (ports.Intake.WithScheduleLock, ADR 0026 decision 4): while another goald holds
 // it, it does nothing and reports Ran false. A trigger is due for its newest cron instant within
 // scheduleWindow before now, and fires as Intake fires a trigger, with that instant in RFC 3339
@@ -61,7 +63,7 @@ func (e *Engine) FireSchedules(ctx context.Context, now time.Time) (ScheduleTick
 			}
 		}
 
-		n, err := e.intake.PruneDeliveries(ctx, now.Add(-domain.DeliveryRetention))
+		n, err := e.intake.PruneDeliveries(ctx, now)
 		if err != nil {
 			errs = append(errs, err)
 		}

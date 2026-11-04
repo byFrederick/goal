@@ -1,0 +1,15 @@
+# GitLab's project and group webhooks: the secret token as it is, in X-Gitlab-Token.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: gitlab
+  title: GitLab
+spec:
+  scheme: token
+  signature:
+    header: X-Gitlab-Token
+  id:
+    header: X-Gitlab-Event-UUID
+  event:
+    paths: [object_kind]
+  events: {}
