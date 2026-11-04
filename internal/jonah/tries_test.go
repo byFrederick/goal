@@ -240,6 +240,13 @@ const originalOutput = `{"draft":true}`
 func (w *tryWorld) pastItem(org domain.OrgID, at time.Time, first bool) (domain.Item, domain.RunID) {
 	w.t.Helper()
 
+	return w.pastItemCost(org, at, first, 100)
+}
+
+// pastItemCost is pastItem with a run that cost usd.
+func (w *tryWorld) pastItemCost(org domain.OrgID, at time.Time, first bool, usd float64) (domain.Item, domain.RunID) {
+	w.t.Helper()
+
 	ctx := w.ctx(org)
 
 	it, err := w.store.CreateItem(ctx, domain.NewItem{FactoryID: w.factories[org], Title: "past", Station: stTryDone, State: domain.StateDone})
@@ -261,7 +268,7 @@ func (w *tryWorld) pastItem(org domain.OrgID, at time.Time, first bool) (domain.
 		w.t.Fatal(err)
 	}
 
-	if err := w.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(originalOutput), CostUSD: 100},
+	if err := w.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(originalOutput), CostUSD: usd},
 		at.Add(time.Minute)); err != nil {
 		w.t.Fatal(err)
 	}
