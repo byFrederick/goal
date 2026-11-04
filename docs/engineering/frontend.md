@@ -548,7 +548,7 @@ task web:dev                     # Vite on :5173, /v1 and /api/auth proxied to g
 GOAL_API=mock task web:dev       # the same against the in-memory mock API (apps/web/mock), no goald needed
 GOAL_API=mock GOAL_MOCK_LIVE=1 task web:dev   # the mock's agents keep calling tools, to watch the stream
 task web:check                   # tsc, Biome, Vitest
-task web:e2e                     # Playwright (Chromium) at 375, 768, 1440 px with axe, on vite preview + the mock (GOAL_E2E_PORT, default 4174; artifacts in test-results/<run>/)
+task web:e2e                     # Playwright (Chromium) at 375, 768, 1440 px with axe, on vite preview + the mock (GOAL_E2E_PORT, default 4174; artifacts in test-results/<run>/); CI runs it in ci.yml's e2e job, which uploads playwright-report/ and test-results/ when it fails
 task web:e2e-auth                # the sign-in flow against a running goald under GOAL_AUTH=session, the identity service and Mailpit (not the mock)
 task build                       # web:build, then go build -tags webui: goald serves the UI at /
 ```
