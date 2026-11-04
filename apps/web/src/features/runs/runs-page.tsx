@@ -495,11 +495,6 @@ export function RunsPage() {
                                     Open transcript
                                   </button>
                                 </NotAvailable>
-                                <NotAvailable label="Send to Jonah">
-                                  <button type="button" className={cn(touchLink, 'text-run-ink font-control')}>
-                                    Send to Jonah
-                                  </button>
-                                </NotAvailable>
                               </span>
                             </div>
                           </td>

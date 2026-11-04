@@ -9,13 +9,14 @@ import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
 import { restoreVersion } from '../../../api/definitions';
 import { defKeys, keys, versionModelQuery } from '../../../api/queries';
-import type { ItemsAtRemovedStations, Version } from '../../../api/types';
+import type { ItemsAtRemovedStations, Version, Watch } from '../../../api/types';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
 import { Field, NativeSelect } from '../../../ui/field';
+import { watchText, watchVerdicts } from '../../jonah/jonah-format';
 import { useSetSearch } from '../search-link';
 import { type ComparePair, compareParam, publishedLine } from './review';
 import { useEditorFacts } from './use-review';
@@ -47,6 +48,32 @@ export function draftDetail(updatedAt: string | undefined): string {
   return updatedAt ? `Autosaved ${formatClock(updatedAt)} by you` : 'Not saved yet';
 }
 
+/** A watch's verdict as the row says it: Watching while it is open, else Helped, Worse, No change… */
+export function watchChip(watch: Watch): { label: string; tone: 'ok' | 'rework' | 'plain' } {
+  return watch.closed_at === null && watch.verdict === 'too_early'
+    ? { label: 'Watching', tone: 'plain' }
+    : watchVerdicts[watch.verdict];
+}
+
+/** What the version's change did at each station it reaches (ADR 0039 decision 14), one line per metric. */
+function VersionWatches({ name, watches }: { name: string; watches: readonly Watch[] }) {
+  return (
+    <ul aria-label={`Watch of ${name}`} className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+      {watches.map((w) => {
+        const chip = watchChip(w);
+        return (
+          <li key={`${w.station}:${w.metric}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 break-words text-secondary text-ink-soft">{watchText(w)}</span>
+            <Chip dot tone={chip.tone}>
+              {chip.label}
+            </Chip>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function VersionRow({
   version,
   comparing,
@@ -71,6 +98,9 @@ export function VersionRow({
         <div className="min-w-0">
           <p className="m-0 min-w-0 break-words text-body font-medium">{version.message || 'No note'}</p>
           <p className="m-0 text-meta text-muted">{publishedLine(version.published_at, version.published_by)}</p>
+          {version.watches && version.watches.length > 0 ? (
+            <VersionWatches name={name} watches={version.watches} />
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {version.current ? <Chip tone="ok">Live</Chip> : null}

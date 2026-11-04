@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { proposeAgentModel } from '../../api/client';
 import { createDraftRequest } from '../../api/definitions';
 import {
   agentStatsQuery,
   builderMetaQuery,
   factoryQuery,
+  policyQuery,
   versionFileQuery,
   versionModelQuery,
   versionQuery,
@@ -19,8 +22,13 @@ import { DraftSession } from '../factory-editor/draft/session';
 import { AgentPage } from './agent-page';
 import type { AgentView } from './views';
 
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+  Toaster: () => null,
+}));
 vi.mock('../../api/client', async (original) => ({
   ...(await original<typeof import('../../api/client')>()),
+  proposeAgentModel: vi.fn(),
 }));
 
 vi.mock('../../api/definitions', async (original) => ({
@@ -124,7 +132,21 @@ function seeds({
         },
       },
     ],
-    [builderMetaQuery(org.id).queryKey, { capabilities: { tool_approvals: false } }],
+    [
+      builderMetaQuery(org.id).queryKey,
+      {
+        capabilities: { tool_approvals: false },
+        models: [
+          { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', default: false },
+          { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', default: true },
+          { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', default: false },
+        ],
+      },
+    ],
+    [
+      policyQuery(org.id).queryKey,
+      { view: { policy: { allowed_models: ['claude-haiku-5-5', 'claude-sonnet-5-5'] } }, etag: '"1"' },
+    ],
     [
       versionQuery(org.id, factory.id, 'current').queryKey,
       {
@@ -479,5 +501,52 @@ describe('phone tap targets on the agent page', () => {
     const reasons = screen.getByRole('region', { name: 'Why review sent work back' });
     const button = within(reasons).getByRole('button', { name: /No test for a new empty or error state/ });
     for (const cls of touchLink.split(' ')) expect(button.classList.contains(cls)).toBe(true);
+  });
+});
+
+describe('Try another model', () => {
+  const estimate = {
+    agent: 'frontend-engineer',
+    current_model: 'claude-haiku-5-5',
+    model: 'claude-sonnet-5-5',
+    items: [],
+    tries: 15,
+    estimate_usd: 4.2,
+    budget_left_usd: 20,
+  };
+
+  it('is not offered without definition:edit', async () => {
+    await renderPage();
+    expect(screen.queryByRole('button', { name: 'Try another model' })).toBeNull();
+  });
+
+  it('lists only the models the policy allows, shows the estimate, then makes the proposal', async () => {
+    vi.mocked(proposeAgentModel).mockImplementation(async (_o, _f, _a, _m, confirm) =>
+      confirm ? { estimate, proposal: { number: 7 } as never } : { estimate },
+    );
+    await renderPage('overview', { can: ['definition:edit'] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try another model' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Try another model' });
+    const make = within(dialog).getByRole('button', { name: 'Make the proposal' });
+    expect(make.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Model' }));
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
+    expect(options).toEqual(['Sonnet 5.5']);
+    fireEvent.click(screen.getByRole('option', { name: 'Sonnet 5.5' }));
+
+    expect(await within(dialog).findByText('15 tries on 0 items')).toBeTruthy();
+    expect(within(dialog).getByText('About $4.20 of $20.00 left this week')).toBeTruthy();
+    expect(vi.mocked(proposeAgentModel).mock.calls.at(-1)?.[4]).toBe(false);
+
+    await waitFor(() => expect(make.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(make);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Proposal made'));
+    expect(vi.mocked(proposeAgentModel).mock.calls.at(-1)?.slice(2)).toEqual([
+      'frontend-engineer',
+      'claude-sonnet-5-5',
+      true,
+    ]);
   });
 });

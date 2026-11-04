@@ -86,6 +86,12 @@ goal move acme-line#3 review --reason "Needs a second look"
 
 A run in progress is stopped first. Moving an item to an earlier station needs a reason, and counts as rework. On the item page, use More, then Move.
 
+## Keep an item as a test
+
+On the item's Teardown tab, **Keep as a test** at a station the item passed the first time keeps the item as a test of that station. Jonah and Publish run kept tests against later changes. It needs `definition:edit`, and Goal refuses a station the item did not pass the first time. A toast says **Kept**.
+
+To try another model for an agent, open the agent's page and choose **Try another model**. Pick a model your policy allows, read the estimate and confirm; Jonah tries it on what the agent finished lately and makes a proposal, and a toast says **Proposal made**.
+
 ## Pause and resume
 
 Pause stops the item where it is. A run in progress is stopped with it.

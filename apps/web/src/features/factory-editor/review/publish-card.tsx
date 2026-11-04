@@ -20,6 +20,7 @@ import { Field, Input, NativeSelect } from '../../../ui/field';
 import { StatStrip } from '../../../ui/stat-strip';
 import { useDraftSession, useModel } from '../draft/use-draft';
 import { SearchLink } from '../search-link';
+import { KeptTestsList } from './kept-tests-list';
 import { blockedSentence, defaultMessage, type MoveNeed, mergeMoveNeeds, publishExplainer } from './review';
 import { useComparison, useEditorFacts } from './use-review';
 
@@ -216,6 +217,8 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
           ))}
         </fieldset>
       ) : null}
+
+      {first ? null : <KeptTestsList />}
 
       {first ? (
         <label className="flex cursor-pointer items-start gap-3 text-body leading-normal">
