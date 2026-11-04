@@ -475,15 +475,15 @@ func testTriesTryAgainSkipsKept(f *fixture) {
 func expectCopies(t *testing.T, added, from []domain.PastTry, attempts []int, at time.Time) {
 	t.Helper()
 
-	if len(added) != len(from) {
+	if len(added) != len(from) || len(attempts) != len(from) {
 		t.Fatalf("AddPastTries = %+v; want %d tries", added, len(from))
 	}
 
-	for i, g := range added {
-		w := from[i]
-		if g.ItemID != w.ItemID || g.Attempt != attempts[i] || g.State != domain.PastTryQueued || g.Station != w.Station ||
+	for i, w := range from {
+		g, attempt := added[i], attempts[i]
+		if g.ItemID != w.ItemID || g.Attempt != attempt || g.State != domain.PastTryQueued || g.Station != w.Station ||
 			g.OriginalRunID != w.OriginalRunID || g.Model != w.Model || g.ProposalNumber != w.ProposalNumber || !g.CreatedAt.Equal(at) {
-			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, w, attempts[i])
+			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, w, attempt)
 		}
 	}
 }
