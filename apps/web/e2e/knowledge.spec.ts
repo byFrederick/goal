@@ -225,6 +225,7 @@ for (const scheme of ['light', 'dark'] as const) {
         ]);
         await alert.getByRole('link', { name: 'Replace value' }).click();
         await expect(page).toHaveURL(/\/o\/acme\/secrets\/confluence-token/);
+        await expect(page.getByRole('heading', { name: 'confluence-token' })).toBeVisible();
       });
     });
   }
