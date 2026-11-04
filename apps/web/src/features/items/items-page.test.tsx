@@ -571,6 +571,21 @@ describe('Items list bulk actions', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Bulk actions' })).toBeNull());
   });
 
+  it('toggles the selection from the enlarged label and keeps the accessible name', async () => {
+    renderItems(twoItems());
+
+    const box = await screen.findByRole('checkbox', { name: 'Select sre#1' });
+    const label = box.parentElement as HTMLElement;
+    expect(label.tagName).toBe('LABEL');
+    fireEvent.click(label);
+    expect(await screen.findByRole('region', { name: 'Bulk actions' })).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Select sre#1' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(label);
+    await waitFor(() =>
+      expect((screen.getByRole('checkbox', { name: 'Select sre#1' }) as HTMLInputElement).checked).toBe(false),
+    );
+  });
+
   it('pauses each checked item with its own request', async () => {
     renderItems(twoItems());
 
