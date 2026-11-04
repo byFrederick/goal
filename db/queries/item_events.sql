@@ -18,10 +18,10 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: NotesSinceLastRun :many
--- An item's notes after its latest run_started event, both on item_events_item_idx: what the
--- next run's brief carries.
+-- An item's notes, a person's and other items' (item_note), after its latest run_started event,
+-- both on item_events_item_idx: what the next run's brief carries.
 SELECT n.* FROM item_events n
-WHERE n.item_id = sqlc.arg(item_id) AND n.kind = 'note'
+WHERE n.item_id = sqlc.arg(item_id) AND n.kind IN ('note', 'item_note')
   AND n.id > coalesce((SELECT max(r.id) FROM item_events r
                        WHERE r.item_id = sqlc.arg(item_id) AND r.kind = 'run_started'), 0)
 ORDER BY n.id;
@@ -62,3 +62,15 @@ CROSS JOIN LATERAL (
 WHERE w.state = 'waiting_human' AND e.kind = 'tool_approval_requested'
 GROUP BY 1
 ORDER BY 1;
+
+-- name: LockNoteCap :exec
+-- Serializes the deliveries into one factory from other factories, so two instances cannot both
+-- read the cap's count below it. Taken after the target item's lock, always last.
+SELECT pg_advisory_xact_lock(hashtextextended('goal.notes:' || sqlc.arg(factory_id)::uuid::text, 0));
+
+-- name: NotesFromOtherFactories :one
+-- How many item_note events from other factories the factory took since a time
+-- (item_events_item_notes_idx): the daily cap's count.
+SELECT count(*) FROM item_events
+WHERE factory_id = sqlc.arg(factory_id) AND kind = 'item_note' AND at > sqlc.arg(since)
+  AND data->>'from_factory_id' IS DISTINCT FROM sqlc.arg(factory_id)::uuid::text;

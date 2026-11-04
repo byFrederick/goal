@@ -65,3 +65,80 @@ func cloneFollowUp(f domain.FollowUp) domain.FollowUp {
 
 	return f
 }
+
+// DeliverNotes implements ports.Store.
+func (s *Store) DeliverNotes(ctx context.Context, factories []domain.NoteFactory, at time.Time, limit int) ([]domain.FollowUp, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	var out []domain.FollowUp
+
+	for i := range s.followUps {
+		if len(out) >= limit {
+			break
+		}
+
+		f := &s.followUps[i]
+
+		src, ok := s.visible(f.ItemID, org)
+		if !ok || src.Untrusted || f.State != domain.FollowUpWaiting || f.Target != domain.FollowUpNote || f.For == nil {
+			continue
+		}
+
+		s.deliverNote(org, f, src, factories, at)
+		out = append(out, cloneFollowUp(*f))
+	}
+
+	return out, nil
+}
+
+// deliverNote routes one claimed note from src, as the store's transaction does. Callers hold s.mu.
+func (s *Store) deliverNote(org domain.OrgID, f *domain.FollowUp, src *domain.Item, factories []domain.NoteFactory, at time.Time) {
+	var (
+		to     *domain.NoteFactory
+		target *domain.Item
+		state  domain.ItemState
+		today  int
+	)
+
+	if nf, ok := domain.NoteFactoryNamed(factories, f.For.Factory); ok {
+		to = &nf
+
+		for _, it := range s.items {
+			if it.OrgID == org && it.FactoryID == nf.ID && it.Number == f.For.Number {
+				target, state = it, it.State
+			}
+		}
+
+		for _, e := range s.events {
+			if e.FactoryID == nf.ID && e.Kind == domain.EventItemNote && e.At.After(at.Add(-24*time.Hour)) &&
+				e.Data[domain.KeyNoteFromFactory] != string(nf.ID) {
+				today++
+			}
+		}
+	}
+
+	if reason := domain.RouteNote(src.FactoryID, to, state, today); reason != "" {
+		f.Reason, f.Target, f.For = domain.NoteTriageReason(*f.For, reason), domain.FollowUpTriage, nil
+
+		return
+	}
+
+	name := string(src.FactoryID)
+	if nf, ok := domain.NoteFactoryNamed(factories, name); ok && nf.Name != "" {
+		name = nf.Name
+	}
+
+	s.append(domain.Event{
+		FactoryID: target.FactoryID, ItemID: target.ID, At: at, Kind: domain.EventItemNote, Station: target.Station,
+		Actor: domain.ActorEngine, Data: domain.NoteData(*f, domain.ItemRef{Factory: name, Number: src.Number}),
+	})
+
+	f.State = domain.FollowUpDelivered
+}

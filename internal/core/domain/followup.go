@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -257,3 +258,91 @@ func reasonOf(err error) string {
 }
 
 func followUpText(s string) string { return truncate(strings.TrimSpace(s), MaxFollowUpText) }
+
+// MaxNotesADay is how many notes from other factories a factory takes in 24 hours (ADR 0040
+// decision 5); a note past it goes to triage. Notes within a factory are not counted.
+const MaxNotesADay = 50
+
+// The reasons a note goes to triage instead of the item its for names (RouteNote).
+const (
+	ReasonNoteNoFactory   = "no factory by that name in the organization"
+	ReasonNoteNotAccepted = "the factory does not accept follow-ups from this one (board.flow.followUpsFrom)"
+	ReasonNoteNoItem      = "no item with that number"
+	ReasonNoteItemClosed  = "the item is done or cancelled"
+	ReasonNoteCapped      = "the factory already took 50 notes from other factories in the last 24 hours"
+)
+
+// The data keys of an item_note event (NoteData).
+const (
+	KeyNoteFollowUp    = "follow_up_id"
+	KeyNoteFromItem    = "from_item"
+	KeyNoteFromItemID  = "from_item_id"
+	KeyNoteFromFactory = "from_factory_id"
+	KeyNoteStation     = "station"
+	KeyNoteAgent       = "agent"
+)
+
+// NoteFactory is what delivering a note needs of a factory of the organization: its id, its
+// metadata.name and the factories it accepts follow-ups from.
+type NoteFactory struct {
+	ID            FactoryID
+	Name          string
+	FollowUpsFrom []FactoryID
+}
+
+// NoteFactoryOf is l as a note's target.
+func NoteFactoryOf(l Line) NoteFactory {
+	return NoteFactory{ID: l.FactoryID, Name: l.Name, FollowUpsFrom: l.Flow.FollowUpsFrom}
+}
+
+// NoteFactoryNamed is the factory of fs a for's factory names, by metadata.name or id, as an
+// after ref is matched.
+func NoteFactoryNamed(fs []NoteFactory, name string) (NoteFactory, bool) {
+	for _, f := range fs {
+		if f.Name == name || string(f.ID) == name {
+			return f, true
+		}
+	}
+
+	return NoteFactory{}, false
+}
+
+// RouteNote is why a note from factory from cannot go to the item its for names, or "" when it
+// can (ADR 0040 decisions 5 and 7). to is the factory the for names (nil: none by that name),
+// state the item's ("" when the factory has no item with that number) and today how many notes
+// from other factories the target factory took in the last 24 hours. A note into another
+// factory needs that factory to list from in followUpsFrom and stays under MaxNotesADay; one
+// within from needs neither.
+func RouteNote(from FactoryID, to *NoteFactory, state ItemState, today int) string {
+	switch {
+	case to == nil:
+		return ReasonNoteNoFactory
+	case to.ID != from && !slices.Contains(to.FollowUpsFrom, from):
+		return ReasonNoteNotAccepted
+	case state == "":
+		return ReasonNoteNoItem
+	case state == StateDone || state == StateCancelled:
+		return ReasonNoteItemClosed
+	case to.ID != from && today >= MaxNotesADay:
+		return ReasonNoteCapped
+	default:
+		return ""
+	}
+}
+
+// NoteTriageReason is the reason a triage follow-up keeps for a note to ref that RouteNote
+// refused: the ref, which the row no longer holds, then why.
+func NoteTriageReason(ref ItemRef, reason string) string {
+	return truncate("for "+ref.String()+": "+reason, maxFollowUpReason)
+}
+
+// NoteData is the data of the item_note event a note f from the source item from becomes:
+// its text, the follow-up, the source item (ref and id), its factory, and the station and agent
+// that wrote it. The engine writes it (actor system:engine), so it is never a person's touch.
+func NoteData(f FollowUp, from ItemRef) map[string]any {
+	return map[string]any{
+		"text": f.Text, KeyNoteFollowUp: string(f.ID), KeyNoteFromItem: from.String(),
+		KeyNoteFromItemID: string(f.ItemID), KeyNoteFromFactory: string(f.FactoryID),
+		KeyNoteStation: f.Station, KeyNoteAgent: f.Agent, "actor": EngineActor.Ref(),
+	}
+}

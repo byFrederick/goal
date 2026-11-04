@@ -88,6 +88,17 @@ type Store interface {
 	// in output order within a run. An unknown item has none.
 	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
 
+	// DeliverNotes delivers up to limit waiting notes of the context's organization, oldest
+	// first (ADR 0040 decision 7), and returns them as they now are. factories are the
+	// organization's, which a note's for is resolved against (domain.NoteFactoryNamed). Each
+	// note is one transaction: it claims the follow-up (FOR UPDATE SKIP LOCKED, so instances
+	// share the sweep), locks only the target item, never the source, and routes it with
+	// domain.RouteNote. A note it may deliver becomes an item_note event on the target by the
+	// engine (domain.NoteData) and is delivered; any other goes to triage, still waiting, with
+	// domain.NoteTriageReason. A note whose source item is untrusted is never claimed: it waits
+	// (decision 21).
+	DeliverNotes(ctx context.Context, factories []domain.NoteFactory, at time.Time, limit int) ([]domain.FollowUp, error)
+
 	// Waiting returns up to limit queued or ready items at a station in pull order: expedite
 	// first, then priority (highest first), then age (oldest first).
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)

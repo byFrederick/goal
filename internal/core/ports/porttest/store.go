@@ -949,7 +949,7 @@ func (s *Store) NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]do
 		case e.ItemID != item:
 		case e.Kind == domain.EventRunStarted:
 			notes = notes[:0]
-		case e.Kind == domain.EventNote:
+		case e.Kind == domain.EventNote || e.Kind == domain.EventItemNote:
 			notes = append(notes, e)
 		}
 	}

@@ -12,6 +12,88 @@ import (
 	"github.com/google/uuid"
 )
 
+const claimNote = `-- name: ClaimNote :one
+SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, s.number AS source_number
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+WHERE f.state = 'waiting' AND f.target = 'note' AND NOT s.untrusted
+ORDER BY f.created_at, f.id
+LIMIT 1
+FOR UPDATE OF f SKIP LOCKED
+`
+
+type ClaimNoteRow struct {
+	FollowUp     FollowUp
+	SourceNumber int64
+}
+
+// The oldest waiting note whose source item is trusted (follow_ups_waiting_notes_idx), with its
+// source's number, locked for the delivering transaction; a note another instance holds is
+// skipped. Only the follow-up is locked, never the source item.
+func (q *Queries) ClaimNote(ctx context.Context) (ClaimNoteRow, error) {
+	row := q.db.QueryRow(ctx, claimNote)
+	var i ClaimNoteRow
+	err := row.Scan(
+		&i.FollowUp.ID,
+		&i.FollowUp.OrgID,
+		&i.FollowUp.FactoryID,
+		&i.FollowUp.ItemID,
+		&i.FollowUp.RunID,
+		&i.FollowUp.Station,
+		&i.FollowUp.Agent,
+		&i.FollowUp.Text,
+		&i.FollowUp.TextKey,
+		&i.FollowUp.Target,
+		&i.FollowUp.ForFactory,
+		&i.FollowUp.ForNumber,
+		&i.FollowUp.Start,
+		&i.FollowUp.State,
+		&i.FollowUp.Reason,
+		&i.FollowUp.FiledItemID,
+		&i.FollowUp.CreatedAt,
+		&i.FollowUp.UpdatedAt,
+		&i.SourceNumber,
+	)
+	return i, err
+}
+
+const deliverFollowUp = `-- name: DeliverFollowUp :one
+UPDATE follow_ups SET state = 'delivered', updated_at = $1
+WHERE id = $2
+RETURNING id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at
+`
+
+type DeliverFollowUpParams struct {
+	At time.Time
+	ID uuid.UUID
+}
+
+func (q *Queries) DeliverFollowUp(ctx context.Context, arg DeliverFollowUpParams) (FollowUp, error) {
+	row := q.db.QueryRow(ctx, deliverFollowUp, arg.At, arg.ID)
+	var i FollowUp
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ItemID,
+		&i.RunID,
+		&i.Station,
+		&i.Agent,
+		&i.Text,
+		&i.TextKey,
+		&i.Target,
+		&i.ForFactory,
+		&i.ForNumber,
+		&i.Start,
+		&i.State,
+		&i.Reason,
+		&i.FiledItemID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const itemFollowUps = `-- name: ItemFollowUps :many
 SELECT id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at FROM follow_ups WHERE item_id = $1 ORDER BY created_at, id
 `
@@ -110,4 +192,97 @@ func (q *Queries) KeepFollowUp(ctx context.Context, arg KeepFollowUpParams) erro
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const lockNoteTarget = `-- name: LockNoteTarget :one
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at FROM work_items WHERE factory_id = $1 AND number = $2 FOR NO KEY UPDATE
+`
+
+type LockNoteTargetParams struct {
+	FactoryID uuid.UUID
+	Number    int64
+}
+
+// The item a note's for names, locked for its item_note (FOR NO KEY UPDATE, as LockItem).
+func (q *Queries) LockNoteTarget(ctx context.Context, arg LockNoteTargetParams) (WorkItem, error) {
+	row := q.db.QueryRow(ctx, lockNoteTarget, arg.FactoryID, arg.Number)
+	var i WorkItem
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ParentID,
+		&i.Type,
+		&i.Lane,
+		&i.Title,
+		&i.Body,
+		&i.Station,
+		&i.State,
+		&i.ClassOfService,
+		&i.Priority,
+		&i.Size,
+		&i.ReworkCount,
+		&i.CostUsd,
+		&i.Outputs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+		&i.OrgID,
+		&i.PartKey,
+		&i.PartPaths,
+		&i.Paths,
+		&i.BaseCommit,
+		&i.Trigger,
+		&i.Source,
+		&i.IntegrationBranch,
+		&i.IntegrationLandAt,
+		&i.Origin,
+		&i.Via,
+		&i.CreatedBy,
+		&i.Generation,
+		&i.Untrusted,
+		&i.StartAt,
+		&i.StartedAt,
+	)
+	return i, err
+}
+
+const triageFollowUp = `-- name: TriageFollowUp :one
+UPDATE follow_ups SET target = 'triage', for_factory = NULL, for_number = NULL, reason = $1,
+  updated_at = $2
+WHERE id = $3
+RETURNING id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at
+`
+
+type TriageFollowUpParams struct {
+	Reason *string
+	At     time.Time
+	ID     uuid.UUID
+}
+
+// A note that cannot go where it says: for triage, still waiting, its ref kept in the reason.
+func (q *Queries) TriageFollowUp(ctx context.Context, arg TriageFollowUpParams) (FollowUp, error) {
+	row := q.db.QueryRow(ctx, triageFollowUp, arg.Reason, arg.At, arg.ID)
+	var i FollowUp
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ItemID,
+		&i.RunID,
+		&i.Station,
+		&i.Agent,
+		&i.Text,
+		&i.TextKey,
+		&i.Target,
+		&i.ForFactory,
+		&i.ForNumber,
+		&i.Start,
+		&i.State,
+		&i.Reason,
+		&i.FiledItemID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

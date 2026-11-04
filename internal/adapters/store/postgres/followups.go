@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,6 +38,133 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 	}
 
 	return out, nil
+}
+
+// DeliverNotes implements ports.Store: one transaction per note, which locks its follow_ups row
+// (ClaimNote) and then only the target item, so two items noting each other never wait on each
+// other's locks.
+func (s *Store) DeliverNotes(ctx context.Context, factories []domain.NoteFactory, at time.Time, limit int) ([]domain.FollowUp, error) {
+	var out []domain.FollowUp
+
+	for len(out) < limit {
+		var (
+			done bool
+			f    domain.FollowUp
+		)
+
+		err := s.inTx(ctx, func(q *db.Queries) error {
+			row, err := q.ClaimNote(ctx)
+			if notFound(err) {
+				done = true
+
+				return nil
+			}
+
+			if err != nil {
+				return fmt.Errorf("claim note: %w", err)
+			}
+
+			f, err = deliverNote(ctx, q, row, factories, at)
+
+			return err
+		})
+		if err != nil {
+			return out, fmt.Errorf("deliver notes: %w", err)
+		}
+
+		if done {
+			break
+		}
+
+		out = append(out, f)
+	}
+
+	return out, nil
+}
+
+// deliverNote routes one claimed note (domain.RouteNote) and records the outcome: an item_note
+// on the locked target and the note delivered, or the note for triage with the reason.
+func deliverNote(ctx context.Context, q *db.Queries, row db.ClaimNoteRow, factories []domain.NoteFactory, at time.Time) (domain.FollowUp, error) {
+	f, err := followUpFrom(row.FollowUp)
+	if err != nil {
+		return domain.FollowUp{}, err
+	}
+
+	var (
+		to     *domain.NoteFactory
+		target db.WorkItem
+		state  domain.ItemState
+		today  int
+	)
+
+	if nf, ok := domain.NoteFactoryNamed(factories, f.For.Factory); ok && isUUID(string(nf.ID)) {
+		to = &nf
+		id := uuid.MustParse(string(nf.ID))
+
+		if nf.ID == f.FactoryID || slices.Contains(nf.FollowUpsFrom, f.FactoryID) {
+			target, err = q.LockNoteTarget(ctx, db.LockNoteTargetParams{FactoryID: id, Number: f.For.Number})
+
+			switch {
+			case notFound(err):
+			case err != nil:
+				return domain.FollowUp{}, fmt.Errorf("lock note target: %w", err)
+			default:
+				state = domain.ItemState(target.State)
+			}
+		}
+
+		if state != "" && nf.ID != f.FactoryID {
+			if today, err = notesToday(ctx, q, id, at); err != nil {
+				return domain.FollowUp{}, err
+			}
+		}
+	}
+
+	if reason := domain.RouteNote(f.FactoryID, to, state, today); reason != "" {
+		r, err := q.TriageFollowUp(ctx, db.TriageFollowUpParams{
+			ID: row.FollowUp.ID, Reason: optional(domain.NoteTriageReason(*f.For, reason)), At: at,
+		})
+		if err != nil {
+			return domain.FollowUp{}, fmt.Errorf("follow-up %s to triage: %w", f.ID, err)
+		}
+
+		return followUpFrom(r)
+	}
+
+	name := string(f.FactoryID)
+	if nf, ok := domain.NoteFactoryNamed(factories, name); ok && nf.Name != "" {
+		name = nf.Name
+	}
+
+	if err := appendEvents(ctx, q, []domain.Event{{
+		FactoryID: domain.FactoryID(target.FactoryID.String()), ItemID: domain.ItemID(target.ID.String()), At: at,
+		Kind: domain.EventItemNote, Station: target.Station, Actor: domain.ActorEngine,
+		Data: domain.NoteData(f, domain.ItemRef{Factory: name, Number: row.SourceNumber}),
+	}}); err != nil {
+		return domain.FollowUp{}, fmt.Errorf("follow-up %s: item_note: %w", f.ID, err)
+	}
+
+	r, err := q.DeliverFollowUp(ctx, db.DeliverFollowUpParams{ID: row.FollowUp.ID, At: at})
+	if err != nil {
+		return domain.FollowUp{}, fmt.Errorf("follow-up %s delivered: %w", f.ID, err)
+	}
+
+	return followUpFrom(r)
+}
+
+// notesToday counts the notes from other factories the factory took in the 24 hours before at,
+// under the factory's cap lock (LockNoteCap), so concurrent deliveries cannot pass the cap.
+func notesToday(ctx context.Context, q *db.Queries, factory uuid.UUID, at time.Time) (int, error) {
+	if err := q.LockNoteCap(ctx, factory); err != nil {
+		return 0, fmt.Errorf("lock note cap: %w", err)
+	}
+
+	n, err := q.NotesFromOtherFactories(ctx, db.NotesFromOtherFactoriesParams{FactoryID: factory, Since: at.Add(-24 * time.Hour)})
+	if err != nil {
+		return 0, fmt.Errorf("count notes from other factories: %w", err)
+	}
+
+	return int(n), nil
 }
 
 // keepFollowUps keeps a transition's follow-ups on the locked item cur at at; a text already kept
