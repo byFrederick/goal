@@ -148,8 +148,12 @@ function NeedsRow({
         <FactoryBadge mark={mark} />
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={cn('text-meta font-semibold', typeClass)}>{typeLabel[type]}</span>
-          <span className="truncate text-body font-medium text-ink">{titleOf(entry)}</span>
-          <span className="truncate text-secondary text-ink-soft">{whereOf(entry)}</span>
+          <span className="truncate text-body font-medium text-ink" title={titleOf(entry)}>
+            {titleOf(entry)}
+          </span>
+          <span className="truncate text-secondary text-ink-soft" title={whereOf(entry)}>
+            {whereOf(entry)}
+          </span>
         </span>
         <span className="flex-none text-meta text-muted">{formatAge(ageOf(entry))}</span>
       </Link>
