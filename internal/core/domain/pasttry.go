@@ -287,3 +287,113 @@ func joinStations(at []string) string {
 
 	return strings.Join(distinct[:len(distinct)-1], ", ") + " and " + distinct[len(distinct)-1]
 }
+
+// GraderCheckID identifies one check of the grader (ADR 0039 decision 10).
+type GraderCheckID string
+
+// GraderCheckResult is which of a tried item's results the grader was checked on. Values match
+// grader_checks.result.
+type GraderCheckResult string
+
+// The two results the grader is checked on, per tried item.
+const (
+	// GraderCheckOriginal is the item's original result, which the grader should read as not fixed.
+	GraderCheckOriginal GraderCheckResult = "original"
+	// GraderCheckFinal is the item's final accepted result, which it should read as fixed.
+	GraderCheckFinal GraderCheckResult = "final"
+)
+
+// MaxGraderCheckReason bounds the reason of the grader's answer, in characters
+// (grader_checks.reason).
+const MaxGraderCheckReason = 2000
+
+// GraderCheck is the grader's answer on one of a tried item's results (ADR 0039 decision 10): when
+// it misreads either one, the item's tries are unknown.
+type GraderCheck struct {
+	ID         GraderCheckID
+	FactoryID  FactoryID
+	ProposalID ProposalID
+	ItemID     ItemID
+	Result     GraderCheckResult
+	// Answer is fixed, not_fixed or unknown.
+	Answer PastTryVerdict
+	Reason string
+	// RunID is the grade run that answered; empty when it has none or it is gone.
+	RunID     RunID
+	CostUSD   float64
+	CheckedAt time.Time
+}
+
+// Hit reports whether the grader read c's result right: the original as not fixed, the final as
+// fixed. An unknown answer is a miss.
+func (c GraderCheck) Hit() bool {
+	return (c.Result == GraderCheckOriginal && c.Answer == PastTryNotFixed) || (c.Result == GraderCheckFinal && c.Answer == PastTryFixed)
+}
+
+// NewGraderCheck is one check to record. The factory is the proposal's.
+type NewGraderCheck struct {
+	ProposalID ProposalID
+	ItemID     ItemID
+	Result     GraderCheckResult
+	Answer     PastTryVerdict
+	Reason     string
+	RunID      RunID
+	CostUSD    float64
+	CheckedAt  time.Time
+}
+
+// Check reports what makes n impossible to record, wrapping ErrInvalid: no proposal or item, a
+// result other than original or final, an answer other than a grade, a blank reason or one past
+// its bound, a negative cost or no time.
+func (n NewGraderCheck) Check() error {
+	switch {
+	case n.ProposalID == "" || n.ItemID == "":
+		return fmt.Errorf("grader check: it needs a proposal and an item: %w", ErrInvalid)
+	case n.Result != GraderCheckOriginal && n.Result != GraderCheckFinal:
+		return fmt.Errorf("grader check: result %q is not original or final: %w", n.Result, ErrInvalid)
+	case !n.Answer.graded():
+		return fmt.Errorf("grader check: answer %q is not fixed, not_fixed or unknown: %w", n.Answer, ErrInvalid)
+	case strings.TrimSpace(n.Reason) == "":
+		return fmt.Errorf("grader check: the answer needs its reason: %w", ErrInvalid)
+	case len([]rune(n.Reason)) > MaxGraderCheckReason:
+		return fmt.Errorf("grader check: the reason is over %d characters: %w", MaxGraderCheckReason, ErrInvalid)
+	case n.CostUSD < 0:
+		return fmt.Errorf("grader check: negative cost: %w", ErrInvalid)
+	case n.CheckedAt.IsZero():
+		return fmt.Errorf("grader check: no time: %w", ErrInvalid)
+	}
+
+	return nil
+}
+
+// GraderHitRates are a proposal's two hit rates of the grader (ADR 0039 decision 10): of its
+// original checks, those read as not fixed; of its final checks, those read as fixed.
+type GraderHitRates struct {
+	OriginalHits  int
+	OriginalTotal int
+	FinalHits     int
+	FinalTotal    int
+}
+
+// HitRatesOf counts the hit rates of checks.
+func HitRatesOf(checks []GraderCheck) GraderHitRates {
+	var r GraderHitRates
+
+	for _, c := range checks {
+		hit := 0
+		if c.Hit() {
+			hit = 1
+		}
+
+		switch c.Result {
+		case GraderCheckOriginal:
+			r.OriginalTotal++
+			r.OriginalHits += hit
+		case GraderCheckFinal:
+			r.FinalTotal++
+			r.FinalHits += hit
+		}
+	}
+
+	return r
+}

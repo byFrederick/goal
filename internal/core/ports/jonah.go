@@ -269,6 +269,16 @@ type PastTries interface {
 	// of each station among the runs that ended before run started. ErrNotFound when there is no
 	// such run.
 	PastTryInput(ctx context.Context, run domain.RunID) (domain.PastTryInput, error)
+	// RecordGraderCheck stores one check of the grader on a tried item's result (ADR 0039 decision
+	// 10), of the proposal's factory. n must pass Check (domain.ErrInvalid); ErrNotFound when the
+	// proposal is not the organization's or the item not its factory's, ErrConflict when the
+	// proposal has a check of that item and result already.
+	RecordGraderCheck(ctx context.Context, n domain.NewGraderCheck) (domain.GraderCheck, error)
+	// ProposalGraderChecks is the proposal's checks, oldest first.
+	ProposalGraderChecks(ctx context.Context, proposal domain.ProposalID) ([]domain.GraderCheck, error)
+	// GraderHitRates is the proposal's two hit rates (domain.HitRatesOf of its checks); zero when
+	// it has none.
+	GraderHitRates(ctx context.Context, proposal domain.ProposalID) (domain.GraderHitRates, error)
 }
 
 // KeptTests keeps the past items people kept as tests (ADR 0039 decision 12), for the organization
