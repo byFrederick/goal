@@ -561,7 +561,9 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps.Judges = h.judgeDeps(tenancy)
 	deps.Jonah = &api.JonahDeps{Store: h.store, Watches: h.store, Tests: h.store, Tries: h.store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: h.store, Authoring: api.NewJonahAuthoring(authors), Audit: tenancy, Clock: h.clock,
-	}), Models: h.models(defs, deps.OrgPolicies, tenancy)}
+	}), Models: h.models(defs, deps.OrgPolicies, tenancy), TryAgain: jonah.NewTryAgain(jonah.TryAgainDeps{
+		Store: h.store, Definitions: modelLines{Cache: defs, h: h}, Audit: tenancy, Clock: h.clock,
+	})}
 
 	handler, err := api.New(h.withEvals(deps, tenancy, opts))
 	if err != nil {

@@ -6383,7 +6383,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). Try another model (ADR 0039 decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with estimate and model_estimate).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). Try another model (ADR 0039 decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with estimate and model_estimate). Try again (ADR 0039 decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with estimate and try_estimate).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -6421,6 +6421,9 @@ type Problem struct {
 	Sha256 *string `json:"sha256,omitempty"`
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
+
+	// TryEstimate learning-budget-exhausted of Try again only, the estimate it refused
+	TryEstimate *TryProposalEstimate `json:"try_estimate,omitempty"`
 
 	// Uses secret-in-use only, what uses the secret
 	Uses *[]SecretUse `json:"uses,omitempty"`
@@ -7888,6 +7891,54 @@ type TriggerTryStepOutcome string
 // TriggerTryStepStep defines model for TriggerTryStep.Step.
 type TriggerTryStepStep string
 
+// TryProposalEstimate defines model for TryProposalEstimate.
+type TryProposalEstimate struct {
+	// BudgetLeftUsd What is left of Jonah's budget over the last 7 days
+	BudgetLeftUsd float64 `json:"budget_left_usd"`
+
+	// EstimateUsd Each item's tries × its run's cost
+	EstimateUsd float64 `json:"estimate_usd"`
+
+	// Items The items the proposal was tried on, in the order their first tries were queued
+	Items []TryProposalItem `json:"items"`
+
+	// Number The proposal's number
+	Number int64 `json:"number"`
+
+	// Tries The tries Try again adds
+	Tries int `json:"tries"`
+}
+
+// TryProposalItem defines model for TryProposalItem.
+type TryProposalItem struct {
+	// ItemRef <factory name>#<number>
+	ItemRef   string `json:"item_ref"`
+	ItemTitle string `json:"item_title"`
+
+	// RunCostUsd What the run the tries rerun cost
+	RunCostUsd float64 `json:"run_cost_usd"`
+
+	// Station The station the item's tries rerun
+	Station string `json:"station"`
+
+	// Tries The tries Try again adds for the item
+	Tries int `json:"tries"`
+}
+
+// TryProposalRequest defines model for TryProposalRequest.
+type TryProposalRequest struct {
+	// Confirm Queue the tries; false answers the estimate only
+	Confirm *bool `json:"confirm,omitempty"`
+}
+
+// TryProposalResult defines model for TryProposalResult.
+type TryProposalResult struct {
+	Estimate TryProposalEstimate `json:"estimate"`
+
+	// Proposal The proposal with its new tries; absent from an estimate
+	Proposal *Proposal `json:"proposal,omitempty"`
+}
+
 // User defines model for User.
 type User struct {
 	Email string `json:"email"`
@@ -8818,6 +8869,9 @@ type SubmitItemJSONRequestBody = NewItem
 
 // RejectProposalJSONRequestBody defines body for RejectProposal for application/json ContentType.
 type RejectProposalJSONRequestBody = ProposalReject
+
+// TryJonahProposalJSONRequestBody defines body for TryJonahProposal for application/json ContentType.
+type TryJonahProposalJSONRequestBody = TryProposalRequest
 
 // KeepTestJSONRequestBody defines body for KeepTest for application/json ContentType.
 type KeepTestJSONRequestBody = KeepTestRequest
@@ -10221,6 +10275,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
 	RejectProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryJonahProposalWithBody Try again, adding tries to an open proposal (ADR 0039 decision 11)
+	//
+	// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+	TryJonahProposalWithBody(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TryJonahProposal Try again, adding tries to an open proposal (ADR 0039 decision 11)
+	//
+	// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+	TryJonahProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body TryJonahProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 	//
@@ -13572,6 +13644,44 @@ func (c *Client) RejectProposalWithBody(ctx context.Context, org OrgRef, factory
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
 func (c *Client) RejectProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRejectProposalRequest(c.Server, org, factory, number, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryJonahProposalWithBody Try again, adding tries to an open proposal (ADR 0039 decision 11)
+//
+// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+func (c *Client) TryJonahProposalWithBody(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryJonahProposalRequestWithBody(c.Server, org, factory, number, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TryJonahProposal Try again, adding tries to an open proposal (ADR 0039 decision 11)
+//
+// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+func (c *Client) TryJonahProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body TryJonahProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTryJonahProposalRequest(c.Server, org, factory, number, body)
 	if err != nil {
 		return nil, err
 	}
@@ -21069,6 +21179,67 @@ func NewRejectProposalRequestWithBody(server string, org OrgRef, factory Factory
 	return req, nil
 }
 
+// NewTryJonahProposalRequest calls the generic TryJonahProposal builder with application/json body
+func NewTryJonahProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber, body TryJonahProposalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTryJonahProposalRequestWithBody(server, org, factory, number, "application/json", bodyReader)
+}
+
+// NewTryJonahProposalRequestWithBody constructs an http.Request for the TryJonahProposal method, with any body, and a specified content type
+func NewTryJonahProposalRequestWithBody(server string, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "number", number, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals/%s/try", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewUndoProposalRequest constructs an http.Request for the UndoProposal method
 func NewUndoProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber) (*http.Request, error) {
 	var err error
@@ -28154,6 +28325,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
 	RejectProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectProposalResponse, error)
 
+	// TryJonahProposalWithBodyWithResponse Try again, adding tries to an open proposal (ADR 0039 decision 11)
+	//
+	// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+	TryJonahProposalWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TryJonahProposalResponse, error)
+
+	// TryJonahProposalWithResponse Try again, adding tries to an open proposal (ADR 0039 decision 11)
+	//
+	// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+	TryJonahProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body TryJonahProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*TryJonahProposalResponse, error)
+
 	// UndoProposalWithResponse Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 	//
 	// Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
@@ -33868,6 +34057,61 @@ func (r RejectProposalResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RejectProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TryJonahProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *TryProposalResult
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *TryProposalResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TryJonahProposalResponse) GetJSON200() *TryProposalResult {
+	return r.JSON200
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r TryJonahProposalResponse) GetJSON201() *TryProposalResult {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TryJonahProposalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TryJonahProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TryJonahProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TryJonahProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TryJonahProposalResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -41060,6 +41304,36 @@ func (c *ClientWithResponses) RejectProposalWithResponse(ctx context.Context, or
 	return ParseRejectProposalResponse(rsp)
 }
 
+// TryJonahProposalWithBodyWithResponse Try again, adding tries to an open proposal (ADR 0039 decision 11)
+//
+// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+func (c *ClientWithResponses) TryJonahProposalWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TryJonahProposalResponse, error) {
+	rsp, err := c.TryJonahProposalWithBody(ctx, org, factory, number, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryJonahProposalResponse(rsp)
+}
+
+// TryJonahProposalWithResponse Try again, adding tries to an open proposal (ADR 0039 decision 11)
+//
+// Adds one more try per item the proposal was tried on, or three per item for a model proposal (Try another model). Each new try reruns the same run of the item at the same station on the same model, and is queued like the proposal's first tries. Estimates first: with confirm false (the default) it answers 200 with the estimate and queues nothing. The estimate prices each new try at its item's original run's cost and says what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal, whose tried lists the new attempts after the earlier ones. 409 learning-budget-exhausted, with try_estimate, when the tries cost more than what is left of Jonah's budget; proposal-decided for a proposal that is not proposed; proposal-not-tried when the proposal has no tries yet (Jonah queues its first ones); proposal-stale when its edits no longer apply. 422 proposal-not-triable for a proposal that changes no station that can be tried, as a memory-only or flow-only one. 404 proposal-not-found; 503 jonah-unavailable.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try (the `TryJonahProposal` operationId).
+func (c *ClientWithResponses) TryJonahProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body TryJonahProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*TryJonahProposalResponse, error) {
+	rsp, err := c.TryJonahProposal(ctx, org, factory, number, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTryJonahProposalResponse(rsp)
+}
+
 // UndoProposalWithResponse Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 //
 // Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
@@ -46323,6 +46597,46 @@ func ParseRejectProposalResponse(rsp *http.Response) (*RejectProposalResponse, e
 	return response, nil
 }
 
+// ParseTryJonahProposalResponse parses an HTTP response from a TryJonahProposalWithResponse call
+func ParseTryJonahProposalResponse(rsp *http.Response) (*TryJonahProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TryJonahProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TryProposalResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest TryProposalResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseUndoProposalResponse parses an HTTP response from a UndoProposalWithResponse call
 func ParseUndoProposalResponse(rsp *http.Response) (*UndoProposalResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -50385,6 +50699,9 @@ type ServerInterface interface {
 	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject)
 	RejectProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
+	// TryJonahProposal Try again, adding tries to an open proposal (ADR 0039 decision 11)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try)
+	TryJonahProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
 	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo)
 	UndoProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
@@ -54461,6 +54778,50 @@ func (siw *ServerInterfaceWrapper) RejectProposal(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RejectProposal(w, r, org, factory, number)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TryJonahProposal operation middleware
+func (siw *ServerInterfaceWrapper) TryJonahProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number ProposalNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TryJonahProposal(w, r, org, factory, number)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -59257,6 +59618,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit", wrapper.EditProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject", wrapper.RejectProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo", wrapper.UndoProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try", wrapper.TryJonahProposal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/tests", wrapper.ListKeptTests)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/tests", wrapper.KeepTest)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/tests/{test}", wrapper.RemoveKeptTest)
@@ -63108,6 +63470,62 @@ type RejectProposaldefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response RejectProposaldefaultApplicationProblemPlusJSONResponse) VisitRejectProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJonahProposalRequestObject struct {
+	Org     OrgRef         `json:"org"`
+	Factory FactoryRef     `json:"factory"`
+	Number  ProposalNumber `json:"number"`
+	Body    *TryJonahProposalJSONRequestBody
+}
+
+type TryJonahProposalResponseObject interface {
+	VisitTryJonahProposalResponse(w http.ResponseWriter) error
+}
+
+type TryJonahProposal200JSONResponse TryProposalResult
+
+func (response TryJonahProposal200JSONResponse) VisitTryJonahProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJonahProposal201JSONResponse TryProposalResult
+
+func (response TryJonahProposal201JSONResponse) VisitTryJonahProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TryJonahProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TryJonahProposaldefaultApplicationProblemPlusJSONResponse) VisitTryJonahProposalResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -68169,6 +68587,9 @@ type StrictServerInterface interface {
 	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject)
 	RejectProposal(ctx context.Context, request RejectProposalRequestObject) (RejectProposalResponseObject, error)
+	// TryJonahProposal Try again, adding tries to an open proposal (ADR 0039 decision 11)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/try)
+	TryJonahProposal(ctx context.Context, request TryJonahProposalRequestObject) (TryJonahProposalResponseObject, error)
 	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo)
 	UndoProposal(ctx context.Context, request UndoProposalRequestObject) (UndoProposalResponseObject, error)
@@ -71253,6 +71674,44 @@ func (sh *strictHandler) RejectProposal(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RejectProposalResponseObject); ok {
 		if err := validResponse.VisitRejectProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TryJonahProposal operation middleware
+func (sh *strictHandler) TryJonahProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber) {
+	var request TryJonahProposalRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Number = number
+
+	var body TryJonahProposalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TryJonahProposal(ctx, request.(TryJonahProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TryJonahProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TryJonahProposalResponseObject); ok {
+		if err := validResponse.VisitTryJonahProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
