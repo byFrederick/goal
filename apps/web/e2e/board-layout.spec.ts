@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 /**
- * The top edge of each column's first body element (a card, or the Empty text), and its header's height.
+ * The top edge of each column's first body element (a card, the Empty text, or the drum's zone label), and its header's height.
  * All boxes are read in one page.evaluate, so they come from one layout pass: reading them one await at a
  * time lets the board move between reads (the mock's latency shifts it once the columns have loaded).
  */
@@ -23,7 +23,8 @@ async function columnEdges(page: import('@playwright/test').Page) {
       const name = column.getAttribute('aria-label') ?? 'column';
       const header = column.querySelector<HTMLElement>(':scope > header');
       const zone = column.querySelector<HTMLElement>(':scope > div:last-of-type');
-      const first = zone?.querySelector<HTMLElement>(':scope > article, :scope > p');
+      // The drum's zone label ("In progress", docs/design/screens/daily-work/board.html) opens its column.
+      const first = zone?.querySelector<HTMLElement>(':scope > :is(article, p, div:not([data-group]))');
       if (!header || !first) throw new Error(`${name}: no header or first body element is laid out`);
       tops.push({ name, top: first.getBoundingClientRect().top });
       heights.push({ name, height: header.getBoundingClientRect().height });
