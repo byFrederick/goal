@@ -921,8 +921,9 @@ func (h *harness) sendBack(t *testing.T, it domain.Item, kind domain.EventKind, 
 	return events[len(events)-1].ID
 }
 
-// decidedProposals stores a finished review of the harness's factory with three proposals and
-// rejects the first 10 days ago and the second 100 days ago; the third stays proposed.
+// decidedProposals stores a finished review of the harness's factory with four proposals, rejects
+// the first 10 days ago and the second 100 days ago, and publishes the fourth; the third stays
+// proposed.
 func (h *harness) decidedProposals(t *testing.T) {
 	t.Helper()
 
@@ -947,6 +948,7 @@ func (h *harness) decidedProposals(t *testing.T) {
 		{Title: "Ask for tests", Summary: "The engineer skips tests.", Files: file(jonahRule)},
 		{Title: "An old idea", Summary: "Rejected long ago.", Files: file(engineerPrompt)},
 		{Title: "Still open", Files: file("factory.yaml")},
+		{Title: "Name the checks", Summary: "The reviewer forgets the checks.", Files: file(jonahRule)},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -959,11 +961,18 @@ func (h *harness) decidedProposals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	if _, err := h.store.DecideProposal(ctx, factoryID, stored[3].Number, domain.ProposalDecision{
+		State: domain.ProposalPublished, PublishedVersionID: version, By: domain.LocalUser, At: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
-// A Jonah review's bundle is its version's definition files, the factory's sent-back events in
-// the token's window and its proposals rejected in the last 90 days, with the policy's threshold:
-// no item, no repository, no definition, no connection, no knowledge, no rule and no file.
+// A Jonah review's bundle names the factory's sent-back events in the token's window in events.md,
+// with the ids a proposal cites, and its open proposals and those rejected or published in the last
+// 90 days under proposals/, with the policy's threshold and the weekly budget left: no item, no
+// repository, no definition, no connection, no rule and no tool (ADR 0039 decision 4).
 func TestServeRun_JonahBundle(t *testing.T) {
 	t.Parallel()
 
@@ -976,6 +985,7 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	h.sendBack(t, it, domain.EventRejected, "alice", "Too old.", now.Add(-10*24*time.Hour)) // before the window
 	h.sendBack(t, it, domain.EventNote, "carol", "", now.Add(-3*time.Hour))                 // not sent back
 	h.decidedProposals(t)
+	h.finishedJonahRun(t, now.Add(-time.Hour), 2.5)
 
 	c := h.jonahClaims()
 	c.Manual = true
@@ -994,23 +1004,44 @@ func TestServeRun_JonahBundle(t *testing.T) {
 	expectJonahSpec(t, b, c, it)
 	expectNoKeys(t, body)
 
+	if b.Spec.MaxUSD != 7.5 {
+		t.Errorf("max_usd = %v, want 7.5: the weekly $10 less the $2.50 spent", b.Spec.MaxUSD)
+	}
+
 	if n := len(h.store.Events(it.ID)); n != before {
 		t.Errorf("%d events of the item, want %d: a bundle records nothing", n, before)
 	}
 
-	wantEvents := []jonahEvent{
-		{ID: strconv.FormatInt(rejected, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventRejected), Reason: "No tests."},
-		{ID: strconv.FormatInt(gate, 10), ItemRef: "#" + strconv.FormatInt(it.Number, 10), Title: it.Title, Station: h.claims().Station, Kind: string(domain.EventGateRejected)},
-	}
-	if !reflect.DeepEqual(b.Spec.Jonah.Events, wantEvents) {
-		t.Errorf("events =\n %+v\nwant\n %+v", b.Spec.Jonah.Events, wantEvents)
+	ref := "#" + strconv.FormatInt(it.Number, 10)
+	events := string(b.Files["events.md"])
+
+	for _, want := range []string{
+		"## Event " + strconv.FormatInt(rejected, 10) + "\n\n- Item: " + ref + " Add a health endpoint\n- Station: build\n- Agent: none\n- Kind: rejected\n- Reason:\n\n> No tests.",
+		"## Event " + strconv.FormatInt(gate, 10) + "\n\n- Item: " + ref + " Add a health endpoint\n- Station: build\n- Agent: none\n- Kind: gate_rejected\n",
+	} {
+		if !strings.Contains(events, want) {
+			t.Errorf("events.md lacks %q:\n%s", want, events)
+		}
 	}
 
-	wantRejected := []jonahRejected{{
-		Title: "Ask for tests", Summary: "The engineer skips tests.", Paths: []string{jonahRule}, Reason: "Not for Ask for tests.",
-	}}
-	if !reflect.DeepEqual(b.Spec.Jonah.Rejected, wantRejected) {
-		t.Errorf("rejected =\n %+v\nwant\n %+v", b.Spec.Jonah.Rejected, wantRejected)
+	if strings.Contains(events, "Too old.") || strings.Count(events, "## Event ") != 2 {
+		t.Errorf("events.md =\n%s\nwant only the two sent-back events in the window", events)
+	}
+}
+
+// finishedJonahRun records a finished review run of the harness's factory that cost usd, started at.
+func (h *harness) finishedJonahRun(t *testing.T, at time.Time, usd float64) {
+	t.Helper()
+
+	ctx := domain.WithOrg(t.Context(), h.org)
+
+	id, err := h.store.StartRun(ctx, ports.NewRun{FactoryID: factoryID, Agent: "jonah-reviewer", StartedAt: at, Kind: domain.RunKindJonah})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.FinishRun(ctx, id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1131,7 +1162,7 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 	}
 
 	// Everything else is an empty item-less spec: no item, station, brief, connection, rule,
-	// granted call, skill, git login, tool or repository, and no file but the evidence.
+	// granted call, skill, git login, tool or repository, and no file but the box's.
 	want := runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: "claude-haiku-5-5", Skills: []string{}, ToolsAllow: []string{},
@@ -1141,13 +1172,18 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 	}
 
 	got := b
-	got.Spec.Jonah = nil
+	got.Spec.Jonah, got.Spec.MaxUSD = nil, 0
 	got.Files = map[string][]byte{}
 
 	for p, body := range b.Files {
-		if !strings.HasPrefix(p, "evidence/") {
+		if !slices.ContainsFunc([]string{"evidence/", "definition/", "proposals/"}, func(dir string) bool { return strings.HasPrefix(p, dir) }) &&
+			p != "files.md" && p != "events.md" {
 			got.Files[p] = body
 		}
+	}
+
+	if b.Spec.MaxUSD <= 0 {
+		t.Errorf("max_usd = %v, want the weekly budget left", b.Spec.MaxUSD)
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -1180,34 +1216,79 @@ func expectNoKeys(t *testing.T, body []byte) {
 	}
 }
 
-// A review reads only the files a proposal may edit, factory.yaml, agents/, skills/, rules/ and
-// contracts/, each as text under its sha256, sorted by path: never evals/, another path or a
-// file that is not text.
-func TestServeRun_JonahBundleOnlyAllowlistedFiles(t *testing.T) {
+// A review's box holds every text file of the version under definition/, and files.md names each
+// with its sha256 and whether a proposal may edit it; a file that is not text is in neither. Its
+// proposals are under proposals/<state>/<number>.md: open ones, and published and rejected ones of
+// the last 90 days, a rejected one with its reason.
+func TestServeRun_JonahBundleHoldsDefinitionAndProposals(t *testing.T) {
 	t.Parallel()
 
 	h := newJonahHarness(t, harnessDeps{})
+	h.submit(t, factoryID, "Add a health endpoint", "") // the factory exists once an item does
+	h.decidedProposals(t)
 	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
 
-	want := []string{engineerPrompt, "contracts/change.json", config.FileName, jonahRule, "skills/acme-conventions/SKILL.md"}
+	all := map[string]string{engineerPrompt: "# engineer\n", config.FileName: jonahYAML}
+	maps.Copy(all, jonahFiles)
+	delete(all, "skills/acme-conventions/logo.png")
 
 	var got []string
 
-	for _, f := range b.Spec.Jonah.Files {
-		got = append(got, f.Path)
+	for p, body := range b.Files {
+		if rest, ok := strings.CutPrefix(p, "definition/"); ok {
+			got = append(got, rest)
 
-		body := cmp.Or(jonahFiles[f.Path], map[string]string{engineerPrompt: "# engineer\n"}[f.Path])
-		if f.Path == config.FileName {
-			body = jonahYAML
-		}
-
-		if f.Content != body || f.SHA256 != string(domain.HashBlob([]byte(body))) {
-			t.Errorf("%s = %q under %s, want %q under its sha256", f.Path, f.Content, f.SHA256, body)
+			if string(body) != all[rest] {
+				t.Errorf("%s = %q, want %q", p, body, all[rest])
+			}
 		}
 	}
 
-	if !slices.Equal(got, want) {
-		t.Errorf("files = %v, want %v", got, want)
+	slices.Sort(got)
+
+	if want := slices.Sorted(maps.Keys(all)); !slices.Equal(got, want) {
+		t.Errorf("definition files = %v, want %v", got, want)
+	}
+
+	index := string(b.Files["files.md"])
+	for p, body := range all {
+		editable := "no"
+		if domain.ProposalPathAllowed(p) {
+			editable = "yes"
+		}
+
+		if row := "| `" + p + "` | " + string(domain.HashBlob([]byte(body))) + " | " + editable + " |"; !strings.Contains(index, row) {
+			t.Errorf("files.md lacks %q:\n%s", row, index)
+		}
+	}
+
+	if strings.Contains(index, "logo.png") {
+		t.Errorf("files.md names a file that is not text:\n%s", index)
+	}
+
+	var proposals []string
+
+	for p := range b.Files {
+		if strings.HasPrefix(p, "proposals/") {
+			proposals = append(proposals, p)
+		}
+	}
+
+	slices.Sort(proposals)
+
+	if want := []string{"proposals/proposed/3.md", "proposals/published/4.md", "proposals/rejected/1.md"}; !slices.Equal(proposals, want) {
+		t.Fatalf("proposals = %v, want %v: none rejected over 90 days ago", proposals, want)
+	}
+
+	rejected := string(b.Files["proposals/rejected/1.md"])
+	for _, want := range []string{"# Proposal #1: Ask for tests", "- State: rejected", "- Files: " + jonahRule, "- Rejected because:\n\n> Not for Ask for tests.", "> The engineer skips tests."} {
+		if !strings.Contains(rejected, want) {
+			t.Errorf("proposals/rejected/1.md lacks %q:\n%s", want, rejected)
+		}
+	}
+
+	if published := string(b.Files["proposals/published/4.md"]); !strings.Contains(published, "- Published as version "+string(version)) {
+		t.Errorf("proposals/published/4.md =\n%s\nwant the version it published", published)
 	}
 }
 

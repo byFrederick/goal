@@ -65,7 +65,7 @@ type Decider struct {
 // Windows of a manual review and its budget.
 const (
 	// BudgetWindow is how far back the weekly budget counts review runs (decision 2).
-	BudgetWindow = 7 * 24 * time.Hour
+	BudgetWindow = domain.JonahBudgetWindow
 	// FirstWindow is how far back a factory's first review reads sent-back touches.
 	FirstWindow = 30 * 24 * time.Hour
 )
