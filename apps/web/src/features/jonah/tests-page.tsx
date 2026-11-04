@@ -1,16 +1,18 @@
 // Jonah's Tests tab (tests.jpg, ADR 0039 decision 12): the past items kept as tests, by station in the line's
 // order, each with who kept it and when. A person with definition:edit removes one from its row menu; the item
-// stays. The last result of each test comes with the part that runs kept tests at publish, so no column holds it yet.
+// stays. Each row shows the test's last result, and when it has a run, links to the item's Trace tab.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, removeKeptTest } from '../../api/client';
 import { keptTestsQuery, keys } from '../../api/queries';
-import type { KeptTest } from '../../api/types';
+import type { KeptTest, KeptTestLastResult } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
-import { useFactory } from '../../shared/factory';
+import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
+import { Chip, type ChipTone } from '../../ui/chip';
 import { EmptyState } from '../../ui/empty-state';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { Skeleton } from '../../ui/skeleton';
@@ -34,6 +36,56 @@ function TestsShape() {
 }
 
 const keptOn = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+
+const resultLabels: Record<KeptTestLastResult['result'], { label: string; tone: ChipTone }> = {
+  passed: { label: 'Passed', tone: 'ok' },
+  failed: { label: 'Failed', tone: 'rework' },
+  error: { label: 'Error', tone: 'rework' },
+};
+
+/** A test's last result: its chip and when it finished, linked to the run's item on its Trace tab; Not run yet when it never ran. */
+function LastResult({ test }: { test: KeptTest }) {
+  const params = useFactoryParams();
+  const factory = useFactory();
+  const last = test.last_result;
+  if (!last) {
+    return (
+      <span className="flex items-center gap-1">
+        <Chip>Not run yet</Chip>
+        <InfoTip label="What the last result is">
+          The newest finished try of this test, from a proposal or a publish. It has not run yet.
+        </InfoTip>
+      </span>
+    );
+  }
+  const { label, tone } = resultLabels[last.result];
+  const body = (
+    <>
+      <Chip tone={tone}>{label}</Chip>
+      <span className="text-secondary text-muted tabular-nums">{keptOn.format(new Date(last.at))}</span>
+    </>
+  );
+  return (
+    <span className="flex items-center gap-1">
+      {last.run_id ? (
+        <Link
+          to="/o/$org/f/$factory/items/$ref"
+          params={{ ...params, ref: refParam(`${factory.name}#${test.item.number}`) }}
+          search={{ tab: 'trace' }}
+          aria-label={`${label} on ${keptOn.format(new Date(last.at))}, open the run of #${test.item.number}`}
+          className="inline-flex items-center gap-2 text-ink no-underline hover:text-link max-md:min-h-11"
+        >
+          {body}
+        </Link>
+      ) : (
+        <span className="inline-flex items-center gap-2">{body}</span>
+      )}
+      <InfoTip label="What the last result is">
+        The newest finished try of this test, from a proposal or a publish.
+      </InfoTip>
+    </span>
+  );
+}
 
 /** What Remove says when it is refused, by the API's code. */
 function removeFailure(err: unknown): string {
@@ -89,7 +141,7 @@ function StationGroup({ station, tests }: { station: string; tests: KeptTest[] }
         {tests.map((test) => (
           <li
             key={test.id}
-            className="grid items-center gap-x-4 gap-y-1 border-b border-line px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_2rem] md:px-5"
+            className="grid items-center gap-x-4 gap-y-1 border-b border-line px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,13rem)_2rem] md:px-5"
           >
             <span className="min-w-0 break-words">
               <span className="mr-2 text-muted tabular-nums">#{test.item.number}</span>
@@ -98,6 +150,7 @@ function StationGroup({ station, tests }: { station: string; tests: KeptTest[] }
             <span className="text-secondary text-muted">
               {actorName(test.kept_by)}, {keptOn.format(new Date(test.kept_at))}
             </span>
+            <LastResult test={test} />
             {canEdit ? <TestMenu test={test} /> : <span aria-hidden="true" />}
           </li>
         ))}

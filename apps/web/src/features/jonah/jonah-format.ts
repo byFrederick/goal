@@ -125,16 +125,35 @@ export const verdictTones: Record<NonNullable<TriedTry['verdict']>, 'ok' | 'rewo
   error: 'rework',
 };
 
-/** An item's verdict when it was tried once: the verdict of its try, or undefined while that try waits. */
-export function itemVerdict(item: TriedItem): TriedTry['verdict'] {
-  return item.tries[0]?.verdict;
+/** The item's newest attempt: Try again adds attempts after the earlier ones, so it is the one with the highest number. */
+export function latestTry(item: TriedItem): TriedTry | undefined {
+  return item.tries.reduce<TriedTry | undefined>(
+    (newest, t) => (!newest || t.attempt > newest.attempt ? t : newest),
+    undefined,
+  );
 }
 
-/** Why an item's try was graded as it was, or why it could not be carried out; undefined when it says nothing. */
+/** An item's verdict now: the verdict of its newest try, or undefined while that try waits. */
+export function itemVerdict(item: TriedItem): TriedTry['verdict'] {
+  return latestTry(item)?.verdict;
+}
+
+/** Why an item's newest try was graded as it was, or why it could not be carried out; undefined when it says nothing. */
 export function itemReason(item: TriedItem): string | undefined {
-  const t = item.tries[0];
+  const t = latestTry(item);
   return t?.verdict === 'error' ? (t.error ?? t.reason) : t?.reason;
 }
+
+/** The sentence a refused Try again shows, by the API's code; undefined for a code it does not name. */
+export const tryRefusals: Record<string, string> = {
+  'learning-budget-exhausted': 'Not tried: budget used',
+  'proposal-decided': 'This proposal was already decided. The page shows its state now.',
+  'proposal-not-tried': 'Jonah has not tried this proposal yet. Try again once its first tries are queued.',
+  'proposal-stale':
+    'The files changed since Jonah read them, so nothing was queued. Jonah has to propose the change again.',
+  'proposal-not-triable': 'This change touches nothing that can be tried.',
+  'proposal-not-found': 'This proposal no longer exists.',
+};
 
 /** How many tried items a try of a definition proposal fixed, of those tried. */
 export function fixedCount(tried: ProposalTried): { fixed: number; total: number } {
