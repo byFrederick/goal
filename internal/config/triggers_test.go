@@ -289,3 +289,127 @@ func TestLoad_KeepsDeliveryRefusals(t *testing.T) {
 		t.Errorf("red-main on = %q; want github.check_run", got)
 	}
 }
+
+// withCheck is withTriggers with nightly-sweep firing on cron and running a check by agent with
+// the extra check lines.
+func withCheck(cron, agent, extra string) string {
+	return withTriggers(`        cron: "0 6 * * MON-FRI"`, `        cron: "`+cron+`"`,
+		"        timeZone: Europe/Berlin\n", "        timeZone: Europe/Berlin\n        check: { agent: "+agent+", brief: Look for new incidents."+extra+" }\n")
+}
+
+// problemsOf are doc's problems with code.
+func problemsOf(t *testing.T, doc string, extra map[string]string, code string) []domain.DefinitionProblem {
+	t.Helper()
+
+	_, problems := Check(checkTree(doc, extra))
+
+	var out []domain.DefinitionProblem
+
+	for _, p := range problems {
+		if p.Code == code {
+			out = append(out, p)
+		}
+	}
+
+	return out
+}
+
+// A check's cron may fire at most every 5 minutes; a schedule without a check may fire more
+// often. A check names an agent of the definition, a brief file that exists and a timeout of at
+// most an hour, and loads with its defaults.
+func TestCheck_TriggerCheckCronFloor(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, doc string
+		extra     map[string]string
+		code      string
+	}{
+		{"every 5 minutes", withCheck("*/5 * * * *", "worker", ""), nil, ""},
+		{"every 2 minutes", withCheck("*/2 * * * *", "worker", ""), nil, codeCheckCronTooOften},
+		{"two minutes apart in an hour", withCheck("0,2 9 * * *", "worker", ""), nil, codeCheckCronTooOften},
+		{"every 2 minutes without a check", withTriggers(`        cron: "0 6 * * MON-FRI"`, `        cron: "*/2 * * * *"`), nil, ""},
+		{"unknown agent", withCheck("*/5 * * * *", "ghost", ""), nil, codeUnknownAgent},
+		{"brief file missing", replaced(withCheck("*/5 * * * *", "worker", ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"), nil, codeBriefNotFound},
+		{"brief file", replaced(withCheck("*/5 * * * *", "worker", ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"),
+			map[string]string{"triggers/incidents.md": "Look for new incidents.\n"}, ""},
+		{"timeout over an hour", withCheck("*/5 * * * *", "worker", ", timeout: 2h"), nil, codeCheckTimeoutInvalid},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(tt.doc, tt.extra))
+
+			var errs []domain.DefinitionProblem
+
+			for _, p := range problems {
+				if p.Severity == domain.SeverityError {
+					errs = append(errs, p)
+				}
+			}
+
+			if tt.code == "" && len(errs) > 0 || tt.code != "" && (len(errs) != 1 || errs[0].Code != tt.code) {
+				t.Errorf("errors = %+v; want %q", errs, tt.code)
+			}
+		})
+	}
+
+	f, err := Load(checkTree(replaced(withCheck("*/5 * * * *", "worker", ""), "brief: Look for new incidents.", "brief: ./triggers/incidents.md"),
+		map[string]string{"triggers/incidents.md": "Look for new incidents.\n"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tr, _ := f.Line().Trigger("nightly-sweep")
+	if c := tr.Check; c == nil || c.Agent != "worker" || c.Brief != "Look for new incidents.\n" || c.MaxUSD != domain.DefaultCheckMaxUSD || c.Timeout != domain.DefaultCheckTimeout {
+		t.Errorf("check = %+v; want the worker with the brief file's text and the defaults", tr.Check)
+	}
+}
+
+// A check on an event trigger is refused by the schema.
+func TestCheck_TriggerCheckOnlyOnASchedule(t *testing.T) {
+	t.Parallel()
+
+	doc := withTriggers("        create: { type: fix, station: inbox }\n", "        create: { type: fix, station: inbox }\n        check: { agent: worker, brief: b }\n")
+	if _, problems := Check(checkTree(doc, nil)); len(problems) == 0 {
+		t.Error("a check on deploy-alert, an event trigger, has no problem; want the schema's")
+	}
+}
+
+// Publish warns when a check's agent may use tools that aren't read-only: built-in edit, run or
+// subagents, or an MCP server of its environment with a tool it allows.
+func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
+	t.Parallel()
+
+	readOnlyEnv := baseEnvironment + "  mcp:\n    pager: { url: \"https://pager.example.com/mcp\", tools: { \"*\": off, \"get_*\": ask } }\n"
+	openEnv := baseEnvironment + "  mcp:\n    pager: { url: \"https://pager.example.com/mcp\", tools: { \"get_*\": allow } }\n"
+
+	for _, tt := range []struct {
+		name, doc string
+		env       string
+		want      string
+	}{
+		{"read-only", withCheck("*/5 * * * *", "worker", ""), readOnlyEnv, ""},
+		{"edit allowed", replaced(withCheck("*/5 * * * *", "worker", ""), agentPrompt, agentPrompt+"      builtins: { read: allowed, edit: allowed }\n"), "", "builtins.edit"},
+		{"run allowed", replaced(withCheck("*/5 * * * *", "worker", ""), agentPrompt, agentPrompt+"      builtins: { run: allowed }\n"), "", "builtins.run"},
+		{"an MCP tool allowed", withCheck("*/5 * * * *", "worker", ""), openEnv, "mcp pager"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var extra map[string]string
+			if tt.env != "" {
+				extra = map[string]string{defaultEnvFile: tt.env}
+			}
+
+			got := problemsOf(t, tt.doc, extra, codeCheckToolsNotReadOnly)
+
+			switch {
+			case tt.want == "" && len(got) > 0:
+				t.Errorf("warnings = %+v; want none", got)
+			case tt.want != "" && (len(got) != 1 || got[0].Severity != domain.SeverityWarning || !strings.Contains(got[0].Message, tt.want)):
+				t.Errorf("warnings = %+v; want one naming %q", got, tt.want)
+			}
+		})
+	}
+}

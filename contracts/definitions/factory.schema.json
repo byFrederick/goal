@@ -470,11 +470,23 @@
             "perHour": { "type": "integer", "minimum": 1, "description": "At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none." },
             "pauseOnBudget": { "type": "boolean", "description": "Skip events while the factory's budget is spent (today the weekly budget)." }
           }
+        },
+        "check": {
+          "type": "object",
+          "description": "When on is schedule, and only then: each firing runs an agent that looks at the source and answers what to file, instead of filing an item (ADR 0040). The cron may fire at most every 5 minutes, and one check per trigger runs at a time. Publish warns when the agent may use tools that aren't read-only; a check never edits or runs commands, and clones nothing.",
+          "required": ["agent", "brief"],
+          "additionalProperties": false,
+          "properties": {
+            "agent": { "type": "string", "description": "An agent of the factory; the check runs with its environment, tools and model." },
+            "brief": { "type": "string", "minLength": 1, "description": "What to look for and what is worth an item, or the path of a Markdown file in the definition that holds it (./triggers/<name>.md)." },
+            "maxUsd": { "type": "number", "exclusiveMinimum": 0, "default": 0.1, "description": "The most one check may spend." },
+            "timeout": { "type": "string", "pattern": "^[0-9]+(s|m|h)$", "default": "5m", "description": "How long one check may run, such as 5m; at most 1h." }
+          }
         }
       },
       "if": { "required": ["on"], "properties": { "on": { "const": "schedule" } } },
       "then": { "required": ["cron"] },
-      "else": { "properties": { "cron": false, "timeZone": false } }
+      "else": { "properties": { "cron": false, "timeZone": false, "check": false } }
     },
     "triggerValues": {
       "description": "One value, or a list of values one of which must match.",

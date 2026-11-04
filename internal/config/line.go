@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strconv"
@@ -76,6 +77,10 @@ func (f *Factory) Line() domain.Line {
 		tr := trigger(t)
 		if file, ok := BriefFile(t.Create.Brief); ok {
 			tr.Create.Brief, _ = f.briefText(file)
+		}
+
+		if file, ok := BriefFile(tr.CheckBrief()); ok {
+			tr.Check.Brief, _ = f.briefText(file)
 		}
 
 		l.Triggers = append(l.Triggers, tr)
@@ -357,6 +362,14 @@ func trigger(t Trigger) domain.Trigger {
 
 	if l := t.Limits; l != nil {
 		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PerHour: l.PerHour, PauseOnBudget: l.PauseOnBudget}
+	}
+
+	if ch := t.Check; ch != nil {
+		timeout, _ := time.ParseDuration(ch.Timeout) // Check refuses one that does not parse
+		out.Check = &domain.TriggerCheck{
+			Agent: ch.Agent, Brief: ch.Brief, MaxUSD: cmp.Or(ch.MaxUSD, domain.DefaultCheckMaxUSD),
+			Timeout: cmp.Or(timeout, domain.DefaultCheckTimeout),
+		}
 	}
 
 	if out.On != domain.OnSchedule && out.Limits.PerHour == 0 {

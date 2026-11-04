@@ -183,6 +183,29 @@ func (c Cron) Next(after time.Time) time.Time {
 	return time.Time{}
 }
 
+// MinInterval is the shortest time between two of c's instants over eight days from a fixed
+// Monday, which covers every minute, hour and weekday it names; zero when it fires at most once
+// in them.
+func (c Cron) MinInterval() time.Duration {
+	start := time.Date(2026, 1, 5, 0, 0, 0, 0, c.loc).Add(-time.Minute)
+	end := start.Add(8 * 24 * time.Hour)
+
+	var (
+		least time.Duration
+		prev  time.Time
+	)
+
+	for t := c.Next(start); !t.IsZero() && t.Before(end); t = c.Next(t) {
+		if gap := t.Sub(prev); !prev.IsZero() && (least == 0 || gap < least) {
+			least = gap
+		}
+
+		prev = t
+	}
+
+	return least
+}
+
 // Latest is the newest instant c matches that is later than after and at or before upTo, in UTC; the zero
 // time when there is none.
 func (c Cron) Latest(after, upTo time.Time) time.Time {

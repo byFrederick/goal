@@ -341,6 +341,19 @@ type Trigger struct {
 	Only     *TriggerOnly   `json:"only,omitempty"`
 	Create   TriggerCreate  `json:"create"`
 	Limits   *TriggerLimits `json:"limits,omitempty"`
+	// Check, only on a schedule, makes each firing run an agent that decides what to file (ADR 0040
+	// decision 19) instead of filing an item.
+	Check *TriggerCheck `json:"check,omitempty"`
+}
+
+// TriggerCheck is a schedule trigger's check: the agent that runs it, its brief (the text, or
+// ./triggers/<name>.md), the most one check may spend and how long it may run (a Go duration
+// such as 5m); zero takes domain.DefaultCheckMaxUSD and domain.DefaultCheckTimeout.
+type TriggerCheck struct {
+	Agent   string  `json:"agent"`
+	Brief   string  `json:"brief"`
+	MaxUSD  float64 `json:"maxUsd,omitempty"`
+	Timeout string  `json:"timeout,omitempty"`
 }
 
 // TriggerFilter holds filters on an event's fields; every one set must match.

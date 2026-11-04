@@ -22,6 +22,15 @@ type TriggerCheck struct {
 	Timeout time.Duration
 }
 
+// CheckBrief is t's check's brief, "" without a check.
+func (t Trigger) CheckBrief() string {
+	if t.Check == nil {
+		return ""
+	}
+
+	return t.Check.Brief
+}
+
 // What a check takes when its trigger sets none, and the most often its cron may fire.
 const (
 	DefaultCheckMaxUSD  = 0.10
