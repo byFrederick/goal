@@ -87,7 +87,14 @@ goal triggers list acme-line
 goal triggers show acme-line <trigger>
 ```
 
-Webhook endpoints feed triggers from outside Goal. `goal webhooks create acme-line github-main --kind github` creates one and prints its signing secret once. Store the secret in the sender at once; Goal does not show it again.
+Webhooks feed triggers from outside Goal. A webhook belongs to the organization and reaches only the factories it is open to:
+
+```sh
+goal webhooks create github-main --sender github
+goal webhooks open github-main acme-line --repos acme/api
+```
+
+`create` makes the secret `webhook-github-main` and prints its value once, alone on stdout. Store the value in the sender at once; Goal does not show it again. To sign with a secret that exists, such as one PagerDuty or Sentry issued, pass `--secret <name>`. `open` without `--repos` lets every repository's deliveries reach the factory, and `goal webhooks close github-main acme-line` stops them.
 
 ## What comes next
 

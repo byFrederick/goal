@@ -1421,12 +1421,29 @@ func TestRun_ConvertsWebhookEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	w.checkWebhooks(t, values["github"])
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkWebhookLogs(t, values)
+}
+
+// checkWebhooks checks the organization has the webhooks github-2 (sender github, signed by
+// webhook-github-2 holding value) and ci-hooks (standard), both open to the factory.
+func (w *world) checkWebhooks(t *testing.T, value string) {
+	t.Helper()
+
+	ctx := w.ctx(t)
+
 	hooks, err := w.intake.Webhooks(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	got := map[string]domain.WebhookSender{}
+
 	for _, h := range hooks {
 		if _, ok := h.Opening(factoryUUID); ok {
 			got[h.Name] = h.Sender
@@ -1442,14 +1459,16 @@ func TestRun_ConvertsWebhookEndpoints(t *testing.T) {
 			continue
 		}
 
-		if s, err := w.secrets.OpenSigning(ctx, h.SecretID); err != nil || s.Current != values["github"] || h.Secret != "webhook-github-2" {
+		if s, err := w.secrets.OpenSigning(ctx, h.SecretID); err != nil || s.Current != value || h.Secret != "webhook-github-2" {
 			t.Errorf("github-2's secret %s, %v; want webhook-github-2 holding the endpoint's value", h.Secret, err)
 		}
 	}
+}
 
-	if err := w.mover.Run(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+// checkWebhookLogs checks the two runs' lines count two webhooks and then none, the rename is
+// logged once and no value of values reached the logs.
+func (w *world) checkWebhookLogs(t *testing.T, values map[string]string) {
+	t.Helper()
 
 	logs := w.logs.String()
 	if !strings.Contains(logs, `"webhooks":2`) || !strings.Contains(logs, `"webhooks":0`) {

@@ -71,6 +71,8 @@ The webhook refers to the secret by id, so renaming the secret keeps the webhook
 
 Publishing refuses a version whose environment file, `runtime.repository.token`, `runtime.modelKey` or trigger key names a secret that signs a webhook (`secret-signs-webhook`), even when the secret is open to the factory. A run that held the value could sign deliveries of its own.
 
+A factory's webhook endpoint made before organization webhooks is converted once when goald starts. Its signing secret becomes an organization secret named `webhook-<name>`, open to no factory, holding the value the endpoint showed when it was made. The endpoint becomes the organization's webhook with the same address, the `github` sender for a `github` endpoint and `standard` for a `generic` one, and is open to its factory for every repository. An endpoint keeps its name unless the name is reserved (a sender name, `schedule` or `webhook`) or an older endpoint of another factory has it; then it takes the first free suffix, such as `github-2`, cut to fit 40 characters. A secret name that is taken gets a suffix the same way. goald logs each rename as `webhook renamed` with the factory and both names: a published trigger that named the endpoint by its old name needs its `on` changed.
+
 Replacing the value of a secret that signs a webhook keeps the previous value for 24 hours, sealed apart from the new one, so a delivery signed with either passes while you update the sender. Checking a signature opens the secret without a `secret.used` audit entry and leaves its last use as it was. `goal db rekey` reseals the previous value too and drops it once its 24 hours are over.
 
 ## What a run receives

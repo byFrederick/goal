@@ -44,12 +44,32 @@ func testConvert(f *fixture) {
 		t.Fatalf("OpenSecret: %v", err)
 	}
 
-	want := domain.ConvertedEndpoint{ID: s.Endpoint.ID, FactoryID: f.factory, From: hooks, Name: hooks, Secret: domain.WebhookSecretName(hooks)}
+	want := converted(s.Endpoint.ID, f.factory, hooks, hooks, domain.WebhookSecretName(hooks))
 	if got := f.convert(); !slices.Equal(got, []domain.ConvertedEndpoint{want}) {
 		t.Fatalf("ConvertEndpoints = %+v; want %+v", got, want)
 	}
 
-	e, err := f.in.Endpoint(f.ctx(), s.Endpoint.ID)
+	f.checkConverted(want, hex.EncodeToString(opened))
+
+	if again := f.convert(); len(again) != 0 {
+		t.Errorf("a second ConvertEndpoints = %+v; want nothing", again)
+	}
+}
+
+// converted is what ConvertEndpoints answers for endpoint id of factory, named from and then name,
+// signed by the secret named secret.
+func converted(id domain.WebhookEndpointID, factory domain.FactoryID, from, name, secret string) domain.ConvertedEndpoint {
+	return domain.ConvertedEndpoint{ID: id, FactoryID: factory, From: from, Name: name, Secret: secret}
+}
+
+// checkConverted checks the endpoint c became: the organization's enabled standard webhook open
+// to its factory with every repository, signed by c.Secret, a secret open to no factory holding
+// value; the factory lists it and its delivery stays.
+func (f *fixture) checkConverted(want domain.ConvertedEndpoint, value string) {
+	t := f.t
+	t.Helper()
+
+	e, err := f.in.Endpoint(f.ctx(), want.ID)
 	if err != nil {
 		t.Fatalf("Endpoint: %v", err)
 	}
@@ -62,15 +82,7 @@ func testConvert(f *fixture) {
 		t.Errorf("openings = %+v; want one to the factory, every repository", e.Openings)
 	}
 
-	sec, err := f.secrets.Get(f.ctx(), want.Secret)
-	if err != nil || sec.Scope.All || len(sec.Scope.Factories) != 0 {
-		t.Errorf("secret %s = %+v, %v; want one open to no factory", want.Secret, sec, err)
-	}
-
-	signing, err := f.secrets.OpenSigning(f.ctx(), e.SecretID)
-	if err != nil || signing.Current != hex.EncodeToString(opened) {
-		t.Errorf("OpenSigning = %v; want the value the endpoint showed", err)
-	}
+	f.checkConvertedSecret(e, value)
 
 	if got := f.listed(f.factory); !slices.Equal(got, []string{hooks}) {
 		t.Errorf("the factory's endpoints = %v; want %s through its opening", got, hooks)
@@ -78,10 +90,6 @@ func testConvert(f *fixture) {
 
 	if ds, err := f.in.ListDeliveries(f.ctx(), e.ID, domain.DeliveryCursor{}, 10); err != nil || len(ds) != 1 {
 		t.Errorf("deliveries after the conversion = %d, %v; want the one before", len(ds), err)
-	}
-
-	if again := f.convert(); len(again) != 0 {
-		t.Errorf("a second ConvertEndpoints = %+v; want nothing", again)
 	}
 }
 
@@ -105,9 +113,9 @@ func testConvertNames(f *fixture) {
 	gh := f.endpoint("github", domain.WebhookGitHub)
 
 	want := []domain.ConvertedEndpoint{
-		{ID: older.Endpoint.ID, FactoryID: f.factory, From: hooks, Name: hooks, Secret: "webhook-ci-hooks-3"},
-		{ID: newer.Endpoint.ID, FactoryID: other, From: hooks, Name: "ci-hooks-3", Secret: "webhook-ci-hooks-3-2"},
-		{ID: gh.Endpoint.ID, FactoryID: f.factory, From: "github", Name: "github-2", Secret: "webhook-github-2"},
+		converted(older.Endpoint.ID, f.factory, hooks, hooks, "webhook-ci-hooks-3"),
+		converted(newer.Endpoint.ID, other, hooks, "ci-hooks-3", "webhook-ci-hooks-3-2"),
+		converted(gh.Endpoint.ID, f.factory, "github", "github-2", "webhook-github-2"),
 	}
 
 	if got := f.convert(); !slices.Equal(got, want) {
@@ -142,4 +150,20 @@ func testConvertIsolation(f *fixture) {
 // openToEvery reports whether e has one opening, to factory, with every repository.
 func openToEvery(e domain.WebhookEndpoint, factory domain.FactoryID) bool {
 	return len(e.Openings) == 1 && e.Openings[0].FactoryID == factory && e.Openings[0].Repositories == nil
+}
+
+// checkConvertedSecret checks e's secret is open to no factory and holds value.
+func (f *fixture) checkConvertedSecret(e domain.WebhookEndpoint, value string) {
+	t := f.t
+	t.Helper()
+
+	sec, err := f.secrets.Get(f.ctx(), e.Secret)
+	if err != nil || sec.Scope.All || len(sec.Scope.Factories) != 0 {
+		t.Errorf("secret %s = %+v, %v; want one open to no factory", e.Secret, sec, err)
+	}
+
+	signing, err := f.secrets.OpenSigning(f.ctx(), e.SecretID)
+	if err != nil || signing.Current != value {
+		t.Errorf("OpenSigning = %v; want the value the endpoint showed", err)
+	}
 }

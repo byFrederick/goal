@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -27,7 +28,7 @@ const (
 	intakeHookID   = "019a1c00-0000-7000-8000-0000000000e1"
 	intakeDocsID   = "019a1c00-0000-7000-8000-00000000d0c5"
 	hookInUse      = "in-use"
-	hookOwnSecret  = "pd-key" //nolint:gosec // a secret's name, not a value
+	hookOwnSecret  = "pd-key"
 	triggerNightly = "nightly"
 	cmdTriggers    = "triggers"
 	cmdWebhooks    = "webhooks"
@@ -94,31 +95,12 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	}}
 	detail.Week.Created, detail.Week.Merged, detail.Week.SpendUsd = 3, 1, 4.2
 
-	repos := []string{"acme/api"}
-	gh := gen.Webhook{
-		Id: intakeHookID, Name: intakeEndpoint, Sender: gen.WebhookSenderGithub, Enabled: true, Address: "/hooks/" + intakeHookID,
-		Secret: "webhook-gh", Openings: []gen.WebhookOpening{{Factory: intakeDocsID, Repositories: &repos}},
-		Triggers: []gen.WebhookTrigger{{Factory: intakeDocsID, FactoryName: intakeFactory, Trigger: "ci-failures"}}, Days: days, CreatedAt: at.Add(-48 * time.Hour),
-	}
-	value := fakeHookSecret
-	created := gen.CreatedWebhook{
-		Id: gh.Id, Name: gh.Name, Sender: gh.Sender, Enabled: true, Address: gh.Address, Secret: gh.Secret, SecretValue: &value,
-		Openings: []gen.WebhookOpening{}, Triggers: []gen.WebhookTrigger{}, Days: []gen.WebhookDeliveryDay{}, CreatedAt: gh.CreatedAt,
-	}
-	own := created
-	own.Name, own.Sender, own.Secret, own.SecretValue = "pd", gen.WebhookSenderPagerduty, hookOwnSecret, nil
 	next := "cursor-2"
 	wouldCreate, skipped := tryAnswers()
 
 	g := &intakeGoald{bodies: map[string][]byte{
 		"intake":  indented(t, gen.Intake{Triggers: []gen.IntakeTrigger{nightly, ci}}),
 		"trigger": indented(t, detail),
-		subList:     indented(t, gen.WebhookList{Webhooks: []gen.Webhook{gh}}),
-		"created":   indented(t, created),
-		"own":       indented(t, own),
-		"webhook":   indented(t, gh),
-		"factory":   indented(t, gen.Factory{Id: intakeDocsID, Name: intakeFactory}),
-		"factories": indented(t, gen.FactoryList{Factories: []gen.Factory{{Id: intakeDocsID, Name: intakeFactory}}}),
 		subDeliveries: indented(t, gen.WebhookDeliveryPage{NextAfter: &next, Deliveries: []gen.WebhookDelivery{
 			{Id: "d2", ReceivedAt: at, Outcome: gen.WebhookDeliveryOutcomeCreated, Item: &gen.WebhookDeliveryItem{Id: "i12", Number: 12}},
 			{Id: "d1", ReceivedAt: at.Add(-time.Minute), Outcome: gen.WebhookDeliveryOutcomeRefused, Reason: "signature did not match"},
@@ -127,21 +109,9 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		firingCreate: indented(t, wouldCreate),
 		firingSkip:   indented(t, skipped),
 	}}
+	maps.Copy(g.bodies, webhookBodies(t, days, at))
 
-	reply := func(name string, status int) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			b, _ := io.ReadAll(r.Body)
-
-			g.mu.Lock()
-			g.sent, g.query = b, r.URL.Query()
-			g.mu.Unlock()
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			_, _ = w.Write(g.bodies[name])
-		}
-	}
-
+	reply := g.reply
 	base := "/v1/orgs/acme/factories/" + intakeFactory
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+base+"/intake", reply("intake", http.StatusOK))
@@ -176,39 +146,92 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 			_, _ = w.Write(g.bodies[req.Firing])
 		}
 	})
-	mux.HandleFunc("GET /v1/orgs/acme/factories", reply("factories", http.StatusOK))
-	mux.HandleFunc("GET "+base, reply("factory", http.StatusOK))
-
-	hooks := "/v1/orgs/acme/webhooks"
-	mux.HandleFunc("GET "+hooks, reply(subList, http.StatusOK))
-	mux.HandleFunc("POST "+hooks, func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		r.Body = io.NopCloser(bytes.NewReader(b))
-
-		if bytes.Contains(b, []byte(`"secret"`)) {
-			reply("own", http.StatusCreated)(w, r)
-		} else {
-			reply(answerCreated, http.StatusCreated)(w, r)
-		}
-	})
-	mux.HandleFunc("PATCH "+hooks+"/"+intakeEndpoint, reply("webhook", http.StatusOK))
-	mux.HandleFunc("DELETE "+hooks+"/"+intakeEndpoint, reply("none", http.StatusNoContent))
-	mux.HandleFunc("DELETE "+hooks+"/"+hookInUse, func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"code":"webhook-in-use","title":"Conflict","status":409,"detail":"webhook \"in-use\" is used by the published triggers docs ci-failures; publish them without it first"}`))
-	})
-	mux.HandleFunc("GET "+hooks+"/"+intakeEndpoint+"/deliveries", reply(subDeliveries, http.StatusOK))
-	mux.HandleFunc("GET "+hooks+"/{other}/deliveries", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/problem+json")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"code":"webhook-not-found","title":"Not found","status":404,"detail":"webhook \"nope\" not found"}`))
-	})
+	g.webhookRoutes(mux, base)
 
 	g.srv = httptest.NewServer(mux)
 	t.Cleanup(g.srv.Close)
 
 	return g
+}
+
+// reply answers with the body named and status, recording what it was sent.
+func (g *intakeGoald) reply(name string, status int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+
+		g.mu.Lock()
+		g.sent, g.query = b, r.URL.Query()
+		g.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write(g.bodies[name])
+	}
+}
+
+// docsFactory is the body that answers the factory docs.
+const docsFactory = "docs-factory"
+
+// webhookBodies are goald's answers about the organization's webhook gh, open to docs for
+// acme/api, and about the factories.
+func webhookBodies(t *testing.T, days []gen.WebhookDeliveryDay, at time.Time) map[string][]byte {
+	t.Helper()
+
+	repos := []string{"acme/api"}
+	gh := gen.Webhook{
+		Id: intakeHookID, Name: intakeEndpoint, Sender: gen.WebhookSenderGithub, Enabled: true, Address: "/hooks/" + intakeHookID,
+		Secret: "webhook-gh", Openings: []gen.WebhookOpening{{Factory: intakeDocsID, Repositories: &repos}},
+		Triggers: []gen.WebhookTrigger{{Factory: intakeDocsID, FactoryName: intakeFactory, Trigger: "ci-failures"}}, Days: days, CreatedAt: at.Add(-48 * time.Hour),
+	}
+	value := fakeHookSecret
+	created := gen.CreatedWebhook{
+		Id: gh.Id, Name: gh.Name, Sender: gh.Sender, Enabled: true, Address: gh.Address, Secret: gh.Secret, SecretValue: &value,
+		Openings: []gen.WebhookOpening{}, Triggers: []gen.WebhookTrigger{}, Days: []gen.WebhookDeliveryDay{}, CreatedAt: gh.CreatedAt,
+	}
+	own := created
+	own.Name, own.Sender, own.Secret, own.SecretValue = "pd", gen.WebhookSenderPagerduty, hookOwnSecret, nil
+
+	return map[string][]byte{
+		subList:       indented(t, gen.WebhookList{Webhooks: []gen.Webhook{gh}}),
+		answerCreated: indented(t, created),
+		"own":         indented(t, own),
+		"webhook":     indented(t, gh),
+		docsFactory:   indented(t, gen.Factory{Id: intakeDocsID, Name: intakeFactory}),
+		"factories":   indented(t, gen.FactoryList{Factories: []gen.Factory{{Id: intakeDocsID, Name: intakeFactory}}}),
+	}
+}
+
+// webhookRoutes serve the organization's webhooks, and the factory docs at base and in the list.
+func (g *intakeGoald) webhookRoutes(mux *http.ServeMux, base string) {
+	mux.HandleFunc("GET /v1/orgs/acme/factories", g.reply("factories", http.StatusOK))
+	mux.HandleFunc("GET "+base, g.reply(docsFactory, http.StatusOK))
+
+	hooks := "/v1/orgs/acme/webhooks"
+	mux.HandleFunc("GET "+hooks, g.reply(subList, http.StatusOK))
+	mux.HandleFunc("GET "+hooks+"/{webhook}", g.reply("webhook", http.StatusOK))
+	mux.HandleFunc("POST "+hooks, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(b))
+
+		if bytes.Contains(b, []byte(`"secret"`)) {
+			g.reply("own", http.StatusCreated)(w, r)
+		} else {
+			g.reply(answerCreated, http.StatusCreated)(w, r)
+		}
+	})
+	mux.HandleFunc("PATCH "+hooks+"/"+intakeEndpoint, g.reply("webhook", http.StatusOK))
+	mux.HandleFunc("DELETE "+hooks+"/"+intakeEndpoint, g.reply("none", http.StatusNoContent))
+	mux.HandleFunc("DELETE "+hooks+"/"+hookInUse, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"code":"webhook-in-use","title":"Conflict","status":409,"detail":"webhook \"in-use\" is used by the published triggers docs ci-failures; publish them without it first"}`))
+	})
+	mux.HandleFunc("GET "+hooks+"/"+intakeEndpoint+"/deliveries", g.reply(subDeliveries, http.StatusOK))
+	mux.HandleFunc("GET "+hooks+"/{other}/deliveries", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"code":"webhook-not-found","title":"Not found","status":404,"detail":"webhook \"nope\" not found"}`))
+	})
 }
 
 // The step outcomes a try answers.
@@ -495,10 +518,12 @@ func TestWebhooks_OpenAndClose(t *testing.T) {
 		sent string
 		say  string
 	}{
-		{[]string{"open", intakeEndpoint, intakeFactory, "--repos", "acme/api, acme/web"},
-			`{"open":[{"factory":"` + intakeDocsID + `","repositories":["acme/api","acme/web"]}]}`, "✓ opened webhook gh to docs for acme/api, acme/web"},
-		{[]string{"open", intakeEndpoint, intakeFactory}, `{"open":[{"factory":"` + intakeDocsID + `"}]}`, "every repository"},
-		{[]string{"close", intakeEndpoint, intakeFactory}, `{"close":["` + intakeDocsID + `"]}`, "✓ closed webhook gh to docs"},
+		{
+			[]string{subOpen, intakeEndpoint, intakeFactory, "--repos", "acme/api, acme/web"},
+			`{"open":[{"factory":"` + intakeDocsID + `","repositories":["acme/api","acme/web"]}]}`, "✓ opened webhook gh to docs for acme/api, acme/web",
+		},
+		{[]string{subOpen, intakeEndpoint, intakeFactory}, `{"open":[{"factory":"` + intakeDocsID + `"}]}`, "every repository"},
+		{[]string{subClose, intakeEndpoint, intakeFactory}, `{"close":["` + intakeDocsID + `"]}`, "✓ closed webhook gh to docs"},
 	} {
 		stdout, stderr, err := goalIntake(t, g.srv.URL, append([]string{cmdWebhooks}, tc.line...)...)
 		if err != nil {
@@ -548,7 +573,7 @@ func TestWebhooks_SecretOnlyOnCreate(t *testing.T) {
 		{cmdTriggers, subList, intakeFactory},
 		{cmdTriggers, subShow, intakeFactory, triggerNightly},
 		{cmdWebhooks, subList},
-		{cmdWebhooks, "open", intakeEndpoint, intakeFactory},
+		{cmdWebhooks, subOpen, intakeEndpoint, intakeFactory},
 		{cmdWebhooks, subDeliveries, intakeEndpoint},
 	} {
 		stdout, stderr, err := goalIntake(t, g.srv.URL, line...)
@@ -577,8 +602,8 @@ func TestIntakeCommands_JSONAsSent(t *testing.T) {
 		{[]string{cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firingCreate}, firingCreate},
 		{[]string{cmdWebhooks, subList}, subList},
 		{[]string{cmdWebhooks, verbCreate, intakeEndpoint}, answerCreated},
-		{[]string{cmdWebhooks, "open", intakeEndpoint, intakeFactory}, "webhook"},
-		{[]string{cmdWebhooks, "close", intakeEndpoint, intakeFactory}, "webhook"},
+		{[]string{cmdWebhooks, subOpen, intakeEndpoint, intakeFactory}, "webhook"},
+		{[]string{cmdWebhooks, subClose, intakeEndpoint, intakeFactory}, "webhook"},
 		{[]string{cmdWebhooks, subDeliveries, intakeEndpoint}, subDeliveries},
 	} {
 		stdout, _, err := goalIntake(t, g.srv.URL, append(tc.line, "--json")...)
@@ -611,9 +636,9 @@ func TestIntakeCommands_Usage(t *testing.T) {
 		{cmdWebhooks, verbCreate, intakeEndpoint, flagKind, "gitlab"},
 		{cmdWebhooks, verbCreate, intakeEndpoint, "--sender", "bitbucket"},
 		{cmdWebhooks, verbCreate, intakeEndpoint, "--sender", importedGitHub, flagKind, importedGitHub},
-		{cmdWebhooks, "open", intakeEndpoint},
-		{cmdWebhooks, "open", intakeEndpoint, intakeFactory, argExtra},
-		{cmdWebhooks, "close", intakeEndpoint},
+		{cmdWebhooks, subOpen, intakeEndpoint},
+		{cmdWebhooks, subOpen, intakeEndpoint, intakeFactory, argExtra},
+		{cmdWebhooks, subClose, intakeEndpoint},
 		{cmdWebhooks, "delete"},
 		{cmdWebhooks, "delete", intakeEndpoint, argExtra},
 		{cmdWebhooks, subDeliveries},

@@ -19,6 +19,8 @@ import (
 const (
 	subShow       = "show"
 	subDeliveries = "deliveries"
+	subOpen       = "open"
+	subClose      = "close"
 )
 
 // intakeTitleWidth is how much of an event's title a row of goal triggers show keeps.
@@ -49,7 +51,7 @@ func webhooksCommand(ctx context.Context, out *printer, getenv func(string) stri
 	}
 
 	handler, ok := map[string]command{
-		subList: webhooksList, verbCreate: webhooksCreate, "open": webhooksOpen, "close": webhooksClose,
+		subList: webhooksList, verbCreate: webhooksCreate, subOpen: webhooksOpen, subClose: webhooksClose,
 		subDeliveries: webhooksDeliveries, "delete": webhooksDelete,
 	}[args[0]]
 	if !ok {
@@ -620,7 +622,7 @@ func patchOpening(ctx context.Context, out *printer, getenv func(string) string,
 }
 
 // webhooksDelete is goal webhooks delete <webhook>: the webhook and its deliveries; its secret
-// stays. goald refuses while published triggers use it, naming them.
+// stays, and the line names it. goald refuses while published triggers use it, naming them.
 func webhooksDelete(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("webhooks delete")
 	orgFlag := addOrgFlag(fs)
@@ -635,6 +637,16 @@ func webhooksDelete(ctx context.Context, out *printer, getenv func(string) strin
 		return err
 	}
 
+	// Read first, so the line names the secret that stays.
+	got, err := c.GetWebhookWithResponse(ctx, c.org, pos[0])
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if got.JSON200 == nil {
+		return problem(got.HTTPResponse, got.ApplicationproblemJSONDefault)
+	}
+
 	res, err := c.DeleteWebhookWithResponse(ctx, c.org, pos[0])
 	if err != nil {
 		return apiDown(err)
@@ -644,7 +656,8 @@ func webhooksDelete(ctx context.Context, out *printer, getenv func(string) strin
 		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
-	out.noticef("✓ deleted webhook %s and its deliveries; its secret stays (goal secret delete removes it)\n", pos[0])
+	w := got.JSON200
+	out.noticef("✓ deleted webhook %s and its deliveries; its secret %s stays (goal secret delete %s removes it)\n", w.Name, w.Secret, w.Secret)
 
 	return nil
 }

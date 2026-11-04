@@ -6,22 +6,26 @@ import (
 	"testing"
 )
 
+// hooksName is an endpoint name the cases share.
+const hooksName = "ci-hooks"
+
 // A converted endpoint keeps its name unless it is reserved or taken, and then takes the first
 // free suffix; a base too long for the suffix is cut, without a trailing hyphen.
 func TestConvertedWebhookName(t *testing.T) {
 	t.Parallel()
 
 	long := strings.Repeat("a", 37) + "-bc" // 40 characters, a hyphen at 38
+	gh := string(SenderGitHub)
 
 	tests := []struct {
 		name, from string
 		taken      []string
 		want       string
 	}{
-		{"free", "ci-hooks", nil, "ci-hooks"},
-		{"reserved", "github", nil, "github-2"},
-		{"reserved and suffix taken", "github", []string{"github-2"}, "github-3"},
-		{"taken", "ci-hooks", []string{"ci-hooks", "ci-hooks-2", "ci-hooks-3"}, "ci-hooks-4"},
+		{"free", hooksName, nil, hooksName},
+		{"a reserved name", gh, nil, "github-2"},
+		{"a reserved name and its suffix taken", gh, []string{"github-2"}, "github-3"},
+		{"taken", hooksName, []string{hooksName, "ci-hooks-2", "ci-hooks-3"}, "ci-hooks-4"},
 		{"long and taken", strings.Repeat("a", 40), []string{strings.Repeat("a", 40)}, strings.Repeat("a", 38) + "-2"},
 		{"cut at a hyphen", long, []string{long}, strings.Repeat("a", 37) + "-2"},
 	}
@@ -54,8 +58,8 @@ func TestConvertedSecretName(t *testing.T) {
 		taken         []string
 		want          string
 	}{
-		{"free", "ci-hooks", nil, "webhook-ci-hooks"},
-		{"taken", "ci-hooks", []string{"webhook-ci-hooks", "webhook-ci-hooks-2"}, "webhook-ci-hooks-3"},
+		{"free", hooksName, nil, "webhook-ci-hooks"},
+		{"taken", hooksName, []string{"webhook-ci-hooks", "webhook-ci-hooks-2"}, "webhook-ci-hooks-3"},
 		{"cut", long, nil, "webhook-" + strings.Repeat("b", 32)},
 		{"cut and taken", long, []string{"webhook-" + strings.Repeat("b", 32)}, "webhook-" + strings.Repeat("b", 30) + "-2"},
 		{"cut to a hyphen", strings.Repeat("c", 31) + "-d", nil, "webhook-" + strings.Repeat("c", 31)},
