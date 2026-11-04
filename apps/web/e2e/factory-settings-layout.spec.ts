@@ -1,4 +1,4 @@
-// Factory settings (canvas build/factory-settings) against the mock (Repository with its token, Runtime with the model key and the environments): at 1440, 1280, 1024, 768
+// Factory settings (canvas build/factory-settings) against the mock (Repository with its token, Runtime with its environments line, the model key and the environments, Notifications with the Slack secret): at 1440, 1280, 1024, 768
 // and 390 px, in light and dark, nothing goes past the viewport edge, no text is clipped, and a phone's
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
 import { expect, test } from '@playwright/test';
@@ -26,6 +26,7 @@ for (const size of sizes) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(path);
       await expect(page.getByRole('region', { name: 'Runtime' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Notifications' }).getByText('slack-bot')).toBeVisible();
 
       await expectNoHorizontalScroll(page);
       await expectNoClippedElements(page);

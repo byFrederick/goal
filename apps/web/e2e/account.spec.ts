@@ -67,9 +67,9 @@ test('the notification table shows the saved boxes, and a box keeps its change a
   await expect(page.getByRole('checkbox', { name: 'A budget passes 80%, Slack' })).toBeChecked();
 });
 
-test('the Slack boxes are not available with no Slack connection, and the email is live', async ({ page }) => {
+test('the Slack boxes are not available when Slack is off, and the email is live', async ({ page }) => {
   await signIn(page.request);
-  const gone = await page.request.delete('/v1/orgs/acme/connections/slack');
+  const gone = await page.request.put('/v1/orgs/acme/settings/notifications', { data: { slack_secret: null } });
   expect(gone.ok()).toBeTruthy();
   await page.goto('/account');
   await expect(page.getByRole('checkbox', { name: 'An agent needs your OK for a write, Slack' })).toHaveAttribute(
