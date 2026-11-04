@@ -233,7 +233,7 @@ func publishedProposal(ctx context.Context, t *testing.T, store *porttest.Store,
 		State: domain.JonahDone, At: t0,
 		Proposals: []domain.NewProposal{{
 			Title: "Ask for a screenshot", Estimate: estimate,
-			Files: []domain.ProposalFile{{Path: agentPath, Content: "# writer\n"}},
+			Edits: []domain.ProposalEdit{{Path: agentPath, Content: "# writer\n"}},
 		}},
 	})
 	if err != nil {

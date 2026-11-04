@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -37,6 +38,43 @@ const (
 	firstRun  = domain.RunID("run-1")
 	secondRun = domain.RunID("run-2")
 )
+
+// reviewFiles are the review world's version: a valid line whose writer's prompt is writerText,
+// with a rule, a contract and the build station's wip.
+var reviewFiles = map[string]string{
+	"factory.yaml": `apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 00000000-0000-4000-8000-0000000000f1
+  name: acme-review
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+  rules:
+    - { name: tests, source: ./rules/tests.md }
+  agents:
+    - name: writer
+      prompt: ./agents/writer.md
+  board:
+    stations:
+      - { id: inbox, kind: queue }
+      - { id: build, kind: agent, agent: writer, wip: 2 }
+      - { id: done, kind: done }
+`,
+	"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n",
+	writerPath:                  writerText,
+	"rules/tests.md":            "---\ndescription: Tests\n---\nRun the tests.\n",
+}
+
+// otherModel is a model the organization's policy allows besides reviewModel.
+const otherModel = "claude-opus-5-5"
+
+// policies is the organization's policy, allowing reviewModel and otherModel.
+type policies struct{}
+
+func (policies) Get(context.Context) (domain.OrgPolicy, error) {
+	return domain.OrgPolicy{AllowedModels: []string{reviewModel, otherModel}, DefaultModel: reviewModel}, nil
+}
 
 // rt0 is the review world's now.
 var rt0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
@@ -137,18 +175,28 @@ func newReviewWorldAt(t *testing.T, now time.Time) *reviewWorld {
 				OrgID: o.ID, FactoryID: reviewFactory, VersionID: reviewVersion, Number: 3,
 				Runtime: domain.Runtime{ModelConnection: modelConn}, Jonah: policy,
 			},
-			files: map[string][]byte{writerPath: []byte(writerText), "factory.yaml": []byte("metadata: {}\n")},
+			files: bytesOf(reviewFiles),
 		},
 		runner: &taskRunner{answer: func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 			return succeeded(`{"observations": [], "proposals": []}`), nil
 		}},
 	}
 	w.loop = jonah.NewReviews(jonah.ReviewDeps{
-		Orgs: tn, Jonah: store, Definitions: w.defs, Runner: w.runner, Clock: clock,
-		Log: slog.New(slog.NewJSONHandler(w.log, nil)),
+		Orgs: tn, Jonah: store, Definitions: w.defs, Runner: w.runner, Check: config.ProposalCheck{}, Policies: policies{},
+		Clock: clock, Log: slog.New(slog.NewJSONHandler(w.log, nil)),
 	}, jonah.ReviewConfig{Timeout: reviewTimeout, Margin: reviewMargin})
 
 	return w
+}
+
+// bytesOf is files as bytes.
+func bytesOf(files map[string]string) map[string][]byte {
+	out := make(map[string][]byte, len(files))
+	for p, c := range files {
+		out[p] = []byte(c)
+	}
+
+	return out
 }
 
 func succeeded(output string) domain.RunResult {
@@ -819,9 +867,9 @@ func expectTestsProposal(t *testing.T, p domain.Proposal, r domain.JonahReview, 
 		t.Errorf("proposal 1 evidence = %+v, want %+v", p.Evidence, wantEvidence)
 	}
 
-	wantFiles := []domain.ProposalFile{{Path: writerPath, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: newWriterText}}
-	if !reflect.DeepEqual(p.Files, wantFiles) {
-		t.Errorf("proposal 1 files = %+v, want %+v", p.Files, wantFiles)
+	wantEdits := []domain.ProposalEdit{{Path: writerPath, Replacements: []domain.Replacement{{Old: writerText, New: newWriterText}}}}
+	if !reflect.DeepEqual(p.Edits, wantEdits) {
+		t.Errorf("proposal 1 edits = %+v, want %+v", p.Edits, wantEdits)
 	}
 }
 
@@ -856,19 +904,33 @@ type output struct {
 }
 
 type observation struct {
-	Summary  string   `json:"summary"`
-	Detail   string   `json:"detail"`
-	Items    []string `json:"items"`
-	Count    int      `json:"count"`
-	Proposal *int     `json:"proposal,omitempty"`
+	ID        string   `json:"id,omitempty"`
+	Summary   string   `json:"summary"`
+	Detail    string   `json:"detail"`
+	Items     []string `json:"items"`
+	Count     int      `json:"count"`
+	Proposal  *int     `json:"proposal,omitempty"`
+	NotJonahs bool     `json:"not_jonahs,omitempty"`
 }
 
 type proposal struct {
-	Title    string                `json:"title"`
-	Summary  string                `json:"summary"`
-	Files    []domain.ProposalFile `json:"files"`
-	Evidence []evidence            `json:"evidence"`
-	Estimate estimate              `json:"estimate"`
+	Title    string     `json:"title"`
+	Summary  string     `json:"summary"`
+	Edits    []fileEdit `json:"edits"`
+	Evidence []evidence `json:"evidence"`
+	Estimate estimate   `json:"estimate"`
+}
+
+// fileEdit mirrors the worker's Edit: replacements, or content for a new file.
+type fileEdit struct {
+	Path         string               `json:"path"`
+	Replacements []domain.Replacement `json:"replacements,omitempty"`
+	Content      *string              `json:"content,omitempty"`
+}
+
+// replace is an edit of path replacing old with nw.
+func replace(path, old, nw string) fileEdit {
+	return fileEdit{Path: path, Replacements: []domain.Replacement{{Old: old, New: nw}}}
 }
 
 type evidence struct {
@@ -891,8 +953,77 @@ func idOf(s domain.SentBack) string { return strconv.FormatInt(s.EventID, 10) }
 func newProposal(title, path string, e domain.SentBack, metric domain.ProposalMetric) proposal {
 	return proposal{
 		Title: title, Summary: "Say it in the prompt.",
-		Files:    []domain.ProposalFile{{Path: path, BaseSHA256: string(domain.HashBlob([]byte(writerText))), Content: newWriterText}},
+		Edits:    []fileEdit{replace(path, writerText, newWriterText)},
 		Evidence: []evidence{{Event: idOf(e), Reason: e.Reason}},
 		Estimate: estimate{Metric: metric, Station: stBuild, After: 0.1, CostDelta: 0.02},
 	}
+}
+
+// A review updates the open observation it names, so its count grows across reviews (ADR 0039
+// decision 5), and its proposal supersedes only the open proposal whose replacements overlap
+// its own (decision 6): one of another file stays proposed.
+func TestReviews_FinishUpdatesObservationsAndSupersedesOverlaps(t *testing.T) {
+	t.Parallel()
+
+	w := newReviewWorld(t)
+	w.sentBacks(2)
+
+	w.queue(domain.JonahManual)
+	ev := w.oldWindow()
+	first := newProposal("Ask for tests", writerPath, ev[0], domain.MetricSentBackRate)
+	other := newProposal("Run them twice", writerPath, ev[0], domain.MetricSentBackRate)
+	other.Edits = []fileEdit{replace("rules/tests.md", "Run the tests.\n", "Run the tests twice.\n")}
+	w.answer(output{
+		Observations: []observation{{Summary: testsMissing, Items: []string{"#1"}, Count: 2, Proposal: new(0)}},
+		Proposals:    []proposal{first, other},
+	})
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("first Work finished %d, want 1", n)
+	}
+
+	open, err := w.store.OpenObservations(w.ctx(), reviewFactory, 10)
+	if err != nil || len(open) != 1 {
+		t.Fatalf("OpenObservations = %+v, %v; want 1", open, err)
+	}
+
+	w.at(rt0.Add(time.Hour))
+	w.queue(domain.JonahManual)
+
+	again := newProposal("Ask for tests and a screenshot", writerPath, ev[1], domain.MetricSentBackRate)
+	again.Edits = []fileEdit{replace(writerPath, writerText, "Write the change, its tests and a screenshot.\n")}
+	w.answer(output{
+		Observations: []observation{{ID: string(open[0].ID), Summary: testsMissing, Items: []string{"#2"}, Count: 3, Proposal: new(0)}},
+		Proposals:    []proposal{again},
+	})
+
+	if n := w.work(); n != 1 {
+		t.Fatalf("second Work finished %d, want 1", n)
+	}
+
+	states := map[int64]domain.ProposalState{}
+	for _, p := range w.proposals() {
+		states[p.Number] = p.State
+	}
+
+	if want := map[int64]domain.ProposalState{1: domain.ProposalSuperseded, 2: domain.ProposalProposed, 3: domain.ProposalProposed}; !reflect.DeepEqual(states, want) {
+		t.Errorf("proposal states = %v, want %v", states, want)
+	}
+
+	obs, err := w.store.Observations(w.ctx(), reviewFactory, 10)
+	if err != nil || len(obs) != 1 || obs[0].Count != 5 || len(obs[0].ItemIDs) != 2 || obs[0].State != domain.ObservationProposed {
+		t.Errorf("observations = %+v, %v; want one of count 5 on two items, proposed", obs, err)
+	}
+}
+
+// oldWindow are the world's sent-back events of the last day, oldest first.
+func (w *reviewWorld) oldWindow() []domain.SentBack {
+	w.t.Helper()
+
+	ev, err := w.store.SentBackBetween(w.ctx(), reviewFactory, rt0.Add(-24*time.Hour), rt0.Add(24*time.Hour), 10)
+	if err != nil || len(ev) < 2 {
+		w.t.Fatalf("SentBackBetween = %+v, %v; want 2", ev, err)
+	}
+
+	return ev
 }

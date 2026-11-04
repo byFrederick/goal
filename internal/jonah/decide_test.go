@@ -219,8 +219,8 @@ func newDecideFixture(t *testing.T) (*decideFixture, context.Context) {
 		State: domain.JonahDone, At: t0,
 		Proposals: []domain.NewProposal{{
 			Title: "Ask for a screenshot",
-			Files: []domain.ProposalFile{
-				{Path: agentPath, BaseSHA256: string(domain.HashBlob([]byte(writerV1))), Content: "# writer\nAttach a screenshot.\n"},
+			Edits: []domain.ProposalEdit{
+				{Path: agentPath, Replacements: []domain.Replacement{{Old: writerV1, New: "# writer\nAttach a screenshot.\n"}}},
 				{Path: rulePath, Content: "Show evidence.\n"},
 			},
 		}},
@@ -269,6 +269,23 @@ func TestDecide_Approve(t *testing.T) {
 	}
 }
 
+// Approve applies the stored replacements to the file as it is now: an unrelated change to the
+// same file since the review still publishes, with both changes in it (ADR 0039 decision 6).
+func TestDecide_ApproveAfterAnUnrelatedEdit(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t)
+	f.def.current = map[string]string{agentPath: "Intro.\n" + writerV1 + "Be brief.\n"}
+
+	if _, _, err := f.dc.Approve(ctx, factory, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := f.def.current[agentPath], "Intro.\n# writer\nAttach a screenshot.\nBe brief.\n"; got != want {
+		t.Errorf("v2's %s = %q, want %q", agentPath, got, want)
+	}
+}
+
 func TestDecide_ApproveRefusals(t *testing.T) {
 	t.Parallel()
 
@@ -288,7 +305,8 @@ func TestDecide_ApproveRefusals(t *testing.T) {
 	})
 
 	for name, current := range map[string]map[string]string{
-		"changed base":      {agentPath: "# writer, changed\n"},
+		"old text gone":     {agentPath: "# writer, changed\n"},
+		"old text twice":    {agentPath: writerV1 + writerV1},
 		"new file now here": {agentPath: writerV1, rulePath: "someone added it\n"},
 		"base file removed": {},
 	} {
@@ -344,6 +362,22 @@ func TestDecide_Edit(t *testing.T) {
 
 	if _, err := f.dc.Reject(ctx, factory, 1, "no"); !errors.Is(err, ports.ErrProposalDecided) {
 		t.Errorf("reject after edit = %v, want ErrProposalDecided", err)
+	}
+}
+
+// Edit applies the stored replacements to the draft's copy of a file a person changed elsewhere.
+func TestDecide_EditIntoAChangedDraft(t *testing.T) {
+	t.Parallel()
+
+	f, ctx := newDecideFixture(t)
+	f.def.draft, f.def.revision = map[string]string{agentPath: writerV1 + "Keep it short.\n"}, 3
+
+	if _, _, err := f.dc.Edit(ctx, factory, 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := f.def.draft[agentPath], "# writer\nAttach a screenshot.\nKeep it short.\n"; got != want {
+		t.Errorf("draft's %s = %q, want %q", agentPath, got, want)
 	}
 }
 
@@ -475,11 +509,10 @@ func TestDecider_UndoReversesAfterLaterPublish(t *testing.T) {
 	}
 
 	first := f.state(ctx, t)
-	now := f.def.current[agentPath]
 
-	want := []domain.ProposalFile{{Path: agentPath, BaseSHA256: string(domain.HashBlob([]byte(now))), Content: "# writer\nBe brief.\n"}}
+	want := []domain.ProposalEdit{{Path: agentPath, Replacements: []domain.Replacement{{Old: "# writer\nAttach a screenshot.\n", New: writerV1}}}}
 	if undo.Number != 2 || undo.Undoes != first.ID || undo.State != domain.ProposalProposed || undo.VersionID != versionID(3) ||
-		!reflect.DeepEqual(undo.Files, want) {
+		!reflect.DeepEqual(undo.Edits, want) {
 		t.Errorf("undo = %+v, want proposal 2 undoing proposal 1 against v3 with %+v", undo, want)
 	}
 
@@ -493,6 +526,10 @@ func TestDecider_UndoReversesAfterLaterPublish(t *testing.T) {
 
 	if _, err := f.dc.Undo(ctx, factory, 1); !errors.Is(err, ports.ErrConflict) {
 		t.Errorf("second undo = %v, want ErrConflict", err)
+	}
+
+	if _, _, err := f.dc.Approve(ctx, factory, 2); err != nil || f.def.current[agentPath] != "# writer\nBe brief.\n" {
+		t.Errorf("approve the undo = %v, %s = %q; want the later publish kept and the change gone", err, agentPath, f.def.current[agentPath])
 	}
 }
 
