@@ -59,16 +59,11 @@ function isOpen(part: Pick<AssemblyPart, 'state'>): boolean {
 }
 
 /**
- * The spend of the assembly: its own cost plus its parts' cost, against the task budget of each
- * item times the parts in all. The budget is null when the factory sets no per-item budget.
+ * The spend of the assembly: its own cost plus its parts' cost. There is no target to show against:
+ * the per-item budget limits one task, not an item, so parts times it is not a budget.
  */
-export function spend(
-  assembly: Pick<Item, 'cost_usd'>,
-  parts: readonly Pick<AssemblyPart, 'cost_usd'>[],
-  perItemUsd: number | null,
-): { spent: number; budget: number | null } {
-  const spent = assembly.cost_usd + parts.reduce((sum, p) => sum + p.cost_usd, 0);
-  return { spent, budget: perItemUsd ? perItemUsd * parts.length : null };
+export function spend(assembly: Pick<Item, 'cost_usd'>, parts: readonly Pick<AssemblyPart, 'cost_usd'>[]): number {
+  return assembly.cost_usd + parts.reduce((sum, p) => sum + p.cost_usd, 0);
 }
 
 /**

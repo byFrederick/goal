@@ -289,9 +289,9 @@ describe('AssemblyPage progress', () => {
       expect(strip.getByText(label)).toBeTruthy();
     }
     expect(stat('Lead time')).toContain('3 d');
-    // The assembly's $0.50 plus the parts' $2, $1, $1 and $1, against $4 for each of 4 parts.
+    // The assembly's $0.50 plus the parts' $2, $1, $1 and $1; the per-item budget is one task's, so no target.
     expect(stat('Spend')).toContain('$5.50');
-    expect(stat('Spend')).toContain('of $16.00');
+    expect(stat('Spend')).not.toContain('of $');
     expect(stat('Human touches')).toContain('3');
     // Merged parts took 2 days; the two waves still open take 2 days each.
     expect(stat('Time to finish')).toContain('About 4 d');

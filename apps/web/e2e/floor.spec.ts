@@ -170,3 +170,21 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test.describe('activity at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('an Activity entry wraps instead of truncating', async ({ page }) => {
+    await page.goto('/o/acme/f/sre');
+    const entries = page.getByRole('region', { name: 'Activity' }).getByRole('listitem');
+    await expect(entries.first()).toBeVisible();
+    const clipped = await entries.evaluateAll((els) =>
+      els.some((el) => {
+        const p = el.querySelector('p');
+        return p ? p.scrollWidth > p.clientWidth + 1 : false;
+      }),
+    );
+    expect(clipped).toBe(false);
+    await expectNoHorizontalScroll(page);
+  });
+});
