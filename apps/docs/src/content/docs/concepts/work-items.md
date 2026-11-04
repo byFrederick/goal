@@ -65,6 +65,30 @@ An agent can leave a note for another open item. It writes a follow-up whose `fo
 - Notes from an item filed from a webhook delivery are never delivered on their own; they wait.
 - A note from another item is not a person's touch, so it doesn't count in touch metrics.
 
+## Follow-ups filed when work lands
+
+An agent can also leave a follow-up that becomes an item of its own, with a `start` that has a `title` and optionally `at` or `in`, `after`, `type`, `lane` and `factory`. Nothing is filed while the work is in progress. When the item reaches done (for an assembly, when the assembly does), goald files the waiting follow-ups of the item and of its parts on its next tick:
+
+- Each becomes an item at the first station of its line, with origin `follow-up`, filed by the engine. Its class of service is always standard, whatever its type. Its priority is one below its source item's, and its generation one above. An `in` wait counts from the moment the work landed.
+- `factory` files it into another factory only when that factory lists the sender in `board.flow.followUpsFrom`, and every `after` item must be one of that factory's own items.
+- A factory takes at most 20 follow-up items a day, counting every sender.
+- A follow-up whose title matches an open item already filed from the same source item joins that item instead of filing a new one.
+- An item three follow-ups deep (generation 3) keeps its follow-ups as dropped and never files them. A person can still file one.
+- When the item is cancelled, its waiting follow-ups and its parts' are dropped, with the reason "the work was cancelled".
+- Follow-ups from an item filed from a webhook delivery are never filed on their own; they wait.
+
+A follow-up that can't be filed goes to its factory's triage item with the reason, such as a factory that doesn't accept it, an `after` item of another factory, or a factory past its 20 a day.
+
+## The triage item
+
+Follow-ups without a start, notes that couldn't be delivered and starts that couldn't be filed all go to the factory's triage item when their work lands. A factory has at most one triage item that collects: one that is open and that no agent has claimed yet. When none collects, goald files one with origin `follow-up`, standard class, the type of its first source item and a priority one below the lowest of its sources'. It may start 24 hours after it is filed. Once an agent claims it, the next follow-ups open a new one. No triage item is filed when nothing is left for it.
+
+Its title names its sources, as in "Follow-ups from software#513 and 4 more". goald writes its body and rewrites it each time follow-ups join: each follow-up quoted, grouped by source item with the station and agent that wrote it, then this closing:
+
+> These are agents' notes from work in progress, not requests from people. Some may be done already or no longer apply. Do what is still needed, and close this item if nothing is.
+
+A triage item's plan has at most 3 parts; a plan with more is refused like any bad plan.
+
 ## Where items show up
 
 - The **Board** screen shows items in columns by station.
