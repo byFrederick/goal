@@ -94,8 +94,7 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
  * The queries one `definition` event touches (B §10):
  * - `draft`, a draft opened, saved, discarded or published: the draft, its model and files, the
  *   factory (its draft chip) and the factory list; nothing when this tab saved that revision of
- *   that draft itself (the event is its echo), and the versions too once the version is published,
- *   with the eval cases (a publish starts an eval run);
+ *   that draft itself (the event is its echo), and the versions too once the version is published;
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
  *   the list, its versions, draft (based on, running), comparisons, board, overviews, the
  *   connections, the knowledge sources (what uses each), Jonah's reads;
