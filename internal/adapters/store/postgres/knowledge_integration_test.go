@@ -29,7 +29,10 @@ func TestKnowledge_Conformance(t *testing.T) {
 			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")),
 			Secrets: NewSecrets(d.store, testKey(t, "k1")), Audit: d.store,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
-			Pin:    func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID) { t.Helper(); pinSnapshot(t, d, org, snap) },
+			Pin: func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID) {
+				t.Helper()
+				pinSnapshot(t, d, org, snap)
+			},
 		}
 	})
 }
@@ -39,7 +42,7 @@ func TestKnowledge_Conformance(t *testing.T) {
 func pinSnapshot(t *testing.T, d connectionsDB, org domain.OrgID, snap domain.KnowledgeSnapshotID) {
 	t.Helper()
 
-	data, err := json.Marshal(map[string]any{"snapshots": []map[string]string{{"source": "handbook", "snapshot": string(snap)}}})
+	data, err := json.Marshal(map[string]any{"snapshots": []map[string]string{{"source": "pinned", "snapshot": string(snap)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +52,7 @@ func pinSnapshot(t *testing.T, d connectionsDB, org domain.OrgID, snap domain.Kn
 			"SET LOCAL session_replication_role = replica",
 			`WITH r AS (
 			   INSERT INTO agent_runs (org_id, factory_id, item_id, station, agent, model, status)
-			   VALUES ($1::uuid, gen_random_uuid(), gen_random_uuid(), 'work', 'worker', 'model-a', 'running')
+			   VALUES ($1::uuid, uuidv7(), gen_random_uuid(), 'work', 'worker', 'model-a', 'running')
 			   RETURNING id, factory_id, item_id)
 			 INSERT INTO item_events (org_id, factory_id, item_id, run_id, kind, station, actor, data)
 			 SELECT $1::uuid, r.factory_id, r.item_id, r.id, 'knowledge_pinned', 'work', 'worker', $2::jsonb FROM r`,

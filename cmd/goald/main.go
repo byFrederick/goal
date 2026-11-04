@@ -179,10 +179,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	// The engine's behaviour; the knowledge base keeps a replaced snapshot as long as one of its
-	// claims can last (ADR 0038 decision 3). The gateway URL comes with the sandboxes below.
-	engineCfg := engine.Config{TickEvery: s.TickEvery, Image: s.AgentImage, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns}
-	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, engineCfg.LongestClaim(), log)
+	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, engineConfig(s, "").LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -225,8 +222,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	engineCfg.GatewayURL = boxes.gateway
-
 	// The engine runs each claim in a sandbox with the run's connections, merges with the
 	// factory's code host connections and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
@@ -235,7 +230,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
-	}, engineCfg)
+	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err
 	}
@@ -360,6 +355,13 @@ type knowledgeBase struct {
 	kb       *postgres.Knowledge
 	uploads  *knowledge.Uploads
 	ingestor *knowledge.Ingestor
+}
+
+// engineConfig is the engine's behaviour with sandboxes reaching the gateway at gatewayURL. The
+// knowledge base keeps a replaced snapshot for its LongestClaim, which needs no gateway (ADR 0038
+// decision 3).
+func engineConfig(s settings, gatewayURL string) engine.Config {
+	return engine.Config{TickEvery: s.TickEvery, Image: s.AgentImage, GatewayURL: gatewayURL, GatewayKeyRef: s.GatewayKeyRef, MaxRuns: s.MaxRuns}
 }
 
 // openKnowledge wires the knowledge base: uploads of at most GOAL_UPLOAD_MAX_BYTES each, read

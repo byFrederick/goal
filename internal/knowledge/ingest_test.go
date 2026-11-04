@@ -774,13 +774,18 @@ func TestIngestor_RetentionDeletesTheZipBeforeTheRow(t *testing.T) {
 	// Four versions of the handbook: old at 0, pinned at 1h, young at 2h, current at 7h. With a
 	// window of 2h at 7h, old (replaced at 1h) and pinned (replaced at 2h) are past it, young
 	// (replaced at 7h) is not.
+	fake, ok := w.kb.(*porttest.Knowledge)
+	if !ok {
+		t.Fatalf("the knowledge base is a %T", w.kb)
+	}
+
 	var ids []domain.KnowledgeSnapshotID
 
 	for i, wait := range []time.Duration{0, time.Hour, time.Hour, 5 * time.Hour} {
 		w.clock.Advance(wait)
 
 		if i == 3 {
-			w.kb.(*porttest.Knowledge).Pin(w.org, ids[1])
+			fake.Pin(w.org, ids[1])
 			objs.fail.Store(true)
 		}
 
@@ -819,16 +824,18 @@ func TestIngestor_RetentionDeletesTheZipBeforeTheRow(t *testing.T) {
 func TestUploads_DeleteSourceDeletesItsSnapshotZips(t *testing.T) {
 	t.Parallel()
 
+	const manuals = "manuals"
+
 	w := newWorld(t)
 	ctx := w.ctx()
 
-	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: "archive", Title: "Archive", Kind: domain.SourceUpload}, admin); err != nil {
+	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{Name: manuals, Title: "Manuals", Kind: domain.SourceUpload}, admin); err != nil {
 		t.Fatal(err)
 	}
 
 	body := []byte("# Policy\n\nBe kind.")
 
-	for _, source := range []string{"handbook", "archive"} {
+	for _, source := range []string{"handbook", manuals} {
 		if _, err := w.uploads.Upload(ctx, source, "policy.md", body, admin); err != nil {
 			t.Fatal(err)
 		}
@@ -836,8 +843,8 @@ func TestUploads_DeleteSourceDeletesItsSnapshotZips(t *testing.T) {
 
 	w.syncDue(w.ingestor(nil))
 
-	handbook, archive := w.source("handbook"), w.source("archive")
-	w.want("the zips after the sync", nil, w.hasZip(handbook, handbook.CurrentSnapshot), w.hasZip(archive, archive.CurrentSnapshot))
+	handbook, other := w.source("handbook"), w.source(manuals)
+	w.want("the zips after the sync", nil, w.hasZip(handbook, handbook.CurrentSnapshot), w.hasZip(other, other.CurrentSnapshot))
 
 	objs := &failingObjects{ObjectStore: w.objects}
 	uploads := knowledge.NewUploads(w.kb, objs, 0)
@@ -866,9 +873,9 @@ func TestUploads_DeleteSourceDeletesItsSnapshotZips(t *testing.T) {
 	}
 
 	w.want("the deleted source's zips", left, len(left) == 0)
-	w.want("the other source's zip", nil, w.hasZip(archive, archive.CurrentSnapshot))
+	w.want("the other source's zip", nil, w.hasZip(other, other.CurrentSnapshot))
 
 	if _, err := w.objects.Get(ctx, domain.KnowledgeKey(w.org, domain.HashBlob(body))); err != nil {
-		t.Errorf("the original archive still holds: %v", err)
+		t.Errorf("the original the other source still holds: %v", err)
 	}
 }
