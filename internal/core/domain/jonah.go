@@ -142,8 +142,9 @@ func (n NewJonahReview) Check() error {
 	return errors.Join(errs...)
 }
 
-// JonahReviewResult is how a claimed review ended: done with its proposals and observations, or
-// failed with Error. RunID is the review's agent run, when it had one.
+// JonahReviewResult is how a claimed review ended: done with its proposals and observations,
+// failed with Error, or pending again with Error to be retried (ADR 0039 decision 3), storing
+// nothing. RunID is the review's agent run, when it had one.
 type JonahReviewResult struct {
 	State        JonahReviewState
 	Error        string
@@ -161,8 +162,12 @@ func (r JonahReviewResult) Check() error {
 		errs = append(errs, fmt.Errorf("jonah review result: "+format+": %w", append(args, ErrInvalid)...))
 	}
 
-	if r.State != JonahDone && r.State != JonahFailed {
-		bad("state %q is not done or failed", r.State)
+	if r.State != JonahDone && r.State != JonahFailed && r.State != JonahPending {
+		bad("state %q is not done, failed or pending", r.State)
+	}
+
+	if r.State == JonahPending && (len(r.Proposals) > 0 || len(r.Observations) > 0) {
+		bad("a review to retry stores no proposal or observation")
 	}
 
 	if utf8.RuneCountInString(r.Error) > maxJonahError {

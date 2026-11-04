@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"time"
 
@@ -145,6 +146,10 @@ func (s *Store) FinishJonahReview(ctx context.Context, claimed domain.JonahRevie
 	r := &s.jonah.reviews[i].row
 	r.State, r.Error, r.RunID, r.FinishedAt, r.LeaseUntil = res.State, res.Error, res.RunID, res.At, time.Time{}
 
+	if res.State == domain.JonahPending {
+		r.FinishedAt = time.Time{}
+	}
+
 	return *r, s.storeReviewOutput(org, *r, res), nil
 }
 
@@ -188,6 +193,22 @@ func (s *Store) storeReviewOutput(org domain.OrgID, r domain.JonahReview, res do
 	}
 
 	return cloneProposals(stored)
+}
+
+// LastDoneJonahReview implements ports.JonahStore.
+func (s *Store) LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error) {
+	all, err := s.JonahReviews(ctx, factory, math.MaxInt)
+	if err != nil {
+		return domain.JonahReview{}, err
+	}
+
+	for _, r := range all {
+		if r.State == domain.JonahDone {
+			return r, nil
+		}
+	}
+
+	return domain.JonahReview{}, fmt.Errorf("last done jonah review of factory %s: %w", factory, ports.ErrNotFound)
 }
 
 // JonahReviews implements ports.JonahStore.

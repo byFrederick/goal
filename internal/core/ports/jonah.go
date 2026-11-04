@@ -151,11 +151,16 @@ type JonahStore interface {
 	// attempt. ErrNotFound when nothing is claimable.
 	ClaimJonahReview(ctx context.Context, now time.Time, lease time.Duration) (domain.JonahReview, error)
 	// FinishJonahReview ends the claimed review as r says and, in the same transaction, stores
-	// its proposals with the factory's next numbers and its observations. claimed is what
+	// its proposals with the factory's next numbers and its observations. A result of state
+	// pending puts the review back in the queue with its error and run, without a lease or a
+	// finish time, to be claimed again (ADR 0039 decision 3). claimed is what
 	// ClaimJonahReview returned; ErrLeaseLost unless the review still runs under that lease.
 	// r must pass Check (domain.ErrInvalid, and nothing is stored). It returns the review and
 	// the stored proposals, in r's order.
 	FinishJonahReview(ctx context.Context, claimed domain.JonahReview, r domain.JonahReviewResult) (domain.JonahReview, []domain.Proposal, error)
+	// LastDoneJonahReview is the factory's newest review that ended done: where the next review's
+	// window starts (ADR 0039 decision 3). ErrNotFound when none has.
+	LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error)
 	// JonahReviews is the factory's latest reviews, newest first, at most limit.
 	JonahReviews(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.JonahReview, error)
 	// Proposals is the factory's proposals that q selects, newest (highest number) first.

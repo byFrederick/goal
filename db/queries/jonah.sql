@@ -25,12 +25,19 @@ WHERE r.id = (
 RETURNING r.*;
 
 -- name: FinishJonahReview :one
--- Ends a running review under the lease its claim returned. No row when the lease is lost.
+-- Ends a running review under the lease its claim returned, or puts it back to pending for a
+-- retry with no finished_at. No row when the lease is lost.
 UPDATE jonah_reviews
-SET state = sqlc.arg(state), error = sqlc.arg(error), run_id = sqlc.narg(run_id), finished_at = sqlc.arg(finished_at)::timestamptz,
+SET state = sqlc.arg(state), error = sqlc.arg(error), run_id = sqlc.narg(run_id), finished_at = sqlc.narg(finished_at)::timestamptz,
     lease_until = NULL
 WHERE id = sqlc.arg(id) AND state = 'running' AND lease_until = sqlc.arg(lease_until)::timestamptz
 RETURNING *;
+
+-- name: LastDoneJonahReview :one
+-- The factory's newest done review, where the next window starts (jonah_reviews_factory_idx).
+SELECT * FROM jonah_reviews WHERE factory_id = sqlc.arg(factory_id) AND state = 'done'
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
 
 -- name: LatestJonahReviews :many
 SELECT * FROM jonah_reviews WHERE factory_id = sqlc.arg(factory_id)

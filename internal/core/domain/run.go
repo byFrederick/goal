@@ -119,6 +119,8 @@ type RunSummary struct {
 
 // RunResult is what a runner returns when an agent task ends.
 type RunResult struct {
+	// RunID is the run's record (agent_runs), set by engine.RunTask once it recorded one.
+	RunID  RunID
 	Status RunStatus
 	// Output is the agent's final JSON output; it must satisfy the station's contract.
 	Output       json.RawMessage

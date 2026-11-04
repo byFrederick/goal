@@ -23,6 +23,8 @@ var jonahTests = []struct {
 	// A Jonah run without an item, beside the Runs_ cases it is named with.
 	{"Runs_JonahWithoutItem", testRunsJonahWithoutItem},
 	{"Jonah_ExpiredLeaseReclaimed", testJonahLeaseReclaimed},
+	{"Jonah_RetryReturnsToPending", testJonahRetry},
+	{"Jonah_WindowStartsAtLastDoneReview", testJonahLastDone},
 	{"Jonah_ConcurrentClaimsTakeDifferentReviews", testJonahConcurrentClaims},
 	{"Jonah_ProposalsNumberedPerFactory", testJonahNumbers},
 	{"Jonah_PathOutsideAllowlistRefused", testJonahPathRefused},
@@ -173,6 +175,70 @@ func testJonahLeaseReclaimed(f *fixture) {
 	}
 
 	f.finishUnderNewLease(t, first, second)
+}
+
+// A review finished as pending goes back to the queue with its error, no lease and no finish
+// time, still in flight; the next claim takes it as attempt 2 and keeps the error until it ends.
+func testJonahRetry(f *fixture) {
+	t := f.t
+	queued := f.queueReview(t, f.factory, t0)
+	first := f.claimReview(t, t0)
+
+	back, stored, err := f.Jonah.FinishJonahReview(f.ctx(t), first, domain.JonahReviewResult{
+		State: domain.JonahPending, Error: "the review run failed", At: t0.Add(time.Minute),
+	})
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("FinishJonahReview pending: %d proposals, %v", len(stored), err)
+	}
+
+	if back.State != domain.JonahPending || back.Error != "the review run failed" || !back.LeaseUntil.IsZero() ||
+		!back.FinishedAt.IsZero() || back.Attempts != 1 {
+		t.Fatalf("retried review %+v: want pending with its error, no lease, no finish, attempt 1", back)
+	}
+
+	if _, err := f.Jonah.QueueJonahReview(f.ctx(t), domain.NewJonahReview{
+		FactoryID: f.factory, VersionID: queued.VersionID, Trigger: domain.JonahThreshold, WindowStart: t0, WindowEnd: t1,
+		By: domain.Actor{Kind: domain.ActorSystem, ID: "jonah"}, At: t1,
+	}); !errors.Is(err, ports.ErrConflict) {
+		t.Fatalf("a review while one waits for its retry: %v, want ErrConflict", err)
+	}
+
+	second := f.claimReview(t, t1)
+	if second.ID != queued.ID || second.Attempts != 2 || second.Error != "the review run failed" {
+		t.Fatalf("second claim %+v: want %s, attempt 2, its error kept", second, queued.ID)
+	}
+
+	done, _, err := f.Jonah.FinishJonahReview(f.ctx(t), second, domain.JonahReviewResult{State: domain.JonahFailed, Error: "again", At: t1})
+	if err != nil || done.State != domain.JonahFailed || done.Error != "again" || !done.FinishedAt.Equal(t1) {
+		t.Fatalf("finish failed: %+v, %v", done, err)
+	}
+}
+
+// LastDoneJonahReview is the factory's newest done review, past any failed or in-flight one
+// after it; ErrNotFound before the first, and another factory's never counts.
+func testJonahLastDone(f *fixture) {
+	t := f.t
+
+	if _, err := f.Jonah.LastDoneJonahReview(f.ctx(t), f.factory); !errors.Is(err, ports.ErrNotFound) {
+		t.Fatalf("LastDoneJonahReview before any review: %v, want ErrNotFound", err)
+	}
+
+	done, _ := f.finishReview(t, f.factory, t0, domain.JonahReviewResult{})
+	f.finishReview(t, f.newFactory(t), t1, domain.JonahReviewResult{})
+
+	f.queueReview(t, f.factory, t1)
+	claimed := f.claimReview(t, t1)
+
+	if _, _, err := f.Jonah.FinishJonahReview(f.ctx(t), claimed, domain.JonahReviewResult{State: domain.JonahFailed, Error: "x", At: t1}); err != nil {
+		t.Fatalf("FinishJonahReview failed: %v", err)
+	}
+
+	f.queueReview(t, f.factory, t1.Add(time.Hour))
+
+	got, err := f.Jonah.LastDoneJonahReview(f.ctx(t), f.factory)
+	if err != nil || got.ID != done.ID || !got.WindowEnd.Equal(t0) {
+		t.Fatalf("LastDoneJonahReview = %s ending %s, %v; want %s ending %s", got.ID, got.WindowEnd, err, done.ID, t0)
+	}
 }
 
 // Claims that race take different reviews: a review one claim holds is skipped by the other,

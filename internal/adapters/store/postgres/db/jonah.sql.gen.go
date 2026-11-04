@@ -299,12 +299,13 @@ type FinishJonahReviewParams struct {
 	State      string
 	Error      string
 	RunID      *uuid.UUID
-	FinishedAt time.Time
+	FinishedAt *time.Time
 	ID         uuid.UUID
 	LeaseUntil time.Time
 }
 
-// Ends a running review under the lease its claim returned. No row when the lease is lost.
+// Ends a running review under the lease its claim returned, or puts it back to pending for a
+// retry with no finished_at. No row when the lease is lost.
 func (q *Queries) FinishJonahReview(ctx context.Context, arg FinishJonahReviewParams) (JonahReview, error) {
 	row := q.db.QueryRow(ctx, finishJonahReview,
 		arg.State,
@@ -547,6 +548,36 @@ func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams
 	var spend_usd float64
 	err := row.Scan(&spend_usd)
 	return spend_usd, err
+}
+
+const lastDoneJonahReview = `-- name: LastDoneJonahReview :one
+SELECT id, org_id, factory_id, version_id, trigger, state, lease_until, attempts, run_id, window_start, window_end, error, created_by, created_at, finished_at FROM jonah_reviews WHERE factory_id = $1 AND state = 'done'
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// The factory's newest done review, where the next window starts (jonah_reviews_factory_idx).
+func (q *Queries) LastDoneJonahReview(ctx context.Context, factoryID uuid.UUID) (JonahReview, error) {
+	row := q.db.QueryRow(ctx, lastDoneJonahReview, factoryID)
+	var i JonahReview
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.VersionID,
+		&i.Trigger,
+		&i.State,
+		&i.LeaseUntil,
+		&i.Attempts,
+		&i.RunID,
+		&i.WindowStart,
+		&i.WindowEnd,
+		&i.Error,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
 }
 
 const lastProposalNumber = `-- name: LastProposalNumber :one
