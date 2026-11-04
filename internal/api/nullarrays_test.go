@@ -19,7 +19,9 @@ var unmarshaler = reflect.TypeFor[json.Unmarshaler]()
 // nullArrays lists the JSON paths in body that are null where T, by its generated gen types, has a
 // required, non-nullable array: a non-pointer slice without omitempty. Pointers to slices, omitempty
 // fields and types with their own UnmarshalJSON (the unions) may be null and are not walked.
-func nullArrays[T any](body []byte) ([]string, error) { return nullArraysOf(reflect.TypeFor[T](), body) }
+func nullArrays[T any](body []byte) ([]string, error) {
+	return nullArraysOf(reflect.TypeFor[T](), body)
+}
 
 // nullArraysOf is nullArrays for a body read as t.
 func nullArraysOf(t reflect.Type, body []byte) ([]string, error) {
@@ -45,27 +47,34 @@ func walkNulls(t reflect.Type, v any, path string, out *[]string) {
 		return
 	}
 
-	switch t.Kind() {
-	case reflect.Struct:
-		if obj, ok := v.(map[string]any); ok {
-			walkStruct(t, obj, path, out)
-		}
-	case reflect.Slice, reflect.Array:
-		if arr, ok := v.([]any); ok {
-			for i, e := range arr {
+	switch v := v.(type) {
+	case map[string]any:
+		walkObject(t, v, path, out)
+	case []any:
+		if k := t.Kind(); k == reflect.Slice || k == reflect.Array {
+			for i, e := range v {
 				walkNulls(t.Elem(), e, path+"["+strconv.Itoa(i)+"]", out)
 			}
 		}
-	case reflect.Map:
-		if obj, ok := v.(map[string]any); ok {
-			for k, e := range obj {
-				walkNulls(t.Elem(), e, path+"."+k, out)
-			}
-		}
-	default:
 	}
 }
 
+// walkObject walks obj as t: a struct by its fields, a map by its values.
+func walkObject(t reflect.Type, obj map[string]any, path string, out *[]string) {
+	if t.Kind() == reflect.Struct {
+		walkStruct(t, obj, path, out)
+
+		return
+	}
+
+	if t.Kind() == reflect.Map {
+		for k, e := range obj {
+			walkNulls(t.Elem(), e, path+"."+k, out)
+		}
+	}
+}
+
+// walkStruct walks obj by the json fields of struct t, noting null at a required array.
 func walkStruct(t reflect.Type, obj map[string]any, path string, out *[]string) {
 	for f := range t.Fields() {
 		if !f.IsExported() {

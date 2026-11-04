@@ -166,6 +166,7 @@ func TestAccess_ServerWithoutSecretsHasEmptyList(t *testing.T) {
 		}
 
 		var found []string
+
 		for _, g := range raw.Groups {
 			for _, row := range g.Rows {
 				if string(row["name"]) == `"`+serverDocs+`"` {
