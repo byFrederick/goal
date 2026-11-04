@@ -21,8 +21,8 @@ describe('touchTarget', () => {
 });
 
 describe('touchLink', () => {
-  it('pads a text link to 44 px below 768 px and takes the padding back with a margin', () => {
-    expect(words(touchLink)).toEqual(expect.arrayContaining(['max-md:py-3', 'max-md:-my-3']));
+  it('pads a text link to at least 44 px below 768 px and takes the padding back with a margin', () => {
+    expect(words(touchLink)).toEqual(expect.arrayContaining(['max-md:py-4', 'max-md:-my-4']));
   });
 
   it('adds no motion', () => {

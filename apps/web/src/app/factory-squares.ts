@@ -13,6 +13,8 @@ export interface FactorySquare {
   attention: Attention;
   /** The link's accessible name: mark, name and status. */
   label: string;
+  /** The name for a link that shows the factory name: it starts with that name. */
+  nameLabel: string;
   /** The tooltip's second line. */
   detail: string;
 }

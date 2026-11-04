@@ -48,4 +48,10 @@ describe('Skeleton', () => {
       expect.arrayContaining(['opacity-0', 'blur-(--blur-small)']),
     );
   });
+
+  it('lets clicks through the faded placeholder once ready', () => {
+    render(<Card ready />);
+    const placeholder = screen.getByText('Placeholder bar').parentElement?.parentElement;
+    expect(Array.from(placeholder?.classList ?? [])).toContain('pointer-events-none');
+  });
 });

@@ -131,3 +131,39 @@ for (const scheme of schemes) {
     });
   }
 }
+
+// At 768 the sidebar takes its width, so the catalog and the detail show one at a time, as on a phone.
+test.describe('Add a tool at 768 px with the sidebar', () => {
+  test.use({ viewport: { width: 768, height: 900 } });
+
+  test('a catalog tool reaches Add to draft inside the viewport and is added', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/definition/add-tool?environment=default');
+    await page.getByRole('link', { name: /Sentry/ }).click();
+    const add = page.getByRole('button', { name: 'Add to draft' });
+    await expect(add).toBeInViewport();
+    await expectNoHorizontalScroll(page);
+    await expectNoClippedElements(page);
+    await expectAccessible(page);
+    await page.getByPlaceholder('Paste sentry auth token').fill('sntrys_example');
+    await add.click();
+    await expect(page).toHaveURL(/definition\/environments\?environment=default/);
+    await page.getByRole('radio', { name: 'YAML' }).check();
+    await expect(page.getByText('mcp.sentry.dev')).toBeVisible();
+  });
+
+  test('Custom reaches Add to draft inside the viewport and is added', async ({ page }) => {
+    await page.goto('/o/acme/f/goal/definition/add-tool?environment=default');
+    await page.getByRole('link', { name: /Custom/ }).click();
+    const add = page.getByRole('button', { name: 'Add to draft' });
+    await expect(add).toBeInViewport();
+    await expectNoHorizontalScroll(page);
+    await expectNoClippedElements(page);
+    await expectAccessible(page);
+    await page.getByPlaceholder('docs').fill('docs');
+    await page.getByPlaceholder('https://mcp.example.com/mcp').fill('https://mcp.example.com/mcp');
+    await add.click();
+    await expect(page).toHaveURL(/definition\/environments\?environment=default/);
+    await page.getByRole('radio', { name: 'YAML' }).check();
+    await expect(page.getByText('mcp.example.com')).toBeVisible();
+  });
+});

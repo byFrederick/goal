@@ -57,6 +57,17 @@ test.describe('the Secrets list', () => {
   });
 });
 
+test('the New secret sheet\u2019s Close button is 44 px tall on a phone', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the phone size');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/secrets');
+  await page.getByRole('button', { name: 'New secret' }).click();
+  const close = page.getByRole('dialog', { name: 'New secret' }).getByRole('button', { name: 'Close' });
+  const box = await close.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await expectAccessible(page);
+});
+
 test.describe('a secret’s page', () => {
   test('shows where it is used and its activity, with a Delete that says why it is disabled', async ({ page }) => {
     await page.goto('/o/acme/secrets/github-token');

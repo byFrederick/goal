@@ -3,7 +3,7 @@
 // the list below it, and a phone's tap targets are 44 px. These specs are not run in the box (no browser);
 // CI runs them.
 import { expect, test } from '@playwright/test';
-import { expectNoClippedElements, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoClippedElements, expectNoHorizontalScroll } from './support';
 
 const sizes = [
   { width: 1440, height: 1000 },
@@ -55,7 +55,8 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
     .getByRole('radio')
     .locator('xpath=..')
     .or(page.getByRole('region', { name: 'MCP servers' }).getByRole('link'))
-    .or(page.getByRole('link', { name: 'Replace value' }));
+    .or(page.getByRole('link', { name: 'Replace value' }))
+    .or(page.getByRole('region', { name: 'MCP servers' }).locator('a[href*="/secrets/"]'));
   await expect(targets.first()).toBeVisible();
   const boxes = await targets.evaluateAll((els) =>
     els.map((el) => {
@@ -66,6 +67,7 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   for (const box of boxes.filter((b) => b.width > 0)) {
     expect(box.height, `${box.name} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
   }
+  await expectAccessible(page);
 });
 
 test('switches the view and opens an environment’s file from a row', async ({ page }, testInfo) => {

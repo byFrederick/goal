@@ -22,7 +22,7 @@ export function Skeleton({ ready, placeholder, children, className }: SkeletonPr
         aria-hidden="true"
         className={cn(
           'col-start-1 row-start-1 min-w-0 transition-[opacity,filter] duration-(--duration-slow) ease-in-out',
-          ready && 'opacity-0 blur-(--blur-small)',
+          ready && 'pointer-events-none opacity-0 blur-(--blur-small)',
         )}
       >
         <div className="animate-skeleton-pulse">{placeholder}</div>
