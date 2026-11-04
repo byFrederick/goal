@@ -172,7 +172,7 @@ func newReviewWorldAt(t *testing.T, now time.Time) *reviewWorld {
 		t: t, org: o.ID, store: store, clock: clock, log: &bytes.Buffer{},
 		defs: &reviewDefs{
 			line: domain.Line{
-				OrgID: o.ID, FactoryID: reviewFactory, VersionID: reviewVersion, Number: 3,
+				OrgID: o.ID, FactoryID: reviewFactory, VersionID: reviewVersion, Number: 3, Name: "acme-review",
 				Runtime: domain.Runtime{ModelConnection: modelConn}, Jonah: policy,
 			},
 			files: bytesOf(reviewFiles),
@@ -250,17 +250,16 @@ func (w *reviewWorld) sentBack(station string, at time.Time, reason string) {
 	w.t.Helper()
 
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
-		FactoryID: reviewFactory, Title: "an item", Type: "task", Station: station, State: domain.StateQueued,
+		FactoryID: reviewFactory, Title: "an item", Type: taskType, Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at.Add(-time.Hour),
 	})
 	if err != nil {
 		w.t.Fatalf("CreateItem: %v", err)
 	}
 
-	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
 	if err := w.store.AppendEvents(w.ctx(), domain.Event{
 		FactoryID: reviewFactory, ItemID: it.ID, At: at, Kind: domain.EventRejected, Station: station, Actor: ada.Name,
-		Data: map[string]any{"actor": ada.Ref(), "reason": reason},
+		Data: map[string]any{"actor": ada.Ref(), keyReason: reason},
 	}); err != nil {
 		w.t.Fatalf("AppendEvents: %v", err)
 	}
@@ -280,7 +279,7 @@ func (w *reviewWorld) span(station string, entered, left time.Time) {
 	w.t.Helper()
 
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
-		FactoryID: reviewFactory, Title: "a passing item", Type: "task", Station: station, State: domain.StateQueued,
+		FactoryID: reviewFactory, Title: "a passing item", Type: taskType, Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: entered,
 	})
 	if err != nil {
@@ -377,7 +376,7 @@ func (w *reviewWorld) finished(at time.Time) {
 	w.t.Helper()
 
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
-		FactoryID: reviewFactory, Title: "a finished item", Type: "task", Station: stBuild, State: domain.StateQueued,
+		FactoryID: reviewFactory, Title: "a finished item", Type: taskType, Station: stBuild, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at.Add(-time.Hour),
 	})
 	if err != nil {
@@ -938,6 +937,7 @@ func (w *reviewWorld) expectFinishedObservations(shorter domain.ProposalID) {
 type output struct {
 	Observations []observation `json:"observations"`
 	Proposals    []proposal    `json:"proposals"`
+	Facts        []fact        `json:"facts,omitempty"`
 }
 
 type observation struct {

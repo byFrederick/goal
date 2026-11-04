@@ -895,7 +895,10 @@ var jonahFiles = map[string]string{
 func newJonahHarness(t *testing.T, d harnessDeps) *harness {
 	t.Helper()
 
-	d.yaml, d.files = jonahYAML, jonahFiles
+	d.yaml = jonahYAML
+	if d.files == nil {
+		d.files = jonahFiles
+	}
 
 	return newHarnessWith(t, Config{}, d)
 }
@@ -1231,12 +1234,16 @@ func expectNoKeys(t *testing.T, body []byte) {
 func TestServeRun_JonahBundleHoldsDefinitionAndProposals(t *testing.T) {
 	t.Parallel()
 
-	h := newJonahHarness(t, harnessDeps{})
+	// With a factory memory, which files.md marks no: the review proposes facts for it instead.
+	files := maps.Clone(jonahFiles)
+	files["memory.yaml"] = "- text: Use acme in samples\n  added: 2026-11-01\n"
+
+	h := newJonahHarness(t, harnessDeps{files: files})
 	h.submit(t, factoryID, "Add a health endpoint", "") // the factory exists once an item does
 	h.decidedProposals(t)
 	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
 
-	expectDefinitionFiles(t, b)
+	expectDefinitionFiles(t, b, files)
 
 	var proposals []string
 
@@ -1294,11 +1301,11 @@ func (h *harness) expectObservationsFile(t *testing.T, b runBundle) {
 
 // expectDefinitionFiles checks TestServeRun_JonahBundleHoldsDefinitionAndProposals's definition/
 // and files.md.
-func expectDefinitionFiles(t *testing.T, b runBundle) {
+func expectDefinitionFiles(t *testing.T, b runBundle, files map[string]string) {
 	t.Helper()
 
 	all := map[string]string{engineerPrompt: "# engineer\n", config.FileName: jonahYAML}
-	maps.Copy(all, jonahFiles)
+	maps.Copy(all, files)
 	delete(all, "skills/acme-conventions/logo.png")
 
 	var got []string
@@ -1323,7 +1330,7 @@ func expectDefinitionFiles(t *testing.T, b runBundle) {
 
 	for p, body := range all {
 		editable := "no"
-		if domain.ProposalPathAllowed(p) {
+		if domain.ProposalPathAllowed(p) && p != config.MemoryFile { // memory takes the review's facts only
 			editable = "yes"
 		}
 

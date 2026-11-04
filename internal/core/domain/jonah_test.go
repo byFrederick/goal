@@ -46,6 +46,18 @@ func TestProposalPathAllowed(t *testing.T) {
 	}
 }
 
+// A review's definition edit may change every path a proposal may edit but memory.yaml, which
+// only goald's memory proposal reaches (ADR 0039 decision 7).
+func TestDefinitionEditAllowed(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]bool{"factory.yaml": true, "rules/a.md": true, "memory.yaml": false, "evals/a.yaml": false} {
+		if got := domain.DefinitionEditAllowed(path); got != want {
+			t.Errorf("DefinitionEditAllowed(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func TestProposal_Check(t *testing.T) {
 	t.Parallel()
 

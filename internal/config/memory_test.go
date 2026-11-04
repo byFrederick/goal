@@ -147,3 +147,18 @@ func memorySchemaRefuses(t *testing.T) {
 		}
 	}
 }
+
+// ProposalCheck reads memory.yaml as JSON for Jonah's memory proposals (ADR 0039 decision 7),
+// keeping an unquoted date as written; a file that does not parse is an error.
+func TestMemory_ProposalCheckReadsMemory(t *testing.T) {
+	t.Parallel()
+
+	got, err := ProposalCheck{}.MemoryJSON([]byte(memoryEntry(5)))
+	if want := `[{"added":"2026-11-01","from":["sre#225"],"text":"aaaaa"}]`; err != nil || string(got) != want {
+		t.Errorf("MemoryJSON = %s, %v; want %s", got, err, want)
+	}
+
+	if got, err := (ProposalCheck{}).MemoryJSON([]byte("- text: [unclosed\n")); err == nil {
+		t.Errorf("MemoryJSON of a file that does not parse = %s, want an error", got)
+	}
+}
