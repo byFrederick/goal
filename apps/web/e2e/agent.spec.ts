@@ -39,7 +39,23 @@ test('the agent page at 768 keeps the crumbs clear of the actions and does not s
   const action = await page.getByRole('link', { name: 'Open prompt file' }).boundingBox();
   expect(crumbs).not.toBeNull();
   expect(action).not.toBeNull();
-  expect((crumbs?.x ?? 0) + (crumbs?.width ?? 0)).toBeLessThanOrEqual(action?.x ?? 0);
+  // Beside the actions, or above them when they wrap to a row under the crumbs.
+  const beside = (crumbs?.x ?? 0) + (crumbs?.width ?? 0) <= (action?.x ?? 0);
+  const above = (crumbs?.y ?? 0) + (crumbs?.height ?? 0) <= (action?.y ?? 0);
+  expect(beside || above).toBe(true);
+});
+
+test('Try another model opens its dialog from More actions at 375 px', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/o/acme/f/goal/agents/reviewer');
+  const more = page.getByRole('button', { name: 'More actions' });
+  await more.click();
+  await page.getByRole('menuitem', { name: /Try another model/ }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(more).toBeFocused();
 });
 
 test('an agent without history says so, and an unknown agent is not found', async ({ page }) => {
