@@ -32,7 +32,7 @@ func (r *countedReviews) Sweep(context.Context) error { r.swept++; return nil }
 
 func (r *countedReviews) Work(context.Context) (int, error) { r.worked++; return 0, nil }
 
-// A round sweeps for threshold reviews only on the goald that takes the schedule lock, and works
+// A round sweeps for daily reviews only on the goald that takes the schedule lock, and works
 // the queue on every goald: claims are leased, so each review runs once wherever it is claimed.
 func TestJonahReviews_SweepsOnlyUnderTheLock(t *testing.T) {
 	t.Parallel()

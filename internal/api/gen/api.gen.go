@@ -4777,18 +4777,20 @@ type JonahPolicy struct {
 type JonahReview struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// Error Why a failed review failed
-	Error      *string            `json:"error,omitempty"`
-	FinishedAt *time.Time         `json:"finished_at,omitempty"`
-	Id         string             `json:"id"`
-	State      JonahReviewState   `json:"state"`
-	Trigger    JonahReviewTrigger `json:"trigger"`
+	// Error Why a failed review failed, or why its last attempt failed while it waits for a retry
+	Error      *string          `json:"error,omitempty"`
+	FinishedAt *time.Time       `json:"finished_at,omitempty"`
+	Id         string           `json:"id"`
+	State      JonahReviewState `json:"state"`
+
+	// Trigger manual when a person asked for it; threshold is goald's daily review
+	Trigger JonahReviewTrigger `json:"trigger"`
 }
 
 // JonahReviewState defines model for JonahReview.State.
 type JonahReviewState string
 
-// JonahReviewTrigger defines model for JonahReview.Trigger.
+// JonahReviewTrigger manual when a person asked for it; threshold is goald's daily review
 type JonahReviewTrigger string
 
 // Judge defines model for Judge.
@@ -9899,9 +9901,9 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo (the `UndoProposal` operationId).
 	UndoProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+	// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 	//
-	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 	QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -13199,9 +13201,9 @@ func (c *Client) UndoProposal(ctx context.Context, org OrgRef, factory FactoryRe
 	return c.Client.Do(req)
 }
 
-// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 //
-// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/reviews (the `QueueJonahReview` operationId).
 func (c *Client) QueueJonahReview(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -27469,9 +27471,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo (the `UndoProposal` operationId).
 	UndoProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*UndoProposalResponse, error)
 
-	// QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
+	// QueueJonahReviewWithResponse Queue a manual review of the factory at once ("Look for improvements now")
 	//
-	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+	// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -40123,9 +40125,9 @@ func (c *ClientWithResponses) UndoProposalWithResponse(ctx context.Context, org 
 	return ParseUndoProposalResponse(rsp)
 }
 
-// QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
+// QueueJonahReviewWithResponse Queue a manual review of the factory at once ("Look for improvements now")
 //
-// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+// The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -49238,7 +49240,7 @@ type ServerInterface interface {
 	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo)
 	UndoProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
-	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+	// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
 	QueueJonahReview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ListJudges The judges of the factory's current version, each with its last 30 days
@@ -66676,7 +66678,7 @@ type StrictServerInterface interface {
 	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo)
 	UndoProposal(ctx context.Context, request UndoProposalRequestObject) (UndoProposalResponseObject, error)
-	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
+	// QueueJonahReview Queue a manual review of the factory at once ("Look for improvements now")
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
 	QueueJonahReview(ctx context.Context, request QueueJonahReviewRequestObject) (QueueJonahReviewResponseObject, error)
 	// ListJudges The judges of the factory's current version, each with its last 30 days

@@ -29,12 +29,20 @@ A bake-off runs one agent's eval cases on two to four models, and by default one
 
 ## Reviews and proposals
 
-A review is one agent run of kind `jonah` per factory. It reads the factory's sent-back events, the `rejected` and `gate_rejected` touches with their reasons, in the window since the last review. It also reads the current version's files and the proposals rejected in the last 90 days, so it does not repeat them. It returns observations and proposals.
+A review is one agent run of kind `jonah` per factory, in a box it can only read. Its agent has the Read, Grep and Glob tools and nothing else: no repository, no secrets, no MCP servers, and at most 40 turns under what the weekly budget has left. The box holds:
+
+- the current version's files;
+- the evidence: one file per item that finished since the last successful review and needed help, with counts across them and the versions published in that time;
+- the `rejected` and `gate_rejected` touches in that window, with their reasons;
+- the open proposals, and those published or rejected in the last 90 days, the rejected ones with their reasons;
+- the knowledge sources that apply to every run, and the factory memory.
+
+Goal's own prompt tells it to group the evidence by cause and propose one change per cause, as small as it can be, citing its items. It must not repeat a rejected proposal or something a recent version already did. When a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice, it says so. It returns observations and proposals.
 
 A proposal is one hypothesis with file edits. Each edit has the whole new content of one file and the SHA-256 of the file it was made from. A review may edit only `factory.yaml`, `agents/`, `skills/`, `rules/` and `contracts/`, never `evals/`.
 
-- A review runs when a person asks for it or when enough new sent-back touches have built up. The threshold is `learning.jonah.proposeAfter`, 5 by default. Each factory has at most one review at a time, and the weekly spend is capped by `learning.jonah.weeklyUsd`.
-- On a threshold review, an observation becomes a proposal only once its count reaches the threshold. Until then it shows as "Watching, n of proposeAfter".
+- goald queues one review a day for each factory with Jonah on that has new evidence, at an hour of the day set by the factory's id. A person can queue one at once. Each factory has at most one review at a time, and the weekly spend is capped by `learning.jonah.weeklyUsd`.
+- On a daily review, an observation becomes a proposal only once its count reaches `learning.jonah.proposeAfter`, 5 by default. Until then it shows as "Watching, n of proposeAfter". A review a person asked for may propose below it.
 - Each factory numbers its proposals from 1. A proposal is `proposed`, `published`, `applied`, `rejected` or `superseded`.
 - Approve opens a draft from the current version, writes the proposal's files into it and publishes it as the person who approved. It is refused when the factory already has an open draft, or when a file changed since Jonah read it, so a stale proposal cannot overwrite newer work.
 - Edit writes the proposal into the draft, so the person can continue in the builder.
@@ -60,7 +68,13 @@ The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in t
 
 ## Where the review loop stands
 
-goald starts the review loop and sweeps for threshold reviews every minute by default (`GOAL_JONAH_REVIEW_EVERY`). The manual trigger is not available yet: the web app's "Look for improvements now" is not available yet, `goal jonah look` refuses, and the API answers a manual review with `review-loop-not-running`. Learned facts, eval cases proposed by a review, and judges proposed by a review are not part of reviews yet.
+goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). Each round queues the daily reviews that are due and runs the queued ones.
+
+- **Look for improvements now:** `goal jonah look` and `POST …/jonah/reviews` queue a review at once. The answer is `review-in-flight` while one is pending or running, and `learning-budget-exhausted` once the factory's review runs of the last 7 days cost `learning.jonah.weeklyUsd`. The web app's button is not wired to it yet.
+- **The window:** a review reads what finished since the last successful review ended, or the last 30 days before the first. A failed review does not move it.
+- **Retries:** a review whose run fails or whose answer does not parse is tried again, at most twice. After the third failure it ends `failed`, and its error shows as the last review in `GET …/jonah`. A spent budget or a deleted version fails it at once.
+
+Learned facts, eval cases proposed by a review, and judges proposed by a review are not part of reviews yet.
 
 A goald without judges or evals shows the Judges, Evals and Bake-offs pages empty, with creating a judge, an eval case or a bake-off not available yet.
 

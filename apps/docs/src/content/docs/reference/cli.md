@@ -707,7 +707,7 @@ Flags: `--reason "..."`, `--factory F`.
 goal jonah look [--factory F]
 ```
 
-queue a review of the factory's sent-back runs now
+queue a review of what the factory finished, now
 
 Flags: `--factory F`.
 

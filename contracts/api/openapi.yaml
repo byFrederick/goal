@@ -2884,12 +2884,11 @@ paths:
       operationId: queueJonahReview
       x-goal-scope: definition:edit
       tags: [learning]
-      summary: Queue a manual review of the factory's sent-back runs (decision 2)
+      summary: Queue a manual review of the factory at once ("Look for improvements now")
       description: >-
-        The review reads the sent-back touches since the last review's window ended (30 days
-        back before the first) on the current version; goald's review loop runs it. 409
-        review-loop-not-running while no review loop runs (none does until software#344 ships):
-        nothing is queued. 409 review-in-flight while a review is pending or running;
+        The review reads what finished since the last done review's window ended (30 days back
+        before the first) on the current version; goald's review loop runs it, retrying a failed
+        run twice. 409 review-in-flight while a review is pending or running;
         learning-budget-exhausted while the factory's jonah runs over the last 7 days cost
         learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
       responses:
@@ -7509,8 +7508,8 @@ components:
       properties:
         id: { type: string }
         state: { type: string, enum: [pending, running, done, failed] }
-        trigger: { type: string, enum: [manual, threshold] }
-        error: { type: string, description: Why a failed review failed }
+        trigger: { type: string, enum: [manual, threshold], description: "manual when a person asked for it; threshold is goald's daily review" }
+        error: { type: string, description: "Why a failed review failed, or why its last attempt failed while it waits for a retry" }
         created_at: { type: string, format: date-time }
         finished_at: { type: string, format: date-time }
     JonahOverview:

@@ -161,42 +161,12 @@ export const Judge = z.object({
 });
 export type Judge = z.infer<typeof Judge>;
 
-/** A factory definition file as a Jonah review reads it: its path in the definition, its sha256 and its text. */
-export const JonahFile = z.object({
-  path: z.string().min(1),
-  sha256: z.string().regex(/^[0-9a-f]{64}$/),
-  content: z.string(),
-});
-export type JonahFile = z.infer<typeof JonahFile>;
-
-/** A sent-back event in the review's window: an item's touch that a station or a gate sent back, with its reason. */
-export const JonahEvent = z.object({
-  /** Names the event in the review's evidence; a proposal's evidence points at this id. */
-  id: z.string().min(1),
-  item_ref: z.string(),
-  title: z.string(),
-  station: z.string(),
-  agent: z.string(),
-  kind: z.string(),
-  reason: z.string(),
-});
-export type JonahEvent = z.infer<typeof JonahEvent>;
-
-/** A proposal the factory rejected in the last 90 days, with the reason a person gave: a later review does not repeat it. */
-export const JonahRejected = z.object({
-  title: z.string(),
-  summary: z.string(),
-  paths: z.array(z.string()),
-  reason: z.string(),
-});
-export type JonahRejected = z.infer<typeof JonahRejected>;
-
-/** Jonah mode (ADR 0034): the factory's definition, its sent-back events and its rejected proposals, read in one model call. */
+/**
+ * Jonah mode (ADR 0034, ADR 0039 decision 4): the review's policy. Everything it reads is a file
+ * of the bundle under /goal (definition/, evidence/, proposals/, files.md, events.md).
+ */
 export const Jonah = z.object({
-  files: z.array(JonahFile),
-  events: z.array(JonahEvent),
-  rejected: z.array(JonahRejected),
-  /** The policy's proposeAfter: a threshold review proposes an observation only when its count reaches it. */
+  /** The policy's proposeAfter: a daily review proposes an observation only when its count reaches it. */
   propose_after: z.number().int().min(1),
   /** Whether a person asked for this review, which may propose below the threshold. */
   manual: z.boolean(),
@@ -247,7 +217,7 @@ const taskFields = z.object({
   draft_request: DraftRequest.optional(),
   /** Judge mode (ADR 0025): the run scores this material with this judge, in one model call without tools. */
   judge: Judge.optional(),
-  /** Jonah mode (ADR 0034): the run reviews the factory and returns observations and proposals, in one model call without tools. */
+  /** Jonah mode (ADR 0039 decision 4): the run reads its box with Read, Grep and Glob and returns observations and proposals. */
   jonah: Jonah.optional(),
 });
 

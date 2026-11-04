@@ -64,6 +64,10 @@ type ProposalID string
 // ObservationID identifies one observation.
 type ObservationID string
 
+// JonahBudgetWindow is how far back a factory's weekly Jonah budget counts its review runs (ADR
+// 0034 decision 2).
+const JonahBudgetWindow = 7 * 24 * time.Hour
+
 // JonahTrigger is why a review was queued: a person asked, or the factory's sent-back touches
 // reached learning.jonah.proposeAfter.
 type JonahTrigger string
@@ -148,8 +152,9 @@ func (n NewJonahReview) Check() error {
 	return errors.Join(errs...)
 }
 
-// JonahReviewResult is how a claimed review ended: done with its proposals and observations, or
-// failed with Error. RunID is the review's agent run, when it had one.
+// JonahReviewResult is how a claimed review ended: done with its proposals and observations,
+// failed with Error, or pending again with Error to be retried (ADR 0039 decision 3), storing
+// nothing. RunID is the review's agent run, when it had one.
 type JonahReviewResult struct {
 	State        JonahReviewState
 	Error        string
@@ -157,6 +162,19 @@ type JonahReviewResult struct {
 	Proposals    []NewProposal
 	Observations []NewObservation
 	At           time.Time
+}
+
+// stateProblem is what makes r's state impossible: one that is not done, failed or pending, or a
+// review to retry that stores something. "" when there is none.
+func (r JonahReviewResult) stateProblem() string {
+	switch {
+	case r.State != JonahDone && r.State != JonahFailed && r.State != JonahPending:
+		return fmt.Sprintf("state %q is not done, failed or pending", r.State)
+	case r.State == JonahPending && (len(r.Proposals) > 0 || len(r.Observations) > 0):
+		return "a review to retry stores no proposal or observation"
+	default:
+		return ""
+	}
 }
 
 // Check reports what makes r impossible to record, wrapping ErrInvalid.
@@ -167,8 +185,8 @@ func (r JonahReviewResult) Check() error {
 		errs = append(errs, fmt.Errorf("jonah review result: "+format+": %w", append(args, ErrInvalid)...))
 	}
 
-	if r.State != JonahDone && r.State != JonahFailed {
-		bad("state %q is not done or failed", r.State)
+	if reason := r.stateProblem(); reason != "" {
+		bad("%s", reason)
 	}
 
 	if utf8.RuneCountInString(r.Error) > maxJonahError {

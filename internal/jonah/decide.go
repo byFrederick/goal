@@ -47,7 +47,7 @@ type Proposals interface {
 	DecideProposal(ctx context.Context, factory domain.FactoryID, number int64, d domain.ProposalDecision) (domain.Proposal, error)
 	UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal, at time.Time) (domain.Proposal, error)
 	QueueJonahReview(ctx context.Context, n domain.NewJonahReview) (domain.JonahReview, error)
-	JonahReviews(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.JonahReview, error)
+	LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error)
 	JonahSpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 }
 
@@ -69,7 +69,7 @@ type Decider struct {
 // Windows of a manual review and its budget.
 const (
 	// BudgetWindow is how far back the weekly budget counts review runs (decision 2).
-	BudgetWindow = 7 * 24 * time.Hour
+	BudgetWindow = domain.JonahBudgetWindow
 	// FirstWindow is how far back a factory's first review reads sent-back touches.
 	FirstWindow = 30 * 24 * time.Hour
 )
@@ -369,8 +369,8 @@ func (dc *Decider) reversed(ctx context.Context, f domain.FactoryID, p domain.Pr
 	return out, nil
 }
 
-// QueueReview queues a manual review of f on version, under policy (decision 2): it reads the
-// sent-back touches since the last review's window ended, or FirstWindow back. It refuses with
+// QueueReview queues a manual review of f on version, under policy (decision 2): it reads what
+// finished since the last done review's window ended, or FirstWindow back (ADR 0039 decision 3). It refuses with
 // domain.ErrLearningBudgetExhausted while the review runs of the last BudgetWindow cost
 // policy.WeeklyUSD or more, and with domain.ErrReviewInFlight while one is pending or running.
 func (dc *Decider) QueueReview(ctx context.Context, f domain.FactoryID, version domain.DefinitionVersionID, policy domain.JonahPolicy) (domain.JonahReview, error) {

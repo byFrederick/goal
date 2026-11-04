@@ -125,11 +125,17 @@ func (s *Store) FinishJonahReview(ctx context.Context, claimed domain.JonahRevie
 		proposals []domain.Proposal
 	)
 
+	// A review put back to pending for a retry has no finish time (ADR 0039 decision 3).
+	finished := optionalTime(r.At)
+	if r.State == domain.JonahPending {
+		finished = nil
+	}
+
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		var err error
 
 		review, err = q.FinishJonahReview(ctx, db.FinishJonahReviewParams{
-			State: string(r.State), Error: r.Error, RunID: run, FinishedAt: r.At, ID: id, LeaseUntil: claimed.LeaseUntil,
+			State: string(r.State), Error: r.Error, RunID: run, FinishedAt: finished, ID: id, LeaseUntil: claimed.LeaseUntil,
 		})
 		if err != nil {
 			return err
@@ -273,6 +279,29 @@ func (s *Store) JonahReviews(ctx context.Context, factory domain.FactoryID, limi
 	}
 
 	return out, nil
+}
+
+// LastDoneJonahReview implements ports.JonahStore.
+func (s *Store) LastDoneJonahReview(ctx context.Context, factory domain.FactoryID) (domain.JonahReview, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return domain.JonahReview{}, domain.ErrNoOrg
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.JonahReview{}, fmt.Errorf("last done jonah review: %w", err)
+	}
+
+	r, err := fetch(ctx, s.read, func(q *db.Queries) (db.JonahReview, error) { return q.LastDoneJonahReview(ctx, f) })
+
+	switch {
+	case notFound(err):
+		return domain.JonahReview{}, fmt.Errorf("last done jonah review of factory %s: %w", factory, ports.ErrNotFound)
+	case err != nil:
+		return domain.JonahReview{}, fmt.Errorf("last done jonah review of factory %s: %w", factory, err)
+	}
+
+	return jonahReviewFrom(r), nil
 }
 
 // Proposals implements ports.JonahStore.
@@ -457,27 +486,6 @@ func (s *Store) JonahSpendSince(ctx context.Context, factory domain.FactoryID, s
 	}
 
 	return usd, nil
-}
-
-// SentBackSince implements ports.JonahStore over item_touches.
-func (s *Store) SentBackSince(ctx context.Context, factory domain.FactoryID, since time.Time) (int, error) {
-	if _, ok := domain.OrgFrom(ctx); !ok {
-		return 0, domain.ErrNoOrg
-	}
-
-	f, err := parseID("factory", string(factory))
-	if err != nil {
-		return 0, fmt.Errorf("sent back: %w", err)
-	}
-
-	n, err := fetch(ctx, s.read, func(q *db.Queries) (int64, error) {
-		return q.SentBackSince(ctx, db.SentBackSinceParams{FactoryID: f, Since: since})
-	})
-	if err != nil {
-		return 0, fmt.Errorf("sent back in factory %s: %w", factory, err)
-	}
-
-	return int(n), nil
 }
 
 // SentBackBetween implements ports.JonahStore over item_touches and lease_spans.

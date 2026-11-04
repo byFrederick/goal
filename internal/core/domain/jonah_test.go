@@ -89,6 +89,14 @@ func TestJonahReviewResult_AndDecisionCheck(t *testing.T) {
 		t.Errorf("result running: %v, want ErrInvalid", err)
 	}
 
+	if err := (domain.JonahReviewResult{State: domain.JonahPending, Error: "the run failed", At: at}).Check(); err != nil {
+		t.Errorf("a review to retry: %v", err)
+	}
+
+	if err := (domain.JonahReviewResult{State: domain.JonahPending, At: at, Proposals: []domain.NewProposal{p}}).Check(); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("a review to retry with a proposal: %v, want ErrInvalid", err)
+	}
+
 	for name, d := range map[string]domain.ProposalDecision{
 		"back to proposed":   {State: domain.ProposalProposed, By: domain.LocalUser, At: at},
 		"reject, no reason":  {State: domain.ProposalRejected, RejectReason: "  ", By: domain.LocalUser, At: at},

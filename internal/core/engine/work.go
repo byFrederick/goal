@@ -332,7 +332,17 @@ func (e *Engine) applyPolicy(ctx context.Context, c *claimed) (string, error) {
 // (builtins.read off) or without Knowledge, and no pin for a source with no snapshot yet or that
 // the organization no longer has. An error when the snapshots cannot be read.
 func (e *Engine) pinKnowledge(ctx context.Context, l domain.Line, agent domain.AgentSpec, run domain.RuleTarget) ([]domain.KnowledgePin, error) {
-	if e.knowledge == nil || !agent.ReadsFiles() {
+	if !agent.ReadsFiles() {
+		return nil, nil
+	}
+
+	return e.pinSources(ctx, l, run)
+}
+
+// pinSources is the newest snapshot of each of the line's knowledge sources that applies to run,
+// as pinKnowledge decides them for any reader; none without Knowledge.
+func (e *Engine) pinSources(ctx context.Context, l domain.Line, run domain.RuleTarget) ([]domain.KnowledgePin, error) {
+	if e.knowledge == nil {
 		return nil, nil
 	}
 

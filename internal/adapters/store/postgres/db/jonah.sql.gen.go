@@ -300,12 +300,13 @@ type FinishJonahReviewParams struct {
 	State      string
 	Error      string
 	RunID      *uuid.UUID
-	FinishedAt time.Time
+	FinishedAt *time.Time
 	ID         uuid.UUID
 	LeaseUntil time.Time
 }
 
-// Ends a running review under the lease its claim returned. No row when the lease is lost.
+// Ends a running review under the lease its claim returned, or puts it back to pending for a
+// retry with no finished_at. No row when the lease is lost.
 func (q *Queries) FinishJonahReview(ctx context.Context, arg FinishJonahReviewParams) (JonahReview, error) {
 	row := q.db.QueryRow(ctx, finishJonahReview,
 		arg.State,
@@ -611,6 +612,36 @@ func (q *Queries) JonahSpendSince(ctx context.Context, arg JonahSpendSinceParams
 	return spend_usd, err
 }
 
+const lastDoneJonahReview = `-- name: LastDoneJonahReview :one
+SELECT id, org_id, factory_id, version_id, trigger, state, lease_until, attempts, run_id, window_start, window_end, error, created_by, created_at, finished_at FROM jonah_reviews WHERE factory_id = $1 AND state = 'done'
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// The factory's newest done review, where the next window starts (jonah_reviews_factory_idx).
+func (q *Queries) LastDoneJonahReview(ctx context.Context, factoryID uuid.UUID) (JonahReview, error) {
+	row := q.db.QueryRow(ctx, lastDoneJonahReview, factoryID)
+	var i JonahReview
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.VersionID,
+		&i.Trigger,
+		&i.State,
+		&i.LeaseUntil,
+		&i.Attempts,
+		&i.RunID,
+		&i.WindowStart,
+		&i.WindowEnd,
+		&i.Error,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const lastProposalNumber = `-- name: LastProposalNumber :one
 SELECT coalesce(max(number), 0)::bigint FROM jonah_proposals WHERE factory_id = $1
 `
@@ -892,24 +923,6 @@ func (q *Queries) SentBackBetween(ctx context.Context, arg SentBackBetweenParams
 		return nil, err
 	}
 	return items, nil
-}
-
-const sentBackSince = `-- name: SentBackSince :one
-SELECT count(*)::bigint FROM item_touches
-WHERE factory_id = $1 AND kind IN ('rejected', 'gate_rejected') AND at >= $2
-`
-
-type SentBackSinceParams struct {
-	FactoryID uuid.UUID
-	Since     time.Time
-}
-
-// The factory's sent-back touches (a person's rejected or gate_rejected) at or after since.
-func (q *Queries) SentBackSince(ctx context.Context, arg SentBackSinceParams) (int64, error) {
-	row := q.db.QueryRow(ctx, sentBackSince, arg.FactoryID, arg.Since)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
 }
 
 const stationFlowSpans = `-- name: StationFlowSpans :one

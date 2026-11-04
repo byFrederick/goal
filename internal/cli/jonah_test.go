@@ -13,6 +13,7 @@ import (
 
 const (
 	webProposals = "/v1/orgs/acme/factories/web/jonah/proposals"
+	webReviews   = "/v1/orgs/acme/factories/web/jonah/reviews"
 )
 
 func goalJonah(t *testing.T, api string, args ...string) (string, error) {
@@ -161,11 +162,14 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 	srv, sent := evalGoald(t, map[string]evalAnswer{
 		"POST " + webProposals + "/7/approve": {http.StatusOK, gen.ProposalDecided{Number: 7, State: gen.ProposalStatePublished, Version: &five}},
 		"POST " + webProposals + "/8/edit":    {http.StatusOK, gen.ProposalDecided{Number: 8, State: gen.ProposalStateApplied, DraftRevision: &rev}},
+		"POST " + webReviews: {http.StatusAccepted, gen.JonahReview{
+			Id: "019a0000-0000-7000-8000-0000000000aa", State: gen.JonahReviewStatePending, Trigger: gen.JonahReviewTriggerManual,
+		}},
 	})
 
 	var got []string
 
-	for _, args := range [][]string{{verbApprove, "7"}, {jonahEditCmd, "#8"}} {
+	for _, args := range [][]string{{verbApprove, "7"}, {jonahEditCmd, "#8"}, {jonahLookCmd}} {
 		out, err := goalJonah(t, srv.URL, append(args, "--factory", searchFactory)...)
 		if err != nil {
 			t.Fatalf("goal jonah %q: %v", args, err)
@@ -177,6 +181,7 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 	want := []string{
 		"proposal #7 published as v5\n",
 		"proposal #8 written into the draft (revision 3): continue in the builder\n",
+		"review 019a0000-0000-7000-8000-0000000000aa queued: goal jonah lists its proposals once it finishes\n",
 	}
 	if strings.Join(got, "") != strings.Join(want, "") {
 		t.Errorf("goal jonah printed\n%s\nwant\n%s", strings.Join(got, ""), strings.Join(want, ""))
@@ -185,6 +190,7 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 	wantSent := []string{
 		"POST " + webProposals + "/7/approve",
 		"POST " + webProposals + "/8/edit",
+		"POST " + webReviews,
 	}
 	if s := sent(); strings.Join(s, "\n") != strings.Join(wantSent, "\n") {
 		t.Errorf("goald was sent\n%s\nwant\n%s", strings.Join(s, "\n"), strings.Join(wantSent, "\n"))
@@ -197,20 +203,19 @@ func TestJonah_DecisionsAndLook(t *testing.T) {
 	}
 }
 
-// goal jonah look refuses with the plain sentence and exits non-zero while no review loop runs,
-// and it never calls goald (software#344 lifts the refusal).
-func TestJonah_LookRefusesUntilTheLoopShips(t *testing.T) {
+// goal jonah look prints a review in flight or a spent budget as its one-line message.
+func TestJonah_LookConflicts(t *testing.T) {
 	t.Parallel()
 
-	srv, sent := evalGoald(t, map[string]evalAnswer{})
+	for code, want := range map[string]string{
+		"review-in-flight":          "a review is already pending or running: wait for it to finish",
+		"learning-budget-exhausted": "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less",
+	} {
+		srv, _ := evalGoald(t, map[string]evalAnswer{"POST " + webReviews: {http.StatusConflict, jonahRefusal(http.StatusConflict, code)}})
 
-	_, err := goalJonah(t, srv.URL, jonahLookCmd, "--factory", searchFactory)
-	if err == nil || err.Error() != reviewsNotStarted {
-		t.Fatalf("goal jonah look = %v, want %q", err, reviewsNotStarted)
-	}
-
-	if s := sent(); len(s) != 0 {
-		t.Errorf("goald was sent %q, want no request", s)
+		if _, err := goalJonah(t, srv.URL, jonahLookCmd, "--factory", searchFactory); err == nil || err.Error() != want {
+			t.Errorf("goal jonah look on %s = %v, want %q", code, err, want)
+		}
 	}
 }
 
@@ -227,7 +232,6 @@ func TestJonah_ConflictsPrintOneLine(t *testing.T) {
 		{"proposal-stale", []string{verbApprove, "7"}, webProposals + "/7/approve", "a file changed since Jonah made this proposal, so it no longer applies: reject it"},
 		{"draft-conflict", []string{jonahEditCmd, "7"}, webProposals + "/7/edit", "the draft's copy of a file changed since Jonah made this proposal: nothing was written"},
 		{"proposal-decided", []string{verbReject, "7", flagReason, "no"}, webProposals + "/7/reject", "the proposal was already decided: goal jonah show 7 says how"},
-		{"review-loop-not-running", []string{verbApprove, "7"}, webProposals + "/7/approve", "Reviews start when Jonah's review loop ships"},
 		{"review-in-flight", []string{verbApprove, "7"}, webProposals + "/7/approve", "a review is already pending or running: wait for it to finish"},
 		{"learning-budget-exhausted", []string{verbApprove, "7"}, webProposals + "/7/approve", "Jonah's runs reached the factory's weekly budget (learning.jonah.weeklyUsd): try again when the last 7 days cost less"},
 	}

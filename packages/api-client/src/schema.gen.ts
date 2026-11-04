@@ -2395,8 +2395,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Queue a manual review of the factory's sent-back runs (decision 2)
-         * @description The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
+         * Queue a manual review of the factory at once ("Look for improvements now")
+         * @description The review reads what finished since the last done review's window ended (30 days back before the first) on the current version; goald's review loop runs it, retrying a failed run twice. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
          */
         post: operations["queueJonahReview"];
         delete?: never;
@@ -6024,9 +6024,12 @@ export interface components {
             id: string;
             /** @enum {string} */
             state: "pending" | "running" | "done" | "failed";
-            /** @enum {string} */
+            /**
+             * @description manual when a person asked for it; threshold is goald's daily review
+             * @enum {string}
+             */
             trigger: "manual" | "threshold";
-            /** @description Why a failed review failed */
+            /** @description Why a failed review failed, or why its last attempt failed while it waits for a retry */
             error?: string;
             /** Format: date-time */
             created_at: string;

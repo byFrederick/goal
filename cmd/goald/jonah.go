@@ -12,8 +12,8 @@ import (
 	"github.com/byFrederick/goal/internal/jonah"
 )
 
-// jonahReviewLoop is the Jonah review loop (ADR 0034): threshold reviews queued from store, each
-// queued review run by eng as a jonah-kind run on its version in defs, within s.JonahReview's times.
+// jonahReviewLoop is the Jonah review loop (ADR 0034, ADR 0039 decision 3): daily reviews queued
+// from store, each queued review run by eng as a jonah-kind run on its version in defs, within s.JonahReview's times.
 func jonahReviewLoop(s settings, store *postgres.Store, defs *definitions.Cache, eng *engine.Engine, clock ports.Clock,
 	log *slog.Logger,
 ) *jonah.Reviews {
@@ -51,7 +51,7 @@ func runJonahReviews(ctx context.Context, log *slog.Logger, lock scheduleLock, r
 	}
 }
 
-// jonahRound queues the threshold reviews that are due, on the goald holding the schedule lock
+// jonahRound queues the daily reviews that are due, on the goald holding the schedule lock
 // only, and then works the queued reviews on every goald: each claim is leased (ClaimJonahReview),
 // so a review runs once wherever it is claimed. Failures are logged and retried next round.
 func jonahRound(ctx context.Context, log *slog.Logger, lock scheduleLock, reviews jonahReviews) {
