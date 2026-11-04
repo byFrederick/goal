@@ -943,13 +943,19 @@ func (h *harness) decidedProposals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	file := func(p string) []domain.ProposalFile { return []domain.ProposalFile{{Path: p, Content: "new\n"}} }
+	file := func(p string) []domain.ProposalEdit {
+		return []domain.ProposalEdit{{Path: p, Replacements: []domain.Replacement{{Old: "old\n", New: "new\n"}}}}
+	}
 
 	_, stored, err := h.store.FinishJonahReview(ctx, claimed, domain.JonahReviewResult{State: domain.JonahDone, At: now, Proposals: []domain.NewProposal{
-		{Title: "Ask for tests", Summary: "The engineer skips tests.", Files: file(jonahRule)},
-		{Title: "An old idea", Summary: "Rejected long ago.", Files: file(engineerPrompt)},
-		{Title: "Still open", Files: file("factory.yaml")},
-		{Title: "Name the checks", Summary: "The reviewer forgets the checks.", Files: file(jonahRule)},
+		{Title: "Ask for tests", Summary: "The engineer skips tests.", Edits: file(jonahRule)},
+		{Title: "An old idea", Summary: "Rejected long ago.", Edits: file(engineerPrompt)},
+		{Title: "Still open", Edits: file("factory.yaml")},
+		{Title: "Name the checks", Summary: "The reviewer forgets the checks.", Edits: file(jonahRule)},
+	}, Observations: []domain.NewObservation{
+		{Summary: "Checks are named late", Detail: "Three reviews in a row.", Count: 3, Proposal: 3},
+		{Summary: "Health endpoints lack tests", Count: 2},
+		{Summary: "The sandbox was lost", Count: 4, NotJonahs: true},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -1179,7 +1185,7 @@ func expectJonahSpec(t *testing.T, b runBundle, c domain.TaskClaims, it domain.I
 
 	for p, body := range b.Files {
 		if !slices.ContainsFunc([]string{"evidence/", "definition/", "proposals/"}, func(dir string) bool { return strings.HasPrefix(p, dir) }) &&
-			p != "files.md" && p != "events.md" {
+			p != "files.md" && p != "events.md" && p != "observations.md" {
 			got.Files[p] = body
 		}
 	}
@@ -1255,6 +1261,34 @@ func TestServeRun_JonahBundleHoldsDefinitionAndProposals(t *testing.T) {
 
 	if published := string(b.Files["proposals/published/4.md"]); !strings.Contains(published, "- Published as version "+string(version)) {
 		t.Errorf("proposals/published/4.md =\n%s\nwant the version it published", published)
+	}
+
+	h.expectObservationsFile(t, b)
+}
+
+// expectObservationsFile checks observations.md of decidedProposals' review: its open
+// observations with the ids a review gives to update them and their counts, and not the one
+// that is not Jonah's (ADR 0039 decision 5).
+func (h *harness) expectObservationsFile(t *testing.T, b runBundle) {
+	t.Helper()
+
+	open, err := h.store.OpenObservations(domain.WithOrg(t.Context(), h.org), factoryID, 10)
+	if err != nil || len(open) != 2 {
+		t.Fatalf("OpenObservations = %+v, %v; want 2", open, err)
+	}
+
+	obs := string(b.Files["observations.md"])
+
+	for _, o := range open {
+		for _, want := range []string{"## " + o.Summary, "- id: `" + string(o.ID) + "`", "- Count so far: " + strconv.Itoa(o.Count), "- State: " + string(o.State)} {
+			if !strings.Contains(obs, want) {
+				t.Errorf("observations.md lacks %q:\n%s", want, obs)
+			}
+		}
+	}
+
+	if !strings.Contains(obs, "> Three reviews in a row.") || strings.Contains(obs, "The sandbox was lost") {
+		t.Errorf("observations.md =\n%s\nwant the open observations' details and not the one that is not Jonah's", obs)
 	}
 }
 

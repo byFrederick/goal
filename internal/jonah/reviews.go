@@ -34,9 +34,18 @@ type ReviewDeps struct {
 	Jonah       ports.JonahStore
 	Definitions ReviewDefinitions
 	Runner      TaskRunner
-	Clock       ports.Clock
+	// Check checks the files a proposal's edits give (ADR 0039 decision 6).
+	Check DefinitionCheck
+	// Policies are the organization's policy, whose allowed models an agent's model may change to.
+	Policies Policies
+	Clock    ports.Clock
 	// Log may be nil.
 	Log *slog.Logger
+}
+
+// Policies reads the organization's policy; ports.OrgPolicies satisfies it.
+type Policies interface {
+	Get(ctx context.Context) (domain.OrgPolicy, error)
 }
 
 // ReviewConfig sets the review loop's times.
@@ -51,11 +60,16 @@ type ReviewConfig struct {
 // definition.
 const ReviewAgent = "jonah"
 
-// reviewEventLimit is how many sent-back events a review reads, as the gateway serves them.
-const reviewEventLimit = 200
+// Limits of what a review's output is checked against: the sent-back events, as the gateway
+// serves them, and the open observations and proposals.
+const (
+	reviewEventLimit       = 200
+	reviewObservationLimit = 200
+	reviewProposalLimit    = 500
+)
 
 // reviewActor queues the daily reviews.
-var reviewActor = domain.Actor{Kind: domain.ActorSystem, ID: ReviewAgent, Name: "Jonah"}
+var reviewActor = domain.JonahActor
 
 // Reviews queues each factory's daily review and works the queued reviews of every factory (ADR
 // 0034 decisions 1 to 5, ADR 0039 decisions 3 and 4): one jonah-kind run per attempt, within the
@@ -394,7 +408,8 @@ func ran(res domain.JonahReviewResult, run domain.RunResult) domain.JonahReviewR
 	return res
 }
 
-// result checks out against rv's version and window and computes each kept proposal's before
+// result checks out against rv's version and window, the factory's open observations and
+// proposals and the organization's allowed models, and computes each kept proposal's before
 // value: a done result.
 func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.JonahPolicy, out reviewOutput) (domain.JonahReviewResult, error) {
 	files, err := r.d.Definitions.VersionFiles(ctx, rv.VersionID)
@@ -407,11 +422,30 @@ func (r *Reviews) result(ctx context.Context, rv domain.JonahReview, p domain.Jo
 		return domain.JonahReviewResult{}, fmt.Errorf("read sent-back events: %w", err)
 	}
 
-	proposals, observations := checkOutput(reviewInput{review: rv, proposeAfter: proposeAfter(p), files: files, events: events}, out,
-		func(i int, reason string) {
-			r.log.WarnContext(ctx, "jonah proposal dropped", slog.String("review_id", string(rv.ID)), slog.Int("proposal", i),
-				slog.String("reason", reason))
-		})
+	in := reviewInput{review: rv, proposeAfter: proposeAfter(p), files: files, events: events, check: r.d.Check}
+
+	if in.observations, err = r.d.Jonah.OpenObservations(ctx, rv.FactoryID, reviewObservationLimit); err != nil {
+		return domain.JonahReviewResult{}, fmt.Errorf("read open observations: %w", err)
+	}
+
+	in.proposals, err = r.d.Jonah.Proposals(ctx, ports.ProposalQuery{Factory: rv.FactoryID, State: domain.ProposalProposed, Limit: reviewProposalLimit})
+	if err != nil {
+		return domain.JonahReviewResult{}, fmt.Errorf("read open proposals: %w", err)
+	}
+
+	if r.d.Policies != nil {
+		policy, err := r.d.Policies.Get(ctx)
+		if err != nil {
+			return domain.JonahReviewResult{}, fmt.Errorf("read the organization's policy: %w", err)
+		}
+
+		in.models = policy.AllowedModels
+	}
+
+	proposals, observations := checkOutput(in, out, func(i int, reason, detail string) {
+		r.log.WarnContext(ctx, "jonah proposal dropped", slog.String("review_id", string(rv.ID)), slog.Int("proposal", i),
+			slog.String("reason", reason), slog.String("detail", truncate(detail, maxReviewError)))
+	})
 
 	flows := map[string]domain.StationFlow{}
 

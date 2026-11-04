@@ -35,18 +35,29 @@ A review is one agent run of kind `jonah` per factory, in a box it can only read
 - the evidence: one file per item that finished since the last successful review and needed help, with counts across them and the versions published in that time;
 - the `rejected` and `gate_rejected` touches in that window, with their reasons;
 - the open proposals, and those published or rejected in the last 90 days, the rejected ones with their reasons;
+- the open observations of earlier reviews, each with its id and its count so far;
 - the knowledge sources that apply to every run, and the factory memory.
 
 Goal's own prompt tells it to group the evidence by cause and propose one change per cause, as small as it can be, citing its items. It must not repeat a rejected proposal or something a recent version already did. When a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice, it says so. It returns observations and proposals.
 
-A proposal is one hypothesis with file edits. Each edit has the whole new content of one file and the SHA-256 of the file it was made from. A review may edit only `factory.yaml`, `agents/`, `skills/`, `rules/` and `contracts/`, never `evals/`.
+An observation is a cause with the items it rests on and a count. Observations persist across reviews: a review that sees a cause again names the open observation, adds its items and adds its own count to the count so far. An observation is *watching* until a proposal addresses it, then *proposed*. One whose cause is not a definition problem is *not Jonah's*, and later reviews no longer update it.
+
+A proposal is one hypothesis, stored as a set of exact edits. Each edit names a file and gives replacements: an old text that occurs exactly once in the file, and the new text that replaces it. A new file is given whole. A proposal also names the one number it should move: goald computes today's value from the line, and the review's value after is shown as an estimate.
+
+goald drops a proposal, and logs `jonah proposal dropped` with the reason, when:
+
+- it edits a file outside the allowlist. A proposal may edit `factory.yaml` and the `.md`, `.yaml` and `.json` files under `agents/`, `skills/`, `rules/` and `contracts/`. It may not edit scripts, `evals/` or any other file.
+- it changes a part of `factory.yaml` outside the allowlist. A proposal may change an agent's `model` (to a model the organization's policy allows) and `skills`, the `skills` list (local `./skills/` sources only), `rules`, `contracts`, and a station's `wip`, `buffer` and `gate.maxRework`. goald compares the parsed file before and after. Agents and skills are matched by name and stations by id. A change to anything else is refused, including a station's checks, kind, action or agents, tools, budgets, triggers, intake, environments and `learning`, and a reorder of agents or stations.
+- an old text does not occur exactly once in the version's file, or it gives whole content for a file that exists;
+- the definition with its edits applied has a blocking problem that the version did not have;
+- its title, summary or edits hold an invisible or bidirectional Unicode character, which can hide instructions from the person reading it.
 
 - goald queues one review a day for each factory with Jonah on that has new evidence, at an hour of the day set by the factory's id. A person can queue one at once. Each factory has at most one review at a time.
 - Jonah's budget is `learning.jonah.share`, 5% by default, of what the line spent in the last 7 days. Each review may spend a fifth of it. When the budget is used up, reviews wait and publishes go on. Jonah's spend shows in the factory's spend, but it never stops production work through `runtime.budget.onExhausted`.
-- On a daily review, an observation becomes a proposal only once its count reaches `learning.jonah.proposeAfter`, 3 by default. Until then it shows as "Watching, n of proposeAfter". A review a person asked for may propose below it.
-- Each factory numbers its proposals from 1. A proposal is `proposed`, `published`, `applied`, `rejected` or `superseded`.
-- Approve opens a draft from the current version, writes the proposal's files into it and publishes it as the person who approved. It is refused when the factory already has an open draft, or when a file changed since Jonah read it, so a stale proposal cannot overwrite newer work.
-- Edit writes the proposal into the draft, so the person can continue in the builder.
+- On a daily review, an observation becomes a proposal only once its count across reviews reaches `learning.jonah.proposeAfter`, 3 by default. Until then it shows as "Watching, n of proposeAfter". A review a person asked for may propose below it.
+- Each factory numbers its proposals from 1. A proposal is `proposed`, `published`, `applied`, `rejected` or `superseded`. A new proposal supersedes an open one only when their edits overlap: both edit the same file and their old texts cover some of the same text there, or either gives that file whole. Proposals that touch other parts of a file both stay open.
+- Approve applies the proposal's replacements to the current version's files, opens a draft from the current version, writes the results and publishes it as the person who approved. A change to the same file since the review does not stop it. Approve is refused when the factory already has an open draft. It is also refused as stale when an old text no longer occurs exactly once, so a proposal cannot overwrite newer work.
+- Edit applies the replacements to the draft's copy of each file, so the person can continue in the builder. It is refused with `draft-conflict` when an old text no longer occurs exactly once in the draft.
 - Reject needs a reason, and later reviews read it.
 - To undo a published proposal, use Undo this change (see the next section). Restore also works, but it reverts everything published since.
 
@@ -63,7 +74,7 @@ Goal watches every published version at each station it changes. A station's out
 
 When a Jonah proposal's own number gets worse, Needs you shows a `watch_worse` entry that is not tied to an item. A person's publish never raises one; its watches show on the version.
 
-Undo this change (`POST …/jonah/proposals/{number}/undo`, which needs `definition:edit`) writes a new proposal that reverses the published edits against the current version, whatever has been published since. The new proposal names the one it undoes, waits in Proposals like any other and publishes only when a person approves it. A file the proposal added stays in place; the reversed edits stop referring to it. The undo is refused with `undo-conflict`, naming the file, when the text the change wrote no longer appears exactly once. While an undo of the proposal is open, the Needs you entry goes away and a second undo is refused with `undo-open`.
+Undo this change (`POST …/jonah/proposals/{number}/undo`, which needs `definition:edit`) writes a new proposal whose replacements are the published ones reversed, checked against the current version, whatever has been published since. The new proposal names the one it undoes, waits in Proposals like any other and publishes only when a person approves it. A file the proposal added stays in place; the reversed edits stop referring to it. The undo is refused with `undo-conflict`, naming the file, when the text the change wrote no longer appears exactly once. While an undo of the proposal is open, the Needs you entry goes away and a second undo is refused with `undo-open`.
 
 The decision behind reviews is ADR 0034 (`docs/adr/0034-jonah-proposals.md` in the repository). The evals and judges are described by ADR 0002 and ADR 0025 there.
 

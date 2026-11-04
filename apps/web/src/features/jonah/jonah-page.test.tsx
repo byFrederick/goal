@@ -103,6 +103,7 @@ const overview: JonahOverview = {
       propose_after: 5,
       proposal: 7,
       created_at: '2026-10-28T10:00:00Z',
+      updated_at: '2026-10-28T10:00:00Z',
     },
     {
       id: 'obs-2',
@@ -113,6 +114,7 @@ const overview: JonahOverview = {
       count: 3,
       propose_after: 5,
       created_at: '2026-10-27T10:00:00Z',
+      updated_at: '2026-10-27T10:00:00Z',
     },
   ],
 };

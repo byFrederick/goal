@@ -1034,13 +1034,16 @@ func (e ItemWaitingKind) Valid() bool {
 
 // Defines values for JonahObservationState.
 const (
-	JonahObservationStateProposed JonahObservationState = "proposed"
-	JonahObservationStateWatching JonahObservationState = "watching"
+	JonahObservationStateNotJonahs JonahObservationState = "not_jonahs"
+	JonahObservationStateProposed  JonahObservationState = "proposed"
+	JonahObservationStateWatching  JonahObservationState = "watching"
 )
 
 // Valid indicates whether the value is a known member of the JonahObservationState enum.
 func (e JonahObservationState) Valid() bool {
 	switch e {
+	case JonahObservationStateNotJonahs:
+		return true
 	case JonahObservationStateProposed:
 		return true
 	case JonahObservationStateWatching:
@@ -4719,25 +4722,32 @@ type ItemsAtRemovedStations struct {
 
 // JonahObservation defines model for JonahObservation.
 type JonahObservation struct {
-	// Count How often the pattern was seen
-	Count     int       `json:"count"`
+	// Count How often the cause was seen
+	Count int `json:"count"`
+
+	// CreatedAt When a review first noticed it
 	CreatedAt time.Time `json:"created_at"`
 	Detail    string    `json:"detail"`
 	Id        string    `json:"id"`
 
-	// ItemRefs The items it rests on, as <factory name>#<number>
+	// ItemRefs The items it rests on, as <factory name>#<number>, gathered across reviews
 	ItemRefs []string `json:"item_refs"`
 
 	// Proposal The number of the proposal it became
 	Proposal *int64 `json:"proposal,omitempty"`
 
 	// ProposeAfter The count at which it becomes a proposal
-	ProposeAfter int                   `json:"propose_after"`
-	State        JonahObservationState `json:"state"`
-	Summary      string                `json:"summary"`
+	ProposeAfter int `json:"propose_after"`
+
+	// State proposed: a proposal addresses it; watching: its count has not reached propose_after; not_jonahs: its cause is not a definition problem
+	State   JonahObservationState `json:"state"`
+	Summary string                `json:"summary"`
+
+	// UpdatedAt When a review last updated it
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// JonahObservationState defines model for JonahObservation.State.
+// JonahObservationState proposed: a proposal addresses it; watching: its count has not reached propose_after; not_jonahs: its cause is not a definition problem
 type JonahObservationState string
 
 // JonahOverview defines model for JonahOverview.
@@ -4747,7 +4757,7 @@ type JonahOverview struct {
 	// MonthCostUsd What the factory's jonah runs cost since the first of this UTC month
 	MonthCostUsd float64 `json:"month_cost_usd"`
 
-	// Observations The observations made since Monday 00:00 UTC, newest first
+	// Observations The observations a review updated since Monday 00:00 UTC, the latest updated first
 	Observations []JonahObservation `json:"observations"`
 
 	// Policy The current version's learning.jonah, with its defaults where it sets none
@@ -6255,11 +6265,16 @@ type Proposal struct {
 	// DecidedBy The actor ref of who decided it
 	DecidedBy *string `json:"decided_by,omitempty"`
 
+	// Edits What the proposal stores and Approve and Edit apply again, one per file in path order
+	Edits []ProposalEdit `json:"edits"`
+
 	// Estimate The metric the proposal should move at one station; before is computed from the recorded events
 	Estimate      *ProposalEstimate  `json:"estimate,omitempty"`
 	Evidence      []ProposalEvidence `json:"evidence"`
 	EvidenceCount int                `json:"evidence_count"`
-	Files         []ProposalFile     `json:"files"`
+
+	// Files Each of edits applied to its file in made_against_version, in the same order
+	Files []ProposalFile `json:"files"`
 
 	// MadeAgainstVersion The number of the version the review read
 	MadeAgainstVersion int      `json:"made_against_version"`
@@ -6292,6 +6307,16 @@ type ProposalDecided struct {
 
 	// Version The version Approve published
 	Version *int `json:"version,omitempty"`
+}
+
+// ProposalEdit One file a proposal changes (ADR 0039 decision 6): replacements, applied in order to the file as it is when the proposal is approved or edited into the draft, or the whole content of a new file. base_sha256 is set only on a whole file stored before proposals were replacements: it replaces the file while the file still has that SHA-256.
+type ProposalEdit struct {
+	BaseSha256 *string `json:"base_sha256,omitempty"`
+
+	// Content The whole content of a new file; absent with replacements
+	Content      *string        `json:"content,omitempty"`
+	Path         string         `json:"path"`
+	Replacements *[]Replacement `json:"replacements,omitempty"`
 }
 
 // ProposalEntry defines model for ProposalEntry.
@@ -6334,15 +6359,15 @@ type ProposalEvidence struct {
 	Station *string `json:"station,omitempty"`
 }
 
-// ProposalFile defines model for ProposalFile.
+// ProposalFile One edited file as it reads in the version the proposal was made against, before and after its edit
 type ProposalFile struct {
 	// BaseContent The file in the version the proposal was made against; empty for a new file
 	BaseContent string `json:"base_content"`
 
-	// BaseSha256 The SHA-256 of the file the review read; empty for a new file
+	// BaseSha256 The SHA-256 of the file in that version; empty for a new file
 	BaseSha256 string `json:"base_sha256"`
 
-	// Content The file's new content
+	// Content The file with the proposal's edit applied to base_content
 	Content string `json:"content"`
 	Path    string `json:"path"`
 }
@@ -6390,6 +6415,12 @@ type Ranges map[string]LineRange
 type Rejection struct {
 	// Reason What the agent must change
 	Reason string `json:"reason"`
+}
+
+// Replacement One exact edit of a file; old occurs exactly once in it
+type Replacement struct {
+	New string `json:"new"`
+	Old string `json:"old"`
 }
 
 // Repository defines model for Repository.
@@ -9867,14 +9898,14 @@ type ClientInterface interface {
 
 	// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
 	//
-	// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+	// Applies the proposal's edits again to the current version's files (ADR 0039 decision 6), opens a draft from the current version, writes the results and publishes it through the usual validation and gates. An unrelated change to an edited file since the review does not stop it. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when an edit no longer applies, because a replacement's old text no longer occurs exactly once in its file (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
 	ApproveProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+	// EditProposal Apply the proposal's edits to the draft, opening one if none is open (decision 8)
 	//
-	// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	// Applies the proposal's edits again to the draft's copy of each file and sets the proposal applied; the caller continues in the builder. 409 draft-conflict when an edit no longer applies to the draft's copy, because a replacement's old text no longer occurs exactly once (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit (the `EditProposal` operationId).
 	EditProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -13117,7 +13148,7 @@ func (c *Client) GetProposal(ctx context.Context, org OrgRef, factory FactoryRef
 
 // ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
 //
-// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+// Applies the proposal's edits again to the current version's files (ADR 0039 decision 6), opens a draft from the current version, writes the results and publishes it through the usual validation and gates. An unrelated change to an edited file since the review does not stop it. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when an edit no longer applies, because a replacement's old text no longer occurs exactly once in its file (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
 func (c *Client) ApproveProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -13132,9 +13163,9 @@ func (c *Client) ApproveProposal(ctx context.Context, org OrgRef, factory Factor
 	return c.Client.Do(req)
 }
 
-// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+// EditProposal Apply the proposal's edits to the draft, opening one if none is open (decision 8)
 //
-// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+// Applies the proposal's edits again to the draft's copy of each file and sets the proposal applied; the caller continues in the builder. 409 draft-conflict when an edit no longer applies to the draft's copy, because a replacement's old text no longer occurs exactly once (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
 //
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit (the `EditProposal` operationId).
 func (c *Client) EditProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -27431,16 +27462,16 @@ type ClientWithResponsesInterface interface {
 
 	// ApproveProposalWithResponse Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
 	//
-	// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+	// Applies the proposal's edits again to the current version's files (ADR 0039 decision 6), opens a draft from the current version, writes the results and publishes it through the usual validation and gates. An unrelated change to an edited file since the review does not stop it. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when an edit no longer applies, because a replacement's old text no longer occurs exactly once in its file (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve (the `ApproveProposal` operationId).
 	ApproveProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*ApproveProposalResponse, error)
 
-	// EditProposalWithResponse Write the proposal's files into the draft, opening one if none is open (decision 8)
+	// EditProposalWithResponse Apply the proposal's edits to the draft, opening one if none is open (decision 8)
 	//
-	// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+	// Applies the proposal's edits again to the draft's copy of each file and sets the proposal applied; the caller continues in the builder. 409 draft-conflict when an edit no longer applies to the draft's copy, because a replacement's old text no longer occurs exactly once (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -40055,7 +40086,7 @@ func (c *ClientWithResponses) GetProposalWithResponse(ctx context.Context, org O
 
 // ApproveProposalWithResponse Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
 //
-// Opens a draft from the current version, writes the proposal's files and publishes it through the usual validation and gates. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when a file's current SHA-256 is not its base_sha256 (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
+// Applies the proposal's edits again to the current version's files (ADR 0039 decision 6), opens a draft from the current version, writes the results and publishes it through the usual validation and gates. An unrelated change to an edited file since the review does not stop it. 409 draft-open when the factory already has an open draft (it is left untouched); proposal-stale when an edit no longer applies, because a replacement's old text no longer occurs exactly once in its file (no draft is left); proposal-decided when it is no longer proposed; the publish's own refusals (definition-invalid, evals-pending, evals-failing; the eval gate keeps the draft open). 404 proposal-not-found.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -40068,9 +40099,9 @@ func (c *ClientWithResponses) ApproveProposalWithResponse(ctx context.Context, o
 	return ParseApproveProposalResponse(rsp)
 }
 
-// EditProposalWithResponse Write the proposal's files into the draft, opening one if none is open (decision 8)
+// EditProposalWithResponse Apply the proposal's edits to the draft, opening one if none is open (decision 8)
 //
-// Sets the proposal applied; the caller continues in the builder. 409 draft-conflict when the draft's copy of a file is not its base_sha256 (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
+// Applies the proposal's edits again to the draft's copy of each file and sets the proposal applied; the caller continues in the builder. 409 draft-conflict when an edit no longer applies to the draft's copy, because a replacement's old text no longer occurs exactly once (nothing is written); proposal-decided when it is no longer proposed. 404 proposal-not-found.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -49234,7 +49265,7 @@ type ServerInterface interface {
 	// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve)
 	ApproveProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
-	// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+	// EditProposal Apply the proposal's edits to the draft, opening one if none is open (decision 8)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit)
 	EditProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
 	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
@@ -66672,7 +66703,7 @@ type StrictServerInterface interface {
 	// ApproveProposal Publish the proposal as a new version, as the caller (ADR 0034 decision 7)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve)
 	ApproveProposal(ctx context.Context, request ApproveProposalRequestObject) (ApproveProposalResponseObject, error)
-	// EditProposal Write the proposal's files into the draft, opening one if none is open (decision 8)
+	// EditProposal Apply the proposal's edits to the draft, opening one if none is open (decision 8)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit)
 	EditProposal(ctx context.Context, request EditProposalRequestObject) (EditProposalResponseObject, error)
 	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)

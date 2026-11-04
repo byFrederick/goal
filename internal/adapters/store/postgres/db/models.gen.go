@@ -254,6 +254,7 @@ type JonahObservation struct {
 	State      string
 	ProposalID *uuid.UUID
 	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type JonahProposal struct {
@@ -266,7 +267,6 @@ type JonahProposal struct {
 	State              string
 	Title              string
 	Summary            string
-	Files              []byte
 	Evidence           []byte
 	Estimate           []byte
 	Paths              []string
@@ -276,6 +276,7 @@ type JonahProposal struct {
 	DecidedAt          *time.Time
 	CreatedAt          time.Time
 	Undoes             *uuid.UUID
+	Edits              []byte
 }
 
 type JonahReview struct {

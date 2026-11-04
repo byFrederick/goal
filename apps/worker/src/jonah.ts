@@ -27,12 +27,20 @@ const jonahRoots = [paths.goal, paths.knowledge];
 /** The folders a proposal may edit, besides factory.yaml. Never evals/: eval cases and judges change only by a person. */
 const jonahDirs = ['agents', 'skills', 'rules', 'contracts'];
 
-/** Whether a path a proposal edits is factory.yaml or a file under agents/, skills/, rules/ or contracts/. */
+/** The kinds of file a proposal may edit under jonahDirs (ADR 0039 decision 6): no script or other file. */
+const jonahExtensions = ['.md', '.yaml', '.json'];
+
+/**
+ * Whether a path a proposal edits is factory.yaml or a .md, .yaml or .json file under agents/,
+ * skills/, rules/ or contracts/, as goald's domain.ProposalPathAllowed allows.
+ */
 export function isJonahPath(path: string): boolean {
   const segments = path.split('/');
   if (segments.some((s) => s === '' || s === '.' || s === '..')) return false;
   if (path === 'factory.yaml') return true;
-  return segments.length >= 2 && jonahDirs.includes(segments[0] ?? '');
+  return (
+    segments.length >= 2 && jonahDirs.includes(segments[0] ?? '') && jonahExtensions.some((ext) => path.endsWith(ext))
+  );
 }
 
 /** The fixed system prompt of Jonah mode; nothing of the factory or the box is in it. */
@@ -44,20 +52,32 @@ export const jonahSystemPrompt = [
     '- Read /goal/evidence/README.md first, then the item files and /goal/events.md that bear on what you see.',
     '- Group the evidence by cause. An observation names one cause, the items it is based on and how many events show it.',
     '- Propose one change per cause, as small as it can be, and cite its items and the events it rests on.',
-    "- Change only the files the cause needs, and only those /goal/files.md marks yes. Each edit gives the whole new content of one file, and that file's sha256 from /goal/files.md as base_sha256: empty for a new file. Never propose an edit under evals/.",
+    "- Read /goal/observations.md. When a cause is one of its open observations, give that observation's id, and count only the events of this window: the count adds to the one it has.",
+    '- Change only the files the cause needs, and only those /goal/files.md marks yes. Edit an existing file by exact replacements: each old is text copied from the file that occurs exactly once in it, as short as stays unique, and new replaces it. Give a new file whole as content. Never propose an edit under evals/.',
+    "- In factory.yaml change only an agent's model or skills, the skills, rules and contracts lists, and a station's wip, buffer or gate.maxRework. goald drops a proposal that changes anything else there, such as checks, tools, budgets or triggers.",
     '- Never repeat a rejected proposal (/goal/proposals/rejected/) or something a recent version already did (/goal/evidence/versions.md), and never propose again what an open proposal (/goal/proposals/proposed/) already proposes.',
-    "- Say when a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice: give it an observation and no proposal.",
+    "- Say when a cause is not a definition problem, such as a lost sandbox, a provider outage or a person's choice: give it an observation with not_jonahs and no proposal.",
     '- Give each proposal an estimate of the metric it should move for one station.',
     `- Propose at most ${maxProposals} proposals.`,
   ].join('\n'),
   'Answer with one JSON object and nothing else, of the shape the request gives. Each observation names its proposal by index when it has one.',
 ].join('\n\n');
 
-const Edit = z.object({
-  path: relativePath.refine(isJonahPath, 'a path under factory.yaml, agents/, skills/, rules/ or contracts/'),
-  base_sha256: z.string().regex(/^([0-9a-f]{64})?$/, 'a lowercase sha256, or empty for a new file'),
-  content: z.string(),
-});
+const Replacement = z.object({ old: z.string().min(1), new: z.string() });
+
+/** One file's edit: replacements of an existing file, or the whole content of a new one; never both. */
+const Edit = z
+  .object({
+    path: relativePath.refine(
+      isJonahPath,
+      'factory.yaml, or a .md, .yaml or .json file under agents/, skills/, rules/ or contracts/',
+    ),
+    replacements: z.array(Replacement).min(1).optional(),
+    content: z.string().optional(),
+  })
+  .refine((e) => (e.replacements === undefined) !== (e.content === undefined), {
+    message: 'an edit gives replacements of an existing file or the content of a new one',
+  });
 
 const Evidence = z.object({ event: z.string().min(1), reason: z.string() });
 
@@ -71,18 +91,22 @@ const Estimate = z.object({
 const Proposal = z.object({
   title: z.string().trim().min(1).max(120),
   summary: z.string().trim().min(1).max(600),
-  files: z.array(Edit).min(1),
+  edits: z.array(Edit).min(1),
   evidence: z.array(Evidence),
   estimate: Estimate,
 });
 
 const Observation = z.object({
+  /** The id of the open observation of /goal/observations.md this one updates; absent for a new one. */
+  id: z.string().min(1).optional(),
   summary: z.string().trim().min(1).max(200),
   detail: z.string(),
   items: z.array(z.string()),
   count: z.number().int().min(0),
   /** The index of the proposal this observation leads to, in proposals. */
   proposal: z.number().int().min(0).optional(),
+  /** The cause is not a definition problem. */
+  not_jonahs: z.boolean().optional(),
 });
 
 /** The output of Jonah mode, checked by zod: the observations and proposals the model returned, never the model's own claims. */
@@ -106,11 +130,13 @@ export const jonahSchema = {
       items: {
         type: 'object',
         properties: {
+          id: { type: 'string' },
           summary: { type: 'string' },
           detail: { type: 'string' },
           items: { type: 'array', items: { type: 'string' } },
           count: { type: 'integer', minimum: 0 },
           proposal: { type: 'integer', minimum: 0 },
+          not_jonahs: { type: 'boolean' },
         },
         required: ['summary', 'detail', 'items', 'count'],
         additionalProperties: false,
@@ -124,7 +150,7 @@ export const jonahSchema = {
         properties: {
           title: { type: 'string' },
           summary: { type: 'string' },
-          files: {
+          edits: {
             type: 'array',
             minItems: 1,
             items: {
@@ -132,12 +158,21 @@ export const jonahSchema = {
               properties: {
                 path: {
                   type: 'string',
-                  pattern: '^(factory\\.yaml|(agents|skills|rules|contracts)/[A-Za-z0-9_@+./-]+)$',
+                  pattern: '^(factory\\.yaml|(agents|skills|rules|contracts)/[A-Za-z0-9_@+./-]+\\.(md|yaml|json))$',
                 },
-                base_sha256: { type: 'string', pattern: '^([0-9a-f]{64})?$' },
+                replacements: {
+                  type: 'array',
+                  minItems: 1,
+                  items: {
+                    type: 'object',
+                    properties: { old: { type: 'string', minLength: 1 }, new: { type: 'string' } },
+                    required: ['old', 'new'],
+                    additionalProperties: false,
+                  },
+                },
                 content: { type: 'string' },
               },
-              required: ['path', 'base_sha256', 'content'],
+              required: ['path'],
               additionalProperties: false,
             },
           },
@@ -162,7 +197,7 @@ export const jonahSchema = {
             additionalProperties: false,
           },
         },
-        required: ['title', 'summary', 'files', 'evidence', 'estimate'],
+        required: ['title', 'summary', 'edits', 'evidence', 'estimate'],
         additionalProperties: false,
       },
     },
@@ -182,13 +217,14 @@ export function jonahPrompt(jonah: Jonah, knowledge?: string): string {
       'Read it with Read, Grep and Glob; nothing else is open to you.',
       '- `/goal/evidence/`: README.md counts what needed help; items/<number>.md is one item each; versions.md lists the versions published in the window.',
       '- `/goal/events.md`: the sent-back events of the window, each with the id a proposal cites as evidence.',
-      "- `/goal/definition/`: the current version's files; `/goal/files.md` gives each one's sha256 and whether a proposal may edit it.",
+      "- `/goal/definition/`: the current version's files; `/goal/files.md` says whether a proposal may edit each one.",
+      '- `/goal/observations.md`: the open observations of earlier reviews, each with its id and its count so far.',
       '- `/goal/proposals/`: proposed/ (open), published/ and rejected/ (the last 90 days, with the reasons), one file per proposal.',
       '- `/knowledge/`: the knowledge sources that apply to every run, when the factory has any.',
     ].join('\n'),
     `## Threshold\n${threshold}`,
     knowledge ?? '',
-    '## Your answer\nOne JSON object: {"observations": [...], "proposals": [...]}. Each observation has summary, detail, items (the item refs it is based on, such as #12), count and, when it leads to a proposal, proposal (that proposal\'s index). Each proposal has title, summary, files ([{path, base_sha256, content}], paths relative to the definition), evidence ([{event, reason}], an event id of /goal/events.md each) and estimate ({metric, station, after, cost_per_item_usd_delta}).',
+    '## Your answer\nOne JSON object: {"observations": [...], "proposals": [...]}. Each observation has id (only when it updates an open observation), summary, detail, items (the item refs it is based on, such as #12), count (this window\'s), not_jonahs (when the cause is not a definition problem) and, when it leads to a proposal, proposal (that proposal\'s index). Each proposal has title, summary, edits ([{path, replacements: [{old, new}]}] for an existing file or [{path, content}] for a new one, paths relative to the definition), evidence ([{event, reason}], an event id of /goal/events.md each) and estimate ({metric, station, after, cost_per_item_usd_delta}).',
   ]
     .filter(Boolean)
     .join('\n\n');

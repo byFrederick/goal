@@ -151,7 +151,10 @@ type JonahStore interface {
 	// attempt. ErrNotFound when nothing is claimable.
 	ClaimJonahReview(ctx context.Context, now time.Time, lease time.Duration) (domain.JonahReview, error)
 	// FinishJonahReview ends the claimed review as r says and, in the same transaction, stores
-	// its proposals with the factory's next numbers and its observations. A result of state
+	// its proposals with the factory's next numbers, sets each proposal a stored one Supersedes
+	// superseded by domain.JonahActor while it is still proposed, and stores its observations:
+	// one that names an open observation of the factory updates it (its items joined, its count
+	// added, its state set when proposed or not Jonah's), any other is inserted. A result of state
 	// pending puts the review back in the queue with its error and run, without a lease or a
 	// finish time, to be claimed again (ADR 0039 decision 3). claimed is what
 	// ClaimJonahReview returned; ErrLeaseLost unless the review still runs under that lease.
@@ -174,10 +177,13 @@ type JonahStore interface {
 	// UndoProposal stores n as a proposal of the factory with its next number, made against
 	// version, that reverses the proposal undoes (Undo this change, ADR 0039 decision 15): it has
 	// no review. n must pass Check (domain.ErrInvalid); ErrConflict when an undo of that proposal
-	// is proposed, published or applied.
+	// is proposed, published or applied. It supersedes n.Supersedes as FinishJonahReview does.
 	UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID, n domain.NewProposal, at time.Time) (domain.Proposal, error)
-	// Observations is the factory's latest observations, newest first, at most limit.
+	// Observations is the factory's observations, the latest updated first, at most limit.
 	Observations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
+	// OpenObservations is the factory's watching and proposed observations, the latest updated
+	// first, at most limit: those a review reads and may update (ADR 0039 decision 5).
+	OpenObservations(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.Observation, error)
 	// JonahSpendSince sums the cost of the factory's runs started at or after since: LineUSD of
 	// every kind but jonah, JonahUSD of kind jonah. Jonah's budget is a share of the first, and
 	// the second is what it spent (ADR 0039 decision 16).
