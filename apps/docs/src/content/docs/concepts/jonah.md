@@ -113,6 +113,14 @@ Tries run only while Jonah is on, while no item waits at an agent station, and w
 
 Today only code grades a try. A try whose output breaks the station's contract, as the proposal changes it, or fails one of the station's checks is `not_fixed`, with what failed as its reason. A try that passes both stays done without a verdict until the grader is built. The grader's hit rates (`tried.grader`) and the station's kept tests (`tried.kept_tests`) are not shown yet: `grader` is absent and `kept_tests` is empty.
 
+### Try again
+
+Try again adds tries to an open proposal, so you get more evidence before you decide it. Run `goal jonah try <number>`, or call `POST …/jonah/proposals/{number}/try` (it needs `definition:edit`).
+
+- **What it adds.** One more try of each item the proposal was tried on, or three more for a model proposal. Each new try reruns the same run of the item, at the same station and on the same model, and is queued like the proposal's first tries. `tried` lists the new attempts after the earlier ones.
+- **The estimate comes first.** Goal prices each new try at its item's original run cost and shows what is left of Jonah's budget. Nothing is queued yet. `goal jonah try` asks before it queues; `--yes` skips the question. Through the API, `{"confirm": true}` queues the tries.
+- **When it is refused.** 409 `learning-budget-exhausted`, with the estimate, when the tries cost more than what is left of Jonah's budget. 409 `proposal-decided` for a proposal that is no longer proposed, and 409 `proposal-not-tried` for one that has no tries yet: Jonah queues its first ones. 422 `proposal-not-triable` for a proposal that can't be tried, such as one that changes only memory or the flow.
+
 ## Kept tests
 
 A kept test is a past item that a person keeps, at a station it passed the first time, as a test. The item must keep passing there. A failing kept test will warn when you publish a change that reaches its station, and it never blocks a publish.
@@ -141,6 +149,7 @@ A goald without judges or evals shows the Judges, Evals and Bake-offs pages empt
 
 - The Jonah overview shows each judge's pass rate over the last 30 days against its pass mark: the latest period in black, the earlier ones in grey, and the pass mark as a dashed line. Each chart opens that judge.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
+- `goal jonah try` tries a proposal again on its past items.
 - `goal agent try-model` proposes another model for an agent.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
 - `goal spend` shows what runs cost, judges and reviews included.
