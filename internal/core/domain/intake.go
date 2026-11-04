@@ -281,6 +281,11 @@ type TriggerFiring struct {
 	RunID      RunID
 	CostUSD    float64
 	Decisions  string
+	// Try marks a try check (Try on the trigger's page): Applied says what it would do, and it
+	// files, notes and saves nothing. Applied is what a done check did; CheckedAt when it ended.
+	Try       bool
+	Applied   *CheckApplied
+	CheckedAt time.Time
 }
 
 // Check refuses a firing that misses its factory, trigger, event or key, has an unknown source or
@@ -307,9 +312,12 @@ func (f TriggerFiring) Check() error {
 	return f.checkMissed()
 }
 
-// checkMissed checks that only a schedule's missed firing counts missed instants, at least one.
+// checkMissed checks that only a schedule's missed firing counts missed instants, at least one,
+// and that only a checked firing is a try.
 func (f TriggerFiring) checkMissed() error {
 	switch {
+	case f.Try && f.Outcome != FiringChecked:
+		return fmt.Errorf("only a checked firing is a try: %w", ErrInvalid)
 	case (f.Outcome == FiringMissed) != (f.Missed > 0) || f.Missed < 0:
 		return fmt.Errorf("only a missed firing counts missed instants, at least one: %w", ErrInvalid)
 	case f.Outcome == FiringMissed && f.Source != TriggerSchedule:

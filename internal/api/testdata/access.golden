@@ -3458,6 +3458,32 @@ listTemplates        pat-demoted      200                      404 org-not-found
 listTemplates        pat-removed      401 unauthenticated      401 unauthenticated
 listTemplates        pat-platform     200                      404 org-not-found
 listTemplates        pat-deleted-org  401 unauthenticated      401 unauthenticated
+listTriggerChecks    anonymous        401 unauthenticated      401 unauthenticated
+listTriggerChecks    owner            200                      404 org-not-found
+listTriggerChecks    admin            200                      404 org-not-found
+listTriggerChecks    viewer           200                      404 org-not-found
+listTriggerChecks    approver         200                      404 org-not-found
+listTriggerChecks    editor           200                      404 org-not-found
+listTriggerChecks    member-no-roles  404 factory-not-found    404 org-not-found
+listTriggerChecks    other-org-owner  404 org-not-found        200
+listTriggerChecks    platform-admin   404 org-not-found        404 org-not-found
+listTriggerChecks    stale-owner      200                      404 org-not-found
+listTriggerChecks    key-scoped       403 forbidden            404 org-not-found
+listTriggerChecks    key-restricted   404 factory-not-found    404 org-not-found
+listTriggerChecks    key-other-org    404 org-not-found        200
+listTriggerChecks    key-expired      401 unauthenticated      401 unauthenticated
+listTriggerChecks    key-revoked      401 unauthenticated      401 unauthenticated
+listTriggerChecks    bearer-owner     200                      404 org-not-found
+listTriggerChecks    pat-approver     403 forbidden            404 org-not-found
+listTriggerChecks    pat-owner        200                      404 org-not-found
+listTriggerChecks    pat-viewer       200                      404 org-not-found
+listTriggerChecks    pat-other-org    404 org-not-found        200
+listTriggerChecks    pat-expired      401 unauthenticated      401 unauthenticated
+listTriggerChecks    pat-revoked      401 unauthenticated      401 unauthenticated
+listTriggerChecks    pat-demoted      404 factory-not-found    404 org-not-found
+listTriggerChecks    pat-removed      401 unauthenticated      401 unauthenticated
+listTriggerChecks    pat-platform     200                      404 org-not-found
+listTriggerChecks    pat-deleted-org  401 unauthenticated      401 unauthenticated
 listVersions         anonymous        401 unauthenticated      401 unauthenticated
 listVersions         owner            200                      404 org-not-found
 listVersions         admin            200                      404 org-not-found
@@ -4992,6 +5018,32 @@ tryJonahProposal     pat-demoted      404 factory-not-found    404 org-not-found
 tryJonahProposal     pat-removed      401 unauthenticated      401 unauthenticated
 tryJonahProposal     pat-platform     200                      404 org-not-found
 tryJonahProposal     pat-deleted-org  401 unauthenticated      401 unauthenticated
+tryTriggerCheck      anonymous        401 unauthenticated      401 unauthenticated
+tryTriggerCheck      owner            200                      404 org-not-found
+tryTriggerCheck      admin            200                      404 org-not-found
+tryTriggerCheck      viewer           403 forbidden            404 org-not-found
+tryTriggerCheck      approver         403 forbidden            404 org-not-found
+tryTriggerCheck      editor           200                      404 org-not-found
+tryTriggerCheck      member-no-roles  404 factory-not-found    404 org-not-found
+tryTriggerCheck      other-org-owner  404 org-not-found        200
+tryTriggerCheck      platform-admin   404 org-not-found        404 org-not-found
+tryTriggerCheck      stale-owner      200                      404 org-not-found
+tryTriggerCheck      key-scoped       403 forbidden            404 org-not-found
+tryTriggerCheck      key-restricted   404 factory-not-found    404 org-not-found
+tryTriggerCheck      key-other-org    404 org-not-found        200
+tryTriggerCheck      key-expired      401 unauthenticated      401 unauthenticated
+tryTriggerCheck      key-revoked      401 unauthenticated      401 unauthenticated
+tryTriggerCheck      bearer-owner     200                      404 org-not-found
+tryTriggerCheck      pat-approver     403 forbidden            404 org-not-found
+tryTriggerCheck      pat-owner        200                      404 org-not-found
+tryTriggerCheck      pat-viewer       403 forbidden            404 org-not-found
+tryTriggerCheck      pat-other-org    404 org-not-found        200
+tryTriggerCheck      pat-expired      401 unauthenticated      401 unauthenticated
+tryTriggerCheck      pat-revoked      401 unauthenticated      401 unauthenticated
+tryTriggerCheck      pat-demoted      404 factory-not-found    404 org-not-found
+tryTriggerCheck      pat-removed      401 unauthenticated      401 unauthenticated
+tryTriggerCheck      pat-platform     200                      404 org-not-found
+tryTriggerCheck      pat-deleted-org  401 unauthenticated      401 unauthenticated
 undoProposal         anonymous        401 unauthenticated      401 unauthenticated
 undoProposal         owner            200                      404 org-not-found
 undoProposal         admin            200                      404 org-not-found

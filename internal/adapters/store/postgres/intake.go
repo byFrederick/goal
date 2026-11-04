@@ -957,6 +957,18 @@ func firingFrom(r db.TriggerFiringByKeyRow) domain.TriggerFiring {
 		f.RunID = domain.RunID(r.RunID.String())
 	}
 
+	f.Try = r.Try
+	if r.CheckedAt != nil {
+		f.CheckedAt = r.CheckedAt.UTC()
+	}
+
+	if len(r.Applied) > 0 {
+		var a domain.CheckApplied
+		if json.Unmarshal(r.Applied, &a) == nil { // the column holds what FinishCheck wrote
+			f.Applied = &a
+		}
+	}
+
 	return f
 }
 

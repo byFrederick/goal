@@ -1,9 +1,11 @@
 package api_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -129,6 +131,7 @@ func checkIntakeTriggers(t *testing.T, triggers []gen.IntakeTrigger) {
 		// The keys written before ADR 0040 decision 14 show as its forms.
 		`flaky-test-on-main: github on github.check_run, when "github.check_run", enabled true, creates fix at inbox lane - expedite true, problem true`,
 		`deploy-failed: webhook on ci-hooks.deploy, when "ci-hooks.deploy", enabled false, creates fix at inbox lane - expedite false, problem true`,
+		`new-incidents: schedule on schedule, when "*/5 * * * *, UTC", enabled true, creates fix at inbox lane - expedite false, problem false`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("triggers =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -143,8 +146,8 @@ func TestIntake_SourceTallyEmpty(t *testing.T) {
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Items != 0 || in.From != nil || in.To != nil ||
-		in.Sources.People != 0 || len(in.Triggers) != 3 {
-		t.Errorf("intake = %d %+v, want no items, no window and the 3 triggers", code, in)
+		in.Sources.People != 0 || len(in.Triggers) != 4 {
+		t.Errorf("intake = %d %+v, want no items, no window and the 4 triggers", code, in)
 	}
 
 	for _, tr := range in.Triggers {
@@ -617,5 +620,140 @@ func TestIntakeTrigger_MissedEvent(t *testing.T) {
 	if e := d.Events[0]; e.Outcome != gen.IntakeEventOutcomeMissed || e.Missed != 3 || e.ItemNumber != nil ||
 		e.Reason == nil || *e.Reason != "3 instants were not fired" {
 		t.Errorf("event = %+v; want missed, 3 instants, with its reason", e)
+	}
+}
+
+const (
+	incidentsName       = "new-incidents"
+	incidentsPath       = intakePath + "/triggers/" + incidentsName + "/checks"
+	unknownTrigger      = intakePath + "/triggers/no-such-trigger"
+	codeTriggerNotFound = "trigger-not-found"
+)
+
+// check runs a check of new-incidents queued at the instant given through the intake: done with answer (filing
+// an item for each file entry, at most perCheck 2), or failed with reason when answer is "".
+func (h *harness) check(t *testing.T, at time.Time, answer, reason string) {
+	t.Helper()
+
+	if _, _, err := h.intake.Fire(inOrg(t), domain.TriggerFiring{
+		FactoryID: acmeID, Trigger: incidentsName, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: at,
+	}, nil, domain.FireLimits{}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, l, err := h.intake.ClaimCheck(inOrg(t), acmeID, "goald-a", at, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := domain.CheckResult{State: domain.CheckFailed, Reason: reason, At: at.Add(time.Minute)}
+
+	if answer != "" {
+		a, err := domain.ParseCheckAnswer(json.RawMessage(answer))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var items []domain.CheckItem
+		for _, f := range a.File {
+			items = append(items, domain.CheckItem{Key: f.Key, Item: domain.NewItem{
+				FactoryID: acmeID, Type: typeFix, Title: f.Title, Body: f.Brief, Station: stInbox, State: domain.StateQueued, CreatedAt: at,
+				Origin: domain.OriginTrigger, Trigger: incidentsName, Untrusted: true,
+			}})
+		}
+
+		res = domain.CheckResult{
+			State: domain.CheckDone, CostUSD: 0.03, Decisions: a.Decisions(), Items: items, Limits: domain.CheckLimits{PerCheck: 2}, At: at.Add(time.Minute),
+		}
+	}
+
+	if err := h.intake.FinishCheck(inOrg(t), l, res); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The trigger's checks list newest first, each with when, its state, cost and failure, and what it
+// filed (with the item's ref), noted and skipped with reasons.
+func TestTriggerChecks_List(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk", "brief": "db"},
+		{"key": "INC-3", "title": "Late", "brief": "x"}], "skip": [{"key": "INC-4", "reason": "a test page"}]}`, "")
+	h.check(t, oct(22, 5), "", "timed out after 5m0s")
+
+	var got gen.TriggerCheckList
+	if code := h.call(t, http.MethodGet, incidentsPath, "", &got); code != http.StatusOK || len(got.Checks) != 2 {
+		t.Fatalf("checks = %d %+v; want two", code, got)
+	}
+
+	if failed := got.Checks[0]; failed.State != gen.TriggerCheckStateFailed || deref(failed.Reason) != "timed out after 5m0s" || len(failed.Filed) != 0 ||
+		failed.CheckedAt == nil {
+		t.Errorf("newest check = %+v; want failed with its reason", failed)
+	}
+
+	expectDoneCheck(t, got.Checks[1])
+
+	if code := h.call(t, http.MethodGet, incidentsPath+"?limit=1", "", &got); code != http.StatusOK || len(got.Checks) != 1 {
+		t.Errorf("limit=1 = %d, %d checks; want one", code, len(got.Checks))
+	}
+
+	if code, p := problemOfCall(t, h, http.MethodGet, unknownTrigger+"/checks", ""); code != http.StatusNotFound || deref(p.Code) != codeTriggerNotFound {
+		t.Errorf("an unknown trigger's checks = %d %s; want 404 %s", code, deref(p.Code), codeTriggerNotFound)
+	}
+}
+
+// expectDoneCheck checks the done check with what it filed and skipped.
+func expectDoneCheck(t *testing.T, done gen.TriggerCheck) {
+	t.Helper()
+
+	filed := done.Filed
+	if len(filed) != 2 || filed[0].Key != "INC-1" || deref(filed[0].Ref) != "#1" {
+		t.Errorf("filed = %+v; want INC-1 and INC-2 filed as #1 and #2", filed)
+	}
+
+	if done.State != gen.TriggerCheckStateDone || done.CostUsd != 0.03 || done.Try || done.Reason != nil || len(done.Noted) != 0 {
+		t.Errorf("done check = %+v; want done, its cost and no notes", done)
+	}
+
+	wantSkips := []gen.TriggerCheckSkip{{Key: "INC-3", Reason: domain.CheckOverLimit}, {Key: "INC-4", Reason: "a test page"}}
+	if !reflect.DeepEqual(done.Skipped, wantSkips) {
+		t.Errorf("skipped = %+v; want %+v", done.Skipped, wantSkips)
+	}
+}
+
+// Try queues a try check and answers 202 with it, writing a trigger.tried entry; it answers 409
+// still-checking while a check is queued, 422 no-check for a trigger without one, and 404 for an
+// unknown trigger.
+func TestTriggerChecks_Try(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var got gen.TriggerCheck
+	if code := h.call(t, http.MethodPost, incidentsPath, "", &got); code != http.StatusAccepted || !got.Try || got.State != gen.TriggerCheckStateQueued {
+		t.Fatalf("try = %d %+v; want 202 with a queued try", code, got)
+	}
+
+	tried, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried})
+	if err != nil || len(tried) != 1 || tried[0].TargetID != incidentsName || tried[0].Data["firing"] != got.Id {
+		t.Errorf("trigger.tried = %+v, %v; want one naming the try", tried, err)
+	}
+
+	h.clock.Advance(time.Second)
+
+	for _, c := range []struct {
+		what, path string
+		status     int
+		code       string
+	}{
+		{"a try while one is queued", incidentsPath, http.StatusConflict, "still-checking"},
+		{"a trigger without a check", intakePath + "/triggers/" + nightlyName + "/checks", http.StatusUnprocessableEntity, "no-check"},
+		{"an unknown trigger", unknownTrigger + "/checks", http.StatusNotFound, codeTriggerNotFound},
+	} {
+		if code, p := problemOfCall(t, h, http.MethodPost, c.path, ""); code != c.status || deref(p.Code) != c.code {
+			t.Errorf("%s: %d %s, want %d %s", c.what, code, deref(p.Code), c.status, c.code)
+		}
 	}
 }

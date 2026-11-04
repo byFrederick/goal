@@ -157,6 +157,7 @@ object, required.
     - `limits`: object. Caps on what the trigger creates.
       - `perDay`: integer. At most this many items created by the trigger since the start of the UTC day.
       - `perHour`: integer. At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none.
+      - `perCheck`: integer. Only with check: at most this many items one check files; what is over it is skipped, "over the limit". Defaults to 5. A check's perDay counts the items the trigger filed, not its firings.
       - `pauseOnBudget`: boolean. Skip events while the factory's budget is spent (today the weekly budget).
     - `check`: object. When on is schedule, and only then: each firing runs an agent that looks at the source and answers what to file, instead of filing an item (ADR 0040). The cron may fire at most every 5 minutes, and one check per trigger runs at a time. Publish warns when the agent may use tools that aren't read-only; a check never edits or runs commands, and clones nothing.
       - `agent`: string, required. An agent of the factory; the check runs with its environment, tools and model.

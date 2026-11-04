@@ -239,6 +239,15 @@ usage:
                                                   each step and why, the item it would create; a
                                                   schedule's events, and a delivery's while its webhook
                                                   keeps it; nothing is created
+  goal triggers try <factory> <trigger> [--wait 6m] [--json]
+                                                  for a trigger with a check: run its check now and
+                                                  wait (at most --wait) for what it would file, note
+                                                  and skip; it spends like any check, and nothing is
+                                                  filed, noted or saved
+  goal triggers checks <factory> <trigger> [--limit N] [--json]
+                                                  a check trigger's checks, newest first: when, what
+                                                  each filed, noted and skipped with reasons, and its
+                                                  cost (--limit: 1 to 100, default 20)
   goal webhooks list [--json]                     the organization's webhooks: sender, address, the
                                                   secret that signs them, the factories they are open
                                                   to, the triggers that use them, deliveries in 7

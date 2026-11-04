@@ -793,11 +793,24 @@ Flags: `--json`.
 
 ```text
 goal triggers try <factory> <trigger> --event ID [--json]
+goal triggers try <factory> <trigger> [--wait 6m] [--json]
 ```
 
 dry-run the trigger on one of its 20 newest events (ID from goal triggers show): whether it matched, each step and why, the item it would create; a schedule's events, and a delivery's while its webhook keeps it; nothing is created
 
-Flags: `--event ID`, `--json`.
+for a trigger with a check: run its check now and wait (at most --wait) for what it would file, note and skip; it spends like any check, and nothing is filed, noted or saved
+
+Flags: `--event ID`, `--json`, `--wait 6m`.
+
+## goal triggers checks
+
+```text
+goal triggers checks <factory> <trigger> [--limit N] [--json]
+```
+
+a check trigger's checks, newest first: when, what each filed, noted and skipped with reasons, and its cost (--limit: 1 to 100, default 20)
+
+Flags: `--limit N`, `--json`.
 
 ## goal webhooks list
 

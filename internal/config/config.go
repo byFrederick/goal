@@ -436,7 +436,9 @@ type TriggerCreate struct {
 type TriggerLimits struct {
 	PerDay int `json:"perDay,omitempty"`
 	// PerHour is domain.DefaultPerHour for an event trigger that sets none.
-	PerHour       int  `json:"perHour,omitempty"`
+	PerHour int `json:"perHour,omitempty"`
+	// PerCheck is domain.DefaultCheckPerCheck for a check that sets none; only a check has it.
+	PerCheck      int  `json:"perCheck,omitempty"`
 	PauseOnBudget bool `json:"pauseOnBudget,omitempty"`
 }
 

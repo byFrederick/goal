@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -233,7 +234,63 @@ func (e *Engine) triggerCheck(ctx context.Context, l domain.Line, lease domain.C
 		return checkFailed(&run, "%v", err)
 	}
 
-	return domain.CheckResult{State: domain.CheckDone, RunID: run.RunID, CostUSD: run.CostUSD, Decisions: a.Decisions(), Saved: a.State}
+	return domain.CheckResult{
+		State: domain.CheckDone, RunID: run.RunID, Agent: t.Check.Agent, CostUSD: run.CostUSD, Decisions: a.Decisions(), Saved: a.State,
+		Items: checkItems(l, t, a, e.clock.Now()), Limits: t.LimitsOfCheck(),
+	}
+}
+
+// checkItems are the items a's file entries make on l at now, each through domain.File (ADR 0040
+// decision 19): origin trigger, by the check's agent, at t's create.station in its arrival state,
+// of the entry's type and lane or else create's, untrusted unless t is create.trusted, since what
+// the agent read is outside text. An entry File refuses keeps why.
+func checkItems(l domain.Line, t domain.Trigger, a domain.CheckAnswer, now time.Time) []domain.CheckItem {
+	out := make([]domain.CheckItem, 0, len(a.File))
+	st, onLine := l.Station(t.Create.Station)
+	agent := domain.Actor{Kind: domain.ActorAgent, ID: t.Check.Agent, Name: t.Check.Agent}
+
+	for _, f := range a.File {
+		if !onLine {
+			out = append(out, domain.CheckItem{Key: f.Key, Refused: fmt.Sprintf("create.station %q is not on the line", t.Create.Station)})
+			continue
+		}
+
+		typ := cmp.Or(f.Type, t.Create.Type)
+
+		class := l.ClassFor(typ)
+		if t.Create.Expedite {
+			class = domain.ClassExpedite
+		}
+
+		r := domain.FileRequest{
+			Origin: domain.OriginTrigger, By: agent, Type: typ, Lane: cmp.Or(f.Lane, t.Create.Lane), Title: f.Title, Body: f.Brief,
+			Priority: f.Priority, Station: st.ID, State: st.Arrival(), Class: class, At: now, Source: domain.ItemFromSchedule,
+			Trigger: t.Name, Untrusted: !t.Create.Trusted, Start: checkStart(f.Start),
+		}
+
+		n, err := domain.File(l, r)
+		if err != nil {
+			out = append(out, domain.CheckItem{Key: f.Key, Refused: err.Error()})
+			continue
+		}
+
+		out = append(out, domain.CheckItem{Key: f.Key, Item: n})
+	}
+
+	return out
+}
+
+// checkStart is a file entry's start as a start request: a wait, else a time; nil for none.
+func checkStart(s string) *domain.StartRequest {
+	if s == "" {
+		return nil
+	}
+
+	if _, err := domain.ParseWait(s); err == nil {
+		return &domain.StartRequest{In: s}
+	}
+
+	return &domain.StartRequest{At: s}
 }
 
 // checkFailed is a failed result with the reason, and run's record and cost when it ran.
@@ -307,4 +364,66 @@ func (e *Engine) beatCheck(ctx context.Context, lease domain.CheckLease, stop co
 			e.log.WarnContext(ctx, "heartbeat check", slog.String("firing", lease.FiringID), slog.Any("error", err))
 		}
 	}
+}
+
+var (
+	// ErrNoCheck means the trigger has no check, so there is no check to try.
+	ErrNoCheck = fmt.Errorf("the trigger has no check: %w", domain.ErrInvalid)
+	// ErrStillChecking means the trigger's check is queued or running, so a try waits for it.
+	ErrStillChecking = fmt.Errorf("%s: %w", domain.StillChecking, ports.ErrConflict)
+)
+
+// TryCheck queues a try check of the trigger of the factory's current line now (ADR 0040
+// decision 19, Try on the trigger's page): it runs as any check does, leased by the next tick,
+// but its finish keeps only what it would file, note and skip (ports.Intake.FinishCheck). It
+// writes a trigger.tried audit entry by the actor by and returns the queued firing. ErrTriggerNotFound for
+// a name the line does not have, ErrNoCheck for a trigger without a check, and ErrStillChecking
+// while its check is queued or running.
+func (e *Engine) TryCheck(ctx context.Context, factory domain.FactoryID, trigger string, by domain.Actor) (domain.TriggerFiring, error) {
+	switch {
+	case e.intake == nil:
+		return domain.TriggerFiring{}, errNoIntake
+	case e.audit == nil:
+		return domain.TriggerFiring{}, errNoAudit
+	}
+
+	l, err := e.lineIn(ctx, factory)
+	if err != nil {
+		return domain.TriggerFiring{}, fmt.Errorf("try check: %w", err)
+	}
+
+	t, ok := lineTrigger(l, trigger)
+
+	switch {
+	case !ok:
+		return domain.TriggerFiring{}, fmt.Errorf("try check: %w: %s is not in the factory's current definition", ErrTriggerNotFound, trigger)
+	case t.Check == nil:
+		return domain.TriggerFiring{}, fmt.Errorf("try check %s: %w", t.Name, ErrNoCheck)
+	}
+
+	now := e.clock.Now()
+
+	f, fresh, err := e.intake.Fire(ctx, domain.TriggerFiring{
+		FactoryID: l.FactoryID, Trigger: t.Name, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: "try " + now.UTC().Format(time.RFC3339Nano), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: now, Try: true,
+	}, nil, domain.FireLimits{})
+
+	switch {
+	case errors.Is(err, ports.ErrConflict) || err == nil && !fresh: // a try at this very instant is queued
+		return domain.TriggerFiring{}, fmt.Errorf("try check %s: %w", t.Name, ErrStillChecking)
+	case err != nil:
+		return domain.TriggerFiring{}, fmt.Errorf("try check %s: %w", t.Name, err)
+	}
+
+	if err := e.audit.Append(ctx, domain.AuditEntry{
+		Actor: by, Action: domain.AuditTriggerTried, TargetKind: domain.AuditTargetTrigger, TargetID: t.Name, FactoryID: l.FactoryID,
+		Data: map[string]any{"firing": f.ID, "outcome": "check"},
+	}); err != nil {
+		return domain.TriggerFiring{}, fmt.Errorf("try check %s: audit: %w", t.Name, err)
+	}
+
+	e.log.InfoContext(ctx, "check tried", slog.String("org_id", string(l.OrgID)), slog.String("factory", string(l.FactoryID)),
+		slog.String("trigger", t.Name), slog.String("firing", f.ID))
+
+	return f, nil
 }

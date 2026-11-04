@@ -214,15 +214,15 @@ SELECT goal_prune_webhook_ledger(sqlc.arg(before)::timestamptz)::bigint AS delet
 
 -- name: InsertTriggerFiring :one
 -- Returns nothing (no rows) when the trigger already has a firing with this key.
-INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at, check_state)
+INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at, check_state, try)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(trigger), sqlc.arg(source), sqlc.arg(event_key), sqlc.arg(idempotency_key),
-        sqlc.arg(dedupe), sqlc.arg(outcome), sqlc.arg(reason), sqlc.narg(item_id), sqlc.arg(missed), sqlc.arg(at), sqlc.narg(check_state))
+        sqlc.arg(dedupe), sqlc.arg(outcome), sqlc.arg(reason), sqlc.narg(item_id), sqlc.arg(missed), sqlc.arg(at), sqlc.narg(check_state), sqlc.arg(try))
 ON CONFLICT (org_id, factory_id, trigger, idempotency_key) DO NOTHING
 RETURNING id;
 
 -- name: TriggerFiringByKey :one
 SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at,
-       check_state, run_id, cost_usd::float8 AS cost_usd, decisions FROM trigger_firings
+       check_state, run_id, cost_usd::float8 AS cost_usd, decisions, try, applied, checked_at FROM trigger_firings
 WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND idempotency_key = sqlc.arg(idempotency_key);
 
 -- name: TriggerFailureStreak :one

@@ -341,6 +341,8 @@ func TestCheck_TriggerCheckCronFloor(t *testing.T) {
 			"",
 		},
 		{"timeout over an hour", withCheck("*/5 * * * *", checkAgent, ", timeout: 2h"), nil, codeCheckTimeoutInvalid},
+		{"perCheck on a check", replaced(withCheck("*/5 * * * *", checkAgent, ""), "        create:\n          type: feature\n", "        limits: { perCheck: 2 }\n        create:\n          type: feature\n"), nil, ""},
+		{"perCheck without a check", withTriggers("        limits: { perDay: 3, pauseOnBudget: true }", "        limits: { perDay: 3, perCheck: 2 }"), nil, codePerCheckWithoutCheck},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -381,6 +383,14 @@ func TestCheck_TriggerCheckLoads(t *testing.T) {
 	tr, _ := f.Line().Trigger("nightly-sweep")
 	if c := tr.Check; c == nil || c.Agent != checkAgent || c.Brief != "Look for new incidents.\n" || c.MaxUSD != domain.DefaultCheckMaxUSD || c.Timeout != domain.DefaultCheckTimeout {
 		t.Errorf("check = %+v; want the worker with the brief file's text and the defaults", tr.Check)
+	}
+
+	if tr.Limits.PerCheck != domain.DefaultCheckPerCheck {
+		t.Errorf("limits.perCheck = %d; want the default %d", tr.Limits.PerCheck, domain.DefaultCheckPerCheck)
+	}
+
+	if other, _ := f.Line().Trigger("red-main"); other.Limits.PerCheck != 0 {
+		t.Errorf("a trigger without a check has perCheck %d; want none", other.Limits.PerCheck)
 	}
 }
 

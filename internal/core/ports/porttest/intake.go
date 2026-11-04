@@ -50,6 +50,19 @@ type intakeData struct {
 	secrets *OrgSecrets
 	// states are the triggers' saved check states (trigger_state).
 	states map[stateKey]json.RawMessage
+	// keys are the triggers' keys (trigger_keys): each key's last item and last note.
+	keys map[triggerKey]keyRow
+}
+
+type triggerKey struct {
+	stateKey
+	key string
+}
+
+type keyRow struct {
+	item     domain.ItemID
+	noteAt   time.Time
+	noteText string
 }
 
 type stateKey struct {
@@ -98,7 +111,7 @@ type firingRow struct {
 func NewIntake(key ports.MasterKey, store *Store) *Intake {
 	return &Intake{key: key, store: store, d: &intakeData{
 		endpoints: map[domain.WebhookEndpointID]*endpointRow{}, ledger: map[ledgerKey]time.Time{}, counts: map[countKey]int{},
-		states: map[stateKey]json.RawMessage{},
+		states: map[stateKey]json.RawMessage{}, keys: map[triggerKey]keyRow{},
 	}}
 }
 
@@ -941,7 +954,10 @@ func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain
 			return domain.TriggerFiring{}, false, err
 		}
 
-		if live {
+		switch {
+		case live && f.Try:
+			return domain.TriggerFiring{}, false, fmt.Errorf("try %s: %s: %w", f.Trigger, domain.StillChecking, ports.ErrConflict)
+		case live:
 			f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
 		}
 	}

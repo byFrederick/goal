@@ -115,8 +115,8 @@ type Intake interface {
 	// records f skipped with that reason; else it files item as CreateItem does and records f
 	// with it. A skipped f with no item is recorded as it is. A checked f (queued, ADR 0040
 	// decision 19) is recorded as it is unless the trigger already has a check queued or
-	// running, when it is recorded skipped with domain.StillChecking. f must pass Check
-	// (domain.ErrInvalid).
+	// running, when it is recorded skipped with domain.StillChecking, or, for a try check
+	// (f.Try), not recorded at all: ErrConflict. f must pass Check (domain.ErrInvalid).
 	Fire(ctx context.Context, f domain.TriggerFiring, item *domain.NewItem, limits domain.FireLimits) (domain.TriggerFiring, bool, error)
 	// UnnamedDays are the webhook's daily counts of accepted deliveries no enabled trigger named,
 	// from the UTC day of since on, by day; a day without one has no entry.
@@ -171,18 +171,34 @@ type Intake interface {
 	// token.
 	HeartbeatCheck(ctx context.Context, l domain.CheckLease, until time.Time) error
 	// FinishCheck ends l's check as r says (r must pass Check, domain.ErrInvalid), in one
-	// transaction: its state, run, cost, decisions or failure reason, and, for a done r with
-	// Saved, the trigger's saved state, which a failed one leaves as it was. ErrLeaseLost when the
-	// check no longer runs under l's token.
+	// transaction under the trigger's lock (Fire's): its state, run, cost, decisions or failure
+	// reason. A done r's answer (its Decisions) is applied as domain.ApplyCheck decides from the
+	// trigger's keys (each key's last item, locked in id order, and last note), r.Items, r.Limits
+	// and the items the trigger filed since the UTC day began: each filed item is filed as
+	// CreateItem does and becomes its key's last item, each note is an item_note on its item
+	// (domain.CheckNoteData) and its key's last note, the trigger's state is r.Saved when set, and
+	// the firing keeps what was applied. A try check's finish keeps only what would be applied,
+	// with no item refs for what it would file, and writes nothing else. A failed r leaves the
+	// keys and the state as they were. ErrLeaseLost when the check no longer runs under l's token.
 	FinishCheck(ctx context.Context, l domain.CheckLease, r domain.CheckResult) error
 	// ExpireChecks fails the factory's running checks whose lease ended by now, with
 	// domain.CheckLeaseExpired, and returns how many.
 	ExpireChecks(ctx context.Context, factory domain.FactoryID, now time.Time) (int, error)
 	// CheckInput is what the trigger's next check is given: its open items, newest first, at most
 	// domain.MaxCheckOpenItems; the keys whose items closed since now-domain.CheckClosedWindow,
-	// newest first, at most domain.MaxCheckClosed; its newest done check's decisions; and the state saved for it. An item's key
-	// is the dedupe value of the firing that filed it.
+	// newest first, at most domain.MaxCheckClosed; its newest done check's decisions, tries left
+	// out; and the state saved for it. An item's key is its trigger_keys key, else the dedupe
+	// value of the firing that filed it.
 	CheckInput(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckInput, error)
+	// TriggerChecks are at most limit of the trigger's checked firings, tries among them, newest
+	// first (at, then id), each with what it applied once done.
+	TriggerChecks(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.TriggerFiring, error)
+	// CheckAlerts are what of the factories' checks Needs you shows (ADR 0040 decision 19), tries
+	// left out: a trigger whose last domain.CheckFailuresShown finished checks all failed
+	// (domain.CheckFailing, at the newest one, with its reason), and a trigger with a done check
+	// at or after since that skipped something domain.CheckOverLimit (domain.CheckLimited, at the
+	// first such check). Ordered by factory, trigger and kind.
+	CheckAlerts(ctx context.Context, factories []domain.FactoryID, since time.Time) ([]domain.CheckAlert, error)
 }
 
 // SenderEvents are the senders' event tables (ADR 0040 decision 14): which normalized fields an

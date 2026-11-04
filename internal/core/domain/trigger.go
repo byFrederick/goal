@@ -121,6 +121,9 @@ type TriggerLimits struct {
 	// PerHour is how many it creates at most in the hour before the event; 0 is no cap. Config
 	// makes it DefaultPerHour for an event trigger that sets none.
 	PerHour int
+	// PerCheck is how many items one check files at most (ADR 0040 decision 19); config makes it
+	// DefaultCheckPerCheck for a check that sets none, and only a check has it.
+	PerCheck int
 	// PauseOnBudget skips events while the factory's weekly budget is spent.
 	PauseOnBudget bool
 }

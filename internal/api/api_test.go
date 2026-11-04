@@ -41,7 +41,8 @@ const (
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
-// intake trigger of each source (a schedule, a GitHub event, a disabled webhook) for Intake.
+// intake trigger of each source (a schedule, a GitHub event, a disabled webhook) and a check for
+// Intake.
 const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
@@ -66,6 +67,12 @@ spec:
         enabled: false
         on: webhook.ci-hooks.deploy
         create: { type: fix, station: inbox, title: "A deploy failed" }
+      - name: new-incidents
+        on: schedule
+        cron: "*/5 * * * *"
+        check: { agent: writer, brief: Look for new incidents. }
+        create: { type: fix, station: inbox }
+        limits: { perCheck: 2 }
     stations:
       - { id: inbox, kind: queue }
       - { id: approve, kind: human }

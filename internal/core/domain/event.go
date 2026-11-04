@@ -83,7 +83,9 @@ const (
 	// EventItemNote is a note from another item's agent (ADR 0040 decision 7): a follow-up whose
 	// for named this item, delivered by the engine (actor system:engine). Data text,
 	// follow_up_id, from_item (<factory>#<number>), from_item_id, from_factory_id, station and
-	// agent (NoteData). The next run's brief carries it; a run in progress does not stream it.
+	// agent (NoteData). A check's note (ADR 0040 decision 19) has text, trigger, key, agent and
+	// run_id instead (CheckNoteData). The next run's brief carries it; a run in progress does not
+	// stream it.
 	EventItemNote EventKind = "item_note"
 	// EventNoteDelivered is a running agent's worker reporting that it gave the agent a note
 	// left while the run works, as a user message between turns. Data note_id (the note's event

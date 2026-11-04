@@ -84,6 +84,8 @@ type Engine interface {
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 	TryTrigger(ctx context.Context, f domain.FactoryID, trigger, firing string, by domain.Actor) (domain.TriggerTry, error)
+	// TryCheck queues a try check of the trigger (ADR 0040 decision 19).
+	TryCheck(ctx context.Context, f domain.FactoryID, trigger string, by domain.Actor) (domain.TriggerFiring, error)
 }
 
 // Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its

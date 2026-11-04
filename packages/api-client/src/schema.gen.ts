@@ -1802,6 +1802,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The trigger's checks, newest first, with what each filed, noted and skipped
+         * @description A check trigger's checks (ADR 0040 decision 19), tries among them, newest first: when each fired and finished, where it is, what it cost, why it failed, and for a done check what goald applied of its answer: the items it filed, the notes it wrote on open items and what it skipped, each with the reason (a closed key, the limit, a note too soon or repeated, or the agent's own). A try's lists are what it would have done. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         */
+        get: operations["listTriggerChecks"];
+        put?: never;
+        /**
+         * Try the trigger's check now, filing, noting and saving nothing
+         * @description Queues a try check (ADR 0040 decision 19): it runs as the trigger's checks do, with its agent, brief, spend and time limits, and spends from the factory's budget, but its finish keeps only what it would file, note and skip; it files no item, writes no note, keeps no key, saves no state and counts toward no limit. Read the result with listTriggerChecks. Writes a trigger.tried audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running; 422 no-check for a trigger without check.
+         */
+        post: operations["tryTriggerCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/metrics/lead-time": {
         parameters: {
             query?: never;
@@ -6301,6 +6332,60 @@ export interface components {
             /** @description How many schedule instants a missed event covers; 0 for any other outcome */
             missed: number;
         };
+        TriggerCheckList: {
+            checks: components["schemas"]["TriggerCheck"][];
+        };
+        /** @description One check of a trigger. Every key, title, text and reason comes from the check's agent or the source it read: text to show as text, never markup. */
+        TriggerCheck: {
+            /** @description The check's firing id */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When it was queued
+             */
+            at: string;
+            /**
+             * Format: date-time
+             * @description When it finished; null while queued or running
+             */
+            checked_at: string | null;
+            /** @enum {string} */
+            state: "queued" | "running" | "done" | "failed";
+            /** @description A try (tryTriggerCheck) */
+            try: boolean;
+            /**
+             * Format: double
+             * @description What its run cost
+             */
+            cost_usd: number;
+            /** @description Why it failed; null otherwise */
+            reason: string | null;
+            /** @description The items it filed, one per key */
+            filed: components["schemas"]["TriggerCheckFiled"][];
+            /** @description The notes it wrote on its keys' open items */
+            noted: components["schemas"]["TriggerCheckNoted"][];
+            /** @description What it did not file or note, with why: "closed on Nov 2: <reason>", "over the limit", "a note on this key within the hour", "the same note again", "no open item for this key", "can't file it: …", or the agent's own reason */
+            skipped: components["schemas"]["TriggerCheckSkip"][];
+        };
+        TriggerCheckFiled: {
+            /** @description The source's own id for it */
+            key: string;
+            title: string;
+            /** @description The item's ref, #<number>; null for a try */
+            ref: string | null;
+            /** @description For a key filed again with reopen, the ref of the closed item it links to */
+            reopens: string | null;
+        };
+        TriggerCheckNoted: {
+            key: string;
+            /** @description The open item's ref, #<number> */
+            ref: string;
+            text: string;
+        };
+        TriggerCheckSkip: {
+            key: string;
+            reason: string;
+        };
         TriggerTryRequest: {
             /** @description The id of one of the trigger's 20 newest events: a schedule's, or a delivery's while its webhook keeps it (30 days) */
             firing: string;
@@ -6995,12 +7080,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo)
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse" | "check_failing" | "check_limit";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -7037,6 +7122,15 @@ export interface components {
             knowledge_source?: components["schemas"]["InboxKnowledgeSource"] | null;
             /** @description The watch of a watch_worse entry, with its proposal's number; absent or null for other kinds */
             watch?: components["schemas"]["Watch"] | null;
+            /** @description The trigger of a check_failing or check_limit entry; absent or null for other kinds */
+            trigger_check?: components["schemas"]["InboxTriggerCheck"] | null;
+        };
+        /** @description A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page. */
+        InboxTriggerCheck: {
+            /** @description The trigger's name */
+            trigger: string;
+            /** @description For check_failing, why its newest check failed; for check_limit, "over the limit" */
+            reason: string;
         };
         /** @description A knowledge source whose last syncs failed, shown under each factory that lists it. */
         InboxKnowledgeSource: {
@@ -11407,6 +11501,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TriggerTry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTriggerChecks: {
+        parameters: {
+            query?: {
+                /** @description How many checks to list (default 20) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trigger's checks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerCheckList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryTriggerCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The try check, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerCheck"];
                 };
             };
             default: components["responses"]["Problem"];

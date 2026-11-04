@@ -66,6 +66,13 @@ func (w workInbox) Inbox(ctx context.Context, q InboxQuery) ([]gen.InboxEntry, e
 
 	out = append(out, sources...)
 
+	checks, err := w.checkEntries(ctx, q.Factories)
+	if err != nil {
+		return nil, err
+	}
+
+	out = append(out, checks...)
+
 	worse, err := w.watchEntries(ctx, q.Factories, q.Limit+1)
 	if err != nil {
 		return nil, err
@@ -295,6 +302,68 @@ func (w workInbox) knowledgeEntries(ctx context.Context, factories []*config.Fac
 	}
 
 	return out, nil
+}
+
+// checkEntries are the check triggers whose checks need a person (ADR 0040 decision 19), derived
+// on read from Intake.CheckAlerts: check_failing while a trigger's last three checks failed, and
+// check_limit once a UTC day for a trigger whose check skipped something over the limit that day.
+// Only triggers with a check in their factory's current definition show.
+func (w workInbox) checkEntries(ctx context.Context, factories []*config.Factory) ([]gen.InboxEntry, error) {
+	byID := map[domain.FactoryID]*config.Factory{}
+	ids := []domain.FactoryID{}
+
+	for _, f := range factories {
+		if hasCheck(f) {
+			byID[domain.FactoryID(f.Metadata.ID)] = f
+			ids = append(ids, domain.FactoryID(f.Metadata.ID))
+		}
+	}
+
+	out := []gen.InboxEntry{}
+
+	if len(ids) == 0 || w.s.intake == nil {
+		return out, nil
+	}
+
+	day := w.s.clock.Now().UTC().Truncate(24 * time.Hour)
+
+	alerts, err := w.s.intake.CheckAlerts(ctx, ids, day)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, a := range alerts {
+		f, ok := byID[a.FactoryID]
+		if !ok {
+			continue
+		}
+
+		if t, ok := f.Line().Trigger(a.Trigger); !ok || t.Check == nil {
+			continue
+		}
+
+		var entry gen.InboxEntry
+
+		switch a.Kind {
+		case domain.CheckFailing:
+			entry = entryOf(f, gen.InboxEntryKindCheckFailing, f.Metadata.ID+":"+a.Trigger, a.At)
+			entry.TriggerCheck = &gen.InboxTriggerCheck{Trigger: a.Trigger, Reason: a.Reason}
+		case domain.CheckLimited:
+			entry = entryOf(f, gen.InboxEntryKindCheckLimit, f.Metadata.ID+":"+a.Trigger+":"+day.Format(time.DateOnly), a.At)
+			entry.TriggerCheck = &gen.InboxTriggerCheck{Trigger: a.Trigger, Reason: domain.CheckOverLimit}
+		default:
+			continue
+		}
+
+		out = append(out, entry)
+	}
+
+	return out, nil
+}
+
+// hasCheck reports whether f's current definition has a trigger with a check.
+func hasCheck(f *config.Factory) bool {
+	return slices.ContainsFunc(f.Line().Triggers, func(t domain.Trigger) bool { return t.Check != nil })
 }
 
 // conversionReason is a conversion's problems as one line: each a sentence.
