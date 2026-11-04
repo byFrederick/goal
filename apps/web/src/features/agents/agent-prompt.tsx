@@ -12,9 +12,11 @@ import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { SectionCard } from '../../ui/card';
+import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Tooltip } from '../../ui/tooltip';
+import { touchLinkWide } from '../../ui/touch-target';
 import { resetBlockedReason, usePromptText } from '../factory-editor/agents/prompt-editor';
 import { useDraftSession } from '../factory-editor/draft/use-draft';
 
@@ -113,7 +115,7 @@ function PromptActions({ agent }: { agent: string }) {
         to="/o/$org/f/$factory/definition/$section"
         params={{ ...params, section: 'agents' }}
         search={{ agent }}
-        className="font-control text-body text-run-ink hover:text-link"
+        className={cn(touchLinkWide, 'font-control text-body text-run-ink hover:text-link')}
       >
         Edit prompt
       </Link>
@@ -140,7 +142,7 @@ export function PromptPreview({ agent }: { agent: string }) {
           to="/o/$org/f/$factory/agents/$agent"
           params={{ ...params, agent }}
           search={{ view: 'prompt' }}
-          className="self-start font-control text-body text-run-ink hover:text-link"
+          className={cn(touchLinkWide, 'self-start font-control text-body text-run-ink hover:text-link')}
         >
           Show the full prompt
         </Link>

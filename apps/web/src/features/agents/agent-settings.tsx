@@ -15,6 +15,7 @@ import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Select } from '../../ui/select';
 import { Skeleton } from '../../ui/skeleton';
+import { touchLinkWide } from '../../ui/touch-target';
 import { setAgentField } from '../factory-editor/draft/ops';
 import { useDraftSession, useSection } from '../factory-editor/draft/use-draft';
 import { defaultEnvironment } from '../factory-editor/environments/env-file';
@@ -204,7 +205,7 @@ export function AgentSettings({ agent }: { agent: string }) {
                 to="/o/$org/f/$factory/agents/$agent"
                 params={{ ...params, agent }}
                 search={{ view: 'tools' }}
-                className="font-control text-run-ink hover:text-link"
+                className={cn(touchLinkWide, 'font-control text-run-ink hover:text-link')}
               >
                 Show the lists
               </Link>

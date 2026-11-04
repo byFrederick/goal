@@ -7,6 +7,7 @@ import { Link } from '@tanstack/react-router';
 import { useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Chip } from '../../ui/chip';
+import { touchLinkWide } from '../../ui/touch-target';
 import { useModelKey } from '../factory-editor/basics/model-key';
 import { useEnvironmentAgents, useEnvironmentNames } from '../factory-editor/environments/use-environments';
 import { SettingsGroup } from './settings-group';
@@ -52,7 +53,7 @@ function KeyAndEnvironments() {
         <Link
           to="/o/$org/f/$factory/definition/$section"
           params={{ ...params, section: 'environments' }}
-          className="font-control text-secondary"
+          className={`${touchLinkWide} font-control text-secondary`}
         >
           Edit
         </Link>

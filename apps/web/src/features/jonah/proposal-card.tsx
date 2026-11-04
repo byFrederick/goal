@@ -143,7 +143,11 @@ export function ProposalCard({
         <span className="text-secondary text-muted">
           {full.data && proposalKind(full.data) === 'memory'
             ? `Quoted from ${evidence_count} people's words`
-            : basedOnText(evidence_count)}
+            : full.data && proposalKind(full.data) === 'model'
+              ? null
+              : evidence_count > 0
+                ? basedOnText(evidence_count)
+                : null}
         </span>
         <Button asChild variant={primary ? 'primary' : 'secondary'} size="sm">
           <Link to="/o/$org/f/$factory/jonah/proposals/$number" params={{ ...params, number: String(number) }}>

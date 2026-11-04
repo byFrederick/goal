@@ -379,6 +379,29 @@ describe('the proposal page, its four states', () => {
     expect(within(strip).getByText('1 of 2')).toBeTruthy();
   });
 
+  it('shows no Found in row and no Why card on a model proposal, which has no evidence', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...modelProposal, evidence: [], evidence_count: 0 });
+    renderProposal();
+
+    await screen.findByRole('region', { name: /Tried on past items/ });
+    expect(screen.queryByText('Found in')).toBeNull();
+    expect(screen.queryByRole('region', { name: /Why/ })).toBeNull();
+    expect(screen.queryByText(/0 of 0 items/)).toBeNull();
+    expect(screen.queryByText(/sent back$/)).toBeNull();
+  });
+
+  it('shows Found in and the Why card on a definition proposal', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue(proposal7);
+    renderProposal();
+
+    await screen.findByRole('heading', { level: 1, name: proposal7.title });
+    expect(screen.getByText('Found in')).toBeTruthy();
+    expect(screen.getByText('4 items sent back')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: /Why/ })).getByText(/of 4 items/)).toBeTruthy();
+  });
+
   it('a decided proposal shows its state and its reason, and no actions', async () => {
     vi.mocked(getJonahOverview).mockResolvedValue(overview);
     vi.mocked(getProposal).mockResolvedValue({

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectNoHorizontalScroll, orgNav } from './support';
+import { boxOf } from './support-boxes';
 
 // Needs you (/o/acme/needs-you): the list, the split detail and the phone's approve view, against the
 // mock API. The mock seeds decisions and alerts in the software, sre and support factories.
@@ -169,4 +170,16 @@ test('Undo this change on a watch_worse entry lands on the undo proposal', async
 
   expect(proposal.undoes).toBe(5);
   await expect(page).toHaveURL(new RegExp(`/o/acme/f/software/jonah/proposals/${proposal.number}$`));
+});
+
+test('the three watch_worse buttons are the same height', async ({ page }) => {
+  await page.goto('/o/acme/needs-you');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await list.getByRole('link', { name: /Proposal 5 made .* worse/ }).click();
+  const heights = [
+    await boxOf(page.getByRole('button', { name: /^Undo this change/ })),
+    await boxOf(page.getByRole('link', { name: /^Open proposal \d+/ }).first()),
+    await boxOf(page.getByRole('link', { name: /^Open the .* Floor$/ }).first()),
+  ].map((box) => box.height);
+  expect(new Set(heights).size).toBe(1);
 });

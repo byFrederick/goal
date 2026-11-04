@@ -9,7 +9,7 @@
 // paint without a slide, and it slides only when the choice changes.
 import { Fragment, useId, useLayoutEffect, useRef } from 'react';
 import { cn } from './cn';
-import { placePill, tabPill } from './tab-nav';
+import { placePill, revealInline, tabPill } from './tab-nav';
 import { Tooltip } from './tooltip';
 
 export interface SegmentedOption<T extends string> {
@@ -50,6 +50,8 @@ export function SegmentedControl<T extends string>({
   const pill = useRef<HTMLSpanElement>(null);
   const labels = useRef<(HTMLLabelElement | null)[]>([]);
   const placed = useRef(false);
+  const box = useRef<HTMLFieldSetElement>(null);
+  const revealed = useRef<HTMLElement | null>(null);
 
   // Moves the pill to the chosen option. The first placement, and a resize, snap; a new choice slides.
   useLayoutEffect(() => {
@@ -64,6 +66,11 @@ export function SegmentedControl<T extends string>({
       if (!animate) el.style.transition = 'none';
       el.style.opacity = '1';
       placePill(el, chosen);
+      // The options scroll sideways when they do not fit; bring a new choice into view, never animated.
+      if (box.current && revealed.current !== chosen) {
+        revealed.current = chosen;
+        revealInline(box.current, chosen);
+      }
       if (!animate) {
         void el.offsetWidth;
         el.style.transition = '';
@@ -78,9 +85,10 @@ export function SegmentedControl<T extends string>({
 
   return (
     <fieldset
+      ref={box}
       aria-describedby={describedBy}
       className={cn(
-        'relative m-0 inline-flex shrink-0 gap-px rounded-control border border-line bg-panel',
+        'no-scrollbar relative m-0 inline-flex max-w-full min-w-0 shrink-0 gap-px overflow-x-auto rounded-control border border-line bg-panel',
         size === 'compact' ? 'p-1 md:p-px' : 'p-1',
         className,
       )}

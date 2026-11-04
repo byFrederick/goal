@@ -3,6 +3,7 @@
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoClippedElements, expectNoHorizontalScroll } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 const sizes = [
   { width: 1440, height: 1000 },
@@ -56,4 +57,32 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
     expect(box.height, `${box.name} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
   }
   await expectAccessible(page);
+});
+
+test('the environments Edit link is 44×44 and no Jonah ⓘ lies over the field under it at 390 px', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(path);
+  await expect(page.getByRole('region', { name: 'Runtime' })).toBeVisible();
+  await expectTarget44(
+    page.getByRole('region', { name: 'Runtime' }).getByRole('link', { name: 'Edit', exact: true }),
+    'Edit',
+  );
+  const jonah = page.getByRole('region', { name: 'Jonah' });
+  const tips = [
+    ['About Jonah’s model', 'Model'],
+    ['About Jonah’s budget', 'Budget, % of the line’s spend'],
+    ['About proposing', 'Proposes after, items'],
+  ] as const;
+  for (const [tip, field] of tips) {
+    const button = jonah.getByRole('button', { name: tip });
+    await expectTarget44(button, tip);
+    await expectNoOverlap(
+      button,
+      jonah.getByRole(field === 'Model' ? 'combobox' : 'textbox', { name: field }),
+      `${tip} and ${field}`,
+    );
+  }
 });
