@@ -571,7 +571,7 @@ func (in *Intake) RecordFiring(ctx context.Context, f domain.TriggerFiring) (dom
 		_, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 			ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
 			IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: item,
-			Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At,
+			Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At, CheckState: checkStateArg(f.CheckState),
 		})
 
 		switch {
@@ -836,6 +836,7 @@ func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger
 		out = append(out, domain.FiringEntry{Firing: firingFrom(db.TriggerFiringByKeyRow{
 			ID: r.ID, FactoryID: r.FactoryID, Trigger: r.Trigger, Source: r.Source, EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey,
 			Dedupe: r.Dedupe, Outcome: r.Outcome, Reason: r.Reason, ItemID: r.ItemID, Missed: r.Missed, At: r.At,
+			CheckState: r.CheckState, RunID: r.RunID, CostUsd: r.CostUsd, Decisions: r.Decisions,
 		}), ItemNumber: r.ItemNumber, Merged: r.Merged})
 	}
 
@@ -941,11 +942,19 @@ func firingFrom(r db.TriggerFiringByKeyRow) domain.TriggerFiring {
 	f := domain.TriggerFiring{
 		ID: r.ID.String(), FactoryID: domain.FactoryID(r.FactoryID.String()), Trigger: r.Trigger, Source: domain.TriggerSource(r.Source),
 		EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey, Dedupe: r.Dedupe, Outcome: domain.FiringOutcome(r.Outcome),
-		Reason: r.Reason, Missed: int(r.Missed), At: r.At.UTC(),
+		Reason: r.Reason, Missed: int(r.Missed), At: r.At.UTC(), CostUSD: r.CostUsd, Decisions: string(r.Decisions),
 	}
 
 	if r.ItemID != nil {
 		f.ItemID = domain.ItemID(r.ItemID.String())
+	}
+
+	if r.CheckState != nil {
+		f.CheckState = domain.CheckState(*r.CheckState)
+	}
+
+	if r.RunID != nil {
+		f.RunID = domain.RunID(r.RunID.String())
 	}
 
 	return f

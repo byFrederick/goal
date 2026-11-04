@@ -216,9 +216,9 @@ func (q *Queries) InsertReceivedDelivery(ctx context.Context, arg InsertReceived
 }
 
 const insertTriggerFiring = `-- name: InsertTriggerFiring :one
-INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at)
+INSERT INTO trigger_firings (id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at, check_state)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12)
+        $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (org_id, factory_id, trigger, idempotency_key) DO NOTHING
 RETURNING id
 `
@@ -236,6 +236,7 @@ type InsertTriggerFiringParams struct {
 	ItemID         *uuid.UUID
 	Missed         int32
 	At             time.Time
+	CheckState     *string
 }
 
 // Returns nothing (no rows) when the trigger already has a firing with this key.
@@ -253,6 +254,7 @@ func (q *Queries) InsertTriggerFiring(ctx context.Context, arg InsertTriggerFiri
 		arg.ItemID,
 		arg.Missed,
 		arg.At,
+		arg.CheckState,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -599,6 +601,7 @@ const pruneTriggerFirings = `-- name: PruneTriggerFirings :execrows
 DELETE FROM trigger_firings f
 WHERE f.factory_id = $1 AND f.at < $2
   AND NOT EXISTS (SELECT 1 FROM work_items w WHERE w.id = f.item_id AND w.state NOT IN ('done', 'cancelled'))
+  AND (f.check_state IS NULL OR f.check_state NOT IN ('queued', 'running'))
 `
 
 type PruneTriggerFiringsParams struct {
@@ -845,7 +848,8 @@ func (q *Queries) TriggerFailureStreak(ctx context.Context, arg TriggerFailureSt
 }
 
 const triggerFiringByKey = `-- name: TriggerFiringByKey :one
-SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at FROM trigger_firings
+SELECT id, factory_id, trigger, source, event_key, idempotency_key, dedupe, outcome, reason, item_id, missed, at,
+       check_state, run_id, cost_usd::float8 AS cost_usd, decisions FROM trigger_firings
 WHERE factory_id = $1 AND trigger = $2 AND idempotency_key = $3
 `
 
@@ -868,6 +872,10 @@ type TriggerFiringByKeyRow struct {
 	ItemID         *uuid.UUID
 	Missed         int32
 	At             time.Time
+	CheckState     *string
+	RunID          *uuid.UUID
+	CostUsd        float64
+	Decisions      []byte
 }
 
 func (q *Queries) TriggerFiringByKey(ctx context.Context, arg TriggerFiringByKeyParams) (TriggerFiringByKeyRow, error) {
@@ -886,12 +894,17 @@ func (q *Queries) TriggerFiringByKey(ctx context.Context, arg TriggerFiringByKey
 		&i.ItemID,
 		&i.Missed,
 		&i.At,
+		&i.CheckState,
+		&i.RunID,
+		&i.CostUsd,
+		&i.Decisions,
 	)
 	return i, err
 }
 
 const triggerFirings = `-- name: TriggerFirings :many
 SELECT f.id, f.factory_id, f.trigger, f.source, f.event_key, f.idempotency_key, f.dedupe, f.outcome, f.reason, f.item_id, f.missed, f.at,
+       f.check_state, f.run_id, f.cost_usd::float8 AS cost_usd, f.decisions,
        coalesce(w.number, 0)::bigint AS item_number,
        EXISTS (SELECT 1 FROM item_events e WHERE e.item_id = f.item_id AND e.kind = 'merged') AS merged
 FROM trigger_firings f
@@ -920,6 +933,10 @@ type TriggerFiringsRow struct {
 	ItemID         *uuid.UUID
 	Missed         int32
 	At             time.Time
+	CheckState     *string
+	RunID          *uuid.UUID
+	CostUsd        float64
+	Decisions      []byte
 	ItemNumber     int64
 	Merged         bool
 }
@@ -947,6 +964,10 @@ func (q *Queries) TriggerFirings(ctx context.Context, arg TriggerFiringsParams) 
 			&i.ItemID,
 			&i.Missed,
 			&i.At,
+			&i.CheckState,
+			&i.RunID,
+			&i.CostUsd,
+			&i.Decisions,
 			&i.ItemNumber,
 			&i.Merged,
 		); err != nil {

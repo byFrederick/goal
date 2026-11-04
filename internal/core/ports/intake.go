@@ -180,7 +180,7 @@ type Intake interface {
 	ExpireChecks(ctx context.Context, factory domain.FactoryID, now time.Time) (int, error)
 	// CheckInput is what the trigger's next check is given: its open items, newest first, at most
 	// domain.MaxCheckOpenItems; the keys whose items closed since now-domain.CheckClosedWindow,
-	// newest first; its newest done check's decisions; and the state saved for it. An item's key
+	// newest first, at most domain.MaxCheckClosed; its newest done check's decisions; and the state saved for it. An item's key
 	// is the dedupe value of the firing that filed it.
 	CheckInput(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckInput, error)
 }

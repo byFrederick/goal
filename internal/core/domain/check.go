@@ -60,8 +60,10 @@ const (
 	MaxCheckState = 4096
 	// MaxCheckOpenItems is the most open items of its trigger a check is given.
 	MaxCheckOpenItems = 50
-	// CheckClosedWindow is how far back a check is given the keys whose items closed.
+	// CheckClosedWindow is how far back a check is given the keys whose items closed, and
+	// MaxCheckClosed the most of them.
 	CheckClosedWindow = 7 * 24 * time.Hour
+	MaxCheckClosed    = 200
 )
 
 // CheckLease is a running check's lease: its firing, the instance holding it, the token that

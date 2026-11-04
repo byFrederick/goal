@@ -245,7 +245,7 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 
 		switch closedAt := cmp.Or(it.DoneAt, it.UpdatedAt); {
 		case it.State == domain.StateDone || it.State == domain.StateCancelled:
-			if closedAt.Before(now.Add(-domain.CheckClosedWindow)) {
+			if closedAt.Before(now.Add(-domain.CheckClosedWindow)) || len(out.Closed) >= domain.MaxCheckClosed {
 				continue
 			}
 

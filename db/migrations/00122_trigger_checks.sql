@@ -50,6 +50,8 @@ CREATE UNIQUE INDEX trigger_firings_check_live_idx ON trigger_firings (org_id, f
 CREATE INDEX trigger_firings_check_done_idx ON trigger_firings (org_id, factory_id, trigger, checked_at DESC)
   WHERE check_state = 'done';
 CREATE INDEX trigger_firings_run_idx ON trigger_firings (org_id, run_id) WHERE run_id IS NOT NULL;
+-- An item's firing, whose dedupe value is the key a check is given it by.
+CREATE INDEX trigger_firings_item_idx ON trigger_firings (org_id, item_id) WHERE item_id IS NOT NULL;
 
 GRANT UPDATE (check_state, lease_holder, lease_token, lease_until, run_id, cost_usd, decisions, checked_at, reason)
   ON trigger_firings TO goal_app;
