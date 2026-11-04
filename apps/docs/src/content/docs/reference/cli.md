@@ -802,42 +802,60 @@ Flags: `--event ID`, `--json`.
 ## goal webhooks list
 
 ```text
-goal webhooks list <factory> [--json]
+goal webhooks list [--json]
 ```
 
-the factory's webhook endpoints: kind, address, the triggers they feed, deliveries in 7 days (never a secret)
+the organization's webhooks: sender, address, the secret that signs them, the factories they are open to, the triggers that use them, deliveries in 7 days (never a secret's value)
 
 Flags: `--json`.
 
 ## goal webhooks create
 
 ```text
-goal webhooks create <factory> <name> [--kind generic|github] [--json]
+goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
 ```
 
-add an endpoint (default kind generic); its signing secret is printed once, alone on stdout: store it in the sender now
+add a webhook, open to no factory (default sender standard; --kind generic|github is the old name of --sender, generic being standard); without --secret it makes the secret webhook-&lt;name&gt; and prints its value once, alone on stdout: store it in the sender now
 
-Flags: `--kind generic|github`, `--json`.
+Flags: `--sender github|gitlab|standard|pagerduty|sentry|token`, `--secret <name>`, `--json`.
 
-## goal webhooks rotate
+## goal webhooks open
 
 ```text
-goal webhooks rotate <factory> <name> [--json]
+goal webhooks open <webhook> <factory> [--repos a,b] [--json]
 ```
 
-replace its signing secret, printed once the same way; the old one stops working at once
+the factory receives its deliveries, only those of the repositories listed with --repos; again replaces the repositories
+
+Flags: `--repos a,b`, `--json`.
+
+## goal webhooks close
+
+```text
+goal webhooks close <webhook> <factory> [--json]
+```
+
+the factory no longer receives its deliveries
 
 Flags: `--json`.
 
 ## goal webhooks deliveries
 
 ```text
-goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+goal webhooks deliveries <webhook> [--limit N] [--after C] [--json]
 ```
 
 what it received, newest first: refused (and why), accepted or created an item
 
 Flags: `--limit N`, `--after C`, `--json`.
+
+## goal webhooks delete
+
+```text
+goal webhooks delete <webhook>
+```
+
+delete it and its deliveries; its secret stays
 
 ## goal storage init
 
