@@ -866,6 +866,7 @@ const (
 	InboxEntryKindQuestion        InboxEntryKind = "question"
 	InboxEntryKindReworkWarning   InboxEntryKind = "rework_warning"
 	InboxEntryKindToolApproval    InboxEntryKind = "tool_approval"
+	InboxEntryKindWatchWorse      InboxEntryKind = "watch_worse"
 )
 
 // Valid indicates whether the value is a known member of the InboxEntryKind enum.
@@ -888,6 +889,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindReworkWarning:
 		return true
 	case InboxEntryKindToolApproval:
+		return true
+	case InboxEntryKindWatchWorse:
 		return true
 	default:
 		return false
@@ -1379,16 +1382,16 @@ func (e PolicyBoxSizeSize) Valid() bool {
 
 // Defines values for ProposalEstimateMetric.
 const (
-	LeadTimeP85  ProposalEstimateMetric = "lead_time_p85"
-	SentBackRate ProposalEstimateMetric = "sent_back_rate"
+	ProposalEstimateMetricLeadTimeP85  ProposalEstimateMetric = "lead_time_p85"
+	ProposalEstimateMetricSentBackRate ProposalEstimateMetric = "sent_back_rate"
 )
 
 // Valid indicates whether the value is a known member of the ProposalEstimateMetric enum.
 func (e ProposalEstimateMetric) Valid() bool {
 	switch e {
-	case LeadTimeP85:
+	case ProposalEstimateMetricLeadTimeP85:
 		return true
-	case SentBackRate:
+	case ProposalEstimateMetricSentBackRate:
 		return true
 	default:
 		return false
@@ -2049,6 +2052,54 @@ func (e VersionState) Valid() bool {
 	case VersionStateDraft:
 		return true
 	case VersionStatePublished:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WatchMetric.
+const (
+	WatchMetricCostPerItem  WatchMetric = "cost_per_item"
+	WatchMetricLeadTimeP85  WatchMetric = "lead_time_p85"
+	WatchMetricSentBackRate WatchMetric = "sent_back_rate"
+)
+
+// Valid indicates whether the value is a known member of the WatchMetric enum.
+func (e WatchMetric) Valid() bool {
+	switch e {
+	case WatchMetricCostPerItem:
+		return true
+	case WatchMetricLeadTimeP85:
+		return true
+	case WatchMetricSentBackRate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WatchVerdict.
+const (
+	Helped        WatchVerdict = "helped"
+	NoChange      WatchVerdict = "no_change"
+	NoClearChange WatchVerdict = "no_clear_change"
+	TooEarly      WatchVerdict = "too_early"
+	Worse         WatchVerdict = "worse"
+)
+
+// Valid indicates whether the value is a known member of the WatchVerdict enum.
+func (e WatchVerdict) Valid() bool {
+	switch e {
+	case Helped:
+		return true
+	case NoChange:
+		return true
+	case NoClearChange:
+		return true
+	case TooEarly:
+		return true
+	case Worse:
 		return true
 	default:
 		return false
@@ -4204,13 +4255,13 @@ type InboxEntry struct {
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo)
 	Kind InboxEntryKind `json:"kind"`
 
 	// KnowledgeSource Why the knowledge source does not sync; absent or null for other kinds
@@ -4222,7 +4273,7 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -4230,9 +4281,12 @@ type InboxEntry struct {
 
 	// ToolApproval A tool_approval entry's open tool approval; absent or null for other kinds
 	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
+
+	// Watch The watch of a watch_worse entry, with its proposal's number; absent or null for other kinds
+	Watch *Watch `json:"watch,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo)
 type InboxEntryKind string
 
 // InboxKnowledgeSource A knowledge source whose last syncs failed, shown under each factory that lists it.
@@ -6216,6 +6270,12 @@ type Proposal struct {
 	State              ProposalState `json:"state"`
 	Summary            string        `json:"summary"`
 	Title              string        `json:"title"`
+
+	// Undoes The number of the proposal this one reverses (Undo this change)
+	Undoes *int64 `json:"undoes,omitempty"`
+
+	// Watch The watch of the proposal's own number (estimate.metric at estimate.station) since Approve published it; absent until the first watch sweep after the publish
+	Watch *Watch `json:"watch,omitempty"`
 }
 
 // ProposalDecided defines model for ProposalDecided.
@@ -7572,6 +7632,9 @@ type Version struct {
 	// Source Where a version started ("Source - Template Cost review v2")
 	Source VersionSource `json:"source"`
 	State  VersionState  `json:"state"`
+
+	// Watches The watches of this version's change, by station and metric: a Jonah proposal's own number, or the send-back rate and cost per item at each station it reaches; empty for a change not watched yet and absent for a draft
+	Watches *[]Watch `json:"watches,omitempty"`
 }
 
 // VersionDetail defines model for VersionDetail.
@@ -7593,6 +7656,9 @@ type VersionDetail struct {
 	// Source Where a version started ("Source - Template Cost review v2")
 	Source VersionSource `json:"source"`
 	State  VersionState  `json:"state"`
+
+	// Watches The watches of this version's change, by station and metric: a Jonah proposal's own number, or the send-back rate and cost per item at each station it reaches; empty for a change not watched yet and absent for a draft
+	Watches *[]Watch `json:"watches,omitempty"`
 }
 
 // VersionModel defines model for VersionModel.
@@ -7671,6 +7737,52 @@ type WaitingSummary struct {
 		Count      int    `json:"count"`
 	} `json:"tool_approvals"`
 }
+
+// Watch One published change watched at one station on one metric (ADR 0039 decision 14). Each item's outcome at the station counts for the definition version of its run there: before covers the versions since the last change that reached the station, after the change's version and those after it until the next change that reaches the station.
+type Watch struct {
+	After  WatchSide `json:"after"`
+	Before WatchSide `json:"before"`
+
+	// ClosedAt When the verdict became final; null while it is watched
+	ClosedAt *time.Time `json:"closed_at"`
+
+	// Interval null while either side has fewer than two items
+	Interval *WatchInterval `json:"interval"`
+
+	// Metric sent_back_rate: the share of items a person sent back at the station; cost_per_item: the USD of an item's runs there; lead_time_p85: the 85th percentile of an item's time there, in seconds. Lower is better for each.
+	Metric WatchMetric `json:"metric"`
+
+	// OpenedAt When the change was published
+	OpenedAt time.Time `json:"opened_at"`
+
+	// Proposal The Jonah proposal whose own number this is; absent for a person's publish
+	Proposal *int64 `json:"proposal,omitempty"`
+	Station  string `json:"station"`
+
+	// Verdict helped or worse: the 90% interval of after minus before clears the minimum effect (5 points for a rate, 10% of before for cost and lead time); no_change: it lies inside that minimum; too_early: neither yet; no_clear_change: still neither after 14 days or 150 items after the change
+	Verdict WatchVerdict `json:"verdict"`
+}
+
+// WatchInterval A 90% interval of after minus before
+type WatchInterval struct {
+	High float64 `json:"high"`
+	Low  float64 `json:"low"`
+}
+
+// WatchMetric sent_back_rate: the share of items a person sent back at the station; cost_per_item: the USD of an item's runs there; lead_time_p85: the 85th percentile of an item's time there, in seconds. Lower is better for each.
+type WatchMetric string
+
+// WatchSide defines model for WatchSide.
+type WatchSide struct {
+	// Items The items counted on this side
+	Items int `json:"items"`
+
+	// Value The metric over them
+	Value float64 `json:"value"`
+}
+
+// WatchVerdict helped or worse: the 90% interval of after minus before clears the minimum effect (5 points for a rate, 10% of before for cost and lead time); no_change: it lies inside that minimum; too_early: neither yet; no_clear_change: still neither after 14 days or 150 items after the change
+type WatchVerdict string
 
 // WebhookDelivery defines model for WebhookDelivery.
 type WebhookDelivery struct {
@@ -9779,6 +9891,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
 	RejectProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+	//
+	// Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo (the `UndoProposal` operationId).
+	UndoProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
 	//
@@ -13053,6 +13172,23 @@ func (c *Client) RejectProposalWithBody(ctx context.Context, org OrgRef, factory
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
 func (c *Client) RejectProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRejectProposalRequest(c.Server, org, factory, number, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+//
+// Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo (the `UndoProposal` operationId).
+func (c *Client) UndoProposal(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUndoProposalRequest(c.Server, org, factory, number)
 	if err != nil {
 		return nil, err
 	}
@@ -20400,6 +20536,54 @@ func NewRejectProposalRequestWithBody(server string, org OrgRef, factory Factory
 	return req, nil
 }
 
+// NewUndoProposalRequest constructs an http.Request for the UndoProposal method
+func NewUndoProposalRequest(server string, org OrgRef, factory FactoryRef, number ProposalNumber) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "number", number, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "integer", Format: "int64"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/jonah/proposals/%s/undo", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewQueueJonahReviewRequest constructs an http.Request for the QueueJonahReview method
 func NewQueueJonahReviewRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -27276,6 +27460,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject (the `RejectProposal` operationId).
 	RejectProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, body RejectProposalJSONRequestBody, reqEditors ...RequestEditorFn) (*RejectProposalResponse, error)
 
+	// UndoProposalWithResponse Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+	//
+	// Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo (the `UndoProposal` operationId).
+	UndoProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*UndoProposalResponse, error)
+
 	// QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
 	//
 	// The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
@@ -32890,6 +33083,54 @@ func (r RejectProposalResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RejectProposalResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UndoProposalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *Proposal
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r UndoProposalResponse) GetJSON201() *Proposal {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UndoProposalResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UndoProposalResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UndoProposalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UndoProposalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UndoProposalResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -39867,6 +40108,21 @@ func (c *ClientWithResponses) RejectProposalWithResponse(ctx context.Context, or
 	return ParseRejectProposalResponse(rsp)
 }
 
+// UndoProposalWithResponse Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+//
+// Works out the replacements the proposal's publish made, from each file in the version it was made against and its published content, and reverses them against the current version, whatever has published since. A file the proposal added is left. The new proposal is proposed, with undoes set, and publishes only when a person approves it. 409 proposal-not-published when the proposal was never published; undo-conflict, naming the file, when a reversed replacement's text no longer occurs exactly once; undo-open while an undo of the proposal is proposed, published or applied. 404 proposal-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo (the `UndoProposal` operationId).
+func (c *ClientWithResponses) UndoProposalWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, number ProposalNumber, reqEditors ...RequestEditorFn) (*UndoProposalResponse, error) {
+	rsp, err := c.UndoProposal(ctx, org, factory, number, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUndoProposalResponse(rsp)
+}
+
 // QueueJonahReviewWithResponse Queue a manual review of the factory's sent-back runs (decision 2)
 //
 // The review reads the sent-back touches since the last review's window ended (30 days back before the first) on the current version; goald's review loop runs it. 409 review-loop-not-running while no review loop runs (none does until software#344 ships): nothing is queued. 409 review-in-flight while a review is pending or running; learning-budget-exhausted while the factory's jonah runs over the last 7 days cost learning.jonah.weeklyUsd or more. 404 version-not-found before the first publish.
@@ -45015,6 +45271,39 @@ func ParseRejectProposalResponse(rsp *http.Response) (*RejectProposalResponse, e
 	return response, nil
 }
 
+// ParseUndoProposalResponse parses an HTTP response from a UndoProposalWithResponse call
+func ParseUndoProposalResponse(rsp *http.Response) (*UndoProposalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UndoProposalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest Proposal
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseQueueJonahReviewResponse parses an HTTP response from a QueueJonahReviewWithResponse call
 func ParseQueueJonahReviewResponse(rsp *http.Response) (*QueueJonahReviewResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -48946,6 +49235,9 @@ type ServerInterface interface {
 	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject)
 	RejectProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
+	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo)
+	UndoProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber)
 	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
 	QueueJonahReview(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -52966,6 +53258,50 @@ func (siw *ServerInterfaceWrapper) RejectProposal(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RejectProposal(w, r, org, factory, number)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UndoProposal operation middleware
+func (siw *ServerInterfaceWrapper) UndoProposal(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "number" -------------
+	var number ProposalNumber
+
+	err = runtime.BindStyledParameterWithOptions("simple", "number", r.PathValue("number"), &number, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "number", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UndoProposal(w, r, org, factory, number)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -57602,6 +57938,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/approve", wrapper.ApproveProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/edit", wrapper.EditProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject", wrapper.RejectProposal)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo", wrapper.UndoProposal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/jonah/reviews", wrapper.QueueJonahReview)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.GetAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
@@ -61394,6 +61731,47 @@ type RejectProposaldefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response RejectProposaldefaultApplicationProblemPlusJSONResponse) VisitRejectProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoProposalRequestObject struct {
+	Org     OrgRef         `json:"org"`
+	Factory FactoryRef     `json:"factory"`
+	Number  ProposalNumber `json:"number"`
+}
+
+type UndoProposalResponseObject interface {
+	VisitUndoProposalResponse(w http.ResponseWriter) error
+}
+
+type UndoProposal201JSONResponse Proposal
+
+func (response UndoProposal201JSONResponse) VisitUndoProposalResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoProposaldefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UndoProposaldefaultApplicationProblemPlusJSONResponse) VisitUndoProposalResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -66295,6 +66673,9 @@ type StrictServerInterface interface {
 	// RejectProposal Reject the proposal with a reason, which later reviews read (decision 9)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/reject)
 	RejectProposal(ctx context.Context, request RejectProposalRequestObject) (RejectProposalResponseObject, error)
+	// UndoProposal Write Undo this change, a proposal that reverses the published proposal (ADR 0039 decision 15)
+	// (POST /v1/orgs/{org}/factories/{factory}/jonah/proposals/{number}/undo)
+	UndoProposal(ctx context.Context, request UndoProposalRequestObject) (UndoProposalResponseObject, error)
 	// QueueJonahReview Queue a manual review of the factory's sent-back runs (decision 2)
 	// (POST /v1/orgs/{org}/factories/{factory}/jonah/reviews)
 	QueueJonahReview(ctx context.Context, request QueueJonahReviewRequestObject) (QueueJonahReviewResponseObject, error)
@@ -69332,6 +69713,34 @@ func (sh *strictHandler) RejectProposal(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RejectProposalResponseObject); ok {
 		if err := validResponse.VisitRejectProposalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UndoProposal operation middleware
+func (sh *strictHandler) UndoProposal(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, number ProposalNumber) {
+	var request UndoProposalRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Number = number
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UndoProposal(ctx, request.(UndoProposalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UndoProposal")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UndoProposalResponseObject); ok {
+		if err := validResponse.VisitUndoProposalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

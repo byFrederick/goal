@@ -71,3 +71,32 @@ func jonahRound(ctx context.Context, log *slog.Logger, lock scheduleLock, review
 		log.WarnContext(ctx, "jonah review work", slog.Int("finished", n), slog.Any("error", err))
 	}
 }
+
+// watchEvery is how often the goald holding the schedule lock sweeps the watches (ADR 0039
+// decision 14): a watch's verdict moves with the items counted, which take hours, not minutes.
+const watchEvery = 15 * time.Minute
+
+// watchSweep is the watch sweep; *jonah.Watcher satisfies it.
+type watchSweep interface {
+	Sweep(ctx context.Context) error
+}
+
+// runWatches sweeps the watches at once and then on each tick of every until ctx ends, on the
+// goald holding the schedule lock only. The sweep is idempotent, so a lock that moves between
+// instances does no harm. Failures are logged and retried next tick.
+func runWatches(ctx context.Context, log *slog.Logger, lock scheduleLock, watches watchSweep, clock ports.Clock, every time.Duration) {
+	t := clock.NewTicker(every)
+	defer t.Stop()
+
+	for {
+		if _, err := lock.WithScheduleLock(ctx, watches.Sweep); err != nil && ctx.Err() == nil {
+			log.WarnContext(ctx, "watch sweep", slog.Any("error", err))
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C():
+		}
+	}
+}

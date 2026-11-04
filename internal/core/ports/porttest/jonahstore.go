@@ -20,7 +20,10 @@ type jonahRows struct {
 	reviews      []jonahRow[domain.JonahReview]
 	proposals    []jonahRow[domain.Proposal]
 	observations []jonahRow[domain.Observation]
-	runKinds     map[domain.RunID]domain.RunKind
+	watches      []jonahRow[domain.Watch]
+	// outcomes are the station outcomes SetStationOutcomes gave, by factory and station.
+	outcomes map[domain.FactoryID]map[string][]domain.StationOutcome
+	runKinds map[domain.RunID]domain.RunKind
 }
 
 // jonahRow is one Jonah row of an organization.
@@ -39,6 +42,7 @@ func (s *Store) purgeJonah(org domain.OrgID, factory domain.FactoryID) {
 	s.jonah.observations = slices.DeleteFunc(s.jonah.observations, func(r jonahRow[domain.Observation]) bool {
 		return gone(r.org, r.row.FactoryID)
 	})
+	s.jonah.watches = slices.DeleteFunc(s.jonah.watches, func(r jonahRow[domain.Watch]) bool { return gone(r.org, r.row.FactoryID) })
 }
 
 // ownsFactory reports whether factory is org's. Callers hold s.mu.
@@ -491,6 +495,58 @@ func cloneProposals(ps []domain.Proposal) []domain.Proposal {
 	}
 
 	return out
+}
+
+// UndoProposal implements ports.JonahStore.
+func (s *Store) UndoProposal(ctx context.Context, factory domain.FactoryID, undoes domain.ProposalID, version domain.DefinitionVersionID,
+	n domain.NewProposal, at time.Time,
+) (domain.Proposal, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Proposal{}, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Proposal{}, fmt.Errorf("undo proposal: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.ownsFactory(org, factory) {
+		return domain.Proposal{}, fmt.Errorf("undo proposal: factory %s: %w", factory, ports.ErrNotFound)
+	}
+
+	var (
+		last  int64
+		found bool
+	)
+
+	for _, p := range s.jonah.proposals {
+		if p.org != org || p.row.FactoryID != factory {
+			continue
+		}
+
+		last = max(last, p.row.Number)
+		found = found || p.row.ID == undoes
+
+		live := p.row.State == domain.ProposalProposed || p.row.State == domain.ProposalPublished || p.row.State == domain.ProposalApplied
+		if p.row.Undoes == undoes && live {
+			return domain.Proposal{}, fmt.Errorf("undo proposal of %s: one is open: %w", undoes, ports.ErrConflict)
+		}
+	}
+
+	if !found {
+		return domain.Proposal{}, fmt.Errorf("undo proposal: no proposal %s: %w", undoes, ports.ErrNotFound)
+	}
+
+	p := domain.Proposal{
+		ID: domain.ProposalID(s.newID()), FactoryID: factory, Number: last + 1, Undoes: undoes, VersionID: version,
+		State: domain.ProposalProposed, Title: n.Title, Summary: n.Summary, Files: slices.Clone(n.Files), CreatedAt: at,
+	}
+	s.jonah.proposals = append(s.jonah.proposals, jonahRow[domain.Proposal]{org, p})
+
+	return cloneProposals([]domain.Proposal{p})[0], nil
 }
 
 // EvidenceItems implements ports.JonahStore.

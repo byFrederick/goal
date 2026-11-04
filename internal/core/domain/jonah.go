@@ -21,6 +21,11 @@ var (
 	ErrProposalDraftConflict = errors.New("the draft's copy of a file the proposal edits is not the one it was made against")
 	// ErrReviewInFlight refuses a manual review while one is pending or running.
 	ErrReviewInFlight = errors.New("a review of this factory is pending or running")
+	// ErrProposalNotPublished refuses Undo this change for a proposal that was never published.
+	ErrProposalNotPublished = errors.New("the proposal was not published, so there is no change to undo")
+	// ErrUndoConflict refuses Undo this change when a file changed since so that the change no
+	// longer reverses: a reversed replacement's old text does not occur exactly once.
+	ErrUndoConflict = errors.New("a file the change edited changed since, so the change does not reverse")
 	// ErrLearningBudgetExhausted refuses a review while the last 7 days' review runs cost
 	// learning.jonah.weeklyUsd or more.
 	ErrLearningBudgetExhausted = errors.New("this factory's review runs used their weekly budget")
@@ -32,6 +37,7 @@ const (
 	AuditProposalApplied   = "learning_proposal.applied"
 	AuditProposalRejected  = "learning_proposal.rejected"
 	AuditReviewQueued      = "jonah_review.queued"
+	AuditProposalUndo      = "learning_proposal.undo_proposed"
 )
 
 // Audit target kinds of Jonah's entries.
@@ -330,6 +336,9 @@ type Proposal struct {
 	Files     []ProposalFile
 	Evidence  []ProposalEvidence
 	Estimate  ProposalEstimate
+	// Undoes is the proposal this one reverses (Undo this change, ADR 0039 decision 15); it has
+	// no review then.
+	Undoes ProposalID
 	// PublishedVersionID is the version Approve published.
 	PublishedVersionID DefinitionVersionID
 	RejectReason       string
@@ -393,6 +402,8 @@ func (n NewProposal) Check() error {
 
 	switch n.Estimate.Metric {
 	case "", MetricSentBackRate, MetricLeadTimeP85:
+	case MetricCostPerItem:
+		bad("estimate metric %q is a watch's, not a proposal's", n.Estimate.Metric)
 	default:
 		bad("estimate metric %q is not sent_back_rate or lead_time_p85", n.Estimate.Metric)
 	}
