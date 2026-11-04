@@ -21,6 +21,11 @@ var (
 	ErrProposalDraftConflict = errors.New("the draft's copy of a file the proposal edits is not the one it was made against")
 	// ErrReviewInFlight refuses a manual review while one is pending or running.
 	ErrReviewInFlight = errors.New("a review of this factory is pending or running")
+	// ErrProposalNotPublished refuses Undo this change for a proposal that was never published.
+	ErrProposalNotPublished = errors.New("the proposal was not published, so there is no change to undo")
+	// ErrUndoConflict refuses Undo this change when a file changed since so that the change no
+	// longer reverses: a reversed replacement's old text does not occur exactly once.
+	ErrUndoConflict = errors.New("a file the change edited changed since, so the change does not reverse")
 	// ErrLearningBudgetExhausted refuses a review while the last 7 days' review runs cost
 	// learning.jonah.weeklyUsd or more.
 	ErrLearningBudgetExhausted = errors.New("this factory's review runs used their weekly budget")
@@ -32,6 +37,7 @@ const (
 	AuditProposalApplied   = "learning_proposal.applied"
 	AuditProposalRejected  = "learning_proposal.rejected"
 	AuditReviewQueued      = "jonah_review.queued"
+	AuditProposalUndo      = "learning_proposal.undo_proposed"
 )
 
 // Audit target kinds of Jonah's entries.
