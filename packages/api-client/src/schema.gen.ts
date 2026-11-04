@@ -2111,6 +2111,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/agents/{agent}/model-proposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The agent's name, as the factory's current version declares it */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try another model for an agent, as a proposal (ADR 0039 decision 13)
+         * @description Estimates first: with confirm false (the default) it answers 200 with the estimate and stores nothing. The estimate names the agent's five newest finished items (done items whose first run of a claim by the agent is at a station of the current version that can be tried), how each went on the line, the tries (three per item), their cost (each item's original run's cost × 3) and what is left of Jonah's budget (learning.jonah.share of the line's spend over the last 7 days, less Jonah's). With confirm true it answers 201 with the estimate and the proposal: an ordinary proposal against the current version whose one edit is a replacement in factory.yaml that changes the agent's model, with three queued tries per item at the item's station and run on the new model, superseding the open proposals it overlaps. Approve, edit and reject then work on it as on any proposal. 422 model-not-allowed for a model the organization's policy does not allow or the agent's model already; agent-not-triable for an agent that needs MCP servers or secrets; no-finished-items when the agent has no finished item to try; 409 learning-budget-exhausted, with the estimate, when the tries cost more than what is left of Jonah's budget; 404 agent-not-found, version-not-found before the first publish; 503 jonah-unavailable.
+         */
+        post: operations["proposeAgentModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/judges": {
         parameters: {
             query?: never;
@@ -4015,7 +4042,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Evals (ADR 0025): evals-unavailable (503: this goald runs no evals), eval-run-not-found (404), eval-case-unknown (400), eval-run-finished, eval-case-exists, draft-open (409), and a publish's evals-pending (its eval run is queued or running, or it started one) and evals-failing (409, with eval_run_id and failing_cases); the draft stays open. Bake-offs (ADR 0029): learning-budget-exhausted (409, with estimate), invalid-bake-off (422). Try another model (ADR 0039 decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with estimate and model_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -4037,6 +4064,8 @@ export interface components {
             failing_cases?: string[];
             /** @description learning-budget-exhausted only, the estimate of the bake-off it refused */
             estimate?: components["schemas"]["EvalEstimate"];
+            /** @description learning-budget-exhausted of a model proposal only, the estimate it refused */
+            model_estimate?: components["schemas"]["ModelProposalEstimate"];
             /** @description secret-in-use only, what uses the secret */
             uses?: components["schemas"]["SecretUse"][];
         };
@@ -6133,6 +6162,64 @@ export interface components {
             station?: string;
             /** @description The quoted reason it was sent back */
             quote: string;
+        };
+        ModelProposalRequest: {
+            /** @description The model to try */
+            model: string;
+            /**
+             * @description Store the proposal and queue its tries; false answers the estimate only
+             * @default false
+             */
+            confirm?: boolean;
+        };
+        ModelProposalItem: {
+            /** @description <factory name>#<number> */
+            item_ref: string;
+            item_title: string;
+            /** @description The station of the run the tries rerun */
+            station: string;
+            /** @description The item's run the tries rerun */
+            run_id: string;
+            /** @description How the item went on the line, as "passed first time, $0.42" or "sent back 2 times at review, $1.10" */
+            line_result: string;
+            /** @description How many times the item was sent back */
+            sent_back: number;
+            /**
+             * Format: double
+             * @description What the item cost
+             */
+            cost_usd: number;
+            /**
+             * Format: double
+             * @description What the run the tries rerun cost
+             */
+            run_cost_usd: number;
+        };
+        ModelProposalEstimate: {
+            agent: string;
+            /** @description The agent's model now */
+            current_model: string;
+            /** @description The model to try */
+            model: string;
+            /** @description The agent's newest finished items the tries run on, newest first, at most five */
+            items: components["schemas"]["ModelProposalItem"][];
+            /** @description Three per item */
+            tries: number;
+            /**
+             * Format: double
+             * @description Each item's run cost × 3
+             */
+            estimate_usd: number;
+            /**
+             * Format: double
+             * @description What is left of Jonah's budget over the last 7 days
+             */
+            budget_left_usd: number;
+        };
+        ModelProposalResult: {
+            estimate: components["schemas"]["ModelProposalEstimate"];
+            /** @description The stored proposal; absent from an estimate */
+            proposal?: components["schemas"]["Proposal"];
         };
         Proposal: components["schemas"]["ProposalEntry"] & {
             summary: string;
@@ -11788,6 +11875,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    proposeAgentModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The agent's name, as the factory's current version declares it */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description The estimate; nothing is stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelProposalResult"];
+                };
+            };
+            /** @description The estimate and the stored proposal */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelProposalResult"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -53,6 +53,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
@@ -68,10 +69,15 @@ import (
 )
 
 // jonahDeps serve the Jonah routes over store: decisions publish and edit through the same
-// authoring service as the builder.
-func jonahDeps(store *postgres.Store, authors *authoring.Service, clock ports.Clock, log *slog.Logger) *api.JonahDeps {
+// authoring service as the builder, and Try another model reads versions through defs and checks
+// its edit with config's definition check against policies' models.
+func jonahDeps(store *postgres.Store, authors *authoring.Service, defs *definitions.Cache, policies ports.OrgPolicies, clock ports.Clock,
+	log *slog.Logger,
+) *api.JonahDeps {
 	return &api.JonahDeps{Store: store, Watches: store, Decisions: jonah.NewDecider(jonah.DecideDeps{
 		Proposals: store, Authoring: api.NewJonahAuthoring(authors), Audit: store, Clock: clock, Log: log,
+	}), Models: jonah.NewModelProposals(jonah.ModelDeps{
+		Store: store, Definitions: defs, Check: config.ProposalCheck{}, Policies: policies, Audit: store, Clock: clock, Log: log,
 	})}
 }
 
@@ -266,7 +272,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
-		Jonah: jonahDeps(store, authors, clock, log), Clock: clock, Logger: log,
+		Jonah: jonahDeps(store, authors, defs, postgres.NewOrgPolicies(store, s.modelIDs()), clock, log), Clock: clock, Logger: log,
 	})
 	if err = errors.Join(err, siteErr); err != nil {
 		return err

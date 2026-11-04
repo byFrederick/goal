@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/jonah"
 )
 
 // JonahDeps serve the Jonah routes (ADR 0034). Store reads reviews, proposals and observations
@@ -22,6 +24,16 @@ type JonahDeps struct {
 	Store     JonahReads
 	Decisions JonahDecisions
 	Watches   ports.Watches
+	// Models makes Try another model's proposals (ADR 0039 decision 13); *jonah.ModelProposals
+	// satisfies it. nil answers the route with 503 jonah-unavailable.
+	Models JonahModels
+}
+
+// JonahModels estimates and makes a model proposal as the person in ctx; its refusals are
+// domain.ErrAgentNotFound, ErrModelNotAllowed, ErrAgentNotTriable, ErrNoFinishedItems and
+// ErrLearningBudgetExhausted, which comes with the estimate.
+type JonahModels interface {
+	Propose(ctx context.Context, f domain.FactoryID, r jonah.ModelRequest) (jonah.ModelEstimate, domain.Proposal, error)
 }
 
 // JonahReads are the reads of ports.JonahStore the Jonah routes make.
@@ -83,14 +95,48 @@ func jonahProblem(err error) (gen.Problem, bool) {
 	case errors.Is(err, domain.ErrLearningBudgetExhausted):
 		status, code = http.StatusConflict, "learning-budget-exhausted"
 	default:
-		return gen.Problem{}, false
+		i := slices.IndexFunc(modelRefusals, func(r modelRefusal) bool { return errors.Is(err, r.err) })
+		if i < 0 {
+			return gen.Problem{}, false
+		}
+
+		status, code = modelRefusals[i].status, modelRefusals[i].code
 	}
 
 	p := detailed(status, err)
 	p.Code = &code
 
+	if e, ok := errors.AsType[*modelBudgetError](err); ok {
+		p.ModelEstimate = &e.estimate
+		p.Estimate = &gen.EvalEstimate{Usd: e.estimate.EstimateUsd, Unpriced: []string{}}
+	}
+
 	return p, true
 }
+
+// modelRefusal is a refusal of Try another model and its answer.
+type modelRefusal struct {
+	err    error
+	status int
+	code   string
+}
+
+// modelRefusals are Try another model's refusals but the budget's.
+var modelRefusals = []modelRefusal{
+	{domain.ErrModelNotAllowed, http.StatusUnprocessableEntity, "model-not-allowed"},
+	{domain.ErrAgentNotTriable, http.StatusUnprocessableEntity, "agent-not-triable"},
+	{domain.ErrNoFinishedItems, http.StatusUnprocessableEntity, "no-finished-items"},
+	{domain.ErrAgentNotFound, http.StatusNotFound, "agent-not-found"},
+}
+
+// modelBudgetError is a model proposal refused over Jonah's budget, with the estimate it refused.
+type modelBudgetError struct {
+	estimate gen.ModelProposalEstimate
+	err      error
+}
+
+func (e *modelBudgetError) Error() string { return e.err.Error() }
+func (e *modelBudgetError) Unwrap() error { return e.err }
 
 func (s *server) GetJonahOverview(ctx context.Context, req gen.GetJonahOverviewRequestObject) (gen.GetJonahOverviewResponseObject, error) {
 	rec, err := s.jonahFactory(ctx, req.Factory)
@@ -492,6 +538,67 @@ func (s *server) QueueJonahReview(ctx context.Context, req gen.QueueJonahReviewR
 	}
 
 	return gen.QueueJonahReview202JSONResponse(reviewOut(r)), nil
+}
+
+func (s *server) ProposeAgentModel(ctx context.Context, req gen.ProposeAgentModelRequestObject) (gen.ProposeAgentModelResponseObject, error) {
+	rec, err := s.jonahWrite(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.jonah.Models == nil {
+		return nil, errJonahUnavailable
+	}
+
+	if rec.Current == nil {
+		return nil, fmt.Errorf("model proposal of a factory never published: %w", authoring.ErrVersionNotFound)
+	}
+
+	if req.Body == nil {
+		return nil, fmt.Errorf("%w: a model proposal needs a model", errInvalid)
+	}
+
+	confirm := req.Body.Confirm != nil && *req.Body.Confirm
+
+	est, p, err := s.jonah.Models.Propose(ctx, rec.ID, jonah.ModelRequest{Version: rec.Current.ID, Agent: req.Agent, Model: req.Body.Model, Confirm: confirm})
+
+	switch {
+	case errors.Is(err, domain.ErrLearningBudgetExhausted):
+		return nil, &modelBudgetError{estimate: s.modelEstimateOut(ctx, rec.ID, est), err: err}
+	case err != nil:
+		return nil, err
+	}
+
+	out := gen.ModelProposalResult{Estimate: s.modelEstimateOut(ctx, rec.ID, est)}
+	if !confirm {
+		return gen.ProposeAgentModel200JSONResponse(out), nil
+	}
+
+	proposal, err := s.proposalOut(ctx, rec, p)
+	if err != nil {
+		return nil, err
+	}
+
+	out.Proposal = &proposal
+
+	return gen.ProposeAgentModel201JSONResponse(out), nil
+}
+
+// modelEstimateOut is est as the API answers it, each item with its ref in f.
+func (s *server) modelEstimateOut(ctx context.Context, f domain.FactoryID, est jonah.ModelEstimate) gen.ModelProposalEstimate {
+	out := gen.ModelProposalEstimate{
+		Agent: est.Agent, CurrentModel: est.CurrentModel, Model: est.Model, Items: []gen.ModelProposalItem{}, Tries: est.Tries,
+		EstimateUsd: est.EstimateUSD, BudgetLeftUsd: est.BudgetLeftUSD,
+	}
+
+	for _, it := range est.Items {
+		out.Items = append(out.Items, gen.ModelProposalItem{
+			ItemRef: s.ref(ctx, f, it.ItemNumber), ItemTitle: it.ItemTitle, Station: it.Run.Station, RunId: string(it.Run.ID),
+			LineResult: it.LineResult(), SentBack: len(it.SentBackAt), CostUsd: it.CostUSD, RunCostUsd: it.Run.Result.CostUSD,
+		})
+	}
+
+	return out
 }
 
 // jonahFactory resolves the path's factory, then refuses with 503 when this goald serves no
