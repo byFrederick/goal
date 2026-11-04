@@ -153,3 +153,20 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('Undo this change on a watch_worse entry lands on the undo proposal', async ({ page }) => {
+  // The mock seeds software's published proposal 5, whose sent-back rate got worse (mock/jonah.ts); the undo is
+  // written as the proposal after the highest seeded one, so the test reads its number from the answer.
+  await page.goto('/o/acme/needs-you');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await list.getByRole('link', { name: /Proposal 5 made .* worse/ }).click();
+
+  const made = page.waitForResponse(
+    (r) => r.url().endsWith('/jonah/proposals/5/undo') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: /^Undo this change/ }).click();
+  const proposal = (await (await made).json()) as { number: number; undoes: number };
+
+  expect(proposal.undoes).toBe(5);
+  await expect(page).toHaveURL(new RegExp(`/o/acme/f/software/jonah/proposals/${proposal.number}$`));
+});
