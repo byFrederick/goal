@@ -165,7 +165,7 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 	}
 
 	w.loop = jonah.NewTries(jonah.TryDeps{
-		Orgs: w.tn, Jonah: store, Tries: store, Kept: store, Definitions: w.defs, Waiting: store, Runner: w.runner, Clock: clock,
+		Orgs: w.tn, Jonah: store, Tries: store, Kept: store, Definitions: w.defs, Waiting: store, Events: store, Runner: w.runner, Clock: clock,
 	}, jonah.TryConfig{Timeout: tryTimeout, Margin: time.Minute})
 
 	return w
@@ -861,3 +861,104 @@ var checksMakeTest = []string{checkMakeTest}
 
 // checkMakeTest is a station check the grading tests name.
 const checkMakeTest = "make test"
+
+// A try at a gate station, where the proposal changes the gate's own agent, rules or contract, is
+// graded by what people did with the item after its original run, never by a model nor by the
+// gate's own reasons: its decision against a person's send-back or a merge no person undid.
+func TestTries_GateChangeGradedByPeople(t *testing.T) {
+	t.Parallel()
+
+	const gateReason = "the gate agent's own words"
+
+	person := func(kv ...string) map[string]any {
+		d := map[string]any{"actor": "user:ada"}
+		for i := 0; i+1 < len(kv); i += 2 {
+			d[kv[i]] = kv[i+1]
+		}
+
+		return d
+	}
+
+	for _, tt := range []struct {
+		name    string
+		events  func(f domain.FactoryID, it domain.ItemID, at time.Time) []domain.Event
+		output  string
+		verdict domain.PastTryVerdict
+		reason  string
+	}{
+		{
+			name: "merged",
+			events: func(f domain.FactoryID, it domain.ItemID, at time.Time) []domain.Event {
+				return []domain.Event{{FactoryID: f, ItemID: it, At: at.Add(time.Hour), Kind: domain.EventMerged, Station: stTryDone, Actor: "ada", Data: person()}}
+			},
+			output: `{"decision":"approve"}`, verdict: domain.PastTryFixed, reason: "merged",
+		},
+		{
+			name: "sent back by a person",
+			events: func(f domain.FactoryID, it domain.ItemID, at time.Time) []domain.Event {
+				return []domain.Event{{
+					FactoryID: f, ItemID: it, At: at.Add(time.Hour), Kind: domain.EventMoved, Station: stTryDone, Actor: "ada",
+					Data: person("from", stTryDone, "to", stSpec, "reason", "it broke the build"),
+				}}
+			},
+			output: `{"decision":"approve"}`, verdict: domain.PastTryNotFixed, reason: "it broke the build",
+		},
+		{
+			name:   "not a gate verdict",
+			events: func(domain.FactoryID, domain.ItemID, time.Time) []domain.Event { return nil },
+			output: `{}`, verdict: domain.PastTryNotFixed, reason: "not a gate verdict",
+		},
+		{
+			name:   "still open",
+			events: func(domain.FactoryID, domain.ItemID, time.Time) []domain.Event { return nil },
+			output: `{"decision":"approve"}`, verdict: domain.PastTryUnknown, reason: "no person",
+		},
+		{
+			name: "gate's own rejection ignored",
+			events: func(f domain.FactoryID, it domain.ItemID, at time.Time) []domain.Event {
+				return []domain.Event{
+					{
+						FactoryID: f, ItemID: it, At: at.Add(time.Minute), Kind: domain.EventGateRejected, Station: stBuild, Actor: tryAgent,
+						Data: map[string]any{"reason": gateReason},
+					},
+					{
+						FactoryID: f, ItemID: it, At: at.Add(time.Minute), Kind: domain.EventMoved, Station: stBuild, Actor: domain.ActorEngine,
+						Data: map[string]any{"from": stBuild, "to": stSpec},
+					},
+				}
+			},
+			output: `{"decision":"reject","reason":"no tests"}`, verdict: domain.PastTryUnknown, reason: "no person",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			w := newTryWorld(t, 1)
+			org := w.orgs[0]
+			w.defs.build(org, func(s *domain.Station) { s.Gate = &domain.Gate{OnReject: stSpec} })
+
+			started := rt0.Add(-time.Hour)
+			it, _ := w.pastItem(org, started, true)
+
+			if err := w.store.AppendEvents(w.ctx(org), tt.events(w.factories[org], it.ID, started)...); err != nil {
+				t.Fatal(err)
+			}
+
+			w.propose(org, writerPath, it)
+			w.sweep()
+
+			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
+				return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(tt.output), Diff: tryDiff, RunID: tryRunID, CostUSD: 0.25}, nil
+			}
+
+			got := w.onlyTry(org)
+			if got.State != domain.PastTryDone || got.Verdict != tt.verdict || !strings.Contains(got.Reason, tt.reason) || got.CostUSD != 0.25 {
+				t.Errorf("try = %+v; want verdict %s with a reason naming %q", got, tt.verdict, tt.reason)
+			}
+
+			if strings.Contains(got.Reason, gateReason) {
+				t.Errorf("reason %q quotes the gate agent's own reason", got.Reason)
+			}
+		})
+	}
+}
