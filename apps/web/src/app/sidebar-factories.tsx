@@ -96,8 +96,7 @@ function FactoryGroup({
           aria-label={nameLabel}
           className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body font-control text-ink no-underline hover:bg-hover"
         >
-          <FactoryBadge mark={mark} />
-          <span className="min-w-0 flex-1 truncate">{factory.name}</span>
+          <FactoryBadge mark={mark} /> <span className="min-w-0 flex-1 truncate">{factory.name}</span>{' '}
           {attention.waiting > 0 ? <Count value={attention.waiting} label=" waiting on you" /> : null}
           {attention.andon !== null || attention.blocked > 0 ? (
             <span aria-hidden="true" className="mr-1 size-2.5 flex-none rounded-full bg-rework" />

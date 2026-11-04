@@ -256,7 +256,10 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
 
   // Signed up by code, they have no name yet (Better Auth leaves it empty): Goal names them by
   // their email, with its initials, until they choose one.
-  await orgNav(page).filter({ visible: true }).getByRole('button', { name: 'DR, d.ross@example.com, account' }).click();
+  await orgNav(page)
+    .filter({ visible: true })
+    .getByRole('button', { name: /^DR d\.ross@example\.com.*, account$/ })
+    .click();
   const account = page.getByRole('dialog', { name: 'Account' });
   await expect(account.getByText('d.ross@example.com', { exact: true })).toBeVisible();
   await expect(account.getByText('DR', { exact: true })).toBeVisible();

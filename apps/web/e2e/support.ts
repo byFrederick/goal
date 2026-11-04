@@ -12,6 +12,15 @@ export async function expectAccessible(page: Page) {
 }
 
 /**
+ * WCAG 2.5.3 (label in name): every control's accessible name contains its visible text. axe tags the rule
+ * experimental, so the tag run above skips it; this runs it by id. It is not part of expectAccessible.
+ */
+export async function expectLabelInName(page: Page) {
+  const { violations } = await new AxeBuilder({ page }).withRules(['label-content-name-mismatch']).analyze();
+  expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+}
+
+/**
  * The document is never wider than the layout viewport: fails with the overflow in px. It compares with
  * `clientWidth`, not `innerWidth`: on a phone the layout viewport grows to fit an overflow (a button's hit
  * area, a pseudo-element), and innerWidth grows with it.

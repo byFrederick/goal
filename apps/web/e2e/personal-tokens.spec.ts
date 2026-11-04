@@ -206,7 +206,9 @@ test('the account menu opens your personal tokens', async ({ page }) => {
   await page.goto('/o/acme');
   // The account menu at every width; on a phone it opens from the drawer's person row.
   await openNavigation(page);
-  await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
+  await orgNav(page)
+    .getByRole('button', { name: /^FC F\. Cruz.*, account$/ })
+    .click();
   await page.getByRole('dialog', { name: 'Account' }).getByRole('link', { name: 'Personal tokens' }).click();
   await expect(page).toHaveURL(/\/account#personal-tokens$/);
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeFocused();

@@ -138,7 +138,8 @@ describe('the Tests tab', () => {
     expect(within(kept_).getByText('Failed')).toBeTruthy();
     expect(within(kept_).getByText('Error')).toBeTruthy();
     expect(within(kept_).getByText('Not run yet')).toBeTruthy();
-    const link = within(kept_).getByRole('link', { name: /Passed on Nov 3/ });
+    const link = within(kept_).getByRole('link', { name: /^Passed Nov 3, open the run/ });
+    expect(link.textContent).toMatch(/^Passed Nov 3$/);
     expect(link.getAttribute('href')).toContain('/items/497');
     expect(link.getAttribute('href')).toContain('tab=trace');
     expect(within(kept_).getAllByRole('link')).toHaveLength(2);

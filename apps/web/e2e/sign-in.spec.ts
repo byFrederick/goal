@@ -105,7 +105,9 @@ test('signing in by code returns to the page that asked, and the session stays o
   // The account menu names the person, their role here and that they are a platform admin. It is the
   // same popover at every width; on a phone it opens from the drawer's top row.
   await openNavigation(page);
-  await orgNav(page).getByRole('button', { name: 'FC, F. Cruz, account' }).click();
+  await orgNav(page)
+    .getByRole('button', { name: /^FC F\. Cruz.*, account$/ })
+    .click();
   const account = page.getByRole('dialog', { name: 'Account' });
   await expect(account.getByText('F. Cruz', { exact: true })).toBeVisible();
   await expect(account.getByText('Owner', { exact: true })).toBeVisible();
@@ -291,9 +293,10 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
 
   // The account menu opens from the sidebar's person row, or from the phone drawer's at every width.
   const openAccount = async (name: string) => {
+    const initialsAndName = name.replace(', ', ' ');
     await openNavigation(page);
     await orgNav(page)
-      .getByRole('button', { name: `${name}, account` })
+      .getByRole('button', { name: new RegExp(`^${initialsAndName.replace(/\W/g, '\\$&')}.*, account$`) })
       .click();
     return page.getByRole('dialog', { name: 'Account' });
   };
