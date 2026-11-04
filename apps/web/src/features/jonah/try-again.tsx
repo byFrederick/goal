@@ -66,6 +66,7 @@ export function TryAgain({ number }: { number: number }) {
         confirmLabel="Queue the tries"
         pendingLabel="Queueing"
         pending={confirm.isPending}
+        disabled={!ready || estimate.isError}
         onConfirm={() => {
           if (ready) confirm.mutate();
         }}

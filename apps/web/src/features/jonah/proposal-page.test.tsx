@@ -566,6 +566,19 @@ describe('Try again', () => {
     fireEvent.click(within(await triedPanel()).getByRole('button', { name: 'Try again' }));
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText('Not tried: budget used')).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Queue the tries' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps Queue the tries disabled while the estimate loads', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue({ ...proposal7, tried: tried('done') });
+    vi.mocked(tryProposal).mockReturnValue(new Promise(() => {}));
+    renderProposal();
+
+    fireEvent.click(within(await triedPanel()).getByRole('button', { name: 'Try again' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Estimating')).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Queue the tries' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('says goald is not answering for any other error', async () => {
