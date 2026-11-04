@@ -9,9 +9,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// A proposal edits only factory.yaml and the .md, .yaml and .json files under agents/, skills/,
-// rules/ and contracts/ (ADR 0039 decision 6): never evals/, a script or a path that climbs out of
-// its directory.
+// A proposal edits only factory.yaml, memory.yaml and the .md, .yaml and .json files under
+// agents/, skills/, rules/ and contracts/ (ADR 0039 decisions 6 and 7): never evals/, a script or
+// a path that climbs out of its directory.
 func TestProposalPathAllowed(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +26,10 @@ func TestProposalPathAllowed(t *testing.T) {
 		"skills/x/tool.py":            false,
 		"agents/a.txt":                false,
 		"rules/a.md.sh":               false,
-		"memory.yaml":                 false,
+		"memory.yaml":                 true,
+		"memory.yaml.bak":             false,
+		"x/memory.yaml":               false,
+		"agents/memory.yaml":          true,
 		"evals/cases/a.yaml":          false,
 		"evals/judges/x.md":           false,
 		"agents/../evals/x.md":        false,
@@ -39,6 +42,18 @@ func TestProposalPathAllowed(t *testing.T) {
 	} {
 		if got := domain.ProposalPathAllowed(path); got != want {
 			t.Errorf("ProposalPathAllowed(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+// A review's definition edit may change every path a proposal may edit but memory.yaml, which
+// only goald's memory proposal reaches (ADR 0039 decision 7).
+func TestDefinitionEditAllowed(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]bool{"factory.yaml": true, "rules/a.md": true, "memory.yaml": false, "evals/a.yaml": false} {
+		if got := domain.DefinitionEditAllowed(path); got != want {
+			t.Errorf("DefinitionEditAllowed(%q) = %v, want %v", path, got, want)
 		}
 	}
 }

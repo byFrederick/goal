@@ -68,8 +68,9 @@ func seedJonah(ctx context.Context, t *testing.T, s *Store) (domain.FactoryID, d
 }
 
 // The CHECKs refuse, as goal_app, a proposal the domain check would have refused first: a path
-// outside the allowlist (a script among them) or with a .. segment, edits whose paths are not
-// paths, a malformed edit, too many bytes, and a rejection without a reason.
+// outside the allowlist (a script, or a memory.yaml not at the root, among them) or with a ..
+// segment, edits whose paths are not paths, a malformed edit, too many bytes, and a rejection
+// without a reason. memory.yaml at the root is allowed (ADR 0039 decision 7).
 func TestJonah_ProposalChecks(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +110,8 @@ func TestJonah_ProposalChecks(t *testing.T) {
 		"evals":             {[]string{"evals/cases/a.yaml"}, whole("evals/cases/a.yaml", "x")},
 		"script":            {[]string{"skills/x/run.sh"}, replace("skills/x/run.sh", "a", "b")},
 		"other file":        {[]string{"agents/a.txt"}, whole("agents/a.txt", "x")},
-		"memory":            {[]string{"memory.yaml"}, whole("memory.yaml", "x")},
+		"memory elsewhere":  {[]string{"x/memory.yaml"}, whole("x/memory.yaml", "x")},
+		"memory backup":     {[]string{"memory.yaml.bak"}, whole("memory.yaml.bak", "x")},
 		"parent segment":    {[]string{"agents/../evals/a.md"}, whole("agents/../evals/a.md", "x")},
 		"no edits":          {[]string{}, []domain.ProposalEdit{}},
 		"paths differ":      {[]string{ruleA}, whole("rules/b.md", "x")},
@@ -126,7 +128,8 @@ func TestJonah_ProposalChecks(t *testing.T) {
 		}
 	}
 
-	if err := insert([]string{"factory.yaml", ruleA}, append(replace("factory.yaml", "wip: 2", "wip: 3"), whole(ruleA, "x")...)); err != nil {
+	allowed := append(replace("factory.yaml", "wip: 2", "wip: 3"), whole(ruleA, "x")...)
+	if err := insert([]string{"factory.yaml", ruleA, "memory.yaml"}, append(allowed, whole("memory.yaml", "[]\n")...)); err != nil {
 		t.Fatalf("an allowed proposal: %v", err)
 	}
 

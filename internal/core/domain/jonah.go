@@ -264,12 +264,13 @@ const (
 )
 
 // proposalPathPattern is the positive allowlist of the paths a proposal may edit (ADR 0039
-// decision 6): factory.yaml, whose paths goald checks apart, and the .md, .yaml and .json files
-// under agents/, skills/, rules/ and contracts/. Never evals/, a script or any other file.
-var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|(agents|skills|rules|contracts)/.+\.(md|yaml|json))$`)
+// decisions 6 and 7): factory.yaml, whose paths goald checks apart, memory.yaml, which only goald
+// writes from the facts it verified, and the .md, .yaml and .json files under agents/, skills/,
+// rules/ and contracts/. Never evals/, a script or any other file.
+var proposalPathPattern = regexp.MustCompile(`^(factory\.yaml|memory\.yaml|(agents|skills|rules|contracts)/.+\.(md|yaml|json))$`)
 
 // ProposalPathAllowed reports whether a proposal may edit path: one under the allowlist, without
-// a . or .. segment or a control character. 00101's goal_jonah_paths_allowed checks the same.
+// a . or .. segment or a control character. 00103's goal_jonah_paths_allowed checks the same.
 func ProposalPathAllowed(path string) bool {
 	if !proposalPathPattern.MatchString(path) || strings.ContainsFunc(path, unicode.IsControl) {
 		return false
@@ -282,6 +283,36 @@ func ProposalPathAllowed(path string) bool {
 	}
 
 	return true
+}
+
+// MemoryProposalPath is the factory's memory (ADR 0038 decision 6). A proposal may edit it, but
+// only as the memory proposal goald writes from the facts it checked against people's words (ADR
+// 0039 decision 7), never as a review's definition edit.
+const MemoryProposalPath = "memory.yaml"
+
+// DefinitionEditAllowed reports whether a review's definition edit may change path: one
+// ProposalPathAllowed accepts, but not memory.yaml.
+func DefinitionEditAllowed(path string) bool {
+	return path != MemoryProposalPath && ProposalPathAllowed(path)
+}
+
+// PersonWords is the text a person wrote in e that a memory fact may quote (ADR 0039 decision 7),
+// and whether e has one: a note's text, an answer to a question, or the reason of a reject, a
+// gate's reject or a move, when data.actor is a person. An agent's or a check's event has none.
+func PersonWords(e Event) (string, bool) {
+	key, ok := personWordKeys[e.Kind]
+	if !ok || !byPerson(e) {
+		return "", false
+	}
+
+	text := dataText(e, key)
+
+	return text, text != ""
+}
+
+// personWordKeys are the event data keys of a person's words, by the kinds of event that hold them.
+var personWordKeys = map[EventKind]string{
+	EventNote: "text", EventQuestionAnswered: "answer", EventRejected: evKeyReason, EventGateRejected: evKeyReason, EventMoved: evKeyReason,
 }
 
 // ProposalEvidence is one sent-back event a proposal rests on, with its quoted reason.

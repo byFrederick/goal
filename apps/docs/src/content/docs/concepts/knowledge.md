@@ -76,6 +76,12 @@ The agent's system prompt gets a **Knowledge** section, built from the same temp
 
 An entry in the definition may replace the line with its own `readWhen`. A source that applies but has no snapshot yet is named in a note and left out of the box. An agent whose `builtins.read` is off gets neither the files nor the section.
 
+## Factory memory
+
+The factory memory is `memory.yaml`, beside `factory.yaml`: short facts that every run's prompt carries. Each entry has its `text`, the items it came from (`from`, as `<factory>#<number>`) and the date it was added (`added`). Memory holds at most 50 entries and 8 KB, and an entry at most 300 characters.
+
+People add facts with `goal memory add` or in the definition editor. Jonah may propose facts too, but only a person's own words from a note, an answer or a send-back reason, which goald checks against that person's event. A person approves the proposal before memory changes ([memory facts](../jonah/#memory-facts)).
+
 ## Reads
 
 Goal counts how often runs read each file and search each folder under `/knowledge`, by day, source, path and factory. The Knowledge page shows each source's reads of the last 7 days and the most read files. A source's page shows the reads of each of its files. `goal knowledge reads` prints the same counts.
