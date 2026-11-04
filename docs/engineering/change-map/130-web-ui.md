@@ -8,4 +8,4 @@ Follow `docs/design/MASTER.md` exactly and `docs/engineering/frontend.md`; the V
 
 ## Run
 
-`task web:check`, `task web:e2e` where a browser is available
+`task web:check`; CI's e2e job runs `task web:e2e`

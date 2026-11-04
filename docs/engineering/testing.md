@@ -41,6 +41,10 @@ task check:changed      # only the checks of the parts this branch changed since
 task e2e:secrets        # a run on secrets against a private repository, the check before deploying main (below)
 ```
 
+### Required checks
+
+A pull request into main passes three ci jobs: `task check`, `task test-integration` and `e2e` (`task web:e2e`). `e2e` is meant to be required like the other two, but is not yet: a person adds it to the repository's branch protection for main once the suite passes on main. Branch protection is not managed in code. Builders name the Playwright specs they could not run ([goal-deliver](../../.claude/skills/goal-deliver/SKILL.md) step 4), and reviewers read the e2e job before approving ([web rule](../../.claude/rules/web.md#review)).
+
 ### A run on secrets end to end
 
 `task e2e:secrets` runs `TestE2E_RunOnSecrets` (`cmd/goald/secrets_e2e_test.go`, build tag `e2e`). It is the check to run before deploying main ([cloudflare-operations.md](cloudflare-operations.md#deploys)). It starts a throwaway goald and auth service as `task e2e:auth` does, on their own database and bucket, with an agents network and egress proxy of its own, so the install's goald, network and proxy are never touched. It then publishes a version whose repository token and model key are organization secrets, runs one item with a real model on `claude-haiku-5-5`, and checks:
