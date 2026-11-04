@@ -190,10 +190,7 @@ func testJonahRetry(f *fixture) {
 		t.Fatalf("FinishJonahReview pending: %d proposals, %v", len(stored), err)
 	}
 
-	if back.State != domain.JonahPending || back.Error != "the review run failed" || !back.LeaseUntil.IsZero() ||
-		!back.FinishedAt.IsZero() || back.Attempts != 1 {
-		t.Fatalf("retried review %+v: want pending with its error, no lease, no finish, attempt 1", back)
-	}
+	expectRetried(t, back)
 
 	if _, err := f.Jonah.QueueJonahReview(f.ctx(t), domain.NewJonahReview{
 		FactoryID: f.factory, VersionID: queued.VersionID, Trigger: domain.JonahThreshold, WindowStart: t0, WindowEnd: t1,
@@ -207,9 +204,21 @@ func testJonahRetry(f *fixture) {
 		t.Fatalf("second claim %+v: want %s, attempt 2, its error kept", second, queued.ID)
 	}
 
-	done, _, err := f.Jonah.FinishJonahReview(f.ctx(t), second, domain.JonahReviewResult{State: domain.JonahFailed, Error: "again", At: t1})
-	if err != nil || done.State != domain.JonahFailed || done.Error != "again" || !done.FinishedAt.Equal(t1) {
+	const last = "the review run failed a second time"
+
+	done, _, err := f.Jonah.FinishJonahReview(f.ctx(t), second, domain.JonahReviewResult{State: domain.JonahFailed, Error: last, At: t1})
+	if err != nil || done.State != domain.JonahFailed || done.Error != last || !done.FinishedAt.Equal(t1) {
 		t.Fatalf("finish failed: %+v, %v", done, err)
+	}
+}
+
+// expectRetried checks that r went back to pending after its first attempt with its error, no
+// lease and no finish time.
+func expectRetried(t *testing.T, r domain.JonahReview) {
+	t.Helper()
+
+	if r.State != domain.JonahPending || r.Error != "the review run failed" || !r.LeaseUntil.IsZero() || !r.FinishedAt.IsZero() || r.Attempts != 1 {
+		t.Fatalf("retried review %+v: want pending with its error, no lease, no finish, attempt 1", r)
 	}
 }
 

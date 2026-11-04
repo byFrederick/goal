@@ -32,6 +32,12 @@ const (
 	reviewMargin  = time.Minute
 )
 
+// The review runs the fake runner names.
+const (
+	firstRun  = domain.RunID("run-1")
+	secondRun = domain.RunID("run-2")
+)
+
 // rt0 is the review world's now.
 var rt0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 
@@ -466,29 +472,29 @@ func (w *reviewWorld) finishedReview(state domain.JonahReviewState) {
 	}
 }
 
-// expectSwept checks that the factory's latest review is of trigger want, that there is none when
-// want is "", and that a daily review is pending on the line's version from start to now.
+// expectSwept checks that the factory's latest review is of trigger want, that none is pending
+// when want is "", and that a daily review is pending on the line's version from start to now.
 func (w *reviewWorld) expectSwept(want domain.JonahTrigger, start func(*reviewWorld) time.Time) {
 	w.t.Helper()
 
 	rs := w.reviews()
+	pending := len(rs) > 0 && rs[0].State == domain.JonahPending
 
 	switch {
-	case want == "" && len(rs) == 0:
+	case want == "":
+		if pending {
+			w.t.Fatalf("reviews = %+v, want none pending", rs)
+		}
+
 		return
-	case want == "" && rs[0].State != domain.JonahPending:
-		return
-	case want == "" || len(rs) == 0:
+	case len(rs) == 0 || rs[0].Trigger != want:
 		w.t.Fatalf("reviews = %+v, want the latest of trigger %q", rs, want)
-	case rs[0].Trigger != want:
-		w.t.Fatalf("trigger = %s, want %s", rs[0].Trigger, want)
 	case want != domain.JonahThreshold:
 		return
 	}
 
 	now := w.clock.Now()
-	if r := rs[0]; r.VersionID != reviewVersion || !r.WindowStart.Equal(start(w)) || !r.WindowEnd.Equal(now) ||
-		r.State != domain.JonahPending || r.CreatedBy == "" {
+	if r := rs[0]; r.VersionID != reviewVersion || !r.WindowStart.Equal(start(w)) || !r.WindowEnd.Equal(now) || !pending || r.CreatedBy == "" {
 		w.t.Errorf("daily review = %+v, want a pending review of %s from %s to %s", r, reviewVersion, start(w), now)
 	}
 }
@@ -510,18 +516,18 @@ func TestReviews_Work(t *testing.T) {
 		{name: "budget spent", setup: func(w *reviewWorld) { w.spend(10, rt0.Add(-time.Hour)) }, error: domain.ErrLearningBudgetExhausted.Error()},
 		{name: "run failed", setup: func(w *reviewWorld) {
 			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-				return domain.RunResult{RunID: "run-1", Status: domain.RunFailed, Error: "out of turns"}, nil
+				return domain.RunResult{RunID: firstRun, Status: domain.RunFailed, Error: "out of turns"}, nil
 			}
 		}, error: "out of turns", runs: jonah.MaxReviewAttempts},
 		{name: "run not carried out", setup: func(w *reviewWorld) {
 			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
-				return domain.RunResult{RunID: "run-1"}, ports.ErrSandboxLost
+				return domain.RunResult{RunID: firstRun}, ports.ErrSandboxLost
 			}
 		}, error: "the review run failed", runs: jonah.MaxReviewAttempts},
 		{name: "output does not parse", setup: func(w *reviewWorld) {
 			w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 				res := succeeded(`"nothing"`)
-				res.RunID = "run-1"
+				res.RunID = firstRun
 
 				return res, nil
 			}
@@ -550,9 +556,9 @@ func TestReviews_Work(t *testing.T) {
 				t.Errorf("review = %s %q after %d attempts, want failed with %q after %d", r.State, r.Error, r.Attempts, tc.error, max(tc.runs, 1))
 			}
 
-			wantRun := domain.RunID("")
+			var wantRun domain.RunID
 			if tc.runs > 0 {
-				wantRun = "run-1"
+				wantRun = firstRun
 			}
 
 			if r.RunID != wantRun {
@@ -582,11 +588,11 @@ func testWorkRetrySucceeds(t *testing.T) {
 	w.runner.answer = func(context.Context, domain.RunRequest) (domain.RunResult, error) {
 		seen = append(seen, w.reviews()[0])
 		if len(seen) == 1 {
-			return domain.RunResult{RunID: "run-1", Status: domain.RunFailed, Error: "provider overloaded"}, nil
+			return domain.RunResult{RunID: firstRun, Status: domain.RunFailed, Error: "provider overloaded"}, nil
 		}
 
 		res := succeeded(`{"observations": [], "proposals": []}`)
-		res.RunID = "run-2"
+		res.RunID = secondRun
 
 		return res, nil
 	}
@@ -595,11 +601,11 @@ func testWorkRetrySucceeds(t *testing.T) {
 		t.Fatalf("Work finished %d, want 1", n)
 	}
 
-	if len(seen) != 2 || seen[1].Attempts != 2 || !strings.Contains(seen[1].Error, "provider overloaded") || seen[1].RunID != "run-1" {
+	if len(seen) != 2 || seen[1].Attempts != 2 || !strings.Contains(seen[1].Error, "provider overloaded") || seen[1].RunID != firstRun {
 		t.Fatalf("second attempt saw %+v, want attempt 2 with the first one's error and run", seen)
 	}
 
-	if r := w.reviews()[0]; r.State != domain.JonahDone || r.Attempts != 2 || r.RunID != "run-2" {
+	if r := w.reviews()[0]; r.State != domain.JonahDone || r.Attempts != 2 || r.RunID != secondRun {
 		t.Errorf("review = %+v, want done after two attempts with run-2", r)
 	}
 }

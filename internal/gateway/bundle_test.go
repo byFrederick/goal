@@ -1228,43 +1228,7 @@ func TestServeRun_JonahBundleHoldsDefinitionAndProposals(t *testing.T) {
 	h.decidedProposals(t)
 	b := h.fetchBundle(t, h.runServer(t), h.jonahClaims())
 
-	all := map[string]string{engineerPrompt: "# engineer\n", config.FileName: jonahYAML}
-	maps.Copy(all, jonahFiles)
-	delete(all, "skills/acme-conventions/logo.png")
-
-	var got []string
-
-	for p, body := range b.Files {
-		if rest, ok := strings.CutPrefix(p, "definition/"); ok {
-			got = append(got, rest)
-
-			if string(body) != all[rest] {
-				t.Errorf("%s = %q, want %q", p, body, all[rest])
-			}
-		}
-	}
-
-	slices.Sort(got)
-
-	if want := slices.Sorted(maps.Keys(all)); !slices.Equal(got, want) {
-		t.Errorf("definition files = %v, want %v", got, want)
-	}
-
-	index := string(b.Files["files.md"])
-	for p, body := range all {
-		editable := "no"
-		if domain.ProposalPathAllowed(p) {
-			editable = "yes"
-		}
-
-		if row := "| `" + p + "` | " + string(domain.HashBlob([]byte(body))) + " | " + editable + " |"; !strings.Contains(index, row) {
-			t.Errorf("files.md lacks %q:\n%s", row, index)
-		}
-	}
-
-	if strings.Contains(index, "logo.png") {
-		t.Errorf("files.md names a file that is not text:\n%s", index)
-	}
+	expectDefinitionFiles(t, b)
 
 	var proposals []string
 
@@ -1289,6 +1253,51 @@ func TestServeRun_JonahBundleHoldsDefinitionAndProposals(t *testing.T) {
 
 	if published := string(b.Files["proposals/published/4.md"]); !strings.Contains(published, "- Published as version "+string(version)) {
 		t.Errorf("proposals/published/4.md =\n%s\nwant the version it published", published)
+	}
+}
+
+// expectDefinitionFiles checks TestServeRun_JonahBundleHoldsDefinitionAndProposals's definition/
+// and files.md.
+func expectDefinitionFiles(t *testing.T, b runBundle) {
+	t.Helper()
+
+	all := map[string]string{engineerPrompt: "# engineer\n", config.FileName: jonahYAML}
+	maps.Copy(all, jonahFiles)
+	delete(all, "skills/acme-conventions/logo.png")
+
+	var got []string
+
+	for p, body := range b.Files {
+		if rest, ok := strings.CutPrefix(p, "definition/"); ok {
+			got = append(got, rest)
+
+			if string(body) != all[rest] {
+				t.Errorf("%s = %q, want %q", p, body, all[rest])
+			}
+		}
+	}
+
+	slices.Sort(got)
+
+	if want := slices.Sorted(maps.Keys(all)); !slices.Equal(got, want) {
+		t.Errorf("definition files = %v, want %v", got, want)
+	}
+
+	index := string(b.Files["files.md"])
+
+	for p, body := range all {
+		editable := "no"
+		if domain.ProposalPathAllowed(p) {
+			editable = "yes"
+		}
+
+		if row := "| `" + p + "` | " + string(domain.HashBlob([]byte(body))) + " | " + editable + " |"; !strings.Contains(index, row) {
+			t.Errorf("files.md lacks %q:\n%s", row, index)
+		}
+	}
+
+	if strings.Contains(index, "logo.png") {
+		t.Errorf("files.md names a file that is not text:\n%s", index)
 	}
 }
 

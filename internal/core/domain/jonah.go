@@ -158,6 +158,19 @@ type JonahReviewResult struct {
 	At           time.Time
 }
 
+// stateProblem is what makes r's state impossible: one that is not done, failed or pending, or a
+// review to retry that stores something. "" when there is none.
+func (r JonahReviewResult) stateProblem() string {
+	switch {
+	case r.State != JonahDone && r.State != JonahFailed && r.State != JonahPending:
+		return fmt.Sprintf("state %q is not done, failed or pending", r.State)
+	case r.State == JonahPending && (len(r.Proposals) > 0 || len(r.Observations) > 0):
+		return "a review to retry stores no proposal or observation"
+	default:
+		return ""
+	}
+}
+
 // Check reports what makes r impossible to record, wrapping ErrInvalid.
 func (r JonahReviewResult) Check() error {
 	var errs []error
@@ -166,12 +179,8 @@ func (r JonahReviewResult) Check() error {
 		errs = append(errs, fmt.Errorf("jonah review result: "+format+": %w", append(args, ErrInvalid)...))
 	}
 
-	if r.State != JonahDone && r.State != JonahFailed && r.State != JonahPending {
-		bad("state %q is not done, failed or pending", r.State)
-	}
-
-	if r.State == JonahPending && (len(r.Proposals) > 0 || len(r.Observations) > 0) {
-		bad("a review to retry stores no proposal or observation")
+	if reason := r.stateProblem(); reason != "" {
+		bad("%s", reason)
 	}
 
 	if utf8.RuneCountInString(r.Error) > maxJonahError {
