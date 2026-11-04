@@ -95,8 +95,8 @@ type Store interface {
 	// share the sweep), locks only the target item, never the source, and routes it with
 	// domain.RouteNote. A note it may deliver becomes an item_note event on the target by the
 	// engine (domain.NoteData) and is delivered; any other goes to triage, still waiting, with
-	// domain.NoteTriageReason. A note whose source item is untrusted is never claimed: it waits
-	// (decision 21).
+	// domain.NoteTriageReason. A note whose source item is untrusted is never claimed here: it
+	// waits for FileFollowUps (decision 21).
 	DeliverNotes(ctx context.Context, factories []domain.NoteFactory, at time.Time, limit int) ([]domain.FollowUp, error)
 
 	// FileFollowUps files the waiting start and triage follow-ups of the context's organization
@@ -113,8 +113,12 @@ type Store interface {
 	// factory); it is filed onto an open item already filed from the same source with that
 	// title instead (domain.FollowUpKey). Any other joins the source factory's collecting triage
 	// item (open, no run yet), filed with domain.TriageFileRequest when there is none, whose
-	// title, body, priority and generation are rewritten from all its follow-ups. A follow-up of
-	// an untrusted source's landed work is never claimed: it waits (decision 21).
+	// title, body, priority and generation are rewritten from all its follow-ups. The follow-ups
+	// of an untrusted source's landed work, its notes too, are never delivered or filed on their
+	// own (decision 21): they go to a triage item of their own, untrusted and filed paused
+	// (blocked, with the engine's paused event, domain.ReasonUntrustedFollowUps), each keeping its
+	// ref in its reason (domain.UntrustedTriageReason); the collecting triage item never takes
+	// them.
 	FileFollowUps(ctx context.Context, lines []domain.Line, at time.Time, limit int) ([]domain.FollowUp, error)
 
 	// DropFollowUp drops a waiting follow-up of item, for domain.DropReason(by), and returns it.

@@ -36,8 +36,8 @@ WHERE id = sqlc.arg(id)
 RETURNING *;
 
 -- name: TriageFollowUp :one
--- A note or a start that cannot go where it says: for triage, still waiting, its ref kept in the
--- reason.
+-- A note or a start that cannot go where it says, or one of untrusted work: for triage, still
+-- waiting, its ref kept in the reason.
 UPDATE follow_ups SET target = 'triage', for_factory = NULL, for_number = NULL, start = NULL, reason = sqlc.narg(reason),
   updated_at = sqlc.arg(at)
 WHERE id = sqlc.arg(id)
@@ -49,32 +49,32 @@ SELECT * FROM work_items WHERE factory_id = sqlc.arg(factory_id) AND number = sq
 
 -- name: ClaimLandedFollowUp :one
 -- The oldest waiting start or triage follow-up whose work has landed or was cancelled
--- (follow_ups_waiting_filing_idx), locked; one another instance holds is skipped. Its root is the
--- source item, or its assembly for a part. A follow-up of a cancelled source or root is taken
--- whatever its trust, to be dropped; one of landed work (a done root) only from a trusted source.
--- Only the follow-ups of factories goald has loaded are taken, since filing needs their line.
+-- (follow_ups_waiting_filing_idx), or note of an untrusted source, locked; one another instance
+-- holds is skipped. Its root is the source item, or its assembly for a part. An untrusted
+-- source's follow-ups, its notes too, are never delivered or filed on their own: they go to a
+-- triage item of their own when its work lands (ADR 0040 decision 21). Only the follow-ups of
+-- factories goald has loaded are taken, since filing needs their line.
 SELECT sqlc.embed(f), COALESCE(s.parent_id, s.id)::uuid AS root_id
 FROM follow_ups f
 JOIN work_items s ON s.id = f.item_id
 LEFT JOIN work_items p ON p.id = s.parent_id
-WHERE f.state = 'waiting' AND f.target IN ('start', 'triage') AND f.factory_id = ANY(sqlc.arg(factories)::uuid[])
-  AND (s.state = 'cancelled' OR p.state = 'cancelled'
-       OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
+WHERE f.state = 'waiting' AND (f.target IN ('start', 'triage') OR (f.target = 'note' AND s.untrusted))
+  AND f.factory_id = ANY(sqlc.arg(factories)::uuid[])
+  AND (s.state = 'cancelled' OR p.state = 'cancelled' OR COALESCE(p.state, s.state) = 'done')
 ORDER BY f.created_at, f.id
 LIMIT 1
 FOR UPDATE OF f SKIP LOCKED;
 
 -- name: LandedFollowUps :many
--- Every waiting start or triage follow-up of a root and its parts that ClaimLandedFollowUp would
--- take, oldest first, locked; the claimed one is already this transaction's.
+-- Every waiting follow-up of a root and its parts that ClaimLandedFollowUp would take, oldest
+-- first, locked; the claimed one is already this transaction's.
 SELECT f.*
 FROM follow_ups f
 JOIN work_items s ON s.id = f.item_id
 LEFT JOIN work_items p ON p.id = s.parent_id
-WHERE f.state = 'waiting' AND f.target IN ('start', 'triage')
+WHERE f.state = 'waiting' AND (f.target IN ('start', 'triage') OR (f.target = 'note' AND s.untrusted))
   AND COALESCE(s.parent_id, s.id) = sqlc.arg(root_id)::uuid
-  AND (s.state = 'cancelled' OR p.state = 'cancelled'
-       OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
+  AND (s.state = 'cancelled' OR p.state = 'cancelled' OR COALESCE(p.state, s.state) = 'done')
 ORDER BY f.created_at, f.id
 FOR UPDATE OF f SKIP LOCKED;
 
@@ -115,9 +115,9 @@ WHERE factory_id = sqlc.arg(factory_id) AND origin = 'follow-up' AND created_by 
 
 -- name: CollectingTriageItem :one
 -- The factory's triage item that still collects (work_items_triage_idx): open, with no run yet,
--- locked for the follow-ups that join it.
+-- and not an untrusted item's own, locked for the follow-ups that join it.
 SELECT w.* FROM work_items w
-WHERE w.factory_id = sqlc.arg(factory_id) AND w.triage AND w.state NOT IN ('done', 'cancelled')
+WHERE w.factory_id = sqlc.arg(factory_id) AND w.triage AND NOT w.untrusted AND w.state NOT IN ('done', 'cancelled')
   AND NOT EXISTS (SELECT 1 FROM agent_runs r WHERE r.item_id = w.id)
 ORDER BY w.created_at
 LIMIT 1
@@ -150,3 +150,10 @@ FROM follow_ups f
 LEFT JOIN work_items w ON w.id = f.filed_item_id
 WHERE f.id = sqlc.arg(id) AND f.item_id = sqlc.arg(item_id)
 FOR UPDATE OF f;
+
+-- name: PauseUntrustedTriageItem :one
+-- An untrusted item's own triage item, filed paused (blocked, with its paused event) for a person
+-- to check and resume (ADR 0040 decision 21).
+UPDATE work_items SET state = 'blocked', updated_at = sqlc.arg(at)
+WHERE id = sqlc.arg(id)
+RETURNING *;

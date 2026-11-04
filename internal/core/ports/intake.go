@@ -86,9 +86,32 @@ type Intake interface {
 	// row the id first came with, while it is kept, counts one more duplicate, and the receipt is
 	// domain.ReceiptDuplicate with that row. Otherwise a delivery n.Named keeps its row and body
 	// (for domain.DeliveryRetention), and one no enabled trigger names only adds one to its UTC
-	// day's count (UnnamedDays). n must pass Check (domain.ErrInvalid); ErrNotFound for an unknown
-	// webhook.
+	// day's count (UnnamedDays). A kept delivery adds n.Evaluations in the same transaction (ADR
+	// 0040 decision 13): pending, or done and skipped at once with its Skip reason. n must pass
+	// Check (domain.ErrInvalid); ErrNotFound for an unknown webhook.
 	Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error)
+	// DeliveryEvaluations are the evaluations of the delivery row, by factory.
+	DeliveryEvaluations(ctx context.Context, delivery domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error)
+	// ClaimEvaluations claims at most limit of the organization's pending evaluations due at now
+	// (next attempt at or before now, no lease live at now), soonest first, with FOR UPDATE SKIP
+	// LOCKED as the notification outbox does: each is leased to holder until now+lease with one
+	// more attempt, and comes with its delivery's body. A row another instance holds is skipped;
+	// one whose lease ran out is claimed again.
+	ClaimEvaluations(ctx context.Context, holder string, now time.Time, lease time.Duration, limit int) ([]domain.ClaimedEvaluation, error)
+	// FinishEvaluation ends f's claim as f says and reports true, or reports false and changes
+	// nothing when the row is no longer pending under f.Holder at f.Attempts (a later claim took
+	// it).
+	FinishEvaluation(ctx context.Context, f domain.EvaluationFinish) (bool, error)
+	// Fire records firing f of a trigger in one transaction under the trigger's lock (a
+	// transaction advisory lock on the factory and trigger, ADR 0040 decision 16), so limits hold
+	// across goald instances. When the trigger already has a firing with f's idempotency key, it
+	// returns that one and false and writes nothing. Otherwise, for f created with item, it reads
+	// the open item of the trigger with f's dedupe value and the items it created since the UTC
+	// day began and in the hour before f.At, and when limits skip them (domain.FireLimits.Skip)
+	// records f skipped with that reason; else it files item as CreateItem does and records f
+	// with it. A skipped f with no item is recorded as it is. f must pass Check
+	// (domain.ErrInvalid).
+	Fire(ctx context.Context, f domain.TriggerFiring, item *domain.NewItem, limits domain.FireLimits) (domain.TriggerFiring, bool, error)
 	// UnnamedDays are the webhook's daily counts of accepted deliveries no enabled trigger named,
 	// from the UTC day of since on, by day; a day without one has no entry.
 	UnnamedDays(ctx context.Context, webhook domain.WebhookEndpointID, since time.Time) ([]domain.DeliveryCount, error)
@@ -128,4 +151,11 @@ type Intake interface {
 	// Firings are at most limit of the trigger's firings, newest first (at, then id), each with
 	// its item's number and whether that item has a merged event.
 	Firings(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.FiringEntry, error)
+}
+
+// SenderEvents are the senders' event tables (ADR 0040 decision 14): which normalized fields an
+// event gives, as dot paths into its payload. internal/catalog/senders satisfies it; false is an
+// event its sender's entry has no table for.
+type SenderEvents interface {
+	EventTable(sender domain.WebhookSender, event string) (domain.EventTable, bool)
 }

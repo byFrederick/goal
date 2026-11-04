@@ -53,10 +53,11 @@ type WebhookSenders interface {
 	Check(sender domain.WebhookSender, token domain.TokenSettings, d domain.InboundDelivery, key domain.SigningSecret) (domain.CheckedDelivery, error)
 }
 
-// DeliveryNames says whether an enabled trigger of a factory the webhook is open to names a
-// delivery of event; *engine.Engine satisfies it from its loaded lines.
-type DeliveryNames interface {
-	NamesDelivery(ctx context.Context, w domain.WebhookEndpoint, event string) bool
+// DeliveryEvaluations are the factories that evaluate a delivery of event with body to the
+// webhook (ADR 0040 decision 13): those it is open to whose enabled triggers name it and whose
+// openings admit its repository; *engine.Engine satisfies it from its loaded lines.
+type DeliveryEvaluations interface {
+	Evaluations(ctx context.Context, w domain.WebhookEndpoint, event string, body []byte) []domain.NewDeliveryEvaluation
 }
 
 // ReceiverDeps are what the receiver needs.
@@ -64,7 +65,7 @@ type ReceiverDeps struct {
 	Intake  ReceiverIntake
 	Secrets SigningSecrets
 	Senders WebhookSenders
-	Names   DeliveryNames
+	Names   DeliveryEvaluations
 	// TrustedProxies are the proxies whose X-Forwarded-For names the client, for the limit on
 	// unknown webhooks; with none, the peer's address counts.
 	TrustedProxies []netip.Prefix
@@ -209,9 +210,10 @@ func (rc *receiver) check(ctx context.Context, w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	evals := rc.d.Names.Evaluations(ctx, hook, checked.Event, body)
 	n := domain.NewReceipt{
 		WebhookID: hook.ID, ReceivedAt: now, Receipt: domain.ReceiptAccepted, DeliveryID: checked.ID, Event: checked.Event,
-		Headers: headers, Body: body, Named: rc.d.Names.NamesDelivery(ctx, hook, checked.Event),
+		Headers: headers, Body: body, Named: len(evals) > 0, Evaluations: evals,
 	}
 
 	// GitHub's ping, sent when the webhook is added there, keeps its row to show on the webhook.

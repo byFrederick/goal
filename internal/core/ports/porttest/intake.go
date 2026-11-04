@@ -33,12 +33,14 @@ type Intake struct {
 }
 
 type intakeData struct {
-	// schedules is the schedule lock (WithScheduleLock).
-	schedules  sync.Mutex
-	mu         sync.Mutex
-	endpoints  map[domain.WebhookEndpointID]*endpointRow
-	deliveries []deliveryRow
-	firings    []firingRow
+	// schedules is the schedule lock (WithScheduleLock), fires every trigger's lock (Fire).
+	schedules   sync.Mutex
+	fires       sync.Mutex
+	mu          sync.Mutex
+	endpoints   map[domain.WebhookEndpointID]*endpointRow
+	deliveries  []deliveryRow
+	firings     []firingRow
+	evaluations []evaluationRow
 	// ledger holds each webhook's accepted delivery ids with when they came, and counts the
 	// deliveries no trigger named per webhook and UTC day.
 	ledger map[ledgerKey]time.Time
@@ -69,6 +71,11 @@ type countKey struct {
 	org     domain.OrgID
 	webhook domain.WebhookEndpointID
 	day     time.Time
+}
+
+type evaluationRow struct {
+	org domain.OrgID
+	e   domain.DeliveryEvaluation
 }
 
 type firingRow struct {
@@ -733,7 +740,206 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 	row, err := in.keepReceivedLocked(org, n)
 	out.Row = row
 
-	return out, err
+	if err != nil {
+		return out, err
+	}
+
+	return out, in.addEvaluationsLocked(org, row, n)
+}
+
+// addEvaluationsLocked adds n's evaluations of the delivery row.
+func (in *Intake) addEvaluationsLocked(org domain.OrgID, row domain.WebhookDeliveryID, n domain.NewReceipt) error {
+	for _, e := range n.Evaluations {
+		if !in.ownsFactory(org, e.FactoryID) {
+			return fmt.Errorf("factory %s: %w", e.FactoryID, ports.ErrNotFound)
+		}
+
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+
+		ev := domain.DeliveryEvaluation{
+			ID: id.String(), FactoryID: e.FactoryID, Delivery: row, WebhookID: n.WebhookID, DeliveryID: n.DeliveryID, Event: n.Event,
+			Triggers: slices.Clone(e.Triggers), State: domain.EvaluationPending, NextAt: n.ReceivedAt.UTC(), CreatedAt: n.ReceivedAt.UTC(),
+		}
+		if e.Skip != "" {
+			ev.State, ev.Outcome, ev.Reason = domain.EvaluationDone, domain.EvaluationSkipped, e.Skip
+		}
+
+		in.d.evaluations = append(in.d.evaluations, evaluationRow{org: org, e: ev})
+	}
+
+	return nil
+}
+
+// DeliveryEvaluations implements ports.Intake.
+func (in *Intake) DeliveryEvaluations(ctx context.Context, delivery domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.DeliveryEvaluation{}
+
+	for _, r := range in.d.evaluations {
+		if r.org == org && r.e.Delivery == delivery {
+			out = append(out, cloneEvaluation(r.e))
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryEvaluation) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
+
+	return out, nil
+}
+
+// ClaimEvaluations implements ports.Intake. Views made with WithKey share the rows, as goalds
+// share one database.
+func (in *Intake) ClaimEvaluations(ctx context.Context, holder string, now time.Time, lease time.Duration, limit int) ([]domain.ClaimedEvaluation, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	var due []int
+
+	for i, r := range in.d.evaluations {
+		e := r.e
+		if r.org == org && e.State == domain.EvaluationPending && !e.NextAt.After(now) && (e.LeaseUntil == nil || !e.LeaseUntil.After(now)) {
+			due = append(due, i)
+		}
+	}
+
+	slices.SortFunc(due, func(a, b int) int {
+		x, y := in.d.evaluations[a].e, in.d.evaluations[b].e
+
+		return cmp.Or(x.NextAt.Compare(y.NextAt), cmp.Compare(x.ID, y.ID))
+	})
+
+	out := []domain.ClaimedEvaluation{}
+
+	for _, i := range due[:min(len(due), limit)] {
+		e := &in.d.evaluations[i].e
+		until := now.Add(lease).UTC()
+		e.LeaseHolder, e.LeaseUntil, e.Attempts = holder, &until, e.Attempts+1
+
+		c := domain.ClaimedEvaluation{DeliveryEvaluation: cloneEvaluation(*e)}
+
+		for _, d := range in.d.deliveries {
+			if d.org == org && d.d.ID == e.Delivery {
+				c.Body = append([]byte{}, d.d.Body...)
+			}
+		}
+
+		out = append(out, c)
+	}
+
+	return out, nil
+}
+
+// FinishEvaluation implements ports.Intake.
+func (in *Intake) FinishEvaluation(ctx context.Context, f domain.EvaluationFinish) (bool, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for i := range in.d.evaluations {
+		e := &in.d.evaluations[i].e
+		if in.d.evaluations[i].org != org || e.ID != f.ID {
+			continue
+		}
+
+		if e.State != domain.EvaluationPending || e.LeaseHolder != f.Holder || e.Attempts != f.Attempts {
+			return false, nil
+		}
+
+		e.State, e.Outcome, e.Reason, e.ItemID, e.LeaseHolder, e.LeaseUntil = f.State, f.Outcome, f.Reason, f.ItemID, "", nil
+		if !f.NextAt.IsZero() {
+			e.NextAt = f.NextAt.UTC()
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func cloneEvaluation(e domain.DeliveryEvaluation) domain.DeliveryEvaluation {
+	e.Triggers = slices.Clone(e.Triggers)
+	if e.LeaseUntil != nil {
+		until := *e.LeaseUntil
+		e.LeaseUntil = &until
+	}
+
+	return e
+}
+
+// Fire implements ports.Intake: fires is the trigger lock, which views made with WithKey share,
+// as goalds share one database.
+func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain.NewItem, limits domain.FireLimits) (domain.TriggerFiring, bool, error) {
+	if err := f.Check(); err != nil {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	in.d.fires.Lock()
+	defer in.d.fires.Unlock()
+
+	if got, ok, err := in.Firing(ctx, f.FactoryID, f.Trigger, f.IdempotencyKey); err != nil || ok {
+		return got, false, err
+	}
+
+	if item != nil && f.Outcome == domain.FiringCreated {
+		if err := in.fileFiring(ctx, &f, *item, limits); err != nil {
+			return domain.TriggerFiring{}, false, err
+		}
+	}
+
+	return in.RecordFiring(ctx, f)
+}
+
+// fileFiring reads the trigger's counts and files item for f, or makes f skipped by limits.
+func (in *Intake) fileFiring(ctx context.Context, f *domain.TriggerFiring, item domain.NewItem, limits domain.FireLimits) error {
+	{
+		var c domain.FireCounts
+
+		open, _, err := in.OpenItemByDedupe(ctx, f.FactoryID, f.Trigger, f.Dedupe)
+		if err != nil {
+			return err
+		}
+
+		c.OpenDedupe = open
+
+		if c.Today, err = in.CreatedSince(ctx, f.FactoryID, f.Trigger, f.At.UTC().Truncate(24*time.Hour)); err != nil {
+			return err
+		}
+
+		if c.LastHour, err = in.CreatedSince(ctx, f.FactoryID, f.Trigger, f.At.Add(-time.Hour)); err != nil {
+			return err
+		}
+
+		if why := limits.Skip(c); why != "" {
+			f.Outcome, f.Reason = domain.FiringSkipped, why
+		} else {
+			it, err := in.store.CreateItem(ctx, item)
+			if err != nil {
+				return err
+			}
+
+			f.ItemID = it.ID
+		}
+	}
+
+	return nil
 }
 
 // keepReceivedLocked keeps the row of a delivery the receiver accepted or refused.

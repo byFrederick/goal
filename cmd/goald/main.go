@@ -202,7 +202,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// definition's secret references and knowledge sources are checked against the organization's
 	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
-		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
+		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake},
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,
@@ -242,7 +242,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
+		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err
@@ -1082,4 +1082,17 @@ func modelIDs(models []builder.Model) []string {
 	}
 
 	return ids
+}
+
+// shippedEvents are the shipped sender catalog's event tables, which read each delivery's fields
+// (ADR 0040 decision 14). ownContent loads the catalog at start and fails goald when it doesn't.
+type shippedEvents struct{}
+
+func (shippedEvents) EventTable(sender domain.WebhookSender, event string) (domain.EventTable, bool) {
+	c, err := senders.Shipped()
+	if err != nil {
+		return nil, false
+	}
+
+	return c.EventTable(sender, event)
 }

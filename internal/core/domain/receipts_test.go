@@ -69,8 +69,8 @@ func TestNewReceipt_Check(t *testing.T) {
 	}
 }
 
-// A delivery is named by an enabled trigger on its webhook, in either form, or on its sender and
-// event, with or without today's action; never by a disabled one, a schedule or another event.
+// A delivery is named by an enabled trigger on its webhook, with its event or none, or on its
+// sender and event, with or without today's action; never by a disabled one, a schedule or another event.
 func TestTrigger_NamesDelivery(t *testing.T) {
 	t.Parallel()
 
@@ -81,7 +81,8 @@ func TestTrigger_NamesDelivery(t *testing.T) {
 		want    bool
 	}{
 		{"github-acme", true, evPush, true},
-		{"github-acme.check_run", true, evPush, true},
+		{"github-acme.check_run", true, evPush, false},
+		{"github-acme.push", true, evPush, true},
 		{"webhook.github-acme", true, evPush, true},
 		{"github.check_run", true, evCheckRun, true},
 		{"github.check_run.failed", true, evCheckRun, true},

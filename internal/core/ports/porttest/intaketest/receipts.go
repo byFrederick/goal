@@ -61,8 +61,8 @@ func testReceiveNamed(f *fixture) {
 	t := f.t
 	w := f.webhook(orgHook)
 
-	r := f.receive(w.ID, "d-1", t0, true)
-	if r.Receipt != domain.ReceiptAccepted || r.DeliveryID != "d-1" || r.Row == "" {
+	r := f.receive(w.ID, firstDelivery, t0, true)
+	if r.Receipt != domain.ReceiptAccepted || r.DeliveryID != firstDelivery || r.Row == "" {
 		t.Fatalf("Receive = %+v; want accepted d-1 with a row", r)
 	}
 
@@ -77,7 +77,7 @@ func testReceiveNamed(f *fixture) {
 func (f *fixture) expectAccepted(d domain.WebhookDelivery) {
 	f.t.Helper()
 
-	if d.DeliveryID != "d-1" || d.Event != pushEvent || d.Receipt != domain.ReceiptAccepted || d.Outcome != domain.DeliveryAccepted ||
+	if d.DeliveryID != firstDelivery || d.Event != pushEvent || d.Receipt != domain.ReceiptAccepted || d.Outcome != domain.DeliveryAccepted ||
 		!bytes.Equal(d.Body, []byte(`{"ref":"main"}`)) || d.Duplicates != 0 || !d.ReceivedAt.Equal(t0) {
 		f.t.Errorf("Delivery = %+v; want d-1, push, accepted, its body", d)
 	}
@@ -102,11 +102,11 @@ func (f *fixture) expectRefused(d domain.WebhookDelivery) {
 func testReceiveDuplicate(f *fixture) {
 	t := f.t
 	w := f.webhook(orgHook)
-	first := f.receive(w.ID, "d-1", t0, true)
+	first := f.receive(w.ID, firstDelivery, t0, true)
 
 	for range 2 {
-		r := f.receive(w.ID, "d-1", t0.Add(time.Minute), true)
-		if r.Receipt != domain.ReceiptDuplicate || r.Row != first.Row || r.DeliveryID != "d-1" {
+		r := f.receive(w.ID, firstDelivery, t0.Add(time.Minute), true)
+		if r.Receipt != domain.ReceiptDuplicate || r.Row != first.Row || r.DeliveryID != firstDelivery {
 			t.Errorf("Receive again = %+v; want a duplicate of %s", r, first.Row)
 		}
 	}
@@ -171,7 +171,7 @@ func testReceiveRefused(f *fixture) {
 		f.expectRefused(f.row(w.ID, r.Row))
 	}
 
-	if r := f.receive(w.ID, "d-1", t0, true); r.Receipt != domain.ReceiptAccepted {
+	if r := f.receive(w.ID, firstDelivery, t0, true); r.Receipt != domain.ReceiptAccepted {
 		t.Errorf("Receive after refusals = %+v; want accepted", r)
 	}
 }
@@ -229,7 +229,7 @@ func testReceiveRules(f *fixture) {
 func testReceiveIsolation(f *fixture) {
 	t := f.t
 	w := f.webhook(orgHook)
-	f.receive(w.ID, "d-1", t0, false)
+	f.receive(w.ID, firstDelivery, t0, false)
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
 

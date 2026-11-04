@@ -350,3 +350,64 @@ func TestSenders_LongIDHashed(t *testing.T) {
 		want:    domain.CheckedDelivery{ID: bodyHash([]byte(long))},
 	}})
 }
+
+// Each sender's event table maps events to normalized fields: GitHub's covers the events triggers
+// name most, and a push's table reads its branch without refs/heads/ and every changed path.
+func TestSenders_EventTables(t *testing.T) {
+	t.Parallel()
+
+	c, err := senders.Shipped()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ghEvents := strings.Fields("check_run issues pull_request push")
+	for _, event := range ghEvents {
+		tb, ok := c.EventTable(domain.SenderGitHub, event)
+		if !ok || !tb.Supplies(domain.FieldRepo) || !tb.Supplies(domain.FieldAuthor) {
+			t.Errorf("github %s: table %v, %v; want one with repo and author", event, tb, ok)
+		}
+	}
+
+	if tb, _ := c.EventTable(domain.SenderGitHub, "check_run"); !tb.Supplies(domain.FieldConclusion) || !tb.Supplies("check.name") {
+		t.Errorf("github check_run supplies %v; want conclusion and check.name", tb)
+	}
+
+	if tb, _ := c.EventTable(domain.SenderGitHub, "pull_request"); tb.Supplies(domain.FieldPaths) {
+		t.Error("github pull_request supplies paths; a pull_request carries no changed paths")
+	}
+
+	if tb, ok := c.EventTable(domain.SenderStandard, "anything"); ok || len(tb) != 0 {
+		t.Errorf("standard's table for an event = %v, %v; want none", tb, ok)
+	}
+
+	checkPushTable(t, c, ghEvents)
+}
+
+// checkPushTable reads a push by its table, and Parse refuses a malformed dot path.
+func checkPushTable(t *testing.T, c *senders.Catalog, ghEvents []string) {
+	t.Helper()
+
+	tb, _ := c.EventTable(domain.SenderGitHub, ghEvents[3])
+	n := domain.Normalize(tb, domain.ParsePayload([]byte(`{"ref": "refs/heads/main", "repository": {"full_name": "acme/app"},
+		"sender": {"login": "jo", "type": "User"}, "commits": [{"added": ["a.go"], "modified": [], "removed": ["b.go"]}]}`)))
+
+	if n.Fields[domain.FieldBranch] != "main" || n.Fields[domain.FieldRepo] != "acme/app" || n.Author != "jo" || n.Bot ||
+		strings.Join(n.Paths, ",") != "a.go,b.go" {
+		t.Errorf("push normalized = %+v; want main, acme/app, jo and a.go, b.go", n)
+	}
+
+	_, err := senders.Parse([]byte(`apiVersion: goal/v1
+kind: Sender
+metadata: {name: token}
+spec:
+  scheme: token
+  signature: {header: Authorization}
+  events:
+    deploy:
+      repo: "repository..name"
+`))
+	if !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("a malformed dot path: Parse = %v; want domain.ErrInvalid", err)
+	}
+}

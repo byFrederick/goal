@@ -278,7 +278,8 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 //   - Read the web and docs, off or ask: the deny rules also get the builtins.web tools
 //     (webTools); ask is served as off, as for builtins, since no tool approval is enforced.
 //   - Merge a pull request, off: an approving gate whose action is merge does not merge, and the
-//     item waits there for a person's merge (noMerge); review_approval is the version's say.
+//     item waits there for a person's merge (noMerge); review_approval is the version's say. An
+//     untrusted item (ADR 0040 decision 21) takes the same path whatever the policy says.
 //   - Use secrets (use_credentials), off: the agent's connections list is emptied, so neither its
 //     env nor its task token gets any of them; the runtime's model and repository connections
 //     still reach the run, which cannot start without them. On secrets the agent's environment
@@ -774,12 +775,10 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c), By: agentActor(c)})
 
 		return
-	case v != nil && c.noMerge && c.station.Action == domain.ActionMerge:
+	case v != nil && c.waitsForPerson() && c.station.Action == domain.ActionMerge:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		t.To, t.Outcome = domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, domain.LeaseEscalated
-		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{
-			keyReason: "approved; the organization policy lets no agent merge a pull request, so a person merges it",
-		}))
+		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{keyReason: noMergeReason(c.item)}))
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
@@ -1007,4 +1006,20 @@ func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {
 	}
 
 	return a, nil
+}
+
+// waitsForPerson is whether an approved merge is left to a person: the organization policy lets no
+// agent merge, or the item came from outside text (ADR 0040 decision 21).
+func (c claimed) waitsForPerson() bool {
+	return c.noMerge || c.item.Untrusted
+}
+
+// noMergeReason is why an approved merge waits for a person: the item came from outside text
+// (ADR 0040 decision 21), or the organization policy lets no agent merge.
+func noMergeReason(it domain.Item) string {
+	if it.Untrusted {
+		return "approved; the item was made from outside text (a webhook delivery), so a person merges it"
+	}
+
+	return "approved; the organization policy lets no agent merge a pull request, so a person merges it"
 }

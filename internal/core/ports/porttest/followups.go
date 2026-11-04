@@ -231,9 +231,10 @@ func (l *fakeLander) ref(it *domain.Item) domain.ItemRef {
 }
 
 // rootOf is f's root, its source or the source's assembly, when f is one the sweep takes
-// (ClaimLandedFollowUp); nil otherwise.
+// (ClaimLandedFollowUp): a start or triage follow-up, or an untrusted source's note; nil
+// otherwise.
 func (l *fakeLander) rootOf(f domain.FollowUp) *domain.Item {
-	if f.State != domain.FollowUpWaiting || (f.Target != domain.FollowUpStart && f.Target != domain.FollowUpTriage) {
+	if f.State != domain.FollowUpWaiting {
 		return nil
 	}
 
@@ -246,6 +247,10 @@ func (l *fakeLander) rootOf(f domain.FollowUp) *domain.Item {
 		return nil
 	}
 
+	if f.Target != domain.FollowUpStart && f.Target != domain.FollowUpTriage && (f.Target != domain.FollowUpNote || !src.Untrusted) {
+		return nil
+	}
+
 	root := src
 	if src.ParentID != "" {
 		if root, ok = l.s.visible(src.ParentID, l.org); !ok {
@@ -253,7 +258,7 @@ func (l *fakeLander) rootOf(f domain.FollowUp) *domain.Item {
 		}
 	}
 
-	if src.State == domain.StateCancelled || root.State == domain.StateCancelled || (root.State == domain.StateDone && !src.Untrusted) {
+	if src.State == domain.StateCancelled || root.State == domain.StateCancelled || root.State == domain.StateDone {
 		return root
 	}
 
@@ -278,8 +283,9 @@ func (l *fakeLander) land(root *domain.Item) []domain.FollowUp {
 	}
 
 	var (
-		out    []domain.FollowUp
-		triage []int
+		out       []domain.FollowUp
+		triage    []int
+		untrusted []int
 	)
 
 	for i := range l.s.followUps {
@@ -293,6 +299,12 @@ func (l *fakeLander) land(root *domain.Item) []domain.FollowUp {
 		switch land := domain.LandFollowUp(*f, *src, root.State); {
 		case land.Drop:
 			f.State, f.Reason = domain.FollowUpDropped, land.Reason
+		case land.Untrusted:
+			f.Reason, f.Target, f.For, f.Start = domain.UntrustedTriageReason(*f), domain.FollowUpTriage, nil, nil
+
+			untrusted = append(untrusted, i)
+
+			continue
 		case land.File:
 			if reason := l.fileStart(f, src, landed); reason != "" {
 				f.Reason, f.Target, f.Start = domain.StartTriageReason(*f.Start, reason), domain.FollowUpTriage, nil
@@ -312,6 +324,45 @@ func (l *fakeLander) land(root *domain.Item) []domain.FollowUp {
 
 	if len(triage) > 0 {
 		out = append(out, l.joinTriage(root.FactoryID, triage)...)
+	}
+
+	if len(untrusted) > 0 {
+		out = append(out, l.untrustedTriage(root.FactoryID, untrusted)...)
+	}
+
+	return out
+}
+
+// untrustedTriage files the follow-ups at idx onto a triage item of their own, filed paused:
+// blocked, with a paused event by the engine whose reason is domain.ReasonUntrustedFollowUps.
+func (l *fakeLander) untrustedTriage(factory domain.FactoryID, idx []int) []domain.FollowUp {
+	ln, ok := l.line(factory)
+	if !ok {
+		return nil
+	}
+
+	es := make([]domain.TriageEntry, 0, len(idx))
+	for _, i := range idx {
+		es = append(es, l.entry(l.s.followUps[i]))
+	}
+
+	n, err := domain.File(ln, domain.UntrustedTriageFileRequest(factory, es, l.at))
+	if err != nil {
+		return nil
+	}
+
+	tri, audit := l.s.file(l.org, n, filedPart{})
+	tri.Triage, tri.State = true, domain.StateBlocked
+
+	l.audits = append(l.audits, audit)
+	l.s.append(domain.UntrustedTriagePaused(*tri, l.at))
+
+	out := make([]domain.FollowUp, 0, len(idx))
+
+	for _, i := range idx {
+		f := &l.s.followUps[i]
+		f.State, f.FiledItem = domain.FollowUpFiled, tri.ID
+		out = append(out, cloneFollowUp(*f))
 	}
 
 	return out
@@ -416,7 +467,7 @@ func (l *fakeLander) collecting(factory domain.FactoryID) *domain.Item {
 	var found *domain.Item
 
 	for _, it := range l.s.items {
-		if it.OrgID != l.org || it.FactoryID != factory || !it.Triage || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		if it.OrgID != l.org || it.FactoryID != factory || !it.Triage || it.Untrusted || it.State == domain.StateDone || it.State == domain.StateCancelled {
 			continue
 		}
 

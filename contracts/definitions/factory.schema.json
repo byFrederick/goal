@@ -394,22 +394,30 @@
         "enabled": { "type": "boolean", "default": true, "description": "A disabled trigger matches nothing." },
         "on": {
           "type": "string",
-          "pattern": "^(github\\.check_run\\.failed|github\\.issues\\.labeled|schedule|webhook\\.[a-z][a-z0-9-]{1,38}[a-z0-9](\\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$",
-          "description": "The event key: github.check_run.failed, github.issues.labeled, schedule, or webhook.<endpoint name> with an optional .<event> matched against the delivery's event field."
+          "pattern": "^(schedule|(webhook\\.)?[a-z][a-z0-9-]{1,38}[a-z0-9](\\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$",
+          "description": "What the trigger fires on: schedule; <sender>.<event> (github.check_run), that event from every webhook of the sender open to the factory; <webhook>.<event>, that event to one organization webhook; or <webhook>, every event to it. github.check_run.failed and github.issues.labeled, as written before, read as github.check_run with conclusion failure and github.issues with action labeled, and webhook.<name>[.<event>] as <name>[.<event>]."
         },
         "cron": { "type": "string", "description": "When on is schedule, and only then: five cron fields (minute, hour, day of month, month, day of week)." },
         "timeZone": { "type": "string", "description": "When on is schedule, and only then: the IANA time zone the cron is read in. Defaults to UTC." },
         "filter": {
           "type": "object",
-          "description": "Filters on the event's fields; every one given must match.",
+          "description": "Filters on the event's normalized fields, which the sender's event table gives, and on its payload; every one given must match. Publish refuses a filter on a field the event never supplies.",
           "additionalProperties": false,
           "properties": {
             "branch": { "type": "string", "description": "The event's branch equals this." },
-            "repo": { "type": "string", "description": "The event's repository, owner/name, equals this." },
+            "repo": { "$ref": "#/$defs/triggerValues", "description": "The event's repository, owner/name in any case, is this one or one of this list; leaving it out watches every repository." },
             "label": { "type": "string", "description": "The event's label equals this." },
+            "action": { "$ref": "#/$defs/triggerValues", "description": "The event's action (opened, labeled, completed…) is this one or one of this list." },
+            "conclusion": { "$ref": "#/$defs/triggerValues", "description": "The event's conclusion (failure, success…) is this one or one of this list." },
             "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Globs; the event matches when any changed path matches one." },
             "authors": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The event's sender is one of these." },
-            "skipBots": { "type": "boolean", "description": "Drop events whose sender is a bot." }
+            "skipBots": { "type": "boolean", "description": "Drop events whose sender is a bot." },
+            "match": {
+              "type": "object",
+              "description": "Payload fields by dot path (check_run.app.slug), each matched against a value or a list of values; all must match.",
+              "propertyNames": { "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$" },
+              "additionalProperties": { "$ref": "#/$defs/triggerValues" }
+            }
           }
         },
         "only": {
@@ -447,8 +455,9 @@
             "station": { "type": "string", "description": "The station id the item starts at." },
             "lane": { "type": "string", "description": "The item's lane: a key of that station's route." },
             "expedite": { "type": "boolean", "description": "Put the item in the expedite flow." },
-            "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's fields." },
-            "brief": { "type": "string", "description": "The item's brief; {{field}} placeholders take the event's fields, which reach agents only as untrusted data." }
+            "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.<path>}} any field of its body." },
+            "brief": { "type": "string", "description": "The item's brief; {{field}} and {{payload.<path>}} placeholders take the event's values, which reach agents only as untrusted data." },
+            "trusted": { "type": "boolean", "description": "File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set." }
           }
         },
         "limits": {
@@ -457,6 +466,7 @@
           "additionalProperties": false,
           "properties": {
             "perDay": { "type": "integer", "minimum": 1, "description": "At most this many items created by the trigger since the start of the UTC day." },
+            "perHour": { "type": "integer", "minimum": 1, "description": "At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none." },
             "pauseOnBudget": { "type": "boolean", "description": "Skip events while the factory's budget is spent (today the weekly budget)." }
           }
         }
@@ -464,6 +474,13 @@
       "if": { "required": ["on"], "properties": { "on": { "const": "schedule" } } },
       "then": { "required": ["cron"] },
       "else": { "properties": { "cron": false, "timeZone": false } }
+    },
+    "triggerValues": {
+      "description": "One value, or a list of values one of which must match.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+      ]
     },
     "station": {
       "type": "object",

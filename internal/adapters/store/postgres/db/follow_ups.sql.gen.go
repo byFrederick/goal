@@ -17,9 +17,9 @@ SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.
 FROM follow_ups f
 JOIN work_items s ON s.id = f.item_id
 LEFT JOIN work_items p ON p.id = s.parent_id
-WHERE f.state = 'waiting' AND f.target IN ('start', 'triage') AND f.factory_id = ANY($1::uuid[])
-  AND (s.state = 'cancelled' OR p.state = 'cancelled'
-       OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
+WHERE f.state = 'waiting' AND (f.target IN ('start', 'triage') OR (f.target = 'note' AND s.untrusted))
+  AND f.factory_id = ANY($1::uuid[])
+  AND (s.state = 'cancelled' OR p.state = 'cancelled' OR COALESCE(p.state, s.state) = 'done')
 ORDER BY f.created_at, f.id
 LIMIT 1
 FOR UPDATE OF f SKIP LOCKED
@@ -31,10 +31,11 @@ type ClaimLandedFollowUpRow struct {
 }
 
 // The oldest waiting start or triage follow-up whose work has landed or was cancelled
-// (follow_ups_waiting_filing_idx), locked; one another instance holds is skipped. Its root is the
-// source item, or its assembly for a part. A follow-up of a cancelled source or root is taken
-// whatever its trust, to be dropped; one of landed work (a done root) only from a trusted source.
-// Only the follow-ups of factories goald has loaded are taken, since filing needs their line.
+// (follow_ups_waiting_filing_idx), or note of an untrusted source, locked; one another instance
+// holds is skipped. Its root is the source item, or its assembly for a part. An untrusted
+// source's follow-ups, its notes too, are never delivered or filed on their own: they go to a
+// triage item of their own when its work lands (ADR 0040 decision 21). Only the follow-ups of
+// factories goald has loaded are taken, since filing needs their line.
 func (q *Queries) ClaimLandedFollowUp(ctx context.Context, factories []uuid.UUID) (ClaimLandedFollowUpRow, error) {
 	row := q.db.QueryRow(ctx, claimLandedFollowUp, factories)
 	var i ClaimLandedFollowUpRow
@@ -109,7 +110,7 @@ func (q *Queries) ClaimNote(ctx context.Context) (ClaimNoteRow, error) {
 
 const collectingTriageItem = `-- name: CollectingTriageItem :one
 SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage FROM work_items w
-WHERE w.factory_id = $1 AND w.triage AND w.state NOT IN ('done', 'cancelled')
+WHERE w.factory_id = $1 AND w.triage AND NOT w.untrusted AND w.state NOT IN ('done', 'cancelled')
   AND NOT EXISTS (SELECT 1 FROM agent_runs r WHERE r.item_id = w.id)
 ORDER BY w.created_at
 LIMIT 1
@@ -117,7 +118,7 @@ FOR NO KEY UPDATE OF w
 `
 
 // The factory's triage item that still collects (work_items_triage_idx): open, with no run yet,
-// locked for the follow-ups that join it.
+// and not an untrusted item's own, locked for the follow-ups that join it.
 func (q *Queries) CollectingTriageItem(ctx context.Context, factoryID uuid.UUID) (WorkItem, error) {
 	row := q.db.QueryRow(ctx, collectingTriageItem, factoryID)
 	var i WorkItem
@@ -401,16 +402,15 @@ SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.
 FROM follow_ups f
 JOIN work_items s ON s.id = f.item_id
 LEFT JOIN work_items p ON p.id = s.parent_id
-WHERE f.state = 'waiting' AND f.target IN ('start', 'triage')
+WHERE f.state = 'waiting' AND (f.target IN ('start', 'triage') OR (f.target = 'note' AND s.untrusted))
   AND COALESCE(s.parent_id, s.id) = $1::uuid
-  AND (s.state = 'cancelled' OR p.state = 'cancelled'
-       OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
+  AND (s.state = 'cancelled' OR p.state = 'cancelled' OR COALESCE(p.state, s.state) = 'done')
 ORDER BY f.created_at, f.id
 FOR UPDATE OF f SKIP LOCKED
 `
 
-// Every waiting start or triage follow-up of a root and its parts that ClaimLandedFollowUp would
-// take, oldest first, locked; the claimed one is already this transaction's.
+// Every waiting follow-up of a root and its parts that ClaimLandedFollowUp would take, oldest
+// first, locked; the claimed one is already this transaction's.
 func (q *Queries) LandedFollowUps(ctx context.Context, rootID uuid.UUID) ([]FollowUp, error) {
 	rows, err := q.db.Query(ctx, landedFollowUps, rootID)
 	if err != nil {
@@ -635,6 +635,63 @@ func (q *Queries) OpenItemFiledFrom(ctx context.Context, arg OpenItemFiledFromPa
 	return i, err
 }
 
+const pauseUntrustedTriageItem = `-- name: PauseUntrustedTriageItem :one
+UPDATE work_items SET state = 'blocked', updated_at = $1
+WHERE id = $2
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage
+`
+
+type PauseUntrustedTriageItemParams struct {
+	At time.Time
+	ID uuid.UUID
+}
+
+// An untrusted item's own triage item, filed paused (blocked, with its paused event) for a person
+// to check and resume (ADR 0040 decision 21).
+func (q *Queries) PauseUntrustedTriageItem(ctx context.Context, arg PauseUntrustedTriageItemParams) (WorkItem, error) {
+	row := q.db.QueryRow(ctx, pauseUntrustedTriageItem, arg.At, arg.ID)
+	var i WorkItem
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ParentID,
+		&i.Type,
+		&i.Lane,
+		&i.Title,
+		&i.Body,
+		&i.Station,
+		&i.State,
+		&i.ClassOfService,
+		&i.Priority,
+		&i.Size,
+		&i.ReworkCount,
+		&i.CostUsd,
+		&i.Outputs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+		&i.OrgID,
+		&i.PartKey,
+		&i.PartPaths,
+		&i.Paths,
+		&i.BaseCommit,
+		&i.Trigger,
+		&i.Source,
+		&i.IntegrationBranch,
+		&i.IntegrationLandAt,
+		&i.Origin,
+		&i.Via,
+		&i.CreatedBy,
+		&i.Generation,
+		&i.Untrusted,
+		&i.StartAt,
+		&i.StartedAt,
+		&i.Triage,
+	)
+	return i, err
+}
+
 const rewriteTriageItem = `-- name: RewriteTriageItem :one
 UPDATE work_items SET title = $1, body = $2, priority = $3::bigint,
   generation = $4::int, updated_at = $5
@@ -715,8 +772,8 @@ type TriageFollowUpParams struct {
 	ID     uuid.UUID
 }
 
-// A note or a start that cannot go where it says: for triage, still waiting, its ref kept in the
-// reason.
+// A note or a start that cannot go where it says, or one of untrusted work: for triage, still
+// waiting, its ref kept in the reason.
 func (q *Queries) TriageFollowUp(ctx context.Context, arg TriageFollowUpParams) (FollowUp, error) {
 	row := q.db.QueryRow(ctx, triageFollowUp, arg.Reason, arg.At, arg.ID)
 	var i FollowUp

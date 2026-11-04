@@ -16,5 +16,86 @@ spec:
     header: X-GitHub-Delivery
   event:
     header: X-GitHub-Event
-  # The event table (ADR 0040 decision 14): each event's normalized fields as dot paths.
-  events: {}
+  # The event table (ADR 0040 decision 14): each event's normalized fields as dot paths into its
+  # payload. Filters read branch, repo, label, action, conclusion, paths and author; any other
+  # field is for placeholders and only.dedupe.
+  events:
+    check_run:
+      action: action
+      conclusion: check_run.conclusion
+      check.name: check_run.name
+      check.url: check_run.html_url
+      branch: check_run.check_suite.head_branch
+      sha: check_run.head_sha
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    check_suite:
+      action: action
+      conclusion: check_suite.conclusion
+      branch: check_suite.head_branch
+      sha: check_suite.head_sha
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    workflow_run:
+      action: action
+      conclusion: workflow_run.conclusion
+      workflow.name: workflow_run.name
+      workflow.url: workflow_run.html_url
+      branch: workflow_run.head_branch
+      sha: workflow_run.head_sha
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    issues:
+      action: action
+      label: label.name
+      issue.number: issue.number
+      issue.title: issue.title
+      issue.url: issue.html_url
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    issue_comment:
+      action: action
+      issue.number: issue.number
+      issue.title: issue.title
+      comment.url: comment.html_url
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    pull_request:
+      action: action
+      label: label.name
+      pr.number: pull_request.number
+      pr.title: pull_request.title
+      pr.url: pull_request.html_url
+      branch: pull_request.head.ref
+      base: pull_request.base.ref
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    pull_request_review:
+      action: action
+      pr.number: pull_request.number
+      pr.title: pull_request.title
+      review.state: review.state
+      branch: pull_request.head.ref
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+    push:
+      branch: {paths: [ref], trimPrefix: refs/heads/}
+      sha: after
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type
+      paths: {paths: [commits.added, commits.modified, commits.removed]}
+    release:
+      action: action
+      release.tag: release.tag_name
+      release.url: release.html_url
+      repo: repository.full_name
+      author: sender.login
+      author.type: sender.type

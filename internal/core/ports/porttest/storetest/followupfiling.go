@@ -24,7 +24,7 @@ var followUpFilingTests = []struct {
 	{"FollowUps_FileCappedADay", testFileCappedADay},
 	{"FollowUps_FileThreeDeep", testFileThreeDeep},
 	{"FollowUps_FileDedupesByTitle", testFileDedupesByTitle},
-	{"FollowUps_FileLeavesUntrustedWaiting", testFileLeavesUntrusted},
+	{"FollowUps_FileUntrustedToTheirOwnTriage", testFileUntrustedToOwnTriage},
 	{"FollowUps_FileConcurrentSweeps", testFileConcurrentSweeps},
 	{"FollowUps_TriageCollectsUntilClaimed", testTriageCollectsUntilClaimed},
 	{"FollowUps_TriageNoneWhenNothingLeft", testTriageNoneWhenNothingLeft},
@@ -331,15 +331,70 @@ func testFileDedupesByTitle(f *fixture) {
 }
 
 // Follow-ups of an untrusted item's landed work stay waiting (decision 21).
-func testFileLeavesUntrusted(f *fixture) {
+// The follow-ups of untrusted work, its notes too, are never delivered or filed on their own: when
+// it lands they go to a triage item of their own, untrusted and filed paused, which collects
+// nothing else; a trusted item's follow-ups still go to the factory's collecting triage item.
+func testFileUntrustedToOwnTriage(f *fixture) {
 	t := f.t
+	lines := []domain.Line{lineOf(f.factory, nameDev)}
 
 	src := f.create(t, domain.NewItem{Title: "hook", Untrusted: true})
-	f.keepNotes(t, src, startFollowUp("from a webhook", domain.FollowUpPlan{Title: "Hook work"}))
+	f.keepNotes(t, src, startFollowUp("from a webhook", domain.FollowUpPlan{Title: "Hook work"}),
+		triageFollowUp("look at the hook"), noteFor("tell #1", nameDev, 1))
+
+	if got := f.deliver(t, []domain.NoteFactory{domain.NoteFactoryOf(lines[0])}, 10); len(got) != 0 {
+		t.Fatalf("DeliverNotes = %+v; want an untrusted item's note left waiting", got)
+	}
+
 	f.land(t, src, domain.StateDone, tLanded)
 
-	if got := f.sweep(t, []domain.Line{lineOf(f.factory, nameDev)}, 10); len(got) != 0 {
-		t.Errorf("FileFollowUps = %+v; want the untrusted follow-up left waiting", got)
+	got := f.sweep(t, lines, 10)
+	if len(got) != 3 {
+		t.Fatalf("FileFollowUps = %+v; want all three of the untrusted item's follow-ups", got)
+	}
+
+	own := got[0].FiledItem
+	for _, fu := range got {
+		if fu.State != domain.FollowUpFiled || fu.Target != domain.FollowUpTriage || fu.FiledItem != own || fu.For != nil || fu.Start != nil {
+			t.Errorf("follow-up = %+v; want it filed for triage onto one item", fu)
+		}
+	}
+
+	if !strings.Contains(got[0].Reason, "Hook work") || !strings.Contains(got[2].Reason, "dev#1") {
+		t.Errorf("reasons %q, %q; want the start's title and the note's ref kept", got[0].Reason, got[2].Reason)
+	}
+
+	checkOwnTriage(t, f, lines, own)
+}
+
+// checkOwnTriage checks the untrusted item's own triage item, and that a trusted item's follow-up goes elsewhere.
+func checkOwnTriage(t *testing.T, f *fixture, lines []domain.Line, own domain.ItemID) {
+	t.Helper()
+
+	it := f.item(t, own)
+	if !it.Triage || !it.Untrusted || it.State != domain.StateBlocked || it.Origin != domain.OriginFollowUp {
+		t.Errorf("own triage item = %+v; want an untrusted triage item, blocked", it)
+	}
+
+	var paused []domain.Event
+
+	for _, e := range f.Events(t, own) {
+		if e.Kind == domain.EventPaused {
+			paused = append(paused, e)
+		}
+	}
+
+	if len(paused) != 1 || paused[0].Data["reason"] != domain.ReasonUntrustedFollowUps {
+		t.Errorf("paused events = %+v; want one with %q", paused, domain.ReasonUntrustedFollowUps)
+	}
+
+	trusted := f.create(t, domain.NewItem{Title: "person's"})
+	f.keepNotes(t, trusted, triageFollowUp("look at the logs"))
+	f.land(t, trusted, domain.StateDone, tLanded)
+
+	later := f.sweep(t, lines, 10)
+	if len(later) != 1 || later[0].FiledItem == own || later[0].FiledItem == "" {
+		t.Errorf("a trusted item's follow-up = %+v; want it in a triage item other than the untrusted one", later)
 	}
 }
 

@@ -18,4 +18,13 @@ spec:
     path: event.id
   event:
     paths: [event.event_type]
-  events: {}
+  # The event table (ADR 0040 decision 14), by event.event_type.
+  events:
+    incident.triggered: &incident
+      incident.id: event.data.id
+      incident.title: event.data.title
+      incident.url: event.data.html_url
+      service: event.data.service.summary
+      urgency: event.data.urgency
+    incident.acknowledged: *incident
+    incident.resolved: *incident

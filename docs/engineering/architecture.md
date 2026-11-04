@@ -23,7 +23,7 @@ Goal is one Go daemon (`goald`), one PostgreSQL database, one object storage buc
 | --- | --- | --- |
 | `internal/core/*` (`domain`, `ports` with `porttest`, `engine`) | the standard library, `github.com/google/uuid` and `internal/core` itself; by convention `domain` imports no other core package, `ports` only `domain`, and `engine` `domain` and `ports` | anything outside `internal/core` (one strict rule) |
 | `internal/adapters/*` | `domain`, `ports`, their own SDK | `engine`, `api`, `knowledge` (outside tests), other adapters |
-| `internal/config` | `domain` | adapters, engine |
+| `internal/config` | `domain`, `catalog/senders` (the senders' event tables, which the deliveries check reads) | adapters, engine |
 | `internal/factorymodel` | `domain`, `config`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, cloud SDKs |
 | `internal/authoring` | `domain`, `ports`, `config`, `factorymodel`, `go.yaml.in/yaml/v3` | adapters, engine, `api`, `gateway`, `definitions`, cloud SDKs |
 | `internal/gateway` | `domain`, `ports`, `config`, the MCP Go SDK | adapters, engine, `authoring`, cloud SDKs |

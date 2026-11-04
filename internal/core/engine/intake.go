@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ var errNoIntake = errors.New("engine: no intake state (Deps.Intake)")
 // one firing for each trigger it reached, in declaration order: every enabled trigger whose on:
 // and filter match it (domain.Trigger.Matches). A trigger it does not reach records nothing. For
 // each one reached, the checks run in order (only.failuresInARow, only.dedupe, only.modelAgrees,
-// limits.perDay, limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
+// limits.perDay, limits.perHour, limits.pauseOnBudget); the first that fails records a skipped firing whose reason starts with
 // its step, and when all pass the trigger creates its item and records a created firing with it.
 // Replaying an event with the same idempotency key returns the firing recorded first and creates
 // nothing. The factory must belong to the organization in ctx; any other is ports.ErrNotFound.
@@ -59,8 +60,10 @@ func (e *Engine) Intake(ctx context.Context, ev domain.IntakeEvent) ([]domain.Tr
 	return out, errors.Join(errs...)
 }
 
-// fire runs one trigger on an event that reached it and records the firing, or returns the one
-// already recorded for the event's idempotency key.
+// fire runs one trigger on an event that reached it and records the firing in one transaction
+// with its item, under the trigger's lock (ports.Intake.Fire, ADR 0040 decision 16), or returns
+// the one already recorded for the event's idempotency key. The store checks only.dedupe,
+// limits.perDay and limits.perHour again under the lock, so they hold across goald instances.
 func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.TriggerFiring, error) {
 	ctx = domain.WithOrg(ctx, l.OrgID)
 
@@ -79,20 +82,22 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 		return domain.TriggerFiring{}, err
 	}
 
+	var item *domain.NewItem
+
 	if _, skipped := eval.Skipped(); skipped {
 		f.Outcome, f.Reason = domain.FiringSkipped, eval.FiringReason()
 	} else {
-		it, err := e.createFromTrigger(ctx, l, t, ev, *eval.Item, now)
+		n, err := fileFromTrigger(l, t, ev, *eval.Item, now)
 		if err != nil {
 			return domain.TriggerFiring{}, err
 		}
 
-		f.Outcome, f.ItemID = domain.FiringCreated, it.ID
+		f.Outcome, item = domain.FiringCreated, &n
 	}
 
-	got, fresh, err := e.intake.RecordFiring(ctx, f)
+	got, fresh, err := e.intake.Fire(ctx, f, item, domain.LimitsOf(t))
 	if err != nil {
-		return domain.TriggerFiring{}, fmt.Errorf("record the firing: %w", err)
+		return domain.TriggerFiring{}, fmt.Errorf("fire: %w", err)
 	}
 
 	attrs := []any{
@@ -100,10 +105,8 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 		slog.String("outcome", string(got.Outcome)), slog.String("reason", loggedReason(got.Reason)), slog.String("item", string(got.ItemID)),
 	}
 
-	if !fresh && f.ItemID != "" {
-		// Another delivery of the same event recorded its firing first: the item this one created
-		// has no firing (the risk the engine part's pull request names).
-		e.log.WarnContext(ctx, "trigger firing raced", append(attrs, slog.String("orphan_item", string(f.ItemID)))...)
+	if !fresh {
+		e.log.InfoContext(ctx, "trigger firing replayed", attrs...)
 	} else {
 		e.log.InfoContext(ctx, "trigger fired", attrs...)
 	}
@@ -207,7 +210,7 @@ func (e *Engine) onlyChecks(ctx context.Context, l domain.Line, t domain.Trigger
 		}
 
 		if open {
-			out.Skip(domain.StepDedupe, fmt.Sprintf("item %s is open for the same %s", id, t.Only.Dedupe))
+			out.Skip(domain.StepDedupe, domain.DedupeSkip(id, t.Only.Dedupe))
 
 			return true, nil
 		}
@@ -228,21 +231,34 @@ func loggedReason(reason string) string {
 	return reason
 }
 
-// limitChecks runs limits.perDay, then limits.pauseOnBudget, into out.
+// limitChecks runs limits.perDay, limits.perHour, then limits.pauseOnBudget, into out.
 func (e *Engine) limitChecks(ctx context.Context, l domain.Line, t domain.Trigger, now time.Time, out *domain.TriggerEvaluation) error {
-	if n := t.Limits.PerDay; n > 0 {
-		created, err := e.intake.CreatedSince(ctx, l.FactoryID, t.Name, now.UTC().Truncate(24*time.Hour))
+	for _, c := range []struct {
+		step  string
+		n     int
+		since time.Time
+		skip  func(created, n int) string
+		pass  string
+	}{
+		{domain.StepPerDay, t.Limits.PerDay, now.UTC().Truncate(24 * time.Hour), domain.PerDaySkip, "%d of the %d items a day created today (UTC)"},
+		{domain.StepPerHour, t.Limits.PerHour, now.Add(-time.Hour), domain.PerHourSkip, "%d of the %d items an hour created in the last hour"},
+	} {
+		if c.n <= 0 {
+			continue
+		}
+
+		created, err := e.intake.CreatedSince(ctx, l.FactoryID, t.Name, c.since)
 		if err != nil {
 			return err
 		}
 
-		if created >= n {
-			out.Skip(domain.StepPerDay, fmt.Sprintf("%d items created today (UTC), the limit is %d", created, n))
+		if created >= c.n {
+			out.Skip(c.step, c.skip(created, c.n))
 
 			return nil
 		}
 
-		out.Pass(domain.StepPerDay, fmt.Sprintf("%d of the %d items a day created today (UTC)", created, n))
+		out.Pass(c.step, fmt.Sprintf(c.pass, created, c.n))
 	}
 
 	if t.Limits.PauseOnBudget {
@@ -268,8 +284,9 @@ func (e *Engine) limitChecks(ctx context.Context, l domain.Line, t domain.Trigge
 // renderItem is t's item for ev: at create.station in its arrival state, of create.type and
 // create.lane, expedite when create.expedite says so (else as the line classes the type). Its
 // title is create.title rendered with plain values (the trigger's name when that is empty), its
-// body create.brief rendered with quoted values and then the event's fields in a block marked as
-// untrusted data (ADR 0026 decision 5), so domain.Item.Work carries both.
+// body create.brief rendered with quoted values and then the event's fields, with the payload
+// values its templates read, in a block marked as untrusted data (ADR 0026 decision 5), so
+// domain.Item.Work carries both.
 func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.TriggerItem, error) {
 	st, ok := l.Station(t.Create.Station)
 	if !ok {
@@ -281,13 +298,13 @@ func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.
 		class = domain.ClassExpedite
 	}
 
-	title := strings.TrimSpace(domain.RenderTemplate(t.Create.Title, ev.Fields, false))
+	title := strings.TrimSpace(domain.RenderEventTemplate(t.Create.Title, ev, false))
 	if title == "" {
 		title = domain.Humanize(t.Name)
 	}
 
-	body := domain.UntrustedEventBlock(ev)
-	if brief := strings.TrimSpace(domain.RenderTemplate(t.Create.Brief, ev.Fields, true)); brief != "" {
+	body := domain.UntrustedEventBlock(withUsedPayload(t, ev))
+	if brief := strings.TrimSpace(domain.RenderEventTemplate(t.Create.Brief, ev, true)); brief != "" {
 		body = brief + "\n\n" + body
 	}
 
@@ -296,22 +313,40 @@ func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.
 	}, nil
 }
 
-// createFromTrigger files the item it, rendered for ev, from t: origin trigger, by the engine.
-func (e *Engine) createFromTrigger(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent, it domain.TriggerItem, now time.Time) (domain.Item, error) {
+// withUsedPayload is ev with the {{payload.<path>}} values t's templates read among its fields,
+// so the untrusted block holds what the item's title and brief were made from.
+func withUsedPayload(t domain.Trigger, ev domain.IntakeEvent) domain.IntakeEvent {
+	fields := maps.Clone(ev.Fields)
+
+	for _, name := range append(domain.Placeholders(t.Create.Title), domain.Placeholders(t.Create.Brief)...) {
+		if strings.HasPrefix(name, "payload.") {
+			if fields == nil {
+				fields = map[string]string{}
+			}
+
+			fields[name] = ev.Value(name)
+		}
+	}
+
+	ev.Fields = fields
+
+	return ev
+}
+
+// fileFromTrigger is the item it, rendered for ev, from t, checked by domain.File: origin
+// trigger, by the engine; untrusted when ev is a webhook delivery, unless t is create.trusted
+// (ADR 0040 decision 21).
+func fileFromTrigger(l domain.Line, t domain.Trigger, ev domain.IntakeEvent, it domain.TriggerItem, now time.Time) (domain.NewItem, error) {
 	n, err := domain.File(l, domain.FileRequest{
 		Origin: domain.OriginTrigger, By: domain.EngineActor, Type: it.Type, Lane: it.Lane, Title: it.Title, Body: it.Body,
 		Station: it.Station, State: it.State, Class: it.Class, At: now, Source: itemSource(ev.Source), Trigger: t.Name,
+		Untrusted: ev.Webhook != "" && !t.Create.Trusted,
 	})
 	if err != nil {
-		return domain.Item{}, fmt.Errorf("file the item: %w", err)
+		return domain.NewItem{}, fmt.Errorf("file the item: %w", err)
 	}
 
-	created, err := e.store.CreateItem(ctx, n)
-	if err != nil {
-		return domain.Item{}, fmt.Errorf("create the item: %w", err)
-	}
-
-	return created, nil
+	return n, nil
 }
 
 // itemSource is where an item a trigger created from an event of source s came from.
@@ -326,25 +361,4 @@ func itemSource(s domain.TriggerSource) domain.ItemSource {
 	}
 
 	return ""
-}
-
-// NamesDelivery reports whether a delivery of event to the organization's webhook w is named by an
-// enabled trigger of a loaded line of the organization in ctx that w is open to
-// (domain.Trigger.NamesDelivery), from the lines already in memory: a factory not loaded yet names
-// nothing, so the receiver keeps only the delivery's ledger id and count (ADR 0040 decision 12).
-func (e *Engine) NamesDelivery(ctx context.Context, w domain.WebhookEndpoint, event string) bool {
-	for _, f := range w.Factories() {
-		l, err := e.lineIn(ctx, f)
-		if err != nil {
-			continue
-		}
-
-		for _, t := range l.Triggers {
-			if t.NamesDelivery(w.Name, w.Sender, event) {
-				return true
-			}
-		}
-	}
-
-	return false
 }

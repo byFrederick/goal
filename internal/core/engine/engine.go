@@ -124,6 +124,9 @@ type Deps struct {
 	// Intake records trigger firings and holds the schedule lock (intake.go, schedules.go); nil
 	// leaves Intake and FireSchedules failing with errNoIntake.
 	Intake ports.Intake
+	// Events are the senders' event tables, which a delivery's fields are read by
+	// (deliveries.go); nil reads none, so deliveries match on their event and payload only.
+	Events ports.SenderEvents
 	// ModelCheck asks a model a trigger's only.modelAgrees question (modelcheck.go); nil skips
 	// every event of a trigger with one, "Model check failed" (ADR 0028 decision 3).
 	ModelCheck ports.ModelCheck
@@ -242,12 +245,15 @@ type Engine struct {
 	policies    ports.OrgPolicies
 	knowledge   KnowledgeSnapshots // nil without Deps.Knowledge
 	intake      ports.Intake
-	modelCheck  ports.ModelCheck
-	audit       ports.Audit
-	outbox      ports.NotificationOutbox
-	clock       ports.Clock
-	log         *slog.Logger
-	cfg         Config
+	events      ports.SenderEvents
+	// holder names this instance's claims of delivery evaluations (deliveries.go).
+	holder     string
+	modelCheck ports.ModelCheck
+	audit      ports.Audit
+	outbox     ports.NotificationOutbox
+	clock      ports.Clock
+	log        *slog.Logger
+	cfg        Config
 
 	mu    sync.RWMutex
 	lines map[domain.FactoryID]domain.Line
@@ -307,7 +313,13 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
+	holder, err := newHolder()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Engine{
+		events: d.Events, holder: holder,
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
 		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
@@ -496,6 +508,12 @@ func (e *Engine) Tick(ctx context.Context) error {
 	// Notes go first, so a target claimed in this tick reads them; every line takes notes. Then
 	// the follow-ups of landed work are filed, before the queues release.
 	errs = append(errs, e.deliverNotes(ctx, lines), e.fileFollowUps(ctx, lines))
+
+	// Deliveries are evaluated on every instance; each claims its own rows (deliveries.go).
+	if e.intake != nil {
+		_, err := e.evaluateDeliveries(ctx, lines)
+		errs = append(errs, err)
+	}
 
 	running := maps.Clone(lines)
 	maps.DeleteFunc(running, func(_ domain.FactoryID, l domain.Line) bool { return l.Paused })

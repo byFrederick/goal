@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 // The steps of a trigger's evaluation, in the order they run (ADR 0028 decision 1): When, each
 // configured Only if condition (the model check last), Create, then each configured limit.
 const (
@@ -9,8 +11,60 @@ const (
 	StepModel    = "only.modelAgrees"
 	StepCreate   = "create"
 	StepPerDay   = "limits.perDay"
+	StepPerHour  = "limits.perHour"
 	StepBudget   = "limits.pauseOnBudget"
 )
+
+// DedupeSkip is only.dedupe's reason when item is open for the same value of field.
+func DedupeSkip(item ItemID, field string) string {
+	return fmt.Sprintf("item %s is open for the same %s", item, field)
+}
+
+// PerDaySkip is limits.perDay's reason when created items were created today, the limit n.
+func PerDaySkip(created, n int) string {
+	return fmt.Sprintf("%d items created today (UTC), the limit is %d", created, n)
+}
+
+// PerHourSkip is limits.perHour's reason when created items were created in the hour before.
+func PerHourSkip(created, n int) string {
+	return fmt.Sprintf("%d items created in the last hour, the limit is %d", created, n)
+}
+
+// FireLimits are what a firing that creates an item checks again under its trigger's lock (ADR
+// 0040 decision 16), so they hold across goald instances: only.dedupe's field (with the
+// firing's Dedupe value), limits.perDay and limits.perHour.
+type FireLimits struct {
+	DedupeField     string
+	PerDay, PerHour int
+}
+
+// LimitsOf are t's FireLimits.
+func LimitsOf(t Trigger) FireLimits {
+	return FireLimits{DedupeField: t.Only.Dedupe, PerDay: t.Limits.PerDay, PerHour: t.Limits.PerHour}
+}
+
+// FireCounts are what a store read under the trigger's lock: the open item with the firing's
+// dedupe value ("" for none), and how many items the trigger created since the UTC day began and
+// in the hour before the firing.
+type FireCounts struct {
+	OpenDedupe      ItemID
+	Today, LastHour int
+}
+
+// Skip is the reason (step: why, as FiringReason writes it) the firing is skipped by l with
+// counts c, "" when it may create its item: only.dedupe, then limits.perDay, then limits.perHour.
+func (l FireLimits) Skip(c FireCounts) string {
+	switch {
+	case l.DedupeField != "" && c.OpenDedupe != "":
+		return StepDedupe + ": " + DedupeSkip(c.OpenDedupe, l.DedupeField)
+	case l.PerDay > 0 && c.Today >= l.PerDay:
+		return StepPerDay + ": " + PerDaySkip(c.Today, l.PerDay)
+	case l.PerHour > 0 && c.LastHour >= l.PerHour:
+		return StepPerHour + ": " + PerHourSkip(c.LastHour, l.PerHour)
+	}
+
+	return ""
+}
 
 // StepOutcome is what one step of an evaluation did with the event.
 type StepOutcome string
@@ -56,7 +110,7 @@ type TriggerEvaluation struct {
 
 // NewTriggerEvaluation is t's evaluation before any step ran: each step t has, every one not
 // reached. A check is one of t's steps when it is configured: only.failuresInARow above 0,
-// only.dedupe, only.modelAgrees, limits.perDay above 0 and limits.pauseOnBudget.
+// only.dedupe, only.modelAgrees, limits.perDay and limits.perHour above 0, and limits.pauseOnBudget.
 func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 	steps := []string{StepWhen}
 
@@ -76,6 +130,10 @@ func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 
 	if t.Limits.PerDay > 0 {
 		steps = append(steps, StepPerDay)
+	}
+
+	if t.Limits.PerHour > 0 {
+		steps = append(steps, StepPerHour)
 	}
 
 	if t.Limits.PauseOnBudget {

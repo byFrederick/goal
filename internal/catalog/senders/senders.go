@@ -19,9 +19,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"path"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -91,8 +95,96 @@ type Spec struct {
 	Settings string `yaml:"settings"`
 	// Events is the event table (ADR 0040 decision 14): each event's normalized fields, as dot
 	// paths into its payload.
-	Events map[string]map[string]string `yaml:"events"`
+	Events map[string]map[string]Field `yaml:"events"`
 }
+
+// Field is where a normalized field is in an event's payload: a dot path, or a mapping of the
+// paths to try in order and a prefix to cut (domain.EventField).
+type Field struct {
+	Paths      []string `yaml:"paths"`
+	TrimPrefix string   `yaml:"trimPrefix"`
+}
+
+// UnmarshalYAML reads a field written as one dot path or as a mapping.
+func (f *Field) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		f.Paths = []string{n.Value}
+
+		return nil
+	}
+
+	type plain Field
+
+	var p plain
+	if err := n.Decode(&p); err != nil {
+		return err
+	}
+
+	*f = Field(p)
+
+	return nil
+}
+
+// dotPath is a payload path: keys joined by dots.
+var dotPath = regexp.MustCompile(`^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$`)
+
+// fieldName is a normalized field's name, as a placeholder writes it.
+var fieldName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
+
+// checkEvents refuses an event table entry that names no path, a path or a field name that is
+// malformed, or a field starting payload., which placeholders keep for the raw payload.
+func (s Spec) checkEvents() error {
+	for event, fields := range s.Events {
+		for name, f := range fields {
+			switch {
+			case !fieldName.MatchString(name) || strings.HasPrefix(name, "payload."):
+				return fmt.Errorf("event %s: %q is not a field name", event, name)
+			case len(f.Paths) == 0:
+				return fmt.Errorf("event %s: field %s names no path", event, name)
+			}
+
+			for _, p := range f.Paths {
+				if !dotPath.MatchString(p) {
+					return fmt.Errorf("event %s: field %s: %q is not a dot path", event, name, p)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// EventTable is the event table of sender's event (domain.EventTable): false when the sender's
+// entry has none for it, so the event supplies no normalized field.
+func (c *Catalog) EventTable(sender domain.WebhookSender, event string) (domain.EventTable, bool) {
+	e, ok := c.entries[sender]
+	if !ok {
+		return nil, false
+	}
+
+	fields, ok := e.Spec.Events[event]
+	if !ok {
+		return domain.EventTable{}, false
+	}
+
+	out := make(domain.EventTable, len(fields))
+	for name, f := range fields {
+		out[name] = domain.EventField{Paths: slices.Clone(f.Paths), TrimPrefix: f.TrimPrefix}
+	}
+
+	return out, true
+}
+
+// Events are the events sender's entry has a table for, sorted.
+func (c *Catalog) Events(sender domain.WebhookSender) []string {
+	return slices.Sorted(maps.Keys(c.entries[sender].Spec.Events))
+}
+
+// shipped is the catalog goald ships, loaded once: the entries are embedded and never change.
+var shipped = sync.OnceValues(Load)
+
+// Shipped is the catalog goald ships (Load), read once.
+func Shipped() (*Catalog, error) { return shipped() }
 
 // Signature is the header that carries the signature or the token: its prefix, the separator
 // between several values ("" for one), any of which passes, and an hmac signature's encoding.
@@ -204,6 +296,10 @@ func (e Entry) check() error {
 		return errors.New("a timestamp needs a header and a tolerance")
 	case s.Signed == SignedIDTimestampBody && (s.ID.Header == "" || s.Timestamp == nil):
 		return errors.New("id.timestamp.body needs an id header and a timestamp")
+	}
+
+	if err := s.checkEvents(); err != nil {
+		return err
 	}
 
 	return s.checkScheme()

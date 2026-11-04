@@ -86,6 +86,8 @@ type harness struct {
 	knowledgeDeps engine.KnowledgeSnapshots
 	// intake holds the trigger firings and the schedule lock every engine of the harness shares.
 	intake *porttest.Intake
+	// events are the senders' event tables; nil builds the engine without them.
+	events ports.SenderEvents
 	// modelCheck answers triggers' model checks; nil builds the engine without one.
 	modelCheck ports.ModelCheck
 	// outbox queues the budget notifications every engine of the harness raises.
@@ -201,7 +203,7 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		Connections: h.connections, Credentials: h.credentials, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
-		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake,
+		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
 		ModelCheck: h.modelCheck, Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,

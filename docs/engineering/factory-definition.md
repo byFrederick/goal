@@ -419,6 +419,12 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 | A schedule's `timeZone` is not an IANA time zone the host knows | `time-zone-invalid` |
 | A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
 | `only.modelAgrees.question` is blank or longer than 500 characters; a model check without `question` is `schema-required` | `model-question-invalid` |
+| `on:` names a sender without an event (`github`, not `github.check_run`) | `on-needs-event` |
+| A filter reads a field the sender's event table doesn't give that event, such as `filter.paths` on `github.pull_request`; publish checks the webhook form (`on: <webhook>.<event>`) against the webhook's sender | `filter-unsupplied` |
+| `create.trusted` on the `gitlab` or `token` sender, or on a GitHub sender or webhook without `filter.authors` | `trusted-refused` |
+| `on:` names a webhook that the organization doesn't have or that isn't open to the factory (publish only) | `webhook-not-open` |
+
+The last four are the `deliveries` check (ADR 0040 decisions 14 and 21). Publish refuses them, and a version already live still loads with them, so its factory keeps running. `github.check_run.failed` and `github.issues.labeled` read as `github.check_run` with `conclusion: failure` and `github.issues` with `action: labeled`, and `webhook.<name>[.<event>]` as `<name>[.<event>]`. An event trigger without `limits.perHour` takes 10.
 
 The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
 

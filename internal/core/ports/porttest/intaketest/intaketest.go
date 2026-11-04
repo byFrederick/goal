@@ -79,6 +79,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	tests = append(tests, webhookTests...)
 	tests = append(tests, receiptTests...)
 	tests = append(tests, convertTests...)
+	tests = append(tests, evaluationTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -158,7 +159,7 @@ func (f *fixture) item(source domain.ItemSource, trigger string, at time.Time) d
 	f.t.Helper()
 
 	it, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
-		FactoryID: f.factory, Type: "fix", Title: "a flaky test", Station: station, State: domain.StateQueued,
+		FactoryID: f.factory, Type: typeFix, Title: "a flaky test", Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
 	})
 	if err != nil {
@@ -803,7 +804,7 @@ func testTallies(f *fixture) {
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
-		FactoryID: otherFactory, Type: "fix", Title: "elsewhere", Station: station, State: domain.StateQueued,
+		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: t0, Source: domain.ItemFromGitHub, Trigger: flaky,
 	}); err != nil {
 		t.Fatal(err)
@@ -841,7 +842,7 @@ func testItemSources(f *fixture) {
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
-		FactoryID: otherFactory, Type: "fix", Title: "elsewhere", Station: station, State: domain.StateQueued,
+		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour), Source: domain.ItemFromAPI,
 	}); err != nil {
 		t.Fatal(err)

@@ -412,6 +412,9 @@ type NewReceipt struct {
 	// (Trigger.NamesDelivery): an accepted delivery no trigger names keeps only its ledger id and a
 	// daily count.
 	Named bool
+	// Evaluations are the factories that evaluate a named delivery (EvaluationFor), added with
+	// its row in the receipt's transaction; a duplicate adds none.
+	Evaluations []NewDeliveryEvaluation
 }
 
 // Check refuses an unknown receipt, an accepted delivery without an id or a refused one with an id,
@@ -429,7 +432,27 @@ func (n NewReceipt) Check() error {
 		return fmt.Errorf("a refused delivery keeps metadata only: %w", ErrInvalid)
 	}
 
+	if err := n.checkEvaluations(); err != nil {
+		return err
+	}
+
 	return n.checkSizes()
+}
+
+// checkEvaluations refuses an evaluation without its factory or triggers, or with a long reason.
+func (n NewReceipt) checkEvaluations() error {
+	if len(n.Evaluations) > 0 && (n.Receipt != ReceiptAccepted || !n.Named) {
+		return fmt.Errorf("only an accepted delivery a trigger names is evaluated: %w", ErrInvalid)
+	}
+
+	for _, e := range n.Evaluations {
+		if e.FactoryID == "" || len(e.Triggers) == 0 || utf8.RuneCountInString(e.Skip) > maxEvaluationReason {
+			return fmt.Errorf("an evaluation needs its factory and triggers, and a reason of at most %d characters: %w",
+				maxEvaluationReason, ErrInvalid)
+		}
+	}
+
+	return nil
 }
 
 // checkSizes refuses an id, event, body or reason over its limit.
@@ -486,18 +509,18 @@ type CheckedDelivery struct {
 var ErrSignature = errors.New("the signature is missing or does not match")
 
 // NamesDelivery reports whether t is enabled and its on names a delivery of event from sender to
-// the webhook named webhook (ADR 0040 decision 14): it names the webhook (TriggerNames), or is
-// <sender>.<event>, alone or followed by today's action (github.check_run.failed).
+// the webhook named webhook (ADR 0040 decision 14, ParseOn): <sender>.<event> names the event
+// from every webhook of the sender, <webhook>.<event> that event to the webhook and <webhook>
+// every event to it.
 func (t Trigger) NamesDelivery(webhook string, sender WebhookSender, event string) bool {
 	if !t.Enabled || t.On == OnSchedule {
 		return false
 	}
 
-	if TriggerNames(t.On, webhook) {
-		return true
+	s, w, e := ParseOn(t.On)
+	if s != "" {
+		return s == sender && e != "" && e == event
 	}
 
-	key := string(sender) + "." + event
-
-	return event != "" && (t.On == key || strings.HasPrefix(t.On, key+"."))
+	return w == webhook && (e == "" || e == event)
 }

@@ -126,8 +126,9 @@ func checkIntakeTriggers(t *testing.T, triggers []gen.IntakeTrigger) {
 
 	want := []string{
 		`nightly-audit: schedule on schedule, when "0 6 * * MON-FRI, Europe/Berlin", enabled true, creates feature at inbox lane - expedite false, problem false`,
-		`flaky-test-on-main: github on github.check_run.failed, when "github.check_run.failed", enabled true, creates fix at inbox lane - expedite true, problem true`,
-		`deploy-failed: webhook on webhook.ci-hooks.deploy, when "webhook.ci-hooks.deploy", enabled false, creates fix at inbox lane - expedite false, problem true`,
+		// The keys written before ADR 0040 decision 14 show as its forms.
+		`flaky-test-on-main: github on github.check_run, when "github.check_run", enabled true, creates fix at inbox lane - expedite true, problem true`,
+		`deploy-failed: webhook on ci-hooks.deploy, when "ci-hooks.deploy", enabled false, creates fix at inbox lane - expedite false, problem true`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("triggers =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
