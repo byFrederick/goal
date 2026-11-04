@@ -287,14 +287,22 @@ func (f TriggerFiring) Check() error {
 		return fmt.Errorf("a firing's dedupe value and reason are at most %d characters: %w", maxIntakeText, ErrInvalid)
 	case f.Outcome != FiringCreated && f.Outcome != FiringSkipped && f.Outcome != FiringMissed:
 		return fmt.Errorf("firing outcome %q must be created, skipped or missed: %w", f.Outcome, ErrInvalid)
-	case (f.Outcome == FiringMissed) != (f.Missed > 0) || f.Missed < 0:
-		return fmt.Errorf("only a missed firing counts missed instants, at least one: %w", ErrInvalid)
-	case f.Outcome == FiringMissed && f.Source != TriggerSchedule:
-		return fmt.Errorf("only a schedule misses instants: %w", ErrInvalid)
 	case f.ItemID != "" && f.Outcome != FiringCreated:
 		return fmt.Errorf("only a created firing names an item: %w", ErrInvalid)
 	case f.At.IsZero():
 		return fmt.Errorf("a firing needs its instant: %w", ErrInvalid)
+	}
+
+	return f.checkMissed()
+}
+
+// checkMissed checks that only a schedule's missed firing counts missed instants, at least one.
+func (f TriggerFiring) checkMissed() error {
+	switch {
+	case (f.Outcome == FiringMissed) != (f.Missed > 0) || f.Missed < 0:
+		return fmt.Errorf("only a missed firing counts missed instants, at least one: %w", ErrInvalid)
+	case f.Outcome == FiringMissed && f.Source != TriggerSchedule:
+		return fmt.Errorf("only a schedule misses instants: %w", ErrInvalid)
 	}
 
 	return nil

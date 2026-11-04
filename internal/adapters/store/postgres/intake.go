@@ -571,7 +571,7 @@ func (in *Intake) RecordFiring(ctx context.Context, f domain.TriggerFiring) (dom
 		_, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 			ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
 			IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: item,
-			Missed: int32(min(f.Missed, math.MaxInt32)), At: f.At,
+			Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At,
 		})
 
 		switch {

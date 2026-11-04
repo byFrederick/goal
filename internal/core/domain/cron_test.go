@@ -95,8 +95,8 @@ func TestCron_ParseRefusesWhatConfigRefuses(t *testing.T) {
 	}
 }
 
-// Between counts the instants after after and at or before upTo, with the first and the last of
-// them, and stops counting at limit.
+// Between counts the instants in a window (later than its start, up to and including its end),
+// with the first and the last of them, and stops counting at its limit.
 func TestCron_BetweenCountsTheInstantsOfAGap(t *testing.T) {
 	t.Parallel()
 

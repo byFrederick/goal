@@ -414,6 +414,14 @@ func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
 		t.Errorf("share = %v; weeklyUsd must not change it", l.Jonah.Share)
 	}
 
+	checkModelAgreesIgnored(t, l, problems)
+}
+
+// checkModelAgreesIgnored checks that red-main keeps its modelAgrees, so it keeps skipping its
+// events, and that its warning says to turn it into a check.
+func checkModelAgreesIgnored(t *testing.T, l domain.Line, problems []domain.DefinitionProblem) {
+	t.Helper()
+
 	if !l.Triggers[1].Only.ModelAgrees {
 		t.Error("red-main lost its modelAgrees; it must keep skipping its events")
 	}

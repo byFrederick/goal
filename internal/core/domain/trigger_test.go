@@ -339,7 +339,7 @@ func TestRenderTemplate_EventTitleQuotedAndCut(t *testing.T) {
 	t.Parallel()
 
 	long := strings.Repeat("a", 500) + "\n" + strings.Repeat("b", 500)
-	ev := domain.IntakeEvent{Fields: map[string]string{"check.name": long, "repo": "acme/app"}}
+	ev := domain.IntakeEvent{Fields: map[string]string{"check.name": long, domain.FieldRepo: acmeApp}}
 
 	got := domain.EventTitle("{{check.name}} failed", ev, "red-main")
 	if want := `"` + strings.Repeat("a", 200) + `" failed`; got != want {

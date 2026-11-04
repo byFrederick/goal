@@ -40,7 +40,15 @@ func testMissedFiring(f *fixture) {
 		t.Errorf("Fire the same gap again = %+v, %v, %v; want the first, nothing new", again, fresh, err)
 	}
 
-	byKey, ok, err := f.in.Firing(f.ctx(), f.factory, nightly, missed.IdempotencyKey)
+	f.readMissed(got)
+}
+
+// readMissed checks that the missed firing got reads back by its key and in its trigger's list,
+// and that a missed firing of no instant is refused.
+func (f *fixture) readMissed(got domain.TriggerFiring) {
+	t := f.t
+
+	byKey, ok, err := f.in.Firing(f.ctx(), f.factory, nightly, got.IdempotencyKey)
 	if err != nil || !ok || byKey != got {
 		t.Errorf("Firing = %+v, %v, %v; want %+v", byKey, ok, err, got)
 	}
@@ -76,7 +84,7 @@ func testPruneFirings(f *fixture) {
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, _, err := f.in.RecordFiring(f.ctx(), domain.TriggerFiring{
-		FactoryID: otherFactory, Trigger: flaky, Source: domain.TriggerGitHub, EventKey: "github.check_run.failed",
+		FactoryID: otherFactory, Trigger: flaky, Source: domain.TriggerGitHub, EventKey: domain.OnCheckRunFailed,
 		IdempotencyKey: "other-factory", Outcome: domain.FiringSkipped, At: old,
 	}); err != nil {
 		t.Fatalf("RecordFiring in another factory: %v", err)
@@ -123,6 +131,7 @@ func testDeliveryBySender(f *fixture) {
 	}
 
 	other := f.NewOrg(t)
+
 	for name, read := range map[string]func() error{
 		"another id": func() error { _, err := f.in.DeliveryBySender(f.ctx(), w.ID, "d-none"); return err },
 		"no id":      func() error { _, err := f.in.DeliveryBySender(f.ctx(), w.ID, ""); return err },

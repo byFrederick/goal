@@ -276,6 +276,22 @@ func TestTryTrigger_DeliveryWithAStoredBody(t *testing.T) {
 		t.Errorf("try = %+v; want the delivery's item rebuilt from its body", got)
 	}
 
+	checkForeignWebhookNotRead(t, h)
+
+	if _, err := h.intake.PruneDeliveries(t.Context(), h.clock.Now().Add(domain.DeliveryRetention+time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.e.TryTrigger(inOrg(t), factoryID, "red-check", f.ID, domain.LocalUser); !errors.Is(err, engine.ErrEventNotStored) {
+		t.Errorf("a pruned delivery's firing = %v; want ErrEventNotStored", err)
+	}
+}
+
+// checkForeignWebhookNotRead checks that a firing naming a delivery of a webhook not open to the
+// factory is not stored, though that webhook keeps it.
+func checkForeignWebhookNotRead(t *testing.T, h *harness) {
+	t.Helper()
+
 	ctx := inOrg(t)
 
 	closed, err := h.intake.CreateWebhook(ctx, domain.NewWebhook{Name: "github-closed", Sender: domain.SenderGitHub, Secret: "webhook-" + testWebhook})
@@ -286,7 +302,7 @@ func TestTryTrigger_DeliveryWithAStoredBody(t *testing.T) {
 	h.deliver(t, h.e, closed, "d-9", checkRun("unit", "failure"))
 
 	foreign, _, err := h.intake.RecordFiring(ctx, domain.TriggerFiring{
-		FactoryID: factoryID, Trigger: "red-check", Source: domain.TriggerGitHub, EventKey: "github.check_run",
+		FactoryID: factoryID, Trigger: "red-check", Source: domain.TriggerGitHub, EventKey: onFailedRun().On,
 		IdempotencyKey: string(closed.ID) + "/d-9", Outcome: domain.FiringSkipped, At: h.clock.Now(),
 	})
 	if err != nil {
@@ -295,13 +311,5 @@ func TestTryTrigger_DeliveryWithAStoredBody(t *testing.T) {
 
 	if _, err := h.e.TryTrigger(ctx, factoryID, "red-check", foreign.ID, domain.LocalUser); !errors.Is(err, engine.ErrEventNotStored) {
 		t.Errorf("a firing of a webhook not open to the factory = %v; want ErrEventNotStored", err)
-	}
-
-	if _, err := h.intake.PruneDeliveries(t.Context(), h.clock.Now().Add(domain.DeliveryRetention+time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := h.e.TryTrigger(ctx, factoryID, "red-check", f.ID, domain.LocalUser); !errors.Is(err, engine.ErrEventNotStored) {
-		t.Errorf("a pruned delivery's firing = %v; want ErrEventNotStored", err)
 	}
 }

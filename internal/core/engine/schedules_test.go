@@ -136,15 +136,7 @@ func TestSchedules_MissedGapRecordedOnceAndNotFiredLate(t *testing.T) {
 		t.Fatalf("FireSchedules at 10:07 = %+v, %v; want one missed firing", got, err)
 	}
 
-	m := got.Firings[0]
-	if m.Outcome != domain.FiringMissed || m.Missed != 4 || m.ItemID != "" || m.IdempotencyKey != "missed/2026-10-23T09:15:00Z" ||
-		!m.At.Equal(t0.Add(time.Hour)) || !strings.Contains(m.Reason, "4 instants") {
-		t.Errorf("missed firing = %+v; want 4 instants from 09:15, at 10:00", m)
-	}
-
-	if n := h.items(t); n != 1 {
-		t.Errorf("%d items; want only the 09:00 instant's, none fired late", n)
-	}
+	checkMissedGap(t, h, got.Firings[0])
 
 	for _, at := range []time.Duration{68 * time.Minute, 69 * time.Minute} {
 		if got, err := h.e.FireSchedules(t.Context(), t0.Add(at)); err != nil || len(got.Firings) != 0 {
@@ -156,6 +148,20 @@ func TestSchedules_MissedGapRecordedOnceAndNotFiredLate(t *testing.T) {
 	got, err = h.e.FireSchedules(t.Context(), t0.Add(76*time.Minute))
 	if err != nil || len(got.Firings) != 1 || got.Firings[0].Outcome != domain.FiringCreated || got.Firings[0].IdempotencyKey != "2026-10-23T10:15:00Z" {
 		t.Errorf("FireSchedules at 10:16 = %+v, %v; want the 10:15 instant created", got, err)
+	}
+}
+
+// checkMissedGap checks m is the gap of 09:15 to 10:00 and that none of it was fired late.
+func checkMissedGap(t *testing.T, h *harness, m domain.TriggerFiring) {
+	t.Helper()
+
+	if m.Outcome != domain.FiringMissed || m.Missed != 4 || m.ItemID != "" || m.IdempotencyKey != "missed/2026-10-23T09:15:00Z" ||
+		!m.At.Equal(t0.Add(time.Hour)) || !strings.Contains(m.Reason, "4 instants") {
+		t.Errorf("missed firing = %+v; want 4 instants from 09:15, at 10:00", m)
+	}
+
+	if n := h.items(t); n != 1 {
+		t.Errorf("%d items; want only the 09:00 instant's, none fired late", n)
 	}
 }
 
