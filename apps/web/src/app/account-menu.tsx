@@ -138,12 +138,16 @@ export function AccountMenu({ org, size = 'sidebar' }: { org: OrgSummary; size?:
   const [open, setOpen] = useState(false);
   const name = person ? displayName(person) : 'Local user';
   const initials = person ? initialsOf(person) : 'LU';
-  const label = `${initials}, ${name}, account`;
+  const role = roleName(org.role);
+  // The rail shows the initials alone; the sidebar shows initials, name and role, and its name starts with
+  // them in that order (WCAG 2.5.3, label in name).
+  const railLabel = `${initials}, ${name}, account`;
+  const label = `${[initials, name, role].filter(Boolean).join(' ')}, account`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {size === 'rail' ? (
-        <PopoverTrigger aria-label={label} className={railItemClass}>
+        <PopoverTrigger aria-label={railLabel} className={railItemClass}>
           <Avatar initials={initials} size="sidebar" />
         </PopoverTrigger>
       ) : (

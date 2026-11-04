@@ -133,7 +133,7 @@ test('the sidebar opens a factory and marks its pages', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 
   const sidebar = orgNav(page);
-  const sre = sidebar.getByRole('link', { name: 'S, sre factory, 3 waiting on you' });
+  const sre = sidebar.getByRole('link', { name: 'S sre 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(sre).toHaveAttribute('aria-current', 'page');
@@ -168,7 +168,7 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the phone navigation');
   await page.goto('/o/acme');
   await openNavigation(page);
-  const sre = orgNav(page).getByRole('link', { name: 'S, sre factory, 3 waiting on you' });
+  const sre = orgNav(page).getByRole('link', { name: 'S sre 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
@@ -181,13 +181,13 @@ test('a decision made elsewhere updates the badges without a reload', async ({ p
   await page.goto('/o/acme/f/goal/board');
   await expectBoardLive(page);
   const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
-  await expect(goal).toHaveAccessibleName('G, goal factory, 2 waiting on you, 1 item blocked');
+  await expect(goal).toHaveAccessibleName('G goal 2 waiting on you, 1 item blocked');
   await expect(orgNav(page).getByRole('link', { name: /^\S+, sre factory, blocked: andon pulled$/ })).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve');
 
-  await expect(goal).toHaveAccessibleName('G, goal factory, 1 waiting on you, 1 item blocked');
+  await expect(goal).toHaveAccessibleName('G goal 1 waiting on you, 1 item blocked');
 });
 
 test('the sidebar marks Home on the organization pages', async ({ page }) => {
@@ -722,7 +722,7 @@ test('with sign-in off the account names the local user and offers nothing to si
   await page.goto('/o/acme');
   // The account menu at every width; on a phone it opens from the drawer's person row.
   await openNavigation(page);
-  const account = orgNav(page).getByRole('button', { name: 'LU, Local user, account' });
+  const account = orgNav(page).getByRole('button', { name: 'LU Local user Owner, account' });
   await account.click();
   const panel = page.getByRole('dialog', { name: 'Account' });
   await expect(panel.getByText('Local user', { exact: true })).toBeVisible();

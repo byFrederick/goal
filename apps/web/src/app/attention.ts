@@ -52,8 +52,10 @@ export function factorySignal(
     attention.andon === null && attention.blocked > 0 ? plural(attention.blocked, 'item blocked', 'items blocked') : '',
   ].filter(Boolean);
   const label = [`${mark}, ${factory.name} factory`, ...status].join(', ');
-  // The sidebar shows the name, so its accessible name starts with it (WCAG 2.5.3, label in name).
-  const nameLabel = [`${factory.name} factory`, ...status].join(', ');
+  // The link shows the mark, the name and the count in that order, and axe counts the aria-hidden mark too,
+  // so its accessible name starts with those pieces unbroken (WCAG 2.5.3, label in name).
+  const [waitingText, ...otherStatus] = attention.waiting > 0 ? status : ['', ...status];
+  const nameLabel = [[`${mark} ${factory.name}`, waitingText].filter(Boolean).join(' '), ...otherStatus].join(', ');
   const detail = status.length > 0 ? status.join(', ').replace('blocked: andon pulled', 'Andon pulled') : '';
   return { label, nameLabel, detail: detail || factory.title || '' };
 }
