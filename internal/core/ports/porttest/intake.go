@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -47,6 +48,14 @@ type intakeData struct {
 	counts map[countKey]int
 	// secrets are the organization secrets webhooks are signed by (UseSecrets); nil has none.
 	secrets *OrgSecrets
+	// states are the triggers' saved check states (trigger_state).
+	states map[stateKey]json.RawMessage
+}
+
+type stateKey struct {
+	org     domain.OrgID
+	factory domain.FactoryID
+	trigger string
 }
 
 type endpointRow struct {
@@ -81,12 +90,15 @@ type evaluationRow struct {
 type firingRow struct {
 	org domain.OrgID
 	f   domain.TriggerFiring
+	// lease is a running check's (ClaimCheck); zero otherwise.
+	lease domain.CheckLease
 }
 
 // NewIntake returns intake state sealed with key, over store's factories and items.
 func NewIntake(key ports.MasterKey, store *Store) *Intake {
 	return &Intake{key: key, store: store, d: &intakeData{
 		endpoints: map[domain.WebhookEndpointID]*endpointRow{}, ledger: map[ledgerKey]time.Time{}, counts: map[countKey]int{},
+		states: map[stateKey]json.RawMessage{},
 	}}
 }
 
@@ -923,6 +935,17 @@ func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain
 		}
 	}
 
+	if f.Outcome == domain.FiringChecked {
+		live, err := in.liveCheck(ctx, f.FactoryID, f.Trigger)
+		if err != nil {
+			return domain.TriggerFiring{}, false, err
+		}
+
+		if live {
+			f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
+		}
+	}
+
 	return in.RecordFiring(ctx, f)
 }
 
@@ -1373,7 +1396,7 @@ func (in *Intake) PruneFirings(ctx context.Context, factory domain.FactoryID, be
 
 	n := len(in.d.firings)
 	in.d.firings = slices.DeleteFunc(in.d.firings, func(r firingRow) bool {
-		return r.org == org && r.f.FactoryID == factory && r.f.At.Before(before) && !open[r.f.ItemID]
+		return r.org == org && r.f.FactoryID == factory && r.f.At.Before(before) && !open[r.f.ItemID] && !r.f.CheckState.Live()
 	})
 
 	return n - len(in.d.firings), nil

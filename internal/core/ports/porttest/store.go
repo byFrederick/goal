@@ -31,6 +31,8 @@ type Store struct {
 	items     map[domain.ItemID]*domain.Item
 	numbers   map[domain.FactoryID]int64
 	leases    map[domain.ItemID]domain.Lease
+	// checks are the slots running checks hold (Intake.ClaimCheck), by firing id.
+	checks    map[string]checkSlot
 	runs      map[domain.RunID]*domain.Run
 	events    []domain.Event
 	labels    map[int64]touchLabel
@@ -58,6 +60,7 @@ func NewStore() *Store {
 		factories: map[domain.FactoryID]domain.OrgID{},
 		orgCaps:   map[domain.OrgID]int{},
 		factCaps:  map[domain.FactoryID]int{},
+		checks:    map[string]checkSlot{},
 		items:     map[domain.ItemID]*domain.Item{},
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
@@ -416,7 +419,36 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	return clone(it), l, nil
 }
 
-// slotCapsLocked returns ErrOrgFull or ErrFactoryFull when org's or the factory's leases reach
+// checkSlot is the slot a running check holds: its organization and factory.
+type checkSlot struct {
+	org     domain.OrgID
+	factory domain.FactoryID
+}
+
+// holdCheckSlot checks org's and the factory's slot caps, as a claim does, and holds a slot for
+// the check of firing id, or returns ErrOrgFull or ErrFactoryFull.
+func (s *Store) holdCheckSlot(id string, org domain.OrgID, factory domain.FactoryID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.slotCapsLocked(org, factory); err != nil {
+		return err
+	}
+
+	s.checks[id] = checkSlot{org: org, factory: factory}
+
+	return nil
+}
+
+// freeCheckSlot frees the slot the check of firing id holds.
+func (s *Store) freeCheckSlot(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.checks, id)
+}
+
+// slotCapsLocked returns ErrOrgFull or ErrFactoryFull when org's or the factory's leases and running checks reach
 // its cap. A factory of another organization has no cap here, as row-level security hides it.
 // Callers hold s.mu.
 func (s *Store) slotCapsLocked(org domain.OrgID, factory domain.FactoryID) error {
@@ -432,6 +464,16 @@ func (s *Store) slotCapsLocked(org domain.OrgID, factory domain.FactoryID) error
 			inOrg++
 
 			if l.FactoryID == factory {
+				inFactory++
+			}
+		}
+	}
+
+	for _, c := range s.checks {
+		if c.org == org {
+			inOrg++
+
+			if c.factory == factory {
 				inFactory++
 			}
 		}
@@ -598,9 +640,9 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	kind := cmp.Or(r.Kind, domain.RunKindStation)
 
-	// Only Jonah's runs (a review or a try) may work no item; they write no run_started item event.
+	// Only Jonah's runs (a review or a try) and checks may work no item; they write no run_started item event.
 	switch _, ok := s.visible(r.ItemID, org); {
-	case r.ItemID == "" && kind.Jonahs():
+	case r.ItemID == "" && kind.Itemless():
 		if s.factories[r.FactoryID] != org {
 			return "", fmt.Errorf("factory %s: %w", r.FactoryID, ports.ErrNotFound)
 		}
