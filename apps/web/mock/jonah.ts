@@ -1,13 +1,20 @@
 // Jonah in the mock API (contracts/api/openapi.yaml, tag jonah): a factory's overview (its policy, the proposals
 // waiting, the month's cost and the week's observations), its proposals by state, and a manual review. A seeded
-// factory (the Software factory, by name) starts with the picture's two waiting proposals, an applied one, four
-// observations and $6.40 this month. A manual review answers 202 with a queued review, and 409 review-in-flight
-// for the next one while it is queued. The Tests tab's kept tests are listed and removed; Undo answers 409
-// proposal-not-published, as no seeded proposal is published.
+// factory (the Software factory, by name) starts with four waiting proposals (7 and 8, memory proposal 9 and model
+// proposal 10), an applied one, four observations (one about the line's send-backs) and $6.40 this month. A manual
+// review answers 202 with a queued review, and 409 review-in-flight for the next one while it is queued. The Tests
+// tab's kept tests are listed and removed.
+// Proposal 5 of the Software factory is published, and its own number got worse: its detail carries a watch with
+// verdict worse, and worseWatches lists it for the inbox's watch_worse entry. Undo this change on it answers 201
+// with a proposed proposal one number past the highest seeded one, whose undoes is 5, then 409 undo-open while
+// that undo is open (proposed, published or applied); the entry goes with the first undo. Undo on any other
+// proposal answers 409 proposal-not-published.
 // A proposal's page reads its files and evidence, and its approve, edit and reject record the decision. Proposal 8
 // is the flagged case: approving it answers 409 draft-open, as a factory with an open draft does.
 import type { ServerResponse } from 'node:http';
 import type {
+  DraftKeptTest,
+  DraftKeptTests,
   JonahObservation,
   JonahOverview,
   JonahPolicy,
@@ -19,6 +26,7 @@ import type {
   ProposalState,
   ProposalTried,
   TriedTry,
+  Watch,
 } from '../src/api/types.ts';
 
 export interface JonahDeps {
@@ -38,6 +46,8 @@ export interface MockJonah {
     res: ServerResponse,
     readBody: () => Promise<Record<string, unknown>>,
   ) => Promise<boolean>;
+  /** The worse watches the factory's inbox lists now: none once their undo is written. */
+  worseWatches: (orgId: string, factoryKey: string) => WorseWatch[];
   reset: () => void;
 }
 
@@ -50,6 +60,17 @@ interface FactoryJonah {
   tried: Map<number, number>;
   /** The queued review, once a person asked for one. */
   review: JonahReview | undefined;
+  /** The undo of proposal 5 once Undo this change wrote it. */
+  undo: Proposal | undefined;
+}
+
+/** A published proposal whose own number got worse, as the inbox's watch_worse entry reads it. */
+export interface WorseWatch {
+  /** The entry's id: watch_worse:<id>. */
+  id: string;
+  /** The watch's last update. */
+  since: string;
+  watch: Watch;
 }
 
 /** A decision on a proposal: its new state and what the decision left behind. */
@@ -97,6 +118,153 @@ function softwareKeptTests(now: number): KeptTest[] {
     kept('kept-3', 493, 'Phone fixes on three screens', 'build', 3, result('error', 1, 'run-493')),
     kept('kept-4', 497, 'Board column header meta', 'review', 4),
   ];
+}
+
+/** The goal factory's kept tests: six past items kept at its stations; build and review are the stations its draft reaches. */
+export function goalKeptTests(now: number): KeptTest[] {
+  const at = (daysAgo: number) => new Date(now - daysAgo * 86_400_000).toISOString();
+  const kept = (
+    id: string,
+    number: number,
+    title: string,
+    station: string,
+    daysAgo: number,
+    last: KeptTest['last_result'] = null,
+  ): KeptTest => ({
+    id,
+    item: { id: `item-${number}`, number, title },
+    station,
+    kept_by: 'user:local',
+    kept_at: at(daysAgo),
+    last_result: last,
+  });
+  return [
+    kept('goal-kept-1', 311, 'Add a spec station before build', 'spec', 9, {
+      result: 'passed',
+      at: at(5),
+      run_id: 'run-311',
+    }),
+    kept('goal-kept-2', 322, 'Build checks run on the changed packages', 'build', 6, {
+      result: 'passed',
+      at: at(3),
+      run_id: 'run-322',
+    }),
+    kept('goal-kept-3', 329, 'Rework limit on a rejected review', 'build', 5, {
+      result: 'failed',
+      at: at(2),
+      run_id: 'run-329',
+    }),
+    kept('goal-kept-4', 334, 'Review reads the pull request description', 'review', 4),
+    kept('goal-kept-5', 340, 'Merge waits for green checks', 'merge', 3),
+  ];
+}
+
+/** What a try of the goal draft's content gave each kept test it reaches, by test id. */
+const goalDraftTries: Record<string, Pick<DraftKeptTest, 'result' | 'reason' | 'run_id'>> = {
+  'goal-kept-2': {
+    result: 'passed',
+    reason: 'The build contract and its checks held with the new test command.',
+    run_id: 'run-try-322',
+  },
+  'goal-kept-3': {
+    result: 'failed',
+    reason: 'Build stopped at the second rework: the draft raises the review limit to 2.',
+    run_id: 'run-try-329',
+  },
+  'goal-kept-4': {
+    result: 'passed',
+    reason: 'The review approved the pull request as the item did.',
+    run_id: 'run-try-334',
+  },
+};
+
+/** The goal draft's kept tests: the stations the draft reaches, with their results once the tries started. */
+export function goalDraftKeptTests(now: number, started: boolean): DraftKeptTests {
+  const tests: DraftKeptTest[] = goalKeptTests(now)
+    .filter((t) => t.id in goalDraftTries)
+    .map((test) => ({
+      test,
+      result: started ? (goalDraftTries[test.id]?.result ?? null) : null,
+      ...(started ? goalDraftTries[test.id] : {}),
+    }));
+  return { state: 'done', tests };
+}
+
+/** The watches of the goal factory's published versions, by number; one not watched yet has none. */
+export function goalWatches(number: number | null, publishedAt: string | null): Watch[] {
+  if (number === null || publishedAt === null) return [];
+  const opened_at = publishedAt;
+  const after = (days: number) => new Date(Date.parse(publishedAt) + days * 86_400_000).toISOString();
+  switch (number) {
+    case 3:
+      return [
+        {
+          station: 'review',
+          metric: 'sent_back_rate',
+          before: { items: 18, value: 0.31 },
+          after: { items: 22, value: 0.14 },
+          interval: { low: -0.29, high: -0.05 },
+          verdict: 'helped',
+          opened_at,
+          closed_at: after(14),
+        },
+      ];
+    case 4:
+      return [
+        {
+          station: 'build',
+          metric: 'cost_per_item',
+          before: { items: 20, value: 2.1 },
+          after: { items: 25, value: 3.4 },
+          interval: { low: 0.6, high: 2 },
+          verdict: 'worse',
+          opened_at,
+          closed_at: after(10),
+        },
+      ];
+    case 5:
+      return [
+        {
+          station: 'spec',
+          metric: 'lead_time_p85',
+          before: { items: 16, value: 1260 },
+          after: { items: 19, value: 1240 },
+          interval: { low: -150, high: 110 },
+          verdict: 'no_change',
+          opened_at,
+          closed_at: after(12),
+        },
+      ];
+    case 6:
+      return [
+        {
+          station: 'build',
+          metric: 'sent_back_rate',
+          proposal: 7,
+          before: { items: 24, value: 0.38 },
+          after: { items: 30, value: 0.2 },
+          interval: { low: -0.33, high: -0.08 },
+          verdict: 'helped',
+          opened_at,
+          closed_at: after(9),
+        },
+      ];
+    case 8:
+      return [
+        {
+          station: 'build',
+          metric: 'cost_per_item',
+          before: { items: 26, value: 3.1 },
+          after: { items: 1, value: 2.9 },
+          interval: null,
+          verdict: 'too_early',
+          opened_at,
+          closed_at: null,
+        },
+      ];
+    default:
+      return [];
+  }
 }
 
 const softwarePolicy: JonahPolicy = {
@@ -153,29 +321,57 @@ const softwareObservations = (now: number): JonahObservation[] => [
     updated_at: new Date(now - 30 * 3_600_000).toISOString(),
   },
   {
-    id: 'obs-plain-language',
-    summary: 'Plain-language judge passes 96% of runs',
-    detail: 'Could sample 10% instead of 25% and save $1.10 a month',
-    item_refs: [],
+    id: 'obs-phone-check',
+    summary: 'Review sends back 1 in 4 frontend items for a missing phone check',
+    detail: 'The frontend station is sent back more than any other; 4 of the last 16 items lacked a check at 375 px',
+    item_refs: ['software#508', 'software#511', 'software#502', 'software#499'],
     state: 'watching',
-    count: 1,
+    count: 4,
     propose_after: 5,
     created_at: new Date(now - 50 * 3_600_000).toISOString(),
     updated_at: new Date(now - 50 * 3_600_000).toISOString(),
   },
 ];
 
+/** The published proposal whose own number got worse, and the id its watch_worse inbox entry carries. */
+const watchedNumber = 5;
+const watchedId = 'jonah-proposal-5';
+
+/** Its watch: the sent-back rate at frontend rose from 10% to 33%, with the interval clear of zero. */
+const watchedWatch = (now: number): Watch => ({
+  station: 'frontend',
+  metric: 'sent_back_rate',
+  proposal: watchedNumber,
+  before: { items: 24, value: 0.1 },
+  after: { items: 12, value: 0.33 },
+  interval: { low: 0.05, high: 0.41 },
+  verdict: 'worse',
+  opened_at: new Date(now - 6 * 24 * 3_600_000).toISOString(),
+  closed_at: null,
+});
+
+/** The watch's last update, which the inbox entry waits since. */
+const watchedSince = (now: number) => new Date(now - 3 * 3_600_000).toISOString();
+
 /** The Software factory's proposals, newest first. */
-const softwareProposals = (now: number): ProposalEntry[] => [
+const softwareProposals = (now: number): Array<ProposalEntry & { published_version?: number }> => [
+  {
+    number: 10,
+    title: 'frontend-engineer on claude-haiku-5-5',
+    state: 'proposed',
+    created_at: new Date(now - 20 * 60_000).toISOString(),
+    paths: ['factory.yaml'],
+    agents: [],
+    evidence_count: 0,
+  },
   {
     number: 9,
-    title: 'Try a smaller model for the reviewer',
+    title: 'Add 3 facts from answers, notes and send-backs',
     state: 'proposed',
-    created_at: new Date(now - 12 * 3_600_000).toISOString(),
-    paths: ['factory.yaml'],
-    agents: ['reviewer'],
-    estimate: { metric: 'sent_back_rate', station: 'review', before: 0.2, after: 0.12, cost_per_item_usd: -0.5 },
-    evidence_count: 0,
+    created_at: new Date(now - 24 * 3_600_000).toISOString(),
+    paths: ['memory.yaml'],
+    agents: [],
+    evidence_count: 3,
   },
   {
     number: 8,
@@ -205,6 +401,17 @@ const softwareProposals = (now: number): ProposalEntry[] => [
     paths: ['agents/reviewer.md'],
     agents: ['reviewer'],
     evidence_count: 3,
+  },
+  {
+    number: watchedNumber,
+    title: 'Ask for the changed screen in every frontend hand-off',
+    state: 'published',
+    published_version: 20,
+    created_at: new Date(now - 12 * 24 * 3_600_000).toISOString(),
+    paths: ['agents/frontend-engineer.md'],
+    agents: ['frontend-engineer'],
+    estimate: { metric: 'sent_back_rate', station: 'frontend', before: 0.18, after: 0.1, cost_per_item_usd: 0 },
+    evidence_count: 2,
   },
 ];
 
@@ -334,47 +541,192 @@ const proposalEight = (now: number): Proposal => ({
   ],
 });
 
-/** Proposal 9, a model proposal: it has no evidence, only what was tried on past items with the line's result. */
+/** Proposal 5, published as version 20: its one file and the watch of its own number. */
+const proposalFive = (now: number): Proposal => ({
+  ...(softwareProposals(now).find((p) => p.number === watchedNumber) as ProposalEntry),
+  summary: 'Hand-offs came back without the changed screen. The frontend engineer names it in the pull request.',
+  made_against_version: 19,
+  publishes_as_version: 20,
+  edits: [],
+  files: [
+    {
+      path: 'agents/frontend-engineer.md',
+      base_sha256: 'd4',
+      base_content: 'Open the pull request with gh pr create.',
+      content: 'Name the changed screen, then open the pull request with gh pr create.',
+    },
+  ],
+  evidence: [
+    { item_ref: 'software#119', item_title: 'Board filters', station: 'review', quote: 'Which screen changed?' },
+    { item_ref: 'software#117', item_title: 'Settings tabs', station: 'review', quote: 'Name the screen.' },
+  ],
+  decided_by: 'user:local',
+  decided_at: new Date(now - 6 * 24 * 3_600_000).toISOString(),
+  watch: watchedWatch(now),
+});
+
+/** A memory.yaml of the given facts, each with the item it came from. */
+const memoryYaml = (facts: [string, string, string][]): string =>
+  facts.map(([text, from, added]) => `- text: ${text}\n  from: [${from}]\n  added: ${added}`).join('\n');
+
+const baseFacts: [string, string, string][] = Array.from({ length: 11 }, (_, i) => [
+  `Earlier fact ${i + 1}.`,
+  `software#${400 + i}`,
+  '2026-10-20',
+]);
+baseFacts.push([
+  'The pre-push hook runs task check with GIT_DIR set, so tests that run git must clear it.',
+  'software#524',
+  '2026-11-02',
+]);
+
+/** Proposal 9 as proposal-memory.jpg shows it: three facts that each quote a person, and no try. */
 const proposalNine = (now: number): Proposal => ({
   ...(softwareProposals(now).find((p) => p.number === 9) as ProposalEntry),
-  summary: 'The reviewer passed past items first time on a smaller model, at a lower cost.',
-  made_against_version: 21,
-  publishes_as_version: 22,
+  summary: 'Three things people wrote are worth keeping for every run.',
+  made_against_version: 40,
+  publishes_as_version: 41,
+  edits: [],
+  files: [
+    {
+      path: 'memory.yaml',
+      base_sha256: 'd4',
+      base_content: memoryYaml(baseFacts),
+      content: memoryYaml([
+        ...baseFacts,
+        ['Phones are 390 wide; check 375 too.', 'software#493', '2026-11-03'],
+        [
+          'The docs site is apps/docs, served at /docs; change it in the same pull request.',
+          'software#371',
+          '2026-11-03',
+        ],
+        [
+          'An ADR’s number is taken when its branch merges; check main before you number one.',
+          'software#308',
+          '2026-11-03',
+        ],
+      ]),
+    },
+  ] satisfies ProposalFile[],
+  evidence: [
+    {
+      item_ref: 'software#493',
+      item_title: 'Phone fixes',
+      station: 'An answer',
+      quote:
+        'frontend-engineer asked: “Which phone width should I check?” Freddy Cruz answered: “Phones are 390 wide; check 375 too.”',
+    },
+    {
+      item_ref: 'software#371',
+      item_title: 'Docs for the CLI',
+      station: 'A note',
+      quote: 'Freddy Cruz: “The docs site is apps/docs, served at /docs. Change it in the same pull request.”',
+    },
+    {
+      item_ref: 'software#308',
+      item_title: 'ADR numbering',
+      station: 'A send-back',
+      quote:
+        'Freddy Cruz moved it back: “An ADR’s number is taken when its branch merges; check main before you number one.”',
+    },
+  ],
+});
+
+/** Proposal 10's seven items as proposal-model.jpg shows them: [ref, title, verdicts of the three tries, line result]. */
+const modelItems: [string, string, boolean[], string][] = [
+  ['software#418', 'Needs you header', [true, true, false], 'passed first time, $0.40'],
+  ['software#493', 'Phone fixes', [true, true, true], 'passed first time, $0.50'],
+  ['software#511', 'Done cards overflow', [true, false, false], 'sent back 2 times at review, $1.10'],
+  ['software#508', 'Item tabs first', [false, false, false], 'sent back once at review, $0.78'],
+  ['software#502', 'Tablet details', [true, false, true], 'passed first time, $0.46'],
+  ['software#499', 'Trace took column', [false, true, true], 'passed first time, $0.58'],
+  ['software#497', 'Board header meta', [true, false, false], 'passed first time, $0.52'],
+];
+
+/** Proposal 10: a model change tried three times on each of seven past items, and no estimate, as goald sends it. */
+const proposalTen = (now: number): Proposal => ({
+  ...(softwareProposals(now).find((p) => p.number === 10) as ProposalEntry),
+  summary: 'frontend-engineer on claude-haiku-5-5, tried on its seven newest finished items.',
+  made_against_version: 40,
+  publishes_as_version: 41,
   edits: [],
   files: [
     {
       path: 'factory.yaml',
-      base_sha256: 'd4',
-      base_content: [...filler(), '    model: claude-opus-5-5'].join('\n'),
-      content: [...filler(), '    model: claude-sonnet-5-5'].join('\n'),
+      base_sha256: 'e5',
+      base_content: [...filler(), '- name: frontend-engineer', '  model: claude-sonnet-5-5'].join('\n'),
+      content: [...filler(), '- name: frontend-engineer', '  model: claude-haiku-5-5'].join('\n'),
     },
-  ],
+  ] satisfies ProposalFile[],
   evidence: [],
   tried: {
     state: 'done',
-    items: [
-      ['software#511', 'Board Done cards overflow', 'passed first time, $0.42'],
-      ['software#497', 'Board column header meta', 'passed first time, $0.38'],
-    ].map(([ref, title, result]) => ({
-      item_ref: ref as string,
-      item_title: title as string,
-      station: 'review',
-      line_result: result as string,
-      tries: [doneTry(1)],
+    items: modelItems.map(([ref, title, passes, line]) => ({
+      item_ref: ref,
+      item_title: title,
+      station: 'frontend',
+      line_result: line,
+      tries: passes.map((fixed, i) => ({
+        attempt: i + 1,
+        state: 'done' as const,
+        verdict: fixed ? ('fixed' as const) : ('not_fixed' as const),
+        cost_usd: 0.21,
+      })),
     })),
-    cost_usd: 2.8,
-    seconds: 1200,
+    cost_usd: 4.4,
+    seconds: 3900,
     kept_tests: [],
   },
 });
 
-/** The detail of a seeded proposal; only 7, 8 and 9 have one, the other numbers answer 404. */
+/** The detail of a seeded proposal; only 5 and 7 to 10 have one, the other numbers answer 404. */
 const softwareDetail = (now: number, number: number): Proposal | undefined => {
+  if (number === watchedNumber) return proposalFive(now);
   if (number === 7) return proposalSeven(now);
   if (number === 8) return proposalEight(now);
   if (number === 9) return proposalNine(now);
+  if (number === 10) return proposalTen(now);
   return undefined;
 };
+
+/** The undo Undo this change writes for proposal 5: proposed, one number past the highest seeded one. */
+const undoOfFive = (now: number): Proposal => {
+  const five = proposalFive(now);
+  return {
+    number: Math.max(...softwareProposals(now).map((p) => p.number)) + 1,
+    title: `Undo: ${five.title}`,
+    state: 'proposed',
+    created_at: new Date(now).toISOString(),
+    paths: five.paths,
+    agents: five.agents,
+    evidence_count: 0,
+    summary: `Reverses proposal ${watchedNumber}, which made the sent-back rate at frontend worse.`,
+    made_against_version: 21,
+    publishes_as_version: 22,
+    edits: [],
+    files: five.files.map((f) => ({
+      path: f.path,
+      base_sha256: f.base_sha256,
+      base_content: f.content,
+      content: f.base_content,
+    })),
+    evidence: [],
+    undoes: watchedNumber,
+  };
+};
+
+/** A proposal's list entry: the fields of its detail that the list carries. */
+const entryOf = (p: Proposal): ProposalEntry & { published_version?: number } => ({
+  number: p.number,
+  title: p.title,
+  state: p.state,
+  ...(p.published_version === undefined ? {} : { published_version: p.published_version }),
+  created_at: p.created_at,
+  paths: p.paths,
+  agents: p.agents,
+  ...(p.estimate ? { estimate: p.estimate } : {}),
+  evidence_count: p.evidence_count,
+});
 
 /** Proposal 7 with the tries Try again added, so far. */
 const withTries = (p: Proposal, rounds: number): Proposal => (p.number === 7 ? { ...p, tried: triedSeven(rounds) } : p);
@@ -413,7 +765,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
   const jonahOf = (id: string): FactoryJonah => {
     let j = byFactory.get(id);
     if (!j) {
-      j = { decisions: new Map(), removed: new Set(), tried: new Map(), review: undefined };
+      j = { decisions: new Map(), removed: new Set(), tried: new Map(), review: undefined, undo: undefined };
       byFactory.set(id, j);
     }
     return j;
@@ -434,8 +786,18 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
     };
   };
 
+  /** The seeded proposals and the undo, newest first, each in the state its decision left it. */
+  const proposalsOf = (j: FactoryJonah, now: number): Array<ProposalEntry & { published_version?: number }> =>
+    [...(j.undo ? [entryOf(j.undo)] : []), ...softwareProposals(now)].map((p) => withDecision(j, p));
+
   return {
     reset,
+    worseWatches(orgId, factoryKey) {
+      const f = factory(orgId, factoryKey);
+      if (!f || !seeded(f.name) || jonahOf(f.id).undo) return [];
+      const now = clock();
+      return [{ id: watchedId, since: watchedSince(now), watch: watchedWatch(now) }];
+    },
     async handle(org, rest, method, url, res, readBody) {
       const m = rest.match(
         /^\/factories\/([^/]+)\/jonah(?:\/(proposals|reviews|tests)(?:\/([^/]+)(?:\/(approve|edit|reject|undo|try))?)?)?$/,
@@ -472,19 +834,27 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       }
 
       if (route === 'proposals' && number !== undefined) {
-        const detail = seeded(f.name) ? softwareDetail(now, number) : undefined;
+        const detail = seeded(f.name) ? (j.undo?.number === number ? j.undo : softwareDetail(now, number)) : undefined;
         if (!detail) {
           problem(res, 404, 'Proposal not found', 'proposal-not-found', m[3]);
           return true;
         }
-        const decided = j.decisions.get(number);
+        const decided = j.decisions.get(number) !== undefined || detail.state !== 'proposed';
         if (action === undefined && method === 'GET') {
           json(res, 200, withTries(withDecision(j, detail), j.tried.get(number) ?? 0));
           return true;
         }
         if (method !== 'POST' || action === undefined) return false;
         if (action === 'undo') {
-          problem(res, 409, 'Proposal not published', 'proposal-not-published', m[3]);
+          if (number !== watchedNumber) {
+            problem(res, 409, 'Proposal not published', 'proposal-not-published', m[3]);
+          } else if (j.undo && withDecision(j, j.undo).state !== 'rejected') {
+            problem(res, 409, 'An undo is open', 'undo-open', m[3]);
+          } else {
+            j.undo = undoOfFive(now);
+            j.decisions.delete(j.undo.number);
+            json(res, 201, j.undo);
+          }
           return true;
         }
         if (action === 'try') {
@@ -536,11 +906,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
       }
 
       if (route === undefined && method === 'GET') {
-        const waiting = seeded(f.name)
-          ? softwareProposals(now)
-              .map((p) => withDecision(j, p))
-              .filter((p) => p.state === 'proposed')
-          : [];
+        const waiting = seeded(f.name) ? proposalsOf(j, now).filter((p) => p.state === 'proposed') : [];
         const body: JonahOverview = {
           policy: seeded(f.name) ? softwarePolicy : defaultPolicy,
           waiting: waiting.length,
@@ -553,7 +919,7 @@ export function createJonah({ factory, clock }: JonahDeps): MockJonah {
 
       if (route === 'proposals' && method === 'GET') {
         const state = url.searchParams.get('state');
-        const all = seeded(f.name) ? softwareProposals(now).map((p) => withDecision(j, p)) : [];
+        const all = seeded(f.name) ? proposalsOf(j, now) : [];
         const proposals = all.filter((p) => state === null || p.state === state);
         json(res, 200, { proposals });
         return true;

@@ -40,11 +40,11 @@ async function call(
 }
 
 describe('the mock Jonah API', () => {
-  it('reads the picture: three proposals waiting, $6.40 this month and the four observations', async () => {
+  it('reads the picture: four proposals waiting, $6.40 this month and the four observations', async () => {
     const { status, body } = await call(jonah(), '/factories/software/jonah', 'GET');
 
     expect(status).toBe(200);
-    expect(body.waiting).toBe(3);
+    expect(body.waiting).toBe(4);
     expect(body.month_cost_usd).toBe(6.4);
     expect(body.policy.approver_roles).toEqual(['owner', 'admin']);
     expect(body.observations).toHaveLength(4);
@@ -59,10 +59,68 @@ describe('the mock Jonah API', () => {
   it('lists the proposals newest first, and only those in the state the query names', async () => {
     const api = jonah();
     const all = await call(api, '/factories/software/jonah/proposals', 'GET');
-    expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8, 7, 6]);
+    expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([10, 9, 8, 7, 6, 5]);
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8, 7]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([10, 9, 8, 7]);
+  });
+
+  it('serves proposal 9 as a memory proposal: memory.yaml only, three quoted facts and no tries', async () => {
+    const api = jonah();
+    const list = await call(api, '/factories/software/jonah/proposals', 'GET');
+    const entry = list.body.proposals.find((p: { number: number }) => p.number === 9);
+    expect(entry).toMatchObject({ paths: ['memory.yaml'], agents: [], evidence_count: 3 });
+    expect(entry.estimate).toBeUndefined();
+
+    const { status, body } = await call(api, '/factories/software/jonah/proposals/9', 'GET');
+    expect(status).toBe(200);
+    expect(body.tried).toBeUndefined();
+    const count = (y: string) => (y.match(/^- text:/gm) ?? []).length;
+    expect(count(body.files[0].base_content)).toBe(12);
+    expect(count(body.files[0].content)).toBe(15);
+    expect(body.evidence.map((e: { item_ref: string }) => e.item_ref)).toEqual([
+      'software#493',
+      'software#371',
+      'software#308',
+    ]);
+    for (const e of body.evidence) expect(e.quote).toContain('“');
+  });
+
+  it('serves proposal 10 as a model proposal: three tries on each of seven items, each with its line result, and no estimate', async () => {
+    const api = jonah();
+    const list = await call(api, '/factories/software/jonah/proposals', 'GET');
+    const entry = list.body.proposals.find((p: { number: number }) => p.number === 10);
+    expect(entry).toMatchObject({
+      title: 'frontend-engineer on claude-haiku-5-5',
+      paths: ['factory.yaml'],
+      agents: [],
+    });
+    expect(entry.estimate).toBeUndefined();
+
+    const { status, body } = await call(api, '/factories/software/jonah/proposals/10', 'GET');
+    expect(status).toBe(200);
+    expect(body.files[0].content).toContain('model: claude-haiku-5-5');
+    expect(body.tried).toMatchObject({ state: 'done', seconds: 3900, cost_usd: 4.4, kept_tests: [] });
+    expect(body.tried.items).toHaveLength(7);
+    const items = body.tried.items as { line_result: string; tries: { verdict: string }[] }[];
+    for (const item of items) {
+      expect(item.line_result).toMatch(/\$\d/);
+      expect(item.tries).toHaveLength(3);
+    }
+    const tries = items.flatMap((i) => i.tries);
+    expect(tries.filter((t) => t.verdict === 'fixed')).toHaveLength(11);
+    expect(tries).toHaveLength(21);
+    expect(items.filter((i) => i.line_result.startsWith('passed first time'))).toHaveLength(5);
+
+    const again = await call(api, '/factories/software/jonah/proposals/10/try', 'POST');
+    expect(again.status).toBe(409);
+    expect(again.body.code).toBe('proposal-not-tried');
+  });
+
+  it('has no judge among the observations: the line observation replaced it', async () => {
+    const { body } = await call(jonah(), '/factories/software/jonah', 'GET');
+    expect(JSON.stringify(body)).not.toMatch(/judge/i);
+    expect(body.observations.map((o: { id: string }) => o.id)).not.toContain('obs-plain-language');
   });
 
   it('queues a manual review with 202 and answers 409 review-in-flight to the next while it waits', async () => {
@@ -181,7 +239,7 @@ describe('the mock Jonah API', () => {
     expect(rejected.body).toMatchObject({ number: 7, state: 'rejected' });
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([10, 9, 8]);
   });
 
   it('answers Try again with an estimate, then with the new tries once confirmed, and refuses over budget', async () => {
@@ -209,5 +267,59 @@ describe('the mock Jonah API', () => {
     expect(
       list.body.tests.map((t: { last_result: { result: string } | null }) => t.last_result?.result ?? null),
     ).toEqual(['passed', 'failed', 'error', null]);
+  });
+
+  describe('proposal 5, published and worse, and Undo this change', () => {
+    const undo = (api: ReturnType<typeof jonah>, n: number) =>
+      call(api, `/factories/software/jonah/proposals/${n}/undo`, 'POST');
+
+    it('is listed as published with its version, and has a detail with a worse watch of its own number', async () => {
+      const api = jonah();
+      const list = await call(api, '/factories/software/jonah/proposals', 'GET');
+      const five = list.body.proposals.find((p: { number: number }) => p.number === 5);
+      expect(five).toMatchObject({ state: 'published', published_version: expect.any(Number) });
+      const published = await call(api, '/factories/software/jonah/proposals?state=published', 'GET');
+      expect(published.body.proposals.map((p: { number: number }) => p.number)).toEqual([5]);
+
+      const detail = await call(api, '/factories/software/jonah/proposals/5', 'GET');
+      expect(detail.status).toBe(200);
+      expect(detail.body.published_version).toBe(five.published_version);
+      expect(detail.body.watch).toMatchObject({
+        proposal: 5,
+        metric: five.estimate.metric,
+        station: five.estimate.station,
+        verdict: 'worse',
+      });
+      for (const k of ['summary', 'edits', 'files', 'evidence', 'made_against_version', 'publishes_as_version'])
+        expect(detail.body).toHaveProperty(k);
+    });
+
+    it('writes a proposed undo that names it, then answers undo-open', async () => {
+      const api = jonah();
+      const made = await undo(api, 5);
+      expect(made.status).toBe(201);
+      expect(made.body).toMatchObject({ state: 'proposed', undoes: 5, number: 11 });
+
+      const read = await call(api, `/factories/software/jonah/proposals/${made.body.number}`, 'GET');
+      expect(read.status).toBe(200);
+      const proposed = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
+      expect(proposed.body.proposals.map((p: { number: number }) => p.number)).toContain(made.body.number);
+      expect((await call(api, '/factories/software/jonah', 'GET')).body.waiting).toBe(5);
+
+      const again = await undo(api, 5);
+      expect(again.status).toBe(409);
+      expect(again.body.code).toBe('undo-open');
+    });
+
+    it('answers proposal-not-published for any other proposal, and a reset clears the undo', async () => {
+      const api = jonah();
+      const other = await undo(api, 7);
+      expect(other.status).toBe(409);
+      expect(other.body.code).toBe('proposal-not-published');
+
+      expect((await undo(api, 5)).status).toBe(201);
+      api.reset();
+      expect((await undo(api, 5)).status).toBe(201);
+    });
   });
 });

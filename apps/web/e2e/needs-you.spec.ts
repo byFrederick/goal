@@ -155,13 +155,29 @@ for (const theme of ['light', 'dark'] as const) {
   }
 }
 
-// The mock holds no watch_worse entry yet, so this runs only where one is listed.
+test('Undo this change on a watch_worse entry lands on the undo proposal', async ({ page }) => {
+  // The mock seeds software's published proposal 5, whose sent-back rate got worse (mock/jonah.ts); the undo is
+  // written as the proposal after the highest seeded one, so the test reads its number from the answer.
+  await page.goto('/o/acme/needs-you');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await list.getByRole('link', { name: /Proposal 5 made .* worse/ }).click();
+
+  const made = page.waitForResponse(
+    (r) => r.url().endsWith('/jonah/proposals/5/undo') && r.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: /^Undo this change/ }).click();
+  const proposal = (await (await made).json()) as { number: number; undoes: number };
+
+  expect(proposal.undoes).toBe(5);
+  await expect(page).toHaveURL(new RegExp(`/o/acme/f/software/jonah/proposals/${proposal.number}$`));
+});
+
 test('the three watch_worse buttons are the same height', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
-  const undo = page.getByRole('button', { name: /^Undo this change/ });
-  test.skip((await undo.count()) === 0, 'the mock has no watch_worse entry');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await list.getByRole('link', { name: /Proposal 5 made .* worse/ }).click();
   const heights = [
-    await boxOf(undo.first()),
+    await boxOf(page.getByRole('button', { name: /^Undo this change/ })),
     await boxOf(page.getByRole('link', { name: /^Open proposal \d+/ }).first()),
     await boxOf(page.getByRole('link', { name: /^Open the .* Floor$/ }).first()),
   ].map((box) => box.height);
