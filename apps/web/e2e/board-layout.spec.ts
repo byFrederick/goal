@@ -121,7 +121,8 @@ for (const theme of ['light', 'dark'] as const) {
       await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
       await page.setViewportSize({ width: size.width, height: size.height });
       await page.goto(size.path);
-      await expect(page.getByText(/^Ready, buffer/).first()).toBeVisible();
+      // The desktop's columns are in the DOM too, hidden below 768 px: wait for the one on screen.
+      await expect(page.getByText(/^Ready, buffer/).filter({ visible: true }).first()).toBeVisible();
       await page.waitForLoadState('networkidle');
       await testInfo.attach(`board-${size.name}-${theme}`, {
         body: await page.screenshot({ fullPage: true }),
@@ -202,7 +203,7 @@ test('on a phone the expedite lane shows only its chip and nothing reaches past 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-// A crowded station: three expedite items in Build (one with a long title), one in Review. The cards stack in
+// A crowded station: three expedite items in Build (one with a long title), one in Review (and the seed's #16 in Spec). The cards stack in
 // their station's own box, never overlap and are exactly as wide as their column; titles take at most two lines.
 for (const width of [1440, 1280, 1024, 768]) {
   test(`expedite cards stack inside their box and fill the column at ${width} px`, async ({ page, request }) => {
@@ -241,7 +242,8 @@ for (const width of [1440, 1280, 1024, 768]) {
     });
 
     const withCards = g.filter((c) => c.cards.length > 0);
-    expect(withCards.map((c) => c.cards.length).sort()).toEqual([1, 3].sort());
+    // Build's three and Review's one, and the seeded expedite item #16 in Spec.
+    expect(withCards.map((c) => c.cards.length).sort()).toEqual([1, 1, 3]);
     const tops = g.map((c) => c.box?.top ?? 0);
     const tallest = Math.max(...g.map((c) => c.box?.height ?? 0));
     for (const c of g) {
