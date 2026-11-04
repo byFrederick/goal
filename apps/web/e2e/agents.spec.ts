@@ -244,6 +244,17 @@ test.describe('Agents page', () => {
     await expectNoHorizontalScroll(page);
   });
 
+  test('renders with an agent on no station, which the stats answer with no stations', async ({ page }) => {
+    // goal's definition declares infra-engineer, and no station staffs it: goald answers its stats with 200 and none.
+    const stats = page.waitForResponse((r) => r.url().endsWith('/agents/infra-engineer/stats'));
+    await page.goto(index);
+    expect((await stats).status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /reviewer/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /infra-engineer/ })).toHaveCount(0);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+
   test('New agent adds an agent and opens it in the definition', async ({ page }) => {
     await page.goto(index);
     await page.getByRole('button', { name: 'New agent' }).click();

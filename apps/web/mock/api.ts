@@ -323,7 +323,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   });
 
   const orgNotifications = createOrgNotifications({
-    secretNames: (org) => secrets.outlines(org).map((s) => s.name),
+    secrets: (org) => secrets.outlines(org),
     acme: acmeOrg,
   });
 
@@ -1363,7 +1363,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   /**
    * One agent's statistics: the fixture's measures (zeros for an agent without any) over the
    * request's range, with the stations whose agents are its copies (builder-1 → builder). Null
-   * for an agent the factory does not have; a string for a bad range.
+   * for an agent the definition does not declare (one on no station is declared, with no stations); a string for a bad range.
    */
   const agentStatsOf = (factory: Factory, agent: string, params: URLSearchParams): AgentStats | string | null => {
     const config = state.stations[factory.name] ?? {};
@@ -1375,7 +1375,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         slots: config[s.id]?.copies ?? 1,
         constraint: state.constraint[factory.name] === s.id,
       }));
-    if (stations.length === 0) return null;
+    // goald answers 404 only for an agent the definition does not declare (internal/api/agents.go); one on no station has no stations.
+    if (stations.length === 0 && !definitions.agentNames(factory).includes(agent)) return null;
     const range = rangeOf(params, clock());
     if (typeof range === 'string') return range;
     const measured: MockAgentStats = state.agentStats[factory.name]?.[agent] ?? {
