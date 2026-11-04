@@ -83,6 +83,101 @@ func (s *Store) QueuePastTries(ctx context.Context, factory domain.FactoryID, pr
 	return out, nil
 }
 
+// AddPastTries implements ports.PastTries: the proposal is locked, so two Try agains number their
+// attempts in turn, and every try is inserted in the same transaction.
+func (s *Store) AddPastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, adds []domain.PastTryAdd,
+	at time.Time,
+) ([]domain.PastTry, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
+	}
+
+	if err := domain.CheckPastTryAdds(adds); err != nil {
+		return nil, fmt.Errorf("add past tries: %w", err)
+	}
+
+	f, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := parseID("proposal", string(proposal))
+	if err != nil {
+		return nil, err
+	}
+
+	var out []domain.PastTry
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		row, err := q.LockProposal(ctx, db.LockProposalParams{FactoryID: f, ID: p})
+		if notFound(err) {
+			return fmt.Errorf("proposal %s: %w", proposal, ports.ErrNotFound)
+		}
+
+		if err != nil {
+			return fmt.Errorf("lock proposal: %w", err)
+		}
+
+		if row.State != string(domain.ProposalProposed) {
+			return fmt.Errorf("proposal %s is %s: %w", proposal, row.State, ports.ErrProposalDecided)
+		}
+
+		out = nil
+
+		for _, a := range adds {
+			added, err := addItemTries(ctx, q, f, p, a, at)
+			if err != nil {
+				return err
+			}
+
+			for _, t := range added {
+				out = append(out, pastTryFrom(t, row.Number))
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("add past tries: %w", err)
+	}
+
+	return out, nil
+}
+
+// addItemTries inserts a.Tries copies of proposal p's try of a.ItemID with the highest attempt, at
+// the attempts after it: ErrNotFound when p has no try of the item.
+func addItemTries(ctx context.Context, q *db.Queries, f, p uuid.UUID, a domain.PastTryAdd, at time.Time) ([]db.Try, error) {
+	item, err := parseID("item", string(a.ItemID))
+	if err != nil {
+		return nil, err
+	}
+
+	latest, err := q.LatestItemTry(ctx, db.LatestItemTryParams{ProposalID: p, ItemID: item})
+	if notFound(err) {
+		return nil, fmt.Errorf("proposal %s has no try of item %s: %w", p, a.ItemID, ports.ErrNotFound)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read the latest try of item %s: %w", a.ItemID, err)
+	}
+
+	out := make([]db.Try, 0, a.Tries)
+
+	for k := 1; k <= a.Tries; k++ {
+		t, err := insertTry(ctx, q, f, p, domain.NewPastTry{
+			ItemID: a.ItemID, Attempt: int(latest.Attempt) + k, Station: latest.Station, OriginalRunID: domain.RunID(latest.OriginalRunID.String()),
+			Model: latest.Model,
+		}, at)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, t)
+	}
+
+	return out, nil
+}
+
 // insertTry inserts one try of proposal p: ErrNotFound for an item or run that is not the
 // organization's, ErrConflict for an item tried twice.
 func insertTry(ctx context.Context, q *db.Queries, f, p uuid.UUID, n domain.NewPastTry, at time.Time) (db.Try, error) {

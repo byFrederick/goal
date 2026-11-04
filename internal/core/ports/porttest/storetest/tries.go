@@ -19,6 +19,7 @@ var triesTests = []struct {
 }{
 	{"Tries_QueuedOncePerProposal", testTriesQueuedOnce},
 	{"Tries_ThreePerItem", testTriesThreePerItem},
+	{"Tries_TryAgain", testTriesTryAgain},
 	{"Tries_AgentDoneItemsNewestFirst", testTriesAgentDoneItems},
 	{"Tries_ClaimCappedPerFactoryAndLeased", testTriesClaim},
 	{"Tries_FinishStoresVerdictAndReason", testTriesGraded},
@@ -390,6 +391,69 @@ func testTriesThreePerItem(f *fixture) {
 
 	if !attempts[1] || !attempts[2] || !attempts[3] {
 		t.Errorf("attempts = %v, want 1, 2 and 3 of the item", attempts)
+	}
+}
+
+// Try again adds tries of the items a proposal was tried on, all or none, each a copy of the
+// item's try with the highest attempt at the attempts after it: past the first three, and the
+// next attempts on a second call. A decided proposal, an item it has no try of and an empty add
+// change nothing.
+func testTriesTryAgain(f *fixture) {
+	t, t2 := f.t, t1.Add(time.Hour)
+	p := f.triedProposal(t, t1)
+	a, b := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+	first := f.newTries(t, p, a, b)
+
+	added, err := f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 3}, {ItemID: b.ID, Tries: 1}}, t2)
+	if err != nil {
+		t.Fatalf("AddPastTries: %v", err)
+	}
+
+	want := []struct {
+		item    domain.ItemID
+		attempt int
+	}{{a.ID, 2}, {a.ID, 3}, {a.ID, 4}, {b.ID, 2}}
+	if len(added) != len(want) {
+		t.Fatalf("AddPastTries = %+v; want %d tries", added, len(want))
+	}
+
+	for i, w := range want {
+		g, from := added[i], first[0]
+		if w.item == b.ID {
+			from = first[1]
+		}
+
+		if g.ItemID != w.item || g.Attempt != w.attempt || g.State != domain.PastTryQueued || g.Station != from.Station ||
+			g.OriginalRunID != from.OriginalRunID || g.Model != from.Model || g.ProposalNumber != p.Number || !g.CreatedAt.Equal(t2) {
+			t.Errorf("added[%d] = %+v; want a queued copy of %+v at attempt %d", i, g, from, w.attempt)
+		}
+	}
+
+	again, err := f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	if err != nil || len(again) != 1 || again[0].Attempt != 5 {
+		t.Errorf("a second AddPastTries = %+v, %v; want attempt 5 of a", again, err)
+	}
+
+	stranger := f.create(t, domain.NewItem{})
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: b.ID, Tries: 1}, {ItemID: stranger.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of an item never tried", err, ports.ErrNotFound)
+
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: b.ID}}, t2)
+	expect(t, "AddPastTries of no tries", err, domain.ErrInvalid)
+
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, domain.ProposalID("019a0000-0000-7000-8000-000000000099"), []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of no such proposal", err, ports.ErrNotFound)
+
+	_, err = f.Tries.AddPastTries(f.otherOrg(t).ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of another org's proposal", err, ports.ErrNotFound)
+
+	f.decide(t, p.Number, domain.ProposalDecision{State: domain.ProposalRejected, RejectReason: "no", By: ada, At: t2})
+
+	_, err = f.Tries.AddPastTries(f.ctx(t), f.factory, p.ID, []domain.PastTryAdd{{ItemID: a.ID, Tries: 1}}, t2)
+	expect(t, "AddPastTries of a decided proposal", err, ports.ErrProposalDecided)
+
+	if got, err := f.Tries.ProposalPastTries(f.ctx(t), p.ID); err != nil || len(got) != len(first)+len(added)+len(again) {
+		t.Errorf("ProposalPastTries = %d tries, %v; want %d, the refused adds none", len(got), err, len(first)+len(added)+len(again))
 	}
 }
 
