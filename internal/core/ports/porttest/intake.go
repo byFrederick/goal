@@ -37,6 +37,8 @@ type intakeData struct {
 	endpoints  map[domain.WebhookEndpointID]*endpointRow
 	deliveries []deliveryRow
 	firings    []firingRow
+	// secrets are the organization secrets webhooks are signed by (UseSecrets); nil has none.
+	secrets *OrgSecrets
 }
 
 type endpointRow struct {
@@ -59,6 +61,16 @@ type firingRow struct {
 // NewIntake returns intake state sealed with key, over store's factories and items.
 func NewIntake(key ports.MasterKey, store *Store) *Intake {
 	return &Intake{key: key, store: store, d: &intakeData{endpoints: map[domain.WebhookEndpointID]*endpointRow{}}}
+}
+
+// UseSecrets makes s the secrets the organization's webhooks are signed by, as the secrets table
+// is beside webhook_endpoints: CreateWebhook names one of them, and s refuses to delete one a
+// webhook uses and keeps its previous value on a replace.
+func (in *Intake) UseSecrets(s *OrgSecrets) {
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	in.d.secrets = s
 }
 
 // WithKey returns a view of in's data sealed with key.
@@ -96,8 +108,8 @@ func (in *Intake) CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoin
 	}
 
 	r := &endpointRow{org: org, e: domain.WebhookEndpoint{
-		ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind,
-		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+		ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind, Sender: n.Kind.Sender(),
+		Enabled: true, CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
 	}}
 
 	secret, err := in.sealLocked(r)
@@ -123,8 +135,8 @@ func (in *Intake) ListEndpoints(ctx context.Context, factory domain.FactoryID) (
 	out := []domain.WebhookEndpoint{}
 
 	for _, r := range in.d.endpoints {
-		if r.org == org && r.e.FactoryID == factory {
-			out = append(out, cloneEndpoint(r.e))
+		if r.org == org && r.e.OpenTo(factory) {
+			out = append(out, in.outLocked(r))
 		}
 	}
 
@@ -148,7 +160,171 @@ func (in *Intake) Endpoint(ctx context.Context, id domain.WebhookEndpointID) (do
 		return domain.WebhookEndpoint{}, err
 	}
 
-	return cloneEndpoint(r.e), nil
+	return in.outLocked(r), nil
+}
+
+// CreateWebhook implements ports.Intake.
+func (in *Intake) CreateWebhook(ctx context.Context, n domain.NewWebhook) (domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	if in.nameTakenLocked(org, n.Name, "") {
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %q: %w", n.Name, ports.ErrNameTaken)
+	}
+
+	var secret domain.SecretID
+	if in.d.secrets != nil {
+		secret, _ = in.d.secrets.webhookSecret(org, n.Secret)
+	}
+
+	if secret == "" {
+		return domain.WebhookEndpoint{}, fmt.Errorf("secret %q: %w", n.Secret, ports.ErrNotFound)
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	r := &endpointRow{org: org, e: domain.WebhookEndpoint{
+		ID: domain.WebhookEndpointID(id.String()), Name: n.Name, Sender: n.Sender, SecretID: secret, Enabled: true, Token: n.Token,
+		Openings: []domain.WebhookOpening{}, CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}}
+	in.d.endpoints[r.e.ID] = r
+	in.d.secrets.sign(org, secret, n.Name, true)
+
+	return in.outLocked(r), nil
+}
+
+// Webhooks implements ports.Intake.
+func (in *Intake) Webhooks(ctx context.Context) ([]domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.WebhookEndpoint{}
+
+	for _, r := range in.d.endpoints {
+		if r.org == org && r.e.OrgLevel() {
+			out = append(out, in.outLocked(r))
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.WebhookEndpoint) int { return cmp.Compare(a.Name, b.Name) })
+
+	return out, nil
+}
+
+// WebhookByName implements ports.Intake.
+func (in *Intake) WebhookByName(ctx context.Context, name string) (domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.endpoints {
+		if r.org == org && r.e.OrgLevel() && r.e.Name == name {
+			return in.outLocked(r), nil
+		}
+	}
+
+	return domain.WebhookEndpoint{}, fmt.Errorf("webhook %q: %w", name, ports.ErrNotFound)
+}
+
+// PatchWebhook implements ports.Intake.
+func (in *Intake) PatchWebhook(ctx context.Context, id domain.WebhookEndpointID, p domain.WebhookPatch) (domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	if err := p.Check(); err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	for _, o := range p.Open {
+		if !in.ownsFactory(org, o.FactoryID) {
+			return domain.WebhookEndpoint{}, fmt.Errorf("factory %s: %w", o.FactoryID, ports.ErrNotFound)
+		}
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	r, err := in.endpointLocked(org, id)
+	if err != nil || !r.e.OrgLevel() {
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %s: %w", id, ports.ErrNotFound)
+	}
+
+	next := p.Apply(cloneEndpoint(r.e))
+	if next.Name != r.e.Name && in.nameTakenLocked(org, next.Name, id) {
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %q: %w", next.Name, ports.ErrNameTaken)
+	}
+
+	if next.Name != r.e.Name {
+		in.d.secrets.sign(org, r.e.SecretID, r.e.Name, false)
+		in.d.secrets.sign(org, r.e.SecretID, next.Name, true)
+	}
+
+	r.e = next
+
+	return in.outLocked(r), nil
+}
+
+// WebhookSecretUses implements ports.Intake.
+func (in *Intake) WebhookSecretUses(ctx context.Context) ([]domain.WebhookSecretUse, error) {
+	hooks, err := in.Webhooks(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.WebhookSecretUse, 0, len(hooks))
+	for _, h := range hooks {
+		out = append(out, domain.WebhookSecretUse{Secret: h.Secret, Webhook: h.Name})
+	}
+
+	slices.SortFunc(out, func(a, b domain.WebhookSecretUse) int {
+		return cmp.Or(cmp.Compare(a.Secret, b.Secret), cmp.Compare(a.Webhook, b.Webhook))
+	})
+
+	return out, nil
+}
+
+// nameTakenLocked reports whether an endpoint of org other than except has name.
+func (in *Intake) nameTakenLocked(org domain.OrgID, name string, except domain.WebhookEndpointID) bool {
+	for _, r := range in.d.endpoints {
+		if r.org == org && r.e.Name == name && r.e.ID != except {
+			return true
+		}
+	}
+
+	return false
+}
+
+// outLocked is r's endpoint as the port answers it, with its secret's name now.
+func (in *Intake) outLocked(r *endpointRow) domain.WebhookEndpoint {
+	e := cloneEndpoint(r.e)
+	if e.SecretID != "" && in.d.secrets != nil {
+		e.Secret = in.d.secrets.secretName(r.org, e.SecretID)
+	}
+
+	return e
 }
 
 // RotateSecret implements ports.Intake.
@@ -164,6 +340,10 @@ func (in *Intake) RotateSecret(ctx context.Context, id domain.WebhookEndpointID)
 	r, err := in.endpointLocked(org, id)
 	if err != nil {
 		return domain.WebhookSecret{}, err
+	}
+
+	if r.e.OrgLevel() {
+		return domain.WebhookSecret{}, fmt.Errorf("webhook %s is signed by an organization secret; replace its value: %w", id, domain.ErrInvalid)
 	}
 
 	next := *r
@@ -190,8 +370,13 @@ func (in *Intake) DeleteEndpoint(ctx context.Context, id domain.WebhookEndpointI
 	in.d.mu.Lock()
 	defer in.d.mu.Unlock()
 
-	if _, err := in.endpointLocked(org, id); err != nil {
+	r, err := in.endpointLocked(org, id)
+	if err != nil {
 		return err
+	}
+
+	if r.e.OrgLevel() && in.d.secrets != nil {
+		in.d.secrets.sign(org, r.e.SecretID, r.e.Name, false)
 	}
 
 	delete(in.d.endpoints, id)
@@ -226,6 +411,10 @@ func (in *Intake) OpenSecret(ctx context.Context, id domain.WebhookEndpointID) (
 	r, err := in.endpointLocked(org, id)
 	if err != nil {
 		return nil, err
+	}
+
+	if r.e.OrgLevel() {
+		return nil, fmt.Errorf("webhook %s has no sealed secret: %w", id, ports.ErrNotFound)
 	}
 
 	if in.key.Active() == "" {
@@ -346,7 +535,7 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 
 	for _, r := range in.d.deliveries {
 		e, ok := in.d.endpoints[r.d.EndpointID]
-		if r.org != org || !ok || e.e.FactoryID != factory || r.d.ReceivedAt.Before(since) {
+		if r.org != org || !ok || !reaches(e.e, factory) || r.d.ReceivedAt.Before(since) {
 			continue
 		}
 
@@ -803,10 +992,29 @@ func (in *Intake) sealLocked(r *endpointRow) ([]byte, error) {
 	return secret, nil
 }
 
+// reaches reports whether DeliveryDays of factory counts e's deliveries: those open to it, or the
+// organization's webhooks for "".
+func reaches(e domain.WebhookEndpoint, factory domain.FactoryID) bool {
+	if factory == "" {
+		return e.OrgLevel()
+	}
+
+	return e.OpenTo(factory)
+}
+
 func cloneEndpoint(e domain.WebhookEndpoint) domain.WebhookEndpoint {
 	if e.RotatedAt != nil {
 		at := *e.RotatedAt
 		e.RotatedAt = &at
+	}
+
+	if e.Openings != nil {
+		openings := make([]domain.WebhookOpening, 0, len(e.Openings))
+		for _, o := range e.Openings {
+			openings = append(openings, domain.WebhookOpening{FactoryID: o.FactoryID, Repositories: slices.Clone(o.Repositories)})
+		}
+
+		e.Openings = openings
 	}
 
 	return e

@@ -26,6 +26,9 @@ type Harness struct {
 	// Key returns master keys with ids, the first active; the same id is the same key in every
 	// call. With no ids it has none (ports.ErrNoMasterKey).
 	Key func(ids ...string) ports.MasterKey
+	// Secrets returns the organization secrets in Intake's store, sealing with key: the ones the
+	// organization's webhooks are signed by.
+	Secrets func(key ports.MasterKey) ports.OrgSecrets
 	// Store is the store items are created in and moved by, the one Intake reads them from.
 	Store ports.Store
 	// NewOrg returns a new organization.
@@ -73,12 +76,14 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
+	tests = append(tests, webhookTests...)
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t)
-			f := &fixture{Harness: h, t: t, in: h.Intake(h.Key("k1")), org: h.NewOrg(t)}
+			f := &fixture{Harness: h, t: t, in: h.Intake(h.Key("k1")), secrets: h.Secrets(h.Key("k1")), org: h.NewOrg(t)}
 			f.factory = h.NewFactory(t, f.org)
 			tc.test(f)
 		})
@@ -103,6 +108,7 @@ type fixture struct {
 
 	t       *testing.T
 	in      ports.Intake
+	secrets ports.OrgSecrets
 	org     domain.OrgID
 	factory domain.FactoryID
 }
@@ -1096,6 +1102,14 @@ func testNoOrg(f *fixture) {
 		"ItemSources":      func() error { _, err := f.in.ItemSources(ctx, f.factory, 48); return err },
 		"TriggerDays":      func() error { _, err := f.in.TriggerDays(ctx, f.factory, t0); return err },
 		"Firings":          func() error { _, err := f.in.Firings(ctx, f.factory, flaky, 10); return err },
+		"CreateWebhook": func() error {
+			_, err := f.in.CreateWebhook(ctx, domain.NewWebhook{Name: orgHook, Sender: domain.SenderGitHub, Secret: hookToken})
+			return err
+		},
+		"Webhooks":          func() error { _, err := f.in.Webhooks(ctx); return err },
+		"WebhookByName":     func() error { _, err := f.in.WebhookByName(ctx, orgHook); return err },
+		"PatchWebhook":      func() error { _, err := f.in.PatchWebhook(ctx, id, domain.WebhookPatch{}); return err },
+		"WebhookSecretUses": func() error { _, err := f.in.WebhookSecretUses(ctx); return err },
 	}
 
 	for name, call := range calls {

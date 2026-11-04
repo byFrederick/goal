@@ -22,13 +22,16 @@ func TestIntake_Conformance(t *testing.T) {
 		tn := porttest.NewTenancy(time.Now).WithStore(s)
 		keys := porttest.NewMasterKeys()
 		in := porttest.NewIntake(keys.Key(), s)
+		secrets := porttest.NewOrgSecrets(keys.Key(), tn, nil)
+		in.UseSecrets(secrets)
 
 		var orgs, factories atomic.Int64
 
 		return intaketest.Harness{
-			Intake: func(key ports.MasterKey) ports.Intake { return in.WithKey(key) },
-			Key:    keys.Key,
-			Store:  s,
+			Intake:  func(key ports.MasterKey) ports.Intake { return in.WithKey(key) },
+			Secrets: func(key ports.MasterKey) ports.OrgSecrets { return secrets.WithKey(key) },
+			Key:     keys.Key,
+			Store:   s,
 			NewOrg: func(t *testing.T) domain.OrgID {
 				t.Helper()
 
