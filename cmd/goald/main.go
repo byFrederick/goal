@@ -217,7 +217,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore,
-	}, gateway.Config{Key: []byte(key)})
+	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
 	}
@@ -481,6 +481,21 @@ type runBoxes struct {
 	sandboxes ports.Sandboxes
 	gateway   string
 	close     func()
+}
+
+// cloudKnowledgeURLTTL is how long a cloud box's signed knowledge snapshot URL stays valid: longer
+// than prepare's download, shorter than the claim.
+const cloudKnowledgeURLTTL = 15 * time.Minute
+
+// knowledgeURLTTL is the gateway's KnowledgeURLTTL: cloud boxes download their knowledge
+// snapshots from signed bucket URLs, local Docker boxes, which cannot reach the bucket, from the
+// gateway's /run/knowledge (ADR 0038 decision 7).
+func knowledgeURLTTL(s settings) time.Duration {
+	if s.Sandbox == sandboxCloudflare {
+		return cloudKnowledgeURLTTL
+	}
+
+	return 0
 }
 
 // sandboxes wires the runs' sandboxes (spec 4 §5.1). On Docker, boxes reach the gateway through
