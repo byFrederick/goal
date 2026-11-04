@@ -27,7 +27,7 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 ## Needs you
 
-`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. [Act on an item](../act-on-an-item/) covers the actions.
+`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. [Act on an item](../act-on-an-item/) covers the actions.
 
 ## The item page and its Timeline
 
@@ -95,6 +95,8 @@ Narrow the list with the search box and the filters. The CLI does the same:
 goal runs --factory acme-line --status running
 goal runs --since 2026-10-26T00:00:00Z --limit 20
 ```
+
+Runs no longer has a Send to Jonah button: Jonah reads the line's evidence on its own. To keep an item as a test, use the Teardown tab of the item ([Act on an item](../act-on-an-item/#keep-an-item-as-a-test)).
 
 `--status` takes `running`, `succeeded`, `failed` or `cancelled`. A long list prints a `--cursor` for the next page.
 

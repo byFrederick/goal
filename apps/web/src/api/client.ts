@@ -23,6 +23,7 @@ import type {
   Board,
   ConstraintReport,
   DeviceRequest,
+  DraftKeptTests,
   EventPage,
   Factory,
   FactoryOverviewList,
@@ -35,16 +36,15 @@ import type {
   ItemState,
   JonahOverview,
   JonahReview,
-  DraftKeptTests,
   KeepTestRequest,
   KeptTest,
   KeptTestList,
-  ModelProposalResult,
   LeadTimeBridge,
   Me,
   Member,
   MergeMethod,
   Metrics,
+  ModelProposalResult,
   NewItem,
   NewOrg,
   NewPartRequest,
@@ -772,6 +772,9 @@ export function startDraftKeptTests(org: string, factory: string): Promise<Draft
 /** The open draft's kept tests and their results; starts nothing (getDraftKeptTests). */
 export function getDraftKeptTests(org: string, factory: string, signal?: AbortSignal): Promise<DraftKeptTests> {
   return unwrap(
-    goal.GET(orgPath('/factories/{factory}/draft/kept-tests'), { params: { path: { org, factory } }, ...cancel(signal) }),
+    goal.GET(orgPath('/factories/{factory}/draft/kept-tests'), {
+      params: { path: { org, factory } },
+      ...cancel(signal),
+    }),
   );
 }
