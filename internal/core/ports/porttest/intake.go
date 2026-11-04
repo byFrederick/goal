@@ -34,10 +34,10 @@ type Intake struct {
 
 type intakeData struct {
 	// schedules is the schedule lock (WithScheduleLock), fires every trigger's lock (Fire).
-	schedules  sync.Mutex
-	fires      sync.Mutex
-	mu         sync.Mutex
-	endpoints  map[domain.WebhookEndpointID]*endpointRow
+	schedules   sync.Mutex
+	fires       sync.Mutex
+	mu          sync.Mutex
+	endpoints   map[domain.WebhookEndpointID]*endpointRow
 	deliveries  []deliveryRow
 	firings     []firingRow
 	evaluations []evaluationRow

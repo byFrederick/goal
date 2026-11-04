@@ -362,4 +362,3 @@ func itemSource(s domain.TriggerSource) domain.ItemSource {
 
 	return ""
 }
-
