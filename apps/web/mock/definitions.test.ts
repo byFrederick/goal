@@ -448,3 +448,62 @@ describe('draft requests (ADR 0021)', () => {
     expect(String(found.body.error)).toContain('stopped before it changed the draft');
   });
 });
+
+describe('the goal draft’s kept tests and its versions’ watches', () => {
+  type Kept = {
+    state: string;
+    tests: { test: { id: string; station: string }; result: string | null; reason?: string; run_id?: string }[];
+  };
+  const kept = `${goal}/draft/kept-tests`;
+  const atBuild = (b: Kept) => b.tests.filter((t) => t.test.station === 'build');
+
+  it('answers untried on GET, starts the tries on POST, and keeps them for the next GET', async () => {
+    const first = await call<Kept>(kept);
+    expect(first.status).toBe(200);
+    expect(first.body.state).toBe('done');
+    expect(new Set(first.body.tests.map((t) => t.test.station))).toEqual(new Set(['build', 'review']));
+    expect(first.body.tests.every((t) => t.result === null)).toBe(true);
+
+    const started = await call<Kept>(kept, { method: 'POST' });
+    expect(started.status).toBe(200);
+    const build = atBuild(started.body);
+    const passed = build.find((t) => t.result === 'passed');
+    const failed = build.find((t) => t.result === 'failed');
+    expect(passed?.reason).toBeTruthy();
+    expect(passed?.run_id).toBeTruthy();
+    expect(failed?.reason).toBeTruthy();
+
+    const again = await call<Kept>(kept);
+    expect(again.body).toEqual(started.body);
+  });
+
+  it('answers 404 no-draft when the factory has no open draft', async () => {
+    const sre = await call<Problem>(`/v1/orgs/acme/factories/sre/draft/kept-tests`);
+    expect(sre.status).toBe(404);
+    expect(sre.body.code).toBe('no-draft');
+    const { body: draft } = await call<Draft>(`${goal}/draft`);
+    const del = await call(`${goal}/draft`, { method: 'DELETE', headers: { 'If-Match': `"${draft.revision}"` } });
+    expect(del.status).toBe(204);
+    for (const method of ['GET', 'POST']) {
+      const r = await call<Problem>(kept, { method });
+      expect(r.status).toBe(404);
+      expect(r.body.code).toBe('no-draft');
+    }
+  });
+
+  it('gives every goal version watches, with the four verdicts and a proposal', async () => {
+    const { body } = await call<{ versions: Version[] }>(`${goal}/versions`);
+    const { versions } = body;
+    expect(versions.length).toBeGreaterThan(0);
+    for (const v of versions) expect(Array.isArray(v.watches)).toBe(true);
+    const all = versions.flatMap((v) => v.watches ?? []);
+    expect(all.some((w) => w.verdict === 'helped' && w.closed_at !== null)).toBe(true);
+    expect(all.some((w) => w.verdict === 'worse' && w.closed_at !== null)).toBe(true);
+    expect(all.some((w) => w.verdict === 'no_change' && w.closed_at !== null)).toBe(true);
+    expect(all.some((w) => w.verdict === 'too_early' && w.closed_at === null && w.interval === null)).toBe(true);
+    expect(all.some((w) => w.proposal === 7)).toBe(true);
+    expect(versions.some((v) => v.watches?.length === 0)).toBe(true);
+    const { body: open } = await call<Record<string, unknown>>(`${goal}/draft`);
+    expect('watches' in open).toBe(false);
+  });
+});

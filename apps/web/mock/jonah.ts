@@ -8,6 +8,8 @@
 // is the flagged case: approving it answers 409 draft-open, as a factory with an open draft does.
 import type { ServerResponse } from 'node:http';
 import type {
+  DraftKeptTest,
+  DraftKeptTests,
   JonahObservation,
   JonahOverview,
   JonahPolicy,
@@ -19,6 +21,7 @@ import type {
   ProposalState,
   ProposalTried,
   TriedTry,
+  Watch,
 } from '../src/api/types.ts';
 
 export interface JonahDeps {
@@ -97,6 +100,153 @@ function softwareKeptTests(now: number): KeptTest[] {
     kept('kept-3', 493, 'Phone fixes on three screens', 'build', 3, result('error', 1, 'run-493')),
     kept('kept-4', 497, 'Board column header meta', 'review', 4),
   ];
+}
+
+/** The goal factory's kept tests: six past items kept at its stations; build and review are the stations its draft reaches. */
+export function goalKeptTests(now: number): KeptTest[] {
+  const at = (daysAgo: number) => new Date(now - daysAgo * 86_400_000).toISOString();
+  const kept = (
+    id: string,
+    number: number,
+    title: string,
+    station: string,
+    daysAgo: number,
+    last: KeptTest['last_result'] = null,
+  ): KeptTest => ({
+    id,
+    item: { id: `item-${number}`, number, title },
+    station,
+    kept_by: 'user:local',
+    kept_at: at(daysAgo),
+    last_result: last,
+  });
+  return [
+    kept('goal-kept-1', 311, 'Add a spec station before build', 'spec', 9, {
+      result: 'passed',
+      at: at(5),
+      run_id: 'run-311',
+    }),
+    kept('goal-kept-2', 322, 'Build checks run on the changed packages', 'build', 6, {
+      result: 'passed',
+      at: at(3),
+      run_id: 'run-322',
+    }),
+    kept('goal-kept-3', 329, 'Rework limit on a rejected review', 'build', 5, {
+      result: 'failed',
+      at: at(2),
+      run_id: 'run-329',
+    }),
+    kept('goal-kept-4', 334, 'Review reads the pull request description', 'review', 4),
+    kept('goal-kept-5', 340, 'Merge waits for green checks', 'merge', 3),
+  ];
+}
+
+/** What a try of the goal draft's content gave each kept test it reaches, by test id. */
+const goalDraftTries: Record<string, Pick<DraftKeptTest, 'result' | 'reason' | 'run_id'>> = {
+  'goal-kept-2': {
+    result: 'passed',
+    reason: 'The build contract and its checks held with the new test command.',
+    run_id: 'run-try-322',
+  },
+  'goal-kept-3': {
+    result: 'failed',
+    reason: 'Build stopped at the second rework: the draft raises the review limit to 2.',
+    run_id: 'run-try-329',
+  },
+  'goal-kept-4': {
+    result: 'passed',
+    reason: 'The review approved the pull request as the item did.',
+    run_id: 'run-try-334',
+  },
+};
+
+/** The goal draft's kept tests: the stations the draft reaches, with their results once the tries started. */
+export function goalDraftKeptTests(now: number, started: boolean): DraftKeptTests {
+  const tests: DraftKeptTest[] = goalKeptTests(now)
+    .filter((t) => t.id in goalDraftTries)
+    .map((test) => ({
+      test,
+      result: started ? (goalDraftTries[test.id]?.result ?? null) : null,
+      ...(started ? goalDraftTries[test.id] : {}),
+    }));
+  return { state: 'done', tests };
+}
+
+/** The watches of the goal factory's published versions, by number; one not watched yet has none. */
+export function goalWatches(number: number | null, publishedAt: string | null): Watch[] {
+  if (number === null || publishedAt === null) return [];
+  const opened_at = publishedAt;
+  const after = (days: number) => new Date(Date.parse(publishedAt) + days * 86_400_000).toISOString();
+  switch (number) {
+    case 3:
+      return [
+        {
+          station: 'review',
+          metric: 'sent_back_rate',
+          before: { items: 18, value: 0.31 },
+          after: { items: 22, value: 0.14 },
+          interval: { low: -0.29, high: -0.05 },
+          verdict: 'helped',
+          opened_at,
+          closed_at: after(14),
+        },
+      ];
+    case 4:
+      return [
+        {
+          station: 'build',
+          metric: 'cost_per_item',
+          before: { items: 20, value: 2.1 },
+          after: { items: 25, value: 3.4 },
+          interval: { low: 0.6, high: 2 },
+          verdict: 'worse',
+          opened_at,
+          closed_at: after(10),
+        },
+      ];
+    case 5:
+      return [
+        {
+          station: 'spec',
+          metric: 'lead_time_p85',
+          before: { items: 16, value: 1260 },
+          after: { items: 19, value: 1240 },
+          interval: { low: -150, high: 110 },
+          verdict: 'no_change',
+          opened_at,
+          closed_at: after(12),
+        },
+      ];
+    case 6:
+      return [
+        {
+          station: 'build',
+          metric: 'sent_back_rate',
+          proposal: 7,
+          before: { items: 24, value: 0.38 },
+          after: { items: 30, value: 0.2 },
+          interval: { low: -0.33, high: -0.08 },
+          verdict: 'helped',
+          opened_at,
+          closed_at: after(9),
+        },
+      ];
+    case 8:
+      return [
+        {
+          station: 'build',
+          metric: 'cost_per_item',
+          before: { items: 26, value: 3.1 },
+          after: { items: 1, value: 2.9 },
+          interval: null,
+          verdict: 'too_early',
+          opened_at,
+          closed_at: null,
+        },
+      ];
+    default:
+      return [];
+  }
 }
 
 const softwarePolicy: JonahPolicy = {

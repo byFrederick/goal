@@ -38,12 +38,14 @@ import type {
   VersionRef,
 } from '@goal/api-client';
 import { parse as parseYaml } from 'yaml';
+import type { DraftKeptTests } from '../src/api/types.ts';
 import type { ConnectionOutline } from './connections.ts';
 import { checkConnections, connectionNames, knowledgeSourceNames } from './connections-check.ts';
 import { localUser, type MockDefinition, type MockSkill, type MockVersion, type Tree } from './definition-seed.ts';
 import { environmentProblems } from './environments.ts';
 import type { MockFault } from './faults.ts';
 import { factoryCan, type MockState } from './fixtures.ts';
+import { goalDraftKeptTests, goalWatches } from './jonah.ts';
 import {
   applySection,
   cleanPath,
@@ -843,6 +845,9 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     return read && !(read instanceof ParseError) ? read.model : undefined;
   };
 
+  /** The drafts whose kept tests were started; a new draft is a new object, so it starts untried. */
+  const triedDrafts = new WeakSet<MockVersion>();
+
   const draftOf = (def: MockDefinition) =>
     def.draft ?? refuse(404, 'No draft', 'no-draft', {}, 'the factory has no open draft');
 
@@ -1123,6 +1128,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       published_by: v.published_by,
       current: v.id === def.current,
       counts: validation.counts,
+      watches: f.name === 'goal' ? goalWatches(v.number, v.published_at) : [],
     };
   };
 
@@ -1418,7 +1424,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
     if (!m) return false;
     const sub = m[2] ?? '';
     const known =
-      /^(|\/pause|\/resume|\/draft(\/model(\/[a-z]+(\/revert)?)?|\/files(\/[^/]+)?|\/requests(\/[^/]+)?|\/tree|\/validate|\/publish)?|\/versions(\/[^/]+(\/model|\/files\/[^/]+|\/restore)?)?|\/compare)$/;
+      /^(|\/pause|\/resume|\/draft(\/model(\/[a-z]+(\/revert)?)?|\/files(\/[^/]+)?|\/kept-tests|\/requests(\/[^/]+)?|\/tree|\/validate|\/publish)?|\/versions(\/[^/]+(\/model|\/files\/[^/]+|\/restore)?)?|\/compare)$/;
     if (!known.test(sub) || (sub === '' && method !== 'GET' && method !== 'DELETE')) return false;
     const f = factoryOf(org, decodeURIComponent(m[1] ?? ''));
     const def = defOf(f);
@@ -1670,6 +1676,16 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       );
       sync(f, def);
       send(res, 200, saveResult(f, def, d));
+      return true;
+    }
+    if (sub === '/draft/kept-tests' && (method === 'GET' || method === 'POST')) {
+      const d = draftOf(def);
+      if (method === 'POST') triedDrafts.add(d);
+      const body: DraftKeptTests =
+        f.name === 'goal'
+          ? goalDraftKeptTests(Math.floor(Date.now() / 86_400_000) * 86_400_000, triedDrafts.has(d))
+          : { state: 'done', tests: [] };
+      send(res, 200, body);
       return true;
     }
     if (sub === '/draft/validate' && method === 'POST') {
