@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/byFrederick/goal/internal/adapters/store/postgres/db"
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // FollowUps implements ports.Store.
 func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error) {
-	uid, err := parseID("item", string(item))
-	if err != nil {
+	if !isUUID(string(item)) {
 		return nil, nil // an id that is not a UUID names no item, which has none
 	}
+
+	uid := uuid.MustParse(string(item))
 
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.FollowUp, error) { return q.ItemFollowUps(ctx, uid) })
 	if err != nil {
@@ -112,3 +115,5 @@ func followUpFrom(r db.FollowUp) (domain.FollowUp, error) {
 
 	return f, nil
 }
+
+func isUUID(s string) bool { return uuid.Validate(s) == nil }

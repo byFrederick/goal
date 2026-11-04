@@ -38,6 +38,7 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 func (s *Store) keepFollowUps(it *domain.Item, fs []domain.FollowUp, at time.Time) {
 	for _, f := range fs {
 		key := domain.FollowUpKey(f.Text)
+
 		if slices.ContainsFunc(s.followUps, func(k domain.FollowUp) bool {
 			return k.ItemID == it.ID && domain.FollowUpKey(k.Text) == key
 		}) {

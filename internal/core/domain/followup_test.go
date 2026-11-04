@@ -25,7 +25,7 @@ func TestFollowUpsFrom(t *testing.T) {
 		want  []FollowUp
 	}{
 		{name: "no field mapped", field: "", out: `{"followups":["a"]}`},
-		{name: "not an object", field: fieldFollowUps, out: `[1]`},
+		{name: "an output that is not an object", field: fieldFollowUps, out: `[1]`},
 		{name: "field absent", field: fieldFollowUps, out: `{"other":["a"]}`},
 		{name: "not a list", field: fieldFollowUps, out: `{"followups":"a"}`},
 		{
@@ -44,20 +44,20 @@ func TestFollowUpsFrom(t *testing.T) {
 		{
 			name: "start with every field", field: fieldFollowUps,
 			out: `{"followups":[{"text":"Remove the old column","start":{"in":"7d","after":["software#648"],` +
-				`"title":"Drop source","type":"chore","lane":"backend","repositories":["acme/goal"],"factory":"ops"}}]}`,
+				`"title":"Drop source","type":"task","lane":"data","repositories":["acme/goal"],"factory":"ops"}}]}`,
 			want: []FollowUp{{
 				Text: "Remove the old column", Target: FollowUpStart, State: FollowUpWaiting,
 				Start: &FollowUpPlan{
-					In: "7d", After: []string{"software#648"}, Title: "Drop source", Type: "chore", Lane: "backend",
+					In: "7d", After: []string{"software#648"}, Title: "Drop source", Type: "task", Lane: "data",
 					Repositories: []string{"acme/goal"}, Factory: "ops",
 				},
 			}},
 		},
 		{
 			name: "start wins over for", field: fieldFollowUps,
-			out: `{"followups":[{"text":"Later","for":"software#1","start":{"at":"2026-12-01","title":"Later"}}]}`,
+			out: `{"followups":[{"text":"Ship later","for":"software#1","start":{"at":"2026-12-01","title":"Ship later"}}]}`,
 			want: []FollowUp{{
-				Text: "Later", Target: FollowUpStart, State: FollowUpWaiting, Start: &FollowUpPlan{At: "2026-12-01", Title: "Later"},
+				Text: "Ship later", Target: FollowUpStart, State: FollowUpWaiting, Start: &FollowUpPlan{At: "2026-12-01", Title: "Ship later"},
 			}},
 		},
 		{

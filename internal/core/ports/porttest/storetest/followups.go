@@ -9,6 +9,15 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
+// followUpsTests are the cases of the follow-ups kept with a transition (ADR 0040 decision 6).
+var followUpsTests = []struct {
+	name string
+	test func(f *fixture)
+}{
+	{"FollowUps_KeptWithTheTransition", testFollowUpsKeptWithTheTransition},
+	{"FollowUps_RerunKeepsAndDedupes", testFollowUpsRerunKeepsAndDedupes},
+}
+
 // followUpsOf are the follow-ups a run at the work station wrote, in output order.
 func followUpsOf(run domain.RunID, entries ...domain.FollowUp) []domain.FollowUp {
 	out := make([]domain.FollowUp, len(entries))
