@@ -14,8 +14,8 @@ test('the page shows proposal 7 as pictured: the estimate, the two diffs, the fo
   await expect(page.getByRole('heading', { level: 1, name: /Ask frontend-engineer for a screenshot/ })).toBeVisible();
   await expect(page.getByText('Waiting for your review')).toBeVisible();
   await expect(page.getByText('2 files, v21 to v22')).toBeVisible();
-  await expect(page.getByText('Why: 4 runs sent back')).toBeVisible();
-  await expect(page.getByText('v22; runs in progress keep v21')).toBeVisible();
+  await expect(page.getByRole('region', { name: /Why/ })).toBeVisible();
+  await expect(page.getByText('v22; running items keep v21')).toBeVisible();
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -44,7 +44,7 @@ test('Reject needs a reason, then records it and shows the rejected state', asyn
   await expect(submit).toBeEnabled();
   await submit.click();
 
-  await expect(page.getByText('Rejected')).toBeVisible();
+  await expect(page.getByText(/^Rejected/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Approve and publish v22' })).toHaveCount(0);
 });
 

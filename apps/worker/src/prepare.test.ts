@@ -976,6 +976,23 @@ describe('prepare', () => {
       expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).judge).toEqual(judge);
     });
 
+    it('refuses a grade with a repository or a definition, and writes its block to spec.json', async () => {
+      const grade = { reason: 'It returned 500.', result: { kind: 'try', output: 'o', diff: '' } };
+      const gradeSpec = { ...spec, item_id: '', station: '', grade };
+      for (const bundle of [
+        { spec: gradeSpec, files: {}, repository: { url: 'https://example.com/a.git', branch: 'goal/1-x' } },
+        { spec: gradeSpec, files: {}, definition: { files: { 'factory.yaml': b64(factory) } } },
+      ]) {
+        const { exec, calls } = recorder();
+        await expect(prepare(depsWith(gatewayServing(bundle).fake, exec))).rejects.toThrow();
+        expect(calls).toEqual([]);
+      }
+
+      const { exec } = recorder();
+      await prepare(depsWith(gatewayServing({ spec: gradeSpec, files: {} }).fake, exec));
+      expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).grade).toEqual(grade);
+    });
+
     it('refuses a jonah review with a repository or a definition, and writes its box and spec', async () => {
       const jonah = { propose_after: 5, manual: false };
       const jonahSpec = { ...spec, item_id: '', station: '', jonah };
