@@ -73,6 +73,7 @@ function softwareKeptTests(now: number): KeptTest[] {
     station,
     kept_by: 'user:local',
     kept_at: new Date(now - daysAgo * 86_400_000).toISOString(),
+    last_result: null,
   });
   return [
     kept('kept-1', 451, 'A sidebar request gets the frontend lane', 'spec', 7),

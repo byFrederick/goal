@@ -146,8 +146,8 @@ function tried(state: 'done' | 'budget_used', queued = false): NonNullable<Propo
     kept_tests: queued
       ? []
       : [
-          { test: 418, result: 'passed' as const },
-          { test: 493, result: 'failed' as const },
+          { test: 418, station: 'frontend', attempt: 1, result: 'passed' as const },
+          { test: 493, station: 'frontend', attempt: 1, result: 'failed' as const },
         ],
   };
 }
