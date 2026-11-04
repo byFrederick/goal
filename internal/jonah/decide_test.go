@@ -243,14 +243,14 @@ func (f *decideFixture) run(ctx context.Context, t *testing.T, kind domain.RunKi
 
 	if kind == domain.RunKindStation {
 		it, err := f.store.CreateItem(ctx, domain.NewItem{
-			FactoryID: factory, Title: "work in progress", Type: "task", Station: "build", State: domain.StateInProgress,
+			FactoryID: factory, Title: "work in progress", Station: stationBuild, State: domain.StateInProgress,
 			Class: domain.ClassStandard, CreatedAt: at,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		n.ItemID, n.Station = it.ID, "build"
+		n.ItemID, n.Station = it.ID, stationBuild
 	}
 
 	id, err := f.store.StartRun(ctx, n)

@@ -89,7 +89,7 @@ const me: Me = {
 
 /** Jonah's overview of each factory: nothing waiting by default, so a row with no count keeps its plain name. */
 const jonahWaiting = (waiting: number): JonahOverview => ({
-  policy: { enabled: true, propose_after: 5, weekly_usd: 20, approver_roles: ['owner'] },
+  policy: { enabled: true, propose_after: 5, share: 0.05, budget_usd: 10, approver_roles: ['owner'] },
   waiting,
   month_cost_usd: 0,
   observations: [],

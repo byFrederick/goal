@@ -85,7 +85,8 @@ const overview: JonahOverview = {
   policy: {
     enabled: true,
     propose_after: 5,
-    weekly_usd: 20,
+    share: 0.05,
+    budget_usd: 10,
     model: 'claude-opus-5-5',
     approver_roles: ['owner', 'admin'],
   },

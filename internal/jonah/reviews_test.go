@@ -163,7 +163,7 @@ func (w *reviewWorld) lineSpend(usd float64, at time.Time) {
 	w.t.Helper()
 
 	it, err := w.store.CreateItem(w.ctx(), domain.NewItem{
-		FactoryID: reviewFactory, Title: "work in progress", Type: "task", Station: stBuild, State: domain.StateInProgress,
+		FactoryID: reviewFactory, Title: "work in progress", Station: stBuild, State: domain.StateInProgress,
 		Class: domain.ClassStandard, CreatedAt: at,
 	})
 	if err != nil {

@@ -54,7 +54,7 @@ const editor: Factory = {
 const viewer: Factory = { ...editor, role: 'viewer', can: ['factory:read'] };
 
 const overview: JonahOverview = {
-  policy: { enabled: true, propose_after: 5, weekly_usd: 20, approver_roles: ['owner', 'admin'] },
+  policy: { enabled: true, propose_after: 5, share: 0.05, budget_usd: 10, approver_roles: ['owner', 'admin'] },
   waiting: 2,
   month_cost_usd: 6.4,
   observations: [],

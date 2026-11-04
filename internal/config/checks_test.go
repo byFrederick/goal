@@ -383,22 +383,7 @@ func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
 	}
 
 	_, problems := Check(checkTree(doc, nil))
-
-	var got []int
-
-	for _, p := range problems {
-		if p.Blocking() || p.Code == codeUnknownAgent || p.Code == codeFieldRemoved {
-			t.Errorf("problem %+v; want warnings only", p)
-		}
-
-		if p.Code == codeFieldIgnored {
-			if p.Severity != domain.SeverityWarning || p.File != FileName {
-				t.Errorf("problem %+v; want a warning in %s", p, FileName)
-			}
-
-			got = append(got, p.Line)
-		}
-	}
+	got := ignoredLines(t, problems)
 
 	var want []int
 
@@ -420,6 +405,32 @@ func TestCheck_IgnoredFieldsWarnAndDoNotRefuse(t *testing.T) {
 	if l.Jonah.Share != domain.DefaultJonahPolicy().Share {
 		t.Errorf("share = %v; weeklyUsd must not change it", l.Jonah.Share)
 	}
+}
+
+// ignoredLines are the factory.yaml lines of problems' field-ignored warnings; any problem that
+// blocks, or any other code that a retired key used to raise, fails t.
+func ignoredLines(t *testing.T, problems []domain.DefinitionProblem) []int {
+	t.Helper()
+
+	var lines []int
+
+	for _, p := range problems {
+		if p.Blocking() || p.Code == codeUnknownAgent || p.Code == codeFieldRemoved {
+			t.Errorf("problem %+v; want warnings only", p)
+		}
+
+		if p.Code != codeFieldIgnored {
+			continue
+		}
+
+		if p.Severity != domain.SeverityWarning || p.File != FileName {
+			t.Errorf("problem %+v; want a warning in %s", p, FileName)
+		}
+
+		lines = append(lines, p.Line)
+	}
+
+	return lines
 }
 
 // Each removed form's fix takes it out of the definition, or puts an organization connection of
