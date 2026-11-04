@@ -26,6 +26,7 @@ const (
 	hookSecret   = "test-hook-secret"
 	hookPrevious = "test-hook-previous"
 	receiverHook = "github-acme"
+	hookJSON     = "application/json"
 )
 
 // hookRig is a receiver over port fakes and the real sender catalog, with one organization webhook.
@@ -86,7 +87,11 @@ func newHookRig(t *testing.T, sender domain.WebhookSender, token domain.TokenSet
 	return r
 }
 
-func (r *hookRig) ctx(t *testing.T) context.Context { return domain.WithOrg(t.Context(), testOrg) }
+func (r *hookRig) ctx(t *testing.T) context.Context {
+	t.Helper()
+
+	return domain.WithOrg(t.Context(), testOrg)
+}
 
 // post posts body to path with headers, from addr.
 func (r *hookRig) post(t *testing.T, path, body string, headers map[string]string, addr string) *httptest.ResponseRecorder {
@@ -122,7 +127,7 @@ func (r *hookRig) github(t *testing.T, body, event, delivery, secret string) *ht
 
 	return r.post(t, api.HooksPath+string(r.hook.ID), body, map[string]string{
 		"X-Hub-Signature-256": "sha256=" + hex.EncodeToString(m.Sum(nil)), "X-GitHub-Event": event, "X-GitHub-Delivery": delivery,
-		"Content-Type": "application/json",
+		"Content-Type": hookJSON,
 	}, "")
 }
 
@@ -230,7 +235,7 @@ func TestHooks_RefusedSignature(t *testing.T) {
 	missing := r.post(t, api.HooksPath+string(r.hook.ID), body, map[string]string{"X-GitHub-Event": "push"}, "")
 
 	for _, rec := range []*httptest.ResponseRecorder{wrong, missing} {
-		if rec.Code != http.StatusUnauthorized || rec.Header().Get("Content-Type") != "application/problem+json" {
+		if rec.Code != http.StatusUnauthorized || rec.Header().Get("Content-Type") != problemType {
 			t.Errorf("POST = %d %s; want 401 problem", rec.Code, rec.Body)
 		}
 	}
@@ -250,18 +255,26 @@ func TestHooks_RefusedSignature(t *testing.T) {
 		}
 	}
 
-	m := hmac.New(sha256.New, []byte("not-the-secret"))
-	m.Write([]byte(body))
-
-	for _, leak := range []string{hookSecret, hex.EncodeToString(m.Sum(nil))} {
-		if strings.Contains(wrong.Body.String()+missing.Body.String()+r.logs.String(), leak) {
-			t.Errorf("an answer or the log holds %q", leak)
-		}
-	}
+	r.expectNoLeak(t, body, wrong.Body.String()+missing.Body.String())
 
 	// A signed delivery with the same id after the refusals is accepted: a refused one takes none.
 	if rec := r.github(t, body, "push", "d-1", hookSecret); rec.Code != http.StatusAccepted {
 		t.Errorf("POST signed = %d; want 202", rec.Code)
+	}
+}
+
+// expectNoLeak checks that neither answers nor the log hold the secret or the wrong signature of
+// body.
+func (r *hookRig) expectNoLeak(t *testing.T, body, answers string) {
+	t.Helper()
+
+	m := hmac.New(sha256.New, []byte("not-the-secret"))
+	m.Write([]byte(body))
+
+	for _, leak := range []string{hookSecret, hex.EncodeToString(m.Sum(nil))} {
+		if strings.Contains(answers+r.logs.String(), leak) {
+			t.Errorf("an answer or the log holds %q", leak)
+		}
 	}
 }
 

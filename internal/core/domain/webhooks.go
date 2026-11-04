@@ -381,6 +381,14 @@ func (n NewReceipt) Check() error {
 		return fmt.Errorf("an accepted delivery needs its id: %w", ErrInvalid)
 	case n.Receipt == ReceiptRefused && (n.DeliveryID != "" || n.Event != "" || len(n.Body) > 0):
 		return fmt.Errorf("a refused delivery keeps metadata only: %w", ErrInvalid)
+	}
+
+	return n.checkSizes()
+}
+
+// checkSizes refuses an id, event, body or reason over its limit.
+func (n NewReceipt) checkSizes() error {
+	switch {
 	case utf8.RuneCountInString(n.DeliveryID) > MaxDeliveryID:
 		return fmt.Errorf("a delivery id is over %d characters: %w", MaxDeliveryID, ErrInvalid)
 	case utf8.RuneCountInString(n.Event) > maxEvent:

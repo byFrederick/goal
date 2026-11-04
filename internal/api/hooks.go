@@ -138,8 +138,7 @@ func (rc *receiver) serve(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, domain.MaxDeliveryBody))
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			rc.problem(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("a delivery has at most %d bytes", domain.MaxDeliveryBody))
 			return
 		}

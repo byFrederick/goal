@@ -206,6 +206,11 @@ func (e Entry) check() error {
 		return errors.New("id.timestamp.body needs an id header and a timestamp")
 	}
 
+	return s.checkScheme()
+}
+
+// checkScheme refuses an unknown scheme, and what is signed and the encodings that do not fit it.
+func (s Spec) checkScheme() error {
 	switch s.Scheme {
 	case SchemeHMAC:
 		if s.Signed != SignedBody && s.Signed != SignedIDTimestampBody {
@@ -311,28 +316,9 @@ func (s Spec) verify(d domain.InboundDelivery, keys []string) error {
 		return fmt.Errorf("no %s header with a value: %w", s.Signature.Header, domain.ErrSignature)
 	}
 
-	signed := d.Body
-
-	if s.Timestamp != nil {
-		ts := first(d, s.Timestamp.Header)
-
-		sec, err := strconv.ParseInt(ts, 10, 64)
-		if err != nil {
-			return fmt.Errorf("no %s header with a Unix time: %w", s.Timestamp.Header, domain.ErrSignature)
-		}
-
-		if off := d.At.Sub(time.Unix(sec, 0)).Abs(); off > s.Timestamp.Tolerance {
-			return fmt.Errorf("%s is more than %s off: %w", s.Timestamp.Header, s.Timestamp.Tolerance, domain.ErrSignature)
-		}
-
-		if s.Signed == SignedIDTimestampBody {
-			id := first(d, s.ID.Header)
-			if id == "" {
-				return fmt.Errorf("no %s header: %w", s.ID.Header, domain.ErrSignature)
-			}
-
-			signed = append([]byte(id+"."+ts+"."), d.Body...)
-		}
+	signed, err := s.signed(d)
+	if err != nil {
+		return err
 	}
 
 	for _, k := range keys {
@@ -342,6 +328,36 @@ func (s Spec) verify(d domain.InboundDelivery, keys []string) error {
 	}
 
 	return fmt.Errorf("%s does not match: %w", s.Signature.Header, domain.ErrSignature)
+}
+
+// signed is what d's signature is made over, once its timestamp, if the entry has one, is within
+// the tolerance: the body, or "<id>.<timestamp>.<body>".
+func (s Spec) signed(d domain.InboundDelivery) ([]byte, error) {
+	if s.Timestamp == nil {
+		return d.Body, nil
+	}
+
+	ts := first(d, s.Timestamp.Header)
+
+	sec, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("no %s header with a Unix time: %w", s.Timestamp.Header, domain.ErrSignature)
+	}
+
+	if off := d.At.Sub(time.Unix(sec, 0)).Abs(); off > s.Timestamp.Tolerance {
+		return nil, fmt.Errorf("%s is more than %s off: %w", s.Timestamp.Header, s.Timestamp.Tolerance, domain.ErrSignature)
+	}
+
+	if s.Signed != SignedIDTimestampBody {
+		return d.Body, nil
+	}
+
+	id := first(d, s.ID.Header)
+	if id == "" {
+		return nil, fmt.Errorf("no %s header: %w", s.ID.Header, domain.ErrSignature)
+	}
+
+	return append([]byte(id+"."+ts+"."), d.Body...), nil
 }
 
 // values are the signature header's values with their prefix cut, split at the separator; a value

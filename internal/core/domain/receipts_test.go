@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// The events the tests deliver.
+const (
+	evPush     = "push"
+	evCheckRun = "check_run"
+)
+
 // A delivery keeps no sender's signature or token header, whatever its case, nor the token
 // webhook's own header; every other header stays, its name lower-cased.
 func TestStoredHeaders_DropEverySignatureHeader(t *testing.T) {
@@ -17,11 +23,11 @@ func TestStoredHeaders_DropEverySignatureHeader(t *testing.T) {
 		"X-Hub-Signature-256": "sha256=00", "X-Hub-Signature": "sha1=00", "X-Goal-Signature": "sha256=00",
 		"X-Gitlab-Token": "t", "Webhook-Signature": "v1,AA==", "X-PagerDuty-Signature": "v1=00",
 		"Sentry-Hook-Signature": "00", "Authorization": "Bearer t", "X-Acme-Token": "t",
-		"X-GitHub-Event": "push", "Content-Type": "application/json",
+		"X-GitHub-Event": evPush, "Content-Type": "application/json",
 	}
 
 	got := StoredHeaders(in, "x-acme-token")
-	want := map[string]string{"x-github-event": "push", "content-type": "application/json"}
+	want := map[string]string{"x-github-event": evPush, "content-type": "application/json"}
 
 	if !maps.Equal(got, want) {
 		t.Errorf("StoredHeaders = %v; want %v", got, want)
@@ -31,7 +37,7 @@ func TestStoredHeaders_DropEverySignatureHeader(t *testing.T) {
 func TestNewReceipt_Check(t *testing.T) {
 	t.Parallel()
 
-	ok := NewReceipt{WebhookID: "w", ReceivedAt: time.Now(), Receipt: ReceiptAccepted, DeliveryID: "d1", Event: "push", Body: []byte("{}")}
+	ok := NewReceipt{WebhookID: "w", ReceivedAt: time.Now(), Receipt: ReceiptAccepted, DeliveryID: "d1", Event: evPush, Body: []byte("{}")}
 	if err := ok.Check(); err != nil {
 		t.Fatalf("Check(accepted) = %v", err)
 	}
@@ -74,17 +80,17 @@ func TestTrigger_NamesDelivery(t *testing.T) {
 		event   string
 		want    bool
 	}{
-		{"github-acme", true, "push", true},
-		{"github-acme.check_run", true, "push", true},
-		{"webhook.github-acme", true, "push", true},
-		{"github.check_run", true, "check_run", true},
-		{"github.check_run.failed", true, "check_run", true},
+		{"github-acme", true, evPush, true},
+		{"github-acme.check_run", true, evPush, true},
+		{"webhook.github-acme", true, evPush, true},
+		{"github.check_run", true, evCheckRun, true},
+		{"github.check_run.failed", true, evCheckRun, true},
 		{"github.check_run", true, "check_suite", false},
-		{"github.check_run", false, "check_run", false},
-		{"gitlab.check_run", true, "check_run", false},
-		{"github", true, "", false},
+		{"github.check_run", false, evCheckRun, false},
+		{"gitlab.check_run", true, evCheckRun, false},
+		{string(SenderGitHub), true, "", false},
 		{OnSchedule, true, "", false},
-		{"other-hook", true, "push", false},
+		{"other-hook", true, evPush, false},
 	}
 
 	for _, tc := range tests {

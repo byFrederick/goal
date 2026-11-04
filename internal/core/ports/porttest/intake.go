@@ -646,9 +646,17 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		in.d.ledger[key] = n.ReceivedAt.UTC()
 	}
 
+	row, err := in.keepReceivedLocked(org, n)
+	out.Row = row
+
+	return out, err
+}
+
+// keepReceivedLocked keeps the row of a delivery the receiver accepted or refused.
+func (in *Intake) keepReceivedLocked(org domain.OrgID, n domain.NewReceipt) (domain.WebhookDeliveryID, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return domain.Received{}, err
+		return "", err
 	}
 
 	outcome := domain.DeliveryAccepted
@@ -658,17 +666,12 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 
 	d := domain.WebhookDelivery{
 		ID: domain.WebhookDeliveryID(id.String()), EndpointID: n.WebhookID, ReceivedAt: n.ReceivedAt.UTC(),
-		Headers: domain.StoredHeaders(n.Headers), Body: slices.Clone(n.Body), Outcome: outcome, Reason: n.Reason,
+		Headers: domain.StoredHeaders(n.Headers), Body: append([]byte{}, n.Body...), Outcome: outcome, Reason: n.Reason,
 		DeliveryID: n.DeliveryID, Event: n.Event, Receipt: n.Receipt,
 	}
-	if d.Body == nil {
-		d.Body = []byte{}
-	}
-
 	in.d.deliveries = append(in.d.deliveries, deliveryRow{org: org, d: d})
-	out.Row = d.ID
 
-	return out, nil
+	return d.ID, nil
 }
 
 // UnnamedDays implements ports.Intake.
