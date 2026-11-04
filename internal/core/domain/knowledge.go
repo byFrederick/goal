@@ -389,9 +389,10 @@ type SyncSpec struct {
 }
 
 // SourceItem is a document as its source lists it. MIME is its type when the listing knows it
-// ("": the fetch says).
+// ("": the fetch says). Folder is the folder its file goes in when its source names one, such as
+// a Confluence page's place in its page tree (ENG/runbooks); "": the folder's top.
 type SourceItem struct {
-	ID, Version, Title, URL, MIME string
+	ID, Version, Title, URL, MIME, Folder string
 }
 
 // SourceDoc is a document's content as its source returns it.

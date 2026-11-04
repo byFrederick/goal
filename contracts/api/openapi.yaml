@@ -10345,9 +10345,10 @@ components:
         config:
           type: object
           description: >-
-            What its reader reads (a repository, a branch and path globs; a Confluence space). A
-            synced source on a secret also names its reader (reader: gitdocs or confluence) and,
-            for confluence, the site and the account's email.
+            What its reader reads (a repository, a branch and path globs; Confluence spaces and,
+            with root_page, only one page's tree). A synced source on a secret also names its
+            reader (reader: gitdocs or confluence) and, for confluence, the site and the account's
+            email.
           additionalProperties: { type: string }
         read_when: { type: string, description: "The line that tells agents when to open it; empty when it has none" }
         sync_every_seconds: { type: integer, minimum: 0, description: "How often it syncs, in seconds: at least 900, or 0 when it syncs only when someone presses Sync" }
@@ -10424,7 +10425,8 @@ components:
             What its reader reads. A synced source names its reader (reader: gitdocs or
             confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or
             on the host code_host names: github or gitlab), branch, include and exclude;
-            confluence reads site, email and spaces.
+            confluence reads site, email and spaces (space keys separated by commas), and the
+            optional root_page (a page id: only that page and the pages under it).
           additionalProperties: { type: string }
         read_when: { $ref: "#/components/schemas/KnowledgeReadWhen" }
         sync_every_seconds: { type: integer, minimum: 0, description: "How often it syncs, in seconds: at least 900 (default 3600), or 0 to sync only when someone presses Sync. A new source syncs once when it is created either way" }

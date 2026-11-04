@@ -19,7 +19,7 @@ A source has a name, a kind, a read-when line and the settings of its kind.
 | --- | --- |
 | Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML, and PDF and Office files when goald has a conversion service (`GOAL_WORKERS_AI_URL`; without one it refuses them). The originals stay in the bucket. |
 | Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host picks the code host. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
-| Confluence | The pages of one or more spaces of a Confluence Cloud site, at the path of their page tree. It reads with the site, the account's email and a secret that holds the API token. |
+| Confluence | The pages of one or more spaces of a Confluence Cloud site, or only one page and the pages under it, at the path of their page tree: Paging under Runbooks in space ENG is `ENG/runbooks/paging-<id>.md`. A page you move is fetched again at its new path. It reads with the site, the account's email and a secret that holds the API token. |
 
 Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to all factories, because a source belongs to the organization, not to one factory ([Access and secrets](../access-and-secrets/)). You can't delete a secret while a source reads with it: the error names the source.
 
@@ -28,6 +28,7 @@ Website, Notion and Google Drive show on the Add a source page as later. A Repos
 A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour, every day, or only when someone presses **Sync now**. Every source syncs once when it is created. After that, an on-demand source syncs only when someone presses **Sync now**, and between syncs it has no next sync. If its sync fails, it doesn't retry on its own: press **Sync now** again. In the API it has `sync_every_seconds` 0 and `next_sync_at` null. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
+- A Repository sync that changes 50 files or more downloads the branch's archive once instead of fetching each file. It takes only the listed files that are still the version it listed, and fetches the rest one by one. An archive over 200 MB, or one that fails to download or read, doesn't fail the sync: it fetches the files one by one instead.
 - A file that looks like it holds a key stays out.
 - goald keeps the current snapshot, any snapshot a running run pinned, and a replaced snapshot for at least the longest a claim can last (about 4 hours by default). After that it deletes the snapshot at the source's next sync. Deleting a source deletes its snapshots.
 
@@ -39,6 +40,24 @@ Limits keep every box fast. A sync that goes past one fails and names it.
 | Markdown in a source | 50 MB |
 | One file | 5 MB |
 | Sources a factory lists | 10 |
+
+When you upgrade to knowledge as files, goald converts each source once, at its start. A synced source that reads with a secret becomes a `repository` source (the `gitdocs` reader) or a `confluence` source. It keeps its name, its secret and its config, without `reader`. Live sources are deleted: give their MCP servers to agents in the factory's environment files instead. Uploads keep their originals. Every source then syncs once, and runs read its files from the next claim on. A factory keeps listing a converted source by its name, so no definition changes. A factory that listed a live source gets a `knowledge-source-unknown` error at its next publish, with a fix that removes the line. A synced source that goald can't convert stays as it is, and goald logs why (`knowledge source not converted`).
+
+### A synced source's secret and config
+
+A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+
+| Reader | Config | The secret holds |
+| --- | --- | --- |
+| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. A repository off github.com and gitlab.com also needs `code_host: github` or `gitlab`. | The code host's token. |
+| `confluence` | `reader: confluence`, `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`), and optionally `root_page` (a page id: only that page and the pages under it, with paths that start at that page, such as `runbooks/paging-<id>.md`). | The account's API token. |
+
+```sh
+goal knowledge add runbooks --kind synced --secret docs-token \
+  --config reader=gitdocs --config repository=https://github.com/acme/docs
+```
+
+Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why: for example, when that secret is open to some factories only, since a source syncs only with a secret open to every factory.
 
 ## What runs get
 

@@ -5,3 +5,6 @@ package knowledge
 func (in *Ingestor) SetByteLimits(source, file int64) {
 	in.limits = byteLimits{source: source, file: file}
 }
+
+// ArchiveFrom is how many changed items make a sync read its reader's archive.
+const ArchiveFrom = archiveFrom

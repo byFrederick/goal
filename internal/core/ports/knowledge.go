@@ -125,6 +125,17 @@ type SourceReader interface {
 	Fetch(ctx context.Context, s domain.SyncSpec, id string) (domain.SourceDoc, error)
 }
 
+// ArchiveReader is a SourceReader that can also read many listed items of one listing from a
+// single download, such as a repository's archive (ADR 0038 decision 2). A sync that changes
+// many items uses it instead of fetching them one by one.
+type ArchiveReader interface {
+	SourceReader
+	// Archive yields, one at a time, the content of each of items whose archived content is the
+	// version listed. Items it never yields are the caller's to fetch one by one. An error ends it
+	// and means the archive failed as a whole.
+	Archive(ctx context.Context, s domain.SyncSpec, items []domain.SourceItem) iter.Seq2[domain.SourceDoc, error]
+}
+
 // Converter turns an item that is neither Markdown nor text into Markdown, so every file of a
 // source is one an agent can read (ADR 0038 decision 2): HTML built in, PDF and Office files
 // through a conversion service. name is the item's file name, mediaType its media type.
