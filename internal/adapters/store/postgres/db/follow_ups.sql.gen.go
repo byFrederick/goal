@@ -12,6 +12,55 @@ import (
 	"github.com/google/uuid"
 )
 
+const claimLandedFollowUp = `-- name: ClaimLandedFollowUp :one
+SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, COALESCE(s.parent_id, s.id)::uuid AS root_id
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+LEFT JOIN work_items p ON p.id = s.parent_id
+WHERE f.state = 'waiting' AND f.target IN ('start', 'triage')
+  AND (s.state = 'cancelled' OR p.state = 'cancelled'
+       OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
+ORDER BY f.created_at, f.id
+LIMIT 1
+FOR UPDATE OF f SKIP LOCKED
+`
+
+type ClaimLandedFollowUpRow struct {
+	FollowUp FollowUp
+	RootID   uuid.UUID
+}
+
+// The oldest waiting start or triage follow-up whose work has landed or was cancelled
+// (follow_ups_waiting_filing_idx), locked; one another instance holds is skipped. Its root is the
+// source item, or its assembly for a part. A follow-up of a cancelled source or root is taken
+// whatever its trust, to be dropped; one of landed work (a done root) only from a trusted source.
+func (q *Queries) ClaimLandedFollowUp(ctx context.Context) (ClaimLandedFollowUpRow, error) {
+	row := q.db.QueryRow(ctx, claimLandedFollowUp)
+	var i ClaimLandedFollowUpRow
+	err := row.Scan(
+		&i.FollowUp.ID,
+		&i.FollowUp.OrgID,
+		&i.FollowUp.FactoryID,
+		&i.FollowUp.ItemID,
+		&i.FollowUp.RunID,
+		&i.FollowUp.Station,
+		&i.FollowUp.Agent,
+		&i.FollowUp.Text,
+		&i.FollowUp.TextKey,
+		&i.FollowUp.Target,
+		&i.FollowUp.ForFactory,
+		&i.FollowUp.ForNumber,
+		&i.FollowUp.Start,
+		&i.FollowUp.State,
+		&i.FollowUp.Reason,
+		&i.FollowUp.FiledItemID,
+		&i.FollowUp.CreatedAt,
+		&i.FollowUp.UpdatedAt,
+		&i.RootID,
+	)
+	return i, err
+}
+
 const claimNote = `-- name: ClaimNote :one
 SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, s.number AS source_number
 FROM follow_ups f
@@ -57,6 +106,61 @@ func (q *Queries) ClaimNote(ctx context.Context) (ClaimNoteRow, error) {
 	return i, err
 }
 
+const collectingTriageItem = `-- name: CollectingTriageItem :one
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage FROM work_items w
+WHERE w.factory_id = $1 AND w.triage AND w.state NOT IN ('done', 'cancelled')
+  AND NOT EXISTS (SELECT 1 FROM agent_runs r WHERE r.item_id = w.id)
+ORDER BY w.created_at
+LIMIT 1
+FOR NO KEY UPDATE OF w
+`
+
+// The factory's triage item that still collects (work_items_triage_idx): open, with no run yet,
+// locked for the follow-ups that join it.
+func (q *Queries) CollectingTriageItem(ctx context.Context, factoryID uuid.UUID) (WorkItem, error) {
+	row := q.db.QueryRow(ctx, collectingTriageItem, factoryID)
+	var i WorkItem
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ParentID,
+		&i.Type,
+		&i.Lane,
+		&i.Title,
+		&i.Body,
+		&i.Station,
+		&i.State,
+		&i.ClassOfService,
+		&i.Priority,
+		&i.Size,
+		&i.ReworkCount,
+		&i.CostUsd,
+		&i.Outputs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+		&i.OrgID,
+		&i.PartKey,
+		&i.PartPaths,
+		&i.Paths,
+		&i.BaseCommit,
+		&i.Trigger,
+		&i.Source,
+		&i.IntegrationBranch,
+		&i.IntegrationLandAt,
+		&i.Origin,
+		&i.Via,
+		&i.CreatedBy,
+		&i.Generation,
+		&i.Untrusted,
+		&i.StartAt,
+		&i.StartedAt,
+		&i.Triage,
+	)
+	return i, err
+}
+
 const deliverFollowUp = `-- name: DeliverFollowUp :one
 UPDATE follow_ups SET state = 'delivered', updated_at = $1
 WHERE id = $2
@@ -92,6 +196,103 @@ func (q *Queries) DeliverFollowUp(ctx context.Context, arg DeliverFollowUpParams
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const dropFollowUp = `-- name: DropFollowUp :one
+UPDATE follow_ups SET state = 'dropped', reason = $1, updated_at = $2
+WHERE id = $3
+RETURNING id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at
+`
+
+type DropFollowUpParams struct {
+	Reason *string
+	At     time.Time
+	ID     uuid.UUID
+}
+
+func (q *Queries) DropFollowUp(ctx context.Context, arg DropFollowUpParams) (FollowUp, error) {
+	row := q.db.QueryRow(ctx, dropFollowUp, arg.Reason, arg.At, arg.ID)
+	var i FollowUp
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ItemID,
+		&i.RunID,
+		&i.Station,
+		&i.Agent,
+		&i.Text,
+		&i.TextKey,
+		&i.Target,
+		&i.ForFactory,
+		&i.ForNumber,
+		&i.Start,
+		&i.State,
+		&i.Reason,
+		&i.FiledItemID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const fileFollowUpOnto = `-- name: FileFollowUpOnto :one
+UPDATE follow_ups SET state = 'filed', filed_item_id = $1, updated_at = $2
+WHERE id = $3
+RETURNING id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at
+`
+
+type FileFollowUpOntoParams struct {
+	FiledItemID *uuid.UUID
+	At          time.Time
+	ID          uuid.UUID
+}
+
+// A follow-up filed as, or onto, an item: one it became, an open one it duplicates or a triage item.
+func (q *Queries) FileFollowUpOnto(ctx context.Context, arg FileFollowUpOntoParams) (FollowUp, error) {
+	row := q.db.QueryRow(ctx, fileFollowUpOnto, arg.FiledItemID, arg.At, arg.ID)
+	var i FollowUp
+	err := row.Scan(
+		&i.ID,
+		&i.OrgID,
+		&i.FactoryID,
+		&i.ItemID,
+		&i.RunID,
+		&i.Station,
+		&i.Agent,
+		&i.Text,
+		&i.TextKey,
+		&i.Target,
+		&i.ForFactory,
+		&i.ForNumber,
+		&i.Start,
+		&i.State,
+		&i.Reason,
+		&i.FiledItemID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const followUpItemsSince = `-- name: FollowUpItemsSince :one
+SELECT count(*) FROM work_items
+WHERE factory_id = $1 AND origin = 'follow-up' AND created_by IS NULL AND NOT triage
+  AND created_at > $2
+`
+
+type FollowUpItemsSinceParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+}
+
+// How many follow-up items the engine filed into the factory since a time, triage items aside
+// (work_items_follow_up_cap_idx): the daily cap's count.
+func (q *Queries) FollowUpItemsSince(ctx context.Context, arg FollowUpItemsSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, followUpItemsSince, arg.FactoryID, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const itemFollowUps = `-- name: ItemFollowUps :many
@@ -194,8 +395,123 @@ func (q *Queries) KeepFollowUp(ctx context.Context, arg KeepFollowUpParams) erro
 	return err
 }
 
+const landedFollowUps = `-- name: LandedFollowUps :many
+SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+LEFT JOIN work_items p ON p.id = s.parent_id
+WHERE f.state = 'waiting' AND f.target IN ('start', 'triage')
+  AND COALESCE(s.parent_id, s.id) = $1::uuid
+  AND (s.state = 'cancelled' OR p.state = 'cancelled'
+       OR (COALESCE(p.state, s.state) = 'done' AND NOT s.untrusted))
+ORDER BY f.created_at, f.id
+FOR UPDATE OF f SKIP LOCKED
+`
+
+// Every waiting start or triage follow-up of a root and its parts that ClaimLandedFollowUp would
+// take, oldest first, locked; the claimed one is already this transaction's.
+func (q *Queries) LandedFollowUps(ctx context.Context, rootID uuid.UUID) ([]FollowUp, error) {
+	rows, err := q.db.Query(ctx, landedFollowUps, rootID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FollowUp
+	for rows.Next() {
+		var i FollowUp
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.Station,
+			&i.Agent,
+			&i.Text,
+			&i.TextKey,
+			&i.Target,
+			&i.ForFactory,
+			&i.ForNumber,
+			&i.Start,
+			&i.State,
+			&i.Reason,
+			&i.FiledItemID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockFollowUpCap = `-- name: LockFollowUpCap :exec
+SELECT pg_advisory_xact_lock(hashtextextended('goal.follow-ups:' || $1::uuid::text, 0))
+`
+
+// Serializes the follow-up items filed into one factory, and the find or file of its triage item,
+// so two instances cannot both read the cap's count below it or open two triage items. Taken
+// after the follow-ups' locks and before any item's.
+func (q *Queries) LockFollowUpCap(ctx context.Context, factoryID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockFollowUpCap, factoryID)
+	return err
+}
+
+const lockItemFollowUp = `-- name: LockItemFollowUp :one
+SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, COALESCE(w.state, '')::text AS filed_state, COALESCE(w.triage, false)::bool AS filed_triage
+FROM follow_ups f
+LEFT JOIN work_items w ON w.id = f.filed_item_id
+WHERE f.id = $1 AND f.item_id = $2
+FOR UPDATE OF f
+`
+
+type LockItemFollowUpParams struct {
+	ID     uuid.UUID
+	ItemID uuid.UUID
+}
+
+type LockItemFollowUpRow struct {
+	FollowUp    FollowUp
+	FiledState  string
+	FiledTriage bool
+}
+
+// One follow-up of an item, locked for a person's File or Drop, with the state of the item it was
+// filed onto (” when none) and whether that item is a triage item.
+func (q *Queries) LockItemFollowUp(ctx context.Context, arg LockItemFollowUpParams) (LockItemFollowUpRow, error) {
+	row := q.db.QueryRow(ctx, lockItemFollowUp, arg.ID, arg.ItemID)
+	var i LockItemFollowUpRow
+	err := row.Scan(
+		&i.FollowUp.ID,
+		&i.FollowUp.OrgID,
+		&i.FollowUp.FactoryID,
+		&i.FollowUp.ItemID,
+		&i.FollowUp.RunID,
+		&i.FollowUp.Station,
+		&i.FollowUp.Agent,
+		&i.FollowUp.Text,
+		&i.FollowUp.TextKey,
+		&i.FollowUp.Target,
+		&i.FollowUp.ForFactory,
+		&i.FollowUp.ForNumber,
+		&i.FollowUp.Start,
+		&i.FollowUp.State,
+		&i.FollowUp.Reason,
+		&i.FollowUp.FiledItemID,
+		&i.FollowUp.CreatedAt,
+		&i.FollowUp.UpdatedAt,
+		&i.FiledState,
+		&i.FiledTriage,
+	)
+	return i, err
+}
+
 const lockNoteTarget = `-- name: LockNoteTarget :one
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at FROM work_items WHERE factory_id = $1 AND number = $2 FOR NO KEY UPDATE
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage FROM work_items WHERE factory_id = $1 AND number = $2 FOR NO KEY UPDATE
 `
 
 type LockNoteTargetParams struct {
@@ -243,12 +559,150 @@ func (q *Queries) LockNoteTarget(ctx context.Context, arg LockNoteTargetParams) 
 		&i.Untrusted,
 		&i.StartAt,
 		&i.StartedAt,
+		&i.Triage,
+	)
+	return i, err
+}
+
+const markTriageItem = `-- name: MarkTriageItem :exec
+UPDATE work_items SET triage = true WHERE id = $1
+`
+
+func (q *Queries) MarkTriageItem(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markTriageItem, id)
+	return err
+}
+
+const openItemFiledFrom = `-- name: OpenItemFiledFrom :one
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage FROM follow_ups f
+JOIN work_items w ON w.id = f.filed_item_id
+WHERE f.item_id = $1 AND f.state = 'filed' AND NOT w.triage
+  AND w.state NOT IN ('done', 'cancelled')
+  AND lower(regexp_replace(btrim(w.title), '\s+', ' ', 'g')) = $2::text
+ORDER BY w.created_at
+LIMIT 1
+`
+
+type OpenItemFiledFromParams struct {
+	ItemID uuid.UUID
+	Key    string
+}
+
+// An open item already filed from a source item's follow-ups whose title is key (trimmed and case
+// folded, domain.FollowUpKey): a start follow-up with that title is filed onto it.
+func (q *Queries) OpenItemFiledFrom(ctx context.Context, arg OpenItemFiledFromParams) (WorkItem, error) {
+	row := q.db.QueryRow(ctx, openItemFiledFrom, arg.ItemID, arg.Key)
+	var i WorkItem
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ParentID,
+		&i.Type,
+		&i.Lane,
+		&i.Title,
+		&i.Body,
+		&i.Station,
+		&i.State,
+		&i.ClassOfService,
+		&i.Priority,
+		&i.Size,
+		&i.ReworkCount,
+		&i.CostUsd,
+		&i.Outputs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+		&i.OrgID,
+		&i.PartKey,
+		&i.PartPaths,
+		&i.Paths,
+		&i.BaseCommit,
+		&i.Trigger,
+		&i.Source,
+		&i.IntegrationBranch,
+		&i.IntegrationLandAt,
+		&i.Origin,
+		&i.Via,
+		&i.CreatedBy,
+		&i.Generation,
+		&i.Untrusted,
+		&i.StartAt,
+		&i.StartedAt,
+		&i.Triage,
+	)
+	return i, err
+}
+
+const rewriteTriageItem = `-- name: RewriteTriageItem :one
+UPDATE work_items SET title = $1, body = $2, priority = $3::bigint,
+  generation = $4::int, updated_at = $5
+WHERE id = $6
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage
+`
+
+type RewriteTriageItemParams struct {
+	Title      string
+	Body       string
+	Priority   int64
+	Generation int32
+	At         time.Time
+	ID         uuid.UUID
+}
+
+func (q *Queries) RewriteTriageItem(ctx context.Context, arg RewriteTriageItemParams) (WorkItem, error) {
+	row := q.db.QueryRow(ctx, rewriteTriageItem,
+		arg.Title,
+		arg.Body,
+		arg.Priority,
+		arg.Generation,
+		arg.At,
+		arg.ID,
+	)
+	var i WorkItem
+	err := row.Scan(
+		&i.ID,
+		&i.FactoryID,
+		&i.Number,
+		&i.ParentID,
+		&i.Type,
+		&i.Lane,
+		&i.Title,
+		&i.Body,
+		&i.Station,
+		&i.State,
+		&i.ClassOfService,
+		&i.Priority,
+		&i.Size,
+		&i.ReworkCount,
+		&i.CostUsd,
+		&i.Outputs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+		&i.OrgID,
+		&i.PartKey,
+		&i.PartPaths,
+		&i.Paths,
+		&i.BaseCommit,
+		&i.Trigger,
+		&i.Source,
+		&i.IntegrationBranch,
+		&i.IntegrationLandAt,
+		&i.Origin,
+		&i.Via,
+		&i.CreatedBy,
+		&i.Generation,
+		&i.Untrusted,
+		&i.StartAt,
+		&i.StartedAt,
+		&i.Triage,
 	)
 	return i, err
 }
 
 const triageFollowUp = `-- name: TriageFollowUp :one
-UPDATE follow_ups SET target = 'triage', for_factory = NULL, for_number = NULL, reason = $1,
+UPDATE follow_ups SET target = 'triage', for_factory = NULL, for_number = NULL, start = NULL, reason = $1,
   updated_at = $2
 WHERE id = $3
 RETURNING id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at
@@ -260,7 +714,8 @@ type TriageFollowUpParams struct {
 	ID     uuid.UUID
 }
 
-// A note that cannot go where it says: for triage, still waiting, its ref kept in the reason.
+// A note or a start that cannot go where it says: for triage, still waiting, its ref kept in the
+// reason.
 func (q *Queries) TriageFollowUp(ctx context.Context, arg TriageFollowUpParams) (FollowUp, error) {
 	row := q.db.QueryRow(ctx, triageFollowUp, arg.Reason, arg.At, arg.ID)
 	var i FollowUp
@@ -285,4 +740,68 @@ func (q *Queries) TriageFollowUp(ctx context.Context, arg TriageFollowUpParams) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const triageFollowUps = `-- name: TriageFollowUps :many
+SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, s.number AS source_number, s.title AS source_title, s.type AS source_type,
+  s.priority AS source_priority, s.generation AS source_generation
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+WHERE f.filed_item_id = $1 AND f.state = 'filed' AND f.target = 'triage'
+ORDER BY f.updated_at, f.created_at, f.id
+`
+
+type TriageFollowUpsRow struct {
+	FollowUp         FollowUp
+	SourceNumber     int64
+	SourceTitle      string
+	SourceType       string
+	SourcePriority   int16
+	SourceGeneration int32
+}
+
+// The follow-ups that joined a triage item, oldest first, with their source item's number, title,
+// type, priority and generation, for its title and brief.
+func (q *Queries) TriageFollowUps(ctx context.Context, itemID *uuid.UUID) ([]TriageFollowUpsRow, error) {
+	rows, err := q.db.Query(ctx, triageFollowUps, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TriageFollowUpsRow
+	for rows.Next() {
+		var i TriageFollowUpsRow
+		if err := rows.Scan(
+			&i.FollowUp.ID,
+			&i.FollowUp.OrgID,
+			&i.FollowUp.FactoryID,
+			&i.FollowUp.ItemID,
+			&i.FollowUp.RunID,
+			&i.FollowUp.Station,
+			&i.FollowUp.Agent,
+			&i.FollowUp.Text,
+			&i.FollowUp.TextKey,
+			&i.FollowUp.Target,
+			&i.FollowUp.ForFactory,
+			&i.FollowUp.ForNumber,
+			&i.FollowUp.Start,
+			&i.FollowUp.State,
+			&i.FollowUp.Reason,
+			&i.FollowUp.FiledItemID,
+			&i.FollowUp.CreatedAt,
+			&i.FollowUp.UpdatedAt,
+			&i.SourceNumber,
+			&i.SourceTitle,
+			&i.SourceType,
+			&i.SourcePriority,
+			&i.SourceGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

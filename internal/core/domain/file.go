@@ -49,7 +49,8 @@ type FileRequest struct {
 	// Priority is ignored for a part, which takes its assembly's.
 	Priority int
 	// Station, State and Class are where a trigger places its item; the line's first station,
-	// its arrival state and the type's class when empty. Only a trigger sets them.
+	// its arrival state and the type's class when empty. Only a trigger sets them, and a
+	// follow-up its Class (always standard, ADR 0040 decision 8).
 	Station string
 	State   ItemState
 	Class   ClassOfService
@@ -150,8 +151,10 @@ func checkLineage(r FileRequest) error {
 		return fmt.Errorf("a person's item is never untrusted: %w", ErrInvalid)
 	case (r.Assembly != nil) != (r.Origin == OriginPlan):
 		return fmt.Errorf("only a part has an assembly: %w", ErrInvalid)
-	case (r.Station != "" || r.State != "" || r.Class != "") && r.Origin != OriginTrigger:
+	case (r.Station != "" || r.State != "") && r.Origin != OriginTrigger:
 		return fmt.Errorf("only a trigger places its item: %w", ErrInvalid)
+	case r.Class != "" && r.Origin != OriginTrigger && r.Origin != OriginFollowUp:
+		return fmt.Errorf("only a trigger or a follow-up sets its item's class: %w", ErrInvalid)
 	}
 
 	return nil
