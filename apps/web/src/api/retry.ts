@@ -1,5 +1,5 @@
 // The retry rule of every query. A 4xx will not fix itself, and neither will a 503 whose code says goald
-// was built without the feature (judges-unavailable, evals-unavailable): the page shows the feature's
+// was built without the feature (jonah-unavailable): the page shows the feature's
 // empty state at once. Any other 5xx or a network blip is tried again, twice.
 import { ApiError } from './client';
 

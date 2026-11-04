@@ -17,15 +17,6 @@ export type {
   AuditPage,
   AuthConfig,
   AuthMode,
-  BakeOff,
-  BakeOffApply,
-  BakeOffArm,
-  BakeOffArmSummary,
-  BakeOffCase,
-  BakeOffCaseArm,
-  BakeOffJudged,
-  BakeOffList,
-  BakeOffStarted,
   Board,
   BoardLane,
   BoardLine,
@@ -64,16 +55,6 @@ export type {
   DraftRequest,
   DraftRequestList,
   DraftTree,
-  EvalCaseEntry,
-  EvalCaseFromRun,
-  EvalCheckedBy,
-  EvalEstimate,
-  EvalHistoryTry,
-  EvalList,
-  EvalResultState,
-  EvalRunRequest,
-  EvalRunStarted,
-  EvalSummary,
   EventPage,
   Factory,
   FactoryAttention,
@@ -284,18 +265,6 @@ export type SpendDay = Schemas['SpendDay'];
 export type SpendWindow = Schemas['SpendWindow'];
 export type WeekCost = Schemas['WeekCost'];
 
-// The judges API's shapes (ADR 0025), read from the generated schema.
-export type JudgeList = Schemas['JudgeList'];
-export type JudgeListEntry = Schemas['JudgeListEntry'];
-export type Judge = Schemas['Judge'];
-export type JudgeWrite = Schemas['JudgeWrite'];
-export type CreateJudgeRequest = Schemas['CreateJudgeRequest'];
-export type JudgeOutcome = Schemas['JudgeOutcome'];
-export type JudgeSummary = Schemas['JudgeSummary'];
-export type JudgeDay = Schemas['JudgeDay'];
-export type JudgeScore = Schemas['JudgeScore'];
-export type JudgeRunsOn = Schemas['JudgeRunsOn'];
-export type JudgeTries = Schemas['JudgeTries'];
 export type JonahOverview = Schemas['JonahOverview'];
 export type JonahPolicy = Schemas['JonahPolicy'];
 export type JonahObservation = Schemas['JonahObservation'];
@@ -308,5 +277,12 @@ export type Proposal = Schemas['Proposal'];
 export type ProposalFile = Schemas['ProposalFile'];
 export type ProposalEvidence = Schemas['ProposalEvidence'];
 export type ProposalDecided = Schemas['ProposalDecided'];
+export type ProposalTried = Schemas['ProposalTried'];
+export type TriedItem = Schemas['TriedItem'];
+export type TriedTry = Schemas['TriedTry'];
+export type KeptTest = Schemas['KeptTest'];
+export type KeptTestList = Schemas['KeptTestList'];
+export type Watch = Schemas['Watch'];
+export type WatchVerdict = Schemas['WatchVerdict'];
 export type TriggerTry = Schemas['TriggerTry'];
 export type TriggerTryStep = Schemas['TriggerTryStep'];

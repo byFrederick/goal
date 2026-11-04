@@ -32,7 +32,6 @@ import {
 import { PromptFull, PromptPreview } from './agent-prompt';
 import { AgentSettings } from './agent-settings';
 import { AskJonahButton } from './ask-jonah-button';
-import { BakeOffButton } from './bake-off-button';
 import { blockedSentence, reasonLabel, reasonShare } from './sentences';
 import { type AgentView, agentViews } from './views';
 
@@ -188,7 +187,6 @@ function AgentPageBody({ agent, view }: { agent: string; view: AgentView }) {
       <TopBarSlot
         crumb={agent}
         actions={[
-          <BakeOffButton key="bake-off" agent={agent} />,
           <Button key="prompt" asChild variant="secondary" size="sm">
             <Link
               to="/o/$org/f/$factory/definition/$section"
