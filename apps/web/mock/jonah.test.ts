@@ -62,7 +62,7 @@ describe('the mock Jonah API', () => {
     expect(all.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8, 7, 6]);
 
     const waiting = await call(api, '/factories/software/jonah/proposals?state=proposed', 'GET');
-    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([8, 7]);
+    expect(waiting.body.proposals.map((p: { number: number }) => p.number)).toEqual([9, 8, 7]);
   });
 
   it('queues a manual review with 202 and answers 409 review-in-flight to the next while it waits', async () => {
