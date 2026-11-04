@@ -11,12 +11,13 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 test.describe('the Secrets list', () => {
-  test('lists the ten secrets, warns about the one that expires soon, and shows no value', async ({ page }) => {
+  test('lists the eleven secrets, warns about the one that expires soon, and shows no value', async ({ page }) => {
     await page.goto('/o/acme/secrets');
     await expect(page).toHaveTitle('Secrets · Acme · Goal');
 
     const table = page.getByRole('table', { name: 'Secrets of Acme' });
-    await expect(table.getByRole('row')).toHaveCount(11);
+    // The header row and the mock's eleven secrets.
+    await expect(table.getByRole('row')).toHaveCount(12);
     await expect(table.getByRole('row').filter({ hasText: 'cloudflare-deploy' })).toContainText('3 days');
     await expect(page.getByRole('region', { name: 'Expiring' })).toContainText('cloudflare-deploy expires in 3 days');
     await expectAccessible(page);
@@ -36,7 +37,7 @@ test.describe('the Secrets list', () => {
     await page.getByRole('button', { name: 'New secret' }).click();
     const sheet = page.getByRole('dialog', { name: 'New secret' });
     await sheet.getByLabel('Name').fill('e2e-token');
-    await sheet.getByLabel('Value').fill('test-token');
+    await sheet.getByLabel('Value', { exact: true }).fill('test-token');
     await sheet.getByRole('button', { name: /Software/ }).click();
     await expectAccessible(page);
     await sheet.getByRole('button', { name: 'Add secret' }).click();
@@ -50,7 +51,7 @@ test.describe('the Secrets list', () => {
     await page.goto('/o/acme/secrets?new=true');
     const sheet = page.getByRole('dialog', { name: 'New secret' });
     await sheet.getByLabel('Name').fill('claude');
-    await sheet.getByLabel('Value').fill('test-token');
+    await sheet.getByLabel('Value', { exact: true }).fill('test-token');
     await sheet.getByRole('button', { name: 'Add secret' }).click();
 
     await expect(sheet.getByRole('alert')).toContainText('already exists');
@@ -83,7 +84,7 @@ test.describe('a secret’s page', () => {
     await page.goto('/o/acme/secrets/claude');
     await page.getByRole('region', { name: 'Value' }).getByRole('button', { name: 'Replace value' }).click();
     const dialog = page.getByRole('dialog', { name: /Replace the value of claude/ });
-    await dialog.getByLabel('Value').fill('test-token');
+    await dialog.getByLabel('Value', { exact: true }).fill('test-token');
     await dialog.getByRole('button', { name: 'Replace value' }).click();
 
     await expect(dialog).toBeHidden();
@@ -125,7 +126,7 @@ test.describe('Import secrets', () => {
 
     const happens = page.getByRole('region', { name: 'What happens' });
     await expect(happens).toContainText('3 found, 2 new, 1 already exists');
-    await expect(happens.getByText('Already exists')).toBeVisible();
+    await expect(happens.getByText('Already exists', { exact: true })).toBeVisible();
     await expectAccessible(page);
     await page.getByRole('button', { name: 'Import 2' }).click();
 

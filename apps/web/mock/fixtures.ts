@@ -425,7 +425,9 @@ export const orgCan = [
   'connection:browse',
   'connection:manage',
   'connection:read',
+  'factory:archive',
   'factory:create',
+  'factory:delete',
   'invitation:read',
   'knowledge:manage',
   'knowledge:read',
@@ -447,9 +449,12 @@ export const factoryCan = [
   'definition:publish',
   'factory:manage',
   'factory:read',
+  'intake:read',
   'item:create',
   'item:decide',
   'item:operate',
+  'trigger:try',
+  'webhook:manage',
 ];
 
 /** The organizations' ids. */
