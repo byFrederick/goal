@@ -43,12 +43,17 @@ var (
 	acmeBroken  = strings.Replace(acme, "kind: human", "kind: agent, agent: nobody", 1)
 )
 
-// decode reads a response body as T, failing the test on a status other than want.
+// decode reads a response body as T, failing the test on a status other than want, or on null where
+// T's generated types have a required array (nullArrays).
 func decode[T any](t *testing.T, r response, want int) T {
 	t.Helper()
 
 	if r.status != want {
 		t.Fatalf("status %d %s, want %d", r.status, r.body, want)
+	}
+
+	if paths, err := nullArrays[T](r.body); err == nil && len(paths) > 0 {
+		t.Errorf("null where the contract has an array, at %s: %s", strings.Join(paths, ", "), r.body)
 	}
 
 	var out T
