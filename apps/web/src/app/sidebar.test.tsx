@@ -326,6 +326,14 @@ describe('the sidebar', () => {
     expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
   });
 
+  it('starts a factory link’s accessible name with its visible name', async () => {
+    renderSidebar();
+    const sidebar = await nav();
+    const link = within(sidebar).getByRole('link', { name: /^sre factory/ });
+    expect(link.getAttribute('aria-label')).toBe('sre factory, 3 waiting on you');
+    expect(link.textContent?.startsWith('S')).toBe(true);
+  });
+
   it('keeps the Needs you row as tall as its siblings, with the badge centred and no stray text node', async () => {
     renderSidebar();
     const link = within(await nav()).getByRole('link', { name: /Needs you/ });

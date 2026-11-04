@@ -91,31 +91,38 @@ function SaveAndFinishLater({ org }: { org: OrgSummary | undefined }) {
 function Stepper({ step }: { step: OnboardingStepKey }) {
   const current = stepIndex(step);
   return (
-    <ol
-      aria-label={`Setup, step ${current + 1} of ${onboardingSteps.length}`}
-      className="m-0 flex max-w-xl list-none gap-2 overflow-x-auto p-0"
+    <section
+      aria-label="Setup steps"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+      tabIndex={0}
+      className="max-w-xl overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
     >
-      {onboardingSteps.map((s, i) => {
-        const isCurrent = i === current;
-        const done = i < current;
-        return (
-          <li
-            key={s.key}
-            aria-current={isCurrent ? 'step' : undefined}
-            className={cn(
-              'flex flex-auto flex-col gap-2 text-meta font-control whitespace-nowrap',
-              isCurrent ? 'text-ink' : done ? 'text-ink-soft' : 'text-muted',
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={cn('block h-1 rounded-full', isCurrent ? 'bg-run' : done ? 'bg-run' : 'bg-line')}
-            />
-            {s.label}
-          </li>
-        );
-      })}
-    </ol>
+      <ol
+        aria-label={`Setup, step ${current + 1} of ${onboardingSteps.length}`}
+        className="m-0 flex w-max min-w-full list-none gap-2 p-0"
+      >
+        {onboardingSteps.map((s, i) => {
+          const isCurrent = i === current;
+          const done = i < current;
+          return (
+            <li
+              key={s.key}
+              aria-current={isCurrent ? 'step' : undefined}
+              className={cn(
+                'flex flex-auto flex-col gap-2 text-meta font-control whitespace-nowrap',
+                isCurrent ? 'text-ink' : done ? 'text-ink-soft' : 'text-muted',
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn('block h-1 rounded-full', isCurrent ? 'bg-run' : done ? 'bg-run' : 'bg-line')}
+              />
+              {s.label}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 

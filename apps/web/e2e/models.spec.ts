@@ -58,3 +58,20 @@ for (const width of [375, 768, 1440]) {
     await expectNoHorizontalScroll(page);
   });
 }
+
+test('the Remove command buttons answer across 44 px on a phone', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the phone size');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/models');
+  await expect(heading(page)).toBeVisible();
+  await page.getByRole('button', { name: '+ Add a command' }).click();
+  await page.getByRole('textbox', { name: 'Command' }).fill('gh release');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const remove = page.getByRole('button', { name: 'Remove gh release' });
+  await expect(remove).toBeVisible();
+  // The hit area is a pseudo-element on a coarse pointer, so the drawn box stays small; the 44 px
+  // area is checked on the touch projects. Here the list item stays inside the viewport.
+  await expect(remove).toHaveClass(/pointer-coarse:before:-inset-3/);
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
