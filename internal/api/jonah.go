@@ -37,6 +37,9 @@ type JonahDeps struct {
 	// KeptDrafts starts and reads the open draft's kept tests (ADR 0039 decision 12);
 	// *jonah.KeptDrafts satisfies it. nil answers those routes with 503 jonah-unavailable.
 	KeptDrafts DraftKeptTests
+	// TryAgain adds tries to a proposal (ADR 0039 decision 11); *jonah.TryAgain satisfies it. nil
+	// answers the route with 503 jonah-unavailable.
+	TryAgain JonahTryAgain
 }
 
 // DraftKeptTests starts and reads the kept tests the open draft reaches; an error wrapping
@@ -44,6 +47,13 @@ type JonahDeps struct {
 type DraftKeptTests interface {
 	Start(ctx context.Context, f domain.FactoryID) (jonah.DraftTests, error)
 	Read(ctx context.Context, f domain.FactoryID) (jonah.DraftTests, error)
+}
+
+// JonahTryAgain estimates and queues Try again of a proposal as the person in ctx; its refusals
+// are ports.ErrNotFound, ErrProposalDecided, domain.ErrProposalStale, ErrProposalNotTriable,
+// ErrProposalNotTried and ErrLearningBudgetExhausted, which comes with the estimate.
+type JonahTryAgain interface {
+	Try(ctx context.Context, f domain.FactoryID, number int64, policy domain.JonahPolicy, confirm bool) (jonah.TryAgainEstimate, error)
 }
 
 // PastTryReads are the reads of ports.PastTries a proposal's tried makes.
@@ -134,6 +144,11 @@ func jonahProblem(err error) (gen.Problem, bool) {
 		p.Estimate = &gen.EvalEstimate{Usd: e.estimate.EstimateUsd, Unpriced: []string{}}
 	}
 
+	if e, ok := errors.AsType[*tryBudgetError](err); ok {
+		p.TryEstimate = &e.estimate
+		p.Estimate = &gen.EvalEstimate{Usd: e.estimate.EstimateUsd, Unpriced: []string{}}
+	}
+
 	return p, true
 }
 
@@ -144,8 +159,10 @@ type modelRefusal struct {
 	code   string
 }
 
-// modelRefusals are Try another model's refusals but the budget's.
+// modelRefusals are Try another model's and Try again's refusals but the budget's.
 var modelRefusals = []modelRefusal{
+	{domain.ErrProposalNotTriable, http.StatusUnprocessableEntity, "proposal-not-triable"},
+	{domain.ErrProposalNotTried, http.StatusConflict, "proposal-not-tried"},
 	{domain.ErrModelNotAllowed, http.StatusUnprocessableEntity, "model-not-allowed"},
 	{domain.ErrAgentNotTriable, http.StatusUnprocessableEntity, "agent-not-triable"},
 	{domain.ErrNoFinishedItems, http.StatusUnprocessableEntity, "no-finished-items"},
@@ -160,6 +177,15 @@ type modelBudgetError struct {
 
 func (e *modelBudgetError) Error() string { return e.err.Error() }
 func (e *modelBudgetError) Unwrap() error { return e.err }
+
+// tryBudgetError is Try again refused over Jonah's budget, with the estimate it refused.
+type tryBudgetError struct {
+	estimate gen.TryProposalEstimate
+	err      error
+}
+
+func (e *tryBudgetError) Error() string { return e.err.Error() }
+func (e *tryBudgetError) Unwrap() error { return e.err }
 
 func (s *server) GetJonahOverview(ctx context.Context, req gen.GetJonahOverviewRequestObject) (gen.GetJonahOverviewResponseObject, error) {
 	rec, err := s.jonahFactory(ctx, req.Factory)
@@ -715,6 +741,66 @@ func (s *server) ProposeAgentModel(ctx context.Context, req gen.ProposeAgentMode
 	out.Proposal = &proposal
 
 	return gen.ProposeAgentModel201JSONResponse(out), nil
+}
+
+func (s *server) TryJonahProposal(ctx context.Context, req gen.TryJonahProposalRequestObject) (gen.TryJonahProposalResponseObject, error) {
+	rec, err := s.jonahWrite(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.jonah.TryAgain == nil {
+		return nil, errJonahUnavailable
+	}
+
+	if _, err := s.proposal(ctx, rec.ID, req.Number); err != nil {
+		return nil, err
+	}
+
+	confirm := req.Body != nil && req.Body.Confirm != nil && *req.Body.Confirm
+
+	est, err := s.jonah.TryAgain.Try(ctx, rec.ID, req.Number, s.jonahPolicy(ctx, rec.ID), confirm)
+
+	switch {
+	case errors.Is(err, domain.ErrLearningBudgetExhausted):
+		return nil, &tryBudgetError{estimate: s.tryEstimateOut(ctx, rec.ID, est), err: err}
+	case err != nil:
+		return nil, err
+	}
+
+	out := gen.TryProposalResult{Estimate: s.tryEstimateOut(ctx, rec.ID, est)}
+	if !confirm {
+		return gen.TryJonahProposal200JSONResponse(out), nil
+	}
+
+	p, err := s.proposal(ctx, rec.ID, req.Number)
+	if err != nil {
+		return nil, err
+	}
+
+	proposal, err := s.proposalOut(ctx, rec, p)
+	if err != nil {
+		return nil, err
+	}
+
+	out.Proposal = &proposal
+
+	return gen.TryJonahProposal201JSONResponse(out), nil
+}
+
+// tryEstimateOut is est as the API answers it, each item with its ref and title in f.
+func (s *server) tryEstimateOut(ctx context.Context, f domain.FactoryID, est jonah.TryAgainEstimate) gen.TryProposalEstimate {
+	out := gen.TryProposalEstimate{
+		Number: est.Number, Items: make([]gen.TryProposalItem, 0, len(est.Items)), Tries: est.Tries, EstimateUsd: est.EstimateUSD,
+		BudgetLeftUsd: est.BudgetLeftUSD,
+	}
+
+	for _, it := range est.Items {
+		ref, title := s.itemRef(ctx, f, it.ItemID)
+		out.Items = append(out.Items, gen.TryProposalItem{ItemRef: ref, ItemTitle: title, Station: it.Station, Tries: it.Tries, RunCostUsd: it.RunCostUSD})
+	}
+
+	return out
 }
 
 // modelEstimateOut is est as the API answers it, each item with its ref in f.

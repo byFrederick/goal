@@ -48,6 +48,16 @@ var (
 	ErrNoFinishedItems = errors.New("the agent has no finished item to try the model on")
 )
 
+// Refusals of Try again (ADR 0039 decision 11).
+var (
+	// ErrProposalNotTriable refuses a proposal that reaches no station that can be tried, as a
+	// memory-only or flow-only one.
+	ErrProposalNotTriable = errors.New("the proposal changes no station that can be tried on past items")
+	// ErrProposalNotTried refuses a proposal that can be tried but has no tries yet: its first
+	// ones are queued by Jonah's sweep.
+	ErrProposalNotTried = errors.New("the proposal has not been tried yet, so there is nothing to try again")
+)
+
 // Audit actions of Jonah's decisions.
 const (
 	AuditProposalPublished = "learning_proposal.published"
@@ -56,6 +66,7 @@ const (
 	AuditReviewQueued      = "jonah_review.queued"
 	AuditProposalUndo      = "learning_proposal.undo_proposed"
 	AuditProposalModel     = "learning_proposal.model_proposed"
+	AuditProposalTried     = "learning_proposal.tried_again"
 )
 
 // Audit target kinds of Jonah's entries.

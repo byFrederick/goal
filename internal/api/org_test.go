@@ -350,6 +350,7 @@ var probes = map[string]probe{
 	"editProposal":       {method: http.MethodPost, path: acmeProposals + "/1/edit", org: testOrg, factory: acmeID},
 	"rejectProposal":     {method: http.MethodPost, path: acmeProposals + "/1/reject", body: rejectBody, org: testOrg, factory: acmeID},
 	"undoProposal":       {method: http.MethodPost, path: acmeProposals + "/1/undo", org: testOrg, factory: acmeID},
+	"tryJonahProposal":   {method: http.MethodPost, path: acmeProposals + "/1/try", org: testOrg, factory: acmeID},
 	"proposeAgentModel": {
 		method: http.MethodPost, path: "/v1/orgs/acme/factories/acme/agents/writer/model-proposal", body: `{"model":"claude-opus-5-5"}`,
 		org: testOrg, factory: acmeID,

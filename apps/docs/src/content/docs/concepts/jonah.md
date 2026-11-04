@@ -125,6 +125,14 @@ A try at any other station that passes the contract and the checks stays done wi
 
 A proposal that reaches a station is also tried on that station's [kept tests](#kept-tests): one try of each, or three for a model proposal. `tried.kept_tests` lists each of those tries with the test's item number, its station, its attempt and its result: `running` while it is queued or runs, then `passed`, `failed` or `error`. A proposal tried before kept tests ran on proposals has none.
 
+### Try again
+
+Try again adds tries to an open proposal, so you get more evidence before you decide it. Run `goal jonah try <number>`, or call `POST …/jonah/proposals/{number}/try` (it needs `definition:edit`).
+
+- **What it adds.** One more try of each item the proposal was tried on, or three more for a model proposal. Each new try reruns the same run of the item, at the same station and on the same model, and is queued like the proposal's first tries. `tried` lists the new attempts after the earlier ones.
+- **The estimate comes first.** Goal prices each new try at its item's original run cost and shows what is left of Jonah's budget. Nothing is queued yet. `goal jonah try` asks before it queues; `--yes` skips the question. Through the API, `{"confirm": true}` queues the tries.
+- **When it is refused.** 409 `learning-budget-exhausted`, with the estimate, when the tries cost more than what is left of Jonah's budget. 409 `proposal-decided` for a proposal that is no longer proposed, and 409 `proposal-not-tried` for one that has no tries yet: Jonah queues its first ones. 422 `proposal-not-triable` for a proposal that can't be tried, such as one that changes only memory or the flow.
+
 ## Kept tests
 
 A kept test is a past item that a person keeps, at a station it passed the first time, as a test. The item must keep passing there. Every change that reaches the station is tried on it: each proposal, and the draft you are about to publish. A failing kept test warns, and it never blocks a publish.
@@ -177,6 +185,7 @@ A goald without judges or evals shows the Judges, Evals and Bake-offs pages empt
 - A proposal's page shows its estimate, the diffs, why (the items and their reasons) and Tried on past items. A memory proposal lists its facts with the quotes they come from. A model proposal shows its three tries per item beside each item's result on the line. Approve and publish, Edit and Reject with a reason sit in the top bar, and on a phone Approve stays in the bar.
 - The Tests tab lists the kept tests by station, with who kept each and when. A person who can edit the definition removes one from its row menu.
 - `goal jonah` lists proposals. `show` displays the evidence and a unified diff, and `approve`, `edit` and `reject` decide one.
+- `goal jonah try` tries a proposal again on its past items.
 - `goal agent try-model` proposes another model for an agent.
 - `goal judge` and `goal eval` manage judges and eval runs. `goal bake-off` runs the comparisons.
 - `goal spend` shows what runs cost, judges and reviews included.

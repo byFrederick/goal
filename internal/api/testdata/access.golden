@@ -5044,6 +5044,32 @@ tryIntakeTrigger     pat-demoted      404 factory-not-found    404 org-not-found
 tryIntakeTrigger     pat-removed      401 unauthenticated      401 unauthenticated
 tryIntakeTrigger     pat-platform     200                      404 org-not-found
 tryIntakeTrigger     pat-deleted-org  401 unauthenticated      401 unauthenticated
+tryJonahProposal     anonymous        401 unauthenticated      401 unauthenticated
+tryJonahProposal     owner            200                      404 org-not-found
+tryJonahProposal     admin            200                      404 org-not-found
+tryJonahProposal     viewer           403 forbidden            404 org-not-found
+tryJonahProposal     approver         403 forbidden            404 org-not-found
+tryJonahProposal     editor           200                      404 org-not-found
+tryJonahProposal     member-no-roles  404 factory-not-found    404 org-not-found
+tryJonahProposal     other-org-owner  404 org-not-found        200
+tryJonahProposal     platform-admin   404 org-not-found        404 org-not-found
+tryJonahProposal     stale-owner      200                      404 org-not-found
+tryJonahProposal     key-scoped       403 forbidden            404 org-not-found
+tryJonahProposal     key-restricted   404 factory-not-found    404 org-not-found
+tryJonahProposal     key-other-org    404 org-not-found        200
+tryJonahProposal     key-expired      401 unauthenticated      401 unauthenticated
+tryJonahProposal     key-revoked      401 unauthenticated      401 unauthenticated
+tryJonahProposal     bearer-owner     200                      404 org-not-found
+tryJonahProposal     pat-approver     403 forbidden            404 org-not-found
+tryJonahProposal     pat-owner        200                      404 org-not-found
+tryJonahProposal     pat-viewer       403 forbidden            404 org-not-found
+tryJonahProposal     pat-other-org    404 org-not-found        200
+tryJonahProposal     pat-expired      401 unauthenticated      401 unauthenticated
+tryJonahProposal     pat-revoked      401 unauthenticated      401 unauthenticated
+tryJonahProposal     pat-demoted      404 factory-not-found    404 org-not-found
+tryJonahProposal     pat-removed      401 unauthenticated      401 unauthenticated
+tryJonahProposal     pat-platform     200                      404 org-not-found
+tryJonahProposal     pat-deleted-org  401 unauthenticated      401 unauthenticated
 tryJudge             anonymous        401 unauthenticated      401 unauthenticated
 tryJudge             owner            200                      404 org-not-found
 tryJudge             admin            200                      404 org-not-found

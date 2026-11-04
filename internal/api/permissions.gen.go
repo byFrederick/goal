@@ -244,6 +244,7 @@ var operationScopes = map[string]string{
 	"testRepository":             "factory:create",
 	"transferOwnership":          "org:transfer",
 	"tryIntakeTrigger":           "trigger:try",
+	"tryJonahProposal":           "definition:edit",
 	"tryJudge":                   "definition:publish",
 	"undoProposal":               "definition:edit",
 	"unlinkItem":                 "item:operate",

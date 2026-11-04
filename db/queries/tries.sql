@@ -2,21 +2,29 @@
 -- to the organization.
 
 -- name: LockProposal :one
--- The proposal whose tries are queued, locked so two sweeps queue its tries once.
-SELECT id, number FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id) AND id = sqlc.arg(id) FOR UPDATE;
+-- The proposal whose tries are queued, locked so two sweeps queue its tries once and two Try
+-- agains number their attempts in turn.
+SELECT id, number, state FROM jonah_proposals WHERE factory_id = sqlc.arg(factory_id) AND id = sqlc.arg(id) FOR UPDATE;
 
 -- name: ProposalHasTries :one
 SELECT EXISTS (SELECT 1 FROM tries WHERE proposal_id = sqlc.arg(proposal_id))::bool;
 
+-- name: LatestItemTry :one
+-- The proposal's try of the cited item with the highest attempt: what Try again copies. A
+-- kept-test try of the same item is not one (00108).
+SELECT * FROM tries
+WHERE proposal_id = sqlc.arg(proposal_id) AND item_id = sqlc.arg(item_id) AND kept_test_id IS NULL
+ORDER BY attempt DESC LIMIT 1;
+
 -- name: InsertTry :one
--- One try of a proposal: of an item it cites, or of a kept test with the content it runs on (00107).
+-- One try of a proposal: of an item it cites, or of a kept test with the content it runs on (00108).
 INSERT INTO tries (id, factory_id, proposal_id, item_id, attempt, station, original_run_id, model, kept_test_id, content_key, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(proposal_id), sqlc.arg(item_id), sqlc.arg(attempt), sqlc.arg(station),
         sqlc.arg(original_run_id), sqlc.arg(model), sqlc.narg(kept_test_id), sqlc.narg(content_key), sqlc.arg(created_at))
 RETURNING *;
 
 -- name: InsertPublishTry :one
--- One kept-test try of a publish (00107): no proposal, its version and edits its own. No row when
+-- One kept-test try of a publish (00108): no proposal, its version and edits its own. No row when
 -- the test has a publish's try of that content and attempt already (tries_publish_key).
 INSERT INTO tries (id, factory_id, item_id, attempt, station, original_run_id, model, kept_test_id, content_key, version_id, edits, created_at)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(item_id), sqlc.arg(attempt), sqlc.arg(station), sqlc.arg(original_run_id),

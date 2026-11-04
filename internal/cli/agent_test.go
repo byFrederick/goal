@@ -94,13 +94,21 @@ func modelGoald(t *testing.T, refusal *gen.Problem, status int) (*httptest.Serve
 func goalTryModel(t *testing.T, api, stdin string, args ...string) string {
 	t.Helper()
 
+	return goalAsked(t, api, stdin, agentCommand, append([]string{subTryModel}, args...))
+}
+
+// goalAsked runs cmd with args against api, answering its questions with stdin, and returns what
+// it printed and its exit code as the golden files hold them.
+func goalAsked(t *testing.T, api, stdin string, cmd command, args []string) string {
+	t.Helper()
+
 	var stdout, stderr bytes.Buffer
 
 	out := &printer{w: &stdout, e: &stderr, in: strings.NewReader(stdin)}
 	getenv := testEnv(t, api, map[string]string{envOrg: orgAcme})
 	code := 0
 
-	if err := errors.Join(agentCommand(t.Context(), out, getenv, append([]string{subTryModel}, args...)), out.err); err != nil {
+	if err := errors.Join(cmd(t.Context(), out, getenv, args), out.err); err != nil {
 		code = 1
 		_, _ = fmt.Fprintln(&stderr, "goal:", err)
 	}

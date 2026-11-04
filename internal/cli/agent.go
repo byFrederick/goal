@@ -64,7 +64,8 @@ func agentTryModel(ctx context.Context, out *printer, getenv func(string) string
 	}
 
 	if !*yes {
-		if ok, err := askYes(out, fmt.Sprintf("Propose %s for %s and queue its %s? [y/N] ", t.model, t.agent, plural(est.Tries, "try"))); err != nil || !ok {
+		if ok, err := askYes(out, fmt.Sprintf("Propose %s for %s and queue its %s? [y/N] ", t.model, t.agent, plural(est.Tries, "try")),
+			"nothing was proposed"); err != nil || !ok {
 			return err
 		}
 	}
@@ -117,9 +118,9 @@ func (t tryModel) propose(ctx context.Context, out *printer, confirm bool) (gen.
 	return answer.Estimate, nil
 }
 
-// askYes asks question and reports whether the answer is y or yes; any other answer prints that
-// nothing was proposed.
-func askYes(out *printer, question string) (bool, error) {
+// askYes asks question and reports whether the answer is y or yes; any other answer prints
+// declined.
+func askYes(out *printer, question, declined string) (bool, error) {
 	out.printf("%s", question)
 
 	answer, err := readLine(out.in)
@@ -131,7 +132,7 @@ func askYes(out *printer, question string) (bool, error) {
 		return true, nil
 	}
 
-	out.printf("nothing was proposed\n")
+	out.printf("%s\n", declined)
 
 	return false, nil
 }

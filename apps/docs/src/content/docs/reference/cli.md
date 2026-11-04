@@ -711,6 +711,16 @@ queue a review of what the factory finished, now
 
 Flags: `--factory F`.
 
+## goal jonah try
+
+```text
+goal jonah try <number> [--factory F] [--yes] [--json]
+```
+
+print what trying the proposal again costs: one more try per item it was tried on, three for a model proposal; ask, then queue them (--yes: without asking)
+
+Flags: `--factory F`, `--yes`, `--json`.
+
 ## goal test keep
 
 ```text

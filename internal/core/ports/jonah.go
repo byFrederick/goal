@@ -251,6 +251,13 @@ type PastTries interface {
 	// KeptTestTries is the factory's kept-test tries whose content key is key, from any proposal
 	// or publish, oldest first: what a publish of that content reuses.
 	KeptTestTries(ctx context.Context, factory domain.FactoryID, key string) ([]domain.PastTry, error)
+	// AddPastTries adds tries to the factory's proposal for Try again (ADR 0039 decision 11), all
+	// of them or none, under the proposal's lock: for each add, Tries copies of the item's try with
+	// the highest attempt (its station, original run and model), at the attempts after it, so a
+	// second call adds the next attempts. It returns the new tries in order. ErrNotFound when the
+	// proposal is not the organization's or has no try of an item, ErrProposalDecided when it is
+	// not proposed, and domain.ErrInvalid for an add of no tries or an item given twice.
+	AddPastTries(ctx context.Context, factory domain.FactoryID, proposal domain.ProposalID, adds []domain.PastTryAdd, at time.Time) ([]domain.PastTry, error)
 	// ProposalPastTries is the proposal's tries, oldest first.
 	ProposalPastTries(ctx context.Context, proposal domain.ProposalID) ([]domain.PastTry, error)
 	// PastTry is one try with its proposal's number. ErrNotFound when there is none.
