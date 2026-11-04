@@ -9,6 +9,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { Dialog as D } from 'radix-ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   attentionQuery,
@@ -234,6 +235,34 @@ describe('the phone top bar with actions', () => {
     fireEvent.keyDown(second, { key: 'Enter' });
     expect(onImport).toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+});
+
+describe('a hidden action that owns a dialog', () => {
+  it('keeps its dialog open after the menu closes, and returns focus to More actions', async () => {
+    topBar(
+      <>
+        <D.Root>
+          <D.Trigger>Try another model</D.Trigger>
+          <D.Portal>
+            <D.Content aria-describedby={undefined}>
+              <D.Title>Pick a model</D.Title>
+              <D.Close>Close</D.Close>
+            </D.Content>
+          </D.Portal>
+        </D.Root>
+        <button type="button">New item</button>
+      </>,
+    );
+    const more = screen.getByRole('button', { name: 'More actions' });
+    fireEvent.pointerDown(more, { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Try another model' }));
+    expect(await screen.findByRole('dialog', { name: 'Pick a model' })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Pick a model' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(more));
   });
 });
 
