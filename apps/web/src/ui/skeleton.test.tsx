@@ -54,4 +54,15 @@ describe('Skeleton', () => {
     const placeholder = screen.getByText('Placeholder bar').parentElement?.parentElement;
     expect(Array.from(placeholder?.classList ?? [])).toContain('pointer-events-none');
   });
+
+  it('takes the faded placeholder out of flow once ready, so the content sets the height', () => {
+    const { container, rerender } = render(<Card ready={false} />);
+    const placeholder = () => screen.getByText('Placeholder bar').parentElement?.parentElement;
+    expect(Array.from(placeholder()?.classList ?? [])).not.toContain('absolute');
+    rerender(<Card ready />);
+    expect(Array.from(placeholder()?.classList ?? [])).toEqual(
+      expect.arrayContaining(['absolute', 'inset-0', 'overflow-hidden']),
+    );
+    expect(Array.from(container.firstElementChild?.classList ?? [])).toContain('relative');
+  });
 });
