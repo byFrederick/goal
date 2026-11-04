@@ -285,8 +285,20 @@ function DeskState({
 }) {
   if (item.state === 'done') return null;
   if (wait) return <WaitLine waiting={wait} status={itemStatus(item)} className="text-meta" />;
-  if (item.state === 'waiting_human' && decides) return <Chip tone="you">{state.text}</Chip>;
-  if (state.tone === 'rework') return <Chip tone="rework">{state.text}</Chip>;
+  // A chip wraps inside a narrow column instead of reaching past it.
+  const wraps = 'min-w-0 max-w-full shrink whitespace-normal';
+  if (item.state === 'waiting_human' && decides)
+    return (
+      <Chip tone="you" className={wraps}>
+        {state.text}
+      </Chip>
+    );
+  if (state.tone === 'rework')
+    return (
+      <Chip tone="rework" className={wraps}>
+        {state.text}
+      </Chip>
+    );
   if (item.state === 'in_progress') {
     return (
       <span className="flex min-w-0 items-center gap-2 text-meta text-run-ink">

@@ -91,6 +91,11 @@ test('the 24-part assembly fits a phone, on its page and in the Items list', asy
   await expect(meter).toBeVisible();
   await page.waitForLoadState('networkidle');
   await expectNoHorizontalScroll(page);
-  const fits = await meter.evaluate((el) => el.getBoundingClientRect().right <= document.documentElement.clientWidth);
+  // Below 1024 px the list's table scrolls in its own box (MASTER.md, "Below 1024px wide tables scroll in their
+  // own box"), so the meter is held to its cell, not to the viewport: the page itself must not scroll.
+  const fits = await meter.evaluate((el) => {
+    const cell = el.closest('td');
+    return cell ? el.getBoundingClientRect().right <= cell.getBoundingClientRect().right : false;
+  });
   expect(fits).toBe(true);
 });

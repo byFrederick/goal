@@ -2348,9 +2348,9 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         }),
       );
     }
-    // The mock has no assemblies: an item has no parts, and adding one is refused as the API refuses it.
+    // An assembly's parts, whatever the assembly's state: a done assembly keeps its parts view.
     if (action === 'parts' && method === 'GET') {
-      const parts = it.state === 'assembly' ? partsOf(it.id) : [];
+      const parts = partsOf(it.id);
       const done = parts.filter((p) => p.state === 'done');
       const closed = parts.every((p) => p.state === 'done');
       const last = done.reduce((latest, p) => Math.max(latest, Date.parse(p.updated_at)), 0);

@@ -345,6 +345,15 @@ describe('Items filters in the URL', () => {
     expect(segments.filter((s) => s.className.includes('bg-rule'))).toHaveLength(2);
   });
 
+  it('bounds a 60-part assembly meter to its column and draws the continuous bar', async () => {
+    renderItems([assembly({ parts: { total: 60, merged: 20, in_progress: 1, waiting: 0, stations: [] } })]);
+
+    const meter = await screen.findByTestId('assembly-meter');
+    expect(meter.getAttribute('data-mode')).toBe('bar');
+    expect(meter.style.width).toBe('100%');
+    expect(meter.parentElement?.className).toContain('w-40');
+  });
+
   it('lines the assembly row up with the header, cell for cell', async () => {
     renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
 
