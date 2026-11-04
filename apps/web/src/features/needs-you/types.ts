@@ -1,7 +1,7 @@
 // What waits on a person, by the type MASTER.md's vocabulary gives it. Pure, so the mapping is
 // tested without a DOM. The API keeps the names (ADR 0016, decision 5): InboxEntryKind's decision is
 // a Decision, question is a Question (ADR 0018), tool_approval is an Approval (ADR 0031); andon,
-// rework_warning, blocked, expedite, knowledge_source and watch_worse (a published Jonah
+// rework_warning, blocked, expedite, knowledge_source, conversion and watch_worse (a published Jonah
 // proposal whose own number got worse, ADR 0039 decision 15) are Alerts.
 import type { InboxEntry } from '../../api/types';
 
@@ -17,6 +17,7 @@ const alertKinds: ReadonlySet<string> = new Set([
   'blocked',
   'expedite',
   'knowledge_source',
+  'conversion',
   'watch_worse',
 ]);
 

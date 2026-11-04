@@ -71,4 +71,50 @@ describe('the mock’s organization notification settings', () => {
     expect((await put(null)).status).toBe(403);
     expect((await fetch(`${base}${path}`)).status).toBe(200);
   });
+
+  describe('POST …/test', () => {
+    const test = (body?: unknown) =>
+      fetch(`${base}${path}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+
+    it('tests the saved setting without a body, and saves nothing', async () => {
+      const res = await test();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true, workspace: 'Acme' });
+      expect(await (await fetch(`${base}${path}`)).json()).toEqual({ slack_secret: 'slack-bot' });
+    });
+
+    it('answers slack-not-set with null or an empty body when nothing is saved', async () => {
+      await put(null);
+      expect(await (await test({ slack_secret: null })).json()).toEqual({ ok: false, error: 'slack-not-set' });
+      expect(await (await test()).json()).toEqual({ ok: false, error: 'slack-not-set' });
+      expect(await (await test({})).json()).toEqual({ ok: false, error: 'slack-not-set' });
+    });
+
+    it('tests a named secret open to all factories', async () => {
+      await put(null);
+      const res = await test({ slack_secret: 'slack-bot' });
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(JSON.parse(text)).toEqual({ ok: true, workspace: 'Acme' });
+      expect(await (await fetch(`${base}${path}`)).json()).toEqual({ slack_secret: null });
+    });
+
+    it('refuses an unknown secret with 404 and one limited to some factories with 400', async () => {
+      const unknown = await test({ slack_secret: 'no-such-secret' });
+      expect(unknown.status).toBe(404);
+      expect(await unknown.json()).toMatchObject({ code: 'secret-not-found' });
+      const limited = await test({ slack_secret: 'zendesk-token' });
+      expect(limited.status).toBe(400);
+      expect(await limited.json()).toMatchObject({ code: 'secret-not-allowed' });
+    });
+
+    it('refuses a caller without org:manage with 403', async () => {
+      await reset('viewer');
+      expect((await test()).status).toBe(403);
+    });
+  });
 });

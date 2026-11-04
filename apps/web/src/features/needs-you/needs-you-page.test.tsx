@@ -163,7 +163,7 @@ function renderPage({
 /** The phone's width: matchMedia answers the phone query with a match. */
 function phoneWidth() {
   window.matchMedia = ((query: string) => ({
-    matches: query === '(max-width: 767px)',
+    matches: query === '(max-width: 767px)' || query === '(max-width: 1023px)',
     media: query,
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -353,7 +353,7 @@ describe('Needs you: deciding a Decision', () => {
       knowledge_source: { source: 'handbook', error: '401 from the code host', failed_syncs: 3 },
     };
     renderPage({
-      search: { entry: failing.id },
+      search: { entry: failing.id, type: 'alert' },
       seed: [
         [inboxQuery(org.id).queryKey, inbox([failing])],
         [factoriesQuery(org.id).queryKey, factories()],
@@ -361,12 +361,94 @@ describe('Needs you: deciding a Decision', () => {
     });
 
     expect(await screen.findByText('401 from the code host', { selector: 'p' })).toBeTruthy();
-    expect(screen.getAllByText('handbook does not sync').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('handbook, which Software reads, does not sync').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/last sync|synced since/i)).toBeNull();
     expect(
       screen.getByText(/The last 3 syncs of handbook failed, so Software reads the files from before/),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open handbook' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+  });
+});
+
+describe('Needs you: a conversion that could not move to secrets', () => {
+  it('shows the factory, the reason, what to fix and a link to the definition', async () => {
+    const conversion: InboxEntry = {
+      ...alert,
+      id: 'conversion:factory-1',
+      kind: 'conversion',
+      factory,
+      andon: null,
+      conversion: {
+        reason: 'Connection aws-prod uses the aws kind.',
+        problems: ['connection aws-prod uses the aws kind', 'connection zendesk-prod has no secret'],
+      },
+    };
+    renderPage({
+      search: { entry: conversion.id, type: 'alert' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([conversion])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    expect((await screen.findAllByText('Software could not move to secrets')).length).toBeGreaterThan(0);
+    expect(screen.getByText('connection aws-prod uses the aws kind', { selector: 'li' })).toBeTruthy();
+    expect(screen.getByText('connection zendesk-prod has no secret', { selector: 'li' })).toBeTruthy();
+    expect(
+      screen.getByText(/keeps running on its current version until a version on secrets is published/),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open the definition' }).getAttribute('href')).toContain('/definition');
+    expect(screen.queryByText(/expedite/i)).toBeNull();
+  });
+});
+
+describe('Needs you: the rows of the two alerts', () => {
+  it('says which factory reads a failing source, and the error and its count under it', async () => {
+    const failing: InboxEntry = {
+      ...alert,
+      id: 'knowledge_source:factory-1:handbook',
+      kind: 'knowledge_source',
+      factory,
+      andon: null,
+      knowledge_source: { source: 'handbook', error: 'Confluence refused the token', failed_syncs: 3 },
+    };
+    renderPage({
+      search: { type: 'alert' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([failing])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const row = await screen.findByRole('link', { name: /handbook, which Software reads, does not sync/ });
+    expect(within(row).getByText('Confluence refused the token 3 times')).toBeTruthy();
+    expect(within(row).queryByText(/synced since|last sync/i)).toBeNull();
+  });
+
+  it('names the factory that could not move to secrets and gives the reason under it', async () => {
+    const conversion: InboxEntry = {
+      ...alert,
+      id: 'conversion:factory-1',
+      kind: 'conversion',
+      factory,
+      andon: null,
+      conversion: {
+        reason: 'Connection aws-prod uses the aws kind.',
+        problems: ['connection aws-prod uses the aws kind'],
+      },
+    };
+    renderPage({
+      search: { type: 'alert' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([conversion])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const row = await screen.findByRole('link', { name: /Software could not move to secrets/ });
+    expect(within(row).getByText('Connection aws-prod uses the aws kind.')).toBeTruthy();
+    expect(within(row).queryByText(/expedite/i)).toBeNull();
   });
 });
 
@@ -804,5 +886,24 @@ describe('Needs you: a proposal that made its number worse', () => {
 
     await screen.findAllByText('Proposal 14 made send-backs worse');
     expect(screen.queryByRole('button', { name: /Undo this change/ })).toBeNull();
+  });
+});
+
+describe('Needs you: truncated row text carries its full text', () => {
+  it('gives the row title and where-line a title attribute', async () => {
+    const long = 'A very long title that the row cuts off with an ellipsis when the list is narrow';
+    const entry: InboxEntry = { ...decision, item: card({ title: long }) };
+    renderPage({
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([entry])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const title = await screen.findByTitle(long);
+    expect(title.className).toContain('truncate');
+    const where = title.nextElementSibling as HTMLElement;
+    expect(where.className).toContain('truncate');
+    expect(where.getAttribute('title')).toBe(where.textContent);
   });
 });

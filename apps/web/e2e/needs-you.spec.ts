@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, orgNav } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll, orgNav } from './support';
 import { boxOf } from './support-boxes';
 
 // Needs you (/o/acme/needs-you): the list, the split detail and the phone's approve view, against the
@@ -13,6 +13,26 @@ test('the page lists what waits on you, with the count in the top bar', async ({
   await expect(page.getByRole('heading', { name: 'Needs you' })).toBeVisible();
   await expect(page.getByRole('list', { name: /Waiting on you/ })).toBeVisible();
   await expectNoHorizontalScroll(page);
+});
+
+test('the Alerts tab opens the failing source and the conversion that waits on the factory', async ({ page }) => {
+  await page.goto('/o/acme/needs-you');
+  await page.getByRole('radio', { name: /^Alerts/ }).check({ force: true });
+  await expect(page).toHaveURL(/type=alert/);
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+
+  await list.getByRole('link', { name: /dashboards, which .* reads, does not sync/ }).click();
+  const detail = page.getByRole('article');
+  await expect(detail.getByRole('heading', { name: /^dashboards, which .* reads, does not sync$/ })).toBeVisible();
+  await expect(list.getByText(/ \d+ times$/).first()).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Open dashboards' })).toBeVisible();
+
+  await list.getByRole('link', { name: /could not move to secrets/ }).click();
+  await expect(detail.getByRole('heading', { name: /could not move to secrets$/ })).toBeVisible();
+  await expect(detail.getByText(/connection aws-prod uses the aws kind/)).toBeVisible();
+  await expect(detail.getByText(/connection zendesk-prod has no secret/)).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Open the definition' })).toBeVisible();
+  await expect(page.getByText(/expedite/i)).toHaveCount(0);
 });
 
 test('the Decisions tab writes its type to the URL and hides the alerts', async ({ page }) => {
@@ -154,6 +174,38 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+// Below 1024 px the page shows the list, then the entry, so the detail always has a full column.
+test('at 768 px the filter row and the opened entry stay inside the screen', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/o/acme/needs-you');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  await expect(list).toBeVisible();
+  await expect(page.getByRole('button', { name: /All factories/ })).toBeVisible();
+  await expectNoClippedElements(page);
+  await expectNoHorizontalScroll(page);
+
+  await list.getByRole('link').first().click();
+  await expect(page.getByRole('link', { name: 'Back to Needs you' })).toBeVisible();
+  await expectNoClippedElements(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('at 390 px the tabs scroll sideways and Alerts can be selected', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/needs-you');
+  const alerts = page.getByRole('radio', { name: /Alerts/ });
+  await alerts.evaluate((el) => el.parentElement?.scrollIntoView({ inline: 'center', block: 'nearest' }));
+  await alerts.check({ force: true });
+  await expect(page).toHaveURL(/type=alert/);
+  const inView = await alerts.evaluate((el) => {
+    const box = (el.parentElement as HTMLElement).getBoundingClientRect();
+    return box.left >= 0 && box.right <= document.documentElement.clientWidth;
+  });
+  expect(inView).toBe(true);
+  await expectNoHorizontalScroll(page);
+  await expectNoClippedElements(page);
+});
 
 test('Undo this change on a watch_worse entry lands on the undo proposal', async ({ page }) => {
   // The mock seeds software's published proposal 5, whose sent-back rate got worse (mock/jonah.ts); the undo is

@@ -276,6 +276,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     // Read at request time: the connections are made just below.
     connections: (org) => connections.outlines(org),
     knowledgeSources: (org) => knowledge.names(org),
+    knowledgeIndex: (org, name) => knowledge.indexOf(org, name),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -323,7 +324,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   });
 
   const orgNotifications = createOrgNotifications({
-    secretNames: (org) => secrets.outlines(org).map((s) => s.name),
+    secrets: (org) => secrets.outlines(org),
     acme: acmeOrg,
   });
 
@@ -695,7 +696,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   /** The organization as the caller sees it: their role, and what it allows. */
   const forCaller = (req: IncomingMessage, o: Org): Org => {
     const role = roleIn(req, o.id);
-    return role ? { ...o, role, can: orgCanOf(role, orgCan) } : o;
+    return role ? { ...o, role, can: orgCanOf(sources.table, role) } : o;
   };
 
   /**
@@ -1164,6 +1165,14 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     };
   };
 
+  /** What stops goald converting a factory to secrets and environment files (ADR 0037), by factory name. */
+  const conversionProblems: Record<string, string[]> = {
+    support: [
+      'connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory',
+      'connection zendesk-prod has no secret to move: add one in Secrets and name it in the factory',
+    ],
+  };
+
   /** An entry of kind about `what` of factory f, waiting since. */
   const entry = (f: Factory, kind: InboxEntry['kind'], what: string, since: string): InboxEntry => ({
     id: `${kind}:${what}`,
@@ -1266,8 +1275,38 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         return it.class_of_service === 'expedite' && open(it) ? [base] : [];
       });
 
+    // As goald's work source makes them: each failing source the factory lists, then a conversion.
+    const listed = definitions.knowledgeSourceNames(f);
+    const syncs = knowledge
+      .sources(f.org_id)
+      .filter((s) => s.status === 'failed' && (s.sync_failures ?? 0) >= 3 && listed.includes(s.name))
+      .map(
+        (s): InboxEntry => ({
+          ...entry(f, 'knowledge_source', `${f.id}:${s.name}`, s.updated_at),
+          knowledge_source: { source: s.name, error: s.last_error ?? '', failed_syncs: s.sync_failures ?? 0 },
+        }),
+      );
+    const problems = conversionProblems[f.name];
+    const conversions: InboxEntry[] = problems
+      ? [
+          {
+            ...entry(f, 'conversion', f.id, new Date(clock() - 2 * 3_600_000).toISOString()),
+            conversion: {
+              reason: problems.map((p) => `${p.charAt(0).toUpperCase()}${p.slice(1)}.`).join(' '),
+              problems,
+            },
+          },
+        ]
+      : [];
     const pull = openAndon(f);
-    if (pull) return [...items, { ...entry(f, 'andon', String(pull.id), pull.pulled_at), andon: pull }];
+    if (pull) {
+      return [
+        ...items,
+        ...syncs,
+        ...conversions,
+        { ...entry(f, 'andon', String(pull.id), pull.pulled_at), andon: pull },
+      ];
+    }
 
     const gates = state.gates[f.name];
     const now = new Date(clock()).toISOString();
@@ -1296,7 +1335,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         watch: w.watch,
       }),
     );
-    return [...items, ...warnings, ...worse];
+    return [...items, ...syncs, ...conversions, ...warnings, ...worse];
   };
 
   const kindOrder: InboxEntry['kind'][] = [
@@ -1307,6 +1346,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     'rework_warning',
     'blocked',
     'expedite',
+    'knowledge_source',
+    'conversion',
     'watch_worse',
   ];
 
@@ -1371,7 +1412,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   /**
    * One agent's statistics: the fixture's measures (zeros for an agent without any) over the
    * request's range, with the stations whose agents are its copies (builder-1 → builder) or the current version routes to it. Null
-   * for an agent the factory does not have; a string for a bad range.
+   * for an agent the definition does not declare (one on no station is declared, with no stations); a string for a bad range.
    */
   const agentStatsOf = (factory: Factory, agent: string, params: URLSearchParams): AgentStats | string | null => {
     const config = state.stations[factory.name] ?? {};
@@ -1386,7 +1427,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         slots: config[s.id]?.copies ?? 1,
         constraint: state.constraint[factory.name] === s.id,
       }));
-    if (stations.length === 0) return null;
+    // goald answers 404 only for an agent the definition does not declare (internal/api/agents.go); one on no station has no stations.
+    if (stations.length === 0 && !definitions.agentNames(factory).includes(agent)) return null;
     const range = rangeOf(params, clock());
     if (typeof range === 'string') return range;
     const measured: MockAgentStats = state.agentStats[factory.name]?.[agent] ?? {
