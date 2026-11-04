@@ -253,10 +253,10 @@ describe('board lanes', () => {
     const work = within(columns).getByRole('link', { name: WORKING }).closest('article') as HTMLElement;
     const row = within(columns).getByRole('link', { name: QUEUED }).closest('article') as HTMLElement;
     for (const card of [work, row]) {
-      const line = within(card).getByRole('link', { name: 'Part 4 of 6 of Migrate billing' });
+      const line = within(card).getByRole('link', { name: /^Migrate billing.*4 of 6/ });
       expect(line.getAttribute('href')).toBe('/o/acme/f/sre/items/40');
       expect(within(line).getByText('Migrate billing').getAttribute('title')).toBe('Migrate billing');
-      expect(within(line).getByText('› 4 of 6').classList).toContain('whitespace-nowrap');
+      expect(within(line).getByText('4 of 6').classList).toContain('whitespace-nowrap');
       expect(within(line).getByText('Migrate billing').classList).toContain('truncate');
     }
   });
@@ -267,9 +267,9 @@ describe('board lanes', () => {
     renderBoardPage({ page: BoardPage, org, factory, board: board({}, [{ ...workItem, assembly }]) });
 
     const columns = await phonePanel();
-    const line = within(columns).getByRole('link', { name: `Part 12 of 14 of ${longTitle}` });
+    const line = within(columns).getByRole('link', { name: new RegExp(`^${longTitle}.*12 of 14`) });
     expect(within(line).getByText(longTitle).classList).toContain('truncate');
-    expect(within(line).getByText('› 12 of 14').classList).toContain('shrink-0');
+    expect(within(line).getByText('12 of 14').classList).toContain('shrink-0');
     expect(line.classList).toContain('relative');
     expect(line.classList).toContain('z-10');
   });
@@ -300,7 +300,7 @@ describe('board lanes', () => {
       factory,
     });
 
-    const lines = await screen.findAllByRole('link', { name: 'Part 4 of 6 of Migrate billing' });
+    const lines = await screen.findAllByRole('link', { name: /^Migrate billing.*4 of 6/ });
     expect(lines).toHaveLength(2);
     for (const line of lines) expect(line.getAttribute('href')).toBe('/o/acme/f/sre/items/40');
   });
