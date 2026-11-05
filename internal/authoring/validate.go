@@ -74,6 +74,9 @@ const (
 	// progress must finish or be stopped first; the others need a station move, offered as
 	// fixes on the publish request.
 	CodeItemsAtRemovedStation = "items-at-removed-station"
+	// CodeItemsUseRemovedRepository: open items use a repository that an entry of the running
+	// version covers and no entry of the draft does (ADR 0041 decision 4).
+	CodeItemsUseRemovedRepository = "items-use-removed-repository"
 )
 
 // FixSectionPublish is the Section of a fix that patches the publish request instead of the
@@ -231,7 +234,12 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 			return ownResult{}, err
 		}
 
-		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckItems)
+		r, err := s.repositoryProblems(ctx, c, f)
+		if err != nil {
+			return ownResult{}, err
+		}
+
+		out.problems, out.ran = append(append(out.problems, p...), r...), append(out.ran, CheckItems)
 	}
 
 	if s.credentials != nil {
@@ -336,6 +344,57 @@ func (s *Service) itemProblems(ctx context.Context, c candidate, f *config.Facto
 	}
 
 	return out, nil
+}
+
+// repositoryProblems reports each repository open items use (their work_item_repositories rows)
+// that an entry of the running version covers and no entry of the draft does, naming the items.
+// Entries match by URL, so renaming one that keeps its URL removes nothing.
+func (s *Service) repositoryProblems(ctx context.Context, c candidate, f *config.Factory) ([]domain.DefinitionProblem, error) {
+	current := runningEntries(c.current)
+	if len(current) == 0 {
+		return nil, nil
+	}
+
+	uses, err := s.loads.OpenItemRepositories(ctx, c.factory)
+	if err != nil {
+		return nil, fmt.Errorf("read the repositories of open items: %w", err)
+	}
+
+	loc := f.Locate("/spec/runtime/repositories")
+
+	var out []domain.DefinitionProblem
+
+	for _, r := range domain.RemovedRepositories(current, f.Line().Runtime.Repositories, uses) {
+		numbers := make([]string, 0, len(r.Items))
+		for _, n := range r.Items {
+			numbers = append(numbers, fmt.Sprintf("#%d", n))
+		}
+
+		which := "open item " + numbers[0] + " uses; keep an entry with its URL, or finish or cancel the item first"
+		if len(numbers) > 1 {
+			which = "open items " + strings.Join(numbers, ", ") + " use; keep an entry with its URL, or finish or cancel the items first"
+		}
+
+		out = append(out, loc.Problem(CheckItems, CodeItemsUseRemovedRepository, domain.SeverityError,
+			fmt.Sprintf("the draft removes the entry for %s, which %s", r.Repo, which)))
+	}
+
+	return out, nil
+}
+
+// runningEntries are the runtime.repositories entries of the running version; none when it has
+// no factory.yaml or it no longer loads, which then removes nothing.
+func runningEntries(current *tree) []domain.RepositoryEntry {
+	if _, ok, err := current.file(config.FileName); err != nil || !ok {
+		return nil
+	}
+
+	cf, _ := config.Check(current)
+	if cf == nil {
+		return nil
+	}
+
+	return cf.Line().Runtime.Repositories
 }
 
 // moveFixes offers one station move per station of the new line.
@@ -474,7 +533,7 @@ var staticSummaries = map[string]string{
 	"removed":          "Uses none of the removed forms",
 	"moved":            "Uses none of the keys moved to environment files",
 	"environments":     "Every environment file is well formed and every secret reference is in its place",
-	CheckItems:         "No open items at a removed station",
+	CheckItems:         "No open items at a removed station or on a removed repository",
 	"availability":     "Everything it declares is available on this install",
 	config.CheckPolicy: "Every model it names is one the organization allows",
 }

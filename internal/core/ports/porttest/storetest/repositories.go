@@ -15,6 +15,7 @@ var repositoriesTests = []struct {
 }{
 	{"CreateItem_StoresBranchAndRepositories", testCreateItemStoresBranchAndRepositories},
 	{"ItemRepositories_InJoinOrder", testItemRepositoriesInJoinOrder},
+	{"OpenItemRepositories_OnlyOpenItems", testOpenItemRepositoriesOnlyOpenItems},
 }
 
 // The repositories the cases name.
@@ -112,5 +113,46 @@ func testItemRepositoriesInJoinOrder(f *fixture) {
 
 	if got := f.itemRepositories(t, missingItem); len(got) != 0 {
 		t.Errorf("unknown item = %+v; want none", got)
+	}
+}
+
+// OpenItemRepositories lists the repositories of the factory's open items, one use per item and
+// repository, by repository then item number: not a done or cancelled item's, another factory's
+// or another organization's.
+func testOpenItemRepositoriesOnlyOpenItems(f *fixture) {
+	t := f.t
+
+	filed := func(repos ...string) []domain.ItemRepository {
+		out := make([]domain.ItemRepository, 0, len(repos))
+		for _, r := range repos {
+			out = append(out, domain.ItemRepository{Repo: r, Joined: domain.JoinedFiling})
+		}
+
+		return out
+	}
+
+	a := f.create(t, domain.NewItem{Repositories: filed(repoWeb, repoAPI)})
+	b := f.create(t, domain.NewItem{Repositories: filed(repoAPI)})
+	f.land(t, f.create(t, domain.NewItem{Repositories: filed(repoOps)}), domain.StateDone, t1)
+	f.cancel(t, f.create(t, domain.NewItem{Repositories: filed(repoOps)}), t1)
+	f.create(t, domain.NewItem{FactoryID: f.newFactory(t), Repositories: filed(repoOps)})
+	f.create(t, domain.NewItem{})
+
+	got, err := f.Store.OpenItemRepositories(f.ctx(t), f.factory)
+	if err != nil {
+		t.Fatalf("OpenItemRepositories: %v", err)
+	}
+
+	want := []domain.RepositoryUse{
+		{Repo: repoAPI, Item: a.ID, Number: a.Number},
+		{Repo: repoAPI, Item: b.ID, Number: b.Number},
+		{Repo: repoWeb, Item: a.ID, Number: a.Number},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("uses =\n%+v\nwant\n%+v", got, want)
+	}
+
+	if got, err := f.Store.OpenItemRepositories(domain.WithOrg(t.Context(), f.NewOrg(t)), f.factory); err != nil || len(got) != 0 {
+		t.Errorf("another organization's OpenItemRepositories = %+v, %v; want none", got, err)
 	}
 }
