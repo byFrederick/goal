@@ -1,8 +1,12 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -115,5 +119,129 @@ func TestFollowUps_FileAndDropRefusals(t *testing.T) {
 
 	if code := h.call(t, http.MethodPost, followUpPath(src.Id, f.ID, "file"), `{"title":"a","type":"no-such-type"}`, nil); code != http.StatusBadRequest {
 		t.Errorf("file with a type the line does not take = %d; want 400", code)
+	}
+}
+
+// keepFollowUps keeps fs on item it, as an accepted run of writer at its station would.
+func (h *harness) keepFollowUps(t *testing.T, it gen.Item, fs ...domain.FollowUp) {
+	t.Helper()
+
+	for i := range fs {
+		fs[i].Station, fs[i].Agent, fs[i].State = it.Station, "writer", domain.FollowUpWaiting
+	}
+
+	at := domain.Position{Station: it.Station, State: domain.ItemState(it.State)}
+	if _, err := h.store.Transition(inOrg(t), ports.Transition{ItemID: domain.ItemID(it.Id), From: at, To: at, At: t0, FollowUps: fs}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An item's follow-ups answer oldest first, each saying where it went or will go: a note its
+// item, a start its plan (another factory named) and the item it was filed as there, a triage
+// one the triage item it joined. The item says how it was filed and by whom.
+func TestGetItem_FollowUpsSayWhereTheyGo(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	src, target := h.submit(t), h.submit(t)
+
+	h.keepFollowUps(t, src,
+		domain.FollowUp{Text: "Mind the cache", Target: domain.FollowUpNote, For: &domain.ItemRef{Factory: "acme", Number: target.Number}},
+		domain.FollowUp{Text: "Check the line", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{In: "7d", Title: "Check the line", Factory: "line"}},
+		domain.FollowUp{Text: "Retry after it", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{After: []string{target.Ref}, Title: "Retry"}},
+		domain.FollowUp{Text: "Tidy the docs", Target: domain.FollowUpTriage},
+	)
+
+	acmeNotes := domain.NoteFactory{ID: acmeID, Name: "acme"}
+	if _, err := h.store.DeliverNotes(inOrg(t), []domain.NoteFactory{acmeNotes, {ID: lineID, Name: "line"}}, t0, 10); err != nil {
+		t.Fatal(err)
+	}
+
+	h.land(t, src, domain.Line{
+		FactoryID: lineID, Name: "line", Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}},
+		Flow: domain.FlowPolicy{FollowUpsFrom: []domain.FactoryID{acmeID}},
+	})
+
+	got := h.getItem(t, src.Id)
+	if got.FollowUps == nil || len(*got.FollowUps) != 4 {
+		t.Fatalf("follow_ups = %+v; want 4", got.FollowUps)
+	}
+
+	var lines []string
+
+	for _, f := range *got.FollowUps {
+		start := "-"
+		if s := f.Start; s != nil {
+			var after []string
+			if s.After != nil {
+				after = *s.After
+			}
+
+			start = fmt.Sprintf("in %s after %v in %s", deref(s.In), after, deref(s.Factory))
+		}
+
+		lines = append(lines, fmt.Sprintf("%s %s for %s start %s filed %s", f.Text, f.State, deref(f.For), start, deref(f.FiledItem)))
+	}
+
+	want := []string{
+		"Mind the cache delivered for acme#2 start - filed ",
+		"Check the line filed for  start in 7d after [] in line filed line#1",
+		"Retry after it filed for  start in  after [acme#2] in  filed acme#3",
+		"Tidy the docs filed for  start - filed acme#4",
+	}
+	if !slices.Equal(lines, want) {
+		t.Errorf("follow_ups =\n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
+	}
+
+	if got.Via == nil || *got.Via != gen.ItemViaWeb && *got.Via != gen.ItemViaCli || got.CreatedBy == nil || got.Untrusted == nil || *got.Untrusted {
+		t.Errorf("item via %v by %+v untrusted %v; want filed by a person, trusted", got.Via, got.CreatedBy, got.Untrusted)
+	}
+
+	if triage := h.getItem(t, deref((*got.FollowUps)[3].FiledItemId)); triage.CreatedBy != nil {
+		t.Errorf("triage item created_by = %+v; want none for the engine's filing", triage.CreatedBy)
+	}
+}
+
+// The notes on an item answer oldest first with their source: another item's (its ref, factory,
+// station and agent) or a trigger's check (its trigger and agent).
+func TestGetItem_NotesFromOtherItems(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	src, target := h.submit(t), h.submit(t)
+
+	h.keepFollowUps(t, src, domain.FollowUp{Text: "Mind the cache", Target: domain.FollowUpNote, For: &domain.ItemRef{Factory: "acme", Number: target.Number}})
+
+	if _, err := h.store.DeliverNotes(inOrg(t), []domain.NoteFactory{{ID: acmeID, Name: "acme"}}, t0, 10); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.store.AppendEvents(inOrg(t), domain.Event{
+		ItemID: domain.ItemID(target.Id), Kind: domain.EventItemNote, At: t0.Add(time.Minute),
+		Data: domain.CheckNoteData("new-incidents", "INC-1", "writer", "run-1", "Seen again"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := h.getItem(t, target.Id)
+	if got.Notes == nil {
+		t.Fatal("notes absent; want two")
+	}
+
+	var lines []string
+	for _, n := range *got.Notes {
+		lines = append(lines, fmt.Sprintf("%s from %s of %s at %s by %s trigger %s", n.Text, deref(n.FromItem), deref(n.FromFactoryId), deref(n.Station), n.Agent, deref(n.Trigger)))
+	}
+
+	want := []string{
+		"Mind the cache from acme#1 of " + acmeID + " at inbox by writer trigger ",
+		"Seen again from  of  at  by writer trigger new-incidents",
+	}
+	if !slices.Equal(lines, want) {
+		t.Errorf("notes =\n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
+	}
+
+	if s := h.getItem(t, src.Id); s.Notes == nil || len(*s.Notes) != 0 {
+		t.Errorf("source notes = %+v; want an empty list", s.Notes)
 	}
 }

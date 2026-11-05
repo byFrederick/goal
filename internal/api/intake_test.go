@@ -757,3 +757,261 @@ func TestTriggerChecks_Try(t *testing.T) {
 		}
 	}
 }
+
+// filedAt creates an open item of acme at its inbox, as n says.
+func (h *harness) filedAt(t *testing.T, n domain.NewItem) domain.Item {
+	t.Helper()
+
+	n.FactoryID, n.Type, n.Station, n.State, n.Class = acmeID, typeFix, stInbox, domain.StateQueued, domain.ClassStandard
+	if n.CreatedAt.IsZero() {
+		n.CreatedAt = t0
+	}
+
+	it, err := h.store.CreateItem(inOrg(t), n)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// Origins count acme's items created in the window, ending now, by origin, zero included; the
+// window is 30d unless asked for, and sources answer as before.
+func TestIntake_OriginsByWindow(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, n := range []struct {
+		origin domain.Origin
+		age    time.Duration
+	}{
+		{domain.OriginPerson, time.Hour}, {domain.OriginPerson, 10 * 24 * time.Hour}, {domain.OriginTrigger, 2 * 24 * time.Hour},
+		{domain.OriginFollowUp, 40 * 24 * time.Hour}, {domain.OriginPlan, 100 * 24 * time.Hour},
+	} {
+		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, Source: domain.ItemFromPeople, CreatedAt: t0.Add(-n.age)})
+	}
+
+	for _, c := range []struct{ query, want string }{
+		{"", "30d {FollowUp:0 Person:2 Plan:0 Trigger:1}"},
+		{"?window=7d", "7d {FollowUp:0 Person:1 Plan:0 Trigger:1}"},
+		{"?window=90d", "90d {FollowUp:1 Person:2 Plan:0 Trigger:1}"},
+	} {
+		var in gen.Intake
+		if code := h.call(t, http.MethodGet, intakePath+c.query, "", &in); code != http.StatusOK || in.Window == nil || in.Origins == nil {
+			t.Fatalf("intake%s = %d %+v; want 200 with a window and origins", c.query, code, in)
+		}
+
+		if got := fmt.Sprintf("%s %+v", *in.Window, *in.Origins); got != c.want {
+			t.Errorf("intake%s = %s; want %s", c.query, got, c.want)
+		}
+
+		if in.Items != 5 || in.Sources.People != 5 {
+			t.Errorf("intake%s sources = %d %+v; want the 5 items as before", c.query, in.Items, in.Sources)
+		}
+	}
+}
+
+// A window other than 7d, 30d or 90d is a bad request.
+func TestIntake_WindowRefused(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, q := range []string{"?window=1d", "?window=30", "?window="} {
+		if code := h.call(t, http.MethodGet, intakePath+q, "", nil); code != http.StatusBadRequest {
+			t.Errorf("intake%s = %d, want 400", q, code)
+		}
+	}
+}
+
+// The webhooks are the organization's open to acme, by name: receiving when enabled and an
+// enabled trigger names it, no_trigger when none does, closed when turned off. A factory endpoint
+// and a webhook not open to acme are left out.
+func TestIntake_OpenWebhooks(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	hook := func(name string, sender domain.WebhookSender, p domain.WebhookPatch) {
+		t.Helper()
+
+		if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: domain.WebhookSecretName(name), Value: "test-secret"}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+
+		w, err := h.intake.CreateWebhook(inOrg(t), domain.NewWebhook{Name: name, Sender: sender, Secret: domain.WebhookSecretName(name)})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := h.intake.PatchWebhook(inOrg(t), w.ID, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	open := []domain.WebhookOpening{{FactoryID: acmeID}}
+	off := false
+
+	hook("github-main", domain.SenderGitHub, domain.WebhookPatch{Open: open})
+	hook("ci-hooks", domain.SenderStandard, domain.WebhookPatch{Open: open}) // only the disabled deploy-failed names it
+	hook("pager", domain.SenderPagerDuty, domain.WebhookPatch{Open: open, Enabled: &off})
+	hook("elsewhere", domain.SenderGitHub, domain.WebhookPatch{Name: new("elsewhere")})
+
+	if _, err := h.intake.CreateEndpoint(inOrg(t), domain.NewWebhookEndpoint{FactoryID: acmeID, Name: "own", Kind: domain.WebhookGeneric}); err != nil {
+		t.Fatal(err)
+	}
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Webhooks == nil {
+		t.Fatalf("intake = %d %+v; want 200 with webhooks", code, in)
+	}
+
+	var got []string
+	for _, w := range *in.Webhooks {
+		got = append(got, fmt.Sprintf("%s %s %s", w.Name, w.Sender, w.State))
+	}
+
+	if want := []string{"ci-hooks standard no_trigger", "github-main github receiving", "pager pagerduty closed"}; !slices.Equal(got, want) {
+		t.Errorf("webhooks = %v; want %v", got, want)
+	}
+}
+
+// Coming up lists acme's items that haven't started: with a start soonest first, then those
+// waiting only for needs, each with its open needs' refs and where it came from; started and
+// closed items are left out.
+func TestIntake_ComingUp(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	need := h.filedAt(t, domain.NewItem{Title: "the need"})
+	h.filedAt(t, domain.NewItem{Title: "later", Origin: domain.OriginTrigger, StartAt: t0.Add(72 * time.Hour)})
+	h.filedAt(t, domain.NewItem{Title: "soon", Origin: domain.OriginPerson, Via: domain.ViaCLI, CreatedBy: domain.LocalUser, StartAt: t0.Add(24 * time.Hour)})
+	h.filedAt(t, domain.NewItem{Title: "waits", Origin: domain.OriginPlan, After: []domain.ItemID{need.ID}})
+	h.filedAt(t, domain.NewItem{Title: "started", StartAt: t0.Add(time.Hour), StartedAt: t0})
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.ComingUp == nil || in.ComingUpTotal == nil {
+		t.Fatalf("intake = %d %+v; want 200 with coming up", code, in)
+	}
+
+	var got []string
+
+	for _, c := range *in.ComingUp {
+		start := "-"
+		if c.Start != nil {
+			start = c.Start.At.Format(time.RFC3339)
+		}
+
+		via := ""
+		if c.Via != nil {
+			via = string(*c.Via)
+		}
+
+		got = append(got, fmt.Sprintf("%s %s %s start %s needs %v via %s by %v", c.Ref, c.Title, c.Origin, start, c.Needs, via, c.CreatedBy != nil))
+	}
+
+	want := []string{
+		"acme#3 soon person start 2026-10-24T09:00:00Z needs [] via cli by true",
+		"acme#2 later trigger start 2026-10-26T09:00:00Z needs [] via  by false",
+		"acme#4 waits plan start - needs [acme#1] via  by false",
+	}
+	if !slices.Equal(got, want) || *in.ComingUpTotal != len(want) {
+		t.Errorf("coming up = %d in all\n%s\nwant\n%s", *in.ComingUpTotal, strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Triage is null without follow-ups for the architect; then it is the collecting triage item with
+// the follow-ups that joined it, and the open items whose triage follow-ups will join it.
+func TestIntake_Triage(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var in gen.Intake
+	if h.call(t, http.MethodGet, intakePath, "", &in); in.Triage != nil {
+		t.Errorf("triage without follow-ups = %+v; want null", in.Triage)
+	}
+
+	landed := h.submit(t)
+	h.keepFollowUp(t, landed, "Tidy the docs")
+	h.land(t, landed)
+
+	open := h.submit(t)
+	h.keepFollowUp(t, open, "One")
+	h.keepFollowUp(t, open, "Two")
+
+	in = gen.Intake{}
+	if h.call(t, http.MethodGet, intakePath, "", &in); in.Triage == nil || in.Triage.Item == nil {
+		t.Fatalf("triage = %+v; want the collecting item", in.Triage)
+	}
+
+	it := in.Triage.Item
+	if it.Ref != "acme#2" || it.Station != stInbox || it.FollowUps != 1 || it.Title == "" {
+		t.Errorf("triage item = %+v; want acme#2 at the inbox with 1 follow-up", *it)
+	}
+
+	if w := in.Triage.Waiting; len(w) != 1 || w[0].Ref != open.Ref || w[0].Title != open.Title || w[0].FollowUps != 2 {
+		t.Errorf("triage waiting = %+v; want %s with 2", w, open.Ref)
+	}
+}
+
+// land moves it to done and runs the follow-up sweep on acme's line and others.
+func (h *harness) land(t *testing.T, it gen.Item, others ...domain.Line) {
+	t.Helper()
+
+	from := domain.Position{Station: it.Station, State: domain.ItemState(it.State)}
+	if _, err := h.store.Transition(inOrg(t), ports.Transition{
+		ItemID: domain.ItemID(it.Id), From: from, To: domain.Position{Station: "done", State: domain.StateDone}, At: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := append([]domain.Line{{FactoryID: acmeID, Name: "acme", Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}}}}, others...)
+	if _, err := h.store.FileFollowUps(inOrg(t), lines, t0.Add(time.Hour), 20); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Each trigger with a check says which agent checks and the most one check spends.
+func TestIntake_TriggerCheck(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var in gen.Intake
+	h.call(t, http.MethodGet, intakePath, "", &in)
+
+	checks := map[string]string{}
+
+	for _, tr := range in.Triggers {
+		if tr.Check != nil {
+			checks[tr.Name] = fmt.Sprintf("%s %.2f", tr.Check.Agent, tr.Check.MaxUsd)
+		}
+	}
+
+	if len(checks) != 1 || !strings.HasPrefix(checks[incidentsName], "writer ") {
+		t.Errorf("checks = %v; want new-incidents by writer only", checks)
+	}
+}
+
+// A firing that queued a check, a try among them, shows as checked among the trigger's events.
+func TestIntakeTrigger_CheckedEvent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if code := h.call(t, http.MethodPost, incidentsPath, "", nil); code != http.StatusAccepted {
+		t.Fatalf("try = %d; want 202", code)
+	}
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+incidentsName, "", &d); code != http.StatusOK || len(d.Events) != 1 {
+		t.Fatalf("trigger = %d %+v; want 200 with the try", code, d.Events)
+	}
+
+	if got := d.Events[0].Outcome; got != gen.IntakeEventOutcomeChecked {
+		t.Errorf("event outcome = %s; want checked", got)
+	}
+}

@@ -435,7 +435,15 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: ageSeconds(it, now),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
 			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
-			PullRequests: []string{},
+			PullRequests: []string{}, CreatedBy: s.createdBy(it), Untrusted: new(it.Untrusted), Start: itemStartOf(it),
+		}
+
+		if it.Origin != "" {
+			c.Origin = new(gen.ItemCardOrigin(it.Origin))
+		}
+
+		if it.Via != "" {
+			c.Via = new(gen.ItemCardVia(it.Via))
 		}
 
 		// Whoever merges sees every pull request the merge lands (spec 4 §4.7), not just the latest.

@@ -95,6 +95,8 @@ type Engine interface {
 // satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
+	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
+	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
@@ -587,6 +589,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
+	if out.FollowUps, out.Notes, err = s.followUpsAndNotes(ctx, it.ID); err != nil {
+		return nil, err
+	}
+
 	return gen.GetItem200JSONResponse(out), nil
 }
 
@@ -873,9 +879,26 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 		out.Origin = new(gen.ItemOrigin(it.Origin))
 	}
 
-	out.Start = itemStartOf(it)
+	if it.Via != "" {
+		out.Via = new(gen.ItemVia(it.Via))
+	}
+
+	out.Start, out.CreatedBy, out.Untrusted = itemStartOf(it), s.createdBy(it), new(it.Untrusted)
 
 	return out
+}
+
+// createdBy is who filed it as the API shows them; nil for items filed before ADR 0040 and for the
+// engine's filings.
+func (s *server) createdBy(it domain.Item) *gen.Actor {
+	a, err := domain.ActorFromRef(it.CreatedBy)
+	if err != nil || a.Kind == domain.ActorSystem {
+		return nil
+	}
+
+	out := s.actorOut(a)
+
+	return &out
 }
 
 func (s *server) eventOf(e domain.Event) gen.Event {

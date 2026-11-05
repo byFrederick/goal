@@ -17,9 +17,9 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Intake's reads (ADR 0026): how many of the newest items the sources count by default and at
-// most, the days of a trigger's daily counts, its events on its page, and the deliveries of each
-// endpoint its refused-deliveries problem reads.
+// Intake's reads (ADR 0026, ADR 0040 decision 22): how many of the newest items the sources count
+// by default and at most, the days of a trigger's daily counts, its events on its page, the items
+// coming up and the triage item's waiting sources it shows.
 const (
 	defaultIntakeItems = 48
 	maxIntakeItems     = 500
@@ -27,8 +27,12 @@ const (
 	triggerEvents      = 20
 	triggerChecks      = 20
 	maxTriggerChecks   = 100
-	problemDeliveries  = 100
+	comingUpItems      = 50
+	triageSources      = 50
 )
+
+// intakeWindows are the days each window origins count over.
+var intakeWindows = map[gen.IntakeWindow]int{gen.IntakeWindowN7d: 7, gen.IntakeWindowN30d: 30, gen.IntakeWindowN90d: 90}
 
 var errTriggerNotFound = fmt.Errorf("trigger %w", ports.ErrNotFound)
 
@@ -71,6 +75,16 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 		last = *n
 	}
 
+	window := gen.IntakeWindowN30d
+	if w := req.Params.Window; w != nil {
+		window = gen.IntakeWindow(*w)
+	}
+
+	days, ok := intakeWindows[window]
+	if !ok {
+		return nil, fmt.Errorf("%w: window must be 7d, 30d or 90d", errInvalid)
+	}
+
 	f, err := s.factory(ctx, req.Factory)
 	if err != nil {
 		return nil, err
@@ -83,15 +97,26 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 		return nil, err
 	}
 
-	out := gen.GetIntake200JSONResponse{Triggers: []gen.IntakeTrigger{}, Suggestions: []gen.TriggerSuggestion{}}
+	out := gen.GetIntake200JSONResponse{Triggers: []gen.IntakeTrigger{}, Suggestions: []gen.TriggerSuggestion{}, Window: &window}
 	tallySources(&out, w)
+
+	origins, err := s.intake.OriginTally(ctx, l.FactoryID, s.clock.Now().AddDate(0, 0, -days))
+	if err != nil {
+		return nil, err
+	}
+
+	out.Origins = originsOf(origins)
+
+	if err := s.comingUp(ctx, &out, f.Metadata.Name, l.FactoryID); err != nil {
+		return nil, err
+	}
+
+	if out.Triage, err = s.triage(ctx, f.Metadata.Name, l.FactoryID); err != nil {
+		return nil, err
+	}
 
 	for _, t := range l.Suggestions() {
 		out.Suggestions = append(out.Suggestions, suggestion(t))
-	}
-
-	if len(l.Triggers) == 0 {
-		return out, nil
 	}
 
 	r, err := s.triggerReads(ctx, l.FactoryID)
@@ -103,7 +128,130 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 		out.Triggers = append(out.Triggers, r.trigger(t))
 	}
 
+	out.Webhooks = openWebhooks(r.endpoints, l.Triggers)
+
 	return out, nil
+}
+
+// originsOf is counts by origin as Intake answers them, every origin answered.
+func originsOf(counts []domain.OriginCount) *gen.IntakeOrigins {
+	out := &gen.IntakeOrigins{}
+	by := map[domain.Origin]*int{
+		domain.OriginPerson: &out.Person, domain.OriginPlan: &out.Plan, domain.OriginTrigger: &out.Trigger, domain.OriginFollowUp: &out.FollowUp,
+	}
+
+	for _, c := range counts {
+		if n, ok := by[c.Origin]; ok {
+			*n += c.Items
+		}
+	}
+
+	return out
+}
+
+// comingUp fills out's coming up with the items of factory (named name) that haven't started.
+func (s *server) comingUp(ctx context.Context, out *gen.GetIntake200JSONResponse, name string, factory domain.FactoryID) error {
+	items, total, err := s.intake.ComingUp(ctx, factory, comingUpItems)
+	if err != nil {
+		return err
+	}
+
+	ref := func(n int64) string { return domain.ItemRef{Factory: name, Number: n}.String() }
+	list := make([]gen.IntakeComingUp, 0, len(items))
+
+	for _, c := range items {
+		it := c.Item
+		e := gen.IntakeComingUp{
+			Id: string(it.ID), Ref: ref(it.Number), Title: it.Title, Origin: gen.IntakeComingUpOrigin(cmp.Or(it.Origin, domain.OriginPerson)),
+			CreatedBy: s.createdBy(it), Start: itemStartOf(it), Needs: make([]string, 0, len(c.Needs)), CreatedAt: it.CreatedAt,
+		}
+
+		if it.Via != "" {
+			e.Via = new(gen.IntakeComingUpVia(it.Via))
+		}
+
+		for _, n := range c.Needs {
+			e.Needs = append(e.Needs, ref(n))
+		}
+
+		if c.FromNumber > 0 {
+			e.FromItem = new(s.ref(ctx, c.FromFactory, c.FromNumber))
+		}
+
+		list = append(list, e)
+	}
+
+	out.ComingUp, out.ComingUpTotal = &list, &total
+
+	return nil
+}
+
+// triage is factory's (named name) follow-ups for the architect as Intake answers them; nil
+// without a collecting triage item or a source waiting for one.
+func (s *server) triage(ctx context.Context, name string, factory domain.FactoryID) (*gen.IntakeTriage, error) {
+	q, err := s.intake.TriageQueue(ctx, factory, triageSources)
+	if err != nil {
+		return nil, err
+	}
+
+	if q.Item == nil && len(q.Waiting) == 0 {
+		return nil, nil
+	}
+
+	ref := func(n int64) string { return domain.ItemRef{Factory: name, Number: n}.String() }
+	out := &gen.IntakeTriage{}
+
+	if it := q.Item; it != nil {
+		out.Item = &struct {
+			FollowUps int    `json:"follow_ups"`
+			Id        string `json:"id"`
+			Ref       string `json:"ref"`
+			Station   string `json:"station"`
+			Title     string `json:"title"`
+		}{FollowUps: q.FollowUps, Id: string(it.ID), Ref: ref(it.Number), Station: it.Station, Title: it.Title}
+	}
+
+	out.Waiting = make([]struct {
+		FollowUps int    `json:"follow_ups"`
+		Id        string `json:"id"`
+		Ref       string `json:"ref"`
+		Title     string `json:"title"`
+	}, len(q.Waiting))
+
+	for i, w := range q.Waiting {
+		out.Waiting[i].FollowUps, out.Waiting[i].Id, out.Waiting[i].Ref, out.Waiting[i].Title = w.FollowUps, string(w.ID), ref(w.Number), w.Title
+	}
+
+	return out, nil
+}
+
+// openWebhooks are the organization's webhooks among endpoints, the ones open to the factory, by
+// name, each with its state as the factory's triggers make it: receiving when it is enabled and
+// an enabled trigger names it, no_trigger when none does, closed when it is turned off.
+func openWebhooks(endpoints []domain.WebhookEndpoint, triggers []domain.Trigger) *[]gen.IntakeWebhook {
+	out := []gen.IntakeWebhook{}
+
+	for _, e := range endpoints {
+		if e.FactoryID != "" {
+			continue
+		}
+
+		state := gen.Closed
+		if e.Enabled {
+			state = gen.NoTrigger
+
+			for _, t := range triggers {
+				if t.NamesWebhook(e.Name, e.Sender) {
+					state = gen.Receiving
+					break
+				}
+			}
+		}
+
+		out = append(out, gen.IntakeWebhook{Id: string(e.ID), Name: e.Name, Sender: gen.WebhookSender(e.Sender), State: state})
+	}
+
+	return &out
 }
 
 func (s *server) GetIntakeTrigger(ctx context.Context, req gen.GetIntakeTriggerRequestObject) (gen.GetIntakeTriggerResponseObject, error) {
@@ -312,8 +460,8 @@ func tallySources(out *gen.GetIntake200JSONResponse, w domain.SourceWindow) {
 }
 
 // triggerReads is what a factory's triggers are shown with: the UTC day today starts, the items
-// each trigger created on the last intakeDays days, and the factory's webhook endpoints with how
-// many deliveries each refused over those days.
+// each trigger created on the last intakeDays days, and the endpoints open to the factory with how
+// many deliveries each refused over those days, from their daily counts.
 type triggerReads struct {
 	today     time.Time
 	days      map[string][]int
@@ -347,17 +495,13 @@ func (s *server) triggerReads(ctx context.Context, factory domain.FactoryID) (tr
 		return triggerReads{}, err
 	}
 
-	for _, e := range r.endpoints {
-		ds, err := s.intake.ListDeliveries(ctx, e.ID, domain.DeliveryCursor{}, problemDeliveries)
-		if err != nil {
-			return triggerReads{}, err
-		}
+	deliveries, err := s.intake.DeliveryDays(ctx, factory, since)
+	if err != nil {
+		return triggerReads{}, err
+	}
 
-		for _, d := range ds {
-			if d.Outcome == domain.DeliveryRefused && !d.ReceivedAt.Before(since) {
-				r.refused[e.ID]++
-			}
-		}
+	for _, d := range deliveries {
+		r.refused[d.EndpointID] += d.Refused
 	}
 
 	return r, nil
@@ -375,6 +519,13 @@ func (r triggerReads) trigger(t domain.Trigger) gen.IntakeTrigger {
 	}
 
 	out.Create.Type, out.Create.Station, out.Create.Lane, out.Create.Expedite = t.Create.Type, t.Create.Station, optional(t.Create.Lane), t.Create.Expedite
+
+	if c := t.Check; c != nil {
+		out.Check = &struct {
+			Agent  string  `json:"agent"`
+			MaxUsd float64 `json:"max_usd"`
+		}{Agent: c.Agent, MaxUsd: c.MaxUSD}
+	}
 
 	return out
 }
@@ -481,6 +632,8 @@ func intakeEvent(e domain.FiringEntry) gen.IntakeEvent {
 		out.Outcome, out.Reason, out.Missed = gen.IntakeEventOutcomeMissed, optional(f.Reason), f.Missed
 	case f.Outcome == domain.FiringSkipped:
 		out.Outcome, out.Reason = gen.IntakeEventOutcomeSkipped, optional(cmp.Or(f.Reason, "skipped"))
+	case f.Outcome == domain.FiringChecked:
+		out.Outcome = gen.IntakeEventOutcomeChecked
 	case e.Merged:
 		out.Outcome = gen.IntakeEventOutcomeMerged
 	default:

@@ -77,7 +77,7 @@ func TestSpend_Text(t *testing.T) {
 	merged, andon, over := 4, "rework rate over 40%", "spent $71.00 of the $70.00 weekly budget in the last 7 days"
 
 	srv, sent := spendGoald(t, spendJSON(t, gen.OrgSpend{
-		Window: gen.Month, Since: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Until: time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC),
+		Window: gen.SpendWindowMonth, Since: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Until: time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC),
 		Complete: true, TotalUsd: 84, ThisMonthUsd: v(84), LastMonthUsd: v(120.5), Merged: &merged, CostPerMergedUsd: v(21),
 		ReworkUsd: v(21), ReworkShare: v(0.25),
 		Budgets: []gen.SpendBudget{
@@ -105,7 +105,7 @@ func TestSpend_Text(t *testing.T) {
 
 	// Without --window goald is asked for this week; an incomplete answer says so.
 	srv, sent = spendGoald(t, spendJSON(t, gen.OrgSpend{
-		Window: gen.Week, Since: time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC), Until: time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC), TotalUsd: 1,
+		Window: gen.SpendWindowWeek, Since: time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC), Until: time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC), TotalUsd: 1,
 	}))
 
 	out, err = goalSpend(t, srv.URL)
