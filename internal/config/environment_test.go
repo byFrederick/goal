@@ -417,3 +417,28 @@ func TestParseEnvironment(t *testing.T) {
 		}
 	}
 }
+
+// A GitHub MCP server is GitHub's remote server or the github-mcp-server binary, by its base
+// name; any other server is not.
+func TestMCPServer_GitHub(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		s    MCPServer
+		want bool
+	}{
+		{"remote", MCPServer{URL: "https://api.githubcopilot.com/mcp/"}, true},
+		{"remote read-only path", MCPServer{URL: "https://API.githubcopilot.com/mcp/readonly"}, true},
+		{"stdio", MCPServer{Command: []string{"github-mcp-server", "stdio", "--read-only"}}, true},
+		{"stdio by path", MCPServer{Command: []string{"/usr/local/bin/github-mcp-server", "stdio"}}, true},
+		{"another remote", MCPServer{URL: "https://mcp.example.com/github"}, false},
+		{"a host that only ends alike", MCPServer{URL: "https://api.githubcopilot.com.example.com/mcp/"}, false},
+		{"another binary", MCPServer{Command: []string{"npx", "github-mcp-server"}}, false},
+		{"neither", MCPServer{}, false},
+	} {
+		if got := tt.s.GitHub(); got != tt.want {
+			t.Errorf("%s: GitHub() = %v; want %v", tt.name, got, tt.want)
+		}
+	}
+}

@@ -208,6 +208,25 @@ func TestEffectiveToolModes(t *testing.T) {
 	}
 }
 
+// A tool's mode is its most specific matching pattern's, and allow when none matches.
+func TestResolveToolMode(t *testing.T) {
+	t.Parallel()
+
+	modes := map[string]ConnectionToolMode{"*": ToolModeOff, "get_*": ToolModeAllow, "get_secret": ToolModeAsk}
+
+	for tool, want := range map[string]ConnectionToolMode{
+		"get_issue": ToolModeAllow, "get_secret": ToolModeAsk, toolDeleteRepo: ToolModeOff,
+	} {
+		if got := ResolveToolMode(modes, tool); got != want {
+			t.Errorf("ResolveToolMode(%s) = %s; want %s", tool, got, want)
+		}
+	}
+
+	if got := ResolveToolMode(nil, toolDeleteRepo); got != ToolModeAllow {
+		t.Errorf("ResolveToolMode without modes = %s; want allow", got)
+	}
+}
+
 func TestServerToolModes(t *testing.T) {
 	t.Parallel()
 
