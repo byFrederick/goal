@@ -1,7 +1,6 @@
 package intaketest
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -709,6 +708,8 @@ func testIsolatedClear(f *fixture) {
 func testItemCheckKey(f *fixture) {
 	t := f.t
 
+	const reopened = "INC-2"
+
 	inc1, inc2 := f.expectFiled(f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "db-1"}]}`,
 		domain.CheckLimits{}, false))
 	f.close(inc2, domain.StateCancelled)
@@ -722,18 +723,18 @@ func testItemCheckKey(f *fixture) {
 
 	for _, c := range []struct {
 		what string
-		ctx  context.Context
+		org  domain.OrgID
 		item domain.ItemID
 		want string
 	}{
-		{"the check's item", f.ctx(), inc1.ID, "INC-1"},
-		{"the key's item filed again", f.ctx(), f.itemByRef(again.Applied.Filed[0].Ref).ID, "INC-2"},
-		{"the key's earlier item", f.ctx(), inc2.ID, ""},
-		{"a schedule's item", f.ctx(), scheduled.ID, ""},
-		{"an unknown item", f.ctx(), "not-an-item", ""},
-		{"another organization's read", domain.WithOrg(t.Context(), f.NewOrg(t)), inc1.ID, ""},
+		{"the check's item", f.org, inc1.ID, "INC-1"},
+		{"the key's item filed again", f.org, f.itemByRef(again.Applied.Filed[0].Ref).ID, reopened},
+		{"the key's earlier item", f.org, inc2.ID, ""},
+		{"a schedule's item", f.org, scheduled.ID, ""},
+		{"an unknown item", f.org, "not-an-item", ""},
+		{"another organization's read", f.NewOrg(t), inc1.ID, ""},
 	} {
-		if got, err := f.in.ItemCheckKey(c.ctx, c.item); err != nil || got != c.want {
+		if got, err := f.in.ItemCheckKey(domain.WithOrg(t.Context(), c.org), c.item); err != nil || got != c.want {
 			t.Errorf("ItemCheckKey of %s = %q, %v; want %q", c.what, got, err, c.want)
 		}
 	}

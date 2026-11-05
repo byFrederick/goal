@@ -98,6 +98,7 @@ type Engine interface {
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
+	FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error)
 	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
@@ -592,6 +593,10 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	if out.FollowUps, out.Notes, err = s.followUpsAndNotes(ctx, it.ID); err != nil {
+		return nil, err
+	}
+
+	if out.CameFrom, err = s.cameFrom(ctx, it); err != nil {
 		return nil, err
 	}
 

@@ -657,8 +657,8 @@ func testFiledFromNamesSourcesAndLanding(f *fixture) {
 	ops := f.newFactory(t)
 	lines := []domain.Line{lineOf(f.factory, nameDev), lineOf(ops, nameOps, f.factory)}
 
-	root := f.create(t, domain.NewItem{Title: "root"})
-	part := f.create(t, domain.NewItem{Title: "part", ParentID: root.ID})
+	root := f.create(t, domain.NewItem{Title: "the assembly"})
+	part := f.create(t, domain.NewItem{Title: "a part", ParentID: root.ID})
 	src := f.create(t, domain.NewItem{Title: titleSrc})
 
 	f.keepNotes(t, part, startFollowUp("Drop the column", domain.FollowUpPlan{Title: "Drop column"}))
@@ -673,7 +673,7 @@ func testFiledFromNamesSourcesAndLanding(f *fixture) {
 
 	fromPart, fromSrc := f.filedAs(t, part), f.filedAs(t, src)
 
-	if got := f.filedFrom(t, f.ctx(t), fromPart.FiledItem); len(got) != 1 || got[0] != (domain.FiledFrom{
+	if got := f.filedFrom(f.ctx(t), t, fromPart.FiledItem); len(got) != 1 || got[0] != (domain.FiledFrom{
 		FollowUp: fromPart.ID, Source: part.ID, SourceFactory: f.factory, SourceNumber: part.Number, Station: stWork, Agent: agWorker,
 		Landed: root.ID, LandedFactory: f.factory, LandedNumber: root.Number,
 	}) {
@@ -684,7 +684,7 @@ func testFiledFromNamesSourcesAndLanding(f *fixture) {
 		t.Fatalf("into ops filed in %s; want ops", it.FactoryID)
 	}
 
-	if got := f.filedFrom(t, f.ctx(t), fromSrc.FiledItem); len(got) != 1 || got[0] != (domain.FiledFrom{
+	if got := f.filedFrom(f.ctx(t), t, fromSrc.FiledItem); len(got) != 1 || got[0] != (domain.FiledFrom{
 		FollowUp: fromSrc.ID, Source: src.ID, SourceFactory: f.factory, SourceNumber: src.Number, Station: stWork, Agent: agWorker,
 		Landed: src.ID, LandedFactory: f.factory, LandedNumber: src.Number,
 	}) {
@@ -692,12 +692,12 @@ func testFiledFromNamesSourcesAndLanding(f *fixture) {
 	}
 
 	for what, id := range map[string]domain.ItemID{"a person's item": src.ID, "an unknown item": "not-an-item"} {
-		if got := f.filedFrom(t, f.ctx(t), id); len(got) != 0 {
+		if got := f.filedFrom(f.ctx(t), t, id); len(got) != 0 {
 			t.Errorf("FiledFrom of %s = %+v; want none", what, got)
 		}
 	}
 
-	if got := f.filedFrom(t, f.otherOrg(t).ctx(t), fromPart.FiledItem); len(got) != 0 {
+	if got := f.filedFrom(f.otherOrg(t).ctx(t), t, fromPart.FiledItem); len(got) != 0 {
 		t.Errorf("another organization's FiledFrom = %+v; want none", got)
 	}
 }
@@ -715,7 +715,7 @@ func (f *fixture) filedAs(t *testing.T, src domain.Item) domain.FollowUp {
 }
 
 // filedFrom reads FiledFrom of id in ctx.
-func (f *fixture) filedFrom(t *testing.T, ctx context.Context, id domain.ItemID) []domain.FiledFrom {
+func (f *fixture) filedFrom(ctx context.Context, t *testing.T, id domain.ItemID) []domain.FiledFrom {
 	t.Helper()
 
 	got, err := f.Store.FiledFrom(ctx, id)

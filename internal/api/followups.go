@@ -158,6 +158,70 @@ func (s *server) followUpsAndNotes(ctx context.Context, item domain.ItemID) (*[]
 	return &follows, &notes, nil
 }
 
+// cameFrom is where a follow-up's or a trigger's item came from, as getItem answers it (ADR 0040
+// decision 2): the follow-ups filed as it, each source and landing named the way filed_item is,
+// or its trigger with the kind the factory's loaded definition gives it and a check's key; nil
+// for any other origin.
+func (s *server) cameFrom(ctx context.Context, it domain.Item) (*gen.ItemCameFrom, error) {
+	switch it.Origin {
+	case domain.OriginFollowUp:
+		fs, err := s.items.FiledFrom(ctx, it.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]gen.CameFromFollowUp, 0, len(fs))
+		for _, f := range fs {
+			out = append(out, gen.CameFromFollowUp{
+				Id: string(f.FollowUp), FromItem: s.ref(ctx, f.SourceFactory, f.SourceNumber), FromItemId: string(f.Source),
+				Agent: f.Agent, Station: f.Station, LandedItem: s.ref(ctx, f.LandedFactory, f.LandedNumber), LandedItemId: string(f.Landed),
+			})
+		}
+
+		return &gen.ItemCameFrom{FollowUps: &out}, nil
+	case domain.OriginTrigger:
+		t := gen.CameFromTrigger{Name: it.Trigger, Kind: s.triggerKind(ctx, it.FactoryID, it.Trigger)}
+
+		if t.Kind != nil && *t.Kind == gen.CameFromTriggerKindCheck {
+			key, err := s.intake.ItemCheckKey(ctx, it.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			t.Key = optional(key)
+		}
+
+		return &gen.ItemCameFrom{Trigger: &t}, nil
+	case domain.OriginPerson, domain.OriginPlan:
+	}
+
+	return nil, nil
+}
+
+// triggerKind is the kind of factory's trigger name in its loaded definition: check for one with
+// a check, schedule for another schedule, webhook otherwise; nil when the definition has no such
+// trigger.
+func (s *server) triggerKind(ctx context.Context, factory domain.FactoryID, name string) *gen.CameFromTriggerKind {
+	f, ok := s.loaded(ctx)[factory]
+	if !ok {
+		return nil
+	}
+
+	for _, t := range f.Line().Triggers {
+		switch {
+		case t.Name != name:
+		case t.Check != nil:
+			return new(gen.CameFromTriggerKindCheck)
+		case t.On == domain.OnSchedule:
+			return new(gen.CameFromTriggerKindSchedule)
+		default:
+			return new(gen.CameFromTriggerKindWebhook)
+		}
+	}
+
+	return nil
+}
+
 // maxItemNotes is the most notes getItem answers.
 const maxItemNotes = 200
 
