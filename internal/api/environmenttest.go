@@ -300,23 +300,29 @@ func (t envTest) server(ctx context.Context, name string, e ports.MCPEndpoint, s
 		return gen.ServerTest{}, fmt.Errorf("%w: %q is not an MCP server's name", errEnvironmentTestInvalid, name)
 	}
 
+	var refuse environmentcheck.Refuser
+
 	if e.URL == "" {
-		refusal, err := t.stdioRefusal(ctx, e)
-		if err != nil {
-			return gen.ServerTest{}, err
+		if !domain.CatalogCommand(t.s.catalog, e.Command) {
+			refusal := fmt.Sprintf("goald starts only the tool catalog's commands for a stdio server, not %q", strings.Join(e.Command, " "))
+			return untestedServer(name, refusal), nil
 		}
 
-		if refusal != "" {
-			return gen.ServerTest{Server: name, Tools: []string{}, Error: new(environmentcheck.Cut(refusal))}, nil
+		refuse = func(ctx context.Context, rendered ports.MCPEndpoint) (string, error) {
+			return t.hostRefusal(ctx, e.Env, rendered.Env)
 		}
 	}
 
 	at := t.s.clock.Now().UTC()
 	r := domain.EnvironmentTest{Factory: t.factory, Environment: t.environment, Server: name, At: at}
 
-	res, err := environmentcheck.Server(ctx, t.s.tools, t.open, e, slots)
+	res, err := environmentcheck.Server(ctx, t.s.tools, t.open, e, slots, refuse)
 	if err != nil {
 		return gen.ServerTest{}, secretError(err)
+	}
+
+	if res.Refused != "" {
+		return untestedServer(name, res.Refused), nil
 	}
 
 	r.OK, r.Tools, r.ReadOnly, r.Error = res.OK, res.Tools, res.ReadOnly, res.Error
@@ -328,24 +334,26 @@ func (t envTest) server(ctx context.Context, name string, e ports.MCPEndpoint, s
 	return serverTestOut(r), nil
 }
 
-// stdioRefusal is why goald does not start stdio server e, or "": its command must be exactly
-// one the tool catalog ships, and each URL its env holds must be on a code host the organization
-// lists, since the process dials its host itself, not through goald's public-addresses-only
-// transport. Nothing is opened to decide.
-func (t envTest) stdioRefusal(ctx context.Context, e ports.MCPEndpoint) (string, error) {
-	if !domain.CatalogCommand(t.s.catalog, e.Command) {
-		return fmt.Sprintf("goald starts only the tool catalog's commands for a stdio server, not %q", strings.Join(e.Command, " ")), nil
-	}
+// untestedServer is server name's result when goald would not start it, for refusal.
+func untestedServer(name, refusal string) gen.ServerTest {
+	return gen.ServerTest{Server: name, Tools: []string{}, Error: new(environmentcheck.Cut(refusal))}
+}
 
-	var urls []string
+// hostRefusal is why goald does not start a stdio server with env, as its file has it, rendered
+// to rendered, or "": each URL rendered holds must be on a code host the organization lists, since
+// the process dials its host itself, not through goald's public-addresses-only transport. It
+// checks the env as the process would get it, so a URL a secret holds is checked too, and the
+// refusal then names the variable, never the secret's host.
+func (t envTest) hostRefusal(ctx context.Context, env, rendered map[string]string) (string, error) {
+	var keys []string
 
-	for _, k := range slices.Sorted(maps.Keys(e.Env)) {
-		if v := e.Env[k]; strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
-			urls = append(urls, v)
+	for _, k := range slices.Sorted(maps.Keys(rendered)) {
+		if v := rendered[k]; strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
+			keys = append(keys, k)
 		}
 	}
 
-	if len(urls) == 0 {
+	if len(keys) == 0 {
 		return "", nil
 	}
 
@@ -356,15 +364,21 @@ func (t envTest) stdioRefusal(ctx context.Context, e ports.MCPEndpoint) (string,
 
 	hosts := append(domain.BuiltInCodeHosts(), added...)
 
-	for _, v := range urls {
+	for _, k := range keys {
 		host := ""
-		if u, err := url.Parse(v); err == nil {
+		if u, err := url.Parse(rendered[k]); err == nil {
 			host = u.Host
 		}
 
-		if _, ok := domain.ListedCodeHost(hosts, host); !ok {
-			return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: add %q in Code hosts", host), nil
+		if _, ok := domain.ListedCodeHost(hosts, host); ok {
+			continue
 		}
+
+		if len(environmentcheck.Referenced(map[string]string{k: env[k]})) > 0 {
+			return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: list the host the secret in %s holds in Code hosts", k), nil
+		}
+
+		return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: add %q in Code hosts", host), nil
 	}
 
 	return "", nil

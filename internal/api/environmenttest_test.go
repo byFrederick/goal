@@ -480,6 +480,44 @@ func TestEnvironmentTest_StdioFromCatalog(t *testing.T) {
 	}
 }
 
+// A stdio server whose env takes its host URL from a secret is checked with the secret opened: a
+// secret holding a host acme does not list starts nothing, keeps nothing and says nothing of the
+// value.
+func TestEnvironmentTest_StdioHostFromSecretChecked(t *testing.T) {
+	t.Parallel()
+
+	h := stdioHarness(t)
+
+	const private = "https://10.0.0.5"
+
+	created := `{"name":"ghe-url","value":"` + private + `",
+"scope":{"all_factories":false,"factories":["` + string(acmeID) + `"]},"expires_at":"2027-01-31T00:00:00Z","remind_days":14}`
+	h.request(t, http.MethodPost, secretsPath, created, nil)
+
+	h.draftEnvironment(t, `apiVersion: goal/v1
+kind: Environment
+spec:
+  mcp:
+    github:
+      command: [github-mcp-server, stdio]
+      env: {GITHUB_PERSONAL_ACCESS_TOKEN: "{{acme-token}}", GITHUB_HOST: "{{ghe-url}}"}
+`)
+
+	got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"github"}`, nil), http.StatusOK)
+	if len(got.Servers) != 1 || got.Servers[0].Tested || got.Servers[0].Ok ||
+		!strings.Contains(valueOf(got.Servers[0].Error), "organization's code hosts") || strings.Contains(body(t, got), "10.0.0.5") {
+		t.Errorf("test with a secret's unlisted host = %s; want it refused without the value", body(t, got))
+	}
+
+	if called := h.tools.Called(); len(called) != 0 {
+		t.Errorf("started %v; want nothing", called)
+	}
+
+	if kept, err := h.envTests.List(inOrg(t), acmeID); err != nil || len(kept) != 0 {
+		t.Errorf("kept = %+v, %v; want nothing", kept, err)
+	}
+}
+
 // A template test of github with an Enterprise host acme lists starts the otherwise lines' stdio
 // server with the slot's value.
 func TestEnvironmentTest_StdioTemplate(t *testing.T) {

@@ -59,14 +59,24 @@ type Result struct {
 	Tools    []string
 	ReadOnly []string
 	Error    string
+
+	// Refused is why refuse would not let the server start, scrubbed and cut like Error: the
+	// server is then untested, and nothing was listed.
+	Refused string
 }
+
+// Refuser is why the server e, with its secrets rendered, may not start, or "". err is a failure
+// to decide.
+type Refuser func(ctx context.Context, e ports.MCPEndpoint) (reason string, err error)
 
 // Server tests the MCP server e, as its file has it: remote at e.URL, or stdio from e.Command,
 // which the caller checked is one the tool catalog ships. It opens the secrets e's headers and env
 // refer to with open (or takes slots' values, when slots is not nil), and lists its tools with
-// them rendered. A secret that does not exist or is not open to the use fails the test; err is
-// any other refusal to open, such as a missing master key, and nothing is tested then.
-func Server(ctx context.Context, tools ports.ToolLister, open Opener, e ports.MCPEndpoint, slots map[string]string) (Result, error) {
+// them rendered. refuse, when not nil, sees the endpoint as it will be started, after rendering,
+// so a value a secret holds is checked too. A secret that does not exist or is not open to the use
+// fails the test; err is any other refusal to open, such as a missing master key, or refuse's
+// error, and nothing is tested then.
+func Server(ctx context.Context, tools ports.ToolLister, open Opener, e ports.MCPEndpoint, slots map[string]string, refuse Refuser) (Result, error) {
 	values := slots
 	if values == nil {
 		names := slices.Sorted(slices.Values(append(Referenced(e.Headers), Referenced(e.Env)...)))
@@ -82,6 +92,17 @@ func Server(ctx context.Context, tools ports.ToolLister, open Opener, e ports.MC
 	}
 
 	e.Headers, e.Env = Render(e.Headers, values), Render(e.Env, values)
+
+	if refuse != nil {
+		reason, err := refuse(ctx, e)
+		if err != nil {
+			return Result{}, err
+		}
+
+		if reason != "" {
+			return Result{Refused: Scrub(reason, values)}, nil
+		}
+	}
 
 	listed, err := tools.ListTools(ctx, e)
 	if err != nil {
