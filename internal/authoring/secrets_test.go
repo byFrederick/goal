@@ -96,6 +96,20 @@ func TestSecretsCheck(t *testing.T) {
 			code: authoring.CodeKnowledgeSourceUnknown, file: yamlFile, pointer: "/basics/knowledge_sources/0", inPlaces: []string{"handbook"},
 			fixes: []domain.ProblemFix{{Label: "Remove handbook", Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "remove", Path: "/knowledge_sources/0"}}}},
 		},
+		{
+			name: "an environment variable naming a webhook's secret", yaml: acmeYAML, env: withEnv(`HOOK_SECRET: "{{webhook-ci-hooks}}"`),
+			code: authoring.CodeSecretSignsWebhook, file: envFile, pointer: "/environments/default/env/HOOK_SECRET",
+			inPlaces: []string{hookSecret, "ci-hooks", "forge"},
+		},
+		{
+			name: "a model key naming a webhook's secret", yaml: strings.Replace(acmeYAML, "{{claude-key}}", "{{webhook-ci-hooks}}", 1),
+			code: authoring.CodeSecretSignsWebhook, file: yamlFile, pointer: "/basics/model_key", inPlaces: []string{"runtime.modelKey", hookSecret},
+		},
+		{
+			name: "a repository token naming a webhook's secret", yaml: strings.Replace(acmeYAML, "{{code-token}}", "{{webhook-ci-hooks}}", 1),
+			code: authoring.CodeSecretSignsWebhook, file: yamlFile, pointer: "/basics/repository/token",
+			inPlaces: []string{"runtime.repository.token", hookSecret},
+		},
 		{name: "a merge with a repository token", yaml: mergeYAML},
 		{
 			name: "a merge without a repository token", yaml: strings.Replace(mergeYAML, `token: "{{code-token}}", `, "", 1),
@@ -108,8 +122,11 @@ func TestSecretsCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarness(t)
+			h := newHarness(t, withSecretsCheck(func(c *authoring.SecretsCheck) {
+				c.Webhooks = webhookSecrets{{Secret: hookSecret, Webhook: "ci-hooks"}}
+			}))
 			h.secret(t, "other-only", domain.SecretScope{Factories: []domain.FactoryID{"0b6f1c9e-5d0a-4c39-9a51-000000000000"}})
+			h.secret(t, hookSecret, domain.SecretScope{All: true})
 
 			files := acmeFiles(tt.yaml)
 			if tt.env != "" {
@@ -205,6 +222,16 @@ func TestSecretsCheck_FailsWhenKnowledgeFails(t *testing.T) {
 	if _, err := h.svc.ValidateFiles(h.ctx, acmeFiles(acmeYAML)); err == nil {
 		t.Fatal("validate succeeded; want the knowledge sources' failure")
 	}
+}
+
+// hookSecret is the secret the organization's webhook ci-hooks is signed by.
+const hookSecret = "webhook-ci-hooks" //nolint:gosec // a secret's name, not a value
+
+// webhookSecrets are the secrets the organization's webhooks are signed by.
+type webhookSecrets []domain.WebhookSecretUse
+
+func (w webhookSecrets) WebhookSecretUses(context.Context) ([]domain.WebhookSecretUse, error) {
+	return w, nil
 }
 
 // failingSources cannot list the organization's knowledge sources.

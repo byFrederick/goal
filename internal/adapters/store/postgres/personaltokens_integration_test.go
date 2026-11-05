@@ -172,12 +172,17 @@ func TestWrites_MadeWithATokenSayVia(t *testing.T) {
 
 	want := "pat:" + string(tok.ID)
 
-	if log := d.logOf(acme); log[len(log)-1].action != domain.AuditAPIKeyRevoked || log[len(log)-1].data["via"] != want {
-		t.Errorf("the revocation's entry = %+v; want via %s", log[len(log)-1], want)
+	log := d.logOf(acme)
+	if filed := log[len(log)-1]; filed.action != domain.AuditItemFiled || filed.data["via"] != want {
+		t.Errorf("the item's entry = %+v; want via %s", filed, want)
 	}
 
-	if log := d.logOf(acme); log[len(log)-2].data["via"] != nil {
-		t.Errorf("the key's creation, in a session = %+v; want no via", log[len(log)-2])
+	if log[len(log)-2].action != domain.AuditAPIKeyRevoked || log[len(log)-2].data["via"] != want {
+		t.Errorf("the revocation's entry = %+v; want via %s", log[len(log)-2], want)
+	}
+
+	if log[len(log)-3].data["via"] != nil {
+		t.Errorf("the key's creation, in a session = %+v; want no via", log[len(log)-3])
 	}
 
 	var via *string

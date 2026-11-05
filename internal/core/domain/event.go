@@ -58,6 +58,9 @@ const (
 	// needs (the item it needs), kind and actor (ref).
 	EventEdgeAdded   EventKind = "edge_added"
 	EventEdgeRemoved EventKind = "edge_removed"
+	// EventStartChanged is a person's change of when the item may start (ADR 0040 decision 3):
+	// data start_at (RFC 3339, absent when cleared: Start now) and actor (ref).
+	EventStartChanged EventKind = "start_changed"
 	// EventAssembled is an item whose plan became parts (data parts: how many); EventPartCreated
 	// a part created from it (data parent and key), its first event; EventAssemblyDone the
 	// assembly closed by its last part (data state, parts_done and parts); EventPartAdded a part
@@ -77,6 +80,13 @@ const (
 	// The next run's brief carries it, and a run in progress reads it from the gateway
 	// (GET /run?notes_after) between its agent's turns.
 	EventNote EventKind = "note"
+	// EventItemNote is a note from another item's agent (ADR 0040 decision 7): a follow-up whose
+	// for named this item, delivered by the engine (actor system:engine). Data text,
+	// follow_up_id, from_item (<factory>#<number>), from_item_id, from_factory_id, station and
+	// agent (NoteData). A check's note (ADR 0040 decision 19) has text, trigger, key, agent and
+	// run_id instead (CheckNoteData). The next run's brief carries it; a run in progress does not
+	// stream it.
+	EventItemNote EventKind = "item_note"
 	// EventNoteDelivered is a running agent's worker reporting that it gave the agent a note
 	// left while the run works, as a user message between turns. Data note_id (the note's event
 	// id); the engine stamps the run.
@@ -158,7 +168,7 @@ const (
 	// AuditItemLaneSet is a person setting an item's lane (from, to).
 	AuditItemLaneSet = "item.lane_set"
 	// AuditItemCancelled is a person cancelling an item (station, reason; assembly for a part
-	// cancelled with its assembly).
+	// cancelled with its assembly), or an agent closing one (station, reason, agent, closed).
 	AuditItemCancelled = "item.cancelled"
 	// AuditItemRejected is a person sending an item back for rework (from, to, reason).
 	AuditItemRejected = "item.rejected"
@@ -167,6 +177,8 @@ const (
 	AuditItemAnswered = "item.answered"
 	// AuditItemPartAdded is a part added to an open assembly (part, key).
 	AuditItemPartAdded = "item.part_added"
+	// AuditItemFiled is an item filed through domain.File (origin, and via for a person's).
+	AuditItemFiled = "item.filed"
 	// AuditTargetItem is the target kind of entries about an item.
 	AuditTargetItem = "item"
 )

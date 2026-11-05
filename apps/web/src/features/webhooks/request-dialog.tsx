@@ -1,5 +1,6 @@
-// View request: one delivery as it was received, its headers and its body (ADR 0026). The signature
-// headers are never here. A body that is not UTF-8 text is labelled as base64.
+// View request: one delivery as it was received, its headers and its body (ADR 0040 decision 12). Only
+// webhook:manage opens it: the page offers the control to nobody else, and goald refuses the read. The
+// signature headers are never here. A body that is not UTF-8 text is labelled as base64.
 import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '../../api/client';
 import { webhookDeliveryQuery } from '../../api/queries';
@@ -9,9 +10,7 @@ import { Spinner } from '../../ui/spinner';
 
 export interface RequestTarget {
   org: string;
-  factory: string;
-  endpoint: string;
-  endpointName: string;
+  webhook: string;
   delivery: string;
   receivedAt: string;
 }
@@ -25,12 +24,12 @@ export function RequestDialog({ target, onClose }: { target: RequestTarget | nul
 }
 
 function Request({ target }: { target: RequestTarget }) {
-  const request = useQuery(webhookDeliveryQuery(target.org, target.factory, target.endpoint, target.delivery));
+  const request = useQuery(webhookDeliveryQuery(target.org, target.webhook, target.delivery));
   const data = request.data;
   return (
     <DialogContent
       title="Request"
-      description={`${target.endpointName}, received ${target.receivedAt}`}
+      description={`${target.webhook}, received ${target.receivedAt}`}
       className="max-w-[680px]"
     >
       {request.isPending ? (

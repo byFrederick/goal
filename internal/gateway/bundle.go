@@ -100,6 +100,8 @@ type bundleSpec struct {
 	Jonah *bundleJonah `json:"jonah,omitempty"`
 	// Grade is a grade's reason and the result it grades (grade.go); nil for every other run.
 	Grade *bundleGrade `json:"grade,omitempty"`
+	// Check is a check's trigger and input (check.go); nil for every other run.
+	Check *bundleCheck `json:"check,omitempty"`
 }
 
 // grantedCall is one call approved for the run, its input as canonical JSON.
@@ -277,7 +279,8 @@ func (g *Gateway) ServeRun(w http.ResponseWriter, r *http.Request) {
 
 // bundleOf is the bundle of the run c names: a Jonah review's for a TaskKindJonah token, a draft
 // request's definition bundle for a TaskKindDraftRequest one, a try's for a TaskKindTry one, a
-// grade's for a TaskKindGrade one, and the run's bundle otherwise.
+// grade's for a TaskKindGrade one, a check's for a TaskKindCheck one, and the run's bundle
+// otherwise.
 func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
 	if c.Kind == domain.TaskKindJonah {
 		return g.jonahBundle(ctx, c)
@@ -293,6 +296,10 @@ func (g *Gateway) bundleOf(ctx context.Context, c domain.TaskClaims) (runBundle,
 
 	if c.Kind == domain.TaskKindGrade {
 		return g.gradeBundle(ctx, c)
+	}
+
+	if c.Kind == domain.TaskKindCheck {
+		return g.checkBundle(ctx, c)
 	}
 
 	return g.bundle(ctx, c)

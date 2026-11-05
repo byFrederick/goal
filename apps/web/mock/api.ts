@@ -167,6 +167,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
         outcome: 'created',
         item_number: 151,
         reason: null,
+        missed: 0,
       },
       {
         id: 'firing-s2',
@@ -176,6 +177,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
         outcome: 'skipped',
         item_number: null,
         reason: 'once',
+        missed: 0,
       },
     ];
   }
@@ -189,6 +191,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
       outcome: 'created',
       item_number: 150,
       reason: null,
+      missed: 0,
     },
     {
       id: 'firing-2',
@@ -198,6 +201,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
       outcome: 'merged',
       item_number: 133,
       reason: null,
+      missed: 0,
     },
     {
       id: 'firing-3',
@@ -207,6 +211,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
       outcome: 'skipped',
       item_number: null,
       reason: 'once',
+      missed: 0,
     },
     {
       id: 'firing-4',
@@ -216,6 +221,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
       outcome: 'skipped',
       item_number: 120,
       reason: '#120 covers it',
+      missed: 0,
     },
     {
       id: 'firing-5',
@@ -225,6 +231,7 @@ function eventsOf(name: string, on: string): IntakeEvent[] {
       outcome: 'merged',
       item_number: 118,
       reason: null,
+      missed: 0,
     },
   ];
 }

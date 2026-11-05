@@ -276,7 +276,8 @@ func TestRoute_PicksAgentByLane(t *testing.T) {
 		{name: "lane from intake", lane: "frontend", wantAgent: agFrontend},
 		{name: "lane from an upstream output", specLane: "backend", wantAgent: agBackend},
 		{name: "output lane wins", lane: "frontend", specLane: "backend", wantAgent: agBackend},
-		{name: "no route blocks", lane: "infra"},
+		// Intake refuses a lane no station routes (domain.File), so only an output can bring one.
+		{name: "no route blocks", specLane: "infra"},
 	}
 
 	for _, tt := range tests {

@@ -185,6 +185,8 @@ type harnessDeps struct {
 	// noJonah leaves Deps.Jonah nil, and noGrades Deps.Grades.
 	noJonah  bool
 	noGrades bool
+	// noChecks leaves Deps.Checks nil; otherwise it is checkInput (check_test.go).
+	noChecks bool
 	// knowledge gives the gateway a knowledge base and a bucket, h.kb and h.objects (knowledge_test.go).
 	knowledge bool
 	// mcpCap is the organization policy's MCP tool mode cap (none when nil).
@@ -313,6 +315,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Tries:         h.store,
 		Proposed:      proposing{base: defs},
 		Grades:        grades,
+		Checks:        checksOf(d),
 		Knowledge:     kb,
 		Objects:       objects,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),

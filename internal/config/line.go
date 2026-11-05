@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strconv"
@@ -73,8 +74,10 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	for _, t := range s.Board.Triggers {
-		l.Triggers = append(l.Triggers, trigger(t))
+		l.Triggers = append(l.Triggers, f.trigger(t))
 	}
+
+	l.WorkTypes = slices.Clone(s.Board.WorkTypes)
 
 	l.Flow = flowPolicy(fl)
 	if fl.Expedite != nil {
@@ -161,7 +164,7 @@ func percent(s string) (float64, bool) {
 
 // flowPolicy maps board.flow; an unset release is push, unset assembly settings rebase,
 // rework, serialize and materialize, an unset transient retry cap domain.DefaultTransientAttempts
-// and unset dependency fields map no output field.
+// and unset dependency and output fields map no output field.
 func flowPolicy(fl Flow) domain.FlowPolicy {
 	p := domain.FlowPolicy{
 		Release: domain.ReleasePush, Constraint: fl.Constraint,
@@ -175,6 +178,14 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 	if d := fl.Dependencies; d != nil {
 		p.Dependencies.After = d.After
 		p.Dependencies.Paths = d.Paths
+	}
+
+	if o := fl.Outputs; o != nil {
+		p.Outputs.FollowUps, p.Outputs.Close = o.FollowUps, o.Close
+	}
+
+	for _, id := range fl.FollowUpsFrom {
+		p.FollowUpsFrom = append(p.FollowUpsFrom, domain.FactoryID(id))
 	}
 
 	if fl.Release != "" {
@@ -295,36 +306,87 @@ func station(st Station) domain.Station {
 	return out
 }
 
-// trigger maps one of board.triggers; an unset enabled is enabled.
+// trigger maps one of board.triggers; an unset enabled is enabled. The keys triggers wrote before
+// ADR 0040 decision 14 read as its forms: github.check_run.failed as github.check_run with
+// conclusion failure, github.issues.labeled as github.issues with action labeled, and
+// webhook.<endpoint>[.<event>] as <endpoint>[.<event>]. An event trigger without limits.perHour
+// takes domain.DefaultPerHour, and a check without limits.perCheck domain.DefaultCheckPerCheck.
+// trigger is t as the engine runs it, its create and check brief files read.
+func (f *Factory) trigger(t Trigger) domain.Trigger {
+	tr := trigger(t)
+	if file, ok := BriefFile(t.Create.Brief); ok {
+		tr.Create.Brief, _ = f.briefText(file)
+	}
+
+	if file, ok := BriefFile(tr.CheckBrief()); ok {
+		tr.Check.Brief, _ = f.briefText(file)
+	}
+
+	return tr
+}
+
 func trigger(t Trigger) domain.Trigger {
 	out := domain.Trigger{
 		Name: t.Name, Enabled: t.Enabled == nil || *t.Enabled, On: t.On, Cron: t.Cron, TimeZone: t.TimeZone,
 		Create: domain.TriggerCreate{
 			Type: t.Create.Type, Station: t.Create.Station, Lane: t.Create.Lane, Expedite: t.Create.Expedite,
-			Title: t.Create.Title, Brief: t.Create.Brief,
+			Title: t.Create.Title, Brief: t.Create.Brief, Trusted: t.Create.Trusted,
 		},
 	}
 
 	if f := t.Filter; f != nil {
 		out.Filter = domain.TriggerFilter{
-			Branch: f.Branch, Repo: f.Repo, Label: f.Label, Paths: slices.Clone(f.Paths), Authors: slices.Clone(f.Authors),
-			SkipBots: f.SkipBots,
+			Branch: f.Branch, Repo: slices.Clone(f.Repo), Label: f.Label, Action: slices.Clone(f.Action),
+			Conclusion: slices.Clone(f.Conclusion), Paths: slices.Clone(f.Paths), Authors: slices.Clone(f.Authors), SkipBots: f.SkipBots,
 		}
+
+		for path, vs := range f.Match {
+			if out.Filter.Match == nil {
+				out.Filter.Match = map[string][]string{}
+			}
+
+			out.Filter.Match[path] = slices.Clone(vs)
+		}
+	}
+
+	switch {
+	case t.On == domain.OnCheckRunFailed:
+		out.On = "github.check_run"
+		out.Filter.Conclusion = append(out.Filter.Conclusion, "failure")
+	case t.On == domain.OnIssuesLabeled:
+		out.On = "github.issues"
+		out.Filter.Action = append(out.Filter.Action, "labeled")
+	case strings.HasPrefix(t.On, webhookPrefix):
+		out.On = strings.TrimPrefix(t.On, webhookPrefix)
 	}
 
 	if o := t.Only; o != nil {
 		out.Only = domain.TriggerOnly{FailuresInARow: o.FailuresInARow, Dedupe: o.Dedupe}
-		if m := o.ModelAgrees; m != nil {
-			out.Only.ModelAgrees = &domain.ModelAgrees{Question: strings.TrimSpace(m.Question), Connection: m.Connection, Model: m.Model}
-		}
+		out.Only.ModelAgrees = o.ModelAgrees != nil
 	}
 
 	if l := t.Limits; l != nil {
-		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PauseOnBudget: l.PauseOnBudget}
+		out.Limits = domain.TriggerLimits{PerDay: l.PerDay, PerHour: l.PerHour, PerCheck: l.PerCheck, PauseOnBudget: l.PauseOnBudget}
+	}
+
+	if ch := t.Check; ch != nil {
+		timeout, _ := time.ParseDuration(ch.Timeout) // Check refuses one that does not parse
+		out.Check = &domain.TriggerCheck{
+			Agent: ch.Agent, Brief: ch.Brief, MaxUSD: cmp.Or(ch.MaxUSD, domain.DefaultCheckMaxUSD),
+			Timeout: cmp.Or(timeout, domain.DefaultCheckTimeout),
+		}
+		out.Limits.PerCheck = cmp.Or(out.Limits.PerCheck, domain.DefaultCheckPerCheck)
+	}
+
+	if out.On != domain.OnSchedule && out.Limits.PerHour == 0 {
+		out.Limits.PerHour = domain.DefaultPerHour
 	}
 
 	return out
 }
+
+// webhookPrefix starts the on: key of a factory endpoint's trigger as written before ADR 0040.
+const webhookPrefix = "webhook."
 
 func agent(a Agent, sources map[string]string) domain.AgentSpec {
 	out := domain.AgentSpec{

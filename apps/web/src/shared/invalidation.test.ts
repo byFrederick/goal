@@ -93,9 +93,8 @@ describe('invalidationsFor an item event', () => {
       ]),
     );
     expect(stale).not.toContainEqual(keys.board(acme, sre));
-    expect(stale).not.toContainEqual(keys.webhooks(acme, sre));
-    // A created delivery makes an item, so the factory's webhooks (and their deliveries) refetch with it.
-    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.webhooks(acme, goal));
+    // A created delivery makes an item, so the organization's webhooks (and their deliveries) refetch with it.
+    expect(invalidationsFor(acme, event('approved'))).toContainEqual(keys.webhooks(acme));
     expect(stale).not.toContainEqual(keys.item(acme, 'goal#7'));
     expect(stale).not.toContainEqual(keys.factories(acme));
     expect(stale.filter((k) => k[1] === labs)).toEqual([]);

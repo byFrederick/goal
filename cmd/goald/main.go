@@ -53,6 +53,7 @@ import (
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
+	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -201,14 +202,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// definition's secret references and knowledge sources are checked against the organization's
 	// (ADR 0037), its models against the organization policy.
 	authors := authoring.New(authoring.Deps{
-		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Clock: clock,
-		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb}, Log: log,
+		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
+		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake}, Log: log,
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,
 	// the engine merges with them and the API lists what a connection reaches.
 	hosts := codeHosts(s.AllowPrivateUpstreams)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
-	moveOver(ctx, store, connections, orgSecrets, definitionStore, authors, hosts, toolLister, clock, log)
+	moveOver(ctx, store, connections, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -228,7 +229,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store),
+		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
@@ -241,7 +242,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
-		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Audit: store, NotificationOutbox: store, Logger: log,
+		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err
@@ -263,7 +264,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// Platform admins, the security log and the sign-in clean-up: install-level, in no organization.
 	platform := postgres.NewPlatform(store)
 	// The docs site at /docs, from GOAL_DOCS_DIR (none without it), and Add a tool's templates.
-	site, templates, siteErr := ownContent(s.DocsDir)
+	site, templates, senderCatalog, siteErr := ownContent(s.DocsDir)
 
 	apiHandler, err := api.New(api.Deps{
 		Engine: eng, Items: store, Factories: defs, Definitions: authors, Versions: definitionStore, Orgs: store, Audit: store, OrgRetention: s.OrgRetention,
@@ -282,7 +283,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	servers := httpServers(s, proxySecret, apiHandler, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
+	// POST /hooks/{webhook id}: the sender catalog checks signatures, the engine's lines name deliveries.
+	receiver := api.Receiver(api.ReceiverDeps{Intake: intake, Secrets: orgSecrets, Senders: senderCatalog, Names: eng, TrustedProxies: s.TrustedProxies, Clock: clock, Logger: log})
+
+	servers := httpServers(s, proxySecret, apiHandler, receiver, gatewayHandler(gw), web.Handler(web.Options{StrictTransport: s.strictTransport()}), site, log)
 
 	j, err := newJobs(s, store, orgSecrets, objects, platform, clock, kb.ingestor, defs, eng, authors, intake, log)
 	if err != nil {
@@ -293,17 +297,18 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 }
 
 // moveOver moves every organization from connections and credentials to secrets and environment
-// files, once (ADR 0037 decision 19), and points synced knowledge sources at their connections'
-// secrets: run before the lines load, so they load the converted versions. A converted version is
-// published only after its repository token (on hosts) and remote MCP servers (through tools)
-// pass their test. A failure is logged and goald starts, an unconverted factory running on the
+// files, once (ADR 0037 decision 19), points synced knowledge sources at their connections'
+// secrets and moves factory webhook endpoints to the organization (ADR 0040 decision 15): run
+// before the lines load, so they load the converted versions. A converted version is published
+// only after its repository token (on hosts) and remote MCP servers (through tools) pass their
+// test. A failure is logged and goald starts, an unconverted factory running on the
 // old path.
-func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
+func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, intake *postgres.Intake,
 	definitions ports.DefinitionStore, authors *authoring.Service, hosts map[string]ports.CodeHost, tools ports.ToolLister,
 	clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Definitions: definitions,
+		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
 		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
@@ -550,13 +555,15 @@ func sandboxes(ctx context.Context, s settings, log *slog.Logger) (runBoxes, err
 	}, nil
 }
 
-// ownContent is what goald serves from its own files: the docs site (docsSite) and the tool
-// templates it ships (catalog.Templates, ADR 0037 decision 15).
-func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, error) {
+// ownContent is what goald serves from its own files: the docs site (docsSite), the tool
+// templates it ships (catalog.Templates, ADR 0037 decision 15) and the webhook sender catalog
+// (senders.Load, ADR 0040 decision 12).
+func ownContent(docsDir string) (http.Handler, []domain.ToolTemplate, *senders.Catalog, error) {
 	site, siteErr := docsSite(docsDir)
 	templates, catalogErr := catalog.Templates()
+	senderCatalog, sendersErr := senders.Load()
 
-	return site, templates, errors.Join(siteErr, catalogErr)
+	return site, templates, senderCatalog, errors.Join(siteErr, catalogErr, sendersErr)
 }
 
 // docsSite serves the docs build in GOAL_DOCS_DIR at /docs (api.Docs); nil without one.
@@ -578,8 +585,8 @@ func docsSite(dir string) (http.Handler, error) {
 // endpoints (/api/auth/*, api.AuthProxy). Every request to the main one but the health check and
 // the agents' gateway must name goald (DNS rebinding); the gateway's serves nothing that a Host
 // could matter to.
-func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
-	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, gw, spa, site)
+func httpServers(s settings, proxySecret string, apiHandler, hooks, gw, spa, site http.Handler, log *slog.Logger) []*http.Server {
+	primary, gatewayOnly := routes(s.GatewayListen != "", apiHandler, hooks, gw, spa, site)
 	if s.Auth == authSession {
 		primary = api.AuthProxy(api.AuthProxyConfig{Upstream: s.AuthUpstream, TrustedProxies: s.TrustedProxies, Secret: proxySecret, Logger: log}, primary)
 	}
@@ -592,20 +599,22 @@ func httpServers(s settings, proxySecret string, apiHandler, gw, spa, site http.
 	return servers
 }
 
-// routes are the handlers of goald's listeners: the main one serves the API, the SPA, the docs
-// site at /docs and everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
+// routes are the handlers of goald's listeners: the main one serves the API, the webhook receiver
+// at /hooks/ (hooks, ahead of the SPA, without a session), the SPA, the docs site at /docs and
+// everything under it (site, from GOAL_DOCS_DIR; 404 when site is nil, never
 // the SPA's index) and, when the gateway has no listener of its own, the agents' gateway at /mcp,
 // /run and /run/tool-approval (gw serves them all).
 // With one (separate), the gateway listener serves only those (everything else 404) and the main
 // one answers them with 404, so the gateway address agents are given reaches nothing else;
 // gatewayOnly is nil without one.
-func routes(separate bool, apiHandler, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
+func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (primary, gatewayOnly http.Handler) {
 	if site == nil {
 		site = http.NotFoundHandler()
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", apiHandler)
+	mux.Handle(api.HooksPath, hooks)
 	mux.Handle("/", spa)
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)
@@ -1073,4 +1082,17 @@ func modelIDs(models []builder.Model) []string {
 	}
 
 	return ids
+}
+
+// shippedEvents are the shipped sender catalog's event tables, which read each delivery's fields
+// (ADR 0040 decision 14). ownContent loads the catalog at start and fails goald when it doesn't.
+type shippedEvents struct{}
+
+func (shippedEvents) EventTable(sender domain.WebhookSender, event string) (domain.EventTable, bool) {
+	c, err := senders.Shipped()
+	if err != nil {
+		return nil, false
+	}
+
+	return c.EventTable(sender, event)
 }

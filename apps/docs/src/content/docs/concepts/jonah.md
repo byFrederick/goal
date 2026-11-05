@@ -27,7 +27,7 @@ The evidence is a folder of small Markdown files that goald writes for each revi
 
 These are the engine's own event kinds, so no configuration names them and the same list fits every factory. The folder holds:
 
-- **`items/<number>.md`**, one file per item: its title, body, type and lane; each run's station, agent, model, version, turns, cost, outcome and the knowledge pinned for it; each send-back with its station, who sent it (an agent, a check or a person), its category and its reason; each question with its answer, and each note and touch. Reasons, notes and answers are kept whole up to 4 KB each. The files are built from milestone events only, never from tool calls.
+- **`items/<number>.md`**, one file per item: its title, body, type, lane and origin; each run's station, agent, model, version, turns, cost, outcome and the knowledge pinned for it; each send-back with its station, who sent it (an agent, a check or a person), its category and its reason; each question with its answer, and each note and touch. Reasons, notes and answers are kept whole up to 4 KB each. The files are built from milestone events only, never from tool calls.
 - **`README.md`**, with the counts across the items: send-backs by station, sender and category, touches by kind, and the disagreements between a gate and a person. A disagreement is an item a person moved to or past a gate that sent it back, or one a person sent back after a gate passed it.
 - **`versions.md`**, the versions published in the window, with who published each and its message, so the review sees what people already fixed.
 

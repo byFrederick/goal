@@ -1587,7 +1587,10 @@ export interface paths {
         /** One page of a factory's items, newest first */
         get: operations["listItems"];
         put?: never;
-        /** Submit a work item to a factory's first station */
+        /**
+         * Submit a work item to a factory's first station
+         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+         */
         post: operations["submitItem"];
         delete?: never;
         options?: never;
@@ -1734,7 +1737,7 @@ export interface paths {
         };
         /**
          * Where the factory's newest items came from, and its triggers
-         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
          */
         get: operations["getIntake"];
         put?: never;
@@ -1761,7 +1764,7 @@ export interface paths {
         };
         /**
          * One trigger with this week's results and its recent events
-         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its memory: the open items and closed keys its checks are given and the state they saved (ADR 0040 decision 19). Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
          */
         get: operations["getIntakeTrigger"];
         put?: never;
@@ -1790,10 +1793,68 @@ export interface paths {
         put?: never;
         /**
          * Try the trigger with one of its past events, creating nothing
-         * @description A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. The model check runs, and its cost is spent, as in intake. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+         * @description A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it, evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now, as intake would, and answers each step. It creates no item, records no event and changes no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a schedule's event is rebuilt from its instant and a delivery's from the body its webhook still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision 18). 404 trigger-not-found for a name the current definition does not have; 404 firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored for a missed event, or a delivery whose body is no longer kept.
          */
         post: operations["tryIntakeTrigger"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The trigger's checks, newest first, with what each filed, noted and skipped
+         * @description A check trigger's checks (ADR 0040 decision 19), tries among them, newest first: when each fired and finished, where it is, what it cost, why it failed, and for a done check what goald applied of its answer: the items it filed, the notes it wrote on open items and what it skipped, each with the reason (a closed key, the limit, a note too soon or repeated, or the agent's own). A try's lists are what it would have done. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         */
+        get: operations["listTriggerChecks"];
+        put?: never;
+        /**
+         * Try the trigger's check now, filing, noting and saving nothing
+         * @description Queues a try check (ADR 0040 decision 19): it runs as the trigger's checks do, with its agent, brief, spend and time limits, and spends from the factory's budget, but its finish keeps only what it would file, note and skip; it files no item, writes no note, keeps no key, saves no state and counts toward no limit. Read the result with listTriggerChecks. Writes a trigger.tried audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running; 422 no-check for a trigger without check.
+         */
+        post: operations["tryTriggerCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear the state a check trigger saved, so its next check starts with none
+         * @description Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done check saved (getIntakeTrigger's memory.state), so its next check is given none. The trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running, because it would save its state again when it finishes; 422 no-check for a trigger without check.
+         */
+        delete: operations["clearTriggerState"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2307,14 +2368,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The factory's webhook endpoints
-         * @description By name, each with its address, kind, the label of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+         * The webhook endpoints open to the factory
+         * @description By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
          */
         get: operations["listWebhookEndpoints"];
         put?: never;
         /**
          * Create a webhook endpoint
-         * @description An endpoint with a new signing secret, answered here once and never again: copy it to the sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         * @description A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
          */
         post: operations["createWebhookEndpoint"];
         delete?: never;
@@ -2342,7 +2403,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a webhook endpoint and its deliveries
-         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory does not have. Needs a sign-in from the last 10 minutes.
+         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
          */
         delete: operations["deleteWebhookEndpoint"];
         options?: never;
@@ -2368,7 +2429,7 @@ export interface paths {
         put?: never;
         /**
          * Replace an endpoint's signing secret
-         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
          */
         post: operations["rotateWebhookSecret"];
         delete?: never;
@@ -2422,9 +2483,121 @@ export interface paths {
         };
         /**
          * One delivery with its request
-         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
          */
         get: operations["getWebhookDelivery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The organization's webhooks
+         * @description By name, each with its sender, the name of the secret that signs it, its openings, the triggers of the published definitions that use it and its deliveries of the last 7 UTC days. Never a secret's value.
+         */
+        get: operations["listWebhooks"];
+        put?: never;
+        /**
+         * Create a webhook
+         * @description An enabled webhook, open to no factory. Without secret, it creates the secret webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with a generated value answered here once as secret_value; with secret, it is signed by that existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400 webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule and webhook), an unknown sender, or token settings on a sender other than token; 404 secret-not-found for a secret the organization does not have; 409 webhook-name-taken for a name an endpoint of the organization has, secret-name-taken when the generated secret's name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+         */
+        post: operations["createWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks/{webhook}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One webhook
+         * @description 404 webhook-not-found for a webhook the organization does not have.
+         */
+        get: operations["getWebhook"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a webhook, its openings and its deliveries
+         * @description Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers name it; a trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
+         */
+        delete: operations["deleteWebhook"];
+        options?: never;
+        head?: never;
+        /**
+         * Open, close, limit, rename, enable or disable a webhook
+         * @description open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
+         */
+        patch: operations["patchWebhook"];
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks/{webhook}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One page of a webhook's deliveries, newest first
+         * @description What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+         */
+        get: operations["listOrgWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One delivery with its request
+         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
+         */
+        get: operations["getOrgWebhookDelivery"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2958,6 +3131,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/items/{item}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change when an item that has not started may start
+         * @description at or in replaces the item's start; after alone keeps it and adds the items as linked dependencies by the caller (one the item already needs is kept, a done one is left out). A start_changed event records the change. Problems: 400 for a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left the first station, or an agent took it there), edge-cycle (an after item already needs it) or item-changed.
+         */
+        put: operations["setItemStart"];
+        post?: never;
+        /**
+         * Start an item now
+         * @description Clears the item's start time, so the first station releases it on its next tick (within seconds); its after items still hold it until they are done, and the needs endpoints remove them. A start_changed event without start_at records it. Problems: 409 item-closed, item-started or item-changed, as for setItemStart.
+         */
+        delete: operations["clearItemStart"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/items/{item}/pause": {
         parameters: {
             query?: never;
@@ -3002,6 +3204,60 @@ export interface paths {
          * @description The item becomes cancelled at its station with a cancelled event. In progress, its lease is taken and its run stopped (lease_taken). An assembly cancels its open parts (neither done nor cancelled) in one transaction, each with its own cancelled event, and closes as cancelled even when some part is done. 409 item-closed (done or cancelled) or item-changed.
          */
         post: operations["cancelItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drop a waiting follow-up of an item so it is never delivered or filed
+         * @description The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state when it is not waiting.
+         */
+        post: operations["dropFollowUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * File an item from a dropped follow-up or one in a closed triage item
+         * @description Files an item in the source item's factory at its first station, as createItem does, with origin follow-up, the caller as its filer, a generation one above the source's and the source's untrusted flag; the follow-up becomes filed with that item. Only a dropped follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+         */
+        post: operations["fileFollowUp"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3803,7 +4059,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -3825,6 +4081,8 @@ export interface components {
             try_estimate?: components["schemas"]["TryProposalEstimate"];
             /** @description secret-in-use only, what uses the secret */
             uses?: components["schemas"]["SecretUse"][];
+            /** @description webhook-in-use only, the published triggers that name the webhook */
+            triggers?: components["schemas"]["WebhookTrigger"][];
         };
         /**
          * @description session: people sign in and every request carries a session or an API key. none: sign-in is off (GOAL_AUTH=none, a loopback install), every request acts as the local user.
@@ -4413,6 +4671,128 @@ export interface components {
             lane?: string;
             /** @default 0 */
             priority?: number;
+            /** @description When the item may start; absent, as soon as it can */
+            start?: components["schemas"]["Start"];
+        };
+        /** @description When an item may start (ADR 0040): at a time, after a wait, after other items, or a time and items. at and in cannot both be set. The start is at most 365 days ahead. */
+        Start: {
+            /** @description An RFC 3339 time, or a date and time without a zone (2026-11-05T09:00, 2026-11-05 09:00 or 2026-11-05), read in the caller's time zone from their notification settings; UTC for an API key or when they saved none */
+            at?: string;
+            /** @description A wait from now in whole hours, days or weeks, as in 36h, 7d or 2w; it becomes at */
+            in?: string;
+            /** @description The items it starts after, each an id (a UUID) or <factory>#<number>, as in goal#2, of the same factory */
+            after?: string[];
+        };
+        /** @description Work an agent noticed outside its item, kept on the item (ADR 0040): a note for an open item, a start for an item of its own when the work lands, or text for the factory's triage item */
+        FollowUp: {
+            id: string;
+            /** @description The source item */
+            item_id: string;
+            /** @description The station whose run wrote it */
+            station: string;
+            agent: string;
+            text: string;
+            /**
+             * @description Where it goes, or went; absent for one dropped as it was read
+             * @enum {string}
+             */
+            target?: "note" | "start" | "triage";
+            /** @enum {string} */
+            state: "waiting" | "delivered" | "filed" | "dropped";
+            /** @description Why it was dropped, or why it went to triage instead of where it said */
+            reason?: string;
+            /** @description The item it was filed as or onto, a triage item for target triage */
+            filed_item_id?: string;
+            /** @description The <factory name>#<number> of filed_item_id, another factory's included; getItem only, absent when it is not filed or that item is gone */
+            filed_item?: string;
+            /** @description A note's item, <factory name>#<number>, as the agent wrote it; absent for any other target */
+            for?: string;
+            /** @description A start's item, which it files when its work lands; absent for any other target */
+            start?: components["schemas"]["FollowUpStart"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description When the item a start follow-up files may start, as the agent wrote it: at a time, a wait after the work lands, after other items, or a mix */
+        FollowUpStart: {
+            title: string;
+            /** @description A time */
+            at?: string;
+            /** @description A wait after the work lands, as in 7d */
+            in?: string;
+            /** @description Refs of the items it waits for */
+            after?: string[];
+            /** @description The factory it is filed in */
+            factory?: string;
+        };
+        /** @description A note another item's agent, or a trigger's check, left on the item (an item_note event); it reaches the item's next run after its brief */
+        ItemNoteFrom: {
+            /**
+             * Format: int64
+             * @description The item_note event's id
+             */
+            id: number;
+            /** @description The agent's text */
+            text: string;
+            /** @description The source item, <factory name>#<number>; absent for a check's note */
+            from_item?: string;
+            from_item_id?: string;
+            /** @description The source item's factory; absent for a check's note */
+            from_factory_id?: string;
+            /** @description The station whose run wrote it; absent for a check's note */
+            station?: string;
+            /** @description The trigger whose check wrote it; absent for an item's note */
+            trigger?: string;
+            agent: string;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @description Where an item came from; follow_ups for origin follow-up, trigger for origin trigger */
+        ItemCameFrom: {
+            /** @description The follow-ups filed as or onto the item, oldest first: its sources. Present, an empty list when none resolves, for origin follow-up; absent otherwise */
+            follow_ups?: components["schemas"]["CameFromFollowUp"][];
+            /** @description The trigger that filed the item; present for origin trigger, absent otherwise */
+            trigger?: components["schemas"]["CameFromTrigger"];
+        };
+        /** @description A follow-up an item was filed from, the item and run that wrote it and the landing that filed it */
+        CameFromFollowUp: {
+            /** @description The follow-up's id */
+            id: string;
+            /** @description The source item, <factory name>#<number>, another factory's included */
+            from_item: string;
+            from_item_id: string;
+            /** @description The agent whose run wrote it */
+            agent: string;
+            /** @description The station whose run wrote it */
+            station: string;
+            /** @description The item whose landing filed it, <factory name>#<number>: the source, or its assembly when the source is a part */
+            landed_item: string;
+            landed_item_id: string;
+        };
+        /** @description The trigger that filed an item */
+        CameFromTrigger: {
+            /** @description The trigger's name */
+            name: string;
+            /**
+             * @description check for a trigger with a check, schedule for another schedule trigger, webhook otherwise; absent when the trigger is not in the factory's loaded definition
+             * @enum {string}
+             */
+            kind?: "schedule" | "check" | "webhook";
+            /** @description The key a check filed the item under; absent for any other trigger, and when the check filed the key again since, which keeps only the key's last item */
+            key?: string;
+        };
+        FileFollowUpRequest: {
+            title: string;
+            body?: string;
+            /** @description One of the factory's work types; absent or empty, the first it declares, or none when it declares none */
+            type?: string;
+            lane?: string;
+            /** @description When the item may start; absent, as soon as it can */
+            start?: components["schemas"]["Start"];
+        };
+        /** @description When an item that has not started may start */
+        ItemStart: {
+            /** Format: date-time */
+            at: string;
         };
         Rejection: {
             /** @description What the agent must change */
@@ -4457,6 +4837,28 @@ export interface components {
             part_paths?: string[];
             /** @description The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts */
             assembly?: components["schemas"]["PartOf"];
+            /**
+             * @description Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)
+             * @enum {string}
+             */
+            origin?: "person" | "plan" | "trigger" | "follow-up";
+            /** @description When the item may start, absent when it may start now; it waits at the first station until then (ADR 0040). Its after items are its needs */
+            start?: components["schemas"]["ItemStart"];
+            /**
+             * @description How a person filed it; absent for any other origin
+             * @enum {string}
+             */
+            via?: "web" | "cli" | "api";
+            /** @description Who filed it; absent for items filed before ADR 0040 and for the engine's filings */
+            created_by?: components["schemas"]["Actor"];
+            /** @description Whether it, or an item it came from, was made from a webhook delivery (ADR 0040 decision 21): a person merges its work, and its follow-ups wait for a person */
+            untrusted?: boolean;
+            /** @description Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the follow-ups filed as it, or its trigger; getItem only, absent unless origin is follow-up or trigger */
+            came_from?: components["schemas"]["ItemCameFrom"];
+            /** @description The follow-ups its runs wrote, oldest first, each saying where it went or will go; getItem only */
+            follow_ups?: components["schemas"]["FollowUp"][];
+            /** @description The notes other items' agents and triggers' checks left on it, oldest first, at most 200; getItem only */
+            notes?: components["schemas"]["ItemNoteFrom"][];
             type: string;
             lane?: string;
             title: string;
@@ -5045,6 +5447,22 @@ export interface components {
             rework_count: number;
             /** Format: double */
             cost_usd: number;
+            /**
+             * @description As Item's origin
+             * @enum {string}
+             */
+            origin?: "person" | "plan" | "trigger" | "follow-up";
+            /**
+             * @description As Item's via
+             * @enum {string}
+             */
+            via?: "web" | "cli" | "api";
+            /** @description As Item's created_by */
+            created_by?: components["schemas"]["Actor"];
+            /** @description As Item's untrusted */
+            untrusted?: boolean;
+            /** @description As Item's start, absent when it may start now; the inbox shows such items under Later */
+            start?: components["schemas"]["ItemStart"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -5959,6 +6377,107 @@ export interface components {
             };
             /** @description The current definition's board.triggers, in definition order */
             triggers: components["schemas"]["IntakeTrigger"][];
+            /** @description The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers. */
+            suggestions: components["schemas"]["TriggerSuggestion"][];
+            /**
+             * @description The window origins count over, the one asked for or 30d; always answered
+             * @enum {string}
+             */
+            window?: "7d" | "30d" | "90d";
+            /** @description How many of the factory's items created in the window came from each origin (ADR 0040 decision 2), zero included; always answered. Items filed before origins were recorded count as person, the column's default */
+            origins?: components["schemas"]["IntakeOrigins"];
+            /** @description Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first; always answered */
+            coming_up?: components["schemas"]["IntakeComingUp"][];
+            /** @description How many items coming_up counts */
+            coming_up_total?: number;
+            /** @description Follow-ups for the architect (ADR 0040 decision 9): the factory's collecting triage item and the items whose waiting triage follow-ups join it when they land; null when there is neither */
+            triage?: components["schemas"]["IntakeTriage"] | null;
+            /** @description The organization's webhooks open to the factory, by name; always answered */
+            webhooks?: components["schemas"]["IntakeWebhook"][];
+        };
+        IntakeOrigins: {
+            /** @description Filed by a person */
+            person: number;
+            /** @description Parts of assemblies */
+            plan: number;
+            /** @description Filed by a trigger or a check */
+            trigger: number;
+            /** @description Filed from follow-ups */
+            follow_up: number;
+        };
+        /** @description An item that hasn't started */
+        IntakeComingUp: {
+            id: string;
+            /** @description <factory name>#<number> */
+            ref: string;
+            title: string;
+            /** @enum {string} */
+            origin: "person" | "plan" | "trigger" | "follow-up";
+            /**
+             * @description How a person filed it; absent otherwise
+             * @enum {string}
+             */
+            via?: "web" | "cli" | "api";
+            /** @description Who filed it; absent for items filed before ADR 0040 and for the engine's filings */
+            created_by?: components["schemas"]["Actor"];
+            /** @description When it may start; absent when it waits only for its needs */
+            start?: components["schemas"]["ItemStart"];
+            /** @description The refs of its open needs (neither done nor cancelled), oldest edge first */
+            needs: string[];
+            /** @description The ref of the item whose follow-up filed it, another factory's included; absent otherwise */
+            from_item?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IntakeTriage: {
+            /** @description The collecting triage item: open, with no run yet; null when there is none, and the next item that lands with triage follow-ups files one */
+            item: components["schemas"]["IntakeTriageItem"] | null;
+            /** @description Each item of the factory with waiting triage follow-ups, oldest first, which join the collecting item when the item (or its assembly) lands. An untrusted item's are left out: they go to a paused triage item of their own */
+            waiting: components["schemas"]["IntakeTriageSource"][];
+        };
+        /** @description A factory's collecting triage item */
+        IntakeTriageItem: {
+            id: string;
+            ref: string;
+            title: string;
+            station: string;
+            /** @description How many follow-ups have joined it */
+            follow_ups: number;
+        };
+        /** @description An item whose waiting triage follow-ups join the collecting triage item when it lands */
+        IntakeTriageSource: {
+            id: string;
+            ref: string;
+            title: string;
+            follow_ups: number;
+        };
+        /** @description An organization webhook open to the factory */
+        IntakeWebhook: {
+            id: string;
+            name: string;
+            sender: components["schemas"]["WebhookSender"];
+            /**
+             * @description Derived from the definition, not from recent deliveries. receiving: the webhook is enabled and an enabled trigger of the factory's current definition names it, by its sender (<sender>.<event>) or by its name; no_trigger: enabled, and no enabled trigger names it; closed: the webhook is turned off
+             * @enum {string}
+             */
+            state: "receiving" | "no_trigger" | "closed";
+        };
+        TriggerSuggestion: {
+            name: string;
+            /** @enum {string} */
+            source: "schedule" | "webhook" | "github";
+            /** @description The trigger's event key, as in the definition */
+            on: string;
+            /** @description As IntakeTrigger's when: the cron and its time zone for a schedule, the event key otherwise */
+            when: string;
+            create: {
+                type: string;
+                station: string;
+                lane: string | null;
+                expedite: boolean;
+                /** @description create.title as written, with its {{field}} placeholders; empty when the definition sets none */
+                title: string;
+            };
         };
         IntakeTrigger: {
             name: string;
@@ -5977,7 +6496,16 @@ export interface components {
             };
             /** @description The items it created on each of the last 7 UTC days, oldest first, ending today */
             days: number[];
-            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries. */
+            /** @description The agent that checks a source each time it fires, instead of filing an item (ADR 0040 decision 19); absent without one */
+            check?: {
+                agent: string;
+                /**
+                 * Format: double
+                 * @description The most one check may spend
+                 */
+                max_usd: number;
+            };
+            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted from the endpoints' daily delivery counts. */
             problem: {
                 /** @enum {string} */
                 kind: "missing_connection" | "refused_deliveries";
@@ -5999,6 +6527,7 @@ export interface components {
             };
             /** @description Its 20 newest events, newest first */
             events: components["schemas"]["IntakeEvent"][];
+            memory?: components["schemas"]["TriggerCheckMemory"];
         };
         IntakeEvent: {
             /** @description The firing's id */
@@ -6007,26 +6536,128 @@ export interface components {
             title: string;
             /** @description The event key it matched */
             event: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When it fired; for missed, the gap's last instant
+             */
             at: string;
             /**
-             * @description created an item; merged once that item has been merged; skipped with the reason
+             * @description created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late; checked: it queued a check (ADR 0040 decision 19), a try among them, whose items and notes are its checks' (listTriggerChecks)
              * @enum {string}
              */
-            outcome: "created" | "merged" | "skipped";
+            outcome: "created" | "merged" | "skipped" | "missed" | "checked";
             /**
              * Format: int64
              * @description The item it created; null when it created none or that item is gone
              */
             item_number: number | null;
-            /** @description Why it was skipped; null otherwise */
+            /** @description Why it was skipped or what it missed; null otherwise */
             reason: string | null;
+            /** @description How many schedule instants a missed event covers; 0 for any other outcome */
+            missed: number;
+        };
+        /** @description What a check trigger carries from one check to the next (ADR 0040 decision 19, the Remembers row of its page); present only for a trigger with a check. Every key, title and reason comes from the check's agent or the source it read: text to show as text, never markup. */
+        TriggerCheckMemory: {
+            /** @description How many of the items it filed are open (neither done nor cancelled) */
+            open: number;
+            /** @description Its newest open items, at most 50, newest first */
+            open_items: components["schemas"]["TriggerCheckOpenItem"][];
+            /** @description How many of its keys' items closed in the last 7×24 hours */
+            closed: number;
+            /** @description The keys whose items closed in the last 7×24 hours, at most 50, newest first; the next check does not file them again */
+            closed_keys: components["schemas"]["TriggerCheckClosedKey"][];
+            /** @description The JSON object its last done check saved for the next one (at most 4 KiB); null when none is saved */
+            state: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Format: date-time
+             * @description When the check that saved the state finished; null without a saved state
+             */
+            checked_up_to: string | null;
+        };
+        TriggerCheckOpenItem: {
+            /** @description The source's own id it was filed for */
+            key: string;
+            /** @description The item's ref, #<number> */
+            ref: string;
+            title: string;
+            /** @description The item's state */
+            state: string;
+        };
+        TriggerCheckClosedKey: {
+            key: string;
+            /** @description The closed item's ref, #<number> */
+            ref: string;
+            /** @enum {string} */
+            how: "done" | "cancelled";
+            /** @description The reason given when it closed; empty for none */
+            why: string;
+            /**
+             * Format: date-time
+             * @description When it closed
+             */
+            at: string;
+        };
+        TriggerCheckList: {
+            checks: components["schemas"]["TriggerCheck"][];
+        };
+        /** @description One check of a trigger. Every key, title, text and reason comes from the check's agent or the source it read: text to show as text, never markup. */
+        TriggerCheck: {
+            /** @description The check's firing id */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When it was queued
+             */
+            at: string;
+            /**
+             * Format: date-time
+             * @description When it finished; null while queued or running
+             */
+            checked_at: string | null;
+            /** @enum {string} */
+            state: "queued" | "running" | "done" | "failed";
+            /** @description A try (tryTriggerCheck) */
+            try: boolean;
+            /**
+             * Format: double
+             * @description What its run cost
+             */
+            cost_usd: number;
+            /** @description Why it failed; null otherwise */
+            reason: string | null;
+            /** @description The items it filed, one per key */
+            filed: components["schemas"]["TriggerCheckFiled"][];
+            /** @description The notes it wrote on its keys' open items */
+            noted: components["schemas"]["TriggerCheckNoted"][];
+            /** @description What it did not file or note, with why: "closed on Nov 2: <reason>", "over the limit", "a note on this key within the hour", "the same note again", "no open item for this key", "can't file it: …", or the agent's own reason */
+            skipped: components["schemas"]["TriggerCheckSkip"][];
+        };
+        TriggerCheckFiled: {
+            /** @description The source's own id for it */
+            key: string;
+            title: string;
+            /** @description The item's ref, #<number>; null for a try */
+            ref: string | null;
+            /** @description For a key filed again with reopen, the ref of the closed item it links to */
+            reopens: string | null;
+        };
+        TriggerCheckNoted: {
+            key: string;
+            /** @description The open item's ref, #<number> */
+            ref: string;
+            text: string;
+        };
+        TriggerCheckSkip: {
+            key: string;
+            reason: string;
         };
         TriggerTryRequest: {
-            /** @description The id of one of the trigger's 20 newest events */
+            /** @description The id of one of the trigger's 20 newest events: a schedule's, or a delivery's while its webhook keeps it (30 days) */
             firing: string;
         };
-        /** @description What the trigger would do with the event now. Every string shaped by the event (the item's title and brief, the model's reason, a step's reason) is text to show as text, never markup. */
+        /** @description What the saved trigger would do with the event now. Every string shaped by the event (the item's title and brief, a step's reason) is text to show as text, never markup. */
         TriggerTry: {
             /** @description The firing tried */
             firing: string;
@@ -6039,7 +6670,7 @@ export interface components {
             outcome: "would_create" | "skipped";
             /** @description The reason a skipped firing would record (the step, a colon and why); null for would_create */
             reason: string | null;
-            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
+            /** @description In the order they run: when, each configured only condition (failuresInARow, dedupe, then a deprecated modelAgrees, which always skips), create, then each configured limit (perDay, pauseOnBudget). Steps after the one that skipped are not_reached. */
             steps: components["schemas"]["TriggerTryStep"][];
             /** @description The item it would create; null when the create step was not reached */
             item: {
@@ -6052,7 +6683,7 @@ export interface components {
                 /** @description The item's body, create.brief rendered, then the event's fields marked as untrusted data */
                 brief: string;
             } | null;
-            /** @description The model check's answer; null when it did not run or gave no answer */
+            /** @description Deprecated and always null; the model check is removed (ADR 0040 decision 18) */
             model_check: {
                 /** @description The model answered yes */
                 worth: boolean;
@@ -6237,7 +6868,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
-            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue */
+            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief */
             kind: string;
             station?: string;
             actor: string;
@@ -6716,12 +7347,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo)
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse" | "check_failing" | "check_limit";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -6758,6 +7389,15 @@ export interface components {
             knowledge_source?: components["schemas"]["InboxKnowledgeSource"] | null;
             /** @description The watch of a watch_worse entry, with its proposal's number; absent or null for other kinds */
             watch?: components["schemas"]["Watch"] | null;
+            /** @description The trigger of a check_failing or check_limit entry; absent or null for other kinds */
+            trigger_check?: components["schemas"]["InboxTriggerCheck"] | null;
+        };
+        /** @description A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page. */
+        InboxTriggerCheck: {
+            /** @description The trigger's name */
+            trigger: string;
+            /** @description For check_failing, why its newest check failed; for check_limit, "over the limit" */
+            reason: string;
         };
         /** @description A knowledge source whose last syncs failed, shown under each factory that lists it. */
         InboxKnowledgeSource: {
@@ -7615,14 +8255,17 @@ export interface components {
         WebhookEndpointList: {
             endpoints: components["schemas"]["WebhookEndpoint"][];
         };
-        /** @description A factory's webhook endpoint, never its signing secret */
+        /** @description A webhook endpoint open to the factory, never its signing secret */
         WebhookEndpoint: {
             id: string;
             name: string;
+            /** @description A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise */
             kind: components["schemas"]["WebhookKind"];
+            /** @description Its sender; a factory endpoint of kind generic reads as standard */
+            sender: components["schemas"]["WebhookSender"];
             /** @description The path senders post to, /hooks/{id}, on goald's public origin */
             address: string;
-            /** @description The label the screens show for its signing secret, <name>-hook-secret. The secret is sealed on the endpoint, not a credential, so no credential has this name. */
+            /** @description A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it. */
             secret_name: string;
             /** Format: date-time */
             created_at: string;
@@ -7635,6 +8278,90 @@ export interface components {
             triggers: string[];
             /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
             days: components["schemas"]["WebhookDeliveryDay"][];
+        };
+        /**
+         * @description How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+         * @enum {string}
+         */
+        WebhookSender: "github" | "gitlab" | "standard" | "pagerduty" | "sentry" | "token";
+        /** @description The token sender's settings */
+        WebhookTokenSettings: {
+            /** @description The header that carries the value; Authorization (as Bearer <value>) when empty */
+            header?: string;
+            /** @description The body's dot path of the event name, such as event.type; empty for none */
+            event_path?: string;
+            /** @description The body's dot path of a delivery id; empty for none */
+            id_path?: string;
+        };
+        /** @description The webhook is open to a factory */
+        WebhookOpening: {
+            /** @description The factory's metadata.id */
+            factory: string;
+            /** @description The repositories (owner/name) whose deliveries reach the factory; null or absent: every one */
+            repositories?: string[] | null;
+        };
+        /** @description A trigger of a factory's published definition that uses the webhook */
+        WebhookTrigger: {
+            /** @description The factory's metadata.id */
+            factory: string;
+            factory_name: string;
+            trigger: string;
+        };
+        NewWebhook: {
+            /** @description A slug of 3 to 40 characters, unique in the organization, and none of github, gitlab, standard, pagerduty, sentry, token, schedule and webhook */
+            name: string;
+            sender: components["schemas"]["WebhookSender"];
+            /** @description The name of an existing secret that signs it; absent: goald creates webhook-<name> with a generated value */
+            secret?: string;
+            token?: components["schemas"]["WebhookTokenSettings"];
+        };
+        WebhookPatch: {
+            /** @description A new name */
+            name?: string;
+            /** @description false: its address answers 404 until enabled again */
+            enabled?: boolean;
+            /** @description Factories to open it to, or whose opening's repositories to replace */
+            open?: components["schemas"]["WebhookOpening"][];
+            /** @description The metadata.id of factories to close it to */
+            close?: string[];
+        };
+        WebhookList: {
+            webhooks: components["schemas"]["Webhook"][];
+        };
+        /** @description One of the organization's webhooks, never a secret's value */
+        Webhook: {
+            id: string;
+            name: string;
+            sender: components["schemas"]["WebhookSender"];
+            /** @description The path senders post to, /hooks/{id}, on goald's public origin */
+            address: string;
+            /** @description The name of the organization secret that signs it */
+            secret: string;
+            enabled: boolean;
+            /** @description The token sender's settings; null for another sender */
+            token: components["schemas"]["WebhookTokenSettings"] | null;
+            /** @description The factories it is open to, by factory id */
+            openings: components["schemas"]["WebhookOpening"][];
+            /** @description The triggers of the published definitions of the factories it is open to that name it (on webhook.<name>, <name> or either followed by .<event>), enabled or not, and the enabled ones that name its sender with an event (<sender>.<event>), by factory name then trigger. Archived factories' triggers are left out. */
+            triggers: components["schemas"]["WebhookTrigger"][];
+            /** Format: date-time */
+            created_at: string;
+            /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
+            days: components["schemas"]["WebhookDeliveryDay"][];
+            /**
+             * Format: date-time
+             * @description When the receiver last accepted GitHub's ping to it; null when it never did
+             */
+            pinged_at: string | null;
+            /** @description The events to choose in the sender's settings: the sorted, distinct events of the enabled triggers of the published definitions of the factories it is open to that name it (<name>.<event>, webhook.<name>.<event>) or its sender (<sender>.<event>). Archived factories are left out. */
+            setup_events: string[];
+            /** @description true when such a trigger names it with no event, so the sender should send every event */
+            setup_all_events: boolean;
+        };
+        /** @description A new webhook, with the value of the secret goald generated for it, never readable again */
+        CreatedWebhook: components["schemas"]["Webhook"] & {
+            /** @description The generated secret's value, to paste into the sender: 64 lower-case hex characters, or for sender standard whsec_ and the base64 of 32 bytes. null when the webhook uses an existing secret. */
+            secret_value: string | null;
         };
         WebhookDeliveryDay: {
             /**
@@ -7665,6 +8392,44 @@ export interface components {
             reason: string;
             /** @description The item it created; null for another outcome or once that item is gone */
             item: components["schemas"]["WebhookDeliveryItem"] | null;
+            /** @description The sender's event, such as check_run; empty when it names none or it was refused */
+            event: string;
+            /**
+             * @description What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
+             * @enum {string|null}
+             */
+            receipt: "accepted" | "duplicate" | "refused" | null;
+            /** @description How many later deliveries had its delivery id and created nothing */
+            duplicates: number;
+            /** @description Its evaluation by each factory that names it, by factory name then factory id. A factory's own routes list only that factory's. */
+            evaluations: components["schemas"]["WebhookDeliveryEvaluation"][];
+        };
+        WebhookDeliveryEvaluation: {
+            /** @description The factory's metadata.id */
+            factory: string;
+            /** @description The factory's name; its metadata.id once the factory is gone */
+            factory_name: string;
+            /**
+             * @description pending, waiting to be evaluated or tried again; done, with its outcome; failed after five attempts
+             * @enum {string}
+             */
+            state: "pending" | "done" | "failed";
+            /**
+             * @description created, an item; skipped, with the reason; failed, with the error; null while pending
+             * @enum {string|null}
+             */
+            outcome: "created" | "skipped" | "failed" | null;
+            /** @description Why it was skipped or failed, or the last attempt's error while pending; empty otherwise */
+            reason: string;
+            /** @description The item it created; null for another outcome or once that item is gone */
+            item: components["schemas"]["WebhookEvaluationItem"] | null;
+        };
+        WebhookEvaluationItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            /** @description <factory name>#<number>, such as sre#88 */
+            ref: string;
         };
         WebhookDeliveryItem: {
             id: string;
@@ -8434,6 +9199,8 @@ export interface components {
     parameters: {
         /** @description The saved view's id */
         SavedViewRef: string;
+        /** @description The organization webhook's name or id */
+        WebhookRef: string;
         /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
         WebhookEndpointRef: string;
         /** @description A person's user id */
@@ -8470,6 +9237,8 @@ export interface components {
         WorkTypeFilter: string;
         /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
         ItemRef: string;
+        /** @description The follow-up's id (a UUID) */
+        FollowUpRef: string;
         /** @description A section of the factory model, a tab of the Visual editor */
         SectionRef: components["schemas"]["Section"];
         /** @description A file's path relative to the factory's root, as in agents/engineer.md; percent-encode its slashes as %2F so it is one path segment */
@@ -10967,6 +11736,8 @@ export interface operations {
             query?: {
                 /** @description How many of the newest items the sources count (default 48) */
                 items?: number;
+                /** @description The days origins count over, ending now (default 30d) */
+                window?: "7d" | "30d" | "90d";
             };
             header?: never;
             path: {
@@ -11047,6 +11818,91 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TriggerTry"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listTriggerChecks: {
+        parameters: {
+            query?: {
+                /** @description How many checks to list (default 20) */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trigger's checks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerCheckList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    tryTriggerCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The try check, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerCheck"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearTriggerState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
@@ -11867,6 +12723,196 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listWebhooks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The webhooks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewWebhook"];
+            };
+        };
+        responses: {
+            /** @description The webhook, with the generated secret's value when it made one */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedWebhook"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The webhook */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    patchWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookPatch"];
+            };
+        };
+        responses: {
+            /** @description The webhook as changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Webhook"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listOrgWebhookDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_after of the previous page; deliveries received before it */
+                after?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deliveries, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryPage"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrgWebhookDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The organization webhook's name or id */
+                webhook: components["parameters"]["WebhookRef"];
+                /** @description The delivery's id */
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryRequest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listSavedViews: {
         parameters: {
             query?: never;
@@ -12577,6 +13623,64 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    setItemStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Start"];
+            };
+        };
+        responses: {
+            /** @description The item with its new start */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearItemStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item without a start time */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
     pauseItem: {
         parameters: {
             query?: never;
@@ -12628,6 +13732,68 @@ export interface operations {
         responses: {
             /** @description The cancelled item */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Item"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    dropFollowUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The dropped follow-up */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FollowUp"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    fileFollowUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by metadata.name or metadata.id; percent-encode the # as %23) */
+                item: components["parameters"]["ItemRef"];
+                /** @description The follow-up's id (a UUID) */
+                followUp: components["parameters"]["FollowUpRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileFollowUpRequest"];
+            };
+        };
+        responses: {
+            /** @description The filed item */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

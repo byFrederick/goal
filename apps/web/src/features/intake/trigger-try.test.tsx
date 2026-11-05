@@ -8,14 +8,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
 import * as intake from '../../api/intake';
 import type { IntakeEvent, Problem, TriggerTry } from '../../api/types';
-import { TryWithPastEvent } from './trigger-try';
+import { TryCheck, TryWithPastEvent } from './trigger-try';
 
 vi.mock('../../api/intake', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/intake')>()),
   tryIntakeTrigger: vi.fn(),
+  tryTriggerCheck: vi.fn(),
 }));
 
 const tryIntakeTrigger = vi.mocked(intake.tryIntakeTrigger);
+const tryTriggerCheck = vi.mocked(intake.tryTriggerCheck);
 
 const events: IntakeEvent[] = [
   {
@@ -26,6 +28,7 @@ const events: IntakeEvent[] = [
     outcome: 'created',
     item_number: 151,
     reason: null,
+    missed: 0,
   },
   {
     id: 'firing-s2',
@@ -35,6 +38,7 @@ const events: IntakeEvent[] = [
     outcome: 'skipped',
     item_number: null,
     reason: 'once',
+    missed: 0,
   },
 ];
 
@@ -45,7 +49,7 @@ const wouldCreate: TriggerTry = {
   reason: null,
   steps: [
     { step: 'when', outcome: 'passed', reason: null },
-    { step: 'only.modelAgrees', outcome: 'passed', reason: null },
+    { step: 'only.dedupe', outcome: 'passed', reason: null },
     { step: 'create', outcome: 'passed', reason: null },
     { step: 'limits.perDay', outcome: 'not_reached', reason: null },
   ],
@@ -57,14 +61,7 @@ const wouldCreate: TriggerTry = {
     title: 'Update the audited dependency',
     brief: 'Bump the package named in the audit.\nSay which advisory it fixes.',
   },
-  model_check: {
-    worth: true,
-    reason: 'The audit names a fix for a direct dependency.',
-    model: 'claude-haiku-5-5',
-    input_tokens: 412,
-    output_tokens: 18,
-    cost_usd: 0.01,
-  },
+  model_check: null,
 };
 
 afterEach(() => {
@@ -81,7 +78,6 @@ function renderTry(props: Partial<Parameters<typeof TryWithPastEvent>[0]> = {}) 
         factory="factory-1"
         trigger="dependency-audit"
         events={events}
-        modelCheck={true}
         disabled={false}
         {...props}
       />
@@ -112,22 +108,14 @@ describe('the try', () => {
     const steps = within(dialog).getAllByRole('listitem');
     expect(steps.map((li) => li.textContent)).toEqual([
       'The event matches WhenPassed',
-      'A model agrees it is worth an itemPassed',
+      'No open item already covers itPassed',
       'Create the itemPassed',
       'Under the daily limitNot reached',
     ]);
 
     expect(within(dialog).getByText('Update the audited dependency')).toBeTruthy();
     expect(within(dialog).getByText('Default lane')).toBeTruthy();
-    expect(within(dialog).getByText('The model said yes: The audit names a fix for a direct dependency.')).toBeTruthy();
-    expect(within(dialog).getByText('claude-haiku-5-5, cost $0.01')).toBeTruthy();
     expect(within(dialog).getByText('Nothing was created. The try changed no item, event or limit.')).toBeTruthy();
-  });
-
-  it('says the model check costs money before the try runs, when the trigger has it', async () => {
-    renderTry();
-    openDialog();
-    expect(await screen.findByText('This try runs the model check. It costs about $0.01 each time.')).toBeTruthy();
   });
 
   it('shows the reason a firing would be skipped', async () => {
@@ -137,14 +125,13 @@ describe('the try', () => {
       outcome: 'skipped',
       reason: 'dedupe: an open item covers this',
       item: null,
-      model_check: null,
       steps: [
         { step: 'when', outcome: 'passed', reason: null },
         { step: 'only.dedupe', outcome: 'skipped', reason: 'an open item covers this' },
         { step: 'create', outcome: 'not_reached', reason: null },
       ],
     });
-    renderTry({ modelCheck: false });
+    renderTry();
     openDialog();
     fireEvent.click(await screen.findByRole('button', { name: 'Run the try' }));
     expect(await screen.findByText('The trigger would skip it. dedupe: an open item covers this')).toBeTruthy();
@@ -201,7 +188,7 @@ describe('the try', () => {
     openDialog();
     runTry();
     expect(
-      await screen.findByText("Only a schedule's events are stored, so this trigger's events cannot be tried."),
+      await screen.findByText('This event is no longer stored, so it cannot be tried. A delivery is kept for 30 days.'),
     ).toBeTruthy();
     expect(screen.queryByText(/Could not try/)).toBeNull();
   });
@@ -222,5 +209,75 @@ describe('the try', () => {
   it('is disabled, with no dialog, when the page says the try is unavailable', () => {
     renderTry({ disabled: true });
     expect(screen.getByRole('button', { name: 'Try with a past event' }).hasAttribute('disabled')).toBe(true);
+  });
+});
+
+describe('Try with a delivery', () => {
+  it('names the button as the page says and runs the same try', async () => {
+    tryIntakeTrigger.mockResolvedValue(wouldCreate);
+    renderTry({ title: 'Try with a delivery' });
+    fireEvent.click(screen.getByRole('button', { name: 'Try with a delivery' }));
+    runTry();
+    expect(await screen.findByRole('heading', { name: 'The event matched' })).toBeTruthy();
+    expect(tryIntakeTrigger).toHaveBeenCalledWith('org-1', 'factory-1', 'dependency-audit', 'firing-s1');
+  });
+});
+
+describe('Try a check', () => {
+  const queued = { id: 'c1', state: 'queued', try: true } as never;
+
+  function renderCheck(props: Partial<Parameters<typeof TryCheck>[0]> = {}) {
+    const onProblem = vi.fn();
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <TryCheck
+          org="org-1"
+          factory="factory-1"
+          trigger="new-incidents"
+          disabled={false}
+          checking={false}
+          readAt={1}
+          onProblem={onProblem}
+          {...props}
+        />
+      </QueryClientProvider>,
+    );
+    return { onProblem, view };
+  }
+
+  it('queues a try and reads the log again', async () => {
+    tryTriggerCheck.mockResolvedValue(queued);
+    const { onProblem } = renderCheck();
+    fireEvent.click(screen.getByRole('button', { name: 'Try a check' }));
+    await waitFor(() => expect(tryTriggerCheck).toHaveBeenCalledWith('org-1', 'factory-1', 'new-incidents'));
+    expect(onProblem).toHaveBeenCalledWith(null);
+  });
+
+  it('turns the button off with the reason when a check is still running (409)', async () => {
+    tryTriggerCheck.mockRejectedValue(new ApiError({ title: 'Conflict', status: 409, code: 'still-checking' }));
+    const { onProblem } = renderCheck();
+    fireEvent.click(screen.getByRole('button', { name: 'Try a check' }));
+    await waitFor(() =>
+      expect(onProblem).toHaveBeenCalledWith('A check is queued or running. Try again when it is done.'),
+    );
+    expect(screen.getByRole('button', { name: 'Try a check' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('shows the problem when the trigger has no check (422)', async () => {
+    tryTriggerCheck.mockRejectedValue(
+      new ApiError({ title: 'Unprocessable', status: 422, code: 'no-check', detail: 'This trigger has no check.' }),
+    );
+    const { onProblem } = renderCheck();
+    fireEvent.click(screen.getByRole('button', { name: 'Try a check' }));
+    await waitFor(() => expect(onProblem).toHaveBeenCalledWith('This trigger has no check.'));
+  });
+
+  it('is off while a check is queued or running, or the page says so', () => {
+    renderCheck({ checking: true });
+    expect(screen.getByRole('button', { name: 'Try a check' }).hasAttribute('disabled')).toBe(true);
+    cleanup();
+    renderCheck({ disabled: true });
+    expect(screen.getByRole('button', { name: 'Try a check' }).hasAttribute('disabled')).toBe(true);
   });
 });

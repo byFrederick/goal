@@ -3,7 +3,6 @@ package porttest
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -32,6 +31,8 @@ type Store struct {
 	items     map[domain.ItemID]*domain.Item
 	numbers   map[domain.FactoryID]int64
 	leases    map[domain.ItemID]domain.Lease
+	// checks are the slots running checks hold (Intake.ClaimCheck), by firing id.
+	checks    map[string]checkSlot
 	runs      map[domain.RunID]*domain.Run
 	events    []domain.Event
 	labels    map[int64]touchLabel
@@ -39,6 +40,8 @@ type Store struct {
 	leaseLog  map[domain.ItemID][]domain.LeaseSpan
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
+	followUps []domain.FollowUp
+	joined    []domain.FollowUpID // follow-ups in the order they joined a triage item
 	views     map[domain.SavedViewID]savedViewRecord
 	jonah     jonahRows
 	ids       int
@@ -57,6 +60,7 @@ func NewStore() *Store {
 		factories: map[domain.FactoryID]domain.OrgID{},
 		orgCaps:   map[domain.OrgID]int{},
 		factCaps:  map[domain.FactoryID]int{},
+		checks:    map[string]checkSlot{},
 		items:     map[domain.ItemID]*domain.Item{},
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
@@ -218,38 +222,39 @@ func (s *Store) Lease(id domain.ItemID) (domain.Lease, bool) {
 	return l, ok
 }
 
-// CreateItem implements ports.Store.
+// CreateItem implements ports.Store. Its audit entry goes to the linked Tenancy, if any, after
+// the item, as Transition's does.
 func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return domain.Item{}, err
 	}
 
+	it, audit, a, err := s.createItem(org, n)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
+	if err := appendAudits(ctx, a, audit); err != nil {
+		return domain.Item{}, fmt.Errorf("create item: %w", err)
+	}
+
+	return it, nil
+}
+
+func (s *Store) createItem(org domain.OrgID, n domain.NewItem) (domain.Item, domain.AuditEntry, ports.Audit, error) {
 	s.mu.Lock()
 	defer s.changes.signal()
 	defer s.mu.Unlock()
 
 	if owner, ok := s.factories[n.FactoryID]; ok && owner != org {
-		return domain.Item{}, fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
+		return domain.Item{}, domain.AuditEntry{}, nil, fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
 	}
 
 	s.factories[n.FactoryID] = org
-	s.numbers[n.FactoryID]++
-	it := &domain.Item{
-		ID: domain.ItemID(s.newID()), OrgID: org, FactoryID: n.FactoryID, Number: s.numbers[n.FactoryID],
-		ParentID: n.ParentID, Type: n.Type, Lane: n.Lane, Title: n.Title, Body: n.Body,
-		Station: n.Station, State: n.State, Class: n.Class, Priority: n.Priority,
-		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
-		Source: n.Source, Trigger: n.Trigger,
-	}
-	s.items[it.ID] = it
-	s.trackSpan(it, nil, n.CreatedAt)
-	s.append(domain.Event{
-		FactoryID: it.FactoryID, ItemID: it.ID, At: n.CreatedAt, Kind: domain.EventCreated,
-		Station: it.Station, Actor: domain.ActorEngine,
-	})
+	it, audit := s.file(org, n, filedPart{})
 
-	return clone(it), nil
+	return clone(it), audit, s.audit, nil
 }
 
 // Item implements ports.Store.
@@ -288,6 +293,62 @@ func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station s
 	}
 
 	return out, nil
+}
+
+// Releasable implements ports.Store.
+func (s *Store) Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	w := slices.DeleteFunc(s.waiting(org, factory, station), func(it *domain.Item) bool { return s.held(it, now) })
+	out := make([]domain.Item, 0, min(limit, len(w)))
+
+	for _, it := range w[:min(limit, len(w))] {
+		out = append(out, clone(it))
+	}
+
+	return out, nil
+}
+
+// held reports whether it may not start at now: an open need, or a start after now. Callers
+// hold s.mu.
+func (s *Store) held(it *domain.Item, now time.Time) bool {
+	return s.heldByNeeds(it) || it.StartAt.After(now)
+}
+
+// SetStart implements ports.Store.
+func (s *Store) SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Item{}, err
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	it, ok := s.visible(id, org)
+	if !ok {
+		return domain.Item{}, fmt.Errorf("item %s: %w", id, ports.ErrNotFound)
+	}
+
+	if it.Position() != from {
+		return domain.Item{}, fmt.Errorf("item %s is %s at %s, not %s at %s: %w", id, it.State, it.Station, from.State, from.Station, ports.ErrConflict)
+	}
+
+	it.StartAt, it.UpdatedAt = at.UTC(), now
+	if at.IsZero() {
+		it.StartAt = time.Time{}
+	}
+
+	s.append(domain.StartChangedEvent(*it, by, now))
+
+	return clone(it), nil
 }
 
 // Leases implements ports.Store.
@@ -332,7 +393,7 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 		}
 	}
 
-	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), s.heldByNeeds)
+	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), func(it *domain.Item) bool { return s.held(it, c.Now) })
 	if len(w) == 0 {
 		return domain.Item{}, domain.Lease{}, fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 	}
@@ -358,7 +419,36 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 	return clone(it), l, nil
 }
 
-// slotCapsLocked returns ErrOrgFull or ErrFactoryFull when org's or the factory's leases reach
+// checkSlot is the slot a running check holds: its organization and factory.
+type checkSlot struct {
+	org     domain.OrgID
+	factory domain.FactoryID
+}
+
+// holdCheckSlot checks org's and the factory's slot caps, as a claim does, and holds a slot for
+// the check of firing id, or returns ErrOrgFull or ErrFactoryFull.
+func (s *Store) holdCheckSlot(id string, org domain.OrgID, factory domain.FactoryID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.slotCapsLocked(org, factory); err != nil {
+		return err
+	}
+
+	s.checks[id] = checkSlot{org: org, factory: factory}
+
+	return nil
+}
+
+// freeCheckSlot frees the slot the check of firing id holds.
+func (s *Store) freeCheckSlot(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.checks, id)
+}
+
+// slotCapsLocked returns ErrOrgFull or ErrFactoryFull when org's or the factory's leases and running checks reach
 // its cap. A factory of another organization has no cap here, as row-level security hides it.
 // Callers hold s.mu.
 func (s *Store) slotCapsLocked(org domain.OrgID, factory domain.FactoryID) error {
@@ -374,6 +464,16 @@ func (s *Store) slotCapsLocked(org domain.OrgID, factory domain.FactoryID) error
 			inOrg++
 
 			if l.FactoryID == factory {
+				inFactory++
+			}
+		}
+	}
+
+	for _, c := range s.checks {
+		if c.org == org {
+			inOrg++
+
+			if c.factory == factory {
 				inFactory++
 			}
 		}
@@ -540,9 +640,9 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	kind := cmp.Or(r.Kind, domain.RunKindStation)
 
-	// Only Jonah's runs (a review or a try) may work no item; they write no run_started item event.
+	// Only Jonah's runs (a review or a try) and checks may work no item; they write no run_started item event.
 	switch _, ok := s.visible(r.ItemID, org); {
-	case r.ItemID == "" && kind.Jonahs():
+	case r.ItemID == "" && kind.Itemless():
 		if s.factories[r.FactoryID] != org {
 			return "", fmt.Errorf("factory %s: %w", r.FactoryID, ports.ErrNotFound)
 		}
@@ -741,6 +841,7 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 
 	before := *it
 	it.Station, it.State, it.UpdatedAt = t.To.Station, t.To.State, t.At
+	started(it, before.Station, t.At)
 
 	if t.Lane != "" {
 		it.Lane = t.Lane
@@ -774,6 +875,8 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 	for _, e := range t.Events {
 		s.append(e)
 	}
+
+	s.keepFollowUps(it, t.FollowUps, t.At)
 }
 
 // checkLease refuses a transition that releases or takes a lease without an outcome, names both,
@@ -889,7 +992,7 @@ func (s *Store) NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]do
 		case e.ItemID != item:
 		case e.Kind == domain.EventRunStarted:
 			notes = notes[:0]
-		case e.Kind == domain.EventNote:
+		case e.Kind == domain.EventNote || e.Kind == domain.EventItemNote:
 			notes = append(notes, e)
 		}
 	}
@@ -950,6 +1053,14 @@ func (s *Store) FactoryActivity(ctx context.Context, factory domain.FactoryID, l
 	})
 
 	return out[:min(len(out), limit)], nil
+}
+
+// started sets it's StartedAt to at when it has none and moved off from, as MoveItem does: the
+// first move off a station is the item leaving its line's first one.
+func started(it *domain.Item, from string, at time.Time) {
+	if it.StartedAt.IsZero() && it.Station != from {
+		it.StartedAt = at
+	}
 }
 
 // waiting returns an organization's items waiting at a station in pull order. Callers hold s.mu.

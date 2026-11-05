@@ -216,7 +216,7 @@ describe('the mock connections', () => {
   it('says what uses a connection from the current versions, and a missing secret', async () => {
     const { body } = await call<ConnectionList>(connections);
     const by = (name: string) => body.connections.find((c) => c.name === name);
-    expect(by('claude')?.used_by.factories.map((f) => f.name)).toEqual(['goal', 'sre', 'support']);
+    expect(by('claude')?.used_by.factories.map((f) => f.name)).toEqual(['goal', 'sre', 'support', 'software']);
     expect(by('aws-prod')?.used_by.factories.map((f) => f.name)).toEqual(['sre']);
     expect(by('gitlab-infra')?.used_by.factories).toEqual([]);
     expect(by('status-api')?.status).toBe('missing-secret');

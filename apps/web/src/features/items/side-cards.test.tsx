@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itemRunsQuery, membersQuery, versionFileQuery, versionModelQuery, versionQuery } from '../../api/queries';
@@ -228,6 +228,61 @@ describe('DetailsCard', () => {
 
     expect(await screen.findByRole('link', { name: 'software#150' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Details' }).textContent).toContain('Part of');
+  });
+});
+
+describe('DetailsCard, where an item came from', () => {
+  const details = async (over: Partial<Item>) => {
+    renderCards(() => <DetailsCard item={item(over)} factory={factory} events={events} trace={buildTrace([])} />);
+    return (await screen.findByRole('region', { name: 'Details' })).textContent;
+  };
+
+  it('says who filed it and through what', async () => {
+    const text = await details({
+      origin: 'person',
+      via: 'cli',
+      created_by: { kind: 'user', id: 'u1', name: 'Freddy Cruz' },
+    });
+    expect(text).toContain('Came from');
+    expect(text).toContain('Freddy Cruz, the CLI');
+  });
+
+  it('says a trigger or a follow-up filed it, and when it starts', async () => {
+    expect(await details({ origin: 'trigger' })).toContain('Filed by a trigger');
+    cleanup();
+    const text = await details({ origin: 'follow-up', start: { at: '2026-11-19T09:00:00' } });
+    expect(text).toContain('A follow-up');
+    expect(text).toContain('StartsThu, Nov 19, 09:00');
+  });
+
+  it('says which follow-up filed it, with both items linked', async () => {
+    renderCards(() => (
+      <DetailsCard
+        item={item({
+          origin: 'follow-up',
+          came_from: {
+            follow_ups: [
+              {
+                id: 'fu1',
+                from_item: 'Other#519',
+                from_item_id: 'i519',
+                agent: 'backend-engineer',
+                station: 'build',
+                landed_item: 'Software#513',
+                landed_item_id: 'i513',
+              },
+            ],
+          },
+        })}
+        factory={factory}
+        events={events}
+        trace={buildTrace([])}
+      />
+    ));
+    const card = await screen.findByRole('region', { name: 'Details' });
+    expect(card.textContent).toContain('A follow-up by backend-engineer on Other#519, filed when Software#513 landed');
+    expect(within(card).getByRole('link', { name: 'Other#519' }).getAttribute('href')).toContain('/f/Other/');
+    expect(within(card).getByRole('link', { name: 'Software#513' })).toBeTruthy();
   });
 });
 

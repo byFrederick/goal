@@ -84,6 +84,7 @@ beforeEach(() => {
     from: null,
     to: null,
     sources: { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 },
+    suggestions: [],
     triggers: [],
   } as Intake);
   vi.mocked(listMembers).mockResolvedValue([you]);
