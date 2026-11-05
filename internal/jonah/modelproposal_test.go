@@ -129,7 +129,7 @@ func (w *modelWorld) doneItem(at time.Time, usd float64, sentBack int) domain.It
 		w.t.Fatal(err)
 	}
 
-	if err := w.store.RecordRunInput(w.ctx(), id, domain.RunInput{Brief: "the brief", BranchHead: tryHead}); err != nil {
+	if err := w.store.RecordRunInput(w.ctx(), id, domain.RunInput{Brief: "the brief", Repositories: []domain.RunRepository{{BranchHead: tryHead}}}); err != nil {
 		w.t.Fatal(err)
 	}
 

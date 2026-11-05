@@ -443,10 +443,10 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 }
 
 // firstRunAt reports whether run id, r, is a finished station run of org's item at station that
-// was a claim's first: its branch head is recorded. Callers hold s.mu.
+// was a claim's first: one of its repositories has a branch head. Callers hold s.mu.
 func (s *Store) firstRunAt(org domain.OrgID, id domain.RunID, r *domain.Run, item domain.ItemID, station string) bool {
 	return r.ItemID == item && r.Station == station && s.runVisible(r, org) && s.jonah.runKinds[id] == domain.RunKindStation &&
-		r.Result.Status != domain.RunRunning && r.Input.BranchHead != ""
+		r.Result.Status != domain.RunRunning && hasTryRepository(r.Input)
 }
 
 // AgentDoneItems implements ports.PastTries.
@@ -554,4 +554,10 @@ func (s *Store) outputsBefore(item domain.ItemID, before time.Time) map[string]j
 	}
 
 	return outputs
+}
+
+// hasTryRepository reports whether in has a repository a try can start from.
+func hasTryRepository(in domain.RunInput) bool {
+	_, ok := in.TryRepository()
+	return ok
 }

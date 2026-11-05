@@ -92,9 +92,9 @@ func runFrom(r db.AgentRun) domain.Run {
 		Result: domain.RunResult{
 			Status: domain.RunStatus(r.Status), CostUSD: r.CostUsd, Turns: int(r.Turns), InputTokens: r.InputTokens,
 			OutputTokens: r.OutputTokens, SessionID: deref(r.SessionID), Error: deref(r.Error),
-			Output: rawJSON(r.Output), PushedHead: deref(r.PushedHead),
+			Output: rawJSON(r.Output),
 		},
-		Input: domain.RunInput{Brief: deref(r.Brief), BranchHead: deref(r.BranchHead), BaseHead: deref(r.BaseHead)},
+		Input: domain.RunInput{Brief: deref(r.Brief)},
 	}
 
 	if r.DefinitionVersionID != nil {
