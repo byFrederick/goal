@@ -11,7 +11,7 @@ import { Plus, X } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { getDraftFile, openDraft, putDraftFile } from '../../api/definitions';
-import { keys, templatesQuery } from '../../api/queries';
+import { defKeys, keys, templatesQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret } from '../../api/secrets';
 import type { FactoryRepositoryTest, OrgSummary, RepositoryTestResult, TemplateCode } from '../../api/types';
@@ -236,7 +236,11 @@ function CodeForm({
       const text = withRepositories(file.text, entries);
       if (text !== file.text) await putDraftFile(org.id, factory, 'factory.yaml', text, { sha256: file.sha256 });
     },
-    onSuccess: () => proceed({ url: answer?.urls[0], secret: answer?.secret }),
+    onSuccess: async () => {
+      // The file was written directly: the draft the next steps read, and its revision, are stale now.
+      await client.invalidateQueries({ queryKey: defKeys.draft(org.id, factory) });
+      proceed({ url: answer?.urls[0], secret: answer?.secret });
+    },
   });
 
   const submit = (event: FormEvent) => {
