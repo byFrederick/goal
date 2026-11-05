@@ -14,10 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
@@ -40,38 +40,34 @@ const (
 	keyName    = "full_name"
 	// octo is the account the fake's token signs in as.
 	octo = "octo"
+	// gheHost is a GitHub Enterprise Server host.
+	gheHost = "ghe.example.com"
+	// acmeOwner owns the fake's repositories.
+	acmeOwner = "acme"
+	appName   = "app"
 )
 
-// connection is the code host login of a connection of the platform's github kind with values
-// (token and host).
-func connection(t *testing.T, values map[string]string) domain.CodeHostLogin {
+// gitHubDotCom is github.com, as the organization's list has it.
+var gitHubDotCom = domain.BuiltInCodeHosts()[0]
+
+// repoOf is the repository at raw, a repository's or a pull request's URL, on the built-in hosts
+// or ghe.example.com, a GitHub Enterprise host.
+func repoOf(t *testing.T, raw string) domain.CodeRepository {
 	t.Helper()
 
-	kinds, err := connkind.Platform()
+	r, err := domain.ParseCodeRepository(domain.ListedCodeHosts([]domain.CodeHost{{Host: gheHost, Kind: domain.CodeHostGitHub}}), raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	i := slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == "github" })
-	if i < 0 {
-		t.Fatal("the platform has no github kind")
-	}
-
-	rc := domain.ResolvedConnection{Connection: domain.Connection{Name: "github", Kind: "github"}, Kind: kinds[i], Values: values}
-
-	login, err := rc.CodeHostLogin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return login
+	return r
 }
 
-// dotComConn is a github.com login with the token.
-func dotComConn(t *testing.T) domain.CodeHostLogin {
+// appRepo is acme/app on github.com, the fake's repository.
+func appRepo(t *testing.T) domain.CodeRepository {
 	t.Helper()
 
-	return connection(t, map[string]string{"token": token})
+	return repoOf(t, repoURL)
 }
 
 // fakeGitHub is a GitHub REST API with one pull request, acme/app#7, that requires the token.
@@ -304,12 +300,12 @@ func TestClient_APIForTheConnectionsHost(t *testing.T) {
 		"acme.ghe.com":    "https://api.acme.ghe.com",
 		"ghe.example.com": "https://ghe.example.com/api/v3",
 	} {
-		if got := c.apiFor(host); got != want {
+		if got := c.apiFor(domain.CodeHost{Host: host, Kind: domain.CodeHostGitHub}); got != want {
 			t.Errorf("API of %s = %s; want %s", host, got, want)
 		}
 	}
 
-	if got := New(Config{APIURL: "http://127.0.0.1:9/"}).apiFor("ghe.example.com"); got != "http://127.0.0.1:9" {
+	if got := New(Config{APIURL: "http://127.0.0.1:9/"}).apiFor(domain.CodeHost{Host: gheHost, Kind: domain.CodeHostGitHub}); got != "http://127.0.0.1:9" {
 		t.Errorf("API with an override = %s; want the override", got)
 	}
 }
@@ -319,7 +315,7 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 
 	_, c := newFakeGitHub(t)
 
-	pr, err := c.PullRequest(t.Context(), dotComConn(t), prURL)
+	pr, err := c.PullRequest(t.Context(), appRepo(t), token, prURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +359,7 @@ func TestPullRequest_WaitsForMergeability(t *testing.T) {
 			f.mergeable = tt.mergeable
 			maps.Copy(f.pr, tt.pr)
 
-			pr, err := c.PullRequest(t.Context(), dotComConn(t), prURL)
+			pr, err := c.PullRequest(t.Context(), appRepo(t), token, prURL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -390,7 +386,7 @@ func TestPullRequest_WaitStopsWithTheContext(t *testing.T) {
 	defer cancel()
 
 	// The deadline may also end the first read, whose transport error does not wrap it.
-	if _, err := c.PullRequest(ctx, dotComConn(t), prURL); err == nil || ctx.Err() == nil {
+	if _, err := c.PullRequest(ctx, appRepo(t), token, prURL); err == nil || ctx.Err() == nil {
 		t.Errorf("PullRequest = %v, context %v; want an error once the context ended", err, ctx.Err())
 	} else if got := f.sent(); len(got) > 1 {
 		t.Errorf("requests %v; want no read after the context ended", got)
@@ -404,7 +400,7 @@ func TestPullRequest_TheRepositoryIsTheURLs(t *testing.T) {
 
 	f, c := newFakeGitHub(t)
 
-	if _, err := c.PullRequest(t.Context(), dotComConn(t), "https://github.com/acme/docs/pull/2"); !errors.Is(err, ports.ErrNotMergeable) {
+	if _, err := c.PullRequest(t.Context(), repoOf(t, "https://github.com/acme/docs/pull/2"), token, "https://github.com/acme/docs/pull/2"); !errors.Is(err, ports.ErrNotMergeable) {
 		t.Errorf("PullRequest of a missing pull request = %v; want ErrNotMergeable", err)
 	}
 
@@ -413,45 +409,52 @@ func TestPullRequest_TheRepositoryIsTheURLs(t *testing.T) {
 	}
 }
 
-// A pull request on another host than the connection's, or a URL that is not a pull request's,
-// is refused before anything is sent.
+// A pull request URL outside the repository it is called with (another host, another repository,
+// not a pull request's), a repository on a host of another kind, and an empty token are refused
+// before anything is sent.
 func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 	t.Parallel()
 
 	f, c := newFakeGitHub(t)
-	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
+	ghe := repoOf(t, "https://"+gheHost+"/acme/app")
+	onGitLab := domain.CodeRepository{Host: domain.BuiltInCodeHosts()[1], Owner: acmeOwner, Name: appName}
 
 	for _, tt := range []struct {
-		conn domain.CodeHostLogin
+		repo domain.CodeRepository
 		url  string
 	}{
-		{dotComConn(t), "https://code.example.com/acme/app/pull/7"},
-		{dotComConn(t), "https://gitlab.com/acme/app/-/merge_requests/7"},
+		{appRepo(t), "https://code.example.com/acme/app/pull/7"},
+		{appRepo(t), "https://gitlab.com/acme/app/-/merge_requests/7"},
 		{ghe, prURL},
-		{dotComConn(t), "http://github.com/acme/app/pull/7"},
-		{dotComConn(t), "https://user@github.com/acme/app/pull/7"},
-		{dotComConn(t), "https://github.com/acme/app/pull/7?x=1"},
-		{dotComConn(t), "https://github.com/acme/app/issues/7"},
+		{appRepo(t), "https://github.com/acme/docs/pull/7"},
+		{appRepo(t), "https://github.com/octo/app/pull/7"},
+		{appRepo(t), "http://github.com/acme/app/pull/7"},
+		{appRepo(t), "https://user@github.com/acme/app/pull/7"},
+		{appRepo(t), "https://github.com/acme/app/pull/7?x=1"},
+		{appRepo(t), "https://github.com/acme/app/issues/7"},
+		{onGitLab, "https://gitlab.com/acme/app/pull/7"},
+		{domain.CodeRepository{}, prURL},
 	} {
-		if _, err := c.PullRequest(t.Context(), tt.conn, tt.url); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", tt.url, err)
+		if _, err := c.PullRequest(t.Context(), tt.repo, token, tt.url); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("PullRequest(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
 		}
 
-		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, headBranch); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		if err := c.DeleteBranch(t.Context(), tt.repo, token, tt.url, headBranch); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("DeleteBranch(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
 		}
 
-		if err := c.UpdateBranch(t.Context(), tt.conn, tt.url, headSHA); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("UpdateBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		if err := c.UpdateBranch(t.Context(), tt.repo, token, tt.url, headSHA); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("UpdateBranch(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
+		}
+
+		if _, err := c.Merge(t.Context(), tt.repo, token, tt.url, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("Merge(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
 		}
 	}
 
-	// A login without a token: nothing is sent either.
-	noToken := dotComConn(t)
-	noToken.Token = ""
-
-	if _, err := c.PullRequest(t.Context(), noToken, prURL); err == nil {
-		t.Error("PullRequest with a login without a token succeeded; want an error")
+	// No token: nothing is sent either.
+	if _, err := c.PullRequest(t.Context(), appRepo(t), "", prURL); err == nil {
+		t.Error("PullRequest without a token succeeded; want an error")
 	}
 
 	if got := f.sent(); len(got) != 0 {
@@ -472,7 +475,7 @@ func TestMerge_SquashesTheHeadItWasGiven(t *testing.T) {
 		return http.StatusOK, map[string]any{keySHA: mergeSHA, "merged": true}
 	}
 
-	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	sha, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 	if err != nil || sha != mergeSHA {
 		t.Fatalf("Merge = %q, %v; want merge-sha", sha, err)
 	}
@@ -498,7 +501,7 @@ func TestMerge_GitHubRefusalsAreNotMergeable(t *testing.T) {
 			return refusal.status, map[string]any{message: refusal.msg}
 		}
 
-		_, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+		_, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 		if !errors.Is(err, ports.ErrNotMergeable) || !strings.Contains(err.Error(), refusal.msg) {
 			t.Errorf("merge answered %d %q: err = %v; want ErrNotMergeable with GitHub's reason", refusal.status, refusal.msg, err)
 		}
@@ -550,7 +553,7 @@ func TestMerge_RetriesAtTheNewHeadWhenGitHubSaysTheHeadWasModified(t *testing.T)
 		return http.StatusOK, map[string]any{keySHA: mergeSHA, "merged": true}
 	}
 
-	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	sha, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 	if err != nil || sha != mergeSHA {
 		t.Fatalf("Merge = %q, %v; want merge-sha", sha, err)
 	}
@@ -568,7 +571,7 @@ func TestMerge_HeadModifiedRetriesEndNotMergeable(t *testing.T) {
 		return http.StatusConflict, map[string]any{message: headModified}
 	}
 
-	_, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	_, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 	if !errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict) || !strings.Contains(err.Error(), "Head branch was modified") {
 		t.Errorf("err = %v; want ErrNotMergeable, not a conflict, with GitHub's reason", err)
 	}
@@ -586,7 +589,7 @@ func TestMerge_HeadModifiedRetriesEndNotMergeable(t *testing.T) {
 		return http.StatusConflict, map[string]any{message: headModified}
 	}
 
-	if _, err := c.Merge(ctx, dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, context.Canceled) {
+	if _, err := c.Merge(ctx, appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled: err = %v; want context.Canceled", err)
 	}
 }
@@ -625,7 +628,7 @@ func TestMerge_HeadModifiedThenMergedIsNotMergedTwice(t *testing.T) {
 		return http.StatusConflict, map[string]any{message: headModified}
 	}
 
-	sha, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
+	sha, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA})
 	if err != nil || sha != "their-merge-sha" {
 		t.Errorf("Merge = %q, %v; want their-merge-sha", sha, err)
 	}
@@ -641,7 +644,7 @@ func TestMerge_HeadModifiedThenMergedIsNotMergedTwice(t *testing.T) {
 		return http.StatusConflict, map[string]any{message: headModified}
 	}
 
-	if _, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) {
+	if _, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) {
 		t.Errorf("closed: err = %v; want ErrNotMergeable", err)
 	}
 
@@ -663,7 +666,7 @@ func TestUpdateBranch_SendsTheExpectedHead(t *testing.T) {
 		return http.StatusAccepted, map[string]any{message: "Updating pull request branch."}
 	}
 
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err != nil {
+	if err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA); err != nil {
 		t.Fatalf("UpdateBranch = %v; want accepted", err)
 	}
 
@@ -673,7 +676,7 @@ func TestUpdateBranch_SendsTheExpectedHead(t *testing.T) {
 
 	// Without a head to expect, GitHub would update whatever the branch holds: nothing is sent.
 	before := len(f.sent())
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, ""); err == nil || len(f.sent()) != before {
+	if err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, ""); err == nil || len(f.sent()) != before {
 		t.Errorf("UpdateBranch without a head = %v, sent %v; want refused before sending", err, f.sent()[before:])
 	}
 }
@@ -686,7 +689,7 @@ func TestUpdateBranch_ConflictIsMergeConflict(t *testing.T) {
 		return http.StatusUnprocessableEntity, map[string]any{message: "merge conflict between base and head"}
 	}
 
-	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+	err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA)
 
 	var mc *ports.MergeConflictError
 	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || len(mc.Files) != 0 || errors.Is(err, ports.ErrNotMergeable) {
@@ -704,7 +707,7 @@ func TestUpdateBranch_UpToDateIsNotAConflict(t *testing.T) {
 		return http.StatusUnprocessableEntity, map[string]any{message: "There are no new commits on the base branch."}
 	}
 
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err != nil {
+	if err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA); err != nil {
 		t.Errorf("UpdateBranch on an up-to-date branch = %v; want nil", err)
 	}
 }
@@ -722,7 +725,7 @@ func TestUpdateBranch_DirtyIsMergeConflictWithoutUpdating(t *testing.T) {
 		return http.StatusAccepted, map[string]any{message: "Updating pull request branch."}
 	}
 
-	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+	err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA)
 
 	var mc *ports.MergeConflictError
 	if !errors.As(err, &mc) || errors.Is(err, ports.ErrNotMergeable) {
@@ -742,7 +745,7 @@ func TestUpdateBranch_UnexplainedRefusalIsNotMergeable(t *testing.T) {
 		return http.StatusUnprocessableEntity, map[string]any{message: "Validation Failed"}
 	}
 
-	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+	err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA)
 	if !errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict) {
 		t.Errorf("UpdateBranch on an unexplained 422 = %v; want ErrNotMergeable, not a conflict", err)
 	}
@@ -757,7 +760,7 @@ func TestUpdateBranch_MovedHeadIsNotMergeable(t *testing.T) {
 		return http.StatusUnprocessableEntity, map[string]any{message: "expected head sha didn't match current head ref."}
 	}
 
-	err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA)
+	err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA)
 	if !errors.Is(err, ports.ErrNotMergeable) || errors.Is(err, ports.ErrMergeConflict) {
 		t.Errorf("UpdateBranch on a moved head = %v; want ErrNotMergeable, not a conflict", err)
 	}
@@ -768,7 +771,7 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 
 	f, c := newFakeGitHub(t)
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, headBranch); err != nil {
+	if err := c.DeleteBranch(t.Context(), appRepo(t), token, prURL, headBranch); err != nil {
 		t.Fatal(err)
 	}
 
@@ -776,7 +779,7 @@ func TestDeleteBranch_DeletesTheRefAndToleratesAGoneOne(t *testing.T) {
 		t.Errorf("deleted %v; want goal/7-add-x", f.deleted)
 	}
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), prURL, "../main"); err == nil {
+	if err := c.DeleteBranch(t.Context(), appRepo(t), token, prURL, "../main"); err == nil {
 		t.Error("deleting ../main succeeded; want refused")
 	}
 }
@@ -813,7 +816,7 @@ func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
 		{repoURL + "/", mainBranch, "c3"},
 		{repoURL, headBranch, headSHA},
 	} {
-		got, err := c.BranchHead(t.Context(), dotComConn(t), tt.repo, tt.branch)
+		got, err := c.BranchHead(t.Context(), repoOf(t, tt.repo), token, tt.branch)
 		if err != nil || got != tt.want {
 			t.Errorf("BranchHead(%s, %q) = %q, %v; want %q", tt.repo, tt.branch, got, err, tt.want)
 		}
@@ -827,40 +830,47 @@ func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
 		{repoURL, "gone"},
 		{"https://github.com/acme/other", ""},
 	} {
-		if _, err := c.BranchHead(t.Context(), dotComConn(t), tt.repo, tt.branch); !errors.Is(err, ports.ErrNotFound) {
+		if _, err := c.BranchHead(t.Context(), repoOf(t, tt.repo), token, tt.branch); !errors.Is(err, ports.ErrNotFound) {
 			t.Errorf("BranchHead(%s, %q) = %v; want ErrNotFound", tt.repo, tt.branch, err)
 		}
 	}
 }
 
-// A repository on another host than the connection's, or a URL that is not a repository's, is
+// A repository on a host of another kind, one that names no owner or name, and an empty token are
 // refused before anything is sent.
 func TestBranchHead_OnlyOnTheConnectionsHost(t *testing.T) {
 	t.Parallel()
 
 	f, c := newFakeGitHub(t)
-	ghe := connection(t, map[string]string{"token": token, "host": "ghe.example.com"})
+	dotCom := domain.BuiltInCodeHosts()
 
 	for _, tt := range []struct {
-		conn domain.CodeHostLogin
-		repo string
+		repo  domain.CodeRepository
+		token string
 	}{
-		{dotComConn(t), "https://code.example.com/acme/app"},
-		{ghe, repoURL},
-		{dotComConn(t), "http://github.com/acme/app"},
-		{dotComConn(t), "https://user@github.com/acme/app"},
-		{dotComConn(t), "https://github.com/acme/app?x=1"},
-		{dotComConn(t), "https://github.com/acme/app#x"},
-		{dotComConn(t), "https://github.com/acme"},
-		{dotComConn(t), prURL},
+		{domain.CodeRepository{Host: dotCom[1], Owner: acmeOwner, Name: appName}, token},
+		{domain.CodeRepository{Host: domain.CodeHost{Host: gheHost}, Owner: acmeOwner, Name: appName}, token},
+		{domain.CodeRepository{Host: dotCom[0], Owner: acmeOwner}, token},
+		{domain.CodeRepository{Host: dotCom[0], Owner: "..", Name: appName}, token},
+		{domain.CodeRepository{Host: dotCom[0], Owner: "acme/team", Name: appName}, token},
+		{domain.CodeRepository{}, token},
+		{appRepo(t), ""},
 	} {
-		if _, err := c.BranchHead(t.Context(), tt.conn, tt.repo, ""); err == nil {
-			t.Errorf("BranchHead(%s) succeeded; want refused", tt.repo)
+		if _, err := c.BranchHead(t.Context(), tt.repo, tt.token, ""); err == nil {
+			t.Errorf("BranchHead(%+v) succeeded; want refused", tt.repo)
 		}
 
-		if _, err := c.Compare(t.Context(), tt.conn, tt.repo, "c1", "c2"); err == nil {
-			t.Errorf("Compare(%s) succeeded; want refused", tt.repo)
+		if _, err := c.Compare(t.Context(), tt.repo, tt.token, "c1", "c2"); err == nil {
+			t.Errorf("Compare(%+v) succeeded; want refused", tt.repo)
 		}
+
+		if _, err := c.RepositoryAccess(t.Context(), tt.repo, tt.token); err == nil {
+			t.Errorf("RepositoryAccess(%+v) succeeded; want refused", tt.repo)
+		}
+	}
+
+	if _, err := c.Repositories(t.Context(), dotCom[1], token, ""); err == nil {
+		t.Error("Repositories on a GitLab host succeeded; want refused")
 	}
 
 	if got := f.sent(); len(got) != 0 {
@@ -874,7 +884,7 @@ func TestCompare_CommitsOldestFirstWithFiles(t *testing.T) {
 	f, c := newFakeGitHub(t)
 	f.seedHistory(4)
 
-	got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c4")
+	got, err := c.Compare(t.Context(), appRepo(t), token, "c1", "c4")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -893,7 +903,7 @@ func TestCompare_CommitsOldestFirstWithFiles(t *testing.T) {
 	}
 
 	// Nothing since: no commits, not truncated.
-	if got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c4", "c4"); err != nil || len(got.Commits) != 0 || got.Truncated {
+	if got, err := c.Compare(t.Context(), appRepo(t), token, "c4", "c4"); err != nil || len(got.Commits) != 0 || got.Truncated {
 		t.Errorf("Compare(c4, c4) = %+v, %v; want no commits", got, err)
 	}
 }
@@ -909,13 +919,13 @@ func TestCompare_UnknownCommitIsNotFound(t *testing.T) {
 		{repoURL, "c1", "gone"},
 		{"https://github.com/acme/other", "c1", "c2"},
 	} {
-		if _, err := c.Compare(t.Context(), dotComConn(t), tt.repo, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
+		if _, err := c.Compare(t.Context(), repoOf(t, tt.repo), token, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
 			t.Errorf("Compare(%s, %s, %s) = %v; want ErrNotFound", tt.repo, tt.base, tt.head, err)
 		}
 	}
 
 	for _, tt := range []struct{ base, head string }{{"", "c2"}, {"c1", ""}, {"c1..c0", "c2"}} {
-		if _, err := c.Compare(t.Context(), dotComConn(t), repoURL, tt.base, tt.head); err == nil {
+		if _, err := c.Compare(t.Context(), appRepo(t), token, tt.base, tt.head); err == nil {
 			t.Errorf("Compare(%q, %q) succeeded; want refused", tt.base, tt.head)
 		}
 	}
@@ -929,7 +939,7 @@ func TestCompare_TruncatesPast100(t *testing.T) {
 	f, c := newFakeGitHub(t)
 	f.seedHistory(ports.MaxCompareCommits + 30)
 
-	got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c"+strconv.Itoa(ports.MaxCompareCommits+30))
+	got, err := c.Compare(t.Context(), appRepo(t), token, "c1", "c"+strconv.Itoa(ports.MaxCompareCommits+30))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -947,7 +957,7 @@ func TestCompare_TruncatesPast100(t *testing.T) {
 	}
 
 	// Exactly 100 is not truncated.
-	if got, err := c.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c101"); err != nil || got.Truncated || len(got.Commits) != 100 {
+	if got, err := c.Compare(t.Context(), appRepo(t), token, "c1", "c101"); err != nil || got.Truncated || len(got.Commits) != 100 {
 		t.Errorf("Compare(c1, c101) = %d commits, truncated %v, %v; want 100, not truncated", len(got.Commits), got.Truncated, err)
 	}
 }
@@ -962,7 +972,7 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		return http.StatusInternalServerError, map[string]any{message: "bad token " + token}
 	}
 
-	if _, err := c.Merge(t.Context(), dotComConn(t), prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); err == nil ||
+	if _, err := c.Merge(t.Context(), appRepo(t), token, prURL, ports.Merge{Method: squash, HeadSHA: headSHA}); err == nil ||
 		strings.Contains(err.Error(), token) {
 		t.Errorf("err = %v; want an error without the token", err)
 	}
@@ -971,7 +981,7 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		return http.StatusUnprocessableEntity, map[string]any{message: "bad token " + token}
 	}
 
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA); err == nil || strings.Contains(err.Error(), token) {
+	if err := c.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA); err == nil || strings.Contains(err.Error(), token) {
 		t.Errorf("UpdateBranch err = %v; want an error without the token", err)
 	}
 
@@ -981,7 +991,7 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 	}))
 	t.Cleanup(echo.Close)
 
-	if _, err := New(Config{APIURL: echo.URL}).Repositories(t.Context(), dotComConn(t), ""); err == nil || strings.Contains(err.Error(), token) {
+	if _, err := New(Config{APIURL: echo.URL}).Repositories(t.Context(), gitHubDotCom, token, ""); err == nil || strings.Contains(err.Error(), token) {
 		t.Errorf("Repositories err = %v; want an error without the token", err)
 	}
 
@@ -1002,26 +1012,48 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 
 	for name, call := range map[string]func() error{
 		"PullRequest": func() error {
-			_, err := moved.PullRequest(t.Context(), dotComConn(t), prURL)
+			_, err := moved.PullRequest(t.Context(), appRepo(t), token, prURL)
 			return err
 		},
-		"UpdateBranch": func() error { return moved.UpdateBranch(t.Context(), dotComConn(t), prURL, headSHA) },
+		"UpdateBranch": func() error { return moved.UpdateBranch(t.Context(), appRepo(t), token, prURL, headSHA) },
 		"BranchHead": func() error {
-			_, err := moved.BranchHead(t.Context(), dotComConn(t), repoURL, "")
+			_, err := moved.BranchHead(t.Context(), appRepo(t), token, "")
 			return err
 		},
 		"Compare": func() error {
-			_, err := moved.Compare(t.Context(), dotComConn(t), repoURL, "c1", "c2")
+			_, err := moved.Compare(t.Context(), appRepo(t), token, "c1", "c2")
 			return err
 		},
 		"Repositories": func() error {
-			_, err := moved.Repositories(t.Context(), dotComConn(t), "")
+			_, err := moved.Repositories(t.Context(), gitHubDotCom, token, "")
 			return err
 		},
 	} {
 		if err := call(); err == nil || leaked {
 			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
 		}
+	}
+}
+
+// RepositoryAccess answers a redirect as a failed read, and sends the token nowhere else.
+func TestRepositoryAccess_FollowsNoRedirect(t *testing.T) {
+	t.Parallel()
+
+	var leaked atomic.Bool
+
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked.Store(leaked.Load() || r.Header.Get("Authorization") != "")
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect) //nolint:gosec // the redirect under test
+	}))
+	t.Cleanup(redirect.Close)
+
+	got, err := New(Config{APIURL: redirect.URL}).RepositoryAccess(t.Context(), appRepo(t), token)
+	if err != nil || got.Read.OK || leaked.Load() {
+		t.Errorf("RepositoryAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a failed read and no token sent", got, err, leaked.Load())
 	}
 }
 
@@ -1131,7 +1163,7 @@ func TestClient_Repositories(t *testing.T) {
 	})
 
 	// The account's, when no owner is asked.
-	got, err := c.Repositories(t.Context(), dotComConn(t), "")
+	got, err := c.Repositories(t.Context(), gitHubDotCom, token, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1151,7 +1183,7 @@ func TestClient_Repositories(t *testing.T) {
 	}
 
 	// The account named as the owner is the account's listing.
-	if got, err := c.Repositories(t.Context(), dotComConn(t), octo); err != nil || !reflect.DeepEqual(got, want) {
+	if got, err := c.Repositories(t.Context(), gitHubDotCom, token, octo); err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("Repositories(octo) = %+v, %v; want %+v", got, err, want)
 	}
 }
@@ -1162,7 +1194,7 @@ func TestClient_RepositoriesOfAnOrganizationTruncated(t *testing.T) {
 
 	_, c := newRepositoriesGitHub(t, nil)
 
-	got, err := c.Repositories(t.Context(), dotComConn(t), "acme")
+	got, err := c.Repositories(t.Context(), gitHubDotCom, token, "acme")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1179,12 +1211,12 @@ func TestClient_RepositoriesRefusals(t *testing.T) {
 
 	f, c := newRepositoriesGitHub(t, nil)
 
-	if _, err := c.Repositories(t.Context(), dotComConn(t), "nobody"); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := c.Repositories(t.Context(), gitHubDotCom, token, "nobody"); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Repositories(nobody) = %v; want ErrNotFound", err)
 	}
 
 	before := len(f.sent())
-	if _, err := c.Repositories(t.Context(), dotComConn(t), "../user"); err == nil || len(f.sent()) != before {
+	if _, err := c.Repositories(t.Context(), gitHubDotCom, token, "../user"); err == nil || len(f.sent()) != before {
 		t.Errorf("Repositories(../user) = %v after %d requests; want an error and none sent", err, len(f.sent())-before)
 	}
 }
@@ -1210,7 +1242,7 @@ type accessCase struct {
 func (tc accessCase) check(t *testing.T, c *Client) {
 	t.Helper()
 
-	got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
+	got, err := c.RepositoryAccess(t.Context(), repoOf(t, tc.repo), tc.token)
 	if err != nil {
 		t.Fatalf("%s: err = %v", tc.name, err)
 	}
@@ -1304,9 +1336,11 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	srv, paths := accessGitHub(t, map[string]bool{})
 	c := New(Config{APIURL: srv.URL})
 
-	for _, bad := range []string{"http://github.com/acme/app", "https://github.com/acme", "https://user:pw@github.com/acme/app", "github.com/acme/app"} {
+	for _, bad := range []domain.CodeRepository{
+		{}, {Host: gitHubDotCom, Owner: acmeOwner}, {Host: gitHubDotCom, Owner: acmeOwner, Name: "a b"}, {Host: domain.BuiltInCodeHosts()[1], Owner: acmeOwner, Name: appName},
+	} {
 		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {
-			t.Errorf("RepositoryAccess(%q) err = %v; want domain.ErrInvalid", bad, err)
+			t.Errorf("RepositoryAccess(%+v) err = %v; want domain.ErrInvalid", bad, err)
 		}
 	}
 
@@ -1321,7 +1355,7 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	}))
 	t.Cleanup(echo.Close)
 
-	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), "https://github.com/"+repoApp, token)
+	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), repoOf(t, "https://github.com/"+repoApp), token)
 	if err != nil || got.Read.OK || strings.Contains(got.Read.Reason+got.Push.Reason, token) {
 		t.Errorf("access = %+v, err = %v; want read failed without the token", got, err)
 	}
@@ -1329,7 +1363,7 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	dead.Close()
 
-	if _, err := New(Config{APIURL: dead.URL}).RepositoryAccess(t.Context(), "https://github.com/"+repoApp, token); err == nil {
+	if _, err := New(Config{APIURL: dead.URL}).RepositoryAccess(t.Context(), repoOf(t, "https://github.com/"+repoApp), token); err == nil {
 		t.Error("a host that does not answer: err = nil; want an error")
 	}
 }

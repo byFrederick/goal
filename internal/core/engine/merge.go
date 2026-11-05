@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -163,122 +162,165 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 	return events, nil
 }
 
-// mergeTarget is one pull request to merge, with the code host that serves it and the login
-// (from the connection mergeTargets picked, or runtime.repository.token) it is called with.
+// mergeTarget is one pull request to merge, or a repository to read, with its repository on one
+// of the organization's code hosts, the token it is called with (from the connection
+// mergeTargets picked, or runtime.repository.token) and the code host adapter of the host's kind.
 type mergeTarget struct {
 	url   string
-	login domain.CodeHostLogin
+	repo  domain.CodeRepository
+	token string
 	host  ports.CodeHost
 }
 
-// codeHostConnection is one of a line's connections that can merge: its name, the host of its git
-// login and the code host of its kind.
+// codeHostConnection is one of a line's connections that can merge: its name and the host of its
+// git login.
 type codeHostConnection struct {
 	name, host string
-	ch         ports.CodeHost
 }
 
-// mergeTargets picks, for each pull request URL, the first of the line's connections
-// (domain.Line.MergeConnections) whose kind names a code host goald has and whose git login is
-// for the URL's host, then opens the ones it picked for use and takes each one's code host login.
-// A version on secrets reads no connection: repositoryTargets picks for it.
-func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
-	if l.OnSecrets() {
-		return e.repositoryTargets(ctx, l, urls)
+// listedCodeHosts are the organization's code hosts (domain.ListedCodeHosts): the built-in ones,
+// and the ones it added when the engine has Hosts.
+func (e *Engine) listedCodeHosts(ctx context.Context) ([]domain.CodeHost, error) {
+	if e.hosts == nil {
+		return domain.BuiltInCodeHosts(), nil
 	}
 
-	hosts, err := e.codeHostConnections(ctx, l)
+	added, err := e.hosts.CodeHosts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("the code host connections: %w", err)
+		return nil, fmt.Errorf("list the organization's code hosts: %w", err)
 	}
 
-	type pick struct {
-		url string
-		codeHostConnection
-	}
+	return domain.ListedCodeHosts(added), nil
+}
 
-	picked := make([]pick, 0, len(urls))
-
-	for _, raw := range urls {
-		u, err := url.Parse(raw)
-		if err != nil {
-			return nil, fmt.Errorf("%q is not a URL: %w", raw, ports.ErrNotMergeable)
-		}
-
-		host := strings.ToLower(u.Host)
-
-		i := slices.IndexFunc(hosts, func(c codeHostConnection) bool { return c.host == host })
-		if i < 0 {
-			return nil, refusal(l, fmt.Errorf("%s: no connection of the factory with a code host goald has is for %s: %w", raw, u.Host, ErrNoCodeHost))
-		}
-
-		picked = append(picked, pick{url: raw, codeHostConnection: hosts[i]})
-	}
-
-	names := make([]string, 0, len(picked))
-	for _, c := range picked {
-		if !slices.Contains(names, c.name) {
-			names = append(names, c.name)
-		}
-	}
-
-	resolved, err := e.connections.Resolve(ctx, names, use)
+// codeRepositories are the repositories of urls (pull requests', or a repository's own) on the
+// organization's code hosts (ADR 0041 decision 1), each with the adapter of its host's kind. A
+// URL on a host the organization doesn't list, or whose kind this goald has no adapter for, is a
+// refusal wrapping ErrNoCodeHost, before anything is opened or sent; a URL that names no
+// repository wraps ports.ErrNotMergeable.
+func (e *Engine) codeRepositories(ctx context.Context, l domain.Line, urls []string) ([]mergeTarget, error) {
+	hosts, err := e.listedCodeHosts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("open the code host connections: %w", err)
+		return nil, err
 	}
 
 	out := make([]mergeTarget, 0, len(urls))
 
-	for _, c := range picked {
-		j := slices.IndexFunc(resolved, func(r domain.ResolvedConnection) bool { return r.Connection.Name == c.name })
-		if j < 0 {
-			return nil, fmt.Errorf("connection %s was not opened", c.name)
+	for _, raw := range urls {
+		repo, err := domain.ParseCodeRepository(hosts, raw)
+
+		switch {
+		case errors.Is(err, domain.ErrCodeHostUnlisted):
+			return nil, refusal(l, fmt.Errorf("%s: %w: %w", raw, err, ErrNoCodeHost))
+		case err != nil:
+			return nil, fmt.Errorf("%w: %w", err, ports.ErrNotMergeable)
 		}
 
-		login, err := resolved[j].CodeHostLogin()
-		if err != nil {
-			return nil, err
+		ch, ok := e.codehosts[string(repo.Host.Kind)]
+		if !ok {
+			return nil, refusal(l, fmt.Errorf("%s: %s is a %s host, and this goald has no %s code host: %w", raw, repo.Host.Host, repo.Host.Kind, repo.Host.Kind, ErrNoCodeHost))
 		}
 
-		out = append(out, mergeTarget{url: c.url, login: login, host: c.ch})
+		out = append(out, mergeTarget{url: raw, repo: repo, host: ch})
 	}
 
 	return out, nil
 }
 
-// repositoryLogin names the code host login of a version on secrets, in errors and logs.
+// mergeTargets picks, for each pull request URL (or the line's repository URL), its repository
+// on the organization's code hosts (codeRepositories) and the first of the line's connections
+// (domain.Line.MergeConnections) whose kind names a code host goald has and whose git login is
+// for the URL's host, then opens the ones it picked for use and takes each one's token. A version
+// on secrets reads no connection: repositoryTargets picks for it.
+func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
+	if l.OnSecrets() {
+		return e.repositoryTargets(ctx, l, urls)
+	}
+
+	targets, err := e.codeRepositories(ctx, l, urls)
+	if err != nil {
+		return nil, err
+	}
+
+	conns, err := e.codeHostConnections(ctx, l)
+	if err != nil {
+		return nil, fmt.Errorf("the code host connections: %w", err)
+	}
+
+	picked := make([]string, 0, len(targets))
+
+	for _, t := range targets {
+		i := slices.IndexFunc(conns, func(c codeHostConnection) bool { return c.host == t.repo.Host.Host })
+		if i < 0 {
+			return nil, refusal(l, fmt.Errorf("%s: no connection of the factory with a code host goald has is for %s: %w", t.url, t.repo.Host.Host, ErrNoCodeHost))
+		}
+
+		picked = append(picked, conns[i].name)
+	}
+
+	var unique []string
+	for _, n := range picked {
+		if !slices.Contains(unique, n) {
+			unique = append(unique, n)
+		}
+	}
+
+	resolved, err := e.connections.Resolve(ctx, unique, use)
+	if err != nil {
+		return nil, fmt.Errorf("open the code host connections: %w", err)
+	}
+
+	for i, name := range picked {
+		j := slices.IndexFunc(resolved, func(r domain.ResolvedConnection) bool { return r.Connection.Name == name })
+		if j < 0 {
+			return nil, fmt.Errorf("connection %s was not opened", name)
+		}
+
+		_, token, err := resolved[j].GitLogin()
+		if err != nil {
+			return nil, err
+		}
+
+		targets[i].token = token
+	}
+
+	return targets, nil
+}
+
+// repositoryLogin names the token of a version on secrets, in errors and logs.
 const repositoryLogin = "runtime.repository.token"
 
 // repositoryTargets are mergeTargets on a version on secrets (ADR 0037 decision 7): every pull
-// request must be on the host of runtime.repository.url, whose name (domain.Repository.CodeHost),
-// else runtime.repository.forge, picks the code host, and runtime.repository.token signs in to
-// it. The token is opened once for the line's factory through OrgSecrets, which checks its
-// scope, audits it as secret.used and sets its last use, as at run start. A refusal opens
-// nothing; each wraps ErrNoCodeHost and names the repository key to fix.
+// request must be on the host of runtime.repository.url, one of the organization's code hosts,
+// whose kind picks the adapter; runtime.repository.forge, when set, must agree with it. The
+// runtime.repository.token signs in. The token is opened once for the line's factory through
+// OrgSecrets, which checks its scope, audits it as secret.used and sets its last use, as at run
+// start. A refusal opens nothing; each wraps ErrNoCodeHost and names the repository key to fix.
 func (e *Engine) repositoryTargets(ctx context.Context, l domain.Line, urls []string) ([]mergeTarget, error) {
 	repo := l.Runtime.Repository
-	host, forge := repo.CodeHost()
 
-	for _, raw := range urls {
-		u, err := url.Parse(raw)
-		if err != nil {
-			return nil, fmt.Errorf("%q is not a URL: %w", raw, ports.ErrNotMergeable)
-		}
+	own, err := e.codeRepositories(ctx, l, []string{repo.URL})
+	if err != nil {
+		return nil, fmt.Errorf("runtime.repository.url: %w", err)
+	}
 
-		if host == "" || strings.ToLower(u.Host) != host {
+	host := own[0].repo.Host
+
+	targets, err := e.codeRepositories(ctx, l, urls)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, t := range targets {
+		if t.repo.Host.Host != host.Host {
 			return nil, refusal(l, fmt.Errorf("%s is not on the host of the repository %q (runtime.repository.url), the only one a version on secrets merges on: %w",
-				raw, repo.URL, ErrNoCodeHost))
+				t.url, repo.URL, ErrNoCodeHost))
 		}
 	}
 
-	if forge == "" {
-		return nil, refusal(l, fmt.Errorf("the repository %s is neither on github.com nor on gitlab.com: set runtime.repository.forge to github or gitlab: %w",
-			repo.URL, ErrNoCodeHost))
-	}
-
-	ch, ok := e.codehosts[forge]
-	if !ok {
-		return nil, refusal(l, fmt.Errorf("the repository %s names runtime.repository.forge %s, a code host this goald has not: %w", repo.URL, forge, ErrNoCodeHost))
+	if repo.Forge != "" && repo.Forge != string(host.Kind) {
+		return nil, refusal(l, fmt.Errorf("the repository %s names runtime.repository.forge %s, but the organization lists %s as a %s host: %w",
+			repo.URL, repo.Forge, host.Host, host.Kind, ErrNoCodeHost))
 	}
 
 	names := domain.SecretNames(repo.Token)
@@ -291,14 +333,12 @@ func (e *Engine) repositoryTargets(ctx context.Context, l domain.Line, urls []st
 		return nil, err
 	}
 
-	login := domain.CodeHostLogin{Name: repositoryLogin, Host: host, Token: domain.FillSecrets(repo.Token, values)}
-
-	out := make([]mergeTarget, 0, len(urls))
-	for _, raw := range urls {
-		out = append(out, mergeTarget{url: raw, login: login, host: ch})
+	token := domain.FillSecrets(repo.Token, values)
+	for i := range targets {
+		targets[i].token = token
 	}
 
-	return out, nil
+	return targets, nil
 }
 
 // refusal adds to err why no run of l can start, when one cannot: a merge refused for a version
@@ -328,8 +368,7 @@ func (e *Engine) codeHostConnections(ctx context.Context, l domain.Line) ([]code
 			return nil, fmt.Errorf("connection %s: kind %s: %w", name, c.Kind, err)
 		}
 
-		ch, ok := e.codehosts[k.Spec.CodeHost]
-		if !ok {
+		if _, ok := e.codehosts[k.Spec.CodeHost]; !ok {
 			continue
 		}
 
@@ -340,7 +379,7 @@ func (e *Engine) codeHostConnections(ctx context.Context, l domain.Line) ([]code
 			continue
 		}
 
-		out = append(out, codeHostConnection{name: name, host: host, ch: ch})
+		out = append(out, codeHostConnection{name: name, host: host})
 	}
 
 	return out, nil
@@ -358,7 +397,7 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 
 	// Only the pull request's own branch, never a fork's or the branch it merged into.
 	if pr.SameRepository && pr.HeadBranch != "" && pr.HeadBranch != pr.BaseBranch {
-		if err := t.host.DeleteBranch(ctx, t.login, t.url, pr.HeadBranch); err != nil {
+		if err := t.host.DeleteBranch(ctx, t.repo, t.token, t.url, pr.HeadBranch); err != nil {
 			e.log.WarnContext(ctx, "merged, but the head branch was not deleted", slog.String("item", string(id)),
 				slog.String("pull_request", t.url), slog.String("branch", pr.HeadBranch), slog.Any("error", err))
 		} else {
@@ -377,7 +416,7 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 // *notMergeableYetError: after a clean update the host knows of no conflict, and the port
 // cannot tell required checks that have not run yet on the new head from ones that fail.
 func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease *domain.Lease) (ports.PullRequest, error) {
-	pr, err := t.host.PullRequest(ctx, t.login, t.url)
+	pr, err := t.host.PullRequest(ctx, t.repo, t.token, t.url)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
@@ -390,7 +429,7 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease 
 		return ports.PullRequest{}, fmt.Errorf("%s is closed: %w", t.url, ports.ErrNotMergeable)
 	}
 
-	if err := t.host.UpdateBranch(ctx, t.login, t.url, pr.HeadSHA); err != nil {
+	if err := t.host.UpdateBranch(ctx, t.repo, t.token, t.url, pr.HeadSHA); err != nil {
 		if mc, ok := errors.AsType[*ports.MergeConflictError](err); ok {
 			return ports.PullRequest{}, &mergeConflictError{url: t.url, base: pr.BaseBranch, files: mc.Files, err: err}
 		}
@@ -412,12 +451,12 @@ func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease 
 			t.url, ports.ErrNotMergeable))
 	}
 
-	if _, err := t.host.Merge(ctx, t.login, t.url, ports.Merge{Method: method, HeadSHA: pr.HeadSHA}); err != nil {
+	if _, err := t.host.Merge(ctx, t.repo, t.token, t.url, ports.Merge{Method: method, HeadSHA: pr.HeadSHA}); err != nil {
 		return ports.PullRequest{}, yet(t.url, err)
 	}
 
 	// Trust the host's record, not the merge call's answer.
-	if pr, err = t.host.PullRequest(ctx, t.login, t.url); err != nil {
+	if pr, err = t.host.PullRequest(ctx, t.repo, t.token, t.url); err != nil {
 		return ports.PullRequest{}, fmt.Errorf("verify the merge of %s: %w", t.url, err)
 	}
 
@@ -437,7 +476,7 @@ const mergePoll = 2 * time.Second
 // is still computing is read again after a growing wait on the engine clock, heartbeating the
 // lease (backoff), until it is known or Config.MergeWait has passed.
 func (e *Engine) settled(ctx context.Context, t mergeTarget, lease *domain.Lease) (ports.PullRequest, error) {
-	pr, err := t.host.PullRequest(ctx, t.login, t.url)
+	pr, err := t.host.PullRequest(ctx, t.repo, t.token, t.url)
 
 	for waited, wait := time.Duration(0), mergePoll; err == nil && lease != nil && pr.MergeabilityPending && waited < e.cfg.MergeWait; wait *= 2 {
 		d := min(wait, e.cfg.MergeWait-waited)
@@ -446,7 +485,7 @@ func (e *Engine) settled(ctx context.Context, t mergeTarget, lease *domain.Lease
 		}
 
 		waited += d
-		pr, err = t.host.PullRequest(ctx, t.login, t.url)
+		pr, err = t.host.PullRequest(ctx, t.repo, t.token, t.url)
 	}
 
 	if err != nil {

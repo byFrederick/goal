@@ -66,7 +66,7 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 			errRepositoryURLInvalid, u.Redacted())
 	}
 
-	ch, err := s.repositoryCodeHost(ctx, u)
+	repo, ch, err := s.repositoryCodeHost(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 	tctx, cancel := context.WithTimeout(ctx, s.repoTestTimeout)
 	defer cancel()
 
-	access, err := ch.RepositoryAccess(tctx, b.Url, token)
+	access, err := ch.RepositoryAccess(tctx, repo, token)
 
 	switch {
 	case errors.Is(err, domain.ErrInvalid):
@@ -107,27 +107,32 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 	}), nil
 }
 
-// repositoryCodeHost is the adapter a token for the repository at u goes to: the one of the kind
-// u's host is listed as among the organization's code hosts (ADR 0041 decision 1). A host the
-// organization doesn't list wraps errRepositoryHostUnknown.
-func (s *server) repositoryCodeHost(ctx context.Context, u *url.URL) (ports.CodeHost, error) {
+// repositoryCodeHost is the repository at u on the organization's code hosts (ADR 0041 decision
+// 1) and the adapter a token for it goes to: the one of the kind its host is listed as. A host
+// the organization doesn't list wraps errRepositoryHostUnknown; a URL that names no repository
+// on its host, errRepositoryURLInvalid.
+func (s *server) repositoryCodeHost(ctx context.Context, u *url.URL) (domain.CodeRepository, ports.CodeHost, error) {
 	added, err := s.orgs.CodeHosts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list code hosts: %w", err)
+		return domain.CodeRepository{}, nil, fmt.Errorf("list code hosts: %w", err)
 	}
 
 	host := strings.ToLower(u.Host)
 
-	listed, ok := domain.ListedCodeHost(append(domain.BuiltInCodeHosts(), added...), host)
-	if !ok {
-		return nil, fmt.Errorf("%w: %s is not one of the organization's code hosts, so goald sends it no token; "+
+	repo, err := domain.ParseCodeRepository(domain.ListedCodeHosts(added), u.String())
+
+	switch {
+	case errors.Is(err, domain.ErrCodeHostUnlisted):
+		return domain.CodeRepository{}, nil, fmt.Errorf("%w: %s is not one of the organization's code hosts, so goald sends it no token; "+
 			"an owner can add it under Code hosts in the organization's settings", errRepositoryHostUnknown, host)
+	case err != nil:
+		return domain.CodeRepository{}, nil, fmt.Errorf("%w: %s is not a repository's URL, such as https://%s/acme/app", errRepositoryURLInvalid, u.Redacted(), host)
 	}
 
-	ch, ok := s.codehosts[string(listed.Kind)]
+	ch, ok := s.codehosts[string(repo.Host.Kind)]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s is a %s host, and this goald has no %s code host", errRepositoryHostUnknown, host, listed.Kind, listed.Kind)
+		return domain.CodeRepository{}, nil, fmt.Errorf("%w: %s is a %s host, and this goald has no %s code host", errRepositoryHostUnknown, host, repo.Host.Kind, repo.Host.Kind)
 	}
 
-	return ch, nil
+	return repo, ch, nil
 }
