@@ -181,3 +181,104 @@ func (e RepositoryEntry) Covers(key string) bool {
 
 // OwnerPattern reports whether e covers an owner's every repository rather than one.
 func (e RepositoryEntry) OwnerPattern() bool { return strings.HasSuffix(e.URL, "/*") }
+
+// ResolveRepository is the repository value names among l's runtime.repositories entries, as its
+// RepositoryKey (ADR 0041 decision 13), in any case and with or without .git: the name of an
+// entry of one repository, host/owner/name or an https URL an entry covers, or owner/name (an
+// event's {{repo}}) on the host of an entry that covers it there. A webhook records no host, so
+// when entries on several hosts cover owner/name, the one on sender's own host (github.com for
+// github, gitlab.com for gitlab) wins, else the first in definition order. False for an empty
+// value and one no entry covers.
+func (l Line) ResolveRepository(value string, sender WebhookSender) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+
+	entries := l.repositoryEntries()
+
+	if i := slices.IndexFunc(entries, func(e RepositoryEntry) bool {
+		return !e.OwnerPattern() && e.Name != "" && strings.EqualFold(e.Name, value)
+	}); i >= 0 {
+		return RepositoryKey(entries[i].URL)
+	}
+
+	if key, ok := RepositoryKey(value); ok && slices.ContainsFunc(entries, func(e RepositoryEntry) bool { return e.Covers(key) }) {
+		return key, true
+	}
+
+	if strings.Contains(value, "://") {
+		return "", false
+	}
+
+	var found string
+
+	for _, e := range entries {
+		segs, ok := repositorySegments(e.URL)
+		if !ok {
+			continue
+		}
+
+		key, ok := RepositoryKey(segs[0] + "/" + strings.Trim(value, "/"))
+		if !ok || !e.Covers(key) {
+			continue
+		}
+
+		if segs[0] == senderHost(sender) {
+			return key, true
+		}
+
+		if found == "" {
+			found = key
+		}
+	}
+
+	return found, found != ""
+}
+
+// ResolveRepositories are values resolved by ResolveRepository, once each and in order, empty
+// values adding none (PagerDuty's and Datadog's events name no repository); or, for the first
+// value no entry covers, NotTheFactorysRepository's reason.
+func (l Line) ResolveRepositories(values []string, sender WebhookSender) ([]string, string) {
+	var keys []string
+
+	for _, v := range values {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+
+		key, ok := l.ResolveRepository(v, sender)
+		if !ok {
+			return nil, NotTheFactorysRepository(strings.TrimSpace(v), l)
+		}
+
+		if !slices.Contains(keys, key) {
+			keys = append(keys, key)
+		}
+	}
+
+	return keys, ""
+}
+
+// repositoryEntries are l's runtime.repositories entries, or its one repository as an entry for
+// a line built with only that.
+func (l Line) repositoryEntries() []RepositoryEntry {
+	if len(l.Runtime.Repositories) == 0 && l.Runtime.Repository.URL != "" {
+		return []RepositoryEntry{{URL: l.Runtime.Repository.URL}}
+	}
+
+	return l.Runtime.Repositories
+}
+
+// senderHost is the code host sender's deliveries come from when it is a code host's own, "" for
+// any other sender.
+func senderHost(sender WebhookSender) string {
+	switch sender {
+	case SenderGitHub:
+		return gitHubDotCom
+	case SenderGitLab:
+		return gitLabDotCom
+	}
+
+	return ""
+}
