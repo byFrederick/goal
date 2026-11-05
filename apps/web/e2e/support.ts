@@ -109,6 +109,10 @@ export async function expectNoClippedElements(page: Page) {
       const style = getComputedStyle(el);
       if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) continue;
       if (el.closest('[aria-hidden="true"], [inert], .sr-only')) continue;
+      // Monaco lays its text out in a 16,777,216 px wide layer that its editor box clips: what a person
+      // sees ends at the editor, so an editor inside the window is not past its edge.
+      const editor = el.closest('.monaco-editor');
+      if (editor && editor.getBoundingClientRect().right <= edge + 0.5) continue;
       if (style.position === 'fixed' && box.left >= edge) continue;
       if (scrolls(el.parentElement) || scrolls(el)) continue;
       found.push(`${label(el)} ends ${Math.round((box.right - edge) * 10) / 10}px past the right edge`);
