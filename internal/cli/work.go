@@ -101,6 +101,9 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	var after refsFlag
 	fs.Var(&after, "after", "start after this item (repeatable)")
 
+	var repos reposFlag
+	fs.Var(&repos, "repo", "a repository the item works on (repeatable)")
+
 	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
@@ -123,6 +126,7 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 
 	res, err := c.SubmitItemWithResponse(ctx, c.org, pos[0], gen.NewItem{
 		Title: strings.TrimSpace(title), Type: optional(*typ), Body: &text, Priority: priority, Start: startIf(start, later),
+		Repositories: repos.list(),
 	})
 	if err != nil {
 		return apiDown(err)
@@ -144,6 +148,31 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 
 	return follow(ctx, out, c, it.Id, 0, pollEvery)
+}
+
+// reposFlag is goal run's repeatable --repo: an entry's name, owner/name, host/owner/name or an
+// https URL, each sent as given for goald to resolve against the factory's runtime.repositories.
+type reposFlag []string
+
+func (r *reposFlag) String() string { return strings.Join(*r, ",") }
+
+func (r *reposFlag) Set(v string) error {
+	if strings.TrimSpace(v) == "" {
+		return errors.New("a repository is empty")
+	}
+
+	*r = append(*r, strings.TrimSpace(v))
+
+	return nil
+}
+
+// list is the repositories to send, nil when none was given.
+func (r reposFlag) list() *[]string {
+	if len(r) == 0 {
+		return nil
+	}
+
+	return new([]string(r))
 }
 
 // followItem follows an existing item: goal follow <item> [--factory F].

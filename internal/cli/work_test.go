@@ -854,3 +854,28 @@ func TestDeny_SendsTheDecision(t *testing.T) {
 	wantUsage(t, env, []string{verbDeny}, []string{verbDeny, notedRef, "x"}, []string{verbDeny, notedRef, flagAlways},
 		[]string{verbDeny, notedRef, "--note", "  "})
 }
+
+// goal run --repo, repeatable, sends each value as given and in order as the item's repositories.
+func TestRun_RepoFlagsBecomeRepositories(t *testing.T) {
+	t.Parallel()
+
+	g := &startGoald{}
+	env := testEnv(t, g.serve(t), map[string]string{envOrg: orgAcme})
+
+	args := []string{"run", startFactory, "Add a flag", "--repo", "acme/web", "--detach", "--repo", "api"}
+	if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); err != nil {
+		t.Fatalf("goal run: %v", err)
+	}
+
+	if got, _ := g.bodies[0]["repositories"].([]any); !slices.Equal(got, []any{"acme/web", "api"}) {
+		t.Errorf("repositories sent = %v; want [acme/web api]", g.bodies[0]["repositories"])
+	}
+
+	if err := run(t.Context(), []string{"run", startFactory, "Later", "--detach"}, &printer{w: &bytes.Buffer{}}, env, nil); err != nil {
+		t.Fatalf("goal run without --repo: %v", err)
+	}
+
+	if _, ok := g.bodies[1]["repositories"]; ok {
+		t.Errorf("goal run without --repo sent repositories %v; want none", g.bodies[1]["repositories"])
+	}
+}
