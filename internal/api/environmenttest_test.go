@@ -106,6 +106,25 @@ func TestEnvironmentTest_ToolsList(t *testing.T) {
 		http.StatusNotFound, "environment-server-not-found")
 }
 
+// The test keeps the names of the tools a server marked read-only, beside every tool's name.
+func TestEnvironmentTest_KeepsReadOnlyHints(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createSecret(t)
+	h.draftEnvironment(t, testedEnvYAML)
+	h.tools.Serve(linearURL, "create_issue")
+	h.tools.ServeReadOnly(linearURL, "list_issues")
+
+	decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"linear"}`, nil), http.StatusOK)
+
+	kept, err := h.envTests.List(inOrg(t), acmeID)
+	if err != nil || len(kept) != 1 || !slices.Equal(kept[0].Tools, []string{"create_issue", "list_issues"}) ||
+		!slices.Equal(kept[0].ReadOnly, []string{"list_issues"}) {
+		t.Errorf("kept = %+v, %v; want linear's tools with list_issues read-only", kept, err)
+	}
+}
+
 // defaultEnvironment is the environment every factory has.
 const defaultEnvironment = "default"
 

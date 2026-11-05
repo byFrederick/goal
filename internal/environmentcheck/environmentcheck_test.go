@@ -52,6 +52,28 @@ func TestServer_OpensHeadersAndListsTools(t *testing.T) {
 	}
 }
 
+// The tools a server marks read-only come back in ReadOnly, sorted, beside every tool's name.
+func TestServer_KeepsReadOnlyHints(t *testing.T) {
+	t.Parallel()
+
+	tools := porttest.NewToolLister()
+	tools.Serve(serverURL, "merge_pull_request")
+	tools.ServeReadOnly(serverURL, "search_code", "get_issue")
+
+	r, err := environmentcheck.Server(t.Context(), tools, opener, serverURL, nil, nil)
+	if err != nil || !r.OK {
+		t.Fatalf("Server = %+v, %v; want its tools", r, err)
+	}
+
+	if want := []string{"get_issue", "merge_pull_request", "search_code"}; !slices.Equal(r.Tools, want) {
+		t.Errorf("Tools = %v; want %v", r.Tools, want)
+	}
+
+	if want := []string{"get_issue", "search_code"}; !slices.Equal(r.ReadOnly, want) {
+		t.Errorf("ReadOnly = %v; want %v", r.ReadOnly, want)
+	}
+}
+
 // A failed tools/list is the test's error, with no opened value in it.
 func TestServer_ErrorScrubbed(t *testing.T) {
 	t.Parallel()

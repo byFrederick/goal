@@ -309,7 +309,7 @@ func (t envTest) server(ctx context.Context, name, url string, headers, slots ma
 		return gen.ServerTest{}, secretError(err)
 	}
 
-	r.OK, r.Tools, r.Error = res.OK, res.Tools, res.Error
+	r.OK, r.Tools, r.ReadOnly, r.Error = res.OK, res.Tools, res.ReadOnly, res.Error
 
 	if err := t.s.envTests.Record(ctx, r); err != nil {
 		return gen.ServerTest{}, err
