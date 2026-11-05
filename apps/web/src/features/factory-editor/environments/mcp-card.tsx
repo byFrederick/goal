@@ -112,6 +112,7 @@ function StatusLine({ test, testing }: { test: ServerTest | undefined; testing: 
 }
 
 export function McpCard({
+  place = 'definition',
   environment,
   spec,
   change,
@@ -120,6 +121,7 @@ export function McpCard({
   testing,
   testServer,
 }: {
+  place?: 'definition' | 'wizard';
   environment: string;
   spec: EnvSpec;
   change: (edit: (text: string) => string) => void;
@@ -129,8 +131,6 @@ export function McpCard({
   testing: string | undefined;
   testServer: (server: string) => void;
 }) {
-  const params = useFactoryParams();
-  const org = useOrg();
   const servers = Object.entries(spec.mcp);
   const said = Object.values(results)
     .map(
@@ -164,19 +164,9 @@ export function McpCard({
           ))}
         </ul>
       )}
-      {readOnly ? null : (
+      {readOnly || place !== 'definition' ? null : (
         <div className={cn('border-t border-line py-1', rowPad)}>
-          <Link
-            to="/o/$org/f/$factory/definition/add-tool"
-            params={{ org: org.slug, factory: params.factory }}
-            search={{ environment }}
-            className="press inline-flex min-h-11 items-center gap-2 text-body text-ink no-underline hover:text-link md:min-h-8"
-          >
-            <span aria-hidden="true" className="text-lg leading-none">
-              +
-            </span>
-            Add an MCP server
-          </Link>
+          <AddServerLink environment={environment} />
         </div>
       )}
     </Card>
@@ -309,5 +299,24 @@ function ServerRow({
         </div>
       </div>
     </Disclosure>
+  );
+}
+
+/** Definition only: Add a tool has a page of its own under the factory's Definition. */
+function AddServerLink({ environment }: { environment: string }) {
+  const params = useFactoryParams();
+  const org = useOrg();
+  return (
+    <Link
+      to="/o/$org/f/$factory/definition/add-tool"
+      params={{ org: org.slug, factory: params.factory }}
+      search={{ environment }}
+      className="press inline-flex min-h-11 items-center gap-2 text-body text-ink no-underline hover:text-link md:min-h-8"
+    >
+      <span aria-hidden="true" className="text-lg leading-none">
+        +
+      </span>
+      Add an MCP server
+    </Link>
   );
 }

@@ -155,6 +155,9 @@ test('an owner turns sign-up by domain on and off; a member sees the switch disa
   await domain.click();
   await expect(domain).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByText('Anyone at example.com joins as a Viewer')).toBeVisible();
+  // axe's target-size rule counts a control that the phone's fixed top bar or tab bar covers; clicking the switch
+  // scrolled the first invitation's buttons under the top bar, so centre the section the check is about.
+  await page.getByRole('heading', { name: 'Invite link' }).evaluate((el) => el.scrollIntoView({ block: 'center' }));
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 

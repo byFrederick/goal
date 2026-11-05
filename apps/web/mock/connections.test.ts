@@ -257,12 +257,14 @@ spec:
     expect(at('connection-env-conflict')).toEqual([]);
   });
 
-  it('refuses a definition with agents that names no model connection, offering each that gives model access', async () => {
+  it('accepts runtime.repository.token as a secret reference and asks for no model connection (ADR 0037)', async () => {
     const yaml = `apiVersion: goal/v1
 kind: Factory
 metadata:
   name: probe
 spec:
+  runtime:
+    repository: { url: "https://github.com/acme/goal", token: "{{github-token}}" }
   agents:
     - { name: worker }
   board:
@@ -270,14 +272,11 @@ spec:
       - { id: inbox, kind: queue }
       - { id: done, kind: done }
 `;
-    const validate = async (text: string) =>
-      (
-        await call<Validation>('/v1/orgs/acme/definitions/validate', 'POST', { files: { 'factory.yaml': { text } } })
-      ).body.problems
-        .filter((p) => p.code === 'model-connection-missing')
-        .map((p) => [p.pointer, p.severity, p.fixes.map((f) => f.label)]);
-    expect(await validate(yaml)).toEqual([['/basics/model_connection', 'error', ['Use claude']]]);
-    // Without agents no run needs a model.
-    expect(await validate(yaml.replace('  agents:\n    - { name: worker }\n', ''))).toEqual([]);
+    const { body } = await call<Validation>('/v1/orgs/acme/definitions/validate', 'POST', {
+      files: { 'factory.yaml': { text: yaml } },
+    });
+    expect(body.problems.filter((p) => ['env-reference-removed', 'model-connection-missing'].includes(p.code))).toEqual(
+      [],
+    );
   });
 });

@@ -141,10 +141,10 @@ export function LineEditorProvider({ place, children }: { place: 'definition' | 
   const insert = useCallback(
     (e: Edit<'line'>, station: ModelStation, then?: (line: LineSection) => Edit<'line'> | undefined) => {
       const placed = then?.(e.value) ?? e;
-      session.edit(placed);
       const all = placed.value.stations ?? [];
       const at = all.findIndex((s) => s.id === station.id);
       refocus.current = { id: station.id, control: 'name' };
+      session.edit(placed);
       announce(`${stationLabel(station)} added at position ${at + 1} of ${all.length}`);
     },
     [session],
@@ -154,9 +154,10 @@ export function LineEditorProvider({ place, children }: { place: 'definition' | 
   useLayoutEffect(() => {
     const want = refocus.current;
     if (!want) return;
-    refocus.current = null;
     const row = document.querySelector(`[data-station="${CSS.escape(want.id)}"]`);
+    // A commit that comes before the new row (a menu closing) leaves the want for the commit that has it.
     if (!row) return;
+    refocus.current = null;
     const target =
       want.control === 'name'
         ? row.querySelector<HTMLElement>('[data-station-name]')

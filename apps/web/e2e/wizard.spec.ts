@@ -94,6 +94,8 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
     .focus();
   await page.getByRole('button', { name: 'Add station' }).click();
   await page.getByRole('menuitem', { name: 'Agent station' }).click();
+  // The new row's name takes focus once the menu has closed (line.spec.ts waits for it too); typing waits for it.
+  await expect(row('New station').getByRole('textbox', { name: /^Name of station/ })).toBeFocused();
   await page.keyboard.type('Security review');
   await expect(row('Security review')).toHaveAccessibleName('6. Security review, agent station');
   await page.keyboard.press('Alt+ArrowUp');
@@ -123,13 +125,10 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(saved(page)).toBeVisible();
   await checkPage(page);
 
-  // Connections: the template's github connection, given to the proposer.
-  await continueTo(page, 'Connections').click();
-  await expect(page.getByRole('heading', { level: 2, name: 'Connections and knowledge' })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: /^github/ })).toBeChecked();
-  await page.getByRole('checkbox', { name: 'proposer gets github' }).check();
-  await expect(page.getByRole('checkbox', { name: 'proposer gets github' })).toBeChecked();
-  await expect(saved(page)).toBeVisible();
+  // Environments (ADR 0037 replaced Connections: an agent's access is its environment's secrets and MCP servers).
+  await continueTo(page, 'Environments').click();
+  await expect(page).toHaveURL(/\/o\/acme\/new\/connections\?factory=/);
+  await expect(page.getByRole('heading', { level: 2, name: 'Environments', exact: true })).toBeVisible();
   await checkPage(page);
 
   // Review: the checks, the changes from the template, then Publish v1; the Floor opens.
@@ -140,12 +139,16 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(changes).toContainText(/\d+ changes in \d+ sections/);
   await expect(changes).toContainText('factory.yaml');
   await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Back' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back', exact: true })).toBeVisible();
   await checkPage(page);
   await page.getByRole('checkbox', { name: /^Start the line right away/ }).check();
   await page.getByRole('button', { name: 'Publish v1' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/[^/]+$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Cost review|cloud-costs/);
+  // The Floor's title is "Floor" (floor-header.tsx, floor.spec.ts); the factory's name is in the breadcrumb.
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  if (!isPhone(page)) {
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(/Cost review|cloud-costs/);
+  }
   // The Floor has the published line at once, not the factory as it was before its first version
   // (New item is in the Floor's header from 768 px).
   if (isPhone(page)) return;
@@ -279,9 +282,9 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
   await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   await checkPage(page);
 
-  // Continue setup opens the first step not left with Continue: Line.
-  if (isPhone(page)) await card.getByRole('link', { name: 'new-factory' }).click();
-  else await card.getByRole('link', { name: 'Continue setup' }).click();
+  // The draft's name resumes it and opens the first step not left with Continue: Line (the v3 design
+  // system's Factories home has no separate Continue setup link; docs/design/MASTER.md).
+  await card.getByRole('link', { name: 'new-factory' }).click();
   await expect(page).toHaveURL(new RegExp(`/o/acme/new/line\\?factory=${id}$`));
 
   await page.getByRole('button', { name: 'Delete this draft factory…' }).click();
