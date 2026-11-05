@@ -3,8 +3,8 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect } from 'react';
 
 /**
- * After every client navigation to another page (not the first load, not a change of search
- * params only), focuses the page's h1 so a screen reader starts at the new page and the next
+ * After every client navigation to another page (not the first load, even when a person navigated before it
+ * finished; not a change of search params only), focuses the page's h1 so a screen reader starts at the new page and the next
  * Tab starts from its top. When the h1 stayed (a layout kept its header, as the Definition editor
  * does between its sections), the view's own heading marked `data-route-focus` takes focus instead,
  * once it has mounted when the view loads lazily.
@@ -15,14 +15,18 @@ export function useRouteFocus(): void {
     let before: Element | null = null;
     let viewBefore: Element | null = null;
     let focusedBefore: Element | null = null;
+    // The first load resolves with no `fromLocation`, and no navigation began before it; a person who navigates before it
+    // finished makes the same resolution, which is a navigation.
+    let navigations = 0;
     const offBefore = router.subscribe('onBeforeNavigate', () => {
+      navigations += 1;
       before = document.querySelector('#main h1');
       viewBefore = document.querySelector('#main [data-route-focus]');
       focusedBefore = document.activeElement;
     });
     let waiting: (() => void) | undefined;
     const offResolved = router.subscribe('onResolved', ({ fromLocation, pathChanged }) => {
-      if (!fromLocation || !pathChanged) return;
+      if ((!fromLocation && navigations === 0) || !pathChanged) return;
       waiting?.();
       requestAnimationFrame(() => {
         // The view put focus on what the link asked for (?station= focuses its row): it stays.

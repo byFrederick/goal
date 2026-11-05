@@ -60,6 +60,25 @@ describe('focus after navigation', () => {
     await vi.waitFor(() => expect(document.activeElement?.textContent).toBe('Organization settings'));
   });
 
+  it('leaves focus alone on the first load', async () => {
+    main().innerHTML = '<h1>Home</h1>';
+    handlers.get('onResolved')?.({ pathChanged: true });
+    await frame();
+    await frame();
+
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('focuses the heading of a navigation made before the first load resolved', async () => {
+    handlers.get('onBeforeNavigate')?.({});
+    main().innerHTML = '<h1>Home</h1>';
+    handlers.get('onResolved')?.({ pathChanged: true });
+    await frame();
+    await frame();
+
+    expect(document.activeElement?.textContent).toBe('Home');
+  });
+
   it('leaves focus alone when a search parameter changes and the path stays', async () => {
     handlers.get('onBeforeNavigate')?.({});
     handlers.get('onResolved')?.({ fromLocation: {}, pathChanged: false });
