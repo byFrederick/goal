@@ -186,21 +186,6 @@ func TestCheck_Repositories(t *testing.T) {
 			doc:  edited("        kind: done\n", "        kind: done\n    flow:\n      assemblies:\n        integration: { mode: branch } #here\n"),
 			code: codeMergeNeedsWrite, file: FileName,
 		},
-		{
-			name: "a second entry",
-			doc:  withRepos(appEntry, `- { name: api, url: "https://github.com/acme/api", token: "{{gh-token}}", access: write } #here`),
-			code: codeRepositoryNotSupported, file: FileName,
-		},
-		{
-			name: "read access",
-			doc:  withRepos(`- { name: app, url: "https://github.com/acme/app", token: "{{gh-token}}", access: read } #here`),
-			code: codeRepositoryNotSupported, file: FileName,
-		},
-		{
-			name: "an agent that only reads",
-			doc:  strings.Replace(withRepos(appEntry), agentPrompt, agentPrompt+"      code: read #here\n", 1),
-			code: codeRepositoryNotSupported, file: FileName,
-		},
 	}
 
 	runEnvRows(t, rows)

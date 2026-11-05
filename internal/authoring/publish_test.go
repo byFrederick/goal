@@ -912,3 +912,53 @@ func (h *harness) storedCounts(t *testing.T, f domain.FactoryID) []*domain.Versi
 
 	return out
 }
+
+// A definition with several entries, one that only reads, and an agent that only reads publishes
+// (ADR 0041 decisions 2 and 3): the reader's tokens and its GitHub tools are warnings only.
+func TestPublish_SeveralEntriesAndAReaderPublishWithWarnings(t *testing.T) {
+	t.Parallel()
+
+	tests := porttest.NewEnvironmentTests()
+	h := newHarness(t, withSecretsCheck(func(c *authoring.SecretsCheck) { c.Tests = tests }))
+	h.secret(t, "code-read", domain.SecretScope{All: true})
+
+	yaml := strings.Replace(withCode("read"),
+		`repository: { url: "https://git.example.com/acme/review.git", token: "{{code-token}}", forge: github }`,
+		`repositories: [`+
+			`{ name: services, url: "https://git.example.com/acme/*", token: "{{code-token}}", access: write, default: false }, `+
+			`{ name: docs, url: "https://git.example.com/acme/docs", token: "{{code-read}}", access: read }]`, 1)
+
+	files := acmeFiles(yaml)
+	files[envFile] = []byte(gitHubEnv("{}"))
+
+	f := h.imported(t, files)
+
+	org, _ := domain.OrgFrom(h.ctx)
+	tests.AddFactory(org, f)
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := codes(val.Problems)
+	for _, want := range []string{"reader-write-token", authoring.CodeGitHubToolsUnknown} {
+		if !slices.Contains(got, want) {
+			t.Errorf("problems %v; want %s", got, want)
+		}
+	}
+
+	if p, ok := problem(val.Problems, "reader-write-token"); ok && p.Message != "engineer only reads, but the only token for services can write." {
+		t.Errorf("reader-write-token says %q", p.Message)
+	}
+
+	for _, p := range val.Problems {
+		if p.Severity == domain.SeverityError {
+			t.Errorf("error %s: %s; want warnings only", p.Code, p.Message)
+		}
+	}
+
+	if v := h.publish(t, f); v.Number != 1 {
+		t.Errorf("published version %d; want 1", v.Number)
+	}
+}
