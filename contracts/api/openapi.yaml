@@ -6228,6 +6228,50 @@ components:
         trigger: { type: string, description: The trigger whose check wrote it; absent for an item's note }
         agent: { type: string }
         at: { type: string, format: date-time }
+    ItemCameFrom:
+      type: object
+      description: Where an item came from; follow_ups for origin follow-up, trigger for origin trigger
+      properties:
+        follow_ups:
+          type: array
+          description: >-
+            The follow-ups filed as or onto the item, oldest first: its sources. Present, an
+            empty list when none resolves, for origin follow-up; absent otherwise
+          items: { $ref: "#/components/schemas/CameFromFollowUp" }
+        trigger:
+          description: The trigger that filed the item; present for origin trigger, absent otherwise
+          allOf: [{ $ref: "#/components/schemas/CameFromTrigger" }]
+    CameFromFollowUp:
+      type: object
+      description: A follow-up an item was filed from, the item and run that wrote it and the landing that filed it
+      required: [id, from_item, from_item_id, agent, station, landed_item, landed_item_id]
+      properties:
+        id: { type: string, description: The follow-up's id }
+        from_item: { type: string, description: "The source item, <factory name>#<number>, another factory's included" }
+        from_item_id: { type: string }
+        agent: { type: string, description: The agent whose run wrote it }
+        station: { type: string, description: The station whose run wrote it }
+        landed_item:
+          type: string
+          description: "The item whose landing filed it, <factory name>#<number>: the source, or its assembly when the source is a part"
+        landed_item_id: { type: string }
+    CameFromTrigger:
+      type: object
+      description: The trigger that filed an item
+      required: [name]
+      properties:
+        name: { type: string, description: The trigger's name }
+        kind:
+          type: string
+          enum: [schedule, check, webhook]
+          description: >-
+            check for a trigger with a check, schedule for another schedule trigger, webhook
+            otherwise; absent when the trigger is not in the factory's loaded definition
+        key:
+          type: string
+          description: >-
+            The key a check filed the item under; absent for any other trigger, and when the
+            check filed the key again since, which keeps only the key's last item
     FileFollowUpRequest:
       type: object
       required: [title]
@@ -6313,6 +6357,12 @@ components:
           description: >-
             Whether it, or an item it came from, was made from a webhook delivery (ADR 0040
             decision 21): a person merges its work, and its follow-ups wait for a person
+        came_from:
+          description: >-
+            Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the
+            follow-ups filed as it, or its trigger; getItem only, absent unless origin is
+            follow-up or trigger
+          allOf: [{ $ref: "#/components/schemas/ItemCameFrom" }]
         follow_ups:
           type: array
           description: >-
