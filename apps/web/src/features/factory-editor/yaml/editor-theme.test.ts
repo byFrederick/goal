@@ -57,6 +57,9 @@ describe.each([
       expect(contrast(`#${rule.foreground}`, background), rule.token).toBeGreaterThanOrEqual(4.5);
     }
     expect(contrast(theme.colors['editorLineNumber.foreground'] as string, background)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(theme.colors['editorLineNumber.dimmedForeground'] as string, background)).toBeGreaterThanOrEqual(
+      4.5,
+    );
   });
 
   it('themes the suggest and hover widgets', () => {

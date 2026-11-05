@@ -29,6 +29,13 @@
   z-index: 10;
 }
 
+/* Monaco gives a zone width: 100% of its 16,777,216 px wide line layer, so the zone's box, though it
+   shows nothing there, reaches far past the window. It is as wide as the block it holds (the
+   visible text area, set by monaco-editor.tsx). Monaco sets the width inline, hence !important. */
+.monaco-editor .goal-zone {
+  width: var(--goal-zone-width, 480px) !important;
+}
+
 .goal-zone-body {
   width: var(--goal-zone-width, 480px);
   box-sizing: border-box;
