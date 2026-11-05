@@ -246,7 +246,15 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
   };
   reset(clock());
 
-  const list = (org: string) => stored.get(org) ?? [];
+  /** The organization's secrets; an organization with none yet (one made after the reset) gets its own list. */
+  const list = (org: string) => {
+    let secrets = stored.get(org);
+    if (!secrets) {
+      secrets = [];
+      stored.set(org, secrets);
+    }
+    return secrets;
+  };
   const named = (org: string, name: string) => list(org).find((s) => s.secret.name === name);
 
   /** The secret as the contract has it: its scope as factory ids. */
@@ -346,6 +354,45 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
             noRead || noPush
               ? { ok: false, reason: 'The token has no write access to this repository.' }
               : { ok: true, reason: 'Can push' },
+        });
+        return true;
+      }
+      if (/^\/factories\/[^/]+\/repositories\/test$/.test(rest) && method === 'POST') {
+        // The factory's check (ADR 0041): as the organization's, in the FactoryRepositoryTest answer.
+        const input = await body();
+        const address = typeof input.url === 'string' ? input.url : '';
+        const access = input.access === 'read' ? 'read' : 'write';
+        if (typeof input.secret !== 'string' || !named(org.id, input.secret)) {
+          refuse(res, 404, `secret "${String(input.secret)}" not found`, 'secret-not-found');
+          return true;
+        }
+        if (!/^https:\/\/(github|gitlab)\.com\/[^/]+\/(\*|[^/]+)/.test(address)) {
+          refuse(res, 400, `"${address}" names no repository on github.com or gitlab.com`, 'repository-url-invalid');
+          return true;
+        }
+        const noRead = /-missing(\.git)?$/.test(address);
+        const noPush = access === 'write' && /-readonly(\.git)?$/.test(address);
+        const good = !noRead && !noPush;
+        send(res, 200, {
+          url: address.replace(/^https:\/\//, '').toLowerCase(),
+          access,
+          secret: input.secret,
+          at: new Date(clock()).toISOString(),
+          tested: true,
+          ok: good,
+          summary: noRead
+            ? 'Can’t read.'
+            : noPush
+              ? 'Can read but not push.'
+              : access === 'read'
+                ? 'Can read'
+                : 'Can read and push',
+          read: noRead
+            ? { ok: false, reason: 'Repository not found, or the token cannot see it.' }
+            : { ok: true, reason: 'Cloned' },
+          push: good
+            ? { ok: true, reason: 'Can push' }
+            : { ok: false, reason: 'The token has no write access to this repository.' },
         });
         return true;
       }

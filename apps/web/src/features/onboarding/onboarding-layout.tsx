@@ -8,6 +8,7 @@ import type { OrgSummary } from '../../api/types';
 import { useSignOut } from '../../shared/account';
 import { cn } from '../../ui/cn';
 import { Wordmark } from '../../ui/logo';
+import { touchLink } from '../../ui/touch-target';
 import { type OnboardingStepKey, onboardingSteps, stepIndex } from './steps';
 
 /** What the steps show in the panel. Each slot falls back to its dashed placeholder. */
@@ -39,7 +40,8 @@ interface OnboardingLayoutProps {
 
 /** The text style of "Save and finish later", for the link and for the button that signs out. */
 export const saveLaterClass =
-  'rounded-control font-control text-secondary text-ink-soft no-underline hover:text-ink focus-visible:outline-2 focus-visible:outline-run';
+  'inline-block rounded-control font-control text-secondary text-ink-soft no-underline hover:text-ink focus-visible:outline-2 focus-visible:outline-run ' +
+  touchLink;
 
 export function OnboardingLayout({ step, org, back, action, preview, children }: OnboardingLayoutProps) {
   return (

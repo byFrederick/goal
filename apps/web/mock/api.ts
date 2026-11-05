@@ -1820,6 +1820,20 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         can: orgCan,
       };
       state.orgs.push(org);
+      // The person who made it is its owner, so a signed-in caller sees it in their list.
+      const who = auth.who(req);
+      if (who) {
+        state.people.members[org.id] = [
+          {
+            memberId: crypto.randomUUID(),
+            userId: who.person.id,
+            role: 'owner',
+            joinedAt: clock(),
+            lastActiveAt: clock(),
+            factoryRoles: {},
+          },
+        ];
+      }
       return json(res, 201, org);
     }
 

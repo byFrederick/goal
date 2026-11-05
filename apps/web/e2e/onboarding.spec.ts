@@ -1,5 +1,5 @@
 // Onboarding step 1 (docs/design/screens/get-started/org.jpg) against the mock: a signed-in person with
-// no organization is sent to /get-started, names one, and reaches step 2; an address already taken is
+// no organization is sent to /get-started, names one, and reaches step 2 (Factory); an address already taken is
 // refused on the address field; an unknown step is not found. Not run in the box: Playwright needs a
 // browser, which is not installed here. CI runs it against the mock.
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
@@ -38,7 +38,7 @@ test('a person with no organization is sent to step 1, creates one and reaches s
   await expectNoHorizontalScroll(page);
 
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page).toHaveURL(/\/o\/goal\/get-started\/code$/);
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory$/);
   await expect(page.getByRole('list', { name: 'Setup, step 2 of 8' })).toBeVisible();
 });
 
@@ -70,53 +70,79 @@ test('Save and finish later signs out when there is no organization yet', async 
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-/** Step 2: the repository's address and a token, tested by the mock, then Continue. */
+/** Step 2: the first template is chosen and the factory made; the Code step opens. */
+async function makeFactory(page: Page) {
+  await page.goto('/o/goal/get-started/factory');
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
+}
+
+/** Step 3: Read and write on one repository, the token tested by the mock, then Continue. */
 async function connectCode(page: Page, url = 'https://github.com/acme/goal') {
+  await page.getByRole('radio', { name: /^Read and write/ }).check();
   await page.getByLabel('Repository', { exact: true }).fill(url);
   await page.getByLabel('Token').fill('test-token');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByText('Goal cloned acme/goal and can push a branch.')).toBeVisible();
+  await expect(page.getByText('acme/goal: Can read and push')).toBeVisible();
   await page.getByRole('button', { name: 'Continue' }).click();
 }
 
-test('step 2 takes a URL and a token, tests them, keeps the URL and the secret name in the address and continues', async ({
+test('step 2 creates the factory from the first template and opens the Code step', async ({ page }) => {
+  await signIn(page.request);
+  await page.goto('/o/goal/get-started/factory');
+
+  // The templates are listed by title, and the first is chosen.
+  await expect(page.getByRole('heading', { level: 1, name: 'Start your first factory' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Start empty/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
+});
+
+test('step 3 takes a URL and a token, tests them on the factory, keeps the secret name in the address and continues', async ({
   page,
 }) => {
   await signIn(page.request);
-  await page.goto('/o/goal/get-started/code');
+  await makeFactory(page);
 
   await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
+  await page.getByRole('radio', { name: /^Read and write/ }).check();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
   await connectCode(page);
 
-  await expect(page).toHaveURL(/\/o\/goal\/get-started\/factory\?/);
-  await expect(page).toHaveURL(/secret=github-token/);
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?/);
+  await expect(page).toHaveURL(/secret=github-acme/);
   expect(page.url()).not.toContain('test-token');
 });
 
-test('step 2 shows the host’s reason when the token cannot push, and keeps Continue disabled', async ({ page }) => {
+test('step 3 shows the host’s reason when the token cannot push, and keeps Continue disabled', async ({ page }) => {
   await signIn(page.request);
-  await page.goto('/o/goal/get-started/code');
+  await makeFactory(page);
+  await page.getByRole('radio', { name: /^Read and write/ }).check();
   await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/goal-readonly');
   await page.getByLabel('Token').fill('test-token');
   await page.getByRole('button', { name: 'Continue' }).click();
 
-  await expect(page.getByText(/can’t push a branch\. The token has no write access/)).toBeVisible();
+  await expect(page.getByText(/Can read but not push\. The token has no write access/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
 });
 
-test('step 3 creates the factory from the first template, and step 4 shapes its line', async ({ page }) => {
+test('step 3 continues without code when the template allows No code', async ({ page }) => {
   await signIn(page.request);
-  await page.goto('/o/goal/get-started/code');
-  await connectCode(page);
+  await makeFactory(page);
+  const none = page.getByRole('radio', { name: /^No code/ });
+  test.skip(await none.isDisabled(), 'the first template needs code');
+  await none.check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
+});
 
-  // The templates are listed by title, and the first is chosen.
-  await expect(page.getByRole('heading', { level: 1, name: 'Start your first factory' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: /Start empty/ })).toBeVisible();
-  await page.getByRole('button', { name: /^Use / }).click();
+test('step 4 shapes the line of the factory made in step 2', async ({ page }) => {
+  await signIn(page.request);
+  await makeFactory(page);
+  await connectCode(page);
 
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
@@ -126,7 +152,7 @@ test('step 3 creates the factory from the first template, and step 4 shapes its 
   await expectNoHorizontalScroll(page);
 });
 
-test('step 4 without a factory links back to step 3', async ({ page }) => {
+test('step 4 without a factory links back to the step that makes one', async ({ page }) => {
   await signIn(page.request);
   await page.goto('/o/goal/get-started/line');
 
@@ -139,9 +165,8 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   page,
 }) => {
   await signIn(page.request);
-  await page.goto('/o/goal/get-started/code');
+  await makeFactory(page);
   await connectCode(page);
-  await page.getByRole('button', { name: /^Use / }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
 
   await page.getByRole('link', { name: 'Continue' }).click();

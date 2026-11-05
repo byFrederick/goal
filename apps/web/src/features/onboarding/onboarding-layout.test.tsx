@@ -44,12 +44,12 @@ describe('the onboarding layout', () => {
   it('shows the eight steps and marks the current one', async () => {
     await renderLayout(<OnboardingLayout step="factory" org={goal} />);
 
-    const steps = screen.getByRole('list', { name: 'Setup, step 3 of 8' });
+    const steps = screen.getByRole('list', { name: 'Setup, step 2 of 8' });
     expect(
       within(steps)
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual(['Organization', 'Code', 'Factory', 'Line', 'Budget', 'Intake', 'People', 'First item']);
+    ).toEqual(['Organization', 'Factory', 'Code', 'Line', 'Budget', 'Intake', 'People', 'First item']);
     expect(screen.getByRole('region', { name: 'Setup steps' }).getAttribute('tabindex')).toBe('0');
     const current = within(steps)
       .getAllByRole('listitem')
@@ -114,7 +114,8 @@ describe('the onboarding steps', () => {
   });
 
   it('names the step before each one, and the first step before the second', () => {
-    expect(previousStep('code')).toBe('organization');
-    expect(previousStep('factory')).toBe('code');
+    expect(previousStep('factory')).toBe('organization');
+    expect(previousStep('code')).toBe('factory');
+    expect(previousStep('line')).toBe('code');
   });
 });
