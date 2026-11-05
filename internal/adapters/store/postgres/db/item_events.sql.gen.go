@@ -158,8 +158,64 @@ func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemE
 	return items, nil
 }
 
+const itemNotes = `-- name: ItemNotes :many
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
+WHERE item_id = $1 AND kind = 'item_note'
+ORDER BY id
+LIMIT $2::bigint
+`
+
+type ItemNotesParams struct {
+	ItemID   uuid.UUID
+	MaxNotes int64
+}
+
+// The notes other items' agents and triggers' checks left on an item (item_note), oldest first,
+// on item_events_item_idx.
+func (q *Queries) ItemNotes(ctx context.Context, arg ItemNotesParams) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, itemNotes, arg.ItemID, arg.MaxNotes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockNoteCap = `-- name: LockNoteCap :exec
+SELECT pg_advisory_xact_lock(hashtextextended('goal.notes:' || $1::uuid::text, 0))
+`
+
+// Serializes the deliveries into one factory from other factories, so two instances cannot both
+// read the cap's count below it. Taken after the target item's lock, always last.
+func (q *Queries) LockNoteCap(ctx context.Context, factoryID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockNoteCap, factoryID)
+	return err
+}
+
 const mergedItems = `-- name: MergedItems :many
-SELECT DISTINCT ON (e.data->>'sha') (e.data->>'sha')::text AS sha, w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at
+SELECT DISTINCT ON (e.data->>'sha') (e.data->>'sha')::text AS sha, w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage
 FROM item_events e
 JOIN work_items w ON w.id = e.item_id
 WHERE e.factory_id = $1 AND e.kind = 'merged' AND e.data->>'sha' = ANY ($2::text[])
@@ -217,6 +273,14 @@ func (q *Queries) MergedItems(ctx context.Context, arg MergedItemsParams) ([]Mer
 			&i.WorkItem.Source,
 			&i.WorkItem.IntegrationBranch,
 			&i.WorkItem.IntegrationLandAt,
+			&i.WorkItem.Origin,
+			&i.WorkItem.Via,
+			&i.WorkItem.CreatedBy,
+			&i.WorkItem.Generation,
+			&i.WorkItem.Untrusted,
+			&i.WorkItem.StartAt,
+			&i.WorkItem.StartedAt,
+			&i.WorkItem.Triage,
 		); err != nil {
 			return nil, err
 		}
@@ -228,16 +292,36 @@ func (q *Queries) MergedItems(ctx context.Context, arg MergedItemsParams) ([]Mer
 	return items, nil
 }
 
+const notesFromOtherFactories = `-- name: NotesFromOtherFactories :one
+SELECT count(*) FROM item_events
+WHERE factory_id = $1 AND kind = 'item_note' AND at > $2
+  AND data->>'from_factory_id' IS DISTINCT FROM $1::uuid::text
+`
+
+type NotesFromOtherFactoriesParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+}
+
+// How many item_note events from other factories the factory took since a time
+// (item_events_item_notes_idx): the daily cap's count.
+func (q *Queries) NotesFromOtherFactories(ctx context.Context, arg NotesFromOtherFactoriesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, notesFromOtherFactories, arg.FactoryID, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const notesSinceLastRun = `-- name: NotesSinceLastRun :many
 SELECT n.id, n.factory_id, n.item_id, n.run_id, n.at, n.kind, n.station, n.actor, n.data, n.org_id FROM item_events n
-WHERE n.item_id = $1 AND n.kind = 'note'
+WHERE n.item_id = $1 AND n.kind IN ('note', 'item_note')
   AND n.id > coalesce((SELECT max(r.id) FROM item_events r
                        WHERE r.item_id = $1 AND r.kind = 'run_started'), 0)
 ORDER BY n.id
 `
 
-// An item's notes after its latest run_started event, both on item_events_item_idx: what the
-// next run's brief carries.
+// An item's notes, a person's and other items' (item_note), after its latest run_started event,
+// both on item_events_item_idx: what the next run's brief carries.
 func (q *Queries) NotesSinceLastRun(ctx context.Context, itemID uuid.UUID) ([]ItemEvent, error) {
 	rows, err := q.db.Query(ctx, notesSinceLastRun, itemID)
 	if err != nil {

@@ -133,12 +133,12 @@ func testAssembleCreatesParts(f *fixture) {
 			ID: got.ID, OrgID: f.org, FactoryID: f.factory, Number: it.Number + int64(i) + 1, ParentID: it.ID,
 			PartKey: p.Key, PartPaths: p.Paths, Paths: p.Paths, Type: "feature", Lane: p.Lane, Title: p.Title, Body: p.Brief,
 			Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
-			CreatedAt: t1, UpdatedAt: t1,
+			CreatedAt: t1, UpdatedAt: t1, Origin: domain.OriginPlan,
 		}
 		sameItem(t, got, w)
 		sameEvents(t, f.Events(t, got.ID), []domain.Event{{
 			FactoryID: f.factory, ItemID: got.ID, At: t1, Kind: domain.EventPartCreated, Station: stWork, Actor: domain.ActorEngine,
-			Data: map[string]any{"parent": string(it.ID), "key": p.Key},
+			Data: map[string]any{"parent": string(it.ID), "key": p.Key, dataActor: domain.EngineActor.Ref()},
 		}})
 	}
 
@@ -735,7 +735,7 @@ func testAddPart(f *fixture) {
 		ID: part.ID, OrgID: f.org, FactoryID: f.factory, Number: it.Number + 4, ParentID: it.ID,
 		PartKey: keyDocs, PartPaths: paths, Paths: paths, Type: typeFeature, Lane: laneBackend, Title: "Docs", Body: "the guide",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
-		CreatedAt: t2, UpdatedAt: t2,
+		CreatedAt: t2, UpdatedAt: t2, Origin: domain.OriginPlan, CreatedBy: domain.LocalUser.Ref(),
 	})
 	sameItem(t, f.item(t, part.ID), part)
 
@@ -756,7 +756,7 @@ func testAddPart(f *fixture) {
 
 	sameEvents(t, f.Events(t, part.ID), []domain.Event{{
 		FactoryID: f.factory, ItemID: part.ID, At: t2, Kind: domain.EventPartCreated, Station: stWork, Actor: domain.LocalUser.Name,
-		Data: map[string]any{"parent": string(it.ID), dataKey: keyDocs},
+		Data: map[string]any{"parent": string(it.ID), dataKey: keyDocs, dataActor: domain.LocalUser.Ref()},
 	}})
 
 	events := f.Events(t, it.ID)
@@ -931,7 +931,7 @@ func testAssembleLinksRootPartsAfter(f *fixture) {
 	sameEvents(t, f.Events(t, api.ID), []domain.Event{
 		{
 			FactoryID: f.factory, ItemID: api.ID, At: t1, Kind: domain.EventPartCreated, Station: stWork, Actor: domain.ActorEngine,
-			Data: map[string]any{"parent": string(it.ID), "key": keyAPI},
+			Data: map[string]any{"parent": string(it.ID), "key": keyAPI, dataActor: domain.EngineActor.Ref()},
 		},
 		{
 			FactoryID: f.factory, ItemID: api.ID, At: t1, Kind: domain.EventEdgeAdded, Station: stWork, Actor: agWorker,

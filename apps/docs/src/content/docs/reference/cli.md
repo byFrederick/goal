@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -30,12 +30,12 @@ Flags: `--compose`.
 ## goal run
 
 ```text
-goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
+goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach] [--at <time> | --in <wait>] [--after <item>]...
 ```
 
-submit a work item and follow it until a human or done (--type: one of the factory's work types; default its first, none when it declares none)
+submit a work item and follow it until a human or done (--type: one of the factory's work types; default its first, none when it declares none); with a start it waits at the first station and is not followed: --at a time (RFC 3339, or 2026-11-05T09:00 in your time zone), --in a wait (36h, 7d, 2w), --after an item that must be done first (repeatable); at most 365 days ahead
 
-Flags: `--type T`, `--body B`, `--priority N`, `--detach`.
+Flags: `--type T`, `--body B`, `--priority N`, `--detach`, `--at <time>`, `--in <wait>`, `--after <item>`.
 
 ## goal follow
 
@@ -44,6 +44,16 @@ goal follow <item>
 ```
 
 follow an item's events again
+
+## goal start
+
+```text
+goal start <item> --at <time> | --in <wait> | --now
+```
+
+change when an item that has not started may start, or start it now (its --after items still hold it)
+
+Flags: `--at <time>`, `--in <wait>`, `--now`.
 
 ## goal item
 
@@ -759,6 +769,16 @@ what the organization's agent runs cost (default this week), per merged item and
 
 Flags: `--window week|month|90d`, `--json`.
 
+## goal intake
+
+```text
+goal intake <factory> [--window 7d|30d|90d] [--json]
+```
+
+what is coming to the factory: the items that haven't started (when each may start or the needs it waits for, and where it came from), its items by origin over the window (default 30d), its follow-ups to triage and the items they join from, its triggers (a check marked) and the webhooks open to it: receiving, no trigger or closed
+
+Flags: `--window 7d|30d|90d`, `--json`.
+
 ## goal triggers list
 
 ```text
@@ -775,7 +795,7 @@ Flags: `--json`.
 goal triggers show <factory> <trigger> [--json]
 ```
 
-a trigger, what its items did in the last 7 days and its recent events: created, merged or skipped
+a trigger, what its items did in the last 7 days and its recent events: created, merged, skipped, missed or checked
 
 Flags: `--json`.
 
@@ -783,51 +803,82 @@ Flags: `--json`.
 
 ```text
 goal triggers try <factory> <trigger> --event ID [--json]
+goal triggers try <factory> <trigger> [--wait 6m] [--json]
 ```
 
-dry-run the trigger on one of its 20 newest events (ID from goal triggers show): whether it matched, each step and why, the item it would create; nothing is created, but the model check runs and its cost is spent
+dry-run the trigger on one of its 20 newest events (ID from goal triggers show): whether it matched, each step and why, the item it would create; a schedule's events, and a delivery's while its webhook keeps it; nothing is created
 
-Flags: `--event ID`, `--json`.
+for a trigger with a check: run its check now and wait (at most --wait) for what it would file, note and skip; it spends like any check, and nothing is filed, noted or saved
+
+Flags: `--event ID`, `--json`, `--wait 6m`.
+
+## goal triggers checks
+
+```text
+goal triggers checks <factory> <trigger> [--limit N] [--json]
+```
+
+a check trigger's checks, newest first: when, what each filed, noted and skipped with reasons, and its cost (--limit: 1 to 100, default 20)
+
+Flags: `--limit N`, `--json`.
 
 ## goal webhooks list
 
 ```text
-goal webhooks list <factory> [--json]
+goal webhooks list [--json]
 ```
 
-the factory's webhook endpoints: kind, address, the triggers they feed, deliveries in 7 days (never a secret)
+the organization's webhooks: sender, address, the secret that signs them, the factories they are open to, the triggers that use them, deliveries in 7 days (never a secret's value)
 
 Flags: `--json`.
 
 ## goal webhooks create
 
 ```text
-goal webhooks create <factory> <name> [--kind generic|github] [--json]
+goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
 ```
 
-add an endpoint (default kind generic); its signing secret is printed once, alone on stdout: store it in the sender now
+add a webhook, open to no factory (default sender standard; --kind generic|github is the old name of --sender, generic being standard); without --secret it makes the secret webhook-&lt;name&gt; and prints its value once, alone on stdout: store it in the sender now
 
-Flags: `--kind generic|github`, `--json`.
+Flags: `--sender github|gitlab|standard|pagerduty|sentry|token`, `--secret <name>`, `--json`.
 
-## goal webhooks rotate
+## goal webhooks open
 
 ```text
-goal webhooks rotate <factory> <name> [--json]
+goal webhooks open <webhook> <factory> [--repos a,b] [--json]
 ```
 
-replace its signing secret, printed once the same way; the old one stops working at once
+the factory receives its deliveries, only those of the repositories listed with --repos; again replaces the repositories
+
+Flags: `--repos a,b`, `--json`.
+
+## goal webhooks close
+
+```text
+goal webhooks close <webhook> <factory> [--json]
+```
+
+the factory no longer receives its deliveries
 
 Flags: `--json`.
 
 ## goal webhooks deliveries
 
 ```text
-goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+goal webhooks deliveries <webhook> [--limit N] [--after C] [--json]
 ```
 
 what it received, newest first: refused (and why), accepted or created an item
 
 Flags: `--limit N`, `--after C`, `--json`.
+
+## goal webhooks delete
+
+```text
+goal webhooks delete <webhook>
+```
+
+delete it and its deliveries; its secret stays
 
 ## goal storage init
 

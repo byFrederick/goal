@@ -21,6 +21,9 @@ func TestSecrets_Conformance(t *testing.T) {
 		keys := porttest.NewMasterKeys()
 		conns := porttest.NewConnections(keys.Key(), tn)
 		secrets := porttest.NewOrgSecrets(keys.Key(), tn, conns)
+		store := porttest.NewStore()
+		intake := porttest.NewIntake(keys.Key(), store)
+		intake.UseSecrets(secrets)
 
 		var orgs atomic.Int64
 
@@ -36,6 +39,13 @@ func TestSecrets_Conformance(t *testing.T) {
 				}
 			},
 			Audit: tn,
+			SignWebhook: func(t *testing.T, org domain.OrgID, name string) {
+				t.Helper()
+
+				if _, err := intake.CreateWebhook(domain.WithOrg(t.Context(), org), domain.NewWebhook{Name: "github-acme", Sender: domain.SenderGitHub, Secret: name}); err != nil {
+					t.Fatal(err)
+				}
+			},
 			NewOrg: func(t *testing.T) domain.OrgID {
 				t.Helper()
 

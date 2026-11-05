@@ -42,7 +42,8 @@ const (
 )
 
 // acme is inbox → approve (human) → done: enough to submit, read and decide on items, with an
-// intake trigger of each source (a schedule, a GitHub event, a disabled webhook) for Intake.
+// intake trigger of each source (a schedule, a GitHub event, a disabled webhook) and a check for
+// Intake.
 const acme = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + acmeID + `, name: acme, title: Acme }
@@ -67,6 +68,12 @@ spec:
         enabled: false
         on: webhook.ci-hooks.deploy
         create: { type: fix, station: inbox, title: "A deploy failed" }
+      - name: new-incidents
+        on: schedule
+        cron: "*/5 * * * *"
+        check: { agent: writer, brief: Look for new incidents. }
+        create: { type: fix, station: inbox }
+        limits: { perCheck: 2 }
     stations:
       - { id: inbox, kind: queue }
       - { id: approve, kind: human }
@@ -543,6 +550,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.notifications = porttest.NewNotificationPreferences()
 
 	connections := h.connections(t, tenancy)
+	h.intake.UseSecrets(h.secrets)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
@@ -858,6 +866,10 @@ func TestAPI_GetItem(t *testing.T) {
 		t.Errorf("item at %s/%s number %d, want approve/waiting_human number 1", it.Station, it.State, it.Number)
 	}
 
+	if it.Origin == nil || *it.Origin != gen.ItemOriginPerson {
+		t.Errorf("item origin %v, want person", it.Origin)
+	}
+
 	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/00000000-0000-7000-8000-ffffffffffff", "", nil); code != http.StatusNotFound {
 		t.Errorf("unknown item = %d, want 404", code)
 	}
@@ -939,12 +951,14 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 		h      *harness
 		header http.Header
 		want   domain.ItemSource
+		via    domain.Via
+		by     string
 	}{
-		{"a browser session", h.harness, cookie(ownerToken), domain.ItemFromPeople},
-		{"goal login's session", h.harness, bearer(freshCLIToken), domain.ItemFromCLI},
-		{"a personal token of the owner", h.harness, bearer(pat.Secret), domain.ItemFromCLI},
-		{"the ci-deploy API key", h.harness, bearer(key.Secret), domain.ItemFromAPI},
-		{"the local user of GOAL_AUTH=none", newHarness(t), nil, domain.ItemFromPeople},
+		{"a browser session", h.harness, cookie(ownerToken), domain.ItemFromPeople, domain.ViaWeb, "user:" + string(ownerID)},
+		{"goal login's session", h.harness, bearer(freshCLIToken), domain.ItemFromCLI, domain.ViaCLI, "user:" + string(ownerID)},
+		{"a personal token of the owner", h.harness, bearer(pat.Secret), domain.ItemFromCLI, domain.ViaCLI, "user:" + string(ownerID)},
+		{"the ci-deploy API key", h.harness, bearer(key.Secret), domain.ItemFromAPI, domain.ViaAPI, "service:" + key.Key.Id},
+		{"the local user of GOAL_AUTH=none", newHarness(t), nil, domain.ItemFromPeople, domain.ViaWeb, domain.LocalUser.Ref()},
 	}
 
 	for _, c := range cases {
@@ -965,6 +979,14 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 
 		if it.Source != c.want {
 			t.Errorf("submit with %s: source %q, want %q", c.name, it.Source, c.want)
+		}
+
+		if it.Origin != domain.OriginPerson || it.Via != c.via || it.CreatedBy != c.by {
+			t.Errorf("submit with %s: origin %q via %q by %q, want person, %q, %q", c.name, it.Origin, it.Via, it.CreatedBy, c.via, c.by)
+		}
+
+		if made.Origin == nil || *made.Origin != gen.ItemOriginPerson {
+			t.Errorf("submit with %s: answered origin %v, want person", c.name, made.Origin)
 		}
 	}
 }

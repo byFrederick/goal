@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CanUseTool, Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { untrustedDataSection } from './agent.js';
 import type { Shell } from './environment.js';
 import type { WorkerEvent } from './events.js';
 import { lsRemoteHead, type RunDeps, runTask } from './run.js';
@@ -123,7 +124,11 @@ describe('runTask', () => {
     expect(options).toMatchObject({
       cwd: '/workspace',
       model: 'claude-sonnet-5-5',
-      systemPrompt: { type: 'preset', preset: 'claude_code', append: 'You are the engineer.' },
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: `You are the engineer.\n\n${untrustedDataSection}`,
+      },
       tools: ['Read', 'Edit', 'Bash', 'Skill'],
       allowedTools: ['Read', 'Edit', 'Bash(npm test*)', 'mcp__goal'],
       disallowedTools: ['Bash(git push*)'],

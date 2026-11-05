@@ -325,6 +325,24 @@ describe('Items filters in the URL', () => {
     expect(await screen.findByRole('button', { name: 'Grouped by assembly', pressed: true })).toBeTruthy();
   });
 
+  it('says "Starts <date>" for an item that has not started', async () => {
+    renderItems([
+      item({
+        id: 'later',
+        ref: 'sre#561',
+        title: 'Add the migration',
+        state: 'queued',
+        start: { at: '2026-11-19T09:00:00Z' },
+      }),
+      item({ id: 'now', ref: 'sre#562', title: 'Plain item', state: 'queued' }),
+    ]);
+
+    const row = (await screen.findByText('Add the migration')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Starts Nov 19')).toBeTruthy();
+    const plain = screen.getByText('Plain item').closest('tr') as HTMLElement;
+    expect(within(plain).queryByText(/^Starts/)).toBeNull();
+  });
+
   it('shows the ref as a mono number and the type as it is written', async () => {
     renderItems([item({ id: 'a', ref: 'sre#144', title: 'Fix it', type: 'feature' })]);
 

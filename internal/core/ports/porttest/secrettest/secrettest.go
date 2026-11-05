@@ -34,6 +34,9 @@ type Harness struct {
 	// rows in hand would.
 	CopySealed func(t *testing.T, fromOrg domain.OrgID, from string, toOrg domain.OrgID, to string)
 	Audit      ports.Audit
+	// SignWebhook creates an organization webhook of org signed by its secret name, in the
+	// secrets' store.
+	SignWebhook func(t *testing.T, org domain.OrgID, name string)
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 }
@@ -65,6 +68,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"NoMasterKey_ValuesUnavailable", testNoKey},
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
+
+	tests = append(tests, signingTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

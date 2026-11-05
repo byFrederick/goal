@@ -48,6 +48,9 @@ type Line struct {
 	Runtime  Runtime
 	Stations []Station
 	Agents   []AgentSpec
+	// WorkTypes are board.workTypes, in declaration order: an item's type is one of them, the
+	// first by default; none when the factory declares none, and then any type goes (File).
+	WorkTypes []string
 	// ExpediteTypes are the work types that enter with class of service expedite.
 	ExpediteTypes []string
 	// Triggers are board.triggers, in declaration order: the rules that turn events and schedules
@@ -324,6 +327,16 @@ func (l Line) Station(id string) (Station, bool) {
 	return l.Stations[i], true
 }
 
+// Trigger returns the trigger with the given name.
+func (l Line) Trigger(name string) (Trigger, bool) {
+	i := slices.IndexFunc(l.Triggers, func(t Trigger) bool { return t.Name == name })
+	if i < 0 {
+		return Trigger{}, false
+	}
+
+	return l.Triggers[i], true
+}
+
 // First returns the station new items enter at.
 func (l Line) First() (Station, error) {
 	if len(l.Stations) == 0 {
@@ -402,6 +415,18 @@ func (l Line) Agent(name string) (AgentSpec, bool) {
 	}
 
 	return l.Agents[i], true
+}
+
+// RoutedLanes are the lanes the stations of l route by, sorted; none when no station routes.
+func (l Line) RoutedLanes() []string {
+	var lanes []string
+	for _, s := range l.Stations {
+		lanes = append(lanes, slices.Collect(maps.Keys(s.Route))...)
+	}
+
+	slices.Sort(lanes)
+
+	return slices.Compact(lanes)
 }
 
 // ClassFor returns the class of service a new item of workType enters with.

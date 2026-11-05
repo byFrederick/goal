@@ -51,9 +51,10 @@ func testFlowMetricsByTypeWithLongWaits(f *fixture) {
 	f.create(t, domain.NewItem{CreatedAt: hours(1), Station: stNext})
 
 	// Done: two items of the asked type (one reworked), one of the other type; spend on both.
-	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(3)}), hours(5), true)
-	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(30)}), hours(34), false)
-	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(3), Type: typeOther}), hours(4), false)
+	// Each was filed past the line's first station, so it started when it was created.
+	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(3), StartedAt: hours(3)}), hours(5), true)
+	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(30), StartedAt: hours(30)}), hours(34), false)
+	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(3), StartedAt: hours(3), Type: typeOther}), hours(4), false)
 
 	for _, r := range []struct {
 		item domain.ItemID
@@ -190,7 +191,8 @@ func testFlowMetricsAssemblyLeadTime(f *fixture) {
 	since, until := hours(0), hours(72)
 
 	// closeWith makes an assembly of two parts created at `created` and closes its parts in
-	// state at first and last.
+	// state at first and last. Each assembly was filed past the first station, so it started
+	// when it was created.
 	closeWith := func(n domain.NewItem, state domain.ItemState, first, last time.Time) {
 		it, l := f.planning(t, n)
 		_, parts := f.assemble(t, assembly(it, l, []domain.NewPart{{Key: "a", Title: "a"}, {Key: "b", Title: "b"}}))
@@ -204,11 +206,11 @@ func testFlowMetricsAssemblyLeadTime(f *fixture) {
 		}
 	}
 
-	closeWith(domain.NewItem{Title: "12 h", CreatedAt: hours(2)}, domain.StateDone, hours(12), hours(14))
-	closeWith(domain.NewItem{Title: "36 h", CreatedAt: hours(4)}, domain.StateDone, hours(20), hours(40))
-	closeWith(domain.NewItem{Title: "other type", CreatedAt: hours(5), Type: typeOther}, domain.StateDone, hours(20), hours(30))
-	closeWith(domain.NewItem{Title: "cancelled", CreatedAt: hours(6)}, domain.StateCancelled, hours(20), hours(21))
-	closeWith(domain.NewItem{Title: "after the window", CreatedAt: hours(7)}, domain.StateDone, hours(20), until)
+	closeWith(domain.NewItem{Title: "12 h", CreatedAt: hours(2), StartedAt: hours(2)}, domain.StateDone, hours(12), hours(14))
+	closeWith(domain.NewItem{Title: "36 h", CreatedAt: hours(4), StartedAt: hours(4)}, domain.StateDone, hours(20), hours(40))
+	closeWith(domain.NewItem{Title: "other type", CreatedAt: hours(5), StartedAt: hours(5), Type: typeOther}, domain.StateDone, hours(20), hours(30))
+	closeWith(domain.NewItem{Title: "cancelled", CreatedAt: hours(6), StartedAt: hours(6)}, domain.StateCancelled, hours(20), hours(21))
+	closeWith(domain.NewItem{Title: "after the window", CreatedAt: hours(7), StartedAt: hours(7)}, domain.StateDone, hours(20), until)
 	f.finish(t, f.create(t, domain.NewItem{CreatedAt: hours(3)}), hours(5), false)
 
 	q := ports.FlowQuery{FactoryID: f.factory, Since: since, Until: until, Type: typeTask}

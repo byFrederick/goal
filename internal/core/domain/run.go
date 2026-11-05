@@ -224,6 +224,9 @@ type RunRequest struct {
 	// succeeded (ADR 0039 decision 10); a line's run gets its station's checks from its claim, so
 	// only a try names them.
 	Checks []string
+	// Trigger is the trigger a check run (Kind check, ADR 0040 decision 19) checks for, which its
+	// task token names; empty for every other run.
+	Trigger string
 }
 
 // ErrBadRunRequest refuses a RunRequest that Check does not accept.
@@ -244,7 +247,13 @@ func (r RunRequest) Check() error {
 		return err
 	}
 
+	if (r.Kind == RunKindCheck) != (r.Trigger != "") {
+		return fmt.Errorf("%w: a check run, and only it, names its trigger", ErrBadRunRequest)
+	}
+
 	switch r.Kind {
+	case RunKindCheck:
+		return r.checkCheck()
 	case RunKindJonah:
 		return r.checkJonah()
 	case RunKindTry:
@@ -325,6 +334,21 @@ func (r RunRequest) checkTry() error {
 		return fmt.Errorf("%w: a try needs its station, its try and a try bundle, and grades no result", ErrBadRunRequest)
 	case r.Commit == "" || r.Repository.URL == "":
 		return fmt.Errorf("%w: a try needs a recorded commit and the repository it is in", ErrBadRunRequest)
+	}
+
+	return nil
+}
+
+// checkCheck refuses a check run with an item, a station, a lease, a repository, a commit, a try,
+// a grade, checks or knowledge (ADR 0040 decision 19: it only reads, clones nothing and has no
+// person to ask), or on another bundle than a check's.
+func (r RunRequest) checkCheck() error {
+	switch {
+	case r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || r.Commit != "" ||
+		r.TryOf != "" || r.GradeOf != "" || len(r.Checks) > 0 || len(r.Knowledge) > 0:
+		return fmt.Errorf("%w: a check has no item, station, lease, repository, commit, try, grade, checks or knowledge", ErrBadRunRequest)
+	case r.Bundle != TaskKindCheck:
+		return fmt.Errorf("%w: a check runs on a check bundle", ErrBadRunRequest)
 	}
 
 	return nil

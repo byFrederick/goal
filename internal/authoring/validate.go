@@ -94,7 +94,7 @@ var checkSections = map[string]string{
 	"tools": domain.SectionBasics, "contracts": domain.SectionFiles, "removed": domain.SectionBasics,
 	"moved": domain.SectionBasics, "environments": domain.SectionEnvironments,
 	"availability": domain.SectionConnections, CheckSecrets: domain.SectionEnvironments,
-	config.CheckPolicy: domain.SectionAgents,
+	config.CheckPolicy: domain.SectionAgents, config.CheckDeliveries: domain.SectionBasics,
 }
 
 // candidate is a definition to validate and what it is validated against.
@@ -241,6 +241,15 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 		}
 
 		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckSecrets)
+	}
+
+	if s.webhooks != nil && c.factory != "" {
+		p, err := s.webhookProblems(ctx, c.factory, f)
+		if err != nil {
+			return ownResult{}, err
+		}
+
+		out.problems, out.ran = append(out.problems, p...), append(out.ran, config.CheckDeliveries)
 	}
 
 	if s.policies != nil {

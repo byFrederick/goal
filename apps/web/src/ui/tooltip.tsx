@@ -1,5 +1,6 @@
 import { Tooltip as T } from 'radix-ui';
 import type { ReactElement, ReactNode } from 'react';
+import { cn } from './cn';
 
 // Mirrors --duration-micro in styles.css (MOTION.md, Tooltip): the wait before the first tip opens.
 // tooltip.test.tsx checks the two agree. Radix takes milliseconds, so the value cannot be a token.
@@ -24,6 +25,11 @@ interface TooltipProps {
   /** A muted second line: its status or what it does. */
   detail?: ReactNode | undefined;
   side?: 'right' | 'top' | 'bottom' | 'left';
+  /** Wraps a long explanation in a tip at most 18rem wide instead of one line. */
+  wrap?: boolean;
+  /** Controls the tip (the ⓘ opens on a tap); leave both out and hover and focus decide. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -31,9 +37,9 @@ interface TooltipProps {
  * Escape). It repeats the trigger's name visually and never carries anything the name lacks. It
  * fades in and grows from its trigger; it closes at once (MOTION.md, Tooltip).
  */
-export function Tooltip({ children, label, detail, side = 'right' }: TooltipProps) {
+export function Tooltip({ children, label, detail, side = 'right', wrap = false, open, onOpenChange }: TooltipProps) {
   return (
-    <T.Root>
+    <T.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
       {/* The trigger's name already says what the tip shows: no duplicate description. */}
       <T.Trigger asChild aria-describedby={undefined}>
         {children}
@@ -43,7 +49,10 @@ export function Tooltip({ children, label, detail, side = 'right' }: TooltipProp
           side={side}
           sideOffset={10}
           aria-hidden="true"
-          className="z-50 origin-(--radix-tooltip-content-transform-origin) rounded-chip border border-rule bg-card px-2.5 py-1.5 text-[13px] leading-[1.35] font-medium whitespace-nowrap text-ink shadow-pop data-[state=delayed-open]:motion-safe:animate-tooltip-in data-[state=delayed-open]:motion-reduce:animate-fade-in data-[state=instant-open]:motion-safe:animate-tooltip-in data-[state=instant-open]:motion-reduce:animate-fade-in"
+          className={cn(
+            'z-50 origin-(--radix-tooltip-content-transform-origin) rounded-chip border border-rule bg-card px-2.5 py-1.5 text-[13px] leading-[1.35] font-medium text-ink shadow-pop data-[state=delayed-open]:motion-safe:animate-tooltip-in data-[state=delayed-open]:motion-reduce:animate-fade-in data-[state=instant-open]:motion-safe:animate-tooltip-in data-[state=instant-open]:motion-reduce:animate-fade-in',
+            wrap ? 'max-w-72 whitespace-normal' : 'whitespace-nowrap',
+          )}
         >
           {label}
           {detail ? <span className="block text-xs font-normal text-muted">{detail}</span> : null}

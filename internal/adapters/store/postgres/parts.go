@@ -97,25 +97,19 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 	}
 
 	ids := make(map[string]uuid.UUID, len(a.Parts))
-	roots := make([]db.WorkItem, 0, len(a.Parts))
-	events := make([]domain.Event, 0, len(a.Parts)+1)
 
 	for _, p := range a.Parts {
-		part, err := insertPart(ctx, q, row, p, t.From.Station, t.At)
+		var follows []uuid.UUID
+		if len(p.Needs) == 0 {
+			follows = after
+		}
+
+		part, err := insertPart(ctx, q, row, p, a.By, t.At, follows, a.AfterBy)
 		if err != nil {
 			return db.WorkItem{}, err
 		}
 
 		ids[p.Key] = part.ID
-		if len(p.Needs) == 0 {
-			roots = append(roots, part)
-		}
-
-		events = append(events, domain.Event{
-			FactoryID: domain.FactoryID(part.FactoryID.String()), ItemID: domain.ItemID(part.ID.String()), At: t.At,
-			Kind: domain.EventPartCreated, Station: part.Station, Actor: domain.ActorEngine,
-			Data: map[string]any{"parent": string(t.ItemID), "key": p.Key},
-		})
 	}
 
 	for _, p := range a.Parts {
@@ -128,18 +122,10 @@ func assemble(ctx context.Context, q *db.Queries, cur db.WorkItem, a ports.Assem
 		}
 	}
 
-	linked, err := linkAfter(ctx, q, roots, after, a.AfterBy, t.At)
-	if err != nil {
-		return db.WorkItem{}, err
-	}
-
-	events = append(events, linked...)
-	events = append(events, domain.Event{
+	if err := appendEvents(ctx, q, []domain.Event{{
 		FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: t.ItemID, At: t.At, Kind: domain.EventAssembled,
 		Station: row.Station, Actor: domain.ActorEngine, Data: map[string]any{"parts": len(a.Parts)},
-	})
-
-	if err := appendEvents(ctx, q, events); err != nil {
+	}}); err != nil {
 		return db.WorkItem{}, err
 	}
 
@@ -198,38 +184,22 @@ func linkAfter(ctx context.Context, q *db.Queries, roots []db.WorkItem, after []
 	return events, nil
 }
 
-// insertPart creates one part of the assembly parent at at: the parent's type, priority and class
-// of service, queued at station, the one that planned it.
-func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, station string, at time.Time) (db.WorkItem, error) {
-	id, err := newID()
-	if err != nil {
-		return db.WorkItem{}, err
-	}
+// insertPart files one part of the assembly parent through fileItem, filed by the actor given
+// at at, with the parent's type, priority, class of service, base commit, generation and
+// untrusted, queued at the parent's station, the one that planned it, following each of after.
+func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, by domain.Actor, at time.Time, after []uuid.UUID, afterBy domain.Actor) (db.WorkItem, error) {
+	key := p.Key
 
-	number, err := q.NextItemNumber(ctx, parent.FactoryID)
-	if err != nil {
-		return db.WorkItem{}, fmt.Errorf("next item number: %w", err)
-	}
-
-	paths := p.Paths
-	if paths == nil {
-		paths = []string{}
-	}
-
-	row, err := q.InsertPart(ctx, db.InsertPartParams{
-		ID: id, FactoryID: parent.FactoryID, Number: number, ParentID: parent.ID, PartKey: p.Key, PartPaths: paths,
-		Type: parent.Type, Lane: optional(p.Lane), Title: p.Title, Body: p.Brief, Station: station,
-		ClassOfService: parent.ClassOfService, Priority: int64(parent.Priority), BaseCommit: parent.BaseCommit, CreatedAt: at,
+	return fileItem(ctx, q, filing{
+		n: domain.NewItem{
+			FactoryID: domain.FactoryID(parent.FactoryID.String()), ParentID: domain.ItemID(parent.ID.String()), Type: parent.Type,
+			Lane: p.Lane, Title: p.Title, Body: p.Brief, Priority: int(parent.Priority), Station: parent.Station,
+			State: domain.StateQueued, Class: domain.ClassOfService(parent.ClassOfService), CreatedAt: at,
+			Origin: domain.OriginPlan, CreatedBy: by, Generation: int(parent.Generation), Untrusted: parent.Untrusted,
+		},
+		factory: parent.FactoryID, parent: &parent.ID, partKey: &key, partPaths: p.Paths, baseCommit: parent.BaseCommit,
+		after: after, afterBy: afterBy,
 	})
-	if violates(err, partKeyIndex) {
-		return db.WorkItem{}, fmt.Errorf("part key %q is taken: %w", p.Key, ports.ErrConflict)
-	}
-
-	if err != nil {
-		return db.WorkItem{}, fmt.Errorf("insert part %q: %w", p.Key, err)
-	}
-
-	return row, nil
 }
 
 // AddPart implements ports.Store. The factory's row is locked before the assembly's, AddEdge's
@@ -337,7 +307,7 @@ func addPart(ctx context.Context, q *db.Queries, cur db.WorkItem, existing []db.
 		return db.WorkItem{}, err
 	}
 
-	row, err := insertPart(ctx, q, cur, p, cur.Station, n.At)
+	row, err := insertPart(ctx, q, cur, p, n.By, n.At, nil, n.By)
 	if err != nil {
 		return db.WorkItem{}, err
 	}
@@ -361,9 +331,6 @@ func addPart(ctx context.Context, q *db.Queries, cur db.WorkItem, existing []db.
 
 	factory, assembly := domain.FactoryID(cur.FactoryID.String()), domain.ItemID(cur.ID.String())
 	if err := appendEvents(ctx, q, []domain.Event{{
-		FactoryID: factory, ItemID: domain.ItemID(row.ID.String()), At: n.At, Kind: domain.EventPartCreated,
-		Station: row.Station, Actor: n.By.Name, Data: map[string]any{"parent": string(assembly), "key": p.Key},
-	}, {
 		FactoryID: factory, ItemID: assembly, At: n.At, Kind: domain.EventPartAdded, Station: cur.Station, Actor: n.By.Name,
 		Data: map[string]any{"part": row.ID.String(), "key": p.Key, "actor": n.By.Ref()},
 	}}); err != nil {

@@ -17,11 +17,13 @@ import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
 import { WorkingLine } from '../../ui/working-line';
+import { FollowUpsCard, NotesCard } from './follow-ups-card';
 import { ItemTabs, panelId, tabId } from './item-tabs';
 import { NoteComposer } from './note-composer';
 import { OutputsCard } from './outputs';
 import { QuestionCard } from './question-card';
 import { CostCard, DetailsCard, OverlapsCard, RulesCard } from './side-cards';
+import { ClosedBanner, closedBy, StartBanner } from './start-banner';
 import { noFlow, stepsOf, summaryOf } from './steps';
 import { TeardownTab } from './teardown-tab';
 import { activeRun, buildTrace, criteriaOf, editedFiles, latestToolCalls, runRole, type Trace } from './timeline';
@@ -240,6 +242,9 @@ export function ItemPage() {
   );
   // At a decision, what is being decided on comes before how it was made.
   const deciding = item.state === 'waiting_human';
+  // An item that has not started says when it starts; one an agent closed says who closed it and why.
+  const closed = closedBy(item, events);
+  const startNote = closed ? <ClosedBanner closed={closed} /> : item.start ? <StartBanner item={item} /> : null;
 
   return (
     <>
@@ -287,6 +292,7 @@ export function ItemPage() {
         )}
       >
         <div className="contents @[1100px]:flex @[1100px]:flex-col @[1100px]:gap-4">
+          {startNote ? <div className="order-2 @[720px]:order-none">{startNote}</div> : null}
           {item.question ? (
             <QuestionCard
               itemKey={key}
@@ -314,6 +320,8 @@ export function ItemPage() {
                   </>
                 ) : null}
               </p>
+              <FollowUpsCard item={item} />
+              <NotesCard notes={item.notes ?? []} />
               <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
             </section>
           ) : null}

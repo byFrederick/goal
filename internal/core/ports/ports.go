@@ -76,15 +76,85 @@ func (e *MergeConflictError) Is(target error) bool { return target == ErrMergeCo
 // their events in the same transaction. All of them are safe to call from many goald
 // instances at once.
 type Store interface {
-	// CreateItem inserts an item with the next per-factory number and appends a created event.
+	// CreateItem files an item domain.File checked: it inserts it with the next per-factory number
+	// (origin person when n.Origin is ""), and appends a created event and an item.filed audit
+	// entry by n.CreatedBy (the engine when zero), in one transaction.
 	CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error)
 
 	// Item returns one item, or ErrNotFound.
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 
+	// FollowUps returns the follow-ups kept for an item (Transition.FollowUps), oldest first and
+	// in output order within a run, each filed one with the factory and number of the item it was
+	// filed as or onto (FiledFactory, FiledNumber), another factory's included, in the same read.
+	// An unknown item has none.
+	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
+
+	// FiledFrom returns the follow-ups filed as or onto an item, its sources, oldest first, each
+	// with its source item and the item whose landing filed it (domain.FiledFrom), another
+	// factory's included. An unknown item, or another organization's, has none.
+	FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error)
+
+	// ItemNotes returns at most limit of an item's item_note events, the notes other items' agents
+	// and triggers' checks left on it, oldest first. An unknown item has none.
+	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
+
+	// DeliverNotes delivers up to limit waiting notes of the context's organization, oldest
+	// first (ADR 0040 decision 7), and returns them as they now are. factories are the
+	// organization's, which a note's for is resolved against (domain.NoteFactoryNamed). Each
+	// note is one transaction: it claims the follow-up (FOR UPDATE SKIP LOCKED, so instances
+	// share the sweep), locks only the target item, never the source, and routes it with
+	// domain.RouteNote. A note it may deliver becomes an item_note event on the target by the
+	// engine (domain.NoteData) and is delivered; any other goes to triage, still waiting, with
+	// domain.NoteTriageReason. A note whose source item is untrusted is never claimed here: it
+	// waits for FileFollowUps (decision 21).
+	DeliverNotes(ctx context.Context, factories []domain.NoteFactory, at time.Time, limit int) ([]domain.FollowUp, error)
+
+	// FileFollowUps files the waiting start and triage follow-ups of the context's organization
+	// whose work landed or was cancelled (ADR 0040 decisions 8, 9, 10 and 21), about limit of
+	// them, and returns them as they now are. lines are the organization's, which a start's
+	// factory is resolved against and its item filed on (domain.File). Each root item (one that is
+	// not a part) is one transaction: it claims the waiting follow-ups of the root and its parts
+	// (FOR UPDATE SKIP LOCKED, so instances share the sweep) and routes each with
+	// domain.LandFollowUp. A follow-up of cancelled work, or of a source MaxFollowUpGeneration
+	// deep, is dropped. A start is filed at the moment the root landed (its DoneAt) with
+	// domain.FollowUpFileRequest into the factory its start names, when domain.RouteStart allows
+	// it, its after refs resolve and the factory took fewer than domain.MaxFollowUpItemsADay
+	// follow-up items in the 24 hours before at (counted under an advisory lock on the
+	// factory); it is filed onto an open item already filed from the same source with that
+	// title instead (domain.FollowUpKey). Any other joins the source factory's collecting triage
+	// item (open, no run yet), filed with domain.TriageFileRequest when there is none, whose
+	// title, body, priority and generation are rewritten from all its follow-ups. The follow-ups
+	// of an untrusted source's landed work, its notes too, are never delivered or filed on their
+	// own (decision 21): they go to a triage item of their own, untrusted and filed paused
+	// (blocked, with the engine's paused event, domain.ReasonUntrustedFollowUps), each keeping its
+	// ref in its reason (domain.UntrustedTriageReason); the collecting triage item never takes
+	// them.
+	FileFollowUps(ctx context.Context, lines []domain.Line, at time.Time, limit int) ([]domain.FollowUp, error)
+
+	// DropFollowUp drops a waiting follow-up of item, for domain.DropReason(by), and returns it.
+	// One that is not item's is ErrNotFound; one that is not waiting ErrConflict.
+	DropFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, by domain.Actor, at time.Time) (domain.FollowUp, error)
+
+	// FileFollowUp files n, which domain.File checked, for follow-up id of item and makes the
+	// follow-up filed as it, in one transaction, as CreateItem does. Only a follow-up
+	// domain.Fileable allows may be filed, else ErrConflict; one that is not item's is
+	// ErrNotFound.
+	FileFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, n domain.NewItem) (domain.FollowUp, domain.Item, error)
+
 	// Waiting returns up to limit queued or ready items at a station in pull order: expedite
 	// first, then priority (highest first), then age (oldest first).
 	Waiting(ctx context.Context, factory domain.FactoryID, station string, limit int) ([]domain.Item, error)
+
+	// Releasable returns up to limit of the Waiting items at a station that a queue station
+	// releases at now, in pull order: those with no open need (AddEdge) and no StartAt after now
+	// (ADR 0040 decision 4), filtered before the limit.
+	Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error)
+
+	// SetStart changes when an item may start to at, or clears it when at is zero (Start now),
+	// and appends a start_changed event by the actor at now. It returns the item after it: ErrNotFound
+	// when it is missing and ErrConflict when it is no longer at from.
+	SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error)
 
 	// Leases returns the live leases held at a station; their slots are the station's WIP.
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
@@ -97,8 +167,8 @@ type Store interface {
 	// ErrSlotTaken when the slot already holds a lease; in each case nothing changes. The unique
 	// (factory, station, slot) lease is what keeps WIP at or under capacity across instances.
 	//
-	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled. Waiting
-	// lists it all the same: only queue stations read it, and they hold nothing.
+	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled, and
+	// while its StartAt is after c.Now. Waiting lists it all the same.
 	ClaimNext(ctx context.Context, c Claim) (domain.Item, domain.Lease, error)
 
 	// AddEdge records that e.Item needs e.Needs and appends an edge_added event on e.Item. It
@@ -125,12 +195,13 @@ type Store interface {
 
 	// Assemble makes a planning item an assembly, in one transaction: a.Transition moves it to
 	// state assembly (fenced as Transition is, its lease recorded as a lease span), each of
-	// a.Parts becomes an item with the parent's type, priority, class of service and base commit
-	// (as a.Transition leaves it), its brief as body, queued at a.Transition.From.Station (the station that planned it), each need a
+	// a.Parts becomes an item filed by a.By with origin plan and the parent's type, priority,
+	// class of service, base commit, generation and untrusted (as a.Transition leaves it), its brief as body, queued at a.Transition.From.Station (the station that planned it), each need a
 	// planned edge, and each part without needs a linked edge by a.AfterBy to each of a.After (with
 	// an edge_added event; new parts have no dependents, so these close no cycle). It appends
-	// assembled on the parent and part_created on each part. An item of a.After that is missing
-	// is ErrNotFound, one of another factory domain.ErrInvalid. A plan that
+	// assembled on the parent, and part_created by a.By and an item.filed audit entry on each
+	// part. An item of a.After that is missing is ErrNotFound, one of another factory
+	// domain.ErrInvalid. A plan that
 	// fails domain.ValidatePlan (domain.ErrInvalid or domain.ErrCycle), a transition not to state
 	// assembly and a parent that is itself a part (assemblies do not nest) are refused with
 	// nothing written. When the parent already has parts, a retry, it returns them and changes
@@ -139,7 +210,8 @@ type Store interface {
 
 	// AddPart adds one part to an open assembly, in one transaction, under the factory's lock and
 	// then the assembly's (AddEdge's order): n.Part becomes an item as each of Assemble's parts
-	// does, with the assembly's type, priority, class of service and base commit, its brief as
+	// does, filed by n.By, with the assembly's type, priority, class of service, base commit,
+	// generation and untrusted, its brief as
 	// body, its paths,
 	// queued at the assembly's own station (the station that planned it), and each need, the key
 	// of one of the assembly's parts, a planned edge by n.By (checked for cycles as AddEdge's
@@ -395,7 +467,7 @@ type FlowStats interface {
 
 	// ItemTimes returns the items of q.Type done in [q.Since, q.Until), by when they were done:
 	// each one's lead time and its time in each component of the lead-time bridge, from its
-	// spans (domain.ComponentOf). It returns at most limit items, those done last, so the read
+	// spans since it started (domain.ComponentOf); lead time counts from Item.LeadFrom. It returns at most limit items, those done last, so the read
 	// stays bounded however busy the window.
 	ItemTimes(ctx context.Context, q FlowQuery, limit int) ([]domain.ItemTime, error)
 
@@ -717,6 +789,8 @@ type Assembly struct {
 	// each part without in-plan needs gets a linked edge to each of them by AfterBy.
 	After   []domain.ItemID
 	AfterBy domain.Actor
+	// By files the parts (domain.File, origin plan): the planning agent; the engine when zero.
+	By domain.Actor
 }
 
 // NewAssemblyPart is one part added to an open assembly by By at At.
@@ -774,6 +848,11 @@ type Transition struct {
 	// DoneAt is stored when To.State is done.
 	DoneAt time.Time
 	Events []domain.Event
+	// FollowUps are kept on the item with the change (ADR 0040 decision 6), each with its run,
+	// station and agent: the store sets their ids, factory, item and CreatedAt (At). One whose
+	// domain.FollowUpKey matches a follow-up already kept for the item is skipped, so a rerun
+	// or a retry of the transaction keeps each text once.
+	FollowUps []domain.FollowUp
 }
 
 // ItemNotices streams a notice of every item event as it is committed, from any goald

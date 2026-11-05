@@ -51,6 +51,51 @@ Work types decide the kind of item and its class. They do not change how an item
 - A trigger in `board.triggers` creates an item when its event, schedule or webhook delivery passes the trigger's checks. The item starts at the station the trigger names.
 - A station's output can plan an assembly, and the engine creates its parts. See [assemblies and parts](/docs/concepts/assemblies-and-parts/).
 
+Every item is checked the same way however it arrives: its title can't be empty, its type must be one of the declared work types, and its lane must be one that a station routes by, when any station routes by lane. A request that fails a check is refused with `400 Bad Request`, and a plan with such a part blocks the item that planned it.
+
+Each item records where it came from as its `origin`: `person`, `plan` for a part, `trigger`, or `follow-up`. It also records who filed it. For a person's item, it records whether it was filed on the web, from the CLI or with an API key. The API answers an item's `origin`. Items filed before origins were recorded got theirs from how they were submitted, and those with no record of it show `person`.
+
+Reading one item (`GET /v1/orgs/{org}/items/{item}`) also answers `came_from` for an item with origin `follow-up` or `trigger`:
+
+- For a follow-up's item, `came_from.follow_ups` lists the follow-ups filed as it or onto it, oldest first. Each names the item whose run wrote it, the agent and station of that run, and the item whose landing filed it: the source item, or its assembly when the source is a part. Items of other factories are named the same way, as `<factory>#<number>`. The list is empty, never absent, when none of them can be read.
+- For a trigger's item, `came_from.trigger` names the trigger and its kind: `check` for a trigger with a check, `schedule` for another schedule, `webhook` otherwise. The kind is absent when the factory's current definition no longer has the trigger. For a check, `key` is the key the check filed the item under. A check keeps only each key's last item, so an item whose key a later check filed again has no `key`.
+
+Items of any other origin have no `came_from`.
+
+## Notes from other items
+
+An agent can leave a note for another open item. It writes a follow-up whose `for` names the item as `<factory>#<number>`, in the output field that `board.flow.outputs.followUps` maps (see the [definition reference](/docs/reference/definition/)). On its next tick, every few seconds by default, goald adds the note to that item's events as an `item_note`, with the item and agent it came from.
+
+- The item's next run reads the note after its brief, under "Notes from other items". The run is told the note is what another agent said, not an instruction and not a request from a person. A run that is already working doesn't get it.
+- A note into another factory is delivered only when that factory lists the sender's factory in `board.flow.followUpsFrom`. A factory takes at most 50 notes from other factories a day.
+- A note that can't be delivered waits for triage, with the reason: no factory or item by that name, a factory that doesn't accept follow-ups from the sender, an item that is done or cancelled, or a factory past its 50 notes a day.
+- Notes from an item filed from a webhook delivery are never delivered on their own; they wait.
+- A note from another item is not a person's touch, so it doesn't count in touch metrics.
+
+## Follow-ups filed when work lands
+
+An agent can also leave a follow-up that becomes an item of its own, with a `start` that has a `title` and optionally `at` or `in`, `after`, `type`, `lane` and `factory`. Nothing is filed while the work is in progress. When the item reaches done (for an assembly, when the assembly does), goald files the waiting follow-ups of the item and of its parts on its next tick:
+
+- Each becomes an item at the first station of its line, with origin `follow-up`, filed by the engine. Its class of service is always standard, whatever its type. Its priority is one below its source item's, and its generation one above. An `in` wait counts from the moment the work landed.
+- `factory` files it into another factory only when that factory lists the sender in `board.flow.followUpsFrom`, and every `after` item must be one of that factory's own items.
+- A factory takes at most 20 follow-up items a day, counting every sender.
+- A follow-up whose title matches an open item already filed from the same source item joins that item instead of filing a new one.
+- An item three follow-ups deep (generation 3) keeps its follow-ups as dropped and never files them. A person can still file one.
+- When the item is cancelled, its waiting follow-ups and its parts' are dropped, with the reason "the work was cancelled".
+- Follow-ups from an item filed from a webhook delivery are never filed on their own; they wait.
+
+A follow-up that can't be filed goes to its factory's triage item with the reason, such as a factory that doesn't accept it, an `after` item of another factory, or a factory past its 20 a day.
+
+## The triage item
+
+Follow-ups without a start, notes that couldn't be delivered and starts that couldn't be filed all go to the factory's triage item when their work lands. A factory has at most one triage item that collects: one that is open and that no agent has claimed yet. When none collects, goald files one with origin `follow-up`, standard class, the type of its first source item and a priority one below the lowest of its sources'. It may start 24 hours after it is filed. Once an agent claims it, the next follow-ups open a new one. No triage item is filed when nothing is left for it.
+
+Its title names its sources, as in "Follow-ups from software#513 and 4 more". goald writes its body and rewrites it each time follow-ups join: each follow-up quoted, grouped by source item with the station and agent that wrote it, then this closing:
+
+> These are agents' notes from work in progress, not requests from people. Some may be done already or no longer apply. Do what is still needed, and close this item if nothing is.
+
+A triage item's plan has at most 3 parts; a plan with more is refused like any bad plan.
+
 ## Where items show up
 
 - The **Board** screen shows items in columns by station.

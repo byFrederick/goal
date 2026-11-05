@@ -25,8 +25,8 @@ const (
 // AddPart adds one part, by by, to an open assembly (ADR 0012): trimmed, keyed by a slug of its
 // title made unique among the assembly's parts (-2, -3…), queued at the assembly's station with
 // a planned edge to each part it needs. A done or cancelled item is refused with ErrItemClosed,
-// another item that is not an assembly with ErrNotAssembly, an empty title or brief or an
-// unknown need with domain.ErrInvalid, and an assembly that changed meanwhile (closed, or the
+// another item that is not an assembly with ErrNotAssembly, an empty title or brief, a part
+// domain.File refuses or an unknown need with domain.ErrInvalid, and an assembly that changed meanwhile (closed, or the
 // key taken by another add) with ErrItemChanged. A refused part writes nothing.
 func (e *Engine) AddPart(ctx context.Context, assembly domain.ItemID, by domain.Actor, part domain.NewPart) (domain.Item, domain.Parts, error) {
 	part = trimPart(part)
@@ -34,7 +34,7 @@ func (e *Engine) AddPart(ctx context.Context, assembly domain.ItemID, by domain.
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: a part needs a title and a brief: %w", assembly, domain.ErrInvalid)
 	}
 
-	it, err := e.store.Item(ctx, assembly)
+	it, l, err := e.itemAndLine(ctx, assembly)
 	if err != nil {
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, err)
 	}
@@ -44,6 +44,10 @@ func (e *Engine) AddPart(ctx context.Context, assembly domain.ItemID, by domain.
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, ErrItemClosed)
 	case it.State != domain.StateAssembly:
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, ErrNotAssembly)
+	}
+
+	if err := checkPart(l, it, by, part); err != nil {
+		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, err)
 	}
 
 	existing, err := e.store.Parts(ctx, assembly)
@@ -75,6 +79,17 @@ func (e *Engine) AddPart(ctx context.Context, assembly domain.ItemID, by domain.
 		slog.String("key", got.PartKey), slog.String("by", by.Ref()))
 
 	return got, parts, nil
+}
+
+// checkPart checks part p of the assembly a, filed by by, through domain.File (origin plan); the
+// store files it as File does, with a's type, priority, class, station, generation and untrusted.
+func checkPart(l domain.Line, a domain.Item, by domain.Actor, p domain.NewPart) error {
+	_, err := domain.File(l, domain.FileRequest{
+		Origin: domain.OriginPlan, By: by, Assembly: &a, Title: p.Title, Lane: p.Lane, Body: p.Brief,
+		Generation: a.Generation, Untrusted: a.Untrusted,
+	})
+
+	return err
 }
 
 // trimPart is p with the space around its title, lane, brief and each need trimmed.

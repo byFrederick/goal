@@ -93,12 +93,17 @@ tags:
       draft and publish operations.
   - name: webhooks
     description: >-
-      A factory's webhook endpoints (ADR 0026 decisions 2 and 3): the addresses other systems post
-      to, POST /hooks/{endpoint id}, each with a signing secret sealed under the platform's master
-      key and shown only in the answers that create the endpoint and rotate its secret, and the
-      log of the deliveries each received, kept 30 days. Anyone who sees the factory reads them;
-      its editors (and the organization's owners and admins) create, rotate and delete endpoints,
-      after a recent sign-in, never with a key or a personal token.
+      The organization's webhooks (ADR 0040 decisions 12 and 15) and, for one release, a factory's
+      webhook endpoints (ADR 0026 decisions 2 and 3). An organization webhook is connected once per
+      sender, such as a GitHub organization or PagerDuty, signed by an organization secret named
+      by the webhook, and opened to factories, each opening optionally limited to some
+      repositories. Owners and admins list and read webhooks (webhook:read) and create, change and
+      delete them (webhook:manage, after a recent sign-in, never with a key or a personal token);
+      only webhook:manage reads a delivery's headers and body, since an organization webhook
+      carries every repository's events. The factory routes list the endpoints open to the
+      factory and their deliveries to anyone who sees the factory; a factory endpoint's signing
+      secret is sealed under the platform's master key and shown only in the answers that create
+      it and rotate it. Deliveries are kept 30 days.
   - name: views
     description: >-
       A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
@@ -2030,6 +2035,13 @@ paths:
       operationId: submitItem
       x-goal-scope: item:create
       summary: Submit a work item to a factory's first station
+      description: >-
+        With start, the item waits at the first station until it may start (ADR 0040): its at has
+        passed and its after items are done. in becomes at when the item is filed, and each open
+        after item becomes a linked dependency by the caller; a done one is met and left out.
+        Problems: 400 for what the line does not take, a start with both at and in, a bad time or
+        wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of
+        another factory.
       requestBody:
         required: true
         content:
@@ -2202,15 +2214,25 @@ paths:
         The sources of the factory's newest `items` items (by creation) with the UTC days the
         oldest and the newest of them were created, and every trigger of the current definition
         in definition order, each with the items it created on each of the last 7 UTC days and
-        its problem, if it has one. Clients re-read it on `item` and `definition` stream events.
+        its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it
+        on `item` and `definition` stream events.
+        It also answers, for the screens of ADR 0040 (decision 22): the items created in the
+        `window` by origin, counted from one grouped read of the factory's items and no read of
+        webhook deliveries; the items that haven't started; the open triage item and the items
+        whose follow-ups will join it; and the organization's webhooks open to the factory.
         Triggers are edited through the definition's draft and publish operations. 400 for items
-        outside 1 to 500.
+        outside 1 to 500 and for a window other than 7d, 30d or 90d.
       parameters:
         - name: items
           in: query
           required: false
           description: How many of the newest items the sources count (default 48)
           schema: { type: integer, minimum: 1, maximum: 500, default: 48 }
+        - name: window
+          in: query
+          required: false
+          description: The days origins count over, ending now (default 30d)
+          schema: { type: string, enum: [7d, 30d, 90d], default: 30d }
       responses:
         "200":
           description: The factory's intake
@@ -2234,7 +2256,9 @@ paths:
       summary: One trigger with this week's results and its recent events
       description: >-
         The trigger as getIntake shows it, what the items it created in the weekly budget's
-        window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on
+        window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its
+        memory: the open items and closed keys its checks are given and the state they saved
+        (ADR 0040 decision 19). Clients re-read it on
         `item` and `definition` stream events. 404 trigger-not-found for a name the current
         definition does not have.
       responses:
@@ -2259,13 +2283,15 @@ paths:
       tags: [intake]
       summary: Try the trigger with one of its past events, creating nothing
       description: >-
-        A dry run (ADR 0028 decision 2): the trigger evaluates the event of one of its 20 newest
-        events (getIntakeTrigger's events, by id) now, as intake would, and answers each step.
-        The model check runs, and its cost is spent, as in intake. It creates no item, records no
-        event and changes no limit; it writes a trigger.tried audit entry. Only a schedule's
-        events can be tried: a firing keeps no other event's fields. 404 trigger-not-found for a
-        name the current definition does not have; 404 firing-not-found for an id that is not
-        one of its 20 newest events; 422 event-not-stored for a webhook or GitHub event.
+        A dry run (ADR 0028 decision 2): the trigger, as the current definition saves it,
+        evaluates the event of one of its 20 newest events (getIntakeTrigger's events, by id) now,
+        as intake would, and answers each step. It creates no item, records no event and changes
+        no limit; it writes a trigger.tried audit entry. A firing keeps no event's fields, so a
+        schedule's event is rebuilt from its instant and a delivery's from the body its webhook
+        still keeps (30 days), read only from a webhook open to the factory (ADR 0040 decision
+        18). 404 trigger-not-found for a name the current definition does not have; 404
+        firing-not-found for an id that is not one of its 20 newest events; 422 event-not-stored
+        for a missed event, or a delivery whose body is no longer kept.
       requestBody:
         required: true
         content:
@@ -2277,6 +2303,86 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TriggerTry" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    get:
+      operationId: listTriggerChecks
+      x-goal-scope: intake:read
+      tags: [intake]
+      summary: The trigger's checks, newest first, with what each filed, noted and skipped
+      description: >-
+        A check trigger's checks (ADR 0040 decision 19), tries among them, newest first: when each
+        fired and finished, where it is, what it cost, why it failed, and for a done check what
+        goald applied of its answer: the items it filed, the notes it wrote on open items and what
+        it skipped, each with the reason (a closed key, the limit, a note too soon or repeated, or
+        the agent's own). A try's lists are what it would have done. Clients re-read it on `item`
+        and `definition` stream events. 404 trigger-not-found for a name the current definition
+        does not have.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: How many checks to list (default 20)
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: The trigger's checks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerCheckList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: tryTriggerCheck
+      x-goal-scope: trigger:try
+      tags: [intake]
+      summary: Try the trigger's check now, filing, noting and saving nothing
+      description: >-
+        Queues a try check (ADR 0040 decision 19): it runs as the trigger's checks do, with its
+        agent, brief, spend and time limits, and spends from the factory's budget, but its finish
+        keeps only what it would file, note and skip; it files no item, writes no note, keeps no
+        key, saves no state and counts toward no limit. Read the result with listTriggerChecks.
+        Writes a trigger.tried audit entry. 404 trigger-not-found for a name the current
+        definition does not have; 409 still-checking while the trigger's check is queued or
+        running; 422 no-check for a trigger without check.
+      responses:
+        "202":
+          description: The try check, queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TriggerCheck" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    delete:
+      operationId: clearTriggerState
+      x-goal-scope: definition:edit
+      tags: [intake]
+      summary: Clear the state a check trigger saved, so its next check starts with none
+      description: >-
+        Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done
+        check saved (getIntakeTrigger's memory.state), so its next check is given none. The
+        trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger
+        with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404
+        trigger-not-found for a name the current definition does not have; 409 still-checking
+        while the trigger's check is queued or running, because it would save its state again
+        when it finishes; 422 no-check for a trigger without check.
+      responses:
+        "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
     parameters:
@@ -2857,11 +2963,13 @@ paths:
       operationId: listWebhookEndpoints
       x-goal-scope: factory:read
       tags: [webhooks]
-      summary: The factory's webhook endpoints
+      summary: The webhook endpoints open to the factory
       description: >-
-        By name, each with its address, kind, the label of its signing secret, the triggers of the
-        factory's current definition it feeds (those whose on is webhook.<name> or starts with
-        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret.
+        By name, the factory's own endpoints and the organization's webhooks open to it, each with
+        its address, kind, sender, the name of its signing secret, the triggers of the factory's
+        current definition it feeds (those whose on is webhook.<name> or starts with
+        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one
+        release beside listWebhooks.
       responses:
         "200":
           description: The endpoints
@@ -2875,8 +2983,9 @@ paths:
       tags: [webhooks]
       summary: Create a webhook endpoint
       description: >-
-        An endpoint with a new signing secret, answered here once and never again: copy it to the
-        sender. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409
+        A factory endpoint with a new signing secret, answered here once and never again: copy it
+        to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400
+        webhook-invalid for a name that is not a slug or an unknown kind; 409
         webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while
         goald has no master key. Needs a sign-in from the last 10 minutes.
       requestBody:
@@ -2902,8 +3011,9 @@ paths:
       tags: [webhooks]
       summary: Delete a webhook endpoint and its deliveries
       description: >-
-        Its address stops accepting requests. 404 webhook-not-found for an endpoint the factory
-        does not have. Needs a sign-in from the last 10 minutes.
+        Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to
+        the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a
+        sign-in from the last 10 minutes.
       responses:
         "204": { description: Deleted }
         default: { $ref: "#/components/responses/Problem" }
@@ -2920,7 +3030,8 @@ paths:
       description: >-
         A new signing secret, answered here once and never again; the old one stops opening at
         once, so the sender's requests are refused until it has the new one. 404
-        webhook-not-found; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
+        webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is
+        replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
         from the last 10 minutes.
       responses:
         "200":
@@ -2970,12 +3081,167 @@ paths:
         schema: { type: string }
     get:
       operationId: getWebhookDelivery
-      x-goal-scope: factory:read
+      x-goal-scope: webhook:manage
       tags: [webhooks]
       summary: One delivery with its request
       description: >-
         The request as received: its headers (names lower-cased, never a signature header) and its
-        body. 404 webhook-delivery-not-found for a delivery the endpoint does not have.
+        body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found
+        for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
+      responses:
+        "200":
+          description: The delivery
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: listWebhooks
+      x-goal-scope: webhook:read
+      tags: [webhooks]
+      summary: The organization's webhooks
+      description: >-
+        By name, each with its sender, the name of the secret that signs it, its openings, the
+        triggers of the published definitions that use it and its deliveries of the last 7 UTC
+        days. Never a secret's value.
+      responses:
+        "200":
+          description: The webhooks
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookList" }
+        default: { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createWebhook
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Create a webhook
+      description: >-
+        An enabled webhook, open to no factory. Without secret, it creates the secret
+        webhook-<name> (cut to 40 characters, without a trailing hyphen), open to no factory, with
+        a generated value answered here once as secret_value; with secret, it is signed by that
+        existing secret, for a sender that issues its own, such as PagerDuty or Sentry. 400
+        webhook-invalid for a name that is not a slug or is reserved (the sender names, schedule
+        and webhook), an unknown sender, or token settings on a sender other than token; 404
+        secret-not-found for a secret the organization does not have; 409 webhook-name-taken for
+        a name an endpoint of the organization has, secret-name-taken when the generated secret's
+        name is taken; 503 secrets-unavailable while goald has no master key. Needs a sign-in from
+        the last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewWebhook" }
+      responses:
+        "201":
+          description: The webhook, with the generated secret's value when it made one
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedWebhook" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks/{webhook}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/WebhookRef"
+    get:
+      operationId: getWebhook
+      x-goal-scope: webhook:read
+      tags: [webhooks]
+      summary: One webhook
+      description: 404 webhook-not-found for a webhook the organization does not have.
+      responses:
+        "200":
+          description: The webhook
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+        default: { $ref: "#/components/responses/Problem" }
+    patch:
+      operationId: patchWebhook
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Open, close, limit, rename, enable or disable a webhook
+      description: >-
+        open opens the webhook to each factory, or replaces the repositories an opening is limited
+        to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory
+        both opened and closed, or a repository list over 100; 404 webhook-not-found, and
+        factory-not-found for a factory the organization does not have; 409 webhook-name-taken;
+        409 webhook-in-use, with triggers, when a rename or a close would leave published triggers
+        that name the webhook without it: publish them without it first. A trigger that names only
+        its sender does not hold it. Needs a sign-in from the
+        last 10 minutes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebhookPatch" }
+      responses:
+        "200":
+          description: The webhook as changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteWebhook
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: Delete a webhook, its openings and its deliveries
+      description: >-
+        Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409
+        webhook-in-use, with triggers, while published triggers name it; a trigger that names only
+        its sender does not hold it. Needs a sign-in from the last 10 minutes.
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks/{webhook}/deliveries:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/WebhookRef"
+    get:
+      operationId: listOrgWebhookDeliveries
+      x-goal-scope: webhook:read
+      tags: [webhooks]
+      summary: One page of a webhook's deliveries, newest first
+      description: >-
+        What the webhook received in the last 30 days, each with its outcome, without its headers
+        and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not
+        answer; 404 webhook-not-found.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: after
+          in: query
+          description: The next_after of the previous page; deliveries received before it
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deliveries, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryPage" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/webhooks/{webhook}/deliveries/{delivery}:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/WebhookRef"
+      - name: delivery
+        in: path
+        required: true
+        description: The delivery's id
+        schema: { type: string }
+    get:
+      operationId: getOrgWebhookDelivery
+      x-goal-scope: webhook:manage
+      tags: [webhooks]
+      summary: One delivery with its request
+      description: >-
+        The request as received: its headers (names lower-cased, never a signature header) and its
+        body. 404 webhook-delivery-not-found. Needs a sign-in from the last 10 minutes.
       responses:
         "200":
           description: The delivery
@@ -3625,6 +3891,54 @@ paths:
               schema: { $ref: "#/components/schemas/Item" }
         "409": { $ref: "#/components/responses/Conflict" }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/start:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+    put:
+      operationId: setItemStart
+      x-goal-scope: item:create
+      tags: [work]
+      summary: Change when an item that has not started may start
+      description: >-
+        at or in replaces the item's start; after alone keeps it and adds the items as linked
+        dependencies by the caller (one the item already needs is kept, a done one is left out).
+        A start_changed event records the change. Problems: 400 for a start with both at and in, a
+        bad time or wait, a start more than 365 days ahead, or an after item that is cancelled,
+        unknown or of another factory; 409 item-closed (done or cancelled), item-started (it left
+        the first station, or an agent took it there), edge-cycle (an after item already needs it)
+        or item-changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Start" }
+      responses:
+        "200":
+          description: The item with its new start
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: clearItemStart
+      x-goal-scope: item:create
+      tags: [work]
+      summary: Start an item now
+      description: >-
+        Clears the item's start time, so the first station releases it on its next tick (within
+        seconds); its after items still hold it until they are done, and the needs endpoints
+        remove them. A start_changed event without start_at records it. Problems: 409
+        item-closed, item-started or item-changed, as for setItemStart.
+      responses:
+        "200":
+          description: The item without a start time
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/items/{item}/pause:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -3674,6 +3988,58 @@ paths:
       responses:
         "200":
           description: The cancelled item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Item" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/drop:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+      - $ref: "#/components/parameters/FollowUpRef"
+    post:
+      operationId: dropFollowUp
+      x-goal-scope: item:decide
+      tags: [work]
+      summary: Drop a waiting follow-up of an item so it is never delivered or filed
+      description: >-
+        The follow-up becomes dropped, its reason naming the caller ("dropped by user:<id>"). File
+        can file it again later. Problems: 404 follow-up-not-found for a follow-up that is not this
+        item's; 409 follow-up-state when it is not waiting.
+      responses:
+        "200":
+          description: The dropped follow-up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FollowUp" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/items/{item}/follow-ups/{followUp}/file:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/ItemRef"
+      - $ref: "#/components/parameters/FollowUpRef"
+    post:
+      operationId: fileFollowUp
+      x-goal-scope: item:create
+      tags: [work]
+      summary: File an item from a dropped follow-up or one in a closed triage item
+      description: >-
+        Files an item in the source item's factory at its first station, as createItem does, with
+        origin follow-up, the caller as its filer, a generation one above the source's and the
+        source's untrusted flag; the follow-up becomes filed with that item. Only a dropped
+        follow-up, or one whose triage item is done or cancelled, can be filed. Problems: 400 for
+        what the factory does not take (a type, a lane, a start); 404 follow-up-not-found for a
+        follow-up that is not this item's; 409 follow-up-state for any other follow-up.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FileFollowUpRequest" }
+      responses:
+        "201":
+          description: The filed item
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Item" }
@@ -4724,6 +5090,12 @@ components:
       required: true
       description: The saved view's id
       schema: { type: string }
+    WebhookRef:
+      name: webhook
+      in: path
+      required: true
+      description: The organization webhook's name or id
+      schema: { type: string }
     WebhookEndpointRef:
       name: endpoint
       in: path
@@ -4833,6 +5205,12 @@ components:
         The item's id (a UUID) or <factory>#<number>, as in goal#2 (the factory by
         metadata.name or metadata.id; percent-encode the # as %23)
       schema: { type: string }
+    FollowUpRef:
+      name: followUp
+      in: path
+      required: true
+      description: The follow-up's id (a UUID)
+      schema: { type: string }
     SectionRef:
       name: section
       in: path
@@ -4941,6 +5319,9 @@ components:
             Secrets (ADR 0037): secret-not-found (404), secret-invalid (400),
             secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use),
             secrets-unavailable (503: goald has no master key).
+            Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404),
+            webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with
+            triggers naming each trigger that uses it), webhooks-unavailable (503).
             Environment tests (ADR 0037 decision 9): environment-not-found,
             environment-server-not-found and template-not-found (404), environment-test-invalid
             (400).
@@ -4983,6 +5364,10 @@ components:
           type: array
           description: secret-in-use only, what uses the secret
           items: { $ref: "#/components/schemas/SecretUse" }
+        triggers:
+          type: array
+          description: webhook-in-use only, the published triggers that name the webhook
+          items: { $ref: "#/components/schemas/WebhookTrigger" }
     AuthMode:
       type: string
       enum: [session, none]
@@ -5750,6 +6135,161 @@ components:
         type: { type: string, description: "One of the factory's work types; absent or empty, the first it declares, or none when it declares none" }
         lane: { type: string }
         priority: { type: integer, default: 0 }
+        start:
+          description: When the item may start; absent, as soon as it can
+          allOf: [{ $ref: "#/components/schemas/Start" }]
+    Start:
+      type: object
+      description: >-
+        When an item may start (ADR 0040): at a time, after a wait, after other items, or a time
+        and items. at and in cannot both be set. The start is at most 365 days ahead.
+      properties:
+        at:
+          type: string
+          minLength: 1
+          description: >-
+            An RFC 3339 time, or a date and time without a zone (2026-11-05T09:00, 2026-11-05
+            09:00 or 2026-11-05), read in the caller's time zone from their notification settings;
+            UTC for an API key or when they saved none
+        in:
+          type: string
+          pattern: "^[1-9][0-9]{0,4}[hdw]$"
+          description: A wait from now in whole hours, days or weeks, as in 36h, 7d or 2w; it becomes at
+        after:
+          type: array
+          maxItems: 50
+          description: The items it starts after, each an id (a UUID) or <factory>#<number>, as in goal#2, of the same factory
+          items: { type: string, minLength: 1 }
+    FollowUp:
+      type: object
+      description: >-
+        Work an agent noticed outside its item, kept on the item (ADR 0040): a note for an open
+        item, a start for an item of its own when the work lands, or text for the factory's triage
+        item
+      required: [id, item_id, station, agent, text, state, created_at]
+      properties:
+        id: { type: string }
+        item_id: { type: string, description: The source item }
+        station: { type: string, description: The station whose run wrote it }
+        agent: { type: string }
+        text: { type: string }
+        target:
+          type: string
+          enum: [note, start, triage]
+          description: Where it goes, or went; absent for one dropped as it was read
+        state:
+          type: string
+          enum: [waiting, delivered, filed, dropped]
+        reason:
+          type: string
+          description: Why it was dropped, or why it went to triage instead of where it said
+        filed_item_id:
+          type: string
+          description: The item it was filed as or onto, a triage item for target triage
+        filed_item:
+          type: string
+          description: >-
+            The <factory name>#<number> of filed_item_id, another factory's included; getItem
+            only, absent when it is not filed or that item is gone
+        for:
+          type: string
+          description: "A note's item, <factory name>#<number>, as the agent wrote it; absent for any other target"
+        start:
+          description: A start's item, which it files when its work lands; absent for any other target
+          allOf: [{ $ref: "#/components/schemas/FollowUpStart" }]
+        created_at: { type: string, format: date-time }
+    FollowUpStart:
+      type: object
+      description: >-
+        When the item a start follow-up files may start, as the agent wrote it: at a time, a
+        wait after the work lands, after other items, or a mix
+      required: [title]
+      properties:
+        title: { type: string }
+        at: { type: string, description: A time, as written }
+        in: { type: string, description: "A wait after the work lands, as in 7d" }
+        after:
+          type: array
+          description: Refs of the items it waits for
+          items: { type: string }
+        factory: { type: string, description: The factory it is filed in, when another than the source's }
+    ItemNoteFrom:
+      type: object
+      description: >-
+        A note another item's agent, or a trigger's check, left on the item (an item_note event);
+        it reaches the item's next run after its brief
+      required: [id, text, agent, at]
+      properties:
+        id: { type: integer, format: int64, description: The item_note event's id }
+        text: { type: string, description: The agent's text, to show as text, never markup }
+        from_item: { type: string, description: "The source item, <factory name>#<number>; absent for a check's note" }
+        from_item_id: { type: string }
+        from_factory_id: { type: string, description: The source item's factory; absent for a check's note }
+        station: { type: string, description: The station whose run wrote it; absent for a check's note }
+        trigger: { type: string, description: The trigger whose check wrote it; absent for an item's note }
+        agent: { type: string }
+        at: { type: string, format: date-time }
+    ItemCameFrom:
+      type: object
+      description: Where an item came from; follow_ups for origin follow-up, trigger for origin trigger
+      properties:
+        follow_ups:
+          type: array
+          description: >-
+            The follow-ups filed as or onto the item, oldest first: its sources. Present, an
+            empty list when none resolves, for origin follow-up; absent otherwise
+          items: { $ref: "#/components/schemas/CameFromFollowUp" }
+        trigger:
+          description: The trigger that filed the item; present for origin trigger, absent otherwise
+          allOf: [{ $ref: "#/components/schemas/CameFromTrigger" }]
+    CameFromFollowUp:
+      type: object
+      description: A follow-up an item was filed from, the item and run that wrote it and the landing that filed it
+      required: [id, from_item, from_item_id, agent, station, landed_item, landed_item_id]
+      properties:
+        id: { type: string, description: The follow-up's id }
+        from_item: { type: string, description: "The source item, <factory name>#<number>, another factory's included" }
+        from_item_id: { type: string }
+        agent: { type: string, description: The agent whose run wrote it }
+        station: { type: string, description: The station whose run wrote it }
+        landed_item:
+          type: string
+          description: "The item whose landing filed it, <factory name>#<number>: the source, or its assembly when the source is a part"
+        landed_item_id: { type: string }
+    CameFromTrigger:
+      type: object
+      description: The trigger that filed an item
+      required: [name]
+      properties:
+        name: { type: string, description: The trigger's name }
+        kind:
+          type: string
+          enum: [schedule, check, webhook]
+          description: >-
+            check for a trigger with a check, schedule for another schedule trigger, webhook
+            otherwise; absent when the trigger is not in the factory's loaded definition
+        key:
+          type: string
+          description: >-
+            The key a check filed the item under; absent for any other trigger, and when the
+            check filed the key again since, which keeps only the key's last item
+    FileFollowUpRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, maxLength: 20000 }
+        type: { type: string, description: "One of the factory's work types; absent or empty, the first it declares, or none when it declares none" }
+        lane: { type: string }
+        start:
+          description: When the item may start; absent, as soon as it can
+          allOf: [{ $ref: "#/components/schemas/Start" }]
+    ItemStart:
+      type: object
+      description: When an item that has not started may start
+      required: [at]
+      properties:
+        at: { type: string, format: date-time }
     Rejection:
       type: object
       required: [reason]
@@ -5800,6 +6340,40 @@ components:
             The assembly the item is a part of, and its place among the parts in plan order;
             getItem only, absent unless the item is a part. The parts themselves are listItemParts
           allOf: [{ $ref: "#/components/schemas/PartOf" }]
+        origin:
+          type: string
+          enum: [person, plan, trigger, follow-up]
+          description: "Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)"
+        start:
+          description: >-
+            When the item may start, absent when it may start now; it waits at the first station
+            until then (ADR 0040). Its after items are its needs
+          allOf: [{ $ref: "#/components/schemas/ItemStart" }]
+        via: { type: string, enum: [web, cli, api], description: "How a person filed it; absent for any other origin" }
+        created_by:
+          description: Who filed it; absent for items filed before ADR 0040 and for the engine's filings
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        untrusted:
+          type: boolean
+          description: >-
+            Whether it, or an item it came from, was made from a webhook delivery (ADR 0040
+            decision 21): a person merges its work, and its follow-ups wait for a person
+        came_from:
+          description: >-
+            Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the
+            follow-ups filed as it, or its trigger; getItem only, absent unless origin is
+            follow-up or trigger
+          allOf: [{ $ref: "#/components/schemas/ItemCameFrom" }]
+        follow_ups:
+          type: array
+          description: >-
+            The follow-ups its runs wrote, oldest first, each saying where it went or will go;
+            getItem only
+          items: { $ref: "#/components/schemas/FollowUp" }
+        notes:
+          type: array
+          description: The notes other items' agents and triggers' checks left on it, oldest first, at most 200; getItem only
+          items: { $ref: "#/components/schemas/ItemNoteFrom" }
         type: { type: string }
         lane: { type: string }
         title: { type: string }
@@ -6432,6 +7006,15 @@ components:
         class_of_service: { $ref: "#/components/schemas/ClassOfService" }
         rework_count: { type: integer }
         cost_usd: { type: number, format: double }
+        origin: { type: string, enum: [person, plan, trigger, follow-up], description: As Item's origin }
+        via: { type: string, enum: [web, cli, api], description: As Item's via }
+        created_by:
+          description: As Item's created_by
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        untrusted: { type: boolean, description: As Item's untrusted }
+        start:
+          description: As Item's start, absent when it may start now; the inbox shows such items under Later
+          allOf: [{ $ref: "#/components/schemas/ItemStart" }]
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         age_seconds:
@@ -7440,7 +8023,7 @@ components:
               per_day: { type: number, format: double, description: done divided by 7 }
     Intake:
       type: object
-      required: [items, from, to, sources, triggers]
+      required: [items, from, to, sources, triggers, suggestions]
       properties:
         items: { type: integer, description: How many items the sources count, at most the items asked for }
         from: { type: string, format: date, nullable: true, description: The UTC day the oldest of them was created; null without items }
@@ -7462,6 +8045,143 @@ components:
           type: array
           description: The current definition's board.triggers, in definition order
           items: { $ref: "#/components/schemas/IntakeTrigger" }
+        suggestions:
+          type: array
+          description: >-
+            The triggers the definition ships disabled, in definition order: what Intake and the
+            onboarding Intake step offer to turn on, so no client names a station, agent or work
+            type of its own. Each is also in triggers.
+          items: { $ref: "#/components/schemas/TriggerSuggestion" }
+        window:
+          type: string
+          enum: [7d, 30d, 90d]
+          description: The window origins count over, the one asked for or 30d; always answered
+        origins:
+          description: >-
+            How many of the factory's items created in the window came from each origin (ADR 0040
+            decision 2), zero included; always answered. Items filed before origins were recorded
+            count as person, the column's default
+          allOf: [{ $ref: "#/components/schemas/IntakeOrigins" }]
+        coming_up:
+          type: array
+          description: >-
+            Up to 50 open items that haven't started (no started_at, the claim filters' rule):
+            those with a start first, soonest first, then those that wait only for their open
+            needs, oldest first; always answered
+          items: { $ref: "#/components/schemas/IntakeComingUp" }
+        coming_up_total: { type: integer, description: How many items coming_up counts, beyond its 50 too; always answered }
+        triage:
+          description: >-
+            Follow-ups for the architect (ADR 0040 decision 9): the factory's collecting triage
+            item and the items whose waiting triage follow-ups join it when they land; null when
+            there is neither
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/IntakeTriage" }]
+        webhooks:
+          type: array
+          description: The organization's webhooks open to the factory, by name; always answered
+          items: { $ref: "#/components/schemas/IntakeWebhook" }
+    IntakeOrigins:
+      type: object
+      required: [person, plan, trigger, follow_up]
+      properties:
+        person: { type: integer, description: Filed by a person, from New item, the CLI or the API }
+        plan: { type: integer, description: Parts of assemblies }
+        trigger: { type: integer, description: Filed by a trigger or a check }
+        follow_up: { type: integer, description: Filed from follow-ups, triage items included }
+    IntakeComingUp:
+      type: object
+      description: An item that hasn't started
+      required: [id, ref, title, origin, needs, created_at]
+      properties:
+        id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>" }
+        title: { type: string }
+        origin: { type: string, enum: [person, plan, trigger, follow-up] }
+        via: { type: string, enum: [web, cli, api], description: How a person filed it; absent otherwise }
+        created_by:
+          description: Who filed it; absent for items filed before ADR 0040 and for the engine's filings
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        start:
+          description: When it may start; absent when it waits only for its needs
+          allOf: [{ $ref: "#/components/schemas/ItemStart" }]
+        needs:
+          type: array
+          description: The refs of its open needs (neither done nor cancelled), oldest edge first
+          items: { type: string }
+        from_item:
+          type: string
+          description: The ref of the item whose follow-up filed it, another factory's included; absent otherwise
+        created_at: { type: string, format: date-time }
+    IntakeTriage:
+      type: object
+      required: [item, waiting]
+      properties:
+        item:
+          nullable: true
+          description: >-
+            The collecting triage item: open, with no run yet; null when there is none, and the
+            next item that lands with triage follow-ups files one
+          allOf: [{ $ref: "#/components/schemas/IntakeTriageItem" }]
+        waiting:
+          type: array
+          description: >-
+            Each item of the factory with waiting triage follow-ups, oldest first, which join the
+            collecting item when the item (or its assembly) lands. An untrusted item's are left
+            out: they go to a paused triage item of their own
+          items: { $ref: "#/components/schemas/IntakeTriageSource" }
+    IntakeTriageItem:
+      type: object
+      description: A factory's collecting triage item
+      required: [id, ref, title, station, follow_ups]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        station: { type: string }
+        follow_ups: { type: integer, description: How many follow-ups have joined it }
+    IntakeTriageSource:
+      type: object
+      description: An item whose waiting triage follow-ups join the collecting triage item when it lands
+      required: [id, ref, title, follow_ups]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        follow_ups: { type: integer }
+    IntakeWebhook:
+      type: object
+      description: An organization webhook open to the factory
+      required: [id, name, sender, state]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sender: { $ref: "#/components/schemas/WebhookSender" }
+        state:
+          type: string
+          enum: [receiving, no_trigger, closed]
+          description: >-
+            Derived from the definition, not from recent deliveries. receiving: the webhook is
+            enabled and an enabled trigger of the factory's current definition names it, by its
+            sender (<sender>.<event>) or by its name; no_trigger: enabled, and no enabled trigger
+            names it; closed: the webhook is turned off
+    TriggerSuggestion:
+      type: object
+      required: [name, source, "on", when, create]
+      properties:
+        name: { type: string }
+        source: { type: string, enum: [schedule, webhook, github] }
+        "on": { type: string, description: "The trigger's event key, as in the definition" }
+        when: { type: string, description: "As IntakeTrigger's when: the cron and its time zone for a schedule, the event key otherwise" }
+        create:
+          type: object
+          required: [type, station, lane, expedite, title]
+          properties:
+            type: { type: string }
+            station: { type: string }
+            lane: { type: string, nullable: true }
+            expedite: { type: boolean }
+            title: { type: string, description: "create.title as written, with its {{field}} placeholders; empty when the definition sets none" }
     IntakeTrigger:
       type: object
       required: [name, enabled, source, on, when, create, days, problem]
@@ -7489,6 +8209,13 @@ components:
           minItems: 7
           maxItems: 7
           items: { type: integer }
+        check:
+          type: object
+          description: The agent that checks a source each time it fires, instead of filing an item (ADR 0040 decision 19); absent without one
+          required: [agent, max_usd]
+          properties:
+            agent: { type: string }
+            max_usd: { type: number, format: double, description: The most one check may spend }
         problem:
           type: object
           nullable: true
@@ -7496,7 +8223,7 @@ components:
             Why it may not be creating items. missing_connection: it listens on a webhook
             endpoint the factory does not have (no endpoint of its name for webhook.<name>, none
             of kind github for github.*). refused_deliveries: its endpoints refused deliveries in
-            the last 7 days, counted over each endpoint's 100 newest deliveries.
+            the last 7 days, counted from the endpoints' daily delivery counts.
           required: [kind, message]
           properties:
             kind: { type: string, enum: [missing_connection, refused_deliveries] }
@@ -7518,31 +8245,138 @@ components:
           type: array
           description: Its 20 newest events, newest first
           items: { $ref: "#/components/schemas/IntakeEvent" }
+        memory: { $ref: "#/components/schemas/TriggerCheckMemory" }
     IntakeEvent:
       type: object
-      required: [id, title, event, at, outcome, item_number, reason]
+      required: [id, title, event, at, outcome, item_number, reason, missed]
       properties:
         id: { type: string, description: The firing's id, the one tryIntakeTrigger names }
         title: { type: string, description: "The event's value of the trigger's only.dedupe field, or its event key without one" }
         event: { type: string, description: The event key it matched }
-        at: { type: string, format: date-time }
+        at: { type: string, format: date-time, description: "When it fired; for missed, the gap's last instant" }
         outcome:
           type: string
-          enum: [created, merged, skipped]
-          description: created an item; merged once that item has been merged; skipped with the reason
+          enum: [created, merged, skipped, missed, checked]
+          description: >-
+            created an item; merged once that item has been merged; skipped with the reason;
+            missed: a schedule's instants passed by more than 5 minutes while no goald ran, and
+            none was fired late; checked: it queued a check (ADR 0040 decision 19), a try among
+            them, whose items and notes are its checks' (listTriggerChecks)
         item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
-        reason: { type: string, nullable: true, description: Why it was skipped; null otherwise }
+        reason: { type: string, nullable: true, description: Why it was skipped or what it missed; null otherwise }
+        missed: { type: integer, description: How many schedule instants a missed event covers; 0 for any other outcome }
+    TriggerCheckMemory:
+      type: object
+      description: >-
+        What a check trigger carries from one check to the next (ADR 0040 decision 19, the
+        Remembers row of its page); present only for a trigger with a check. Every key, title and
+        reason comes from the check's agent or the source it read: text to show as text, never
+        markup.
+      required: [open, open_items, closed, closed_keys, state, checked_up_to]
+      properties:
+        open: { type: integer, description: How many of the items it filed are open (neither done nor cancelled) }
+        open_items:
+          type: array
+          description: Its newest open items, at most 50, newest first
+          maxItems: 50
+          items: { $ref: "#/components/schemas/TriggerCheckOpenItem" }
+        closed: { type: integer, description: How many of its keys' items closed in the last 7×24 hours }
+        closed_keys:
+          type: array
+          description: The keys whose items closed in the last 7×24 hours, at most 50, newest first; the next check does not file them again
+          maxItems: 50
+          items: { $ref: "#/components/schemas/TriggerCheckClosedKey" }
+        state:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: The JSON object its last done check saved for the next one (at most 4 KiB); null when none is saved
+        checked_up_to: { type: string, format: date-time, nullable: true, description: When the check that saved the state finished; null without a saved state }
+    TriggerCheckOpenItem:
+      type: object
+      required: [key, ref, title, state]
+      properties:
+        key: { type: string, description: "The source's own id it was filed for" }
+        ref: { type: string, description: "The item's ref, #<number>" }
+        title: { type: string }
+        state: { type: string, description: The item's state }
+    TriggerCheckClosedKey:
+      type: object
+      required: [key, ref, how, why, at]
+      properties:
+        key: { type: string }
+        ref: { type: string, description: "The closed item's ref, #<number>" }
+        how: { type: string, enum: [done, cancelled] }
+        why: { type: string, description: The reason given when it closed; empty for none }
+        at: { type: string, format: date-time, description: When it closed }
+    TriggerCheckList:
+      type: object
+      required: [checks]
+      properties:
+        checks:
+          type: array
+          items: { $ref: "#/components/schemas/TriggerCheck" }
+    TriggerCheck:
+      type: object
+      description: >-
+        One check of a trigger. Every key, title, text and reason comes from the check's agent or
+        the source it read: text to show as text, never markup.
+      required: [id, at, checked_at, state, try, cost_usd, reason, filed, noted, skipped]
+      properties:
+        id: { type: string, description: The check's firing id }
+        at: { type: string, format: date-time, description: When it was queued }
+        checked_at: { type: string, format: date-time, nullable: true, description: When it finished; null while queued or running }
+        state: { type: string, enum: [queued, running, done, failed] }
+        try: { type: boolean, description: A try (tryTriggerCheck), whose lists are what it would do }
+        cost_usd: { type: number, format: double, description: What its run cost }
+        reason: { type: string, nullable: true, description: Why it failed; null otherwise }
+        filed:
+          type: array
+          description: The items it filed, one per key
+          items: { $ref: "#/components/schemas/TriggerCheckFiled" }
+        noted:
+          type: array
+          description: The notes it wrote on its keys' open items
+          items: { $ref: "#/components/schemas/TriggerCheckNoted" }
+        skipped:
+          type: array
+          description: >-
+            What it did not file or note, with why: "closed on Nov 2: <reason>", "over the limit",
+            "a note on this key within the hour", "the same note again", "no open item for this
+            key", "can't file it: …", or the agent's own reason
+          items: { $ref: "#/components/schemas/TriggerCheckSkip" }
+    TriggerCheckFiled:
+      type: object
+      required: [key, title, ref, reopens]
+      properties:
+        key: { type: string, description: "The source's own id for it" }
+        title: { type: string }
+        ref: { type: string, nullable: true, description: "The item's ref, #<number>; null for a try" }
+        reopens: { type: string, nullable: true, description: "For a key filed again with reopen, the ref of the closed item it links to" }
+    TriggerCheckNoted:
+      type: object
+      required: [key, ref, text]
+      properties:
+        key: { type: string }
+        ref: { type: string, description: "The open item's ref, #<number>" }
+        text: { type: string }
+    TriggerCheckSkip:
+      type: object
+      required: [key, reason]
+      properties:
+        key: { type: string }
+        reason: { type: string }
     TriggerTryRequest:
       type: object
       additionalProperties: false
       required: [firing]
       properties:
-        firing: { type: string, description: The id of one of the trigger's 20 newest events }
+        firing: { type: string, description: "The id of one of the trigger's 20 newest events: a schedule's, or a delivery's while its webhook keeps it (30 days)" }
     TriggerTry:
       type: object
       description: >-
-        What the trigger would do with the event now. Every string shaped by the event (the item's
-        title and brief, the model's reason, a step's reason) is text to show as text, never markup.
+        What the saved trigger would do with the event now. Every string shaped by the event (the
+        item's title and brief, a step's reason) is text to show as text, never markup.
       required: [firing, matched, outcome, reason, steps, item, model_check]
       properties:
         firing: { type: string, description: The firing tried }
@@ -7559,8 +8393,8 @@ components:
           type: array
           description: >-
             In the order they run: when, each configured only condition (failuresInARow, dedupe,
-            then modelAgrees), create, then each configured limit (perDay, pauseOnBudget). Steps
-            after the one that skipped are not_reached.
+            then a deprecated modelAgrees, which always skips), create, then each configured limit
+            (perDay, pauseOnBudget). Steps after the one that skipped are not_reached.
           items: { $ref: "#/components/schemas/TriggerTryStep" }
         item:
           type: object
@@ -7579,7 +8413,7 @@ components:
         model_check:
           type: object
           nullable: true
-          description: The model check's answer; null when it did not run or gave no answer
+          description: Deprecated and always null; the model check is removed (ADR 0040 decision 18)
           required: [worth, reason, model, input_tokens, output_tokens, cost_usd]
           properties:
             worth: { type: boolean, description: The model answered yes }
@@ -7771,7 +8605,10 @@ components:
             always_allow_offered); the run ends and the item waits at its station.
             tool_approval_granted: a person approved it (data approval_id, always_allow; actor);
             tool_approval_denied: a person denied it (data approval_id, note when given; actor);
-            either way the item goes back to its station's queue
+            either way the item goes back to its station's queue. item_note: a note another
+            item's agent left as a follow-up for this item, delivered by the engine (actor
+            engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id,
+            from_factory_id, station and agent); the item's next run reads it after its brief
         station: { type: string }
         actor: { type: string }
         data:
@@ -8335,8 +9172,10 @@ components:
         publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038
         decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got
         worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo
-        this change (POST …/jonah/proposals/{number}/undo)
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse]
+        this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three
+        checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger
+        whose check skipped something over its limit today (UTC), once a day
+      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse, check_failing, check_limit]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -8346,7 +9185,7 @@ components:
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
             andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>,
-            watch_worse:<proposal id>
+            watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
           type: object
@@ -8418,6 +9257,21 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/Watch"
+        trigger_check:
+          description: The trigger of a check_failing or check_limit entry; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxTriggerCheck"
+    InboxTriggerCheck:
+      type: object
+      description: A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page.
+      required: [trigger, reason]
+      properties:
+        trigger: { type: string, description: The trigger's name }
+        reason:
+          type: string
+          description: >-
+            For check_failing, why its newest check failed; for check_limit, "over the limit"
     InboxKnowledgeSource:
       type: object
       description: A knowledge source whose last syncs failed, shown under each factory that lists it.
@@ -9493,18 +10347,24 @@ components:
           items: { $ref: "#/components/schemas/WebhookEndpoint" }
     WebhookEndpoint:
       type: object
-      description: A factory's webhook endpoint, never its signing secret
-      required: [id, name, kind, address, secret_name, created_at, rotated_at, triggers, days]
+      description: A webhook endpoint open to the factory, never its signing secret
+      required: [id, name, kind, sender, address, secret_name, created_at, rotated_at, triggers, days]
       properties:
         id: { type: string }
         name: { type: string }
-        kind: { $ref: "#/components/schemas/WebhookKind" }
+        kind:
+          allOf: [{ $ref: "#/components/schemas/WebhookKind" }]
+          description: A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
+        sender:
+          allOf: [{ $ref: "#/components/schemas/WebhookSender" }]
+          description: Its sender; a factory endpoint of kind generic reads as standard
         address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
         secret_name:
           type: string
           description: >-
-            The label the screens show for its signing secret, <name>-hook-secret. The secret is
-            sealed on the endpoint, not a credential, so no credential has this name.
+            A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the
+            endpoint, so no secret has this name; an organization webhook's is the name of the
+            organization secret that signs it.
         created_at: { type: string, format: date-time }
         rotated_at: { type: string, format: date-time, nullable: true, description: When its secret was last replaced; null when it never was }
         triggers:
@@ -9517,6 +10377,137 @@ components:
           minItems: 7
           maxItems: 7
           items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
+    WebhookSender:
+      type: string
+      enum: [github, gitlab, standard, pagerduty, sentry, token]
+      description: >-
+        How a webhook is signed and names its events (ADR 0040 decision 12). github:
+        X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks'
+        webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token:
+        a shared value in one header, for a sender that can do nothing else.
+    WebhookTokenSettings:
+      type: object
+      description: The token sender's settings
+      properties:
+        header: { type: string, description: "The header that carries the value; Authorization (as Bearer <value>) when empty", maxLength: 100 }
+        event_path: { type: string, description: "The body's dot path of the event name, such as event.type; empty for none", maxLength: 200 }
+        id_path: { type: string, description: "The body's dot path of a delivery id; empty for none", maxLength: 200 }
+    WebhookOpening:
+      type: object
+      description: The webhook is open to a factory
+      required: [factory]
+      properties:
+        factory: { type: string, description: "The factory's metadata.id" }
+        repositories:
+          type: array
+          nullable: true
+          maxItems: 100
+          description: "The repositories (owner/name) whose deliveries reach the factory; null or absent: every one"
+          items: { type: string }
+    WebhookTrigger:
+      type: object
+      description: A trigger of a factory's published definition that uses the webhook
+      required: [factory, factory_name, trigger]
+      properties:
+        factory: { type: string, description: "The factory's metadata.id" }
+        factory_name: { type: string }
+        trigger: { type: string }
+    NewWebhook:
+      type: object
+      required: [name, sender]
+      properties:
+        name:
+          type: string
+          description: "A slug of 3 to 40 characters, unique in the organization, and none of github, gitlab, standard, pagerduty, sentry, token, schedule and webhook"
+        sender: { $ref: "#/components/schemas/WebhookSender" }
+        secret:
+          type: string
+          description: "The name of an existing secret that signs it; absent: goald creates webhook-<name> with a generated value"
+        token: { $ref: "#/components/schemas/WebhookTokenSettings" }
+    WebhookPatch:
+      type: object
+      properties:
+        name: { type: string, description: A new name, under NewWebhook's rules }
+        enabled: { type: boolean, description: "false: its address answers 404 until enabled again" }
+        open:
+          type: array
+          description: Factories to open it to, or whose opening's repositories to replace
+          items: { $ref: "#/components/schemas/WebhookOpening" }
+        close:
+          type: array
+          description: The metadata.id of factories to close it to
+          items: { type: string }
+    WebhookList:
+      type: object
+      required: [webhooks]
+      properties:
+        webhooks:
+          type: array
+          items: { $ref: "#/components/schemas/Webhook" }
+    Webhook:
+      type: object
+      description: One of the organization's webhooks, never a secret's value
+      required: [id, name, sender, address, secret, enabled, token, openings, triggers, created_at, days, pinged_at, setup_events, setup_all_events]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sender: { $ref: "#/components/schemas/WebhookSender" }
+        address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
+        secret: { type: string, description: The name of the organization secret that signs it }
+        enabled: { type: boolean }
+        token:
+          description: The token sender's settings; null for another sender
+          allOf: [{ $ref: "#/components/schemas/WebhookTokenSettings" }]
+          nullable: true
+        openings:
+          type: array
+          description: The factories it is open to, by factory id
+          items: { $ref: "#/components/schemas/WebhookOpening" }
+        triggers:
+          type: array
+          description: >-
+            The triggers of the published definitions of the factories it is open to that name it
+            (on webhook.<name>, <name> or either followed by .<event>), enabled or not, and the
+            enabled ones that name its sender with an event (<sender>.<event>), by factory name
+            then trigger. Archived factories' triggers are left out.
+          items: { $ref: "#/components/schemas/WebhookTrigger" }
+        created_at: { type: string, format: date-time }
+        days:
+          type: array
+          description: The last 7 UTC days, oldest first, today last, each zero-filled
+          minItems: 7
+          maxItems: 7
+          items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
+        pinged_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the receiver last accepted GitHub's ping to it; null when it never did
+        setup_events:
+          type: array
+          description: >-
+            The events to choose in the sender's settings: the sorted, distinct events of the
+            enabled triggers of the published definitions of the factories it is open to that
+            name it (<name>.<event>, webhook.<name>.<event>) or its sender (<sender>.<event>).
+            Archived factories are left out.
+          items: { type: string }
+        setup_all_events:
+          type: boolean
+          description: "true when such a trigger names it with no event, so the sender should send every event"
+    CreatedWebhook:
+      description: A new webhook, with the value of the secret goald generated for it, never readable again
+      allOf:
+        - $ref: "#/components/schemas/Webhook"
+        - type: object
+          required: [secret_value]
+          properties:
+            secret_value:
+              type: string
+              nullable: true
+              description: >-
+                The generated secret's value, to paste into the sender: 64 lower-case hex
+                characters, or for sender standard whsec_ and the base64 of 32 bytes. null when
+                the webhook uses an existing secret.
     WebhookDeliveryDay:
       type: object
       required: [day, delivered, refused]
@@ -9546,7 +10537,7 @@ components:
       description: "refused, with its reason; accepted, with no trigger matched; created, an item"
     WebhookDelivery:
       type: object
-      required: [id, received_at, outcome, reason, item]
+      required: [id, received_at, outcome, reason, item, event, receipt, duplicates, evaluations]
       properties:
         id: { type: string }
         received_at: { type: string, format: date-time }
@@ -9556,6 +10547,49 @@ components:
           description: The item it created; null for another outcome or once that item is gone
           allOf: [{ $ref: "#/components/schemas/WebhookDeliveryItem" }]
           nullable: true
+        event: { type: string, description: "The sender's event, such as check_run; empty when it names none or it was refused" }
+        receipt:
+          type: string
+          enum: [accepted, duplicate, refused]
+          nullable: true
+          description: >-
+            What the receiver made of it: accepted; duplicate, a delivery id it already had (the
+            first row counts the later ones in duplicates); refused, with its reason. null for a
+            delivery recorded before the receiver.
+        duplicates: { type: integer, description: How many later deliveries had its delivery id and created nothing }
+        evaluations:
+          type: array
+          description: >-
+            Its evaluation by each factory that names it, by factory name then factory id. A
+            factory's own routes list only that factory's.
+          items: { $ref: "#/components/schemas/WebhookDeliveryEvaluation" }
+    WebhookDeliveryEvaluation:
+      type: object
+      required: [factory, factory_name, state, outcome, reason, item]
+      properties:
+        factory: { type: string, description: "The factory's metadata.id" }
+        factory_name: { type: string, description: "The factory's name; its metadata.id once the factory is gone" }
+        state:
+          type: string
+          enum: [pending, done, failed]
+          description: "pending, waiting to be evaluated or tried again; done, with its outcome; failed after five attempts"
+        outcome:
+          type: string
+          enum: [created, skipped, failed]
+          nullable: true
+          description: "created, an item; skipped, with the reason; failed, with the error; null while pending"
+        reason: { type: string, description: "Why it was skipped or failed, or the last attempt's error while pending; empty otherwise" }
+        item:
+          description: The item it created; null for another outcome or once that item is gone
+          allOf: [{ $ref: "#/components/schemas/WebhookEvaluationItem" }]
+          nullable: true
+    WebhookEvaluationItem:
+      type: object
+      required: [id, number, ref]
+      properties:
+        id: { type: string }
+        number: { type: integer, format: int64 }
+        ref: { type: string, description: "<factory name>#<number>, such as sre#88" }
     WebhookDeliveryItem:
       type: object
       required: [id, number]
