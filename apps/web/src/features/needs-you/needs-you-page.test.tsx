@@ -245,6 +245,31 @@ describe('Needs you: filters live in the URL', () => {
   });
 });
 
+describe('Needs you: the item an alert names', () => {
+  it('opens the item by its number, the canonical address of its page', async () => {
+    const blocked: InboxEntry = {
+      ...decision,
+      id: 'blocked:item-5',
+      kind: 'blocked',
+      item: card({ id: 'item-5', ref: 'software#5', number: 5, title: 'Show spend per factory', station: 'build' }),
+      station: 'build',
+      action: null,
+      approval: null,
+      blocked: { reason: 'No test environment', paused: false },
+    };
+    renderPage({
+      search: { entry: 'blocked:item-5' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([blocked])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const open = await screen.findByRole('link', { name: 'Open software#5' });
+    expect(open.getAttribute('href')).toMatch(/\/items\/5$/);
+  });
+});
+
 describe('Needs you: deciding a Decision', () => {
   it('swaps the Approve label for a check once the approval went through, before the entry leaves', async () => {
     vi.mocked(approveItem).mockResolvedValue({ id: 'item-3', state: 'done' } as unknown as Item);
