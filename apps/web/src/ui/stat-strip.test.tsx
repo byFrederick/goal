@@ -14,6 +14,15 @@ const stats: Stat[] = [
 afterEach(cleanup);
 
 describe('StatStrip', () => {
+  it('lets a long figure wrap between words so it never leaves its cell', () => {
+    render(<StatStrip label="Time" stats={[{ label: 'Time to finish', value: 'About 1 d 16 h 43 min' }]} />);
+
+    const cell = screen.getByText('Time to finish').parentElement as HTMLElement;
+    const figure = cell.children[1] as HTMLElement;
+    for (const c of ['flex-wrap', 'min-w-0', 'break-words']) expect(figure.className).toContain(c);
+    expect(within(cell).getByText('About 1 d 16 h 43 min').className).toContain('sr-only');
+  });
+
   it('shows at most four stats, so a fifth is not drawn', () => {
     render(<StatStrip label="Flow" stats={stats} />);
 

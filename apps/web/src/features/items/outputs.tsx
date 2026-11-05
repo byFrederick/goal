@@ -33,9 +33,16 @@ function Value({ name, value }: { name: string; value: unknown }) {
     return (
       <div className="flex flex-col gap-1">
         <span className="text-sm text-muted">{humanize(name)}</span>
-        <pre className="m-0 overflow-x-auto rounded-control bg-shell p-3 text-secondary leading-normal">
-          {JSON.stringify(value, null, 2)}
-        </pre>
+        <section
+          aria-label="Output value"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+          tabIndex={0}
+          className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+        >
+          <pre className="m-0 w-max min-w-full rounded-control bg-shell p-3 text-secondary leading-normal">
+            {JSON.stringify(value, null, 2)}
+          </pre>
+        </section>
       </div>
     );
   }

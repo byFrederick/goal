@@ -303,4 +303,13 @@ test.describe('files table at 390 px', () => {
     expect(scrolls).toBe(true);
     await expectNoHorizontalScroll(page);
   });
+
+  test('the Files scroller is a named region a keyboard can reach, and axe finds nothing', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/runbooks');
+    const region = page.getByRole('region', { name: 'Files table' });
+    await expect(region).toBeVisible();
+    await region.focus();
+    await expect(region).toBeFocused();
+    await expectAccessible(page);
+  });
 });

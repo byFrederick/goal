@@ -180,7 +180,13 @@ function FilesCard({ source }: { source: KnowledgeSource }) {
                 : 'No files yet. The first sync writes them.'}
           </p>
         ) : (
-          <div data-testid="files-scroll" className="overflow-x-auto">
+          <section
+            data-testid="files-scroll"
+            aria-label="Files table"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+            tabIndex={0}
+            className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+          >
             <table className="w-full min-w-[360px] border-collapse text-body">
               <caption className="sr-only">Files of {source.name}</caption>
               <thead>
@@ -212,7 +218,7 @@ function FilesCard({ source }: { source: KnowledgeSource }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
         )}
       </Skeleton>
     </section>

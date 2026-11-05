@@ -369,6 +369,16 @@ describe('the Send a test panel', () => {
     expect(written).toContain('X-Goal-Signature: sha256=');
   });
 
+  it('lets a keyboard scroll the curl sample', async () => {
+    answers();
+    renderPage();
+
+    const region = await screen.findByRole('region', { name: 'Example request' });
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain('focus-visible:outline-run');
+    expect(region.textContent).toContain('curl -X POST');
+  });
+
   it('shows a curl sample for the first address with its signature header, and the fields the trigger can read', async () => {
     answers();
     renderPage();

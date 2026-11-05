@@ -8,6 +8,14 @@ afterEach(cleanup);
 // The delta is one span whose text is the arrow and the signed figure together.
 const deltaText = (text: string) => screen.getByText((_, el) => el?.localName === 'span' && el.textContent === text);
 
+describe('KpiTile', () => {
+  it('lets a long figure wrap inside the tile', () => {
+    render(<KpiTile label="Spend" value="$1,176.52 a month" />);
+    const figure = screen.getByText('$1,176.52 a month').closest('p') as HTMLElement;
+    for (const c of ['flex-wrap', 'min-w-0', 'break-words']) expect(figure.className).toContain(c);
+  });
+});
+
 describe('Delta', () => {
   it('shows an up arrow and a plus sign for a rise', () => {
     render(<Delta value={2} unit="pts" good={false} />);
