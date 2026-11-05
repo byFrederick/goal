@@ -356,28 +356,7 @@ func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) 
 			}
 
 			for _, t := range f.Spec.Board.Triggers {
-				use := gen.WebhookTrigger{Factory: string(id), FactoryName: f.Metadata.Name, Trigger: t.Name}
-				named := domain.TriggerNames(t.On, w.Name)
-
-				if named {
-					out.named = append(out.named, use)
-					out.triggers = append(out.triggers, use)
-				}
-
-				if t.Enabled != nil && !*t.Enabled {
-					continue
-				}
-
-				if sender, _, event := domain.ParseOn(t.On); !named && sender == w.Sender && event != "" {
-					out.triggers = append(out.triggers, use)
-				}
-
-				if event, all, ok := domain.SetupEvent(t.On, w); ok {
-					out.all = out.all || all
-					if event != "" {
-						out.events = append(out.events, event)
-					}
-				}
+				out.add(w, gen.WebhookTrigger{Factory: string(id), FactoryName: f.Metadata.Name, Trigger: t.Name}, t.On, t.Enabled == nil || *t.Enabled)
 			}
 		}
 
@@ -388,6 +367,30 @@ func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) 
 
 		return out
 	}, nil
+}
+
+// add counts the trigger use, whose on is on, in what of it uses w.
+func (u *webhookUse) add(w domain.WebhookEndpoint, use gen.WebhookTrigger, on string, enabled bool) {
+	named := domain.TriggerNames(on, w.Name)
+	if named {
+		u.named = append(u.named, use)
+		u.triggers = append(u.triggers, use)
+	}
+
+	if !enabled {
+		return
+	}
+
+	if sender, _, event := domain.ParseOn(on); !named && sender == w.Sender && event != "" {
+		u.triggers = append(u.triggers, use)
+	}
+
+	if event, all, ok := domain.SetupEvent(on, w); ok {
+		u.all = u.all || all
+		if event != "" {
+			u.events = append(u.events, event)
+		}
+	}
 }
 
 // byFactoryThenTrigger orders trigger uses by factory name, then trigger.
