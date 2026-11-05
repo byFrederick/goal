@@ -71,8 +71,10 @@ function open(url: string) {
   const root = createRootRoute();
   const org = createRoute({ ...Route.options, getParentRoute: () => root, path: '/o/$org' } as never);
   const factory = createRoute({ ...FactoryRoute.options, getParentRoute: () => org, path: '/f/$factory' } as never);
+  // The factory's Floor, which matches under an unknown factory too: the top bar must not look for the factory.
+  const floor = createRoute({ getParentRoute: () => factory, path: '/', component: () => <p>Floor page</p> });
   const router = createRouter({
-    routeTree: root.addChildren([org.addChildren([factory])]),
+    routeTree: root.addChildren([org.addChildren([factory.addChildren([floor])])]),
     history: createMemoryHistory({ initialEntries: [url] }),
     context: { queryClient },
   } as never);
@@ -100,6 +102,8 @@ describe('/o/$org not found', () => {
     open('/o/goal/f/nope');
 
     expect(await screen.findByRole('heading', { level: 1, name: 'No such factory' })).toBeTruthy();
+    expect(screen.queryByText('Floor page')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'This page hit an error' })).toBeNull();
     expect(screen.getAllByRole('navigation').length).toBeGreaterThan(0);
     expect(document.querySelectorAll('#main')).toHaveLength(1);
   });
