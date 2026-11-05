@@ -51,11 +51,13 @@ test('an item no agent has picked up shows the empty state', async ({ page }) =>
 });
 
 test('a failed read shows an error, and Try again shows the breakdown', async ({ page, request }) => {
-  await request.post('/__mock/fail', { data: { path: '/teardown', method: 'GET', status: 503, times: 1 } });
+  // The query client tries a 5xx twice more (api/retry.ts), so the fault outlasts the first attempt and both retries.
+  await request.post('/__mock/fail', { data: { path: '/teardown', method: 'GET', status: 503, times: 3 } });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/o/acme/f/goal/items/4?tab=teardown');
 
-  await expect(page.getByRole('alert')).toBeVisible();
+  // The two retries wait 1 s and 2 s before the error shows, more with the tablet project's latency.
+  await expect(page.getByRole('alert')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('region', { name: 'Totals' })).toBeVisible();
 });
@@ -64,6 +66,7 @@ test('at 375 px no two station labels overlap and each has a title', async ({ pa
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto('/o/acme/f/goal/items/4?tab=teardown');
   const labels = page.getByRole('table', { name: 'Time by station' }).locator('tbody th[scope="row"] [title]');
+  await expect(labels.first()).toBeVisible();
   const count = await labels.count();
   expect(count).toBeGreaterThan(0);
   const boxes = [];

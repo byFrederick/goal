@@ -54,7 +54,11 @@ test('the event rows of a run fit its card and keep raw output behind a disclosu
   const times = await events.locator('time').evaluateAll((els) =>
     els.map((el) => ({
       text: el.textContent ?? '',
-      height: el.getBoundingClientRect().height,
+      // The box less its padding: the time sits 4 px lower to line up with the row's text.
+      height:
+        el.getBoundingClientRect().height -
+        Number.parseFloat(getComputedStyle(el).paddingTop) -
+        Number.parseFloat(getComputedStyle(el).paddingBottom),
       line: Number.parseFloat(getComputedStyle(el).lineHeight),
     })),
   );
@@ -85,7 +89,8 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 test('between 720 and 1100 px the page is one column, with the details below the timeline', async ({ page }) => {
-  await page.setViewportSize({ width: 1000, height: 900 });
+  // The screen lays out by the width of main (frontend.md, "container queries"): 1100 px less the 256 px sidebar and its padding.
+  await page.setViewportSize({ width: 1100, height: 900 });
   await page.goto('/o/acme/f/goal/items/343');
   const panel = await page.getByRole('tabpanel').boundingBox();
   const details = await page.getByRole('heading', { name: 'Details' }).boundingBox();
