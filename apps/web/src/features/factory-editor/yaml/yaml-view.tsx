@@ -249,16 +249,25 @@ export function YamlView({ search }: SectionViewProps) {
   }, [editor, path, search.line, entryLine, text === undefined]);
 
   const cursorLine = cursor?.line;
+  // The file the cursor last moved in, and the latest search, so a pending write never lands on another file.
+  const cursorPath = useRef(path);
+  const latestSearch = useRef(search);
+  latestSearch.current = search;
+  const onCursor = (c: CursorPosition) => {
+    cursorPath.current = path;
+    setCursor(c);
+  };
   // biome-ignore lint/correctness/useExhaustiveDependencies: only the cursor's moves write the URL
   useEffect(() => {
     if (cursorLine === undefined) return;
     const t = setTimeout(() => {
-      if (cursorLine === search.line) return;
+      const current = latestSearch.current;
+      if (cursorPath.current !== path || cursorLine === current.line) return;
       written.current = cursorLine;
-      go(undefined, { ...search, line: cursorLine }, true);
+      go(undefined, { ...current, line: cursorLine }, true);
     }, 400);
     return () => clearTimeout(t);
-  }, [cursorLine]);
+  }, [cursorLine, path]);
 
   const revealProblem = (p: DefinitionProblem) => {
     const file = cleanPath(p.file ?? factoryFile);
@@ -444,7 +453,7 @@ export function YamlView({ search }: SectionViewProps) {
                 markers={here.map(toMarker)}
                 changedLines={changed}
                 zones={zones}
-                onCursor={setCursor}
+                onCursor={onCursor}
               />
             )}
           </div>
