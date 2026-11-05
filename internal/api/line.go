@@ -28,7 +28,7 @@ func (s *server) boardLine(
 	line := gen.BoardLine{
 		Status:   gen.BoardLineStatusRunning,
 		Wip:      lineWIP(l, loads),
-		Release:  gen.LineRelease{Policy: gen.Push, InBuffer: loads[drum].Waiting},
+		Release:  gen.LineRelease{Policy: gen.LineReleasePolicyPush, InBuffer: loads[drum].Waiting},
 		Expedite: lineExpedite(l, cards),
 	}
 
@@ -42,7 +42,7 @@ func (s *server) boardLine(
 	}
 
 	if l.Flow.Release == domain.ReleaseDBR {
-		line.Release.Policy = gen.DrumBufferRope
+		line.Release.Policy = gen.LineReleasePolicyDrumBufferRope
 	}
 
 	if drum != "" {
