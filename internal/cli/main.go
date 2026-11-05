@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), lists, shows and decides Jonah's proposals (jonah.go), keeps, lists and removes kept tests (test.go), proposes another model for an agent (agent.go), reads its spend (spend.go) reads and tries a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), lists, shows and decides Jonah's proposals (jonah.go), keeps, lists and removes kept tests (test.go), proposes another model for an agent (agent.go), reads its spend (spend.go) reads a factory's intake, reads and tries its triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -29,11 +29,18 @@ const usage = `usage:
                                                   proxy, run goald (and, with sign-in, Mailpit and the auth
                                                   service); --compose runs goald and the auth service as
                                                   compose services too, and returns once they are healthy
-  goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach]
+  goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach] [--at <time> | --in <wait>] [--after <item>]...
                                                   submit a work item and follow it until a human or done
                                                   (--type: one of the factory's work types; default its
-                                                  first, none when it declares none)
+                                                  first, none when it declares none); with a start it
+                                                  waits at the first station and is not followed:
+                                                  --at a time (RFC 3339, or 2026-11-05T09:00 in your time
+                                                  zone), --in a wait (36h, 7d, 2w), --after an item that
+                                                  must be done first (repeatable); at most 365 days ahead
   goal follow <item>                              follow an item's events again
+  goal start <item> --at <time> | --in <wait> | --now
+                                                  change when an item that has not started may start, or
+                                                  start it now (its --after items still hold it)
   goal item <item> [--teardown]                   show an item with its outputs as JSON, and its human
                                                   touches (who acted, where, planned or not, why) on stderr;
                                                   --teardown prints where its lead time, cost and human
@@ -241,30 +248,57 @@ const usage = `usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal intake <factory> [--window 7d|30d|90d] [--json]
+                                                  what is coming to the factory: the items that
+                                                  haven't started (when each may start or the needs
+                                                  it waits for, and where it came from), its items
+                                                  by origin over the window (default 30d), its
+                                                  follow-ups to triage and the items they join from,
+                                                  its triggers (a check marked) and the webhooks open
+                                                  to it: receiving, no trigger or closed
   goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
                                                   when they fire, what they create, the items they
                                                   created in the last 7 days, and why one may not be
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
-                                                  and its recent events: created, merged or skipped
+                                                  and its recent events: created, merged, skipped,
+                                                  missed or checked
   goal triggers try <factory> <trigger> --event ID [--json]
                                                   dry-run the trigger on one of its 20 newest events
                                                   (ID from goal triggers show): whether it matched,
-                                                  each step and why, the item it would create; nothing
-                                                  is created, but the model check runs and its cost is
-                                                  spent
-  goal webhooks list <factory> [--json]           the factory's webhook endpoints: kind, address,
-                                                  the triggers they feed, deliveries in 7 days
-                                                  (never a secret)
-  goal webhooks create <factory> <name> [--kind generic|github] [--json]
-                                                  add an endpoint (default kind generic); its signing
-                                                  secret is printed once, alone on stdout: store it in
-                                                  the sender now
-  goal webhooks rotate <factory> <name> [--json]  replace its signing secret, printed once the same
-                                                  way; the old one stops working at once
-  goal webhooks deliveries <factory> <name> [--limit N] [--after C] [--json]
+                                                  each step and why, the item it would create; a
+                                                  schedule's events, and a delivery's while its webhook
+                                                  keeps it; nothing is created
+  goal triggers try <factory> <trigger> [--wait 6m] [--json]
+                                                  for a trigger with a check: run its check now and
+                                                  wait (at most --wait) for what it would file, note
+                                                  and skip; it spends like any check, and nothing is
+                                                  filed, noted or saved
+  goal triggers checks <factory> <trigger> [--limit N] [--json]
+                                                  a check trigger's checks, newest first: when, what
+                                                  each filed, noted and skipped with reasons, and its
+                                                  cost (--limit: 1 to 100, default 20)
+  goal webhooks list [--json]                     the organization's webhooks: sender, address, the
+                                                  secret that signs them, the factories they are open
+                                                  to, the triggers that use them, deliveries in 7
+                                                  days (never a secret's value)
+  goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
+                                                  add a webhook, open to no factory (default sender
+                                                  standard; --kind generic|github is the old name of
+                                                  --sender, generic being standard); without --secret
+                                                  it makes the secret webhook-<name> and prints its
+                                                  value once, alone on stdout: store it in the sender
+                                                  now
+  goal webhooks open <webhook> <factory> [--repos a,b] [--json]
+                                                  the factory receives its deliveries, only those of
+                                                  the repositories listed with --repos; again replaces
+                                                  the repositories
+  goal webhooks close <webhook> <factory> [--json]
+                                                  the factory no longer receives its deliveries
+  goal webhooks deliveries <webhook> [--limit N] [--after C] [--json]
                                                   what it received, newest first: refused (and why),
                                                   accepted or created an item
+  goal webhooks delete <webhook>                  delete it and its deliveries; its secret stays
   goal storage init                               create the bucket if missing
   goal catalog skills sync --file <sources.yaml> [--search <q>]... [--top <n>]
                                                   fetch skills.sh skills (a YAML list of
@@ -308,7 +342,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or
@@ -391,10 +425,10 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 
 	// The commands on one item, and the command groups, by name.
 	if handler, ok := map[string]command{
-		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
+		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbStart: startItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalMoved, "bake-off": bakeOffMoved, "spend": spend,
-		"judge": judgeMoved, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
+		"judge": judgeMoved, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "intake": intakeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}

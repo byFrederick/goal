@@ -563,6 +563,22 @@ describe('the collapsed rail', () => {
     expect(within(await nav()).queryByRole('link', { name: /^Secrets/ })).toBeNull();
   });
 
+  it('links Webhooks to its page, right after Secrets, for those who may read webhooks', async () => {
+    renderSidebar({ can: ['secret:read', 'webhook:read'] });
+    const rail = await nav();
+    const link = within(rail).getByRole('link', { name: /^Webhooks/ });
+
+    expect(link.getAttribute('href')).toBe('/o/acme/webhooks');
+    const secrets = within(rail).getByRole('link', { name: /^Secrets/ });
+    expect(secrets.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('does not list Webhooks without webhook:read', async () => {
+    renderSidebar({ can: ['secret:read'] });
+
+    expect(within(await nav()).queryByRole('link', { name: /^Webhooks/ })).toBeNull();
+  });
+
   it('links Needs you to its page, with the count it waits on', async () => {
     renderSidebar();
     await collapse();

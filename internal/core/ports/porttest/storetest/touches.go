@@ -472,3 +472,30 @@ func testTouchesTenancy(f *fixture) {
 		t.Errorf("LabelTouch without an organization = %v; want ErrNoOrg", err)
 	}
 }
+
+// A note another item's agent left (item_note) is the engine's event, not a person's touch
+// (ADR 0039 decision 7): ItemTouches and TouchCounts leave it out.
+func testTouchesItemNoteIsNotATouch(f *fixture) {
+	t := f.t
+
+	src := f.create(t, domain.NewItem{})
+	dst := f.create(t, domain.NewItem{})
+	f.keepNotes(t, src, noteFor("mind the index", nameDev, dst.Number))
+
+	if got := f.deliver(t, []domain.NoteFactory{{ID: f.factory, Name: nameDev}}, 10); len(got) != 1 || len(f.itemNotes(t, dst.ID)) != 1 {
+		t.Fatalf("DeliverNotes = %+v; want one note on the target", got)
+	}
+
+	if touches := f.itemTouches(t, dst.ID); len(touches) != 0 {
+		t.Errorf("ItemTouches = %+v; want none", touches)
+	}
+
+	counts, err := f.Flow.TouchCounts(f.ctx(t), []domain.ItemID{dst.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if counts[dst.ID] != 0 {
+		t.Errorf("TouchCounts = %v; want no touch", counts)
+	}
+}

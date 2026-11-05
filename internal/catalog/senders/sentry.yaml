@@ -1,0 +1,30 @@
+# Sentry's integration webhooks: an HMAC-SHA256 of the body under the client secret, in hex.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: sentry
+  title: Sentry
+spec:
+  scheme: hmac
+  signature:
+    header: Sentry-Hook-Signature
+    encoding: hex
+  signed: body
+  secret: text
+  id:
+    header: Request-ID
+  event:
+    header: Sentry-Hook-Resource
+  # The event table (ADR 0040 decision 14), by Sentry-Hook-Resource.
+  events:
+    issue:
+      action: action
+      issue.id: data.issue.id
+      issue.title: data.issue.title
+      issue.url: data.issue.web_url
+      project: data.issue.project.slug
+    event_alert:
+      action: action
+      alert.rule: data.triggered_rule
+      issue.title: data.event.title
+      issue.url: data.event.web_url

@@ -12,6 +12,47 @@ const software: Intake = {
   from: '2026-10-20',
   to: '2026-10-26',
   sources: { github: 22, people: 11, cli: 0, api: 0, schedule: 7, webhook: 2 },
+  window: '30d',
+  origins: { person: 160, plan: 377, trigger: 4, follow_up: 31 },
+  coming_up: [
+    {
+      id: 'item-561',
+      ref: 'software#561',
+      title: 'Add the migration that drops the connection tables',
+      origin: 'follow-up',
+      from_item: 'software#519',
+      start: { at: '2026-11-19T09:00:00Z' },
+      needs: [],
+      created_at: '2026-11-01T09:00:00Z',
+    },
+    {
+      id: 'item-562',
+      ref: 'software#562',
+      title: 'Renew the docs site certificate check',
+      origin: 'person',
+      via: 'web',
+      created_by: { kind: 'user', id: 'local', name: 'Freddy Cruz' },
+      start: { at: '2026-11-24T09:00:00Z' },
+      needs: [],
+      created_at: '2026-11-02T09:00:00Z',
+    },
+  ],
+  coming_up_total: 2,
+  triage: {
+    item: {
+      id: 'item-570',
+      ref: 'software#570',
+      title: 'Follow-ups from #513 and 2 more',
+      station: 'intake',
+      follow_ups: 61,
+    },
+    waiting: [{ id: 'item-525', ref: 'software#525', title: 'Build knowledge as files', follow_ups: 9 }],
+  },
+  webhooks: [
+    { id: 'hook-1', name: 'github-acme', sender: 'github', state: 'receiving' },
+    { id: 'hook-2', name: 'deploys', sender: 'standard', state: 'no_trigger' },
+  ],
+  suggestions: [],
   triggers: [
     {
       name: 'issues-labeled-factory',
@@ -55,7 +96,7 @@ const software: Intake = {
     },
     {
       name: 'deploy-failed',
-      enabled: true,
+      enabled: false,
       source: 'webhook',
       on: 'webhook.cloudflare.deploy.failed',
       when: 'webhook.cloudflare.deploy.failed',
@@ -112,5 +153,5 @@ function triggersOf(yamlText: string): IntakeTrigger[] {
 /** The intake of the factory with this name, from its current version's factory.yaml when it has no fixture. */
 export function intakeOf(factory: string, yamlText: string): Intake {
   if (factory === 'software') return software;
-  return { items: 0, from: null, to: null, sources: none, triggers: triggersOf(yamlText) };
+  return { items: 0, from: null, to: null, sources: none, suggestions: [], triggers: triggersOf(yamlText) };
 }

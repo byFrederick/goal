@@ -125,35 +125,46 @@ object, required.
   - `triggers`: array of object. Rules that turn an event, a schedule or a webhook delivery into a work item (ADR 0026). Each name is unique within the factory.
     - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. Names the trigger in the API, the UI and the firing log; unique within the factory.
     - `enabled`: boolean, default `true`. A disabled trigger matches nothing.
-    - `on`: string matching `^(github\.check_run\.failed|github\.issues\.labeled|schedule|webhook\.[a-z][a-z0-9-]{1,38}[a-z0-9](\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$`, required. The event key: github.check\_run.failed, github.issues.labeled, schedule, or webhook.&lt;endpoint name&gt; with an optional .&lt;event&gt; matched against the delivery's event field.
+    - `on`: string matching `^(schedule|(webhook\.)?[a-z][a-z0-9-]{1,38}[a-z0-9](\.[A-Za-z0-9_][A-Za-z0-9_.-]*)?)$`, required. What the trigger fires on: schedule; &lt;sender&gt;.&lt;event&gt; (github.check\_run), that event from every webhook of the sender open to the factory; &lt;webhook&gt;.&lt;event&gt;, that event to one organization webhook; or &lt;webhook&gt;, every event to it. github.check\_run.failed and github.issues.labeled, as written before, read as github.check\_run with conclusion failure and github.issues with action labeled, and webhook.&lt;name&gt;\[.&lt;event&gt;\] as &lt;name&gt;\[.&lt;event&gt;\].
     - `cron`: string. When on is schedule, and only then: five cron fields (minute, hour, day of month, month, day of week).
     - `timeZone`: string. When on is schedule, and only then: the IANA time zone the cron is read in. Defaults to UTC.
-    - `filter`: object. Filters on the event's fields; every one given must match.
+    - `filter`: object. Filters on the event's normalized fields, which the sender's event table gives, and on its payload; every one given must match. Publish refuses a filter on a field the event never supplies.
       - `branch`: string. The event's branch equals this.
-      - `repo`: string. The event's repository, owner/name, equals this.
+      - `repo`: string or array of string. The event's repository, owner/name in any case, is this one or one of this list; leaving it out watches every repository.
       - `label`: string. The event's label equals this.
+      - `action`: string or array of string. The event's action (opened, labeled, completed…) is this one or one of this list.
+      - `conclusion`: string or array of string. The event's conclusion (failure, success…) is this one or one of this list.
       - `paths`: array of string. Globs; the event matches when any changed path matches one.
       - `authors`: array of string. The event's sender is one of these.
       - `skipBots`: boolean. Drop events whose sender is a bot.
+      - `match`: map of string or array of string. Payload fields by dot path (check\_run.app.slug), each matched against a value or a list of values; all must match.
     - `only`: object. Checks made before an item is created, in this order.
       - `failuresInARow`: integer. Passes when the same check failed on the last n events for it.
       - `dedupe`: string matching `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`. An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it.
-      - `modelAgrees`: object. The model check, run last: passes when a model answers yes to the question about the event, which it reads as untrusted data.
-        - `question`: string, required. The yes or no question the model answers about the event: not blank, at most 500 characters.
-        - `key`: string. The {{secret}} that pays for the check; runtime.modelKey when unset.
+      - `modelAgrees`: object. Ignored (ADR 0040): the model check is removed. A trigger that has it skips every event that reaches it, and the definition loads with the warning field-ignored: turn the trigger into a check.
+        - `question`: string, required. The yes or no question the model answered. Ignored.
+        - `key`: string. The {{secret}} that paid for the check. Ignored.
         - `connection`: string. Removed by ADR 0037 (moved-to-environment): set key. Accepted so versions published before still load and run until Goal converts them.
-        - `model`: string. The model asked; the default model when unset.
+        - `model`: string. The model asked. Ignored.
     - `create`: object, required. The item the trigger creates.
       - `type`: string, required. One of board.workTypes.
       - `station`: string, required. The station id the item starts at.
       - `lane`: string. The item's lane: a key of that station's route.
       - `expedite`: boolean. Put the item in the expedite flow.
-      - `title`: string. The item's title; {{field}} placeholders take the event's fields.
-      - `brief`: string. The item's brief; {{field}} placeholders take the event's fields, which reach agents only as untrusted data.
+      - `title`: string. The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.&lt;path&gt;}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters.
+      - `brief`: string. The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md), as an agent's prompt is; {{field}} and {{payload.&lt;path&gt;}} placeholders take the event's values, which reach agents only as untrusted data.
+      - `trusted`: boolean. File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set.
     - `limits`: object. Caps on what the trigger creates.
       - `perDay`: integer. At most this many items created by the trigger since the start of the UTC day.
+      - `perHour`: integer. At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none.
+      - `perCheck`: integer. Only with check: at most this many items one check files; what is over it is skipped, "over the limit". Defaults to 5. A check's perDay counts the items the trigger filed, not its firings.
       - `pauseOnBudget`: boolean. Skip events while the factory's budget is spent (today the weekly budget).
-  - `intake`: array of object. Deprecated and ignored: nothing reads it, and board.triggers replaces it (ADR 0026). Still accepted so existing definitions load.
+    - `check`: object. When on is schedule, and only then: each firing runs an agent that looks at the source and answers what to file, instead of filing an item (ADR 0040). The cron may fire at most every 5 minutes, and one check per trigger runs at a time. Publish warns when the agent may use tools that aren't read-only; a check never edits or runs commands, and clones nothing.
+      - `agent`: string, required. An agent of the factory; the check runs with its environment, tools and model.
+      - `brief`: string, required. What to look for and what is worth an item, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md).
+      - `maxUsd`: number, default `0.1`. The most one check may spend.
+      - `timeout`: string matching `^[0-9]+(s|m|h)$`, default `"5m"`. How long one check may run, such as 5m; at most 1h.
+  - `intake`: array of object. Ignored: board.triggers replaces it (ADR 0026, ADR 0040). Still accepted so existing definitions load, with the warning field-ignored.
     - `source`: one of `"manual"`, `"github-issues"`, `"schedule"`, `"webhook"`, `"email"`, required.
     - `repo`: string.
     - `labels`: array of string.
@@ -209,6 +220,10 @@ object, required.
     - `dependencies`: object. Which station output fields set an item's dependencies. The platform names no field; an omitted key maps none.
       - `paths`: string. The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. Items whose paths overlap wait for each other under assemblies.overlap serialize.
       - `after`: string. The output property listing the open items of this factory, outside the output's plan, that the work must follow, as item refs &lt;factory&gt;#&lt;number&gt;. Each becomes a linked edge from the item, or from every part of its plan with no in-plan needs; a ref that is malformed, of another factory, unknown, done, cancelled or would close a cycle fails the output.
+    - `outputs`: object. Which station output fields goald reads besides the contract's own. The platform names no field; an omitted key maps none.
+      - `followUps`: string. The top-level output field that holds follow-ups: work an agent noticed outside its item. goald keeps the first 10 entries of each accepted output on the item, each text once. An entry is a string (text for triage) or an object with text and optionally for, an open item &lt;factory&gt;#&lt;number&gt; to note, or start, {at, in, after} with a title and optionally type, lane, repositories and factory, an item of its own filed when the work lands; start wins over for. A station contract that declares the field must declare it as a plain array: no $ref, no maxItems and no required on its items.
+      - `close`: string. The top-level output field whose text closes the item: when an accepted output gives 10 to 500 characters there, goald cancels the item at its station with that text as the reason, the agent the actor. Only an item a trigger or a follow-up filed, and never a part, can be closed. On a person's item, a part, an output that also plans parts, or a text outside the limits, the output fails its check and the agent asks a person instead. Empty or only whitespace closes nothing.
+    - `followUpsFrom`: array of string matching `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`. The factories, by metadata.id, this factory accepts follow-ups from: their notes and their items. None by default.
     - `retry`: object. How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.
       - `transient`: object. Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip): each runs again in a new box after a backoff that doubles with each loss.
         - `attempts`: integer. The most runs one claim makes when its sandbox is lost; the loss that reaches it blocks the item. Default 3.

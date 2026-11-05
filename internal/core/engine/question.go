@@ -242,7 +242,7 @@ type saidByPeople struct {
 }
 
 // peopleSaid reads what people said since the item's latest run started: their notes, the
-// questions they answered and the tool calls they decided.
+// questions they answered and the tool calls they decided, with the notes other items left.
 func (e *Engine) peopleSaid(ctx context.Context, id domain.ItemID) (saidByPeople, error) {
 	notes, err := e.withNotes(ctx, id, nil)
 	if err != nil {

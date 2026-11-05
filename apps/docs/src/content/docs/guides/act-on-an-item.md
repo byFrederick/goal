@@ -130,6 +130,15 @@ goal lane acme-line#3 backend
 
 On the Board and in Items, Set lane changes it from the item's menu.
 
+## Drop or file a follow-up
+
+An agent's follow-up waits on its item until the work lands (see [follow-ups filed when work lands](/docs/concepts/work-items/#follow-ups-filed-when-work-lands)). Through the API, a person can stop one or take one back:
+
+- `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/drop` drops a waiting follow-up, so it is never delivered or filed. Its reason names you. It needs the permission to decide on the item, as Cancel does.
+- `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/file` files an item from a dropped follow-up, or from one whose triage item is done or cancelled. The body is `{title, body, type, lane, start}`, of which only `title` is required, as when you submit an item. The new item has origin `follow-up`, you as its filer, a generation one above the source item's, and the source's untrusted flag. It needs the permission to file items.
+
+Drop answers `409 follow-up-state` for a follow-up that isn't waiting, and File for any follow-up other than those two. Both answer `404 follow-up-not-found` for a follow-up that isn't the item's. The CLI and the item page don't offer these yet.
+
 ## Related
 
 - [Read the Board, the item Timeline and Runs](../read-the-board-timeline-and-runs/) to see where an item waits.

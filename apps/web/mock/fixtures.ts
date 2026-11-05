@@ -12,6 +12,7 @@ import type {
   AuditEntry,
   ClassOfService,
   Factory,
+  FollowUp,
   GateTally,
   ItemEvent,
   ItemQuestion,
@@ -68,6 +69,8 @@ export interface MockItem {
   tool_approval?: ToolApproval | null;
   /** The assembly it is a part of (the assembly's item id) and its place among the parts, 1-based. */
   partOf?: { id: string; part: number };
+  /** The follow-ups its runs wrote (Item.follow_ups), as getItem returns them. */
+  follow_ups?: FollowUp[];
 }
 
 /** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
@@ -256,6 +259,8 @@ interface Seed {
   /** The assembly the item is a part of (its seed number) and its place among the parts. */
   assembly?: number;
   part?: number;
+  /** The follow-ups its runs wrote, the card on the item's page. */
+  followUps?: { text: string; target: 'note' | 'start' | 'triage'; state: 'waiting' | 'delivered' | 'filed' }[];
   steps: Step[];
 }
 
@@ -884,6 +889,18 @@ const goalSeeds: Seed[] = [
     state: 'waiting_human',
     createdMin: 170,
     updatedMin: 48,
+    followUps: [
+      {
+        text: 'The checkout dashboard has no alert on p95 latency, so this took 38 minutes to be noticed.',
+        target: 'triage',
+        state: 'waiting',
+      },
+      {
+        text: 'Redis evictions on session-cache started at the same time; look at it when this is closed.',
+        target: 'note',
+        state: 'delivered',
+      },
+    ],
     outputs: {
       spec: specOutput(
         'Embed web/dist into goald and serve it at /, falling back to index.html for client routes; /v1 and /mcp keep their handlers.',
@@ -1879,6 +1896,20 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
       ...(seed.paths ? { paths: seed.paths } : {}),
       ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
+      ...(seed.followUps
+        ? {
+            follow_ups: seed.followUps.map((f, i) => ({
+              id: `follow-up-${seed.number}-${i + 1}`,
+              item_id: id,
+              station: seed.station,
+              agent: seed.agent ?? 'investigator',
+              text: f.text,
+              target: f.target,
+              state: f.state,
+              created_at: new Date(updated).toISOString(),
+            })),
+          }
+        : {}),
       ...(seed.assembly ? { partOf: { id: uuid(factoryIndex + 1, seed.assembly), part: seed.part ?? 1 } } : {}),
       spans: [],
     };

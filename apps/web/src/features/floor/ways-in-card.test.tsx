@@ -101,14 +101,14 @@ describe('WaysInCard', () => {
     expect(screen.queryByRole('button', { name: /^Copy label/ })).toBeNull();
   });
 
-  it('copies goal item create', async () => {
+  it('copies goal run', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderWays();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Copy command' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('goal item create'));
-    expect(screen.getByText('goal item create')).toBeTruthy();
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('goal run'));
+    expect(screen.getByText('goal run')).toBeTruthy();
   });
 
   it('offers Connect for Slack while the organization has no slack connection', async () => {

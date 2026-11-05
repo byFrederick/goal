@@ -87,19 +87,30 @@ func newFlags(name string) *flag.FlagSet {
 	return fs
 }
 
-// runItem submits an item and follows it: goal run <factory> "<brief>" [--type T] [--body B].
-// The brief's first line is the title; the rest, and --body, is the body.
+// runItem submits an item and follows it: goal run <factory> "<brief>" [--type T] [--body B]
+// [--at <time> | --in <wait>] [--after <item>]... The brief's first line is the title; the rest,
+// and --body, is the body. An item with a start is not followed, as with --detach: it waits.
 func runItem(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("run")
 	typ := fs.String("type", "", "work type (default: the factory's first)")
 	body := fs.String("body", "", "item body")
 	priority := fs.Int("priority", 0, "priority (higher first)")
 	detach := fs.Bool("detach", false, "submit without following the item")
+	sf := addStartFlags(fs)
+
+	var after refsFlag
+	fs.Var(&after, "after", "start after this item (repeatable)")
+
 	org := addOrgFlag(fs)
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 2 || strings.TrimSpace(pos[1]) == "" {
 		return errUsage
+	}
+
+	start, later, err := sf.startOf(after)
+	if err != nil {
+		return err
 	}
 
 	title, rest, _ := strings.Cut(strings.TrimSpace(pos[1]), "\n")
@@ -111,7 +122,7 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	}
 
 	res, err := c.SubmitItemWithResponse(ctx, c.org, pos[0], gen.NewItem{
-		Title: strings.TrimSpace(title), Type: optional(*typ), Body: &text, Priority: priority,
+		Title: strings.TrimSpace(title), Type: optional(*typ), Body: &text, Priority: priority, Start: startIf(start, later),
 	})
 	if err != nil {
 		return apiDown(err)
@@ -124,7 +135,11 @@ func runItem(ctx context.Context, out *printer, getenv func(string) string, args
 	it := res.JSON201
 	out.printf("submitted %s %q (%s) at %s\n", it.Ref, it.Title, it.Id, it.Station)
 
-	if *detach {
+	if later {
+		out.printf("%s", startLine(it, after))
+	}
+
+	if *detach || later {
 		return nil
 	}
 
@@ -316,6 +331,7 @@ var describers = map[string]func(gen.Event) string{
 	"created":       func(gen.Event) string { return "created" },
 	"moved":         func(e gen.Event) string { return fmt.Sprintf("moved %s → %s", str(e, "from"), str(e, "to")) },
 	"lane_set":      laneSet,
+	"start_changed": startChanged,
 	"claimed":       func(e gen.Event) string { return "claimed for " + str(e, "agent") },
 	"run_started":   func(e gen.Event) string { return "run started (" + e.Actor + ")" },
 	"run_finished":  runFinished,
@@ -427,6 +443,15 @@ func usd(v float64) string {
 }
 
 // laneSet renders a person's lane change; an item without a lane had (none).
+// startChanged is a person's change of the item's start: a new time, or Start now.
+func startChanged(e gen.Event) string {
+	if at := str(e, "start_at"); at != "" {
+		return "starts at " + at
+	}
+
+	return "starts now"
+}
+
 func laneSet(e gen.Event) string {
 	from := str(e, "from")
 	if from == "" {

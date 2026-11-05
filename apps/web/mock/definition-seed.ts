@@ -482,6 +482,7 @@ metadata:
   name: software
   title: Software
 spec:
+  runtime: { modelConnection: claude }
   agents:
     - name: architect
       description: Writes the spec for an item.
@@ -497,8 +498,8 @@ spec:
     workTypes: [feature, fix, refactor]
     stations:
       - { id: intake, name: Intake, kind: queue }
-      - { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }
-      - { id: build, name: Build, kind: agent, agent: builder, wip: 2 }
+      - { id: spec, name: Spec, kind: agent, agent: architect, wip: 2 }
+      - { id: build, name: Build, kind: agent, agent: backend-engineer, wip: 2 }
       - { id: review, name: Review, kind: agent, agent: reviewer, wip: 1 }
       - { id: done, name: Done, kind: done }
     flow:
@@ -530,7 +531,7 @@ const flakyTrigger = `    triggers:
           brief: "The dependency audit reported a finding. Update the direct dependency and say in the pull request which advisory it fixes."
 `;
 
-// A function: a reset seeds a fresh tree, so a draft one test opens is gone for the next.
+// A function, so each reset builds its own: a publish pushes onto the history it returns.
 const seedSoftware = () =>
   definition({
     versions: [

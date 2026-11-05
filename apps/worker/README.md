@@ -234,6 +234,36 @@ The spec's `knowledge` is the line's knowledge sources that apply to every run (
 - Output: `finished`'s `output` is `{ "observations": [...], "proposals": [...], "facts": [...] }`, checked by zod (`JonahReply`); `facts` is optional. An observation has `summary`, `detail`, `items`, `count`, `id` when it updates an open observation, `not_jonahs` when its cause is not a definition problem and, when it leads to a proposal, `proposal` (that proposal's index). A proposal has `title`, `summary`, `edits` (at least one, each with `path` and either `replacements`, at least one `{old, new}` with a non-empty `old`, or `content` for a new file), `evidence` (`event` and `reason`) and `estimate` (`metric` `sent_back_rate` or `lead_time_p85`, `station`, `after`, `cost_per_item_usd_delta`). The limits: at most 10 proposals; a path only `factory.yaml` or a `.md`, `.yaml` or `.json` file under `agents/`, `skills/`, `rules/` or `contracts/`, never `evals/`; an observation's index must name a proposal. A fact has `text` (1 to 300 characters), `items` (at least one item ref, such as `#12`) and `replaces` (the exact texts of the `memory.yaml` facts it replaces, or none). goald keeps a fact only when each item it names holds its text in a person's event, and writes the one `memory.yaml` proposal itself (ADR 0039 decision 7). goald applies the replacements to the version's files, checks the allowlist, the `factory.yaml` paths, invisible characters and `config.Check`, and computes the value before; the worker does not.
 - Errors: a reply that does not match the schema makes `finished` `failed` with an `error` and no `output`. A failed SDK result (such as `error_max_turns`) stays failed, without output. `goal-agent run` exits 0 only when the review finished with a validated reply.
 
+### Check mode
+
+A check (ADR 0040 decision 19) is a schedule trigger's agent run that looks at a source with its agent's environment and answers what to file. goald queues one per firing, leases it on any instance, and checks and records the answer; goal-agent runs the agent. The gateway serves the check bundle for a task token of kind `check`, which names the trigger and no item or station (`internal/gateway/check.go`). The spec carries a `check` block, and the bundle has no `repository` and no `definition` (refused otherwise). A spec with `check` and another mode block is refused. `item_id` and `station` are empty.
+
+```json
+{
+  "spec": { "item_id": "", "station": "", "agent": "watcher", "brief": "Look for new incidents.", "max_usd": 0.1, "…": "as above",
+    "check": {
+      "trigger": "new-incidents",
+      "input": {
+        "open": [{ "key": "INC-1", "ref": "#12", "title": "Checkout is down", "state": "in_progress", "last_note": "still down" }],
+        "closed": [{ "key": "INC-0", "ref": "#9", "how": "done", "why": "fixed", "at": "2026-11-02T10:00:00Z" }],
+        "last_decisions": { "file": [], "note": [], "skip": [] },
+        "state": { "since": "2026-11-03T14:05:00Z" }
+      } } },
+  "files": { "agent/prompt.md": "<base64>", "agent/output.schema.json": "<base64>" }
+}
+```
+
+- `brief` is the trigger's `check.brief` (a brief file's text), and `max_usd` its `check.maxUsd`. goald stops the run at `check.timeout`.
+- `input` is what goald read: the trigger's open items (at most 50, newest first), the keys whose items closed in the last 7 days, the newest done check's decisions and the state it saved (`null` when there is none). An item's key is the dedupe value of the firing that filed it.
+- `agent/output.schema.json` is the fixed answer contract (`domain.CheckAnswerSchema`).
+- The gateway removes the built-ins that edit or run (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, `Task`) from `tools_allow` and adds them to `tools_deny`, serves every `ask` tool of the environment and the connections as `off`, and gives no knowledge, rule or granted call. The check's MCP session on the gateway lists no tool.
+
+`goal-agent run` with a `check` reads `prompt.md` and installs the agent's skills, and runs the agent as for any task (`src/check.ts`), with these differences:
+
+- The worker removes the edit and run built-ins again, turns `ask` into `off`, and drops `gateway_url`, `knowledge` and `granted_calls`. The agent then has no `goal` MCP server (no `question__ask`), polls no notes and reports no Ask-first call.
+- The user prompt is the brief, then `## What goald gives this check` with `input` as JSON between `<untrusted-event-data>` delimiters (a closing tag in it is escaped, the block cut to 60,000 characters), then `## Your answer` with the answer's shape.
+- `finished`'s `output` is the agent's answer: `{ "file": [{ "key", "title", "brief", "type"?, "lane"?, "priority"?, "repositories"?, "start"?, "reopen"? }], "note": [{ "key", "text" }], "skip": [{ "key", "reason" }], "state"? }`. goald checks it with `domain.ParseCheckAnswer`. When the answer fails that check, the check fails with the reason, and the saved state stays as it was.
+
 ### Try mode
 
 A try of a past item ([ADR 0039](../../docs/adr/0039-jonah-learns-from-the-line.md) decision 9) is a station run whose bundle's `repository` names `commit`, the commit the original run started from, and `base_commit`, its base's commit then. Its task token is of kind `try` and names no item, and its spec's `brief` and `inputs` are what the original run recorded.

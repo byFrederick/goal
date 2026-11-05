@@ -41,7 +41,11 @@ import (
 // A Jonah run (ADR 0034 decision 1) holds no lease and works no item, so no item event is written
 // for it: its sandbox's prepare gets no repository's git login, as it clones none, and its agent
 // only the model connection's env. Without pins of its own, it pins the newest snapshot of each of
-// its line's knowledge sources scoped to no agent, station, lane or work type. The result names
+// its line's knowledge sources scoped to no agent, station, lane or work type.
+//
+// A check (ADR 0040 decision 19) holds no lease either and works no item: its agent gets its
+// environment, tools and MCP servers, its token names its trigger, and it pins no knowledge and
+// clones no repository (RunRequest.Check refuses both). The result names
 // the run's record (RunResult.RunID) once one was started, with an error too. The line's claims run through the same lifecycle (runOnce),
 // with a sandbox their attempts share and their output's checks under the same heartbeat.
 func (e *Engine) RunTask(ctx context.Context, req domain.RunRequest) (domain.RunResult, error) {
@@ -465,7 +469,7 @@ func (e *Engine) gatewayToken(ctx context.Context, req domain.RunRequest, runID 
 		Kind: req.Bundle, OrgID: req.OrgID, FactoryID: req.FactoryID, VersionID: req.Version, ItemID: req.Item, Station: req.Station,
 		Agent: req.Agent, RunID: runID, Connections: req.Connections, Model: req.Model, DeniedCommands: req.DeniedCommands,
 		Knowledge: req.Knowledge, Branch: req.Branch, Base: req.Base, WindowStart: unixSeconds(req.WindowStart, false), WindowEnd: unixSeconds(req.WindowEnd, true),
-		Manual: req.Manual, NoEnvironment: req.NoEnvironment, TryOf: req.TryOf, GradeOf: req.GradeOf, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
+		Manual: req.Manual, NoEnvironment: req.NoEnvironment, TryOf: req.TryOf, GradeOf: req.GradeOf, Trigger: req.Trigger, ExpiresAt: e.clock.Now().Add(req.Timeout + e.cfg.LeaseTTL).Unix(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("gateway token: %w", err)

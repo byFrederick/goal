@@ -72,24 +72,34 @@ export type {
   FactoryStart,
   FileChange,
   FileContent,
+  FileFollowUpRequest,
   FileInfo,
   FileMap,
+  FollowUp,
+  FollowUpStart,
   Inbox,
   InboxEntry,
   InboxEntryKind,
   Intake,
+  IntakeComingUp,
   IntakeEvent,
+  IntakeOrigins,
+  IntakeTriage,
   IntakeTrigger,
   IntakeTriggerDetail,
+  IntakeWebhook,
   Invitation,
   Item,
   ItemAnswer,
   ItemAt,
+  ItemCameFrom,
   ItemCard,
   ItemEvent,
   ItemFlow,
+  ItemNoteFrom,
   ItemQuestion,
   ItemSpan,
+  ItemStart,
   ItemState,
   ItemsAtRemovedStations,
   ItemTouches,
@@ -160,6 +170,7 @@ export type {
   SkillFiles,
   SkillListing,
   SkillPage,
+  StartRequest,
   Station,
   StationAction,
   StationKind,
@@ -182,6 +193,7 @@ export type {
   TouchReasonCount,
   TouchStats,
   TouchTrend,
+  TriggerSuggestion,
   User,
   ValidateDraftRequest,
   Validation,
@@ -293,4 +305,7 @@ export type ModelProposalEstimate = Schemas['ModelProposalEstimate'];
 export type Watch = Schemas['Watch'];
 export type WatchVerdict = Schemas['WatchVerdict'];
 export type TriggerTry = Schemas['TriggerTry'];
+export type TriggerCheck = Schemas['TriggerCheck'];
+export type TriggerCheckList = Schemas['TriggerCheckList'];
+export type TriggerCheckMemory = Schemas['TriggerCheckMemory'];
 export type TriggerTryStep = Schemas['TriggerTryStep'];

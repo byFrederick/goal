@@ -29,6 +29,11 @@ type Orgs interface {
 	ActiveOrgs(ctx context.Context) ([]domain.OrgID, error)
 }
 
+// Endpoints moves factory webhook endpoints to the organization: ports.Intake.
+type Endpoints interface {
+	ConvertEndpoints(ctx context.Context, by domain.Actor) ([]domain.ConvertedEndpoint, error)
+}
+
 // Deps is what Run works with; every one is required but CheckTimeout.
 type Deps struct {
 	Orgs        Orgs
@@ -36,8 +41,10 @@ type Deps struct {
 	Secrets     ports.OrgSecrets
 	// Settings is the organization's notification setting, pointed at its oldest Slack
 	// connection's secret.
-	Settings    ports.NotificationSettings
-	Knowledge   ports.Knowledge
+	Settings  ports.NotificationSettings
+	Knowledge ports.Knowledge
+	// Webhooks converts the organization's factory webhook endpoints (ADR 0040 decision 15).
+	Webhooks    Endpoints
 	Definitions ports.DefinitionStore
 	Publisher   Publisher
 	Conversions ports.FactoryConversions
@@ -70,6 +77,8 @@ type Tally struct {
 	Kinds, Live, Due int
 	// Slack is whether this run pointed the notification setting at a Slack connection's secret.
 	Slack bool
+	// Webhooks are the factory webhook endpoints moved to the organization.
+	Webhooks int
 }
 
 // Run converts every organization once, under the install's conversion lock, and logs one line
@@ -93,7 +102,8 @@ func (m *Mover) Run(ctx context.Context) error {
 
 			m.d.Logger.InfoContext(ctx, "moved over", slog.String("org", string(org)),
 				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources),
-				slog.Int("kinds", t.Kinds), slog.Int("live", t.Live), slog.Int("due", t.Due), slog.Bool("slack", t.Slack))
+				slog.Int("kinds", t.Kinds), slog.Int("live", t.Live), slog.Int("due", t.Due), slog.Bool("slack", t.Slack),
+				slog.Int("webhooks", t.Webhooks))
 		}
 
 		return nil
@@ -112,7 +122,8 @@ func (m *Mover) Run(ctx context.Context) error {
 // Org converts the organization in ctx: its connections' secrets first, then its Slack
 // notification setting, then its synced knowledge sources still on a connection, then each factory with no conversion
 // recorded whose current version is on connections, and last its knowledge sources into ADR 0038's
-// kinds, after the factories so a factory listing a live source still publishes its conversion.
+// kinds, after the factories so a factory listing a live source still publishes its conversion,
+// and last its factory webhook endpoints into the organization's webhooks.
 func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	var t Tally
 
@@ -137,7 +148,34 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		return t, err
 	}
 
-	return t, m.knowledge(ctx, &t)
+	if err := m.knowledge(ctx, &t); err != nil {
+		return t, err
+	}
+
+	return t, m.webhooks(ctx, &t)
+}
+
+// webhooks moves the organization's factory webhook endpoints to the organization, each open to
+// its factory and signed by a new secret holding its value (ADR 0040 decision 15), counting them
+// in t. Each rename is logged (webhook renamed) with its factory and both names, never a value,
+// so an owner can fix the triggers that name it. A second run finds none.
+func (m *Mover) webhooks(ctx context.Context, t *Tally) error {
+	org, _ := domain.OrgFrom(ctx)
+	done, err := m.d.Webhooks.ConvertEndpoints(ctx, Actor)
+	t.Webhooks = len(done)
+
+	for _, c := range done {
+		if c.Renamed() {
+			m.d.Logger.WarnContext(ctx, "webhook renamed", slog.String("org", string(org)), slog.String("factory", string(c.FactoryID)), slog.String("from", c.From),
+				slog.String("to", c.Name), slog.String("secret", c.Secret))
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("convert webhook endpoints: %w", err)
+	}
+
+	return nil
 }
 
 // knowledge moves the organization's knowledge sources onto files (ADR 0038 decision 16): each
