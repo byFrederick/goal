@@ -159,6 +159,25 @@ board:
 - **The outcome.** The transition that accepts the output cancels the item at its station: state `cancelled`, lease outcome `advanced`. Its `cancelled` event has the agent as actor and data `reason` (the text), `station`, `agent` and `closed: true`, and the audit log gets `item.cancelled` by the agent. This is not a person's Cancel, which takes a running run's lease. A gate that rejects ignores the close.
 - **Follow-ups of a closed triage item** keep File, as those of any cancelled triage item do, so a person can take any of them back.
 
+### Adding repositories: `board.flow.outputs.repositories`
+
+`board.flow.outputs.repositories` names the output property whose list of repositories joins the item ([ADR 0041](../adr/0041-code-and-github-without-an-app.md) decision 4). With the key unset, no output adds a repository; an item's list then grows only when a run pushes to one.
+
+```yaml
+board:
+  flow:
+    outputs:
+      repositories: repositories
+```
+
+```json
+{ "repositories": ["api", "acme/web", "https://github.com/acme/docs"] }
+```
+
+- **The names.** Each is resolved against the `runtime.repositories` of the version the run started on, as at filing: an entry's name, `owner/name` or an https URL an entry covers. Names of the same repository count once. A missing or `null` property adds none.
+- **The outcome.** The transition that accepts the output adds the repositories the item lacks, after its own, joined `output`. A gate that rejects adds none, and neither does an output that fails its check.
+- **Refusals.** The output fails its check, and goes back to the agent with the reason like any other bad output (a `contract_failed` event), when the property is not a list of strings, when a name is not one of the factory's repositories (the reason quotes it), or when the item would have more than 10 repositories. The count is the item's repositories, those this run pushed to included, plus the new ones. A push past 10 only leaves the repository off the item; an output's names past 10 fail, so the agent can name fewer.
+
 ## Station context
 
 A station's optional `context` list names what goald preloads into the `GOAL_FEEDBACK` of every run at the station. Its only value is `inflight` ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) decision 1); a station without `context` gets nothing preloaded.

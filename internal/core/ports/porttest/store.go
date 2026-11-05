@@ -1023,6 +1023,7 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 	}
 
 	s.keepFollowUps(it, t.FollowUps, t.At)
+	s.joinRepositories(it.ID, domain.JoinedOutput, t.Repositories, t.At)
 }
 
 // checkLease refuses a transition that releases or takes a lease without an outcome, names both,

@@ -37,7 +37,7 @@ Name a repository in any of these forms:
 
 Case and a trailing `.git` do not matter, and names that point at the same repository count once. An item has at most 10 repositories. An item that names none works on the factory's default entry's repository, or on none when the factory has no default entry. It keeps that repository from its first run, so changing the default entry later does not move it.
 
-An item's list grows as its agents work. When a run pushes a change to a repository the item does not have, that repository joins the item, joined `push`, until the item has 10. A repository a run only read, or one past the 10, does not join the item; the run still records it.
+An item's list grows as its agents work. When a run pushes a change to a repository the item does not have, that repository joins the item, joined `push`, until the item has 10. A repository a run only read, or one past the 10, does not join the item; the run still records it. When the factory maps `board.flow.outputs.repositories`, an agent's accepted output can also add the repositories it names there, joined `output`. An output whose names would give the item more than 10 repositories fails its check with the count, and the agent tries again.
 
 A value that matches none of the factory's entries is refused with a 400 problem that quotes the value as you gave it, and nothing is filed. So is an owner entry's name, an `owner/name` on more than one host, and an 11th repository.
 

@@ -952,6 +952,28 @@ func TestLine_CarriesClose(t *testing.T) {
 	}
 }
 
+// board.flow.outputs.repositories maps the field whose repositories join the item onto the line;
+// an empty or non-string value is a schema problem.
+func TestLine_CarriesOutputRepositories(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { repositories: joining }\n", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if o := f.Line().Flow.Outputs; o.Repositories != "joining" {
+		t.Errorf("outputs = %+v; want repositories joining", o)
+	}
+
+	for _, flow := range []string{"outputs: { repositories: \"\" }", "outputs: { repositories: [a] }"} {
+		_, problems := Check(checkTree(baseFactory+"    flow:\n      "+flow+"\n", nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("flow %s: problems %+v, want a schema problem", flow, problems)
+		}
+	}
+}
+
 // A station contract that declares the mapped follow-ups field declares it as a plain array, so a
 // follow-up never fails its run's checks: Load refuses a $ref, an item limit or required inner
 // fields, and takes strings, objects or both. Without the field mapped, the contract is not read.
