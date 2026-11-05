@@ -427,3 +427,50 @@ func (e *Engine) TryCheck(ctx context.Context, factory domain.FactoryID, trigger
 
 	return f, nil
 }
+
+// ClearCheckState deletes the saved state of the trigger of the factory's current line (ADR 0040
+// decision 19, Clear on the check's page), so its next check starts with none; its keys stay, as
+// they stop a closed key from being filed again. It writes a trigger.state_cleared audit entry by
+// the actor by. ErrTriggerNotFound for a name the line does not have, ErrNoCheck for a trigger
+// without a check, and ErrStillChecking while its check is queued or running, because that check
+// would save its state again when it finishes.
+func (e *Engine) ClearCheckState(ctx context.Context, factory domain.FactoryID, trigger string, by domain.Actor) error {
+	switch {
+	case e.intake == nil:
+		return errNoIntake
+	case e.audit == nil:
+		return errNoAudit
+	}
+
+	l, err := e.lineIn(ctx, factory)
+	if err != nil {
+		return fmt.Errorf("clear check state: %w", err)
+	}
+
+	t, ok := lineTrigger(l, trigger)
+
+	switch {
+	case !ok:
+		return fmt.Errorf("clear check state: %w: %s is not in the factory's current definition", ErrTriggerNotFound, trigger)
+	case t.Check == nil:
+		return fmt.Errorf("clear check state of %s: %w", t.Name, ErrNoCheck)
+	}
+
+	switch err := e.intake.ClearCheckState(ctx, l.FactoryID, t.Name); {
+	case errors.Is(err, ports.ErrConflict):
+		return fmt.Errorf("clear check state of %s: %w", t.Name, ErrStillChecking)
+	case err != nil:
+		return fmt.Errorf("clear check state of %s: %w", t.Name, err)
+	}
+
+	if err := e.audit.Append(ctx, domain.AuditEntry{
+		Actor: by, Action: domain.AuditTriggerStateCleared, TargetKind: domain.AuditTargetTrigger, TargetID: t.Name, FactoryID: l.FactoryID,
+	}); err != nil {
+		return fmt.Errorf("clear check state of %s: audit: %w", t.Name, err)
+	}
+
+	e.log.InfoContext(ctx, "check state cleared", slog.String("org_id", string(l.OrgID)), slog.String("factory", string(l.FactoryID)),
+		slog.String("trigger", t.Name))
+
+	return nil
+}
