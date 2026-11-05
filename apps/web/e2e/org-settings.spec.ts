@@ -8,6 +8,7 @@ import {
   expectToast,
   isPhone,
   orgMarkOf,
+  openNavigation,
   orgNav,
   recordToasts,
 } from './support';
@@ -42,8 +43,9 @@ test('organization settings is accessible and fits the screen', async ({ page })
   // There is no short mark, model access or secrets on the page now.
   await expect(page.getByLabel('Short mark')).toHaveCount(0);
   await expect(page.getByText('Model access')).toHaveCount(0);
-  // Email code is on and Google is off; both are shown, not changed, until the API has them.
-  await expect(page.getByRole('switch', { name: 'Email code sign-in' })).toHaveAttribute('aria-checked', 'true');
+  // Sign-in is off in this session, so the API lists no way in: both switches show that, and neither changes.
+  await expect(page.getByRole('switch', { name: 'Email code sign-in' })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('switch', { name: 'Email code sign-in' })).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByRole('switch', { name: 'Google sign-in' })).toHaveAttribute('aria-disabled', 'true');
   // Transfer ownership needs sign-in, which is off here.
   await expect(page.getByLabel('Transfer ownership')).toHaveCount(0);
@@ -55,7 +57,8 @@ test('organization settings is accessible and fits the screen', async ({ page })
 test('controls the API does not have yet are disabled and send nothing', async ({ page }) => {
   await page.goto('/o/acme/settings');
   const google = page.getByRole('switch', { name: 'Google sign-in' });
-  await google.click();
+  // Playwright waits for a control that says aria-disabled, so the click is forced to prove it sends nothing.
+  await google.click({ force: true });
   await expect(google).toHaveAttribute('aria-checked', 'false');
   for (const name of ['Set up', 'Use your own bucket', 'Open audit log', 'Export']) {
     await expect(page.getByRole('button', { name, exact: true })).toHaveAttribute('aria-disabled', 'true');
@@ -79,6 +82,7 @@ test('a new name shows in the sidebar and the top row once saved', async ({ page
 
   await expectToast(page, 'Saved');
   await expect(save(page)).toBeDisabled();
+  await openNavigation(page);
   await expect(orgMarkOf(page, 'Acme Robotics')).toBeVisible();
   await expect(page).toHaveTitle('Settings · Acme Robotics · Goal');
 });
@@ -134,9 +138,12 @@ test('slot limits: per factory and across the organization', async ({ page, requ
   await page.goto('/o/acme/settings');
   await expect(page.getByText('A factory without a limit may use all 6 slots.')).toBeVisible();
 
+  // Acme has four factories; software has no limit yet, so the note still says one may use every slot.
   await slotsFor(page).getByLabel('support').fill('3');
+  await expect(page.getByText('A factory without a limit may use all 6 slots.')).toBeVisible();
+  await slotsFor(page).getByLabel('software').fill('1');
   await expect(
-    page.getByText('Limits add up to 8 of 6 slots, so factories wait for each other at peak. That’s allowed.'),
+    page.getByText('Limits add up to 9 of 6 slots, so factories wait for each other at peak. That’s allowed.'),
   ).toBeVisible();
   await save(page).click();
   await expectToast(page, 'Saved');
@@ -156,6 +163,7 @@ test('slot limits: per factory and across the organization', async ({ page, requ
 test('leaving with unsaved changes asks first', async ({ page }) => {
   await page.goto('/o/acme/settings');
   await page.getByLabel('Name').fill('Acme Robotics');
+  await openNavigation(page);
   const goal = orgNav(page).getByRole('link', { name: /^G goal / });
 
   await goal.click();
@@ -167,6 +175,7 @@ test('leaving with unsaved changes asks first', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/acme\/settings$/);
   await expect(page.getByLabel('Name')).toHaveValue('Acme Robotics');
 
+  await openNavigation(page);
   await goal.click();
   await prompt.getByRole('button', { name: 'Leave' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/goal$/);
@@ -192,7 +201,7 @@ test('transfer ownership: an admin is chosen in the row, then confirmed by typin
 test('delete is enabled only by the typed name, then opens the next organization', async ({ page, request }) => {
   await page.goto('/o/acme/settings');
   await expect(
-    page.getByText('Stops all 3 factories and deletes their definitions, items and logs. This can’t be undone.'),
+    page.getByText('Stops all 4 factories and deletes their definitions, items and logs. This can’t be undone.'),
   ).toBeVisible();
   const typed = page.getByLabel('Type Acme to confirm');
   const confirm = page.getByRole('button', { name: 'Delete organization', exact: true });
