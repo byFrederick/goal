@@ -27,6 +27,7 @@ for (const size of sizes) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(path);
       await expect(page.getByRole('region', { name: 'Runtime' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Code' })).toBeVisible();
       await expect(page.getByRole('region', { name: 'Notifications' }).getByText('slack-bot')).toBeVisible();
 
       await expectNoHorizontalScroll(page);
@@ -59,6 +60,17 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
     expect(box.height, `${box.name} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
   }
   await expectAccessible(page);
+});
+
+test('the Code section’s ⓘ buttons are 44 px on a phone', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(path);
+  const code = page.getByRole('region', { name: 'Code' });
+  await expect(code).toBeVisible();
+  for (const tip of ['About Agents that write', 'About Secrets and webhooks']) {
+    await expectTarget44(code.getByRole('button', { name: tip }), tip);
+  }
 });
 
 test('the environments Edit link is 44×44 and no Jonah ⓘ lies over the field under it at 390 px', async ({

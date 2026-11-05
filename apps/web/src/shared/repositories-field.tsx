@@ -81,7 +81,7 @@ export function RepositoriesField({
     <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
       <legend className="mb-1 flex items-center gap-1 p-0 text-sm text-muted">
         Repositories
-        <InfoTip about="Repositories">
+        <InfoTip about="Repositories" className="max-md:size-11">
           {`Agents start with these, and open any other repository ${factory} covers as they need them.`}
         </InfoTip>
       </legend>
@@ -113,7 +113,7 @@ function RepoChip({ repo, onRemove }: { repo: string; onRemove: () => void }) {
     <Leaving leaving={leaving} className="min-w-0 max-w-full">
       <span
         className={cn(
-          'inline-flex h-7 max-w-full items-center gap-1 rounded-chip border border-line bg-panel pr-1 pl-3 text-secondary text-ink',
+          'inline-flex h-7 max-w-full items-center gap-1 rounded-chip border border-line bg-panel pr-1 pl-3 max-md:h-11 text-secondary text-ink',
           // A chip that is added fades in and rises 4px (MOTION.md, A new item appears in a list or column).
           'motion-safe:animate-item-in motion-reduce:animate-fade-in',
         )}
@@ -125,7 +125,7 @@ function RepoChip({ repo, onRemove }: { repo: string; onRemove: () => void }) {
           type="button"
           aria-label={`Remove ${repo}`}
           onClick={leave}
-          className="press inline-flex size-6 flex-none items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none"
+          className="press inline-flex size-6 flex-none max-md:size-11 items-center justify-center rounded-chip text-muted transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none"
         >
           <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>

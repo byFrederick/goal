@@ -287,7 +287,11 @@ function CodeForm({
       ...o,
       value: o.value as CodeAccess,
       disabled: reason !== undefined,
-      badge: reason ? <InfoTip about={`${o.label} being unavailable`}>{reason}</InfoTip> : undefined,
+      badge: reason ? (
+        <InfoTip about={`${o.label} being unavailable`} className="max-md:size-11">
+          {reason}
+        </InfoTip>
+      ) : undefined,
     };
   });
 
@@ -358,7 +362,7 @@ function CodeForm({
             <div className="flex flex-col gap-2">
               <span className="flex items-center gap-1 text-sm font-medium text-ink">
                 Repositories
-                <InfoTip about="repositories">
+                <InfoTip about="repositories" className="max-md:size-11">
                   A whole organization covers every repository in it, including new ones. Each item clones the one it’s
                   about. Read and write access works either way.
                 </InfoTip>

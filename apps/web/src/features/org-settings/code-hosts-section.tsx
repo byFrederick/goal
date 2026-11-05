@@ -92,7 +92,7 @@ export function CodeHostsSection() {
       id="hosts"
       title="Code hosts"
       aside={
-        <InfoTip about="Code hosts" side="right">
+        <InfoTip about="Code hosts" className="max-md:size-11">
           Tokens go only to these hosts, which must be reachable from the internet
         </InfoTip>
       }
@@ -138,7 +138,7 @@ export function CodeHostsSection() {
       {ready && mayEdit ? (
         <form onSubmit={add} noValidate className="contents">
           <SettingsRow id="code-host" label="Add a host" error={problem ?? undefined}>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 max-sm:flex-col max-sm:items-stretch">
               <Input
                 id="code-host"
                 name="host"
@@ -154,16 +154,22 @@ export function CodeHostsSection() {
                   setHost(e.target.value);
                   setProblem(null);
                 }}
-                className="min-w-0 flex-1 basis-48 font-mono"
+                className="min-w-0 flex-1 basis-48 font-mono max-sm:basis-auto"
               />
               <Select
                 aria-label="Kind"
                 value={kind}
                 options={kindOptions}
-                className="w-32"
+                className="w-32 max-sm:w-full"
                 onValueChange={(v) => setKind(v as CodeHostKind)}
               />
-              <Button type="submit" variant="action" size="md" disabled={!host.trim() || save.isPending || leavingNow}>
+              <Button
+                type="submit"
+                variant="action"
+                size="md"
+                className="max-sm:w-full"
+                disabled={!host.trim() || save.isPending || leavingNow}
+              >
                 Add
               </Button>
             </div>
@@ -180,15 +186,18 @@ function HostLine({ host, fresh = false, children }: { host: CodeHost; fresh?: b
     <div
       className={
         fresh
-          ? 'flex min-w-0 animate-row-in items-center justify-between gap-3 border-t border-rule px-5 py-3 motion-reduce:animate-none'
-          : 'flex min-w-0 items-center justify-between gap-3 border-t border-rule px-5 py-3'
+          ? 'flex min-w-0 animate-row-in flex-col items-stretch justify-between gap-2 border-t border-rule px-5 py-3 motion-reduce:animate-none max-sm:items-start sm:flex-row sm:items-center sm:gap-3'
+          : 'flex min-w-0 flex-col justify-between gap-2 border-t border-rule px-5 py-3 max-sm:items-start sm:flex-row sm:items-center sm:gap-3'
       }
     >
-      <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex min-w-0 max-w-full flex-col gap-1">
         <b className="truncate font-semibold text-body text-ink" title={host.host}>
           {host.host}
         </b>
-        <span className="truncate text-secondary text-muted" title={host.built_in ? undefined : host.api_base}>
+        <span
+          className="truncate text-secondary text-muted max-sm:max-w-full"
+          title={host.built_in ? undefined : host.api_base}
+        >
           {kindNames[host.kind]}
           {host.built_in ? null : ` · ${host.api_base}`}
         </span>

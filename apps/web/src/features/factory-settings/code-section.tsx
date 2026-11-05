@@ -105,7 +105,9 @@ function EntryRow({
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
                   <ResultChip result={result} />
                   {result.warning || result.note ? (
-                    <span className="min-w-0 text-secondary text-muted">{result.warning ?? result.note}</span>
+                    <span className="min-w-0 break-words text-secondary text-muted">
+                      {result.warning ?? result.note}
+                    </span>
                   ) : null}
                 </div>
               ) : (

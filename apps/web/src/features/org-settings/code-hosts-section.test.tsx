@@ -66,6 +66,17 @@ describe('the code hosts section', () => {
     expect(screen.getByRole('button', { name: 'About Code hosts' })).toBeTruthy();
   });
 
+  it('lays out for a phone: a 44 px ⓘ that opens at the top, and 44 px row actions', async () => {
+    renderSection({ added: [ghe] });
+    await screen.findByText('ghe.example.com');
+    expect(screen.getByRole('button', { name: 'About Code hosts' }).className).toContain('max-md:size-11');
+    expect(screen.getByRole('button', { name: 'Remove ghe.example.com' }).className).toContain('max-md:min-h-11');
+    expect(screen.getByRole('button', { name: 'Add' }).className).toContain('max-md:min-h-11');
+    const name = screen.getByText('ghe.example.com');
+    expect(name.className).toContain('truncate');
+    expect(name.getAttribute('title')).toBe('ghe.example.com');
+  });
+
   it('adds a host with its kind', async () => {
     renderSection({ added: [ghe] });
     await screen.findByText('ghe.example.com');

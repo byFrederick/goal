@@ -140,6 +140,10 @@ describe('Step 3, Connect your code: the choices', () => {
     expect((await radio(/^Read and write/)).disabled).toBe(false);
     expect((await radio(/^Read and write/)).checked).toBe(true);
     expect(screen.getAllByText('This line merges pull requests, so it needs Read and write.')).toHaveLength(2);
+    // On a phone the ⓘ is 44 px.
+    for (const tip of screen.getAllByRole('button', { name: /^About .* being unavailable$/ })) {
+      expect(tip.className).toContain('max-md:size-11');
+    }
   });
 
   it('disables only No code for a line that reads', async () => {
