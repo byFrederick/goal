@@ -27,7 +27,17 @@ The gate's `onReject` names a station on the same line. The engine refuses to se
 
 ## Merge on approval
 
-A station with `action: merge` merges the item's pull requests when the item is approved there. It works at a human station, and at an agent station with a gate. The merge reads the pull requests from the station outputs of the item.
+A station with `action: merge` merges the item's pull requests when the item is approved there. It works at a human station, and at an agent station with a gate. The merge reads the pull requests from the station outputs of the item, and takes them in the order the outputs name them, each in its own repository.
+
+Each pull request has one of three outcomes when it can't be merged:
+
+- A conflict with its base sends the item back to be built again.
+- A pull request that isn't mergeable yet, such as one whose required checks haven't passed, keeps the item at the gate, which runs again and merges it later.
+- Any other refusal blocks the item, with the reason.
+
+Pull requests merged before a refusal stay merged, and merging again skips them. An item with pull requests in several repositories can therefore be merged in some of them and not yet in the others.
+
+goald merges a pull request only when its head is the item's branch in that repository, or, for an assembly's landing, the assembly's integration branch there. A pull request from a fork or from any other branch is refused with a reason that names it and its branch, because no station checked it. goald also merges only in a repository an entry with `access: write` covers (see [repositories and what agents may write](/docs/concepts/access-and-secrets/#repositories-and-what-agents-may-write)).
 
 When the organization's policy does not let agents merge, an approved item waits at the station for a person to merge it.
 

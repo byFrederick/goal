@@ -970,16 +970,16 @@ func TestMerge_RefusesARepositoryOnlyAReadEntryCovers(t *testing.T) {
 	}{
 		{
 			name:    "a read entry",
-			entries: []domain.RepositoryEntry{app, {Name: "docs", URL: docsRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead}},
-			want:    "entry docs, which only reads",
+			entries: []domain.RepositoryEntry{app, {Name: connDocs, URL: docsRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead}},
+			want:    "entry " + connDocs + ", which only reads",
 		},
 		{
 			name: "a read entry more specific than a write pattern",
 			entries: []domain.RepositoryEntry{
 				{Name: "acme", URL: "https://github.com/acme/*", Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: false},
-				{Name: "docs", URL: docsRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead},
+				{Name: connDocs, URL: docsRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead},
 			},
-			want: "entry docs, which only reads",
+			want: "entry " + connDocs + ", which only reads",
 		},
 		{name: "no entry", entries: []domain.RepositoryEntry{app}, want: "no entry of runtime.repositories covers"},
 	}

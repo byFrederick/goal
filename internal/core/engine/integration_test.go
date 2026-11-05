@@ -527,9 +527,74 @@ func TestRun_LandingClonesTheUnionOfItsPartsRepositories(t *testing.T) {
 	h.expectLandingRun(t, runs[0])
 
 	note := runs[0].Env["GOAL_FEEDBACK"]
+	if !strings.Contains(note, "in each of the item's repositories where `"+integrationBranch+"` has commits") {
+		t.Errorf("landing feedback %q does not say to land each repository", note)
+	}
+
 	for _, key := range []string{keyAPI, keyWeb} {
 		if !strings.Contains(note, "- https://"+key) {
 			t.Errorf("landing feedback %q does not list the clone of %s", note, key)
 		}
+	}
+}
+
+// The landing note names the open command of the host the organization lists the item's first
+// repository on: gh for GitHub, glab for GitLab. An agent that only reads hears to push nothing
+// and open no pull request.
+func TestRun_LandingNoteNamesTheHostsOpenCommand(t *testing.T) {
+	t.Parallel()
+
+	gh := "gh pr create --base <default branch> --head " + integrationBranch
+	glab := "glab mr create --target-branch <default branch> --source-branch " + integrationBranch
+
+	tests := []struct {
+		name       string
+		kind       domain.CodeHostKind
+		code       string
+		want, none []string
+	}{
+		{name: codeHostGitHub, kind: domain.CodeHostGitHub, want: []string{gh}, none: []string{glab}},
+		{name: "gitlab", kind: domain.CodeHostGitLab, want: []string{glab}, none: []string{gh}},
+		{
+			name: "a reader", kind: domain.CodeHostGitHub, code: domain.CodeRead,
+			want: []string{"You only read code: push nothing and open no pull request."},
+			none: []string{gh, glab, "landing the whole assembly", "push to"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := landingLine()
+			for i := range l.Agents {
+				if l.Agents[i].Name == agReviewer {
+					l.Agents[i].Code = tt.code
+				}
+			}
+
+			h := newHarness(t, l, byAgent(map[string]string{agReviewer: approveEmpty}))
+			h.listHost(t, gitHost, tt.kind)
+			h.landing(t)
+			h.step(t)
+
+			runs := h.worker.Runs()
+			if len(runs) != 1 {
+				t.Fatalf("%d runs, want 1", len(runs))
+			}
+
+			note := runs[0].Env["GOAL_FEEDBACK"]
+			for _, s := range tt.want {
+				if !strings.Contains(note, s) {
+					t.Errorf("feedback %q does not mention %q", note, s)
+				}
+			}
+
+			for _, s := range tt.none {
+				if strings.Contains(note, s) {
+					t.Errorf("feedback %q mentions %q", note, s)
+				}
+			}
+		})
 	}
 }

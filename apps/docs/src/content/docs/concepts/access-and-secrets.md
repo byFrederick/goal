@@ -73,7 +73,7 @@ None of them reaches the agent's environment unless an environment file names it
 
 The repository token signs git in to the repository's host for three things: the clone, the push of a new base branch (an assembly's integration branch), and the agent's own `git push`. Git signs in as `x-access-token` on GitHub and as `oauth2` on GitLab, with the token as the password. Goal keeps the token in git's credential store inside the run's box, outside the workspace, so the agent's push works without the token in its environment. The box and its store are thrown away after the run. The agent's prompt says that git signs in with the repository token. A public repository needs no token: it clones without a login.
 
-goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request on a host other than the repository's is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run.
+goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request in a repository the entry doesn't cover is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run. With several entries, each repository uses its own entry's token, as the next section says.
 
 ### Repositories and what agents may write
 
@@ -98,7 +98,9 @@ runtime:
 
 An agent's `code` says whether it writes: `write` or `read`, next to its `builtins`. An agent without `code` writes when the factory has a `write` entry, so existing factories keep working. A line that merges, with a merge station or integration branches, needs a `write` entry and an agent that writes.
 
-For now, publishing refuses a second entry, `access: read` and `code: read` with "not supported yet": runs start and merge in one repository that writes until Goal can work in several.
+For each repository, the most specific entry that covers it gives the token: one repository before an owner pattern. An agent that only reads takes a `read` entry's token whenever one covers the repository. Publishing warns with `reader-write-token` when an agent that only reads would get a `write` entry's token because no `read` entry covers it.
+
+goald never pushes, creates branches, opens pull requests or merges in a repository whose entry only reads, or for an agent that only reads. A merge takes each pull request in its own repository with the token of the most specific entry that covers it. When that entry is a `read` entry, or no entry covers the repository, the merge is refused before goald updates a branch, merges or deletes one, and the reason names the repository and says an entry with `access: write` must cover it. Reads, such as an item's base commits and its "changed since your plan" note, take a `read` entry's token first.
 
 ### Testing a repository's token
 

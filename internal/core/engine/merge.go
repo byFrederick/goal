@@ -253,8 +253,7 @@ func (e *Engine) codeRepositories(ctx context.Context, l domain.Line, urls []str
 // entry without one (the shorthand on connections) signs in as loginTargets picks. A line without
 // runtime.repositories is loginTargets' alone.
 func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
-	entries := l.Runtime.Repositories
-	if len(entries) == 0 {
+	if len(l.Runtime.Repositories) == 0 {
 		return e.loginTargets(ctx, l, urls, use)
 	}
 
@@ -263,20 +262,9 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 		return nil, err
 	}
 
-	picked := make([]domain.RepositoryEntry, len(targets))
-
-	for i, t := range targets {
-		entry, ok := domain.TokenEntry(entries, t.repo.Key(), false)
-		if !ok || entry.Access != domain.AccessWrite {
-			return nil, refusal(l, noWriteEntry(t, entry, ok))
-		}
-
-		if f := l.Runtime.Repository.Forge; f != "" && entry.URL == l.Runtime.Repository.URL && f != string(t.repo.Host.Kind) {
-			return nil, refusal(l, fmt.Errorf("the repository %s names runtime.repository.forge %s, but the organization lists %s as a %s host: %w",
-				entry.URL, f, t.repo.Host.Host, t.repo.Host.Kind, ErrNoCodeHost))
-		}
-
-		picked[i] = entry
+	picked, err := writeEntries(l, targets)
+	if err != nil {
+		return nil, err
 	}
 
 	tokens := map[string]string{}
@@ -318,6 +306,29 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 	}
 
 	return targets, nil
+}
+
+// writeEntries are the entries that write targets' repositories, one per target: the most
+// specific entry that covers each, which must be a write entry. The shorthand's
+// runtime.repository.forge, when set, must agree with the kind its host is listed as.
+func writeEntries(l domain.Line, targets []mergeTarget) ([]domain.RepositoryEntry, error) {
+	picked := make([]domain.RepositoryEntry, len(targets))
+
+	for i, t := range targets {
+		entry, ok := domain.TokenEntry(l.Runtime.Repositories, t.repo.Key(), false)
+		if !ok || entry.Access != domain.AccessWrite {
+			return nil, refusal(l, noWriteEntry(t, entry, ok))
+		}
+
+		if f := l.Runtime.Repository.Forge; f != "" && entry.URL == l.Runtime.Repository.URL && f != string(t.repo.Host.Kind) {
+			return nil, refusal(l, fmt.Errorf("the repository %s names runtime.repository.forge %s, but the organization lists %s as a %s host: %w",
+				entry.URL, f, t.repo.Host.Host, t.repo.Host.Kind, ErrNoCodeHost))
+		}
+
+		picked[i] = entry
+	}
+
+	return picked, nil
 }
 
 // noWriteEntry is the refusal of the pull request of t, whose repository entry, the most specific
