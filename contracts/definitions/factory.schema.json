@@ -668,7 +668,7 @@
                 },
                 "changedSince": {
                   "type": "boolean",
-                  "description": "true: a station with context [inflight] that finishes an item records the default branch's head of runtime.repository as its base commit (a plan's parts inherit it), and every later run of the item gets a Changed since your plan section listing the commits since then that changed files its paths match. false (the default): nothing is recorded."
+                  "description": "true: a station with context [inflight] that finishes an item records the default branch's head of each of the item's repositories as that repository's base commit (a plan's parts inherit them), and every later run of the item gets a Changed since your plan section per repository listing the commits since then that changed files its paths match. false (the default): nothing is recorded."
                 },
                 "integration": {
                   "type": "object",
