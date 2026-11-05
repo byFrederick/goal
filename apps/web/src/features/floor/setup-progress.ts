@@ -1,7 +1,7 @@
 // The nine rows of "Finish setting up" on the Floor (ADR 0032 decision 2). Each row is done when the
 // data the factory already has says so: nothing is stored for it. This file is a pure function over
 // the answers the card's queries give, so the rules are tested without a request.
-import type { Connection, IntakeTrigger, Invitation, KnowledgeSource, Member } from '../../api/types';
+import type { IntakeTrigger, Invitation, KnowledgeSource, Member } from '../../api/types';
 import type { Model } from '../../shared/definition/model';
 
 /** How many rows the checklist has; the ring and "N of 9 done" count against it. */
@@ -12,7 +12,7 @@ export type SetupRowId =
   | 'slack'
   | 'knowledge'
   | 'organization'
-  | 'github'
+  | 'code'
   | 'line'
   | 'budget'
   | 'triggers'
@@ -21,8 +21,6 @@ export type SetupRowId =
 export interface SetupInput {
   members: Member[];
   invitations: Invitation[];
-  /** The organization's connections, every kind. */
-  connections: Connection[];
   /** Whether the organization's notification setting names a Slack secret (ADR 0037). */
   slackSet: boolean;
   /** The organization's knowledge sources. */
@@ -51,9 +49,22 @@ export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/**
+ * The factory's code choice from the published model (ADR 0041): "No code", or the count with the access
+ * the entries give. Any write entry makes it read and write; the legacy `repository` counts as one with write.
+ */
+export function codeChoice(model: Model): string {
+  const entries = model.basics?.repositories ?? [];
+  const legacy = entries.length === 0 && model.basics?.repository ? 1 : 0;
+  const count = entries.length + legacy;
+  if (count === 0) return 'No code';
+  const write = legacy === 1 || entries.some((entry) => entry.access === 'write');
+  return `Code, ${write ? 'read and write' : 'read only'}, ${plural(count, 'repository', 'repositories')}`;
+}
+
 /** The rows in the picture's order. Stations are the line's stations, and Done is not counted. */
 export function setupRows(input: SetupInput): SetupRow[] {
-  const repositories = input.model.basics?.repository ? 1 : 0;
+  const code = codeChoice(input.model);
   const stations = (input.model.line?.stations ?? []).filter((station) => station.kind !== 'done').length;
   const budget = input.model.review?.budget ?? {};
   const targets = input.model.line?.flow?.targets ?? {};
@@ -62,7 +73,6 @@ export function setupRows(input: SetupInput): SetupRow[] {
     Object.values(targets).some((value) => value !== undefined);
   // Every trigger the factory has counts, on or off: a switched-off trigger is still set up, only waiting.
   const triggers = input.triggers.length;
-  const hasGitHub = input.connections.some((connection) => connection.kind === 'github');
 
   return [
     {
@@ -85,10 +95,11 @@ export function setupRows(input: SetupInput): SetupRow[] {
     },
     { id: 'organization', text: 'Organization', hint: null, done: true },
     {
-      id: 'github',
-      text: `GitHub, ${plural(repositories, 'repository', 'repositories')}`,
-      hint: 'Connect the repositories agents work in',
-      done: hasGitHub,
+      id: 'code',
+      text: code,
+      hint: null,
+      // No code is a valid choice (ADR 0041 decision 9), so the row is done for every choice.
+      done: true,
     },
     {
       id: 'line',

@@ -4,16 +4,19 @@ import { Plus } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, fileFollowUp, submitItem } from '../api/client';
-import { factoriesQuery } from '../api/queries';
+import { factoriesQuery, versionModelQuery } from '../api/queries';
 import type { Factory } from '../api/types';
 import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog';
 import { Select } from '../ui/select';
+import { Skeleton } from '../ui/skeleton';
+import { modelOf } from './definition/model';
 import { findFactory, refParam } from './factory';
 import { formatDay, humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
 import { holds } from './permissions';
+import { choicesOf, RepositoriesField } from './repositories-field';
 import { defaultStart, StartField, startOf } from './start-field';
 
 const field =
@@ -231,10 +234,32 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
   // goald's refusal of the start (a time too far ahead, an item that is not there), said on the Start field.
   const [startProblem, setStartProblem] = useState<string>();
   const when = startOf(start);
+  // The repositories the person picked for one factory; another factory starts again from its default entry.
+  const [picked, setPicked] = useState<{ factory: string; list: string[] }>();
+  // goald's refusal of a repository, said on the Repositories field.
+  const [repoProblem, setRepoProblem] = useState<string>();
 
   const target = factory ?? picker?.factories.find((f) => f.id === picker.value);
   const workTypes = target?.work_types ?? [];
   const workType = workTypes.includes(type) ? type : (workTypes[0] ?? '');
+
+  // The running version's repositories: the field exists only for a factory that has entries. A follow-up takes
+  // its own repositories (its start's or its source's), so it has no field.
+  const definition = useQuery({
+    ...versionModelQuery(org.id, target?.id ?? '', 'current'),
+    enabled: open && !file && Boolean(target?.current),
+    select: (v) => choicesOf(modelOf(v.model).basics?.repositories ?? []),
+  });
+  const choices = definition.data;
+  const hasChoices = choices !== undefined && (choices.options.length > 0 || choices.owners.length > 0);
+  const repositories =
+    hasChoices && target
+      ? picked?.factory === target.id
+        ? picked.list
+        : choices.initial
+          ? [choices.initial]
+          : []
+      : [];
 
   const submit = useMutation({
     mutationFn: (to: Factory) => {
@@ -243,6 +268,7 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
         ...(workType ? { type: workType } : {}),
         ...(body.trim() ? { body: body.trim() } : {}),
         ...(when.start ? { start: when.start } : {}),
+        ...(repositories.length > 0 ? { repositories } : {}),
       };
       return file ? fileFollowUp(org.id, file.itemId, file.followUpId, request) : submitItem(org.id, to.id, request);
     },
@@ -252,6 +278,8 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
       setBody('');
       setTouched(false);
       setStart(defaultStart());
+      setPicked(undefined);
+      setRepoProblem(undefined);
       toast.success(
         item.start
           ? `Scheduled ${item.ref} for ${formatDay(item.start.at)}.`
@@ -265,6 +293,16 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
       });
     },
     onError: (err) => {
+      const refused = err instanceof ApiError ? (err.detail ?? err.title) : '';
+      if (
+        err instanceof ApiError &&
+        err.status === 400 &&
+        repositories.length > 0 &&
+        (repositories.some((r) => refused.includes(r)) || !when.start)
+      ) {
+        setRepoProblem(refused);
+        return;
+      }
       if (err instanceof ApiError && (err.status === 400 || err.status === 409) && when.start) {
         setStartProblem(err.detail ?? err.title);
         return;
@@ -277,6 +315,7 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
     e.preventDefault();
     setTouched(true);
     setStartProblem(undefined);
+    setRepoProblem(undefined);
     if (title.trim() && target && !when.missing) submit.mutate(target);
   };
 
@@ -342,6 +381,30 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
               className={`${field} min-h-24 resize-y py-2`}
             />
           </div>
+          {open && !file && target?.current ? (
+            <Skeleton
+              ready={!definition.isPending}
+              placeholder={
+                <div className="flex flex-col gap-1">
+                  <div className="h-5 w-24 rounded-chip bg-hover" />
+                  <div className="h-7 w-40 rounded-chip bg-hover" />
+                </div>
+              }
+            >
+              {hasChoices ? (
+                <RepositoriesField
+                  choices={choices}
+                  value={repositories}
+                  onChange={(list) => {
+                    setPicked({ factory: target.id, list });
+                    setRepoProblem(undefined);
+                  }}
+                  factory={target.title ?? target.name}
+                  error={repoProblem}
+                />
+              ) : null}
+            </Skeleton>
+          ) : null}
           <StartField
             id={id}
             value={start}
