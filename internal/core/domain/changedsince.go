@@ -23,18 +23,19 @@ type ChangedSinceEntry struct {
 	Paths []string
 }
 
-// ChangedSinceSection is the `## Changed since your plan` section of a run's feedback (ADR 0015
-// decision 5): the entries, oldest first, each by its merged item's ref and title or else by its
+// ChangedSinceSection is the `## Changed since your plan` section of a run's feedback for one of
+// its item's repositories, repo (ADR 0015 decision 5, per repository by ADR 0041 decision 5): the
+// entries, oldest first, each by its merged item's ref and title or else by its
 // commit, with at most MaxChangedPaths of its paths, and a line when the comparison from base was
 // truncated. It states what it lists and nothing else; it is empty without entries.
-func ChangedSinceSection(base string, entries []ChangedSinceEntry, truncated bool) string {
+func ChangedSinceSection(repo, base string, entries []ChangedSinceEntry, truncated bool) string {
 	if len(entries) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "## Changed since your plan\n\nThe commits on the default branch since %s that changed files this item's paths match, oldest first, with those files:\n", short(base))
+	fmt.Fprintf(&b, "## Changed since your plan\n\nThe commits on the default branch of %s since %s that changed files this item's paths match, oldest first, with those files:\n", repo, short(base))
 
 	for _, e := range entries {
 		by := fmt.Sprintf("commit %s %q", short(e.SHA), e.Subject)
@@ -51,7 +52,7 @@ func ChangedSinceSection(base string, entries []ChangedSinceEntry, truncated boo
 	}
 
 	if truncated {
-		fmt.Fprintf(&b, "\n\nThe comparison was truncated: the default branch has more commits since %s than the code host returned, and the later ones are not listed.", short(base))
+		fmt.Fprintf(&b, "\n\nThe comparison was truncated: the default branch of %s has more commits since %s than the code host returned, and the later ones are not listed.", repo, short(base))
 	}
 
 	return b.String()

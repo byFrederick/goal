@@ -803,7 +803,7 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 
 // finish moves an item whose output passed its checks, with an event for each declared rule the
 // output says was broken (violations) and the paths it lists in the field the line maps
-// (flow.dependencies.paths) and the follow-ups of run it holds (followUps), with the base commit it was planned against (baseCommit): through the gate's verdict when the
+// (flow.dependencies.paths) and the follow-ups of run it holds (followUps), with the base commits it was planned against (baseCommits): through the gate's verdict when the
 // station has one, to cancelled at its station when its output closes the item (closeItem), into
 // state assembly when its output has a plan (assemble), otherwise to the next station. An approving gate whose action is merge leaves the merge to a person when the
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
@@ -816,9 +816,10 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
-		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), BaseCommit: e.baseCommit(ctx, log, c),
+		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths),
 		Output: output, At: e.clock.Now(), FollowUps: followUps(c, run, output),
 	}
+	t.BaseCommit, t.BaseCommits = e.baseCommits(ctx, log, c)
 	t.Events = e.violations(ctx, log, c, output, t.At)
 
 	var err error
