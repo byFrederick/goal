@@ -110,8 +110,9 @@ func testOrigins(f *fixture) {
 
 // ComingUp lists the open items that haven't started and have a start or an open planned or
 // linked need: those with a start soonest first, then the rest oldest first, each with its open
-// needs and the item whose follow-up filed it. Started, closed and unconstrained items are left
-// out, a need that is done no longer holds an item back, and the total counts past the limit.
+// needs and the item whose follow-up filed it. Started, closed and unconstrained items and an
+// assembly's parts are left out, a need that is done no longer holds an item back, and the total
+// counts past the limit.
 func testComingUp(f *fixture) {
 	t := f.t
 
@@ -123,6 +124,10 @@ func testComingUp(f *fixture) {
 	f.filed(domain.NewItem{Title: "started", StartAt: t0.Add(time.Hour), StartedAt: t0})
 	f.filed(domain.NewItem{Title: "met", After: []domain.ItemID{doneNeed.ID}})
 	f.close(doneNeed, domain.StateDone)
+
+	assembly := f.filed(domain.NewItem{Title: "assembly"})
+	firstPart := f.filed(domain.NewItem{Title: "first part", ParentID: assembly.ID})
+	f.filed(domain.NewItem{Title: "waiting part", ParentID: assembly.ID, After: []domain.ItemID{firstPart.ID}})
 
 	src := f.filed(domain.NewItem{Title: "source"})
 	f.keep(src, domain.FollowUp{Text: "Check it in a week", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{In: "7d", Title: "From a follow-up"}})

@@ -8067,9 +8067,10 @@ components:
           description: >-
             Up to 50 open items that haven't started (no started_at, the claim filters' rule):
             those with a start first, soonest first, then those that wait only for their open
-            needs, oldest first; always answered
+            needs, oldest first. An assembly's parts are left out: their plan orders them, and
+            the assembly's page shows each part and what it waits for. Always answered
           items: { $ref: "#/components/schemas/IntakeComingUp" }
-        coming_up_total: { type: integer, description: How many items coming_up counts, beyond its 50 too; always answered }
+        coming_up_total: { type: integer, description: How many items coming_up counts, beyond its 50 too, parts left out; always answered }
         triage:
           description: >-
             Follow-ups for the architect (ADR 0040 decision 9): the factory's collecting triage

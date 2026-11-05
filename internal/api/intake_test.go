@@ -883,7 +883,7 @@ func TestIntake_OpenWebhooks(t *testing.T) {
 
 // Coming up lists acme's items that haven't started: with a start soonest first, then those
 // waiting only for needs, each with its open needs' refs and where it came from; started and
-// closed items are left out.
+// closed items and an assembly's parts are left out.
 func TestIntake_ComingUp(t *testing.T) {
 	t.Parallel()
 
@@ -892,8 +892,10 @@ func TestIntake_ComingUp(t *testing.T) {
 	need := h.filedAt(t, domain.NewItem{Title: "the need"})
 	h.filedAt(t, domain.NewItem{Title: "later", Origin: domain.OriginTrigger, StartAt: t0.Add(72 * time.Hour)})
 	h.filedAt(t, domain.NewItem{Title: "soon", Origin: domain.OriginPerson, Via: domain.ViaCLI, CreatedBy: domain.LocalUser, StartAt: t0.Add(24 * time.Hour)})
-	h.filedAt(t, domain.NewItem{Title: "waits", Origin: domain.OriginPlan, After: []domain.ItemID{need.ID}})
+	h.filedAt(t, domain.NewItem{Title: "waits", Origin: domain.OriginFollowUp, After: []domain.ItemID{need.ID}})
 	h.filedAt(t, domain.NewItem{Title: "started", StartAt: t0.Add(time.Hour), StartedAt: t0})
+	assembly := h.filedAt(t, domain.NewItem{Title: "assembly"})
+	h.filedAt(t, domain.NewItem{Title: "part", ParentID: assembly.ID, Origin: domain.OriginPlan, After: []domain.ItemID{need.ID}})
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.ComingUp == nil || in.ComingUpTotal == nil {
@@ -919,7 +921,7 @@ func TestIntake_ComingUp(t *testing.T) {
 	want := []string{
 		"acme#3 soon person start 2026-10-24T09:00:00Z needs [] via cli by true",
 		"acme#2 later trigger start 2026-10-26T09:00:00Z needs [] via  by false",
-		"acme#4 waits plan start - needs [acme#1] via  by false",
+		"acme#4 waits follow-up start - needs [acme#1] via  by false",
 	}
 	if !slices.Equal(got, want) || *in.ComingUpTotal != len(want) {
 		t.Errorf("coming up = %d in all\n%s\nwant\n%s", *in.ComingUpTotal, strings.Join(got, "\n"), strings.Join(want, "\n"))

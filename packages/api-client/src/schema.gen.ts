@@ -6386,7 +6386,7 @@ export interface components {
             window?: "7d" | "30d" | "90d";
             /** @description How many of the factory's items created in the window came from each origin (ADR 0040 decision 2), zero included; always answered. Items filed before origins were recorded count as person, the column's default */
             origins?: components["schemas"]["IntakeOrigins"];
-            /** @description Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first; always answered */
+            /** @description Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first. An assembly's parts are left out: their plan orders them, and the assembly's page shows each part and what it waits for. Always answered */
             coming_up?: components["schemas"]["IntakeComingUp"][];
             /** @description How many items coming_up counts */
             coming_up_total?: number;
