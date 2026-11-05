@@ -111,7 +111,7 @@ function AddTool() {
         ) : (
           <Skeleton ready={catalog.data !== undefined} placeholder={<CatalogPlaceholder />}>
             <ReadOnly when={!editable}>
-              <div className="grid min-w-0 overflow-hidden rounded-card border border-line bg-card lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+              <div className="grid min-w-0 overflow-clip rounded-card border border-line bg-card lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
                 <CatalogList
                   templates={templates}
                   selected={selected}
