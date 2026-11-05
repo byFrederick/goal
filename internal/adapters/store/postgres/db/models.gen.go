@@ -314,6 +314,26 @@ type Organization struct {
 	MaxSlots  *int32
 }
 
+type RepositoryTest struct {
+	OrgID      uuid.UUID
+	FactoryID  uuid.UUID
+	Url        string
+	Access     string
+	Secret     string
+	At         time.Time
+	Tested     bool
+	Ok         bool
+	Summary    string
+	Warning    string
+	ReadOk     bool
+	ReadReason string
+	PushOk     bool
+	PushReason string
+	Readable   int32
+	Pushable   int32
+	Truncated  bool
+}
+
 type SavedView struct {
 	ID        uuid.UUID
 	OrgID     uuid.UUID

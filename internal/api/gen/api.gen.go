@@ -702,6 +702,42 @@ func (e FactoryHealth) Valid() bool {
 	}
 }
 
+// Defines values for FactoryRepositoryTestAccess.
+const (
+	FactoryRepositoryTestAccessRead  FactoryRepositoryTestAccess = "read"
+	FactoryRepositoryTestAccessWrite FactoryRepositoryTestAccess = "write"
+)
+
+// Valid indicates whether the value is a known member of the FactoryRepositoryTestAccess enum.
+func (e FactoryRepositoryTestAccess) Valid() bool {
+	switch e {
+	case FactoryRepositoryTestAccessRead:
+		return true
+	case FactoryRepositoryTestAccessWrite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FactoryRepositoryTestRequestAccess.
+const (
+	FactoryRepositoryTestRequestAccessRead  FactoryRepositoryTestRequestAccess = "read"
+	FactoryRepositoryTestRequestAccessWrite FactoryRepositoryTestRequestAccess = "write"
+)
+
+// Valid indicates whether the value is a known member of the FactoryRepositoryTestRequestAccess enum.
+func (e FactoryRepositoryTestRequestAccess) Valid() bool {
+	switch e {
+	case FactoryRepositoryTestRequestAccessRead:
+		return true
+	case FactoryRepositoryTestRequestAccessWrite:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FactoryRole.
 const (
 	Approver FactoryRole = "approver"
@@ -4358,6 +4394,69 @@ type FactoryOverviewList struct {
 	// Window The window asked for, as in 7d
 	Window string `json:"window"`
 }
+
+// FactoryRepositoryTest defines model for FactoryRepositoryTest.
+type FactoryRepositoryTest struct {
+	Access FactoryRepositoryTestAccess `json:"access"`
+
+	// At When it was tested
+	At time.Time `json:"at"`
+
+	// Note For a write entry: the host reports no pull-request permission, so Goal can't check it
+	Note *string `json:"note,omitempty"`
+
+	// Ok Whether the token can do what access asks: read, or read and push
+	Ok   bool            `json:"ok"`
+	Push RepositoryCheck `json:"push"`
+
+	// Pushable For an owner pattern: how many of them it can push to
+	Pushable *int            `json:"pushable,omitempty"`
+	Read     RepositoryCheck `json:"read"`
+
+	// Readable For an owner pattern: how many of the owner's repositories the token can read
+	Readable *int `json:"readable,omitempty"`
+
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret SecretName `json:"secret"`
+
+	// Summary One line, such as Can read, Can read 48 repositories in acme or Can read and push
+	Summary string `json:"summary"`
+
+	// Tested false when the host gave no answer: summary then starts with couldn't test
+	Tested bool `json:"tested"`
+
+	// Truncated For an owner pattern: the count stopped at 1000, so there may be more
+	Truncated *bool `json:"truncated,omitempty"`
+
+	// Url The repository tested, as its lower-case host/owner/name, or host/owner/* for an owner pattern
+	Url string `json:"url"`
+
+	// Warning For a read entry whose token can also push: Goal won't push, but agents could. Use a read-only token.
+	Warning *string `json:"warning,omitempty"`
+}
+
+// FactoryRepositoryTestAccess defines model for FactoryRepositoryTest.Access.
+type FactoryRepositoryTestAccess string
+
+// FactoryRepositoryTestList defines model for FactoryRepositoryTestList.
+type FactoryRepositoryTestList struct {
+	Tests []FactoryRepositoryTest `json:"tests"`
+}
+
+// FactoryRepositoryTestRequest defines model for FactoryRepositoryTestRequest.
+type FactoryRepositoryTestRequest struct {
+	// Access The access the factory's entry asks for, which picks the summary and the warning
+	Access FactoryRepositoryTestRequestAccess `json:"access"`
+
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret SecretName `json:"secret"`
+
+	// Url One repository's https URL, such as https://github.com/acme/app, or an owner pattern, such as https://github.com/acme/*
+	Url string `json:"url"`
+}
+
+// FactoryRepositoryTestRequestAccess The access the factory's entry asks for, which picks the summary and the warning
+type FactoryRepositoryTestRequestAccess string
 
 // FactoryRole A ladder, each including the one before
 type FactoryRole string
@@ -9611,6 +9710,9 @@ type TryJonahProposalJSONRequestBody = TryProposalRequest
 // KeepTestJSONRequestBody defines body for KeepTest for application/json ContentType.
 type KeepTestJSONRequestBody = KeepTestRequest
 
+// TestFactoryRepositoryJSONRequestBody defines body for TestFactoryRepository for application/json ContentType.
+type TestFactoryRepositoryJSONRequestBody = FactoryRepositoryTestRequest
+
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
 
@@ -11052,6 +11154,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
 	PurgeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestFactoryRepositoryWithBody Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepositoryWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepository(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListFactoryRepositoryTests List a factory's kept repository tests
+	//
+	// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+	ListFactoryRepositoryTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ResumeFactory Start a paused factory again
 	//
@@ -14477,6 +14604,61 @@ func (c *Client) PauseFactory(ctx context.Context, org OrgRef, factory FactoryRe
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
 func (c *Client) PurgeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPurgeFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestFactoryRepositoryWithBody Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *Client) TestFactoryRepositoryWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestFactoryRepositoryRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *Client) TestFactoryRepository(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestFactoryRepositoryRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListFactoryRepositoryTests List a factory's kept repository tests
+//
+// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+func (c *Client) ListFactoryRepositoryTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListFactoryRepositoryTestsRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -22498,6 +22680,101 @@ func NewPurgeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*htt
 	return req, nil
 }
 
+// NewTestFactoryRepositoryRequest calls the generic TestFactoryRepository builder with application/json body
+func NewTestFactoryRepositoryRequest(server string, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestFactoryRepositoryRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewTestFactoryRepositoryRequestWithBody constructs an http.Request for the TestFactoryRepository method, with any body, and a specified content type
+func NewTestFactoryRepositoryRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/repositories/test", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListFactoryRepositoryTestsRequest constructs an http.Request for the ListFactoryRepositoryTests method
+func NewListFactoryRepositoryTestsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/repositories/tests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewResumeFactoryRequest constructs an http.Request for the ResumeFactory method
 func NewResumeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -29206,6 +29483,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
 	PurgeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PurgeFactoryResponse, error)
 
+	// TestFactoryRepositoryWithBodyWithResponse Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error)
+
+	// TestFactoryRepositoryWithResponse Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepositoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error)
+
+	// ListFactoryRepositoryTestsWithResponse List a factory's kept repository tests
+	//
+	// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+	ListFactoryRepositoryTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListFactoryRepositoryTestsResponse, error)
+
 	// ResumeFactoryWithResponse Start a paused factory again
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -35249,6 +35553,102 @@ func (r PurgeFactoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PurgeFactoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type TestFactoryRepositoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FactoryRepositoryTest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestFactoryRepositoryResponse) GetJSON200() *FactoryRepositoryTest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestFactoryRepositoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestFactoryRepositoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestFactoryRepositoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestFactoryRepositoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestFactoryRepositoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListFactoryRepositoryTestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FactoryRepositoryTestList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListFactoryRepositoryTestsResponse) GetJSON200() *FactoryRepositoryTestList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListFactoryRepositoryTestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListFactoryRepositoryTestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListFactoryRepositoryTestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListFactoryRepositoryTestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListFactoryRepositoryTestsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -42335,6 +42735,51 @@ func (c *ClientWithResponses) PurgeFactoryWithResponse(ctx context.Context, org 
 	return ParsePurgeFactoryResponse(rsp)
 }
 
+// TestFactoryRepositoryWithBodyWithResponse Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *ClientWithResponses) TestFactoryRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error) {
+	rsp, err := c.TestFactoryRepositoryWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestFactoryRepositoryResponse(rsp)
+}
+
+// TestFactoryRepositoryWithResponse Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *ClientWithResponses) TestFactoryRepositoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error) {
+	rsp, err := c.TestFactoryRepository(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestFactoryRepositoryResponse(rsp)
+}
+
+// ListFactoryRepositoryTestsWithResponse List a factory's kept repository tests
+//
+// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+func (c *ClientWithResponses) ListFactoryRepositoryTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListFactoryRepositoryTestsResponse, error) {
+	rsp, err := c.ListFactoryRepositoryTests(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListFactoryRepositoryTestsResponse(rsp)
+}
+
 // ResumeFactoryWithResponse Start a paused factory again
 //
 // Returns a wrapper object for the known response body format(s).
@@ -47792,6 +48237,72 @@ func ParsePurgeFactoryResponse(rsp *http.Response) (*PurgeFactoryResponse, error
 	return response, nil
 }
 
+// ParseTestFactoryRepositoryResponse parses an HTTP response from a TestFactoryRepositoryWithResponse call
+func ParseTestFactoryRepositoryResponse(rsp *http.Response) (*TestFactoryRepositoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestFactoryRepositoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactoryRepositoryTest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListFactoryRepositoryTestsResponse parses an HTTP response from a ListFactoryRepositoryTestsWithResponse call
+func ParseListFactoryRepositoryTestsResponse(rsp *http.Response) (*ListFactoryRepositoryTestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListFactoryRepositoryTestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactoryRepositoryTestList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseResumeFactoryResponse parses an HTTP response from a ResumeFactoryWithResponse call
 func ParseResumeFactoryResponse(rsp *http.Response) (*ResumeFactoryResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -51752,6 +52263,12 @@ type ServerInterface interface {
 	// PurgeFactory Delete an archived, idle factory for good
 	// (POST /v1/orgs/{org}/factories/{factory}/purge)
 	PurgeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+	// (POST /v1/orgs/{org}/factories/{factory}/repositories/test)
+	TestFactoryRepository(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListFactoryRepositoryTests List a factory's kept repository tests
+	// (GET /v1/orgs/{org}/factories/{factory}/repositories/tests)
+	ListFactoryRepositoryTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -56342,6 +56859,76 @@ func (siw *ServerInterfaceWrapper) PurgeFactory(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// TestFactoryRepository operation middleware
+func (siw *ServerInterfaceWrapper) TestFactoryRepository(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestFactoryRepository(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFactoryRepositoryTests operation middleware
+func (siw *ServerInterfaceWrapper) ListFactoryRepositoryTests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFactoryRepositoryTests(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ResumeFactory operation middleware
 func (siw *ServerInterfaceWrapper) ResumeFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -60728,6 +61315,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/environments/{environment}/test", wrapper.TestEnvironment)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/repositories/test", wrapper.TestRepository)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/repositories/test", wrapper.TestFactoryRepository)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/repositories/tests", wrapper.ListFactoryRepositoryTests)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.ListWebhookEndpoints)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.CreateWebhookEndpoint)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}", wrapper.DeleteWebhookEndpoint)
@@ -64882,6 +65471,87 @@ type PurgeFactorydefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PurgeFactorydefaultApplicationProblemPlusJSONResponse) VisitPurgeFactoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestFactoryRepositoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *TestFactoryRepositoryJSONRequestBody
+}
+
+type TestFactoryRepositoryResponseObject interface {
+	VisitTestFactoryRepositoryResponse(w http.ResponseWriter) error
+}
+
+type TestFactoryRepository200JSONResponse FactoryRepositoryTest
+
+func (response TestFactoryRepository200JSONResponse) VisitTestFactoryRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestFactoryRepositorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestFactoryRepositorydefaultApplicationProblemPlusJSONResponse) VisitTestFactoryRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFactoryRepositoryTestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListFactoryRepositoryTestsResponseObject interface {
+	VisitListFactoryRepositoryTestsResponse(w http.ResponseWriter) error
+}
+
+type ListFactoryRepositoryTests200JSONResponse FactoryRepositoryTestList
+
+func (response ListFactoryRepositoryTests200JSONResponse) VisitListFactoryRepositoryTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFactoryRepositoryTestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListFactoryRepositoryTestsdefaultApplicationProblemPlusJSONResponse) VisitListFactoryRepositoryTestsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -69848,6 +70518,12 @@ type StrictServerInterface interface {
 	// PurgeFactory Delete an archived, idle factory for good
 	// (POST /v1/orgs/{org}/factories/{factory}/purge)
 	PurgeFactory(ctx context.Context, request PurgeFactoryRequestObject) (PurgeFactoryResponseObject, error)
+	// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+	// (POST /v1/orgs/{org}/factories/{factory}/repositories/test)
+	TestFactoryRepository(ctx context.Context, request TestFactoryRepositoryRequestObject) (TestFactoryRepositoryResponseObject, error)
+	// ListFactoryRepositoryTests List a factory's kept repository tests
+	// (GET /v1/orgs/{org}/factories/{factory}/repositories/tests)
+	ListFactoryRepositoryTests(ctx context.Context, request ListFactoryRepositoryTestsRequestObject) (ListFactoryRepositoryTestsResponseObject, error)
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(ctx context.Context, request ResumeFactoryRequestObject) (ResumeFactoryResponseObject, error)
@@ -73126,6 +73802,67 @@ func (sh *strictHandler) PurgeFactory(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PurgeFactoryResponseObject); ok {
 		if err := validResponse.VisitPurgeFactoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestFactoryRepository operation middleware
+func (sh *strictHandler) TestFactoryRepository(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request TestFactoryRepositoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body TestFactoryRepositoryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestFactoryRepository(ctx, request.(TestFactoryRepositoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestFactoryRepository")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestFactoryRepositoryResponseObject); ok {
+		if err := validResponse.VisitTestFactoryRepositoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListFactoryRepositoryTests operation middleware
+func (sh *strictHandler) ListFactoryRepositoryTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListFactoryRepositoryTestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListFactoryRepositoryTests(ctx, request.(ListFactoryRepositoryTestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListFactoryRepositoryTests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListFactoryRepositoryTestsResponseObject); ok {
+		if err := validResponse.VisitListFactoryRepositoryTestsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
