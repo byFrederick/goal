@@ -115,14 +115,16 @@ An investigation does not need a second factory to fix what it finds. The invest
 ```yaml
 board:
   stations:
-    - name: investigate
+    - id: investigate
+      kind: agent
       agent: investigator
-    - name: implement
+    - id: implement
+      kind: agent
       route:
         fix: fixer
 ```
 
-The investigator's output sets `lane: fix`, so the `implement` station sends the item to `fixer`, whose `code` is `write`. The names are samples; lanes are explained in [Lanes](/docs/concepts/lanes/). A line that merges, through a merge station or integration branches, needs a `write` entry and an agent that writes; publishing refuses one without. goald merges each pull request in its own repository with the token of the entry that covers it, and refuses a repository only a `read` entry covers.
+The investigator's output sets `lane: fix`, so the `implement` station (its `id`) sends the item to `fixer`, whose `code` is `write`. The names are samples; lanes are explained in [Lanes](/docs/concepts/lanes/). A line that merges, through a merge station or integration branches, needs a `write` entry and an agent that writes; publishing refuses one without. goald merges each pull request in its own repository with the token of the entry that covers it, and refuses a repository only a `read` entry covers.
 
 ## Run a team that only reads
 
