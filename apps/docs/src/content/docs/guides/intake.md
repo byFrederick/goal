@@ -51,7 +51,9 @@ An item made from a webhook delivery is untrusted: its brief carries the event's
 
 ## Suggestions
 
-A definition's disabled triggers are its suggestions. On the Intake page, New trigger lists them under "Or start from a suggestion". Use opens the trigger page with the source and event chosen. A suggestion whose event Goal cannot create yet has Use turned off. Nothing in the web app names a station or work type; the suggestions come from the definition.
+The API and `goal intake` return a definition's disabled triggers as `suggestions`.
+
+The web app does not show those yet. Its Intake page and its New trigger dialog (under "Or start from a suggestion") offer a fixed set of suggested triggers, grouped as For the factory, Incidents, Code health, Pull requests and Security. Use opens the trigger page with the source and event chosen. A suggestion whose event Goal cannot create yet has Use turned off.
 
 ## Try a trigger on a past event
 
