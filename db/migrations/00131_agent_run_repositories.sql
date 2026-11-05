@@ -52,6 +52,6 @@ DROP INDEX agent_runs_try_target_idx;
 ALTER TABLE agent_runs DROP COLUMN branch_head, DROP COLUMN base_head, DROP COLUMN pushed_head;
 CREATE INDEX agent_runs_try_target_idx ON agent_runs (org_id, item_id, station, started_at DESC)
   WHERE kind = 'station';
--- The rows of a run with a branch head, for the try readers' EXISTS.
-CREATE INDEX agent_run_repositories_branch_head_idx ON agent_run_repositories (org_id, run_id)
-  WHERE branch_head IS NOT NULL;
+-- An organization's rows by run, for scoped reads (TestSchema_EveryOrgTableHasAnIndexOnOrgID);
+-- the unique key serves one run's rows and the try readers' EXISTS.
+CREATE INDEX agent_run_repositories_org_run_idx ON agent_run_repositories (org_id, run_id);
