@@ -97,6 +97,16 @@
       "password_env": "CODE_TOKEN"
     }
   ],
+  "repositories": [
+    {
+      "url": "https://github.com/acme/api",
+      "path": "/workspace",
+      "branch": "goal/1-add-a-health-endpoint",
+      "write": true
+    }
+  ],
+  "repository_logins": [],
+  "read_only": [],
   "tools": [
     "task@3.46.1",
     "npm:@acme/issues-cli@2.0.0"
