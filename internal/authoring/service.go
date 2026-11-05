@@ -278,7 +278,7 @@ func New(d Deps) *Service {
 	return &Service{
 		store: d.Store, loads: d.Loads, credentials: d.Credentials, log: log,
 		policies: d.Policies, webhooks: d.Webhooks,
-		clock:    d.Clock, newID: newID,
+		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
 }
