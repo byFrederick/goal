@@ -276,6 +276,30 @@ func (f *fixture) pinged(w domain.WebhookEndpoint) *time.Time {
 	return byID.PingedAt
 }
 
+// ping receives GitHub's ping id to webhook w at at.
+func (f *fixture) ping(w domain.WebhookEndpointID, id string, at time.Time) domain.Received {
+	f.t.Helper()
+
+	r, err := f.in.Receive(f.ctx(), domain.NewReceipt{
+		WebhookID: w, ReceivedAt: at, Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: "ping", Ping: true,
+		Body: []byte(`{"zen":"Keep it logically awesome."}`),
+	})
+	if err != nil {
+		f.t.Fatalf("Receive ping %s: %v", id, err)
+	}
+
+	return r
+}
+
+// expectPinged checks webhook w's PingedAt is want.
+func (f *fixture) expectPinged(w domain.WebhookEndpoint, want time.Time, when string) {
+	f.t.Helper()
+
+	if got := f.pinged(w); got == nil || !got.Equal(want) {
+		f.t.Errorf("PingedAt %s = %v; want %v", when, got, want)
+	}
+}
+
 // An accepted ping sets its webhook's PingedAt and, named by no trigger, keeps no row: its ledger
 // id and daily count. A duplicate ping leaves the time; a new one moves it. A webhook never
 // pinged reads none.
@@ -287,39 +311,20 @@ func testReceivePing(f *fixture) {
 		t.Fatalf("PingedAt of a webhook never pinged = %v; want nil", got)
 	}
 
-	ping := func(id string, at time.Time) domain.Received {
-		r, err := f.in.Receive(f.ctx(), domain.NewReceipt{
-			WebhookID: w.ID, ReceivedAt: at, Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: "ping", Ping: true,
-			Body: []byte(`{"zen":"Keep it logically awesome."}`),
-		})
-		if err != nil {
-			t.Fatalf("Receive ping %s: %v", id, err)
-		}
-
-		return r
-	}
-
-	if r := ping("p-1", t0); r.Receipt != domain.ReceiptAccepted || r.Row != "" {
+	if r := f.ping(w.ID, "p-1", t0); r.Receipt != domain.ReceiptAccepted || r.Row != "" {
 		t.Errorf("Receive ping = %+v; want accepted without a row", r)
 	}
 
-	if got := f.pinged(w); got == nil || !got.Equal(t0) {
-		t.Errorf("PingedAt = %v; want %v", got, t0)
-	}
+	f.expectPinged(w, t0, "after a ping")
 
-	if r := ping("p-1", t0.Add(time.Hour)); r.Receipt != domain.ReceiptDuplicate {
+	if r := f.ping(w.ID, "p-1", t0.Add(time.Hour)); r.Receipt != domain.ReceiptDuplicate {
 		t.Errorf("Receive ping again = %+v; want a duplicate", r)
 	}
 
-	if got := f.pinged(w); got == nil || !got.Equal(t0) {
-		t.Errorf("PingedAt after a duplicate = %v; want %v unchanged", got, t0)
-	}
+	f.expectPinged(w, t0, "after a duplicate")
 
-	ping("p-2", t0.Add(2*time.Hour))
-
-	if got := f.pinged(w); got == nil || !got.Equal(t0.Add(2*time.Hour)) {
-		t.Errorf("PingedAt after another ping = %v; want %v", got, t0.Add(2*time.Hour))
-	}
+	f.ping(w.ID, "p-2", t0.Add(2*time.Hour))
+	f.expectPinged(w, t0.Add(2*time.Hour), "after another ping")
 
 	if got := f.deliveries(w.ID); len(got) != 0 {
 		t.Errorf("deliveries = %+v; want none", got)

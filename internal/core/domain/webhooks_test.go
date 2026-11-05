@@ -103,7 +103,7 @@ func TestParseOn_SetupEvent(t *testing.T) {
 		{on: "webhook.acme-ci", all: true, ok: true},
 		{on: "other.push"},
 		{on: "gitlab.push"},
-		{on: "github"},
+		{on: string(SenderGitHub)},
 		{on: OnSchedule},
 	}
 

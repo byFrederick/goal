@@ -777,14 +777,7 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		in.d.ledger[key] = n.ReceivedAt.UTC()
 	}
 
-	if n.Ping && n.Receipt == domain.ReceiptAccepted {
-		at := n.ReceivedAt.UTC()
-		hook.e.PingedAt = &at
-	}
-
-	if n.Receipt == domain.ReceiptAccepted && !n.Named {
-		in.d.counts[countKey{org: org, webhook: n.WebhookID, day: utcDay(n.ReceivedAt)}]++
-
+	if n.Receipt == domain.ReceiptAccepted && !in.ledgerLocked(org, hook, n) {
 		return out, nil
 	}
 
@@ -796,6 +789,22 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 	}
 
 	return out, in.addEvaluationsLocked(org, row, n)
+}
+
+// ledgerLocked is what accepted delivery n, new to its webhook hook's ledger, does there: a ping
+// sets the webhook's time, and one no trigger named is counted on its UTC day. It reports whether
+// n keeps a row.
+func (in *Intake) ledgerLocked(org domain.OrgID, hook *endpointRow, n domain.NewReceipt) bool {
+	if n.Ping {
+		at := n.ReceivedAt.UTC()
+		hook.e.PingedAt = &at
+	}
+
+	if !n.Named {
+		in.d.counts[countKey{org: org, webhook: n.WebhookID, day: utcDay(n.ReceivedAt)}]++
+	}
+
+	return n.Named
 }
 
 // addEvaluationsLocked adds n's evaluations of the delivery row.

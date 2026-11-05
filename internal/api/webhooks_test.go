@@ -182,7 +182,7 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 	signed := map[string]string{"X-Goal-Signature": "sha256=00", "X-Hub-Signature-256": "sha256=00", contentType: "application/json"}
 	first := h.deliver(t, created.Id, domain.NewWebhookDelivery{ReceivedAt: t0.Add(-3 * 24 * time.Hour), Headers: signed, Body: []byte{0xff, 0xfe}})
 	second := h.deliver(t, created.Id, domain.NewWebhookDelivery{
-		ReceivedAt: t0.Add(-time.Hour), Outcome: domain.DeliveryRefused, Reason: "signature did not match",
+		ReceivedAt: t0.Add(-time.Hour), Outcome: domain.DeliveryRefused, Reason: signatureMismatch,
 	})
 	third := h.deliver(t, created.Id, domain.NewWebhookDelivery{
 		ReceivedAt: t0, Headers: signed, Body: []byte(`{"event":"deploy.failed"}`), Outcome: domain.DeliveryCreated, ItemID: domain.ItemID(it.Id),
@@ -200,7 +200,7 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 		t.Errorf("created delivery's item = %+v; want #%d", item, it.Number)
 	}
 
-	if d := page.Deliveries[1]; d.Outcome != gen.WebhookDeliveryOutcome(domain.DeliveryRefused) || d.Reason != "signature did not match" || d.Item != nil {
+	if d := page.Deliveries[1]; d.Outcome != gen.WebhookDeliveryOutcome(domain.DeliveryRefused) || d.Reason != signatureMismatch || d.Item != nil {
 		t.Errorf("refused delivery = %+v", d)
 	}
 
@@ -572,17 +572,14 @@ func TestWebhooks_SetupEventsAndPing(t *testing.T) {
 	w := h.createOrgHook(t, `{"name":"ci-hooks","sender":"github"}`)
 
 	got, raw := h.getOrgHook(t, "ci-hooks")
-	if len(got.SetupEvents) != 0 || got.SetupAllEvents || got.PingedAt != nil || !strings.Contains(raw, `"setup_events":[]`) ||
-		!strings.Contains(raw, `"pinged_at":null`) {
+	if len(got.SetupEvents) != 0 || got.SetupAllEvents || !strings.Contains(raw, `"setup_events":[]`) || !strings.Contains(raw, `"pinged_at":null`) {
 		t.Fatalf("webhook open to none = %s; want no setup events, as [], and pinged_at null", raw)
 	}
 
 	h.request(t, http.MethodPatch, orgHooksPath+"/ci-hooks", `{"open":[{"factory":"`+acmeID+`"}]}`, nil)
 
 	// acme's flaky-test-on-main names the sender (github.check_run.failed); deploy-failed is disabled.
-	if got, _ = h.getOrgHook(t, "ci-hooks"); !slices.Equal(got.SetupEvents, []string{"check_run"}) || got.SetupAllEvents {
-		t.Errorf("setup events = %v, all %v; want [check_run] alone", got.SetupEvents, got.SetupAllEvents)
-	}
+	h.expectSetup(t, w.Id, []string{checkRunEvent}, false)
 
 	h.openDraft(t)
 	h.saveYAML(t, strings.Replace(acme, "        enabled: false\n        on: webhook.ci-hooks.deploy\n",
@@ -594,15 +591,7 @@ func TestWebhooks_SetupEventsAndPing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, _ = h.getOrgHook(t, w.Id)
-	if !slices.Equal(got.SetupEvents, []string{"check_run", "deploy"}) || !got.SetupAllEvents {
-		t.Errorf("setup events = %v, all %v; want [check_run deploy] and every event", got.SetupEvents, got.SetupAllEvents)
-	}
-
-	list := decode[gen.WebhookList](t, h.request(t, http.MethodGet, orgHooksPath, "", nil), http.StatusOK)
-	if len(list.Webhooks) != 1 || !slices.Equal(list.Webhooks[0].SetupEvents, got.SetupEvents) {
-		t.Errorf("listed = %+v; want the same setup events", list.Webhooks)
-	}
+	h.expectSetup(t, w.Id, []string{checkRunEvent, "deploy"}, true)
 
 	if _, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
 		WebhookID: domain.WebhookEndpointID(w.Id), ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "p-1", Event: "ping", Ping: true,
@@ -612,6 +601,21 @@ func TestWebhooks_SetupEventsAndPing(t *testing.T) {
 
 	if got, _ = h.getOrgHook(t, "ci-hooks"); got.PingedAt == nil || !got.PingedAt.Equal(t0) {
 		t.Errorf("pinged_at = %v; want %v", got.PingedAt, t0)
+	}
+}
+
+// expectSetup checks webhook id's setup events are events, and all, as read and as listed.
+func (h *harness) expectSetup(t *testing.T, id string, events []string, all bool) {
+	t.Helper()
+
+	got, _ := h.getOrgHook(t, id)
+	if !slices.Equal(got.SetupEvents, events) || got.SetupAllEvents != all {
+		t.Errorf("setup events = %v, all %v; want %v, all %v", got.SetupEvents, got.SetupAllEvents, events, all)
+	}
+
+	list := decode[gen.WebhookList](t, h.request(t, http.MethodGet, orgHooksPath, "", nil), http.StatusOK)
+	if len(list.Webhooks) != 1 || !slices.Equal(list.Webhooks[0].SetupEvents, events) || list.Webhooks[0].SetupAllEvents != all {
+		t.Errorf("listed = %+v; want the same setup events", list.Webhooks)
 	}
 }
 
@@ -625,8 +629,8 @@ func (h *harness) logPage(t *testing.T, path string) (gen.WebhookDeliveryPage, s
 }
 
 // The organization's delivery log shows each delivery's event, receipt and duplicates, and its
-// evaluation by each factory, by factory id: created with the item's ref, skipped with its reason. A factory's
-// log shows only its own evaluation. Neither log holds a body or headers.
+// evaluation by each factory, by factory id: created with the item's ref, skipped with its
+// reason. A factory's log shows only its own evaluation. Neither log holds a body or headers.
 func TestWebhooks_DeliveryLogReceiptsAndEvaluations(t *testing.T) {
 	t.Parallel()
 
@@ -637,25 +641,10 @@ func TestWebhooks_DeliveryLogReceiptsAndEvaluations(t *testing.T) {
 	accepted, item := h.evaluatedDelivery(t, domain.WebhookEndpointID(w.Id))
 
 	if _, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
-		WebhookID: domain.WebhookEndpointID(w.Id), ReceivedAt: t0.Add(time.Minute), Receipt: domain.ReceiptRefused, Reason: "signature did not match",
-		Headers: map[string]string{"x-github-event": "check_run"},
+		WebhookID: domain.WebhookEndpointID(w.Id), ReceivedAt: t0.Add(time.Minute), Receipt: domain.ReceiptRefused, Reason: signatureMismatch,
+		Headers: map[string]string{"x-github-event": checkRunEvent},
 	}); err != nil {
 		t.Fatal(err)
-	}
-
-	page, raw := h.logPage(t, orgHooksPath+"/ci-hooks/deliveries")
-	if strings.Contains(raw, `"headers"`) || strings.Contains(raw, `"body"`) {
-		t.Errorf("the log = %s; want no headers or body", raw)
-	}
-
-	if len(page.Deliveries) != 2 {
-		t.Fatalf("deliveries = %+v; want the refused and the accepted one", page.Deliveries)
-	}
-
-	refusedOne, got := page.Deliveries[0], page.Deliveries[1]
-	if refusedOne.Receipt == nil || *refusedOne.Receipt != gen.WebhookDeliveryReceiptRefused || refusedOne.Reason != "signature did not match" ||
-		refusedOne.Evaluations == nil || len(refusedOne.Evaluations) != 0 {
-		t.Errorf("refused = %+v; want refused with its reason and no evaluations, as []", refusedOne)
 	}
 
 	created := gen.WebhookDeliveryEvaluation{
@@ -664,23 +653,48 @@ func TestWebhooks_DeliveryLogReceiptsAndEvaluations(t *testing.T) {
 		Item:    &gen.WebhookEvaluationItem{Id: string(item.ID), Number: item.Number, Ref: fmt.Sprintf("%s#%d", acmeName, item.Number)},
 	}
 	skipped := gen.WebhookDeliveryEvaluation{
-		Factory: lineID, FactoryName: "line", State: gen.WebhookDeliveryEvaluationStateDone,
+		Factory: lineID, FactoryName: lineSlug, State: gen.WebhookDeliveryEvaluationStateDone,
 		Outcome: new(gen.WebhookDeliveryEvaluationOutcomeSkipped), Reason: lineSkip,
 	}
 
-	if got.Id != string(accepted) || got.Event != "check_run" || got.Receipt == nil || *got.Receipt != gen.WebhookDeliveryReceiptAccepted ||
-		got.Duplicates != 2 || !reflect.DeepEqual(got.Evaluations, []gen.WebhookDeliveryEvaluation{skipped, created}) {
-		t.Errorf("accepted = %+v; want check_run, accepted, 2 duplicates, created in acme and skipped in line", got)
-	}
-
-	acmeLog, _ := h.logPage(t, webhooksPath+"/"+w.Id+"/deliveries")
-	if len(acmeLog.Deliveries) != 2 || !reflect.DeepEqual(acmeLog.Deliveries[1].Evaluations, []gen.WebhookDeliveryEvaluation{created}) {
-		t.Errorf("acme's log = %+v; want acme's evaluation alone", acmeLog.Deliveries)
-	}
+	h.expectLog(t, orgHooksPath+"/ci-hooks/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{skipped, created})
+	h.expectLog(t, webhooksPath+"/"+w.Id+"/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{created})
 
 	one := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, orgHooksPath+"/ci-hooks/deliveries/"+string(accepted), "", nil), http.StatusOK)
 	if one.Duplicates != 2 || !reflect.DeepEqual(one.Evaluations, []gen.WebhookDeliveryEvaluation{skipped, created}) {
 		t.Errorf("one delivery = %+v; want its duplicates and both evaluations", one)
+	}
+}
+
+// expectLog checks the log at path: no headers or body, the refused delivery newest with its
+// reason and no evaluations, then the accepted one with its event, two duplicates and evals.
+func (h *harness) expectLog(t *testing.T, path, accepted string, evals []gen.WebhookDeliveryEvaluation) {
+	t.Helper()
+
+	page, raw := h.logPage(t, path)
+	if strings.Contains(raw, `"headers"`) || strings.Contains(raw, `"body"`) {
+		t.Errorf("%s = %s; want no headers or body", path, raw)
+	}
+
+	if len(page.Deliveries) != 2 {
+		t.Fatalf("%s = %+v; want the refused and the accepted delivery", path, page.Deliveries)
+	}
+
+	expectRefusedEntry(t, path, page.Deliveries[0])
+
+	got := page.Deliveries[1]
+	if got.Id != accepted || got.Event != checkRunEvent || got.Receipt == nil || *got.Receipt != gen.WebhookDeliveryReceiptAccepted ||
+		got.Duplicates != 2 || !reflect.DeepEqual(got.Evaluations, evals) {
+		t.Errorf("%s: accepted = %+v; want check_run, accepted, 2 duplicates and evaluations %+v", path, got, evals)
+	}
+}
+
+// expectRefusedEntry checks d, in the log at path, is refused with its reason and no evaluations.
+func expectRefusedEntry(t *testing.T, path string, d gen.WebhookDelivery) {
+	t.Helper()
+
+	if d.Receipt == nil || *d.Receipt != gen.WebhookDeliveryReceiptRefused || d.Reason != signatureMismatch || d.Evaluations == nil || len(d.Evaluations) != 0 {
+		t.Errorf("%s: refused = %+v; want refused with its reason and no evaluations, as []", path, d)
 	}
 }
 
@@ -696,8 +710,8 @@ func (h *harness) evaluatedDelivery(t *testing.T, w domain.WebhookEndpointID) (d
 
 	for range 3 {
 		r, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
-			WebhookID: w, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "d-1", Event: "check_run", Named: true,
-			Headers: map[string]string{"x-github-event": "check_run"}, Body: []byte(`{"action":"completed"}`),
+			WebhookID: w, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: firstDeliveryID, Event: checkRunEvent, Named: true,
+			Headers: map[string]string{"x-github-event": checkRunEvent}, Body: []byte(`{"action":"completed"}`),
 			Evaluations: []domain.NewDeliveryEvaluation{
 				{FactoryID: acmeID, Triggers: []string{"flaky-test-on-main"}},
 				{FactoryID: lineID, Triggers: []string{"flaky"}, Skip: lineSkip},

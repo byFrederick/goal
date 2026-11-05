@@ -30,6 +30,14 @@ const (
 	hookJSON     = "application/json"
 )
 
+// Values the receiver's and the delivery log's cases share.
+const (
+	firstDeliveryID   = "d-1"
+	checkRunEvent     = "check_run"
+	acmeAuthHeader    = "X-Acme-Token"
+	signatureMismatch = "signature did not match"
+)
+
 // hookRig is a receiver over port fakes and the real sender catalog, with one organization webhook.
 type hookRig struct {
 	h       http.Handler
@@ -175,18 +183,18 @@ func TestHooks_AcceptedThenDuplicate(t *testing.T) {
 	r := newHookRig(t, domain.SenderGitHub, domain.TokenSettings{})
 	body := `{"action":"completed","check_run":{"name":"test"}}`
 
-	rec := r.github(t, body, "check_run", "d-1", hookSecret)
-	if rec.Code != http.StatusAccepted || receiptOf(t, rec) != (receipt{ID: "d-1", Receipt: "accepted"}) {
+	rec := r.github(t, body, checkRunEvent, firstDeliveryID, hookSecret)
+	if rec.Code != http.StatusAccepted || receiptOf(t, rec) != (receipt{ID: firstDeliveryID, Receipt: "accepted"}) {
 		t.Fatalf("POST = %d %s; want 202 with d-1", rec.Code, rec.Body)
 	}
 
-	rec = r.github(t, body, "check_run", "d-1", hookSecret)
-	if rec.Code != http.StatusOK || receiptOf(t, rec) != (receipt{ID: "d-1", Receipt: "duplicate"}) {
+	rec = r.github(t, body, checkRunEvent, firstDeliveryID, hookSecret)
+	if rec.Code != http.StatusOK || receiptOf(t, rec) != (receipt{ID: firstDeliveryID, Receipt: "duplicate"}) {
 		t.Fatalf("POST again = %d %s; want 200, a duplicate", rec.Code, rec.Body)
 	}
 
 	ds := r.deliveries(t)
-	if len(ds) != 1 || ds[0].DeliveryID != "d-1" || ds[0].Event != "check_run" || ds[0].Duplicates != 1 || string(ds[0].Body) != body {
+	if len(ds) != 1 || ds[0].DeliveryID != firstDeliveryID || ds[0].Event != checkRunEvent || ds[0].Duplicates != 1 || string(ds[0].Body) != body {
 		t.Fatalf("deliveries = %+v; want d-1 with its body and 1 duplicate", ds)
 	}
 
@@ -206,11 +214,11 @@ func TestReceiver_AddsEvaluations(t *testing.T) {
 		r.names.skip = skip
 		id := fmt.Sprintf("d-%d", i)
 
-		if rec := r.github(t, `{}`, "check_run", id, hookSecret); rec.Code != http.StatusAccepted {
+		if rec := r.github(t, `{}`, checkRunEvent, id, hookSecret); rec.Code != http.StatusAccepted {
 			t.Fatalf("POST = %d %s; want 202", rec.Code, rec.Body)
 		}
 
-		if rec := r.github(t, `{}`, "check_run", id, hookSecret); rec.Code != http.StatusOK {
+		if rec := r.github(t, `{}`, checkRunEvent, id, hookSecret); rec.Code != http.StatusOK {
 			t.Fatalf("POST again = %d %s; want 200", rec.Code, rec.Body)
 		}
 	}
@@ -222,7 +230,7 @@ func TestReceiver_AddsEvaluations(t *testing.T) {
 
 	for _, d := range ds {
 		es, err := r.intake.DeliveryEvaluations(r.ctx(t), d.ID)
-		if err != nil || len(es) != 1 || es[0].FactoryID != acmeID || es[0].Event != "check_run" {
+		if err != nil || len(es) != 1 || es[0].FactoryID != acmeID || es[0].Event != checkRunEvent {
 			t.Fatalf("evaluations of %s = %+v, %v; want one for acme", d.DeliveryID, es, err)
 		}
 
@@ -244,7 +252,7 @@ func TestHooks_UnnamedKeepsOnlyACount(t *testing.T) {
 	r := newHookRig(t, domain.SenderGitHub, domain.TokenSettings{})
 	r.names.named = false
 
-	if rec := r.github(t, `{}`, "issues", "d-1", hookSecret); rec.Code != http.StatusAccepted {
+	if rec := r.github(t, `{}`, "issues", firstDeliveryID, hookSecret); rec.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d %s; want 202", rec.Code, rec.Body)
 	}
 
@@ -290,10 +298,10 @@ func TestHooks_GitHubPing(t *testing.T) {
 func TestHooks_PingFromAnotherSenderIsNotGitHubs(t *testing.T) {
 	t.Parallel()
 
-	r := newHookRig(t, domain.SenderToken, domain.TokenSettings{Header: "X-Acme-Token", EventPath: "type", IDPath: "id"})
+	r := newHookRig(t, domain.SenderToken, domain.TokenSettings{Header: acmeAuthHeader, EventPath: "type", IDPath: "id"})
 	r.names.named = false
 
-	rec := r.post(t, api.HooksPath+string(r.hook.ID), `{"type":"ping","id":"p-1"}`, map[string]string{"X-Acme-Token": hookSecret}, "")
+	rec := r.post(t, api.HooksPath+string(r.hook.ID), `{"type":"ping","id":"p-1"}`, map[string]string{acmeAuthHeader: hookSecret}, "")
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("POST = %d %s; want 202", rec.Code, rec.Body)
 	}
@@ -311,7 +319,7 @@ func TestHooks_RefusedSignature(t *testing.T) {
 	r := newHookRig(t, domain.SenderGitHub, domain.TokenSettings{})
 	body := `{"ref":"main"}`
 
-	wrong := r.github(t, body, "push", "d-1", "not-the-secret")
+	wrong := r.github(t, body, "push", firstDeliveryID, "not-the-secret")
 	missing := r.post(t, api.HooksPath+string(r.hook.ID), body, map[string]string{"X-GitHub-Event": "push"}, "")
 
 	for _, rec := range []*httptest.ResponseRecorder{wrong, missing} {
@@ -338,7 +346,7 @@ func TestHooks_RefusedSignature(t *testing.T) {
 	r.expectNoLeak(t, body, wrong.Body.String()+missing.Body.String())
 
 	// A signed delivery with the same id after the refusals is accepted: a refused one takes none.
-	if rec := r.github(t, body, "push", "d-1", hookSecret); rec.Code != http.StatusAccepted {
+	if rec := r.github(t, body, "push", firstDeliveryID, hookSecret); rec.Code != http.StatusAccepted {
 		t.Errorf("POST signed = %d; want 202", rec.Code)
 	}
 }
@@ -409,7 +417,7 @@ func TestHooks_UnknownDisabledAndOtherMethods(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if rec := r.github(t, `{}`, "push", "d-1", hookSecret); rec.Code != http.StatusNotFound {
+	if rec := r.github(t, `{}`, "push", firstDeliveryID, hookSecret); rec.Code != http.StatusNotFound {
 		t.Errorf("POST to a disabled webhook = %d; want 404", rec.Code)
 	}
 }
@@ -420,7 +428,7 @@ func TestHooks_TooLarge(t *testing.T) {
 
 	r := newHookRig(t, domain.SenderGitHub, domain.TokenSettings{})
 
-	if rec := r.github(t, strings.Repeat("a", domain.MaxDeliveryBody+1), "push", "d-1", hookSecret); rec.Code != http.StatusRequestEntityTooLarge {
+	if rec := r.github(t, strings.Repeat("a", domain.MaxDeliveryBody+1), "push", firstDeliveryID, hookSecret); rec.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("POST 1 MiB + 1 = %d; want 413", rec.Code)
 	}
 
@@ -451,7 +459,7 @@ func TestHooks_RefusedLimitedPerWebhook(t *testing.T) {
 		t.Errorf("refusal 31 = %d, Retry-After %q; want 429, 60", rec.Code, rec.Header().Get("Retry-After"))
 	}
 
-	if rec := r.github(t, `{}`, "push", "d-1", hookSecret); rec.Code != http.StatusAccepted {
+	if rec := r.github(t, `{}`, "push", firstDeliveryID, hookSecret); rec.Code != http.StatusAccepted {
 		t.Errorf("signed after the limit = %d; want 202", rec.Code)
 	}
 
@@ -489,7 +497,7 @@ func TestHooks_UnknownLimitedPerAddress(t *testing.T) {
 		t.Errorf("another address = %d; want 404", rec.Code)
 	}
 
-	if rec := r.github(t, `{}`, "push", "d-1", hookSecret); rec.Code != http.StatusAccepted {
+	if rec := r.github(t, `{}`, "push", firstDeliveryID, hookSecret); rec.Code != http.StatusAccepted {
 		t.Errorf("signed from the limited address's peer = %d; want 202", rec.Code)
 	}
 
@@ -505,15 +513,15 @@ func TestHooks_UnknownLimitedPerAddress(t *testing.T) {
 func TestHooks_TokenWebhook(t *testing.T) {
 	t.Parallel()
 
-	r := newHookRig(t, domain.SenderToken, domain.TokenSettings{Header: "X-Acme-Token", EventPath: "alert.type", IDPath: "alert.id"})
+	r := newHookRig(t, domain.SenderToken, domain.TokenSettings{Header: acmeAuthHeader, EventPath: "alert.type", IDPath: "alert.id"})
 	body := `{"alert":{"id":"a-1","type":"monitor.alert"}}`
 	path := api.HooksPath + string(r.hook.ID)
 
-	if rec := r.post(t, path, body, map[string]string{"X-Acme-Token": "wrong"}, ""); rec.Code != http.StatusUnauthorized {
+	if rec := r.post(t, path, body, map[string]string{acmeAuthHeader: "wrong"}, ""); rec.Code != http.StatusUnauthorized {
 		t.Errorf("POST with a wrong token = %d; want 401", rec.Code)
 	}
 
-	rec := r.post(t, path, body, map[string]string{"X-Acme-Token": hookSecret}, "")
+	rec := r.post(t, path, body, map[string]string{acmeAuthHeader: hookSecret}, "")
 	if rec.Code != http.StatusAccepted || receiptOf(t, rec) != (receipt{ID: "a-1", Receipt: "accepted"}) {
 		t.Fatalf("POST = %d %s; want 202 with a-1", rec.Code, rec.Body)
 	}

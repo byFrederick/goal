@@ -337,13 +337,10 @@ func checkEvaluationsOf(t *testing.T, f *fixture, got []domain.DeliveryEvaluatio
 	for _, e := range got {
 		seen[e.Delivery]++
 
-		switch {
-		case e.Delivery == created:
-			if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationCreated || e.ItemID != it.ID || e.ItemNumber != it.Number ||
-				e.FactoryID != f.factory || e.DeliveryID != "d-created" {
-				t.Errorf("created evaluation = %+v; want item %s #%d", e, it.ID, it.Number)
-			}
-		case e.Delivery == skipped:
+		switch e.Delivery {
+		case created:
+			checkCreatedOf(t, f, e, it)
+		case skipped:
 			if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationSkipped || e.Reason != skip || e.ItemID != "" || e.ItemNumber != 0 {
 				t.Errorf("skipped evaluation = %+v; want skipped with %q", e, skip)
 			}
@@ -354,5 +351,15 @@ func checkEvaluationsOf(t *testing.T, f *fixture, got []domain.DeliveryEvaluatio
 
 	if seen[created] != 1 || seen[skipped] != 2 {
 		t.Errorf("evaluations by delivery = %v; want one created and two skipped", seen)
+	}
+}
+
+// checkCreatedOf checks e is the fixture factory's, done and created with it and its number.
+func checkCreatedOf(t *testing.T, f *fixture, e domain.DeliveryEvaluation, it domain.Item) {
+	t.Helper()
+
+	if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationCreated || e.ItemID != it.ID || e.ItemNumber != it.Number ||
+		e.FactoryID != f.factory || e.DeliveryID != "d-created" {
+		t.Errorf("created evaluation = %+v; want item %s #%d", e, it.ID, it.Number)
 	}
 }

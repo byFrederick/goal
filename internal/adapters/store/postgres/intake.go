@@ -441,38 +441,12 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		return domain.Received{}, fmt.Errorf("receive delivery: headers: %w", err)
 	}
 
-	at := n.ReceivedAt.UTC()
 	out := domain.Received{Receipt: n.Receipt, DeliveryID: n.DeliveryID}
 
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
 		if n.Receipt == domain.ReceiptAccepted {
-			_, err := q.InsertLedgerID(ctx, db.InsertLedgerIDParams{WebhookID: webhook, DeliveryID: n.DeliveryID, ReceivedAt: at})
-
-			switch {
-			case notFound(err):
-				out.Receipt = domain.ReceiptDuplicate
-
-				// The first row is gone, or there was none: the id was only counted.
-				row, err := q.CountDuplicate(ctx, db.CountDuplicateParams{EndpointID: webhook, DeliveryID: n.DeliveryID})
-				if notFound(err) {
-					return nil
-				}
-
-				out.Row = domain.WebhookDeliveryID(row.String())
-
+			if keep, err := ledger(ctx, q, webhook, n, &out); err != nil || !keep {
 				return err
-			case err != nil:
-				return err
-			}
-
-			if n.Ping {
-				if err := q.PingWebhook(ctx, db.PingWebhookParams{ID: webhook, At: at}); err != nil {
-					return err
-				}
-			}
-
-			if !n.Named {
-				return q.CountUnnamedDelivery(ctx, db.CountUnnamedDeliveryParams{WebhookID: webhook, ReceivedAt: at})
 			}
 		}
 
@@ -494,6 +468,43 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 	default:
 		return out, nil
 	}
+}
+
+// ledger takes accepted delivery n's id into webhook's ledger in the receipt's transaction: a
+// duplicate is counted on its first row, a ping sets the webhook's time, and a delivery no trigger
+// named is counted on its UTC day. keep is whether n keeps a row of its own.
+func ledger(ctx context.Context, q *db.Queries, webhook uuid.UUID, n domain.NewReceipt, out *domain.Received) (keep bool, err error) {
+	at := n.ReceivedAt.UTC()
+	_, err = q.InsertLedgerID(ctx, db.InsertLedgerIDParams{WebhookID: webhook, DeliveryID: n.DeliveryID, ReceivedAt: at})
+
+	switch {
+	case notFound(err):
+		out.Receipt = domain.ReceiptDuplicate
+
+		// The first row is gone, or there was none: the id was only counted.
+		row, err := q.CountDuplicate(ctx, db.CountDuplicateParams{EndpointID: webhook, DeliveryID: n.DeliveryID})
+		if notFound(err) {
+			return false, nil
+		}
+
+		out.Row = domain.WebhookDeliveryID(row.String())
+
+		return false, err
+	case err != nil:
+		return false, err
+	}
+
+	if n.Ping {
+		if err := q.PingWebhook(ctx, db.PingWebhookParams{ID: webhook, At: at}); err != nil {
+			return false, err
+		}
+	}
+
+	if !n.Named {
+		return false, q.CountUnnamedDelivery(ctx, db.CountUnnamedDeliveryParams{WebhookID: webhook, ReceivedAt: at})
+	}
+
+	return true, nil
 }
 
 // insertReceived keeps the row of a delivery the receiver accepted or refused, with its body for an
