@@ -50,6 +50,27 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     },
   },
   {
+    name: 'Intake',
+    open: async (page) => {
+      await page.goto('/o/acme/f/software/intake');
+      await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
+    },
+  },
+  {
+    name: 'Check',
+    open: async (page) => {
+      await page.goto('/o/acme/f/software/intake/flaky-test-on-main');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    },
+  },
+  {
+    name: 'Webhooks',
+    open: async (page) => {
+      await page.goto('/o/acme/webhooks');
+      await expect(page.getByRole('heading', { level: 1, name: 'Webhooks' })).toBeVisible();
+    },
+  },
+  {
     name: 'Item trace',
     open: async (page) => {
       await page.goto('/o/acme/f/goal/items/12?tab=trace');

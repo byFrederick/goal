@@ -82,6 +82,18 @@ describe('Coming up', () => {
     expect(within(list).getByRole('button', { name: 'Start now: Later item' })).toBeTruthy();
   });
 
+  it('starts an item from the ⋯ menu a phone shows', async () => {
+    vi.mocked(clearItemStart).mockResolvedValue({} as never);
+    renderRows();
+    const list = await screen.findByRole('region', { name: 'Coming up' });
+
+    const trigger = within(list).getByRole('button', { name: 'More actions: Later item' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Start now' }));
+
+    await waitFor(() => expect(clearItemStart).toHaveBeenCalledWith('org-1', 'a'));
+  });
+
   it('says so when nothing is waiting to start', async () => {
     renderRows([]);
     const list = await screen.findByRole('region', { name: 'Coming up' });

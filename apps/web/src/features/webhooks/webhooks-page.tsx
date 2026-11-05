@@ -99,7 +99,7 @@ function Row({
           <span title={webhook.name} className="truncate text-body font-medium">
             {webhook.name}
           </span>
-          <span title={webhook.address} className="truncate text-meta text-muted">
+          <span title={`${senderLabel(webhook.sender)}, ${webhook.address}`} className="truncate text-meta text-muted">
             {senderLabel(webhook.sender)}, <span className="font-mono">{webhook.address}</span>
           </span>
           <span title={webhook.secret} className="truncate text-meta text-muted">
