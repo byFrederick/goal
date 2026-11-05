@@ -98,7 +98,7 @@ test('model, prompt, a skills.sh skill and built-in tools save with the draft', 
   await expect(agent.getByText('Asked as Off until tool approvals arrive')).toBeHidden();
 
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Agents, \d+ changes?$/)).toBeAttached();
+  await expect(tile(page, /^Agents, \d+ changes?, \d+ agents? on \d+ models?$/)).toBeAttached();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
