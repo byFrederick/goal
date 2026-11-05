@@ -698,7 +698,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 	h.kbRanges, h.kbDocs = &rangeCounter{ObjectStore: h.kbObjects}, &docsReader{}
 	h.ingestor = knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: h.kb, Secrets: h.secrets, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
+		Knowledge: h.kb, Secrets: h.secrets, Hosts: h.tenancy, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
 		Objects: h.kbObjects, Clock: h.clock, TempDir: t.TempDir(),
 	})
 

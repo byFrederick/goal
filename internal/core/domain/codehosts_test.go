@@ -132,3 +132,29 @@ func TestCodeHost_APIBase(t *testing.T) {
 		}
 	}
 }
+
+// ListedCodeHost finds a host among the built-in and added ones, case ignored, and finds no host
+// with a port, a host only a suffix matches or one nobody listed.
+func TestListedCodeHost(t *testing.T) {
+	t.Parallel()
+
+	hosts := append(BuiltInCodeHosts(), CodeHost{Host: hostGHE, Kind: CodeHostGitHub})
+
+	for _, c := range []struct {
+		host string
+		want CodeHost
+		ok   bool
+	}{
+		{hostGitHub, CodeHost{Host: hostGitHub, Kind: CodeHostGitHub, BuiltIn: true}, true},
+		{"GitLab.com", CodeHost{Host: hostGitLab, Kind: CodeHostGitLab, BuiltIn: true}, true},
+		{"GHE.example.com", CodeHost{Host: hostGHE, Kind: CodeHostGitHub}, true},
+		{hostGitAcme, CodeHost{}, false},
+		{hostGHE + ":8443", CodeHost{}, false},
+		{"example.com", CodeHost{}, false},
+		{"", CodeHost{}, false},
+	} {
+		if got, ok := ListedCodeHost(hosts, c.host); got != c.want || ok != c.ok {
+			t.Errorf("ListedCodeHost(%q) = %+v, %t; want %+v, %t", c.host, got, ok, c.want, c.ok)
+		}
+	}
+}
