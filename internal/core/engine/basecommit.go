@@ -88,10 +88,16 @@ func (e *Engine) changedSinceNote(ctx context.Context, l domain.Line, it domain.
 }
 
 // changedSince compares the item's base commit with the default branch's head and renders the
-// commits whose changed files overlap paths.
+// commits whose changed files overlap the globs of paths in the line's repository
+// (repositoryGlobs).
 func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item, paths []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gateMergeTimeout)
 	defer cancel()
+
+	globs, err := e.repositoryGlobs(ctx, l, it, paths)
+	if err != nil || len(globs) == 0 {
+		return "", err
+	}
 
 	t, err := e.repositoryHost(ctx, l, it)
 	if err != nil {
@@ -112,7 +118,7 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 		return "", fmt.Errorf("compare %s with the default branch: %w", it.BaseCommit, err)
 	}
 
-	entries := overlapping(cmp.Commits, paths)
+	entries := overlapping(cmp.Commits, globs)
 	if len(entries) == 0 {
 		return "", nil
 	}
@@ -134,6 +140,21 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 	}
 
 	return domain.ChangedSinceSection(it.BaseCommit, entries, cmp.Truncated), nil
+}
+
+// repositoryGlobs are the globs of paths in the line's repository (domain.RepositoryGlobs): an
+// `owner/name:` prefix naming it is stripped, an entry without one is in the item's first
+// repository, and entries in other repositories are left out.
+func (e *Engine) repositoryGlobs(ctx context.Context, l domain.Line, it domain.Item, paths []string) ([]string, error) {
+	rows, err := e.store.ItemRepositories(ctx, it.ID)
+	if err != nil {
+		return nil, fmt.Errorf("read the item's repositories: %w", err)
+	}
+
+	first, _ := domain.ResolveItemRepositories(rows, l).First()
+	repo, _ := domain.RepositoryKey(l.Runtime.Repository.URL)
+
+	return domain.RepositoryGlobs(paths, first.Repo, repo), nil
 }
 
 // overlapping are the entries of the commits that changed files paths match, each with only

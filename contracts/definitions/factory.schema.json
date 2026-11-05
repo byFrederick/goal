@@ -704,7 +704,7 @@
                 "paths": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. Items whose paths overlap wait for each other under assemblies.overlap serialize."
+                  "description": "The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. An entry may start with owner/name: to name its repository (acme/web:src/**); an entry without one is in the item's first repository. Items whose paths overlap, in the same repository, wait for each other under assemblies.overlap serialize: the same path in two repositories does not overlap."
                 },
                 "after": {
                   "type": "string",

@@ -19,7 +19,7 @@ A gate that rejects work ignores the plan. An approving gate creates the assembl
 
 A part can list the parts it `needs` in its plan. A part is not claimed while a part it needs is neither done nor cancelled. The item's waiting reason names the parts it waits for.
 
-Parts can also wait for each other on files. When two items' `paths` overlap, the item that is further back on the line waits for the other one to finish. This is controlled by `board.flow.assemblies.overlap`, which defaults to `serialize`. See [integration branches](/docs/concepts/integration-branches/) for how parts share a branch.
+Parts can also wait for each other on files. When two items' `paths` overlap in the same repository, the item that is further back on the line waits for the other one to finish. A path that starts with `owner/name:` is in that repository, and a path without a prefix is in its item's first repository, so `internal/**` in acme/api and `internal/**` in acme/web don't overlap. Repositories compare by owner and name, whatever their host. This is controlled by `board.flow.assemblies.overlap`, which defaults to `serialize`. See [integration branches](/docs/concepts/integration-branches/) for how parts share a branch.
 
 A part gets a note in its run's feedback that names its assembly and the other parts, and it is told to return a spec for its own work, never a plan. Parts cannot be assemblies themselves, so assemblies do not nest.
 

@@ -282,6 +282,37 @@ func TestEngine_ChangedSinceSkipsUnrelatedCommits(t *testing.T) {
 	}
 }
 
+// A path prefixed with the item's first repository, owner/name:, still matches the commits that
+// changed its files, and a path in another repository matches none of them.
+func TestEngine_ChangedSinceStripsTheFirstRepositorysPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := changedSinceLine()
+	l.Runtime.Repositories = []domain.RepositoryEntry{{Name: "app", URL: appRepo, Access: domain.AccessWrite, Default: true}}
+
+	h := newHarness(t, l, porttest.Succeed(`{"touches":["acme/app:internal/store/**","acme/web:docs/**"]}`))
+	h.codehost.SetBranchHead(appRepo, "", base)
+
+	h.submit(t, domain.NewItem{})
+	h.step(t) // spec, at base
+
+	h.land(ports.Commit{SHA: base},
+		ports.Commit{SHA: "c0ffee000012", Subject: "Fix the store's lock", Files: []string{"internal/store/lock.go"}},
+		ports.Commit{SHA: "c0ffee000013", Subject: "Update the docs", Files: []string{"docs/items.md"}},
+	)
+
+	h.step(t) // build
+
+	section := h.changedSinceOf(1)
+	if want := `- commit c0ffee000012 "Fix the store's lock": internal/store/lock.go`; !strings.Contains(section, want) {
+		t.Errorf("section lacks %q:\n%s", want, section)
+	}
+
+	if strings.Contains(section, "docs/items.md") {
+		t.Errorf("section lists a file for acme/web's paths, which are in another repository:\n%s", section)
+	}
+}
+
 func TestEngine_ChangedSinceCodeHostErrorLeavesItOut(t *testing.T) {
 	t.Parallel()
 

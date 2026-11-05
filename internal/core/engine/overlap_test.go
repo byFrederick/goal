@@ -128,6 +128,44 @@ func twoOverlapping(t *testing.T, l domain.Line) (*harness, domain.Item, domain.
 	return h, a, b
 }
 
+// Overlap compares repository and path (ADR 0041 decision 5): the same glob in two items whose
+// first repositories differ makes no edge, and an `owner/name:` prefix puts a glob in that
+// repository, where it holds a later item whose first repository it is.
+func TestEngine_OverlapComparesRepositories(t *testing.T) {
+	t.Parallel()
+
+	l := lineOf(agentStation(stSpec, agArchitect, 4, 4), agentStation(stBuild, agWorker, 2, 2))
+	l.Flow.Dependencies.Paths = fieldPaths
+	l = withRepositories(l)
+	l.Runtime.Repositories = append(l.Runtime.Repositories, domain.RepositoryEntry{Name: "site", URL: "https://github.com/acme/web", Access: domain.AccessWrite})
+
+	s := newScripted()
+	h := newHarness(t, l, s.agent)
+
+	a := h.submitRepos(t, "a", entryAPI)
+	b := h.submitRepos(t, "b", "site")
+	c := h.submitRepos(t, "c", entryAPI)
+	d := h.submitRepos(t, "d", "acme/web")
+
+	s.set(a.ID, stSpec, `{"touches":["internal/**"]}`)
+	s.set(b.ID, stSpec, `{"touches":["internal/**"]}`)
+	s.set(c.ID, stSpec, `{"touches":["acme/web:docs/**"]}`)
+	s.set(d.ID, stSpec, `{"touches":["docs/guide.md"]}`)
+
+	h.step(t) // spec, for all four
+	h.step(t) // build: a and c run, b and d are checked against them
+
+	for _, id := range []domain.ItemID{a.ID, b.ID, c.ID} {
+		if got := h.edgesOf(t, id, domain.EdgeOverlap); len(got) != 0 {
+			t.Errorf("item %s's overlap edges = %+v, want none: its paths are in another repository", id, got)
+		}
+	}
+
+	if got := h.edgesOf(t, d.ID, domain.EdgeOverlap); len(got) != 1 || got[0].Needs != c.ID {
+		t.Errorf("d's overlap edges = %+v, want one on c, whose acme/web:docs/** is in d's first repository", got)
+	}
+}
+
 // Of two items whose paths overlap, the later one waits for the earlier: it gets an overlap
 // edge by the engine, is not claimed while the earlier one is open and is once it is done.
 func TestEngine_OverlapHoldsTheLaterItem(t *testing.T) {

@@ -43,9 +43,9 @@ type runEnv struct {
 // the port. A Jonah run (ADR 0017 decision 1) and a grade get only the model connection's env,
 // so after resolving it keeps only the credentials the model connection refers to. The line runs
 // (domain.Line.Refusal), so it has a model connection. A request with a model key is of a version
-// on secrets, which opens no connection or credential (secretEnv); of its runs only a station's
-// opens the repository token and the entry tokens its code picks, since a Jonah review clones
-// nothing.
+// on secrets, which opens no connection or credential (secretEnv); of its runs a station's opens
+// the repository token and the entry tokens its code picks, and a check's the entry tokens alone,
+// since it has no repository; a Jonah review clones nothing.
 func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, own []string, run domain.RunID) (runEnv, error) {
 	if req.ModelKey != "" {
 		repo, code := req.Repository, req.Code
