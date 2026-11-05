@@ -1,11 +1,21 @@
 // E10: a person moves, pauses and sends back work, at any state, without dragging (WCAG 2.2 2.5.7).
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectToast, isPhone, pressUntilHeard, recordToasts } from './support';
 
 test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
   await recordToasts(page);
 });
+
+/** What a phone keeps in its More actions menu (Pause, Send back, Move) is a button on a wider screen. */
+async function openControl(page: Page, name: string | RegExp) {
+  if (!isPhone(page)) {
+    await page.getByRole('button', { name, exact: typeof name === 'string' }).click();
+    return;
+  }
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name, exact: typeof name === 'string' }).click();
+}
 
 const serveUI = 'goald: serve the embedded web UI'; // goal#12, waiting at Approve spec
 
@@ -122,7 +132,7 @@ test('carry a card with the keyboard to a column off the screen: one arrow, one 
 
 test('pause a running item, then resume it', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/9');
-  await page.getByRole('button', { name: 'Pause' }).click();
+  await openControl(page, 'Pause');
 
   const dialog = page.getByRole('dialog', { name: 'Pause goal#9?' });
   await expect(dialog.getByText(/The agent working on it now stops\./)).toBeVisible();
@@ -132,12 +142,13 @@ test('pause a running item, then resume it', async ({ page }) => {
   await expectToast(page, 'Paused goal#9 at Build.');
   await page.getByRole('button', { name: 'Resume' }).click();
   await expectToast(page, 'goal#9 is back in the queue.');
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
+  if (isPhone(page)) await expect(page.getByRole('button', { name: 'Resume' })).toBeHidden();
+  else await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
 });
 
 test('send a running item back to its rework station', async ({ page, request }) => {
   await page.goto('/o/acme/f/goal/items/9');
-  await page.getByRole('button', { name: 'Send back to Spec' }).click();
+  await openControl(page, 'Send back to Spec');
 
   const dialog = page.getByRole('dialog', { name: 'Send goal#9 back to Spec' });
   await expect(dialog.getByText(/The agent working on it now stops\./)).toBeVisible();
@@ -157,8 +168,9 @@ test('Escape from Send back and Pause puts focus back on the button that opened 
     ['Send back to Spec', /^Send goal#12 back/],
     ['Pause', /^Pause goal#12/],
   ] as const) {
-    const opener = page.getByRole('button', { name: button, exact: true });
-    await opener.click();
+    // A phone opens both from the More actions menu, and focus returns to that button.
+    const opener = page.getByRole('button', { name: isPhone(page) ? 'More actions' : button, exact: true });
+    await openControl(page, button);
     await expect(page.getByRole('dialog', { name: dialog })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: dialog })).toBeHidden();

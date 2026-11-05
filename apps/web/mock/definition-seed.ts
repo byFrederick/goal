@@ -466,7 +466,7 @@ export function seedDefinitions(): Record<string, MockDefinition> {
     '0b7d9e21-58a4-4f0e-b6c3-2a9d8e7f6a51': sre,
     '5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01': support,
     '9e8d7c6b-5a49-4382-9172-6a5b4c3d2e1f': research,
-    '0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88': software,
+    '0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88': seedSoftware(),
   };
 }
 
@@ -530,22 +530,24 @@ const flakyTrigger = `    triggers:
           brief: "The dependency audit reported a finding. Update the direct dependency and say in the pull request which advisory it fixes."
 `;
 
-const software = definition({
-  versions: [
-    {
-      id: '019a1c00-0000-7000-8000-0000000000f0',
-      message: 'First version',
-      at: day(10, '09:00'),
-      files: tree({ 'factory.yaml': softwareYaml('') }),
-    },
-    {
-      id: '019a1c00-0000-7000-8000-0000000000f1',
-      message: 'Add the flaky-test trigger',
-      at: day(20, '09:00'),
-      files: tree({ 'factory.yaml': softwareYaml(flakyTrigger) }),
-    },
-  ],
-});
+// A function: a reset seeds a fresh tree, so a draft one test opens is gone for the next.
+const seedSoftware = () =>
+  definition({
+    versions: [
+      {
+        id: '019a1c00-0000-7000-8000-0000000000f0',
+        message: 'First version',
+        at: day(10, '09:00'),
+        files: tree({ 'factory.yaml': softwareYaml('') }),
+      },
+      {
+        id: '019a1c00-0000-7000-8000-0000000000f1',
+        message: 'Add the flaky-test trigger',
+        at: day(20, '09:00'),
+        files: tree({ 'factory.yaml': softwareYaml(flakyTrigger) }),
+      },
+    ],
+  });
 
 // Templates: the catalog's latest versions, "8 in the bucket".
 

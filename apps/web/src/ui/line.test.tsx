@@ -76,7 +76,10 @@ describe('Line', () => {
     expect(strip.className).toContain('motion-andon');
     for (const li of stationItems()) {
       expect(li.getAttribute('data-dimmed')).toBe('true');
-      expect(li.className).toContain('data-[dimmed=true]:opacity-40');
+      // The graphics dim by opacity and the words turn muted: opacity on text fails contrast.
+      expect(li.className).toContain('group');
+      expect(li.querySelector('[class*="group-data-[dimmed=true]:opacity-40"]')).not.toBeNull();
+      expect(li.querySelector('[class*="group-data-[dimmed=true]:text-muted"]')).not.toBeNull();
     }
   });
 
