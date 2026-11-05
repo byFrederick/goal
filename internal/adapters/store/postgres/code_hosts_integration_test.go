@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -50,6 +51,75 @@ func TestCodeHosts_RoundTripAndIsolation(t *testing.T) {
 	}
 
 	refuseRawCodeHosts(t, pool, a, "github.com", "GIT.example.org", "localhost")
+}
+
+// Two instances seeding one organization at once, each on its own pool, seed it once: exactly
+// one call reports the seed, each host is stored once and one audit entry is appended. A host
+// an owner removes afterwards is not seeded back.
+func TestCodeHosts_SeedOnTwoInstancesAddsEachOnce(t *testing.T) {
+	t.Parallel()
+
+	tdb := newTestDB(t, OwnerRole)
+	migrate(t, tdb.owner)
+
+	pools := []*pgxpool.Pool{openPool(t, tdb.app), openPool(t, tdb.app)}
+	stores := []*Store{New(pools[0]), New(pools[1])}
+	org := newOrgID(t, stores[0])
+	ctx := domain.WithOrg(t.Context(), org)
+
+	hosts := []domain.CodeHost{
+		{Host: "ghe.example.com", Kind: domain.CodeHostGitHub},
+		{Host: "gitlab.example.com", Kind: domain.CodeHostGitLab},
+	}
+
+	var (
+		wg      sync.WaitGroup
+		start   = make(chan struct{})
+		results = make([]bool, len(stores))
+		errs    = make([]error, len(stores))
+	)
+
+	for i, s := range stores {
+		wg.Go(func() {
+			<-start
+
+			results[i], errs[i] = s.SeedCodeHosts(ctx, domain.LocalUser, hosts)
+		})
+	}
+
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("instance %d: SeedCodeHosts: %v", i, err)
+		}
+	}
+
+	if results[0] == results[1] {
+		t.Errorf("seeded = %v; want exactly one instance to seed", results)
+	}
+
+	if got, err := stores[1].CodeHosts(ctx); err != nil || !reflect.DeepEqual(got, hosts) {
+		t.Errorf("CodeHosts = %+v, %v; want each host once: %+v", got, err, hosts)
+	}
+
+	var n int
+	if err := asOrg(t, pools[0], org, "SELECT count(*) FROM audit_log WHERE action = 'org.code_hosts_set'", &n); err != nil || n != 1 {
+		t.Errorf("org.code_hosts_set entries = %d, %v; want 1", n, err)
+	}
+
+	if _, err := stores[0].SetCodeHosts(ctx, domain.LocalUser, hosts[:1]); err != nil {
+		t.Fatal(err)
+	}
+
+	if seeded, err := stores[1].SeedCodeHosts(ctx, domain.LocalUser, hosts); err != nil || seeded {
+		t.Errorf("a later SeedCodeHosts = %v, %v; want no seed", seeded, err)
+	}
+
+	if got, err := stores[0].CodeHosts(ctx); err != nil || !reflect.DeepEqual(got, hosts[:1]) {
+		t.Errorf("after the removal and a later seed = %+v, %v; want %+v", got, err, hosts[:1])
+	}
 }
 
 // refuseRawCodeHosts checks that code_hosts refuses each of hosts written straight in SQL as org.

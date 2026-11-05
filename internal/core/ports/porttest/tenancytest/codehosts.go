@@ -94,3 +94,74 @@ func testCodeHosts(f *fixture) {
 		f.t.Errorf("after clearing = %+v; want none", got)
 	}
 }
+
+func (f *fixture) seedCodeHosts(o domain.Org, hosts ...domain.CodeHost) bool {
+	f.t.Helper()
+
+	seeded, err := f.CodeHosts.SeedCodeHosts(f.in(o), domain.LocalUser, hosts)
+	if err != nil {
+		f.t.Fatalf("SeedCodeHosts: %v", err)
+	}
+
+	return seeded
+}
+
+// An organization's hosts are seeded once: the first call adds the hosts it lacks, keeping the
+// kind of a host already listed, with one audit entry; a later call adds nothing, so a host an
+// owner removed after the seed stays removed. Another organization's list is untouched.
+func testCodeHostsSeededOnce(f *fixture) {
+	a := f.create(acme, acmeName)
+	b := f.create(labs, labsName)
+
+	f.setCodeHosts(b, gitlab)
+	f.setCodeHosts(a, ghe)
+
+	asGitLab := domain.CodeHost{Host: ghe.Host, Kind: domain.CodeHostGitLab}
+	if !f.seedCodeHosts(a, asGitLab, gitlab) {
+		f.t.Fatal("first SeedCodeHosts seeded nothing; want it to seed")
+	}
+
+	if got, want := f.codeHosts(a), []domain.CodeHost{ghe, gitlab}; !reflect.DeepEqual(got, want) {
+		f.t.Errorf("after the seed = %+v; want %+v, the listed host keeping its kind", got, want)
+	}
+
+	entries := f.log(a, ports.AuditQuery{Action: domain.AuditOrgCodeHostsSet})
+	if len(entries) != 2 {
+		f.t.Fatalf("org.code_hosts_set entries = %d; want 2, the set and the seed", len(entries))
+	}
+
+	wantData := map[string]any{
+		"hosts": []any{map[string]any{"host": ghe.Host, "kind": "github"}, map[string]any{"host": gitlab.Host, "kind": "gitlab"}},
+		"from":  []any{map[string]any{"host": ghe.Host, "kind": "github"}},
+	}
+	if seed := entries[0]; !reflect.DeepEqual(seed.Data, wantData) || seed.Actor.Ref() != domain.LocalUser.Ref() || seed.TargetID != string(a.ID) {
+		f.t.Errorf("seed entry = %+v; want data %v by the local user on the organization", seed, wantData)
+	}
+
+	f.setCodeHosts(a, ghe) // an owner removes the seeded host
+
+	if f.seedCodeHosts(a, gitlab) {
+		f.t.Error("second SeedCodeHosts seeded; want nothing")
+	}
+
+	if got := f.codeHosts(a); !reflect.DeepEqual(got, []domain.CodeHost{ghe}) {
+		f.t.Errorf("after the second seed = %+v; want only %+v, the removed host not back", got, ghe)
+	}
+
+	if n := len(f.log(a, ports.AuditQuery{Action: domain.AuditOrgCodeHostsSet})); n != 3 {
+		f.t.Errorf("org.code_hosts_set entries = %d; want 3, none for the second seed", n)
+	}
+
+	if got := f.codeHosts(b); !reflect.DeepEqual(got, []domain.CodeHost{gitlab}) {
+		f.t.Errorf("another organization's hosts = %+v; want only %+v", got, gitlab)
+	}
+
+	// The first seed of an organization with nothing to add still counts as its seed.
+	if !f.seedCodeHosts(b) || f.seedCodeHosts(b, ghe) {
+		f.t.Error("an empty first seed did not count as the seed")
+	}
+
+	if got := f.codeHosts(b); !reflect.DeepEqual(got, []domain.CodeHost{gitlab}) {
+		f.t.Errorf("after the empty seed = %+v; want only %+v", got, gitlab)
+	}
+}

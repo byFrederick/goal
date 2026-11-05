@@ -52,6 +52,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"PurgeOrg_OneOrgAtATime", testPurgeHook},
 		{"PurgeOrg_NothingThatIsNotDue", testPurgeRefused},
 		{"CodeHosts_ReplacedReadAndIsolated", testCodeHosts},
+		{"CodeHosts_SeededOnce", testCodeHostsSeededOnce},
 	}
 
 	for _, tc := range tests {

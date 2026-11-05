@@ -591,6 +591,12 @@ type CodeHosts interface {
 	// and returns the hosts now stored, sorted by host; setting what is stored changes nothing
 	// and appends nothing.
 	SetCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) ([]domain.CodeHost, error)
+	// SeedCodeHosts adds hosts (already checked with domain.CheckCodeHost) the first time it is
+	// called for the organization, and never again, so a host an owner removes later stays
+	// removed (ADR 0041 decision 19). A host already listed keeps its kind; when it adds a host it
+	// appends one org.code_hosts_set by by. seeded reports whether this call was the first,
+	// whether or not it added a host. Concurrent calls, on any instance, seed once.
+	SeedCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) (seeded bool, err error)
 }
 
 // NewOrg is an organization to create.

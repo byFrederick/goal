@@ -17,3 +17,13 @@ DELETE FROM code_hosts WHERE NOT (host = ANY (sqlc.arg(hosts)::text[]));
 INSERT INTO code_hosts (host, kind, created_by)
 VALUES (sqlc.arg(host), sqlc.arg(kind), sqlc.arg(created_by))
 ON CONFLICT (org_id, host) DO UPDATE SET kind = excluded.kind WHERE code_hosts.kind <> excluded.kind;
+
+-- name: MarkCodeHostsSeeded :execrows
+-- One row the first time for the organization (00128), none after: the caller seeds only on 1.
+INSERT INTO code_hosts_seeded DEFAULT VALUES ON CONFLICT (org_id) DO NOTHING;
+
+-- name: AddCodeHost :execrows
+-- Adds host unless it is listed, keeping a listed host's kind and who added it.
+INSERT INTO code_hosts (host, kind, created_by)
+VALUES (sqlc.arg(host), sqlc.arg(kind), sqlc.arg(created_by))
+ON CONFLICT (org_id, host) DO NOTHING;
