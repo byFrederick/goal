@@ -70,12 +70,15 @@ describe('the Webhooks list', () => {
     const { queryClient } = renderWebhooks({ list });
     queryClient.setQueryData(webhooksQuery(org.id).queryKey, undefined);
     await queryClient.cancelQueries();
-    queryClient.getQueryCache().find({ queryKey: webhooksQuery(org.id).queryKey })?.setState({
-      status: 'error',
-      error: new Error('down'),
-      data: undefined,
-      fetchStatus: 'idle',
-    });
+    queryClient
+      .getQueryCache()
+      .find({ queryKey: webhooksQuery(org.id).queryKey })
+      ?.setState({
+        status: 'error',
+        error: new Error('down'),
+        data: undefined,
+        fetchStatus: 'idle',
+      });
 
     expect(await screen.findByText(/Couldn’t load the webhooks/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();

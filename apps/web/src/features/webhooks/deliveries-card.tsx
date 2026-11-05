@@ -13,7 +13,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { SkeletonRows } from '../../ui/skeleton';
+import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Card, FactoryChip } from './parts';
 import type { RequestTarget } from './request-dialog';
 import { evaluationText, receiptNote, receiptOf } from './words';
@@ -52,11 +52,10 @@ export function DeliveriesCard({
       }}
     >
       {log.isPending ? (
-        <div aria-busy="true" className="p-4">
-          <span className="sr-only" role="status">
-            Loading deliveries
-          </span>
-          <SkeletonRows rows={4} />
+        <div className="p-4">
+          <Skeleton ready={false} placeholder={<SkeletonRows rows={4} />}>
+            <span />
+          </Skeleton>
         </div>
       ) : log.isError ? (
         <div role="alert" className="flex flex-col items-start gap-3 p-4">
