@@ -37,6 +37,9 @@ func (r CodeRepository) String() string { return r.Key() }
 // stored (ports.CodeHosts).
 func ListedCodeHosts(added []CodeHost) []CodeHost { return append(BuiltInCodeHosts(), added...) }
 
+// schemeHTTPS is the only scheme a repository URL may have.
+const schemeHTTPS = "https"
+
 // pathSegment is one segment of a repository's path on either kind of host.
 var pathSegment = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
@@ -52,7 +55,7 @@ func ParseCodeRepository(hosts []CodeHost, raw string) (CodeRepository, error) {
 		return CodeRepository{}, fmt.Errorf("%q is not a repository URL: %w", redactedURL(raw), ErrInvalid)
 	}
 
-	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if u.Scheme != schemeHTTPS || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return CodeRepository{}, fmt.Errorf("%s is not a repository's https URL without credentials, such as https://github.com/acme/app: %w",
 			u.Redacted(), ErrInvalid)
 	}
@@ -74,36 +77,40 @@ func ParseCodeRepository(hosts []CodeHost, raw string) (CodeRepository, error) {
 // repositorySegments are the owner and name segments of a repository path on a host of kind, or
 // of a pull request or merge request path in it, and false for any other path.
 func repositorySegments(kind CodeHostKind, segs []string) ([]string, bool) {
-	number := func(s string) bool {
-		n, err := strconv.Atoi(s)
-		return err == nil && n > 0 && s[0] != '0'
-	}
-
 	if kind == CodeHostGitLab {
 		if i := slices.Index(segs, "-"); i >= 0 {
-			if i < 2 || len(segs) != i+3 || segs[i+1] != "merge_requests" || !number(segs[i+2]) {
-				return nil, false
-			}
-
-			return segs[:i], true
+			// A merge request: /<group>/.../<name>/-/merge_requests/<iid>.
+			ok := i >= 2 && len(segs) == i+3 && segs[i+1] == "merge_requests" && positive(segs[i+2])
+			return segs[:i], ok
 		}
 
-		if len(segs) < 2 {
-			return nil, false
-		}
-	} else {
-		switch {
-		case len(segs) == 4 && segs[2] == "pull" && number(segs[3]):
-			return segs[:2], true
-		case len(segs) != 2:
-			return nil, false
-		}
+		return repositoryName(segs, len(segs) >= 2)
+	}
+
+	if len(segs) == 4 && segs[2] == "pull" && positive(segs[3]) {
+		return segs[:2], true
+	}
+
+	return repositoryName(segs, len(segs) == 2)
+}
+
+// repositoryName is segs of a repository's own path, ok when its shape is, with .git dropped
+// from the name.
+func repositoryName(segs []string, ok bool) ([]string, bool) {
+	if !ok {
+		return nil, false
 	}
 
 	segs = slices.Clone(segs)
 	segs[len(segs)-1] = strings.TrimSuffix(segs[len(segs)-1], ".git")
 
 	return segs, segs[len(segs)-1] != ""
+}
+
+// positive reports whether s is a positive decimal number without a leading zero.
+func positive(s string) bool {
+	n, err := strconv.Atoi(s)
+	return err == nil && n > 0 && s[0] != '0'
 }
 
 // redactedURL is raw for an error when it does not parse: cut at its last @, which may end

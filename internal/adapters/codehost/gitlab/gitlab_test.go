@@ -599,7 +599,9 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	c := New(Config{APIURL: accessGitLab(t).URL})
 
 	for _, bad := range []domain.CodeRepository{
-		{}, {Host: gitLabDotCom, Name: "app"}, {Host: gitLabDotCom, Owner: "acme/..", Name: "app"},
+		{},
+		{Host: gitLabDotCom, Name: "app"},
+		{Host: gitLabDotCom, Owner: "acme/..", Name: "app"},
 		{Host: domain.BuiltInCodeHosts()[0], Owner: "acme", Name: "app"},
 	} {
 		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,6 +42,9 @@ const (
 	octo = "octo"
 	// gheHost is a GitHub Enterprise Server host.
 	gheHost = "ghe.example.com"
+	// acmeOwner owns the fake's repositories.
+	acmeOwner = "acme"
+	appName   = "app"
 )
 
 // gitHubDotCom is github.com, as the organization's list has it.
@@ -413,7 +417,7 @@ func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 
 	f, c := newFakeGitHub(t)
 	ghe := repoOf(t, "https://"+gheHost+"/acme/app")
-	onGitLab := domain.CodeRepository{Host: domain.BuiltInCodeHosts()[1], Owner: "acme", Name: "app"}
+	onGitLab := domain.CodeRepository{Host: domain.BuiltInCodeHosts()[1], Owner: acmeOwner, Name: appName}
 
 	for _, tt := range []struct {
 		repo domain.CodeRepository
@@ -844,11 +848,11 @@ func TestBranchHead_OnlyOnTheConnectionsHost(t *testing.T) {
 		repo  domain.CodeRepository
 		token string
 	}{
-		{domain.CodeRepository{Host: dotCom[1], Owner: "acme", Name: "app"}, token},
-		{domain.CodeRepository{Host: domain.CodeHost{Host: gheHost}, Owner: "acme", Name: "app"}, token},
-		{domain.CodeRepository{Host: dotCom[0], Owner: "acme"}, token},
-		{domain.CodeRepository{Host: dotCom[0], Owner: "..", Name: "app"}, token},
-		{domain.CodeRepository{Host: dotCom[0], Owner: "acme/team", Name: "app"}, token},
+		{domain.CodeRepository{Host: dotCom[1], Owner: acmeOwner, Name: appName}, token},
+		{domain.CodeRepository{Host: domain.CodeHost{Host: gheHost}, Owner: acmeOwner, Name: appName}, token},
+		{domain.CodeRepository{Host: dotCom[0], Owner: acmeOwner}, token},
+		{domain.CodeRepository{Host: dotCom[0], Owner: "..", Name: appName}, token},
+		{domain.CodeRepository{Host: dotCom[0], Owner: "acme/team", Name: appName}, token},
 		{domain.CodeRepository{}, token},
 		{appRepo(t), ""},
 	} {
@@ -1029,10 +1033,27 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
 		}
 	}
+}
 
-	// RepositoryAccess answers a redirect as a failed read, and sends the token nowhere else.
-	if got, err := moved.RepositoryAccess(t.Context(), appRepo(t), token); err != nil || got.Read.OK || leaked {
-		t.Errorf("RepositoryAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a failed read and no token sent", got, err, leaked)
+// RepositoryAccess answers a redirect as a failed read, and sends the token nowhere else.
+func TestRepositoryAccess_FollowsNoRedirect(t *testing.T) {
+	t.Parallel()
+
+	var leaked atomic.Bool
+
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked.Store(leaked.Load() || r.Header.Get("Authorization") != "")
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect) //nolint:gosec // the redirect under test
+	}))
+	t.Cleanup(redirect.Close)
+
+	got, err := New(Config{APIURL: redirect.URL}).RepositoryAccess(t.Context(), appRepo(t), token)
+	if err != nil || got.Read.OK || leaked.Load() {
+		t.Errorf("RepositoryAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a failed read and no token sent", got, err, leaked.Load())
 	}
 }
 
@@ -1316,7 +1337,7 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	c := New(Config{APIURL: srv.URL})
 
 	for _, bad := range []domain.CodeRepository{
-		{}, {Host: gitHubDotCom, Owner: "acme"}, {Host: gitHubDotCom, Owner: "acme", Name: "a b"}, {Host: domain.BuiltInCodeHosts()[1], Owner: "acme", Name: "app"},
+		{}, {Host: gitHubDotCom, Owner: acmeOwner}, {Host: gitHubDotCom, Owner: acmeOwner, Name: "a b"}, {Host: domain.BuiltInCodeHosts()[1], Owner: acmeOwner, Name: appName},
 	} {
 		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("RepositoryAccess(%+v) err = %v; want domain.ErrInvalid", bad, err)

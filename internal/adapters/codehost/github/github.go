@@ -576,6 +576,15 @@ type repoListJSON struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// signsIn refuses a host that is not a GitHub one and an empty token, wrapping domain.ErrInvalid.
+func signsIn(host domain.CodeHost, token string) error {
+	if host.Kind != domain.CodeHostGitHub || host.Host == "" || token == "" {
+		return fmt.Errorf("%s is not a GitHub host, or no token: %w", host.Host, domain.ErrInvalid)
+	}
+
+	return nil
+}
+
 // loginName is a GitHub account or organization login.
 var loginName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
@@ -587,11 +596,8 @@ var loginName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 // languageReads at a time, the largest by bytes first: up to ports.MaxRepositories+3 requests in
 // all, and any failure fails the whole call.
 func (cl *Client) Repositories(ctx context.Context, host domain.CodeHost, token, owner string) (ports.RepositoryList, error) {
-	switch {
-	case host.Kind != domain.CodeHostGitHub || host.Host == "":
-		return ports.RepositoryList{}, fmt.Errorf("repositories: %s is not a GitHub host", host.Host)
-	case token == "":
-		return ports.RepositoryList{}, fmt.Errorf("repositories on %s: no token: %w", host.Host, domain.ErrInvalid)
+	if err := signsIn(host, token); err != nil {
+		return ports.RepositoryList{}, fmt.Errorf("repositories: %w", err)
 	}
 
 	if owner != "" && !loginName.MatchString(owner) {

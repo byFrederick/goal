@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+// acmeOwner and webName name the parse tests' repositories.
+const (
+	acmeOwner = "acme"
+	webName   = "web"
+	appName   = "app"
+	appKey    = "github.com/acme/app"
+)
+
 // A repository URL, or a pull request's or merge request's in it, names one repository of a listed
 // host: .git and a trailing slash are dropped, the key is in lower case, and GitLab's groups nest.
 func TestCodeHost_RepositoryParse(t *testing.T) {
@@ -21,15 +29,15 @@ func TestCodeHost_RepositoryParse(t *testing.T) {
 		want CodeRepository
 		key  string
 	}{
-		{raw: "https://github.com/acme/app", want: CodeRepository{Host: gitHub, Owner: "acme", Name: "app"}, key: "github.com/acme/app"},
-		{raw: "https://GitHub.com/Acme/App.git", want: CodeRepository{Host: gitHub, Owner: "Acme", Name: "App"}, key: "github.com/acme/app"},
-		{raw: "https://github.com/acme/app/", want: CodeRepository{Host: gitHub, Owner: "acme", Name: "app"}, key: "github.com/acme/app"},
-		{raw: "https://github.com/acme/app/pull/7", want: CodeRepository{Host: gitHub, Owner: "acme", Name: "app"}, key: "github.com/acme/app"},
-		{raw: "https://GHE.example.com/acme/app.git", want: CodeRepository{Host: ghe, Owner: "acme", Name: "app"}, key: hostGHE + "/acme/app"},
-		{raw: "https://gitlab.com/acme/web", want: CodeRepository{Host: gitLab, Owner: "acme", Name: "web"}, key: "gitlab.com/acme/web"},
+		{raw: "https://github.com/acme/app", want: CodeRepository{Host: gitHub, Owner: acmeOwner, Name: appName}, key: appKey},
+		{raw: "https://GitHub.com/Acme/App.git", want: CodeRepository{Host: gitHub, Owner: "Acme", Name: "App"}, key: appKey},
+		{raw: "https://github.com/acme/app/", want: CodeRepository{Host: gitHub, Owner: acmeOwner, Name: appName}, key: appKey},
+		{raw: "https://github.com/acme/app/pull/7", want: CodeRepository{Host: gitHub, Owner: acmeOwner, Name: appName}, key: appKey},
+		{raw: "https://GHE.example.com/acme/app.git", want: CodeRepository{Host: ghe, Owner: acmeOwner, Name: appName}, key: hostGHE + "/acme/app"},
+		{raw: "https://gitlab.com/acme/web", want: CodeRepository{Host: gitLab, Owner: acmeOwner, Name: webName}, key: "gitlab.com/acme/web"},
 		{
 			raw:  "https://gitlab.com/acme/platform/web/-/merge_requests/3",
-			want: CodeRepository{Host: gitLab, Owner: "acme/platform", Name: "web"}, key: "gitlab.com/acme/platform/web",
+			want: CodeRepository{Host: gitLab, Owner: "acme/platform", Name: webName}, key: "gitlab.com/acme/platform/web",
 		},
 		{
 			raw:  "https://" + hostGitAcme + "/Acme/Platform/Web.git",
@@ -61,7 +69,7 @@ func TestCodeHost_RepositoryParseRefuses(t *testing.T) {
 		"https://" + hostGitAcme + "/acme/app/-/merge_requests/1",
 	} {
 		_, err := ParseCodeRepository(hosts, raw)
-		host := strings.Split(strings.TrimPrefix(raw, "https://"), "/")[0]
+		host, _, _ := strings.Cut(strings.TrimPrefix(raw, "https://"), "/")
 
 		if !errors.Is(err, ErrCodeHostUnlisted) || !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), host) {
 			t.Errorf("ParseCodeRepository(%s) = %v; want ErrCodeHostUnlisted naming %s", raw, err, host)

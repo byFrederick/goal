@@ -190,7 +190,7 @@ func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
 
 		switch {
 		case !listed && (got != "" || len(calls) != 0 || !strings.Contains(h.logs.String(), "base commit not recorded")):
-			t.Errorf("unlisted: base commit %q after %d code host calls; want none, none, and the log saying why", got, len(calls))
+			t.Errorf("unlisted: base commit %q after %d code host calls; want no base commit, no call and the log saying why", got, len(calls))
 		case listed && (got != base || !slices.Equal(calls, []string{"ghe-token"})):
 			t.Errorf("listed: base commit %q with tokens %d; want %s read once with the ghe connection's token", got, len(calls), base)
 		}
