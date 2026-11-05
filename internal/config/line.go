@@ -328,7 +328,7 @@ func trigger(t Trigger) domain.Trigger {
 		Name: t.Name, Enabled: t.Enabled == nil || *t.Enabled, On: t.On, Cron: t.Cron, TimeZone: t.TimeZone,
 		Create: domain.TriggerCreate{
 			Type: t.Create.Type, Station: t.Create.Station, Lane: t.Create.Lane, Expedite: t.Create.Expedite,
-			Title: t.Create.Title, Brief: t.Create.Brief, Trusted: t.Create.Trusted,
+			Title: t.Create.Title, Brief: t.Create.Brief, Repositories: slices.Clone(t.Create.Repositories), Trusted: t.Create.Trusted,
 		},
 	}
 

@@ -110,6 +110,10 @@ type TriggerCreate struct {
 	Type, Station, Lane string
 	Expedite            bool
 	Title, Brief        string
+	// Repositories are the item's repositories, each a template like Title (an event's {{repo}}
+	// is owner/name) or an entry's name, matched against the line's entries
+	// (Line.ResolveRepositories, ADR 0041 decision 13).
+	Repositories []string
 	// Trusted files a delivery's item trusted (ADR 0040 decision 21): its merges need no person.
 	Trusted bool
 }
