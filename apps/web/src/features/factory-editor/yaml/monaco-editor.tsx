@@ -165,6 +165,8 @@ export default function MonacoEditor({
       wrappingIndent: 'same',
       lineNumbers: 'on',
       lineNumbersMinChars: 3,
+      // The default dims the last line's number on Linux; every number reads at the same contrast.
+      renderFinalNewline: 'on',
       lineDecorationsWidth: 14,
       folding: false,
       glyphMargin: language !== 'markdown',
