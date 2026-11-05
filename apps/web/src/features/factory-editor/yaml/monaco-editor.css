@@ -39,7 +39,8 @@
 /* The layer that holds the zones is as wide as the whole line layer, so it too reached 16 million px
    past the window once it stopped being aria-hidden (the e2e check skips hidden layers). It only
    holds the zones, so it is as wide as one. */
-.monaco-editor .view-zones {
+.monaco-editor .view-zones,
+.monaco-editor .view-zones > * {
   width: var(--goal-zone-width, 480px) !important;
 }
 

@@ -8,7 +8,11 @@ import { SourcePage } from './source-page';
 import { renderKnowledge, sourceOf, summary } from './test-harness';
 
 const draft = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
-vi.mock('../../api/definitions', () => ({ getDraftFile: draft.get, putDraftFile: draft.put }));
+vi.mock('../../api/definitions', () => ({
+  getDraftFile: draft.get,
+  putDraftFile: draft.put,
+  openDraft: vi.fn(async () => ({})),
+}));
 vi.mock('../../app/top-bar', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../app/top-bar')>()),
   TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,

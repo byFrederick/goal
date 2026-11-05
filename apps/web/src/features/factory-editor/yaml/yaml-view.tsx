@@ -198,12 +198,13 @@ export function YamlView({ search }: SectionViewProps) {
   }, [problems]);
 
   // The change gutter: this file against the version the draft is based on.
-  const comparison = useQuery({
+  const comparisonQuery = useQuery({
     queryKey: defKeys.compare(org, f, 'base', 'draft', revision),
     queryFn: ({ signal }) => compareVersions(org, f, 'base', 'draft', signal),
     enabled: hasDraft,
     placeholderData: keepPreviousData,
-  }).data;
+  });
+  const comparison = comparisonQuery.data;
   const changedFiles = useMemo(
     () => new Set((hasDraft ? (comparison?.files ?? []) : []).filter((x) => x.op !== 'unchanged').map((x) => x.path)),
     [comparison, hasDraft],
@@ -238,7 +239,9 @@ export function YamlView({ search }: SectionViewProps) {
   const changesPending =
     hasDraft &&
     path !== factoryFile &&
-    (comparison === undefined || (fileChange?.op === 'modified' && baseText === undefined));
+    (comparison === undefined ||
+      comparisonQuery.isPlaceholderData ||
+      (fileChange?.op === 'modified' && baseText === undefined));
   const entryLine =
     search.line ?? (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : changed[0]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: revealed once per file and asked-for line
