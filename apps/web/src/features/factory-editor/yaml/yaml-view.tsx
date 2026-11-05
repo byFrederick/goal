@@ -373,7 +373,7 @@ export function YamlView({ search }: SectionViewProps) {
       <h2 className="sr-only" data-route-focus="" tabIndex={-1}>
         YAML of the {version}
       </h2>
-      <div className="grid min-h-180 min-w-0 overflow-hidden rounded-card border border-rule @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
+      <div className="grid [overflow-anchor:none] min-h-180 min-w-0 overflow-hidden rounded-card border border-rule @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
         <div id={treeId} className={cn(filesOpen ? 'flex' : 'hidden', '@[640px]:flex', 'min-w-0 border-r border-line')}>
           <FileTree
             nodes={tree}
