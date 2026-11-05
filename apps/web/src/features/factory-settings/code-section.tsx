@@ -196,7 +196,7 @@ export function CodeSection() {
           <div className="flex min-w-0 flex-col gap-1">
             <span className="flex items-center gap-1 text-sm font-medium">
               Agents that write
-              <InfoTip about="Agents that write">
+              <InfoTip about="Agents that write" className="max-md:size-11">
                 Agents whose code is write push, open pull requests and merge in the repositories that write. An agent
                 without a setting writes when the factory has a write repository.
               </InfoTip>
@@ -234,7 +234,7 @@ export function CodeSection() {
       <div className="flex min-w-0 flex-col gap-3">
         <span className="flex items-center gap-1 text-sm font-medium">
           Repositories
-          <InfoTip about="Secrets and webhooks">
+          <InfoTip about="Secrets and webhooks" className="max-md:size-11">
             Creating a secret or opening a webhook needs an owner or admin. Ask one if the token you need is not in the
             list.
           </InfoTip>

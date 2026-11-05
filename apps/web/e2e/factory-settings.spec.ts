@@ -13,7 +13,7 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'General' })).toBeVisible();
-  await expect(page.getByLabel('Name')).toHaveValue('goal');
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('goal');
   await expect(page.getByLabel('Purpose')).toHaveAttribute('readonly', '');
   await expect(page.getByRole('region', { name: 'People with access' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'People with access' }).getByText('Organization owner')).toBeVisible();
