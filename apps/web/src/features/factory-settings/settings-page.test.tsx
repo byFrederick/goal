@@ -193,7 +193,7 @@ describe('Factory settings page', () => {
     const ids = Array.from(document.querySelectorAll('section[id]')).map((section) => section.id);
     expect(ids).toEqual([
       'general',
-      'repository',
+      'code',
       'runtime',
       'budgets',
       'flow',
@@ -209,7 +209,7 @@ describe('Factory settings page', () => {
         .map((link) => link.textContent),
     ).toEqual([
       'General',
-      'Repository',
+      'Code',
       'Runtime',
       'Budgets and targets',
       'Flow',
@@ -223,7 +223,7 @@ describe('Factory settings page', () => {
   it('shows Loading in each settings group while the draft loads', async () => {
     await renderSettings({ members: [] });
 
-    for (const name of ['Repository', 'Runtime', 'Budgets and targets', 'Flow']) {
+    for (const name of ['Code', 'Runtime', 'Budgets and targets', 'Flow']) {
       const group = screen.getByRole('region', { name });
       expect(within(group).getByText('Loading')).toBeTruthy();
       expect(group.querySelector('[aria-busy="true"]')).toBeTruthy();

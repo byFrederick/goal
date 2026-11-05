@@ -13,7 +13,7 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'General' })).toBeVisible();
-  await expect(page.getByLabel('Name')).toHaveValue('goal');
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('goal');
   await expect(page.getByLabel('Purpose')).toHaveAttribute('readonly', '');
   await expect(page.getByRole('region', { name: 'People with access' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'People with access' }).getByText('Organization owner')).toBeVisible();
@@ -71,7 +71,8 @@ test('factory settings has Save changes in the top bar and flat sections', async
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
-  await expect(page.locator('main [aria-expanded]')).toHaveCount(0);
+  // Flat sections have no accordion; a Select's combobox (Jonah's model) carries aria-expanded of its own.
+  await expect(page.locator('main [aria-expanded]:not([role=combobox])')).toHaveCount(0);
   await expect(page.getByText('Badge', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'true');
 });
@@ -85,7 +86,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
       await page.goto('/o/acme/f/goal/settings');
       await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Repository' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Code' })).toBeVisible();
       await testInfo.attach(`factory-settings-${width}-${theme}`, {
         body: await page.screenshot({ fullPage: true }),
         contentType: 'image/png',

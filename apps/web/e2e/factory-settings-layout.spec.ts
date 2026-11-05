@@ -1,4 +1,4 @@
-// Factory settings (canvas build/factory-settings) against the mock (Repository with its token, Runtime with its environments line, the model key and the environments, Notifications with the Slack secret): at 1440, 1280, 1024, 768
+// Factory settings (canvas build/factory-settings) against the mock (Code with its repositories, Runtime with its environments line, the model key and the environments, Notifications with the Slack secret): at 1440, 1280, 1024, 768
 // and 390 px, in light and dark, nothing goes past the viewport edge, no text is clipped, and a phone's
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
 import { expect, test } from '@playwright/test';
@@ -44,9 +44,11 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(path);
   await expect(page.getByRole('region', { name: 'Runtime' })).toBeVisible();
+  // A switch draws 32 × 18 px and takes its 44 px hit area from a ::before (ui/switch.tsx), which a box
+  // measurement cannot see, so it is left out here.
   const targets = page
     .getByRole('main')
-    .locator('a[href]:not(p a, dd a), button, input:not([type=hidden]), [role=combobox]');
+    .locator('a[href]:not(p a, dd a), button:not([role=switch]), input:not([type=hidden]), [role=combobox]');
   const boxes = await targets.evaluateAll((els) =>
     els.map((el) => {
       const { width, height } = el.getBoundingClientRect();

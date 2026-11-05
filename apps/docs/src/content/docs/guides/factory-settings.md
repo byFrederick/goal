@@ -28,19 +28,20 @@ Settings lists its sections in this order. Every section is open; scroll the pag
 
 The factory's name, its purpose from the definition, and its Badge: the colour and letter the sidebar shows. All three are read-only here.
 
-### Repository
+### Code
 
-The page shows the repository URL, a chip that says whether the token works, the name of the secret that holds the token, and a Change button. The chip comes from Goal asking the host's API whether the token can read the repository and push to it, without running git: "Token works", or "Token fails" with the host's reason. It shows only to people who may create factories, and "Token not tested" says the test could not run, for example because the secret is limited to some factories. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
+The section lists the factory's repositories. Each row shows the URL, its access ("Read only" or "Read and write"), the name of the secret that holds its token, and the last result of testing that token. A factory on the `runtime.repository` shorthand shows it as one "Read and write" row. A factory with neither shows "No code. Agents work through their tools."
+
+Test asks the host's API whether the token can do what the access asks, without running git. A read entry says "Can read"; a write entry says "Can read and push". A read entry whose token can also push carries a warning to use a read-only token. A failed check is shown as the answer, in the "sent back" tone, and "couldn't test" means the host did not reply. Goal keeps the result for the factory, so it is still there when you return. Test shows only to people who may edit the definition; everyone with access to the factory sees the kept results.
 
 | Field | Sets | Notes |
 |---|---|---|
-| Repository URL | `runtime.repository.url` | An https URL cloned into each run's box before the agent starts. Empty means no checkout and no pull requests. |
-| Repository token | `runtime.repository.token` | The secret whose token git signs in with, written as `{{secret-name}}`. Pick one, or choose New secret to make it here. "Use no token" is for a public repository. See [Access and secrets](../../concepts/access-and-secrets/). |
-| Base branch | none yet | Shows "Not available yet". The factory definition has no field for it. |
+| Repositories | `runtime.repositories` | Add a repository opens the entries in place: name, URL, access, token and whether items without a repository use it. Remove takes a row out. Both edit the draft; Save changes publishes it. |
+| Agents that write | each agent's `code` | "All agents" unless an agent is set to read; otherwise the agents that write. Change an agent's access on the Agents page. |
+| Branch names | none | Read only: `goal/<number>-<slug>`, in every repository an item changes. |
+| Default branch | none yet | Shows "Not available yet". The API does not return the host's default branch. |
 
-The fields above edit the `runtime.repository` shorthand: one repository with `write` access, which is the factory's default entry. A factory with more than one repository, an owner pattern such as `https://github.com/acme/*`, or a `read` entry lists them in `runtime.repositories`, which is edited in the Definition's YAML view. See [Connect code to a factory](../connect-code/). A definition has one form or the other, never both.
-
-A shorthand line merges only in its own repository. A pull request in a sibling repository on the same host is refused with `engine.ErrNoWriteEntry` ("no repository entry that writes covers the pull request's repository"), because no `write` entry covers it. Add a `write` entry for that repository in `runtime.repositories` to merge there.
+Creating a secret or opening a webhook needs an owner or admin; the ⓘ beside Repositories says so. Ask one if the token you need is not in the secret list. See [Connect code to a factory](../connect-code/) and [Access and secrets](../../concepts/access-and-secrets/).
 
 ### Runtime
 

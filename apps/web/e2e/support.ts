@@ -5,6 +5,16 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
 export async function expectAccessible(page: Page) {
+  // Entrances (row-in, fade-in) animate opacity, and axe reads a half-faded text as low contrast: let every
+  // finite animation finish first. Looping ones (the Skeleton's pulse) never finish, so they are skipped.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
