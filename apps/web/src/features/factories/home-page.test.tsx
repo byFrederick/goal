@@ -385,7 +385,11 @@ describe('Home: the ready state', () => {
     expect(within(needs).getByRole('link', { name: 'Reply' }).getAttribute('href')).toBe('/o/acme/needs-you');
     expect(within(needs).getByRole('button', { name: 'Deny' })).toBeTruthy();
 
-    fireEvent.click(within(needs).getByRole('button', { name: 'Approve' }));
+    const toolApprove = within(needs).getByRole('button', { name: 'Approve' });
+    expect(toolApprove.className).toContain('bg-you');
+    expect(toolApprove.className).toContain('text-white');
+    expect(toolApprove.className).not.toContain('text-action-ink');
+    fireEvent.click(toolApprove);
     await waitFor(() =>
       expect(decideToolApproval).toHaveBeenCalledWith('org-1', 'id-software#14', {
         decision: 'approve',
@@ -441,7 +445,11 @@ describe('Home: the ready state', () => {
   it('approves an approval in place, through the item decision', async () => {
     await renderReady();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    const approve = await screen.findByRole('button', { name: 'Approve' });
+    expect(approve.className).toContain('bg-you');
+    expect(approve.className).toContain('text-white');
+    expect(approve.className).not.toContain('text-action-ink');
+    fireEvent.click(approve);
 
     await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'software#12'));
   });
