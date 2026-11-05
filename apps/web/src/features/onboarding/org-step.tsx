@@ -44,7 +44,7 @@ export function OrgStep({ home }: { home: OrgSummary | undefined }) {
 
   const create = useCreateOrg((org) => {
     setOrgUses(org.id, uses);
-    navigate({ to: '/o/$org/get-started/$step', params: { org: org.slug, step: 'code' } });
+    navigate({ to: '/o/$org/get-started/$step', params: { org: org.slug, step: 'factory' } });
   });
   const failed = create.error && !isSlugTaken(create.error);
 

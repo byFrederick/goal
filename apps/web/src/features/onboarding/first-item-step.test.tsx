@@ -201,7 +201,8 @@ describe('step 8, watch your first item', () => {
     expect(screen.getByText('Spec accepted')).toBeTruthy();
     expect(screen.getByText('Cost so far')).toBeTruthy();
     expect(screen.getByText('$0.84')).toBeTruthy();
-    expect(screen.getByText('Review merges it when it passes. Nothing else in the repository changes.')).toBeTruthy();
+    expect(screen.queryByText(/Review merges it/)).toBeNull();
+    expect(screen.queryByText(/repository/)).toBeNull();
   });
 
   it('does not submit again after a remount, and the panel shows the running item', async () => {

@@ -10,11 +10,11 @@ A factory runs from a published version. You can get one in two ways: the web ap
 
 ## Create one in the web app
 
-Setup starts after you create an organization and takes you through eight steps. Step 3 (Factory) makes the factory from a template, and step 5 (Budget) publishes it. The steps, in order:
+Setup starts after you create an organization and takes you through eight steps. Step 2 (Factory) makes the factory from a template, and step 5 (Budget) publishes it. The steps, in order:
 
 1. **Organization** names the organization and asks what its factories will do. Goal suggests templates from the answer.
-2. **Code** takes the repository's https address and a token, the code the factory's agents work on. Goal saves the token as the secret `github-token`, then tries to clone the repository and push a branch with it, and shows the host's answer. Continue stays off until the test passes. There is no app to install: a fine-grained token for that one repository, with Contents and Pull requests read and write, is enough. See [Access and secrets](../../concepts/access-and-secrets/).
-3. **Factory** starts a factory from a template and lets you name what it works on.
+2. **Factory** starts a factory from a template and lets you name what it works on.
+3. **Code** asks how much of your code agents may touch, once the factory exists, so the token is open to that one factory. Choose **No code**, **Read only** or **Read and write**. The template's line decides which choices are open: a line that merges pull requests needs Read and write, a line that reads code can't go without code, and the ⓘ on a disabled choice says why. No code asks for nothing. The other two ask which repositories (a whole organization, or only some, one or more by https address) and a token. Goal saves the token as a secret open to this factory only and tests it on every address, and shows the host's answer for each. Continue stays off until the test passes. If the secret's name is taken, Goal never replaces its value: use the existing secret or pick a new name. The repositories go into the factory as `runtime.repositories` entries with the access you chose. There is no app to install: a fine-grained token with Contents (and, to write, Pull requests) is enough. See [Access and secrets](../../concepts/access-and-secrets/).
 4. **Line** shows the factory's stations.
 5. **Budget** sets the spend and the targets. Continuing from this step publishes the factory.
 6. **Intake** chooses where work comes from: the triggers the template ships with, off until you turn them on, plus **New item**, the CLI and the API.
