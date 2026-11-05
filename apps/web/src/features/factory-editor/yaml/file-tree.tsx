@@ -40,11 +40,20 @@ const anyChanged = (folder: TreeFolder, changed: ReadonlySet<string>): boolean =
   folder.children.some((c) => (c.kind === 'file' ? changed.has(c.path) : anyChanged(c, changed)));
 
 /** A dot for a changed file or folder: a mark beside the name, the words for screen readers. */
-function ChangedMark({ on, className = 'ml-auto' }: { on: boolean; className?: string }) {
+function ChangedMark({
+  on,
+  className = 'ml-auto',
+  words = true,
+}: {
+  on: boolean;
+  className?: string;
+  /** False when the words sit inside the name's own span, so the accessible name reads "name, changed" without a flex gap. */
+  words?: boolean;
+}) {
   return on ? (
     <>
       <span aria-hidden="true" className={cn(className, 'size-1.5 shrink-0 rounded-full bg-muted')} />
-      <span className="sr-only">, changed</span>
+      {words ? <span className="sr-only">, changed</span> : null}
     </>
   ) : null;
 }
@@ -94,9 +103,12 @@ export function FileTree({
           className={cn(rowBase, selected && 'bg-hover font-control text-ink')}
         >
           <File size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-muted" />
-          <span className="truncate font-mono text-meta">{file.name}</span>
+          <span className="truncate font-mono text-meta">
+            {file.name}
+            {changed.has(file.path) ? <span className="sr-only">, changed</span> : null}
+          </span>
           <ErrorCount count={errors} />
-          <ChangedMark on={changed.has(file.path)} />
+          <ChangedMark on={changed.has(file.path)} words={false} />
         </button>
         {menu ? (
           <Menu>
