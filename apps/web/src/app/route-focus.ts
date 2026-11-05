@@ -55,8 +55,12 @@ function focusHeading(heading: HTMLElement | null): void {
 /** How long a lazily loaded view's heading is waited for before the h1 takes focus. */
 const viewWaitMs = 5000;
 
-/** How long a heading that was already there is given to be replaced before it counts as the new one. */
-const sameViewMs = 400;
+/**
+ * How long a heading that was already there is given to be replaced before it counts as the new one. A
+ * section that loads over a slow link (a few round trips of 200 ms) is still on its way after 400 ms, and
+ * focusing the old heading then would lose focus when the new view replaces it.
+ */
+const sameViewMs = 1500;
 
 /**
  * Waits for the view's `data-route-focus` heading to mount (a lazy section's code arriving; the

@@ -65,6 +65,18 @@ describe('PageActions on a phone', () => {
   });
 });
 
+describe('PageActions on Review and publish', () => {
+  it('leaves Publish to the page, so there is one Publish v9 button', () => {
+    for (const narrow of [false, true]) {
+      setNarrow(narrow);
+      const { unmount } = render(<PageActions {...props} section="review" canPublish />);
+      expect(screen.queryByRole('link', { name: 'Publish v9' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Publish v9' })).toBeNull();
+      unmount();
+    }
+  });
+});
+
 describe('PageActions on wider screens', () => {
   it('lists Versions beside the other actions', () => {
     setNarrow(false);

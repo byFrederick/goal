@@ -534,7 +534,7 @@ interface DialogProps<T> {
   onConfirm: (value: T) => void;
   pending: boolean;
   /** Called as the dialog closes; preventDefault keeps focus from returning to what opened it. */
-  onCloseAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
 }
 
 /** What stopping a run means, for the dialogs of the controls that do it. */

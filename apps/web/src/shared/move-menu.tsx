@@ -121,7 +121,7 @@ interface DialogProps {
   /** After goald moved the last of them (the board focuses the card again). */
   onMoved?: (updated: Item) => void;
   /** Called as the dialog closes; preventDefault keeps focus from returning to what opened it. */
-  onCloseAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
 }
 
 /** The Move menu: a dialog with the line's stations to choose from (Radix: focus trapped, Escape closes). */
