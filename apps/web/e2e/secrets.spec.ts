@@ -2,23 +2,35 @@
 // URL, the New secret sheet, a secret's page with Replace value, settings and a delete that a use blocks, and
 // Import with its dry run. No value is read back from anywhere. Not run in the box (no browser): it runs in CI with
 // `task web:e2e`.
-import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, recordToasts } from './support';
+import { expect, type Page, test } from '@playwright/test';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, recordToasts } from './support';
 
 test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
   await recordToasts(page);
 });
 
+/**
+ * The list's entries as the width shows them: table rows from 768 px, linked cards on a phone
+ * (secrets-page.tsx).
+ */
+const secretRows = (page: Page) =>
+  isPhone(page)
+    ? page
+        .getByRole('main')
+        .getByRole('listitem')
+        .filter({ has: page.locator('a[href^="/o/acme/secrets/"]') })
+    : page.getByRole('table').getByRole('row');
+
 test.describe('the Secrets list', () => {
   test('lists the eleven secrets, warns about the one that expires soon, and shows no value', async ({ page }) => {
     await page.goto('/o/acme/secrets');
     await expect(page).toHaveTitle('Secrets · Acme · Goal');
 
-    const table = page.getByRole('table', { name: 'Secrets of Acme' });
-    // The header row and the mock's eleven secrets.
-    await expect(table.getByRole('row')).toHaveCount(12);
-    await expect(table.getByRole('row').filter({ hasText: 'cloudflare-deploy' })).toContainText('3 days');
+    // The mock's eleven secrets, and a header row on a table.
+    if (!isPhone(page)) await expect(page.getByRole('table', { name: 'Secrets of Acme' })).toBeVisible();
+    await expect(secretRows(page)).toHaveCount(isPhone(page) ? 11 : 12);
+    await expect(secretRows(page).filter({ hasText: 'cloudflare-deploy' })).toContainText('3 days');
     await expect(page.getByRole('region', { name: 'Expiring' })).toContainText('cloudflare-deploy expires in 3 days');
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
@@ -29,7 +41,7 @@ test.describe('the Secrets list', () => {
     await page.getByRole('radio', { name: /Not used/ }).check();
 
     await expect(page).toHaveURL(/[?&]filter=unused/);
-    await expect(page.getByRole('table').getByRole('row')).toHaveCount(2);
+    await expect(secretRows(page)).toHaveCount(isPhone(page) ? 1 : 2);
   });
 
   test('creates a secret in the side sheet and lists it', async ({ page }) => {
@@ -38,12 +50,15 @@ test.describe('the Secrets list', () => {
     const sheet = page.getByRole('dialog', { name: 'New secret' });
     await sheet.getByLabel('Name').fill('e2e-token');
     await sheet.getByLabel('Value', { exact: true }).fill('test-token');
-    await sheet.getByRole('button', { name: /Software/ }).click();
+    // A new secret reaches every factory until that is switched off.
+    await sheet.getByLabel('All factories, including new ones').uncheck();
+    // The mock titles two factories (goal and software) "Software"; the badge initials are hidden from the name.
+    await sheet.getByRole('button', { name: 'Software', exact: true }).last().click();
     await expectAccessible(page);
     await sheet.getByRole('button', { name: 'Add secret' }).click();
 
     await expect(sheet).toBeHidden();
-    await expect(page.getByRole('row').filter({ hasText: 'e2e-token' })).toBeVisible();
+    await expect(secretRows(page).filter({ hasText: 'e2e-token' })).toBeVisible();
     await expect(page.getByText('test-token')).toHaveCount(0);
   });
 
@@ -115,7 +130,8 @@ test.describe('a secret’s page', () => {
       .click();
 
     await expect(page).toHaveURL(/\/o\/acme\/secrets$/);
-    await expect(page.getByRole('row').filter({ hasText: 'old-npm-token' })).toHaveCount(0);
+    await expect(page.getByRole('main')).toBeVisible();
+    await expect(secretRows(page).filter({ hasText: 'old-npm-token' })).toHaveCount(0);
   });
 });
 
@@ -131,7 +147,7 @@ test.describe('Import secrets', () => {
     await page.getByRole('button', { name: 'Import 2' }).click();
 
     await expect(page).toHaveURL(/\/o\/acme\/secrets$/);
-    await expect(page.getByRole('row').filter({ hasText: 'linear-api-key' })).toBeVisible();
+    await expect(secretRows(page).filter({ hasText: 'linear-api-key' })).toBeVisible();
   });
 
   test('the old Credentials addresses open Secrets and Import', async ({ page }) => {

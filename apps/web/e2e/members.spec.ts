@@ -254,6 +254,7 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
 
   // Signed up by code, they have no name yet (Better Auth leaves it empty): Goal names them by
   // their email, with its initials, until they choose one.
+  await openNavigation(page);
   await orgNav(page)
     .filter({ visible: true })
     .getByRole('button', { name: /^DR d\.ross@example\.com.*, account$/ })

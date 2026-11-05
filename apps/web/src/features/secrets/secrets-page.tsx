@@ -100,7 +100,9 @@ export function SecretsPage() {
             {manage ? (
               <Button variant="action" className="h-11 md:h-8.5" onClick={() => setSearch({ new: true })}>
                 <Plus size={15} strokeWidth={1.8} aria-hidden="true" />
-                <span className="md:hidden">New</span>
+                <span className="md:hidden">
+                  New<span className="sr-only"> secret</span>
+                </span>
                 <span className="max-md:hidden">New secret</span>
               </Button>
             ) : null}
