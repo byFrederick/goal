@@ -3,8 +3,9 @@
 // token that signs in to it (ADR 0041, decision 7).
 //
 // It reads pull requests, merges them, updates their branches with their base and deletes
-// branches, reads a repository's branch heads and the commits between two commits, and lists the
-// owners and repositories a token reaches, nothing else. A repository on a host of another kind,
+// branches, reads a repository's branch heads and the commits between two commits, lists the
+// owners and repositories a token reaches, and checks what a token can do in one repository or
+// in all of an owner's, nothing else. A repository on a host of another kind,
 // and a pull request URL that is not the repository's, are refused before anything is sent. The
 // API is the host's domain.CodeHostAPIBase: https://api.github.com for github.com,
 // https://api.<host> for a GitHub Enterprise Cloud host (<name>.ghe.com) and
@@ -908,6 +909,78 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 
 	if !answer.Permissions.Push {
 		out.Push.Reason = "GitHub grants the token no push to " + full + " (permissions.push is false)"
+	}
+
+	return out, nil
+}
+
+// OwnerAccess implements ports.CodeHost with GET /user/repos for every affiliation (owner,
+// collaborator, organization member), 100 a page: the token's repositories whose owner is owner,
+// ignoring case, are the readable ones, and those with permissions.push the pushable ones. For a
+// fine-grained token the listing is its own grant. It reads at most ports.MaxOwnerRepositories of
+// the token's repositories, of any owner, and sets Truncated when GitHub links a page after them.
+// A refusal (401, 403, a redirect) is in the result with GitHub's message; a 5xx or no answer is
+// an error.
+func (cl *Client) OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (ports.OwnerAccess, error) {
+	if err := signsIn(host, token); err != nil {
+		return ports.OwnerAccess{}, fmt.Errorf("owner access: %w", err)
+	}
+
+	if !loginName.MatchString(owner) {
+		return ports.OwnerAccess{}, fmt.Errorf("owner access of %q: not an account or organization name: %w", owner, domain.ErrInvalid)
+	}
+
+	p := pull{api: cl.apiFor(host), token: token}
+
+	var out ports.OwnerAccess
+
+	for page := 1; ; page++ {
+		var repos []struct {
+			Owner struct {
+				Login string `json:"login"`
+			} `json:"owner"`
+			Permissions struct {
+				Push bool `json:"push"`
+			} `json:"permissions"`
+		}
+
+		path := "/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&page=" + strconv.Itoa(page)
+
+		status, msg, header, err := cl.exchange(ctx, p, http.MethodGet, path, nil, &repos, maxListBytes)
+
+		switch {
+		case err != nil:
+			return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: %w", owner, err)
+		case status >= http.StatusInternalServerError:
+			return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: GitHub answered %d %s", owner, status, msg)
+		case status != http.StatusOK:
+			return ports.OwnerAccess{Reason: strings.TrimSpace(fmt.Sprintf("GitHub answered %d: %s", status, msg))}, nil
+		}
+
+		for _, r := range repos {
+			if strings.EqualFold(r.Owner.Login, owner) {
+				out.Readable++
+
+				if r.Permissions.Push {
+					out.Pushable++
+				}
+			}
+		}
+
+		if !strings.Contains(header.Get("Link"), `rel="next"`) {
+			break
+		}
+
+		if page*100 >= ports.MaxOwnerRepositories {
+			out.Truncated = true
+
+			break
+		}
+	}
+
+	out.Reason = fmt.Sprintf("GitHub shows the token %d repositories of %s, %d it can push to", out.Readable, owner, out.Pushable)
+	if out.Readable == 0 {
+		out.Reason = "GitHub shows the token no repositories of " + owner
 	}
 
 	return out, nil
