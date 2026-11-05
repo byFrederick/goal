@@ -54,7 +54,17 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
     .locator('a[href]:not(p a, dd a), button, input:not([type=hidden]), [role=combobox]');
   const boxes = await targets.evaluateAll((els) =>
     els.map((el) => {
-      const { width, height } = el.getBoundingClientRect();
+      // The hit area, not the drawn box: an input inside a label is hit through the label, and an
+      // absolutely positioned ::before with negative insets grows its element's box.
+      const label = el instanceof HTMLInputElement ? el.closest('label') : null;
+      const rect = (label ?? el).getBoundingClientRect();
+      let { width, height } = rect;
+      const before = getComputedStyle(el, '::before');
+      if (!label && before.position === 'absolute' && before.content !== 'none') {
+        const grow = (v: string) => Math.max(0, -(Number.parseFloat(v) || 0));
+        width += grow(before.left) + grow(before.right);
+        height += grow(before.top) + grow(before.bottom);
+      }
       return { name: (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30), width, height };
     }),
   );
