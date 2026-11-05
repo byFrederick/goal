@@ -104,7 +104,12 @@ function HomeLine({
 function Station({ station: s, stopped }: { station: LineStation; stopped: boolean }) {
   return (
     <li className="flex min-w-12 flex-col items-start gap-1">
-      <span className={cn('flex items-center gap-1 text-heading font-semibold tabular-nums', stopped && 'text-muted')}>
+      <span
+        className={cn(
+          'flex items-center gap-1 text-heading font-semibold tabular-nums transition-colors duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none',
+          stopped && 'text-muted',
+        )}
+      >
         {s.done ? <span aria-hidden="true" className="size-2 rounded-full bg-ok" /> : null}
         <NumberRoll value={s.count} />
       </span>
