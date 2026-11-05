@@ -8,7 +8,7 @@ import { Fragment, type ReactNode } from 'react';
 import { membersQuery, versionFileQuery, versionModelQuery, versionQuery } from '../../api/queries';
 import type { Factory, Item, ItemEvent, Run } from '../../api/types';
 import { type EffectiveRule, effectiveRules, type RuleForAgent } from '../../shared/definition/effective-rules';
-import { modelOf } from '../../shared/definition/model';
+import { modelOf, type RepositoryEntry } from '../../shared/definition/model';
 import { cleanPath } from '../../shared/definition/place';
 import { parseRule } from '../../shared/definition/rule-md';
 import { whereAgentWorks } from '../../shared/definition/where';
@@ -56,6 +56,18 @@ function pullRequestNumber(url: string): string {
   return github ? `#${github[1]}` : pullRequestLabel(url);
 }
 
+const joinedLabel: Record<string, string> = {
+  filing: 'Named at filing',
+  default: 'Default',
+  push: 'An agent pushed to it',
+  output: "Named by a station's output",
+};
+
+/** Whether a factory covers more than one repository: two or more entries, or an owner's every repository. */
+function coversSeveral(entries: readonly RepositoryEntry[]): boolean {
+  return entries.length > 1 || entries.some((e) => /\/\*$/.test(e.url.trim()));
+}
+
 export function DetailsCard({
   item,
   factory,
@@ -79,6 +91,13 @@ export function DetailsCard({
   const creator = creatorOf(events);
   const owner = creator ? members.data?.find((m) => m.user.id === creator)?.user.name : undefined;
   const run = workingRun(trace);
+  // The running version's repositories decide whether the row is worth a line: a one-repository factory has none.
+  const code = useQuery({
+    ...versionModelQuery(org.id, factory.id, 'current'),
+    enabled: !summary && Boolean(factory.current),
+    select: (v) => coversSeveral(modelOf(v.model).basics?.repositories ?? []),
+  });
+  const repositories = item.repositories ?? [];
   const branch = branchOf(item.outputs);
   const pulls = pullRequestsOf(
     item.outputs,
@@ -105,6 +124,24 @@ export function DetailsCard({
     if (run?.model) rows.push({ label: 'Model', value: run.model });
     const station = item.lane ? `${humanize(item.station)}, ${item.lane} lane` : humanize(item.station);
     rows.push({ label: 'Station', value: station });
+    if (code.data === true || repositories.length > 1) {
+      rows.push({
+        label: 'Repositories',
+        value:
+          repositories.length === 0 ? (
+            <span className="text-muted">None yet</span>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+              {repositories.map((r) => (
+                <li key={r.repo} className="min-w-0">
+                  <span className="font-mono">{r.repo}</span>
+                  <span className="text-muted"> · {joinedLabel[r.joined]}</span>
+                </li>
+              ))}
+            </ul>
+          ),
+      });
+    }
     if (branch) rows.push({ label: 'Branch', value: <span className="font-mono">{branch}</span> });
     if (pulls.length > 0) rows.push({ label: 'Pull request', value: pullLinks });
     if (item.start) {
