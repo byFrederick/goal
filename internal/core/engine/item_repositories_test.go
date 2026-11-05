@@ -16,13 +16,16 @@ const (
 	keyAPI  = "github.com/acme/api"
 	keyWeb  = "github.com/acme-labs/web"
 	keyDocs = "github.com/acme-labs/docs"
+
+	// entryAPI is the keyAPI entry's name.
+	entryAPI = "api"
 )
 
 // withRepositories is l with runtime.repositories: api, the default, and acme-labs' every
 // repository.
 func withRepositories(l domain.Line) domain.Line {
 	l.Runtime.Repositories = []domain.RepositoryEntry{
-		{Name: "api", URL: "https://" + keyAPI + ".git", Access: "write", Default: true},
+		{Name: entryAPI, URL: "https://" + keyAPI + ".git", Access: "write", Default: true},
 		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: "write"},
 	}
 
@@ -61,11 +64,11 @@ func TestAssemble_PartsTakeTheirRepositories(t *testing.T) {
 	t.Parallel()
 
 	out := `{"plan":[
-		{"key":"store","title":"Store","brief":"Add the table.","repositories":["acme-labs/docs","api"]},
+		{"key":"store","title":"Store","brief":"Add the table.","repositories":["acme-labs/docs","acme/api"]},
 		{"key":"web","title":"Web","brief":"Show it."}
 	]}`
 	h := newHarness(t, withRepositories(planLine(true)), porttest.Succeed(out))
-	it := h.submitRepos(t, "Big request", "acme-labs/web", "api")
+	it := h.submitRepos(t, "Big request", "acme-labs/web", entryAPI)
 
 	h.step(t)
 

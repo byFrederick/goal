@@ -87,7 +87,7 @@ func TestFollowUpFiling_FileRequest(t *testing.T) {
 		Start: &FollowUpPlan{In: "2d", Title: "Index runs", Type: fileStory, Lane: fileLaneAPI},
 	}
 
-	r := FollowUpFileRequest("a", src, ItemRef{Factory: "software", Number: 513}, f, nil, []string{keyAPI}, landed)
+	r := FollowUpFileRequest("a", src, ItemRef{Factory: "software", Number: 513}, f, nil, nil, landed)
 
 	l := fileLine()
 	l.FactoryID = "a"
@@ -105,27 +105,36 @@ func TestFollowUpFiling_FileRequest(t *testing.T) {
 	if !strings.HasPrefix(n.Body, f.Text) || !strings.Contains(n.Body, "software#513") {
 		t.Errorf("body %q; want the text and the source", n.Body)
 	}
+}
 
-	// The start's repositories win over the source's; without them the item takes the source's.
+// A start follow-up's item takes the start's repositories, else the source's; a start naming one
+// the line does not cover is refused with the value.
+func TestFollowUpFiling_FileRequestRepositories(t *testing.T) {
+	t.Parallel()
+
+	landed := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
+	src, from := Item{FactoryID: "a"}, ItemRef{Factory: "labs", Number: 514}
+	f := FollowUp{Text: "Index", Start: &FollowUpPlan{Title: "Index the runs", Type: fileStory}}
+
 	rl := repoLine(entryAPI)
 	rl.FactoryID = "a"
 
 	named := f
-	named.Start = &FollowUpPlan{Title: "Index runs", Type: fileStory, Repositories: []string{"acme-labs/web"}}
+	named.Start = &FollowUpPlan{Title: "Index the runs", Type: fileStory, Repositories: []string{"acme-labs/web"}}
 
-	got, err := File(rl, FollowUpFileRequest("a", src, ItemRef{Factory: "software", Number: 513}, named, nil, []string{keyAPI}, landed))
+	got, err := File(rl, FollowUpFileRequest("a", src, from, named, nil, []string{keyAPI}, landed))
 	if want := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling}}; err != nil || !reflect.DeepEqual(got.Repositories, want) {
 		t.Errorf("start.repositories: %+v, %v; want %+v", got.Repositories, err, want)
 	}
 
-	got, err = File(rl, FollowUpFileRequest("a", src, ItemRef{Factory: "software", Number: 513}, f, nil, []string{keyLabsWeb, keyAPI}, landed))
+	got, err = File(rl, FollowUpFileRequest("a", src, from, f, nil, []string{keyLabsWeb, keyAPI}, landed))
 	if want := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling}, {Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1}}; err != nil ||
 		!reflect.DeepEqual(got.Repositories, want) {
 		t.Errorf("the source's: %+v, %v; want %+v", got.Repositories, err, want)
 	}
 
 	named.Start.Repositories = []string{"acme/unknown"}
-	if _, err := File(rl, FollowUpFileRequest("a", src, ItemRef{}, named, nil, nil, landed)); !errors.Is(err, ErrInvalid) ||
+	if _, err := File(rl, FollowUpFileRequest("a", src, from, named, nil, nil, landed)); !errors.Is(err, ErrInvalid) ||
 		!strings.Contains(err.Error(), "acme/unknown") {
 		t.Errorf("an uncovered start repository: err %v; want ErrInvalid quoting it", err)
 	}
@@ -182,8 +191,14 @@ func TestTriage_PriorityGenerationAndRequest(t *testing.T) {
 	if n.Origin != OriginFollowUp || n.Class != ClassStandard || n.Type != fileStory || !n.StartAt.Equal(at.Add(24*time.Hour)) {
 		t.Errorf("triage item %+v; want a standard follow-up of the first source's type starting in 24h", n)
 	}
+}
 
-	// The sources' repositories, once each in source order, at most MaxItemRepositories.
+// A triage item, shared or an untrusted item's own, takes its sources' repositories, once each in
+// source order, at most MaxItemRepositories.
+func TestTriage_RequestRepositories(t *testing.T) {
+	t.Parallel()
+
+	es, at := triageEntries(), time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
 	es[0].Repositories = []string{keyLabsWeb, keyAPI}
 	es[1].Repositories = []string{keyAPI, "github.com/acme-labs/docs"}
 

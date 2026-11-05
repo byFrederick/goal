@@ -526,9 +526,15 @@ func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows 
 		out = append(out, f)
 	}
 
-	joined, err := l.q.TriageFollowUps(ctx, &tri.ID)
+	return out, l.rewriteTriage(ctx, ln, tri.ID)
+}
+
+// rewriteTriage rewrites the triage item tri's title, brief, priority and generation from all of
+// its follow-ups.
+func (l *lander) rewriteTriage(ctx context.Context, ln domain.Line, tri uuid.UUID) error {
+	joined, err := l.q.TriageFollowUps(ctx, &tri)
 	if err != nil {
-		return nil, fmt.Errorf("follow-ups of triage item %s: %w", tri.ID, err)
+		return fmt.Errorf("follow-ups of triage item %s: %w", tri, err)
 	}
 
 	es := make([]domain.TriageEntry, 0, len(joined))
@@ -536,7 +542,7 @@ func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows 
 	for _, j := range joined {
 		f, err := followUpFrom(j.FollowUp)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		es = append(es, domain.TriageEntry{
@@ -546,13 +552,13 @@ func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows 
 	}
 
 	if _, err := l.q.RewriteTriageItem(ctx, db.RewriteTriageItemParams{
-		ID: tri.ID, Title: domain.TriageTitle(es), Body: domain.TriageBrief(es), Priority: int64(domain.TriagePriority(es)),
+		ID: tri, Title: domain.TriageTitle(es), Body: domain.TriageBrief(es), Priority: int64(domain.TriagePriority(es)),
 		Generation: int32(min(max(domain.TriageGeneration(es), 0), maxInt32)), At: l.at,
 	}); err != nil {
-		return nil, fmt.Errorf("rewrite triage item %s: %w", tri.ID, err)
+		return fmt.Errorf("rewrite triage item %s: %w", tri, err)
 	}
 
-	return out, nil
+	return nil
 }
 
 // joinRepositories adds to the open triage item tri the repositories of rows' sources it lacks,
@@ -577,7 +583,7 @@ func (l *lander) joinRepositories(ctx context.Context, ln domain.Line, tri uuid.
 
 		for _, j := range domain.JoinRepositories(ln, cur, keys, l.at) {
 			if err := l.q.JoinItemRepository(ctx, db.JoinItemRepositoryParams{
-				ItemID: tri, Repo: j.Repo, Joined: string(j.Joined), JoinedAt: j.JoinedAt, Ordinal: int32(min(j.Ordinal, maxInt32)),
+				ItemID: tri, Repo: j.Repo, Joined: string(j.Joined), JoinedAt: j.JoinedAt, Ordinal: int32(min(max(j.Ordinal, 0), maxInt32)),
 			}); err != nil {
 				return fmt.Errorf("repository %s joins triage item %s: %w", j.Repo, tri, err)
 			}

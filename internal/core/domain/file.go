@@ -76,7 +76,7 @@ type FileRequest struct {
 	// its assembly's for a part, its source's for a follow-up's item, its sources' for a triage
 	// item. File uses them only when Repositories names none.
 	Inherited []string
-	At           time.Time
+	At        time.Time
 }
 
 // File turns a filing request into a checked NewItem the same way for every origin (ADR 0040

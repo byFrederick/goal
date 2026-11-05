@@ -125,7 +125,7 @@ func fileRepositories(l Line, named, inherited []string) ([]ItemRepository, erro
 
 // JoinRepositories are the rows an item that has have gains from keys, the repositories
 // (RepositoryKey) of the items it comes from: each key one of l's entries covers and have lacks,
-// once and in order, joined filing at at with the next ordinal, until the item has
+// once and in order, joined filing at time at with the next ordinal, until the item has
 // MaxItemRepositories. The rest are left out without an error.
 func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time) []ItemRepository {
 	entries := l.repositoryEntries()

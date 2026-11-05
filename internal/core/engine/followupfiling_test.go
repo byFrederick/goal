@@ -86,7 +86,7 @@ func TestEngine_TickFilesFollowUpsWithTheirSourcesRepositories(t *testing.T) {
 		t.Errorf("triage item's repositories = %v; want its source's %v", keys, []string{keyWeb})
 	}
 
-	second := h.submitRepos(t, "Trace it", "api", "acme-labs/web")
+	second := h.submitRepos(t, "Trace it", entryAPI, "acme-labs/web")
 
 	h.untilDone(t, second.ID, 4)
 	h.step(t)
@@ -192,8 +192,6 @@ func TestFollowUp_FileByAPersonTakesRepositories(t *testing.T) {
 		t.Fatalf("follow-ups = %+v; want three", fs)
 	}
 
-	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
-
 	for _, tt := range []struct {
 		f     domain.FollowUp
 		named []string
@@ -201,7 +199,7 @@ func TestFollowUp_FileByAPersonTakesRepositories(t *testing.T) {
 	}{
 		{fs[0], nil, []string{keyWeb}},
 		{fs[1], nil, []string{keyDocs}},
-		{fs[2], []string{"api"}, []string{keyAPI}},
+		{fs[2], []string{entryAPI}, []string{keyAPI}},
 	} {
 		if _, err := h.e.DropFollowUp(inOrg(t), src.ID, tt.f.ID, ada); err != nil {
 			t.Fatal(err)

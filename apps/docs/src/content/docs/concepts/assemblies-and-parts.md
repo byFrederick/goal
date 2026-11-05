@@ -9,7 +9,7 @@ An assembly is an item that has been split into parts. Each part is worked as a 
 
 ## How an item becomes an assembly
 
-A station's output can carry a `plan`: a list of parts, each with a `key`, `title`, `brief` and optionally `lane`, `paths` and `needs`. When the station finishes the item with a non-empty plan, and `board.flow.assemblies.materialize` is on, the item becomes an assembly. Its parts are queued at the station that planned them, and each part gets its brief.
+A station's output can carry a `plan`: a list of parts, each with a `key`, `title`, `brief` and optionally `lane`, `paths`, `needs` and `repositories`. A part's `repositories` are the ones it works on; a part that names none takes its assembly's (see [an item's repositories](/docs/concepts/work-items/#an-items-repositories)). When the station finishes the item with a non-empty plan, and `board.flow.assemblies.materialize` is on, the item becomes an assembly. Its parts are queued at the station that planned them, and each part gets its brief.
 
 `materialize` is on by default. When it is off, the plan is ignored and the item moves on to the next station as usual.
 

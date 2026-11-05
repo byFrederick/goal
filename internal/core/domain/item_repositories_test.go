@@ -367,8 +367,8 @@ func TestFile_InheritedRepositoriesOnlyThoseTheLineCovers(t *testing.T) {
 	}
 }
 
-// JoinRepositories are the rows an item gains: each covered key it lacks, joined filing at at with
-// the next ordinal, until it has MaxItemRepositories.
+// JoinRepositories are the rows an item gains: each covered key it lacks, joined filing at time at
+// with the next ordinal, until it has MaxItemRepositories.
 func TestJoinRepositories_SkipsWhatTheItemHasUpToTheCap(t *testing.T) {
 	t.Parallel()
 

@@ -141,7 +141,7 @@ func filed(keys ...string) []domain.ItemRepository {
 func repoLineOf(factory domain.FactoryID, name string, from ...domain.FactoryID) domain.Line {
 	l := lineOf(factory, name, from...)
 	l.Runtime.Repositories = []domain.RepositoryEntry{
-		{Name: "acme", URL: "https://github.com/acme/*", Access: "write"},
+		{Name: "all", URL: "https://github.com/acme/*", Access: "write"},
 		{Name: "ops", URL: "https://" + repoOps, Access: "write"},
 	}
 
