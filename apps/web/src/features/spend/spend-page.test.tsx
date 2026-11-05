@@ -56,6 +56,26 @@ describe('the spend screen, ready', () => {
     expect(within(strip).getByText('12% of spend · Runs sent back')).toBeTruthy();
   });
 
+  it('keeps the window control in the page on a phone, and only Export CSV in the top bar', async () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      renderSpend();
+      await screen.findByRole('heading', { name: 'Spend and billing' });
+      const header = screen.getByTestId('top-bar');
+      expect(within(header).queryByRole('radio', { name: 'This month' })).toBeNull();
+      expect(within(header).getByRole('button', { name: 'Export CSV' })).toBeTruthy();
+      expect(screen.getAllByRole('radio', { name: 'This month' })).toHaveLength(1);
+    } finally {
+      // @ts-expect-error restoring the jsdom default, which has no matchMedia
+      delete window.matchMedia;
+    }
+  });
+
   it('draws one slot for each day of the week, with one bar for one day of data and today marked', async () => {
     answerWith(() =>
       spendFixture({

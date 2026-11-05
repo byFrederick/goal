@@ -385,6 +385,8 @@ describe('the tab bar', () => {
     const needs = within(await tabs()).getByRole('link', { name: /Needs you/ });
     expect(needs.getAttribute('href')).toBe('/o/acme/needs-you');
     expect(needs.getAttribute('aria-disabled')).toBeNull();
+    // The name starts with the visible label, which comes first in the markup (label-content-name-mismatch).
+    expect(needs.textContent?.startsWith('Needs you')).toBe(true);
   });
 
   it('draws the Needs you count as an orange 18 px pill that rolls and enters', async () => {
