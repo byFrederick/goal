@@ -121,7 +121,7 @@ describe('step 1, name the organization', () => {
 
     await screen.findByText('Step page');
     expect(createOrg).toHaveBeenCalledWith({ name: 'Acme Two', slug: 'acme-two' });
-    expect(router.state.location.pathname).toBe('/o/acme-two/get-started/code');
+    expect(router.state.location.pathname).toBe('/o/acme-two/get-started/factory');
     expect(getOrgUses('org-acme')).toEqual(['build', 'operations']);
   });
 

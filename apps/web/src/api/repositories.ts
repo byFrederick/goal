@@ -36,16 +36,18 @@ export async function listFactoryRepositoryTests(
   return list.tests;
 }
 
-/** Tests the token in `secret` against `url` for the factory and keeps the result (definition:edit); a failed check is an answer. */
+/** Tests the token in `secret` against `url` for the factory and keeps the result (definition:edit); a failed check is an answer; the secret must be open to the factory. */
 export function testFactoryRepository(
   org: string,
   factory: string,
   request: FactoryRepositoryTestRequest,
+  signal?: AbortSignal,
 ): Promise<FactoryRepositoryTest> {
   return unwrap(
     goal.POST(orgPath('/factories/{factory}/repositories/test'), {
       params: { path: { org, factory } },
       body: request,
+      ...cancel(signal),
     }),
   );
 }

@@ -5,7 +5,7 @@ import { PendingScreen } from '../app/states';
 import { onboardingSearch } from '../features/onboarding/code-search';
 import { OnboardingStepPage } from '../features/onboarding/onboarding-step';
 import { isOrgOnboardingStep, stepLabel } from '../features/onboarding/steps';
-import { findOrg } from '../shared/org';
+import { findOrg, OrgContext } from '../shared/org';
 
 // Onboarding steps 2 to 8 (ADR 0032 decision 2), under the organization the person just made. The
 // trailing underscore keeps this route out of /o/$org's layout: onboarding has no organization
@@ -26,6 +26,10 @@ export const Route = createFileRoute('/o/$org_/get-started/$step')({
     const { step } = Route.useParams();
     const { org } = Route.useRouteContext();
     const search = Route.useSearch();
-    return isOrgOnboardingStep(step) ? <OnboardingStepPage step={step} org={org} search={search} /> : null;
+    return isOrgOnboardingStep(step) ? (
+      <OrgContext value={org}>
+        <OnboardingStepPage step={step} org={org} search={search} />
+      </OrgContext>
+    ) : null;
   },
 });

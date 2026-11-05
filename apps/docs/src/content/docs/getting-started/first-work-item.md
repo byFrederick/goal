@@ -24,7 +24,7 @@ The first line of the brief is the title. Anything after the first line becomes 
 goal run <factory> "Add a health check endpoint" --body "Return 200 from /healthz when the database answers."
 ```
 
-The web app can submit an item too. Setup submits the template's starter item at its last step, the First item step.
+The web app can submit an item too. Setup submits the template's starter item at its last step, the First item step. The step names the repository only when you connected code in the Code step; a factory set up with No code shows the item without repository wording.
 
 ## 2. Watch it move
 
