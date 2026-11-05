@@ -33,6 +33,7 @@ const (
 	slowMD         = "docs/slow.md"
 	shipOnTuesdays = "# Deploy\n\nShip on Tuesdays."
 	newPage        = "# New\n\nA new page."
+	runbooksTitle  = "Runbooks"
 	// gitdocsSync is the test kind's sync adapter.
 	gitdocsSync = "gitdocs"
 )
@@ -61,8 +62,8 @@ type reader struct {
 	// lists counts its listings; codeHost is the code_host config of the last.
 	lists    int
 	codeHost string
-	block   map[string]chan struct{}
-	down    bool // every fetch fails, as a server answering 503
+	block    map[string]chan struct{}
+	down     bool // every fetch fails, as a server answering 503
 	// titles and folders, by path, list a document under another title and in a folder.
 	titles, folders map[string]string
 }
@@ -183,7 +184,7 @@ func (a *archiving) count() int {
 }
 
 // world is one organization's knowledge base on the port fakes, with a repository source
-// "runbooks" read by docs and an upload source "handbook".
+// srcRunbooks read by docs and an upload source "handbook".
 type world struct {
 	t       *testing.T
 	org     domain.OrgID
@@ -230,7 +231,7 @@ func newWorld(t *testing.T) *world {
 	}
 
 	for _, n := range []domain.NewKnowledgeSource{
-		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
+		{Name: srcRunbooks, Title: runbooksTitle, Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
 		{Name: "handbook", Title: "Handbook", Kind: domain.SourceUpload},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
@@ -315,9 +316,9 @@ func TestIngestor_SyncsIncrementallyAndDropsWhatGoes(t *testing.T) {
 	w.want("fetched", fetched, slices.Equal(fetched, []string{deployMD, oncallMD}))
 	w.want("the reader's secret", w.docs.secret, w.docs.secret == "s3cret")
 
-	src := w.source("runbooks")
+	src := w.source(srcRunbooks)
 	w.want("runbooks after its sync", src, src.Status == domain.SyncIdle, src.LeaseUntil == nil, src.CurrentSnapshot != "")
-	w.want("runbooks' files", w.files("runbooks"), slices.Equal(w.files("runbooks"), []string{deployMD, oncallMD}))
+	w.want("runbooks' files", w.files(srcRunbooks), slices.Equal(w.files(srcRunbooks), []string{deployMD, oncallMD}))
 
 	// An hour on: oncall.md changed, deploy.md did not, a page is new and none went yet.
 	oncall = "# On call\n\nPage the primary only."
@@ -335,7 +336,7 @@ func TestIngestor_SyncsIncrementallyAndDropsWhatGoes(t *testing.T) {
 	w.clock.Advance(time.Hour + time.Minute)
 	w.syncDue(in)
 
-	files := w.files("runbooks")
+	files := w.files(srcRunbooks)
 	w.want("files (deploy.md gone)", files, slices.Equal(files, []string{newMD, oncallMD}))
 }
 
@@ -347,13 +348,13 @@ func TestIngestor_AFileThatIsNotTextIsListedFailed(t *testing.T) {
 
 	w.syncDue(w.ingestor(nil))
 
-	snaps, err := w.kb.Snapshots(w.ctx(), "runbooks")
+	snaps, err := w.kb.Snapshots(w.ctx(), srcRunbooks)
 	if err != nil || len(snaps) != 1 {
 		t.Fatalf("snapshots = %v, %v; want one", snaps, err)
 	}
 
-	if src := w.source("runbooks"); src.Status != domain.SyncIdle || snaps[0].Failed != 1 || !slices.Equal(w.files("runbooks"), []string{"docs/good.md"}) {
-		t.Errorf("runbooks = %+v, snapshot %+v, files %v; want idle, one file failed and good.md only", src, snaps[0], w.files("runbooks"))
+	if src := w.source(srcRunbooks); src.Status != domain.SyncIdle || snaps[0].Failed != 1 || !slices.Equal(w.files(srcRunbooks), []string{"docs/good.md"}) {
+		t.Errorf("runbooks = %+v, snapshot %+v, files %v; want idle, one file failed and good.md only", src, snaps[0], w.files(srcRunbooks))
 	}
 }
 
@@ -366,7 +367,7 @@ func TestIngestor_UnknownReaderFailsTheSource(t *testing.T) {
 	})
 	w.syncDue(in)
 
-	if src := w.source("runbooks"); src.Status != domain.SyncFailed || !strings.Contains(src.LastError, strconv.Quote(gitdocsSync)) {
+	if src := w.source(srcRunbooks); src.Status != domain.SyncFailed || !strings.Contains(src.LastError, strconv.Quote(gitdocsSync)) {
 		t.Errorf("runbooks without a gitdocs reader = %+v", src)
 	}
 }
@@ -486,7 +487,7 @@ func TestUploads_RefusalsWriteNothing(t *testing.T) {
 	}
 
 	other := []byte("# Other")
-	if _, err := w.uploads.Upload(ctx, "runbooks", "x.md", other, admin); !errors.Is(err, domain.ErrNotUploadSource) {
+	if _, err := w.uploads.Upload(ctx, srcRunbooks, "x.md", other, admin); !errors.Is(err, domain.ErrNotUploadSource) {
 		t.Errorf("Upload to a repository source = %v", err)
 	}
 
@@ -637,14 +638,14 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 		t.Fatalf("a second goald synced %d sources after the first's lease ended, want runbooks", n)
 	}
 
-	synced := w.source("runbooks")
+	synced := w.source(srcRunbooks)
 
 	w.clock.Advance(time.Minute)
 	close(release)
 	<-done
 
-	got := w.source("runbooks")
-	w.want("runbooks after the first goald woke (the second's sync)", got, got.Status == domain.SyncIdle, len(w.files("runbooks")) == 2, len(snapshotsOf(w, "runbooks")) == 1,
+	got := w.source(srcRunbooks)
+	w.want("runbooks after the first goald woke (the second's sync)", got, got.Status == domain.SyncIdle, len(w.files(srcRunbooks)) == 2, len(snapshotsOf(w, srcRunbooks)) == 1,
 		got.LastSyncedAt != nil && got.LastSyncedAt.Equal(*synced.LastSyncedAt), got.NextSyncAt.Equal(*synced.NextSyncAt))
 }
 
@@ -700,7 +701,7 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 		t.Fatalf("a second goald synced %d sources while the first's lease holds", n)
 	}
 
-	if src := w.source("runbooks"); src.Status != domain.SyncSyncing || len(snapshotsOf(w, "runbooks")) != 0 {
+	if src := w.source(srcRunbooks); src.Status != domain.SyncSyncing || len(snapshotsOf(w, srcRunbooks)) != 0 {
 		t.Errorf("runbooks after the kill = %+v, want still syncing with nothing stored", src)
 	}
 
@@ -712,7 +713,7 @@ func TestIngestor_LeasesSurviveAKilledGoald(t *testing.T) {
 		t.Fatalf("synced %d after the lease ended, want runbooks", n)
 	}
 
-	if src := w.source("runbooks"); src.Status != domain.SyncIdle || len(w.files("runbooks")) != 1 {
+	if src := w.source(srcRunbooks); src.Status != domain.SyncIdle || len(w.files(srcRunbooks)) != 1 {
 		t.Errorf("runbooks = %+v, want synced by the second goald", src)
 	}
 }
@@ -735,12 +736,12 @@ func TestIngest_SyncOpensTheSecret(t *testing.T) {
 		}
 	}
 
-	if err := w.kb.DeleteSource(ctx, "runbooks", admin, nil); err != nil {
+	if err := w.kb.DeleteSource(ctx, srcRunbooks, admin, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, n := range []domain.NewKnowledgeSource{
-		{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository, Secret: "other-token", Config: repoConfig},
+		{Name: srcRunbooks, Title: runbooksTitle, Kind: domain.SourceRepository, Secret: "other-token", Config: repoConfig},
 		{Name: "scoped", Title: "Scoped", Kind: domain.SourceRepository, Secret: "acme-only", Config: repoConfig},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
@@ -758,8 +759,8 @@ func TestIngest_SyncOpensTheSecret(t *testing.T) {
 
 	w.want("the reader's secret (opened at sync time)", w.docs.secret == replaced, w.docs.secret == replaced)
 
-	src := w.source("runbooks")
-	w.want("runbooks after its sync", src, src.Status == domain.SyncIdle, len(w.files("runbooks")) == 1)
+	src := w.source(srcRunbooks)
+	w.want("runbooks after its sync", src, src.Status == domain.SyncIdle, len(w.files(srcRunbooks)) == 1)
 
 	scoped := w.source("scoped")
 	w.want("the source on a scoped secret", scoped, scoped.Status == domain.SyncFailed, strings.Contains(scoped.LastError, "acme-only"))
@@ -975,7 +976,7 @@ func (w *world) replaceRunbooks(repository string, sources ...domain.NewKnowledg
 
 	ctx := w.ctx()
 
-	if err := w.kb.DeleteSource(ctx, "runbooks", admin, nil); err != nil {
+	if err := w.kb.DeleteSource(ctx, srcRunbooks, admin, nil); err != nil {
 		w.t.Fatal(err)
 	}
 
@@ -1014,10 +1015,14 @@ func TestIngest_UnlistedHostOpensNoSecret(t *testing.T) {
 	}
 
 	w.replaceRunbooks("https://"+unlisted+"/acme/docs",
-		domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository,
-			Config: map[string]string{domain.SourceCodeHostKey: "github"}},
-		domain.NewKnowledgeSource{Name: "wiki", Title: "Wiki", Kind: domain.SourceSynced,
-			Config: map[string]string{domain.SourceReaderKey: gitdocsSync, domain.SourceCodeHostKey: "github"}},
+		domain.NewKnowledgeSource{
+			Name: srcRunbooks, Title: runbooksTitle, Kind: domain.SourceRepository,
+			Config: map[string]string{domain.SourceCodeHostKey: "github"},
+		},
+		domain.NewKnowledgeSource{
+			Name: "wiki", Title: "Wiki", Kind: domain.SourceSynced,
+			Config: map[string]string{domain.SourceReaderKey: gitdocsSync, domain.SourceCodeHostKey: "github"},
+		},
 	)
 
 	secrets := &countedSecrets{Secrets: w.secrets}
@@ -1027,7 +1032,7 @@ func TestIngest_UnlistedHostOpensNoSecret(t *testing.T) {
 		Objects: w.objects, Clock: w.clock, TempDir: t.TempDir(),
 	}))
 
-	for _, name := range []string{"runbooks", "wiki"} {
+	for _, name := range []string{srcRunbooks, "wiki"} {
 		src := w.source(name)
 		w.want(name+" on an unlisted host", src, src.Status == domain.SyncFailed,
 			strings.Contains(src.LastError, unlisted), strings.Contains(src.LastError, "Code hosts"))
@@ -1044,14 +1049,16 @@ func TestIngest_ListedEnterpriseHostSyncs(t *testing.T) {
 
 	w := newWorld(t)
 	w.replaceRunbooks("https://GIT.example.com/acme/docs",
-		domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository,
-			Config: map[string]string{domain.SourceCodeHostKey: "gitlab"}})
+		domain.NewKnowledgeSource{
+			Name: srcRunbooks, Title: runbooksTitle, Kind: domain.SourceRepository,
+			Config: map[string]string{domain.SourceCodeHostKey: "gitlab"},
+		})
 
 	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
 	w.syncDue(w.ingestor(nil))
 
-	src := w.source("runbooks")
-	w.want("runbooks on a listed host", src, src.Status == domain.SyncIdle, len(w.files("runbooks")) == 1)
+	src := w.source(srcRunbooks)
+	w.want("runbooks on a listed host", src, src.Status == domain.SyncIdle, len(w.files(srcRunbooks)) == 1)
 
 	lists, kind := w.docs.listings()
 	w.want("the reader's secret and code host", []any{w.docs.secret, lists, kind}, w.docs.secret == "s3cret", lists == 1, kind == "github")

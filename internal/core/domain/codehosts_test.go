@@ -145,7 +145,7 @@ func TestListedCodeHost(t *testing.T) {
 		want CodeHost
 		ok   bool
 	}{
-		{"github.com", CodeHost{Host: hostGitHub, Kind: CodeHostGitHub, BuiltIn: true}, true},
+		{hostGitHub, CodeHost{Host: hostGitHub, Kind: CodeHostGitHub, BuiltIn: true}, true},
 		{"GitLab.com", CodeHost{Host: hostGitLab, Kind: CodeHostGitLab, BuiltIn: true}, true},
 		{"GHE.example.com", CodeHost{Host: hostGHE, Kind: CodeHostGitHub}, true},
 		{hostGitAcme, CodeHost{}, false},
