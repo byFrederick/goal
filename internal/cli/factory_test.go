@@ -152,6 +152,9 @@ func newDefGoald(t *testing.T) *defGoald {
 	envTests, tools := porttest.NewEnvironmentTests(), porttest.NewToolLister()
 	envTests.AddFactory(o.ID, factoryID)
 
+	repoTests := porttest.NewRepositoryTests()
+	repoTests.AddFactory(o.ID, factoryID)
+
 	kb.ReadSecrets(secrets)
 
 	codehost := porttest.NewCodeHost()
@@ -161,7 +164,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, ParseKind: connkind.Parse,
-		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, RepositoryTests: porttest.NewRepositoryTests(), Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
+		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, RepositoryTests: repoTests, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
 		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads,
 		KnowledgeObjects: kbObjects, KnowledgeCheck: knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Secrets: secrets, Uploads: uploads, Objects: kbObjects, Clock: clock}),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock, NotificationPreferences: porttest.NewNotificationPreferences(),
@@ -646,7 +649,7 @@ func TestFactory_RefusesBadCommandLines(t *testing.T) {
 		"factory pull a", "factory pull a b --version latest", "factory validate", "factory list x",
 		"factory publish", "factory versions", "factory restore a zero", "factory push a --move inbox",
 		"factory archive", "factory archive a b", "factory delete", "factory delete a b", "factory restore a 1 2",
-		"factory restore a --move inbox=done", "factory list --archived x",
+		"factory restore a --move inbox=done", "factory list --archived x", "factory show", "factory show a b",
 	} {
 		if _, err := g.goal(t, strings.Fields(line)...); !errors.Is(err, errUsage) {
 			t.Errorf("goal %s = %v, want a usage error", line, err)
@@ -848,4 +851,68 @@ func TestFactoryValidate_ReportsRuleProblems(t *testing.T) {
 		!strings.Contains(out, `rule tone: appliesTo.agents: unknown agent "ghost"`) || !strings.Contains(out, "error unknown-agent") {
 		t.Errorf("goal validate printed:\n%s", out)
 	}
+}
+
+// withRepositories is factoryYAML with runtime as given.
+func withRepositories(runtime string) map[string]string {
+	return map[string]string{yamlPath: strings.Replace(factoryYAML, `runtime: { modelKey: "{{claude-key}}" }`, runtime, 1)}
+}
+
+// goal factory show prints the factory's versions, then each repository of the current version
+// with its access, the default marked, and the test goald kept for its url, matched in any case
+// and without .git; kept tests of no entry come after.
+func TestFactoryShow_ListsRepositoriesWithKeptTests(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+	g.createRepoSecret(t)
+	g.mustGoal(t, "factory", "push", newCopy(t, withRepositories(`runtime:
+    modelKey: "{{claude-key}}"
+    repositories:
+      - { name: app, url: "https://github.com/Acme/App.git", token: "{{repo-token}}", access: write }`)), "--publish")
+
+	out := g.mustGoal(t, "factory", "show", factoryID)
+	expectOutput(t, "untested", out, []string{factoryID, "v1", "app *", "write", "https://github.com/Acme/App.git", "not tested"})
+
+	g.grantApp(true)
+	g.codehost.SetOwnerAccess("github.com", "labs", cliRepoToken, ports.OwnerAccess{Readable: 3, Pushable: 3, Reason: "GitHub lists 3 repositories of labs"})
+
+	for _, args := range [][]string{{cliRepo}, {"https://github.com/labs/*", "--access", "read"}} {
+		if out, err := g.testForAcme(t, args[0], args[1:]...); err != nil {
+			t.Fatalf("goal repository test %v = %v\n%s", args, err, out)
+		}
+	}
+
+	out = g.mustGoal(t, "factory", "show", factoryID)
+	expectOutput(t, "tested", out, []string{
+		"✓ Can read and push with secret " + repoSecret + ", tested 2026-10-24 09:00 UTC", "note: The host reports no pull-request permission",
+		"kept tests of no repository of acme v1", "github.com/labs/*", "read", "warning: Goal won't push",
+	}, cliRepoToken, "not tested")
+
+	if i, j := strings.Index(out, "app *"), strings.Index(out, "github.com/labs/*"); i < 0 || j < i {
+		t.Errorf("the unmatched test is not listed after the entries:\n%s", out)
+	}
+}
+
+// goal factory show says so, in one line, of a factory without repositories and of one never
+// published; the runtime.repository shorthand is one write entry, the default, named after its URL.
+func TestFactoryShow_NoRepositories(t *testing.T) {
+	t.Parallel()
+
+	g := newDefGoald(t)
+	g.mustGoal(t, "factory", "push", newCopy(t, nil))
+
+	expectOutput(t, "never published", g.mustGoal(t, "factory", "show", factoryID),
+		[]string{"never published + draft r1", "acme has no published version, so no repositories yet"}, "not tested")
+
+	g.mustGoal(t, "factory", "publish", factoryID)
+	expectOutput(t, "no repositories", g.mustGoal(t, "factory", "show", factoryID), []string{"v1", "acme v1 has no repositories"}, "not tested")
+
+	g.createRepoSecret(t)
+	g.mustGoal(t, "factory", "push", newCopy(t, withRepositories(`runtime:
+    modelKey: "{{claude-key}}"
+    repository: { url: "https://github.com/acme/app", token: "{{repo-token}}" }`)), "--publish", "--force")
+
+	expectOutput(t, "shorthand", g.mustGoal(t, "factory", "show", factoryID),
+		[]string{"v2", "app *", "write", cliRepo, "not tested"})
 }
