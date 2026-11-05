@@ -184,7 +184,9 @@ export function writeTrigger(text: string, trigger: Trigger): string {
     if (!node) {
       edits.push(addEntry(text, seq, next));
     } else {
-      const current = node.toJSON() as Trigger;
+      // Compared in the schema's current words, so a trigger still written the old way (github.check_run.failed)
+      // keeps its lines until the form changes `on` or `filter`.
+      const current = normalizeTrigger(node.toJSON() as Trigger);
       for (const key of keys) {
         if (key === 'name') continue;
         const value = next[key];

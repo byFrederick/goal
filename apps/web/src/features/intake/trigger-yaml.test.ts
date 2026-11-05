@@ -6,6 +6,7 @@ import type { Trigger } from '../../shared/definition/model';
 import {
   keyLines,
   readBoard,
+  readRawTrigger,
   readTrigger,
   readTriggers,
   TriggerNotFoundError,
@@ -50,7 +51,7 @@ describe('reading the triggers', () => {
   });
 
   it('reads the work types and station ids the Create section chooses from', () => {
-    expect(readBoard(file)).toEqual({ workTypes: ['feature', 'fix'], stations: ['intake', 'build'], lanes: {} });
+    expect(readBoard(file)).toEqual({ workTypes: ['feature', 'fix'], stations: ['intake', 'build'], lanes: {}, agents: [] });
   });
 
   it("reads each station's route keys as its lanes", () => {
@@ -220,7 +221,7 @@ spec:
 
 describe('showing a trigger as YAML', () => {
   it('writes the list entry with its maps in flow style, as the definition card shows it', () => {
-    const yaml = triggerYaml(flaky);
+    const yaml = triggerYaml(readRawTrigger(file, 'flaky-test-on-main') as Trigger);
     expect(yaml).toContain('- name: flaky-test-on-main\n  on: github.check_run.failed\n');
     expect(yaml).toContain('  filter: { branch: main, repo: byFrederick/goal }\n');
     expect(yaml).toContain('  limits: { perDay: 3, pauseOnBudget: true }');
@@ -273,5 +274,88 @@ describe('withTriggerEnabled', () => {
 
   it('refuses a switchFile that does not parse', () => {
     expect(() => withTriggerEnabled('spec: [', 'flaky', false)).toThrow(/does not parse/);
+  });
+});
+
+describe('the sender, event filters, payload matches and checks', () => {
+  const base = `spec:
+  agents:
+    - { name: watcher, prompt: p, builtins: { read: allow, edit: off } }
+  board:
+    workTypes: [fix]
+    stations:
+      - { id: build, kind: agent }
+    triggers:
+      - name: old-label
+        on: github.issues.labeled
+        create: { type: fix, station: build }
+      - name: hooked
+        on: webhook.ci.check_run
+        create: { type: fix, station: build }
+      - name: gone
+        on: github.check_run
+        filter: { conclusion: failure }
+        only: { modelAgrees: { question: Is it worth it? } }
+        create: { type: fix, station: build }
+`;
+
+  it('reads the two legacy event keys and webhook.<name> in the schema’s current words', () => {
+    expect(readTrigger(base, 'old-label')).toMatchObject({ on: 'github.issues', filter: { action: 'labeled' } });
+    expect(readTrigger(base, 'hooked')?.on).toBe('ci.check_run');
+    expect(readRawTrigger(base, 'old-label')?.on).toBe('github.issues.labeled');
+  });
+
+  it('keeps the legacy lines until the form changes on or filter', () => {
+    const t = readTrigger(base, 'old-label') as Trigger;
+    expect(writeTrigger(base, { ...t, limits: { perHour: 4 } })).toBe(
+      base.replace(
+        "on: github.issues.labeled\n        create: { type: fix, station: build }",
+        'on: github.issues.labeled\n        create: { type: fix, station: build }\n        limits: { perHour: 4 }',
+      ),
+    );
+    expect(readTrigger(writeTrigger(base, { ...t, filter: { action: ['labeled', 'unlabeled'] } }), 'old-label')?.filter).toEqual({
+      action: ['labeled', 'unlabeled'],
+    });
+  });
+
+  it('round-trips action, conclusion, a repo list, payload matches and perHour', () => {
+    const t = readTrigger(base, 'gone') as Trigger;
+    const next: Trigger = {
+      ...t,
+      filter: {
+        conclusion: ['failure', 'timed_out'],
+        repo: ['acme/api', 'acme/web'],
+        match: { 'check_run.app.slug': 'ci', 'ref.kind': ['a', 'b'] },
+      },
+      limits: { perDay: 3, perHour: 10 },
+    };
+    const back = readTrigger(writeTrigger(base, next), 'gone');
+    expect(back?.filter).toEqual(next.filter);
+    expect(back?.limits).toEqual({ perDay: 3, perHour: 10 });
+  });
+
+  it('keeps a file’s modelAgrees as it is, and writes no empty payload match', () => {
+    const t = readTrigger(base, 'gone') as Trigger;
+    const out = writeTrigger(base, { ...t, filter: { conclusion: 'failure', match: {} }, limits: { perDay: 2 } });
+    expect(readTrigger(out, 'gone')?.only).toEqual({ modelAgrees: { question: 'Is it worth it?' } });
+    expect(readTrigger(out, 'gone')?.filter).toEqual({ conclusion: 'failure' });
+  });
+
+  it('writes and reads a check, and drops it from a trigger that is not a schedule', () => {
+    const t: Trigger = {
+      name: 'watch',
+      on: 'schedule',
+      cron: '*/5 * * * *',
+      check: { agent: 'watcher', brief: 'Look at it.', maxUsd: 0.1 },
+      create: { type: 'fix', station: 'build', trusted: true },
+      limits: { perCheck: 5, perDay: 20 },
+    };
+    const out = writeTrigger(base, t);
+    expect(readTrigger(out, 'watch')).toEqual(t);
+    expect(readTrigger(writeTrigger(base, { ...t, on: 'github.check_run' }), 'watch')?.check).toBeUndefined();
+  });
+
+  it('reads each agent with the tools it has on', () => {
+    expect(readBoard(base).agents).toEqual([{ name: 'watcher', tools: ['read'] }]);
   });
 });

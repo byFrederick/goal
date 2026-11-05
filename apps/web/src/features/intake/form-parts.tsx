@@ -160,7 +160,9 @@ export function ChipList({
           className="inline-flex h-8 max-w-full items-center gap-1 rounded-control bg-run-tint pl-3 pr-1 text-body text-run-ink"
         >
           {prefix ? <span className="text-muted">{prefix}</span> : null}
-          <span className="min-w-0 truncate font-control">{value}</span>
+          <span title={value} className="min-w-0 truncate font-control">
+            {value}
+          </span>
           <button
             type="button"
             aria-label={`Remove ${value} from ${label.toLowerCase()}`}

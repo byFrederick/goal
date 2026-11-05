@@ -220,14 +220,12 @@ describe('the ready page', () => {
 
     const when = screen.getByRole('region', { name: 'When' });
     expect(within(when).getByText('GitHub')).toBeTruthy();
-    expect((within(when).getByRole('combobox', { name: 'Event' }) as HTMLSelectElement).value).toBe(
-      'github.check_run.failed',
-    );
+    // The legacy key reads as github.check_run with conclusion failure (factory.schema.json, `on`).
+    expect((within(when).getByRole('combobox', { name: 'Event' }) as HTMLSelectElement).value).toBe('github.check_run');
+    expect(within(within(when).getByRole('group', { name: 'Conclusion' })).getByText('failure')).toBeTruthy();
     expect((within(when).getByRole('textbox', { name: 'Branch' }) as HTMLInputElement).value).toBe('main');
-    expect((within(when).getByRole('textbox', { name: 'Repository' }) as HTMLInputElement).value).toBe(
-      'byFrederick/goal',
-    );
-    expect(within(when).getByRole('button', { name: /More filters: paths, authors, skip bots/ })).toBeTruthy();
+    expect(within(within(when).getByRole('group', { name: 'Repository' })).getByText('byFrederick/goal')).toBeTruthy();
+    expect(within(when).getByRole('button', { name: 'More filters' })).toBeTruthy();
 
     const only = screen.getByRole('region', { name: 'Only if' });
     expect(within(only).getByText('No open item already covers this check')).toBeTruthy();
@@ -242,15 +240,12 @@ describe('the ready page', () => {
     expect((within(create).getByRole('textbox', { name: 'Title' }) as HTMLInputElement).value).toBe(
       'Fix flaky {{check.name}} on main',
     );
-    expect(
-      within(create).getByText(
-        'Text from the event reaches the agent marked as untrusted data, never as instructions.',
-      ),
-    ).toBeTruthy();
+    expect(within(create).getByRole('button', { name: 'About brief for the agent' })).toBeTruthy();
 
     const limits = screen.getByRole('region', { name: 'Limits' });
     expect((within(limits).getByRole('spinbutton', { name: 'Items a day' }) as HTMLInputElement).value).toBe('3');
-    expect(within(limits).getByText("Pause when Software's weekly budget is spent")).toBeTruthy();
+    expect((within(limits).getByRole('spinbutton', { name: 'Items an hour' }) as HTMLInputElement).disabled).toBe(true);
+    expect(within(limits).getByText("Pause while Software's weekly budget is spent")).toBeTruthy();
 
     const recent = screen.getByRole('region', { name: 'Recent events' });
     expect(within(recent).getByText('Created #150')).toBeTruthy();
@@ -259,7 +254,7 @@ describe('the ready page', () => {
 
     const definition = screen.getByRole('region', { name: 'In the definition' });
     expect(within(definition).getByText('Open file')).toBeTruthy();
-    expect(within(definition).getByText("Saving publishes a new version of Software's definition.")).toBeTruthy();
+    expect(within(definition).getByRole('button', { name: 'About saving' })).toBeTruthy();
     expect(definition.querySelector('pre')?.textContent).toContain('- name: flaky-test-on-main');
   });
 
@@ -280,11 +275,12 @@ describe('the ready page', () => {
   it('opens More filters in place', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1 });
-    const more = screen.getByRole('button', { name: /More filters: paths, authors, skip bots/ });
+    const more = screen.getByRole('button', { name: 'More filters' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(more);
     expect(more.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByRole('textbox', { name: /Paths/ })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Authors' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add a payload match' })).toBeTruthy();
   });
 
   it('disables only the controls that are not built yet, with the tooltip that says so', async () => {
@@ -294,7 +290,7 @@ describe('the ready page', () => {
     fireEvent.focus(screen.getByRole('button', { name: /Add another event/ }));
     expect(await screen.findByText('Not available yet')).toBeTruthy();
     expect(screen.queryByText(/copy/i)).toBeNull();
-    expect(screen.getByRole('checkbox', { name: /A model agrees it is worth an item/ })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: /model agrees/i })).toBeNull();
   });
 });
 
@@ -500,9 +496,9 @@ describe('a new trigger from the New trigger picker', () => {
   });
 });
 
-describe('the try and the model check', () => {
-  // The flaky-test trigger is a GitHub trigger: its events are not stored, so Try says why it is unavailable.
-  // The schedule below is a trigger whose past events can be tried.
+describe('the try and the removed model check', () => {
+  // The flaky-test trigger is a GitHub trigger; its saved deliveries can be tried. The schedule below keeps
+  // its own past events. The model check is gone: a file that still has it keeps it and is never asked about it.
   const scheduleFile = file.replace(
     '      - name: flaky-test-on-main',
     [
@@ -520,14 +516,10 @@ describe('the try and the model check', () => {
     trigger: { ...detail.trigger, name: 'dependency-audit', source: 'schedule' as const, on: 'schedule' },
   };
 
-  it('says why Try is unavailable for a GitHub trigger, and does not open a dialog', async () => {
+  it('offers Try with a delivery for a GitHub trigger that has events', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1 });
-    const button = screen.getByRole('button', { name: 'Try with a past event' });
-    expect(button.hasAttribute('disabled')).toBe(true);
-    expect(
-      screen.getByText("Only a schedule's events are stored, so this trigger's events cannot be tried."),
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try with a delivery' }).hasAttribute('disabled')).toBe(false);
   });
 
   it('disables Try while there are unsaved edits, with the reason to save first', async () => {
@@ -538,7 +530,7 @@ describe('the try and the model check', () => {
     await screen.findByRole('heading', { level: 1 });
     expect(screen.getByRole('button', { name: 'Try with a past event' }).hasAttribute('disabled')).toBe(false);
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /A model agrees it is worth an item/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Pause while/ }));
     expect(screen.getByRole('button', { name: 'Try with a past event' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Save to try your changes')).toBeTruthy();
   });
@@ -553,7 +545,7 @@ describe('the try and the model check', () => {
     expect(screen.getByText('No past events to try yet')).toBeTruthy();
   });
 
-  it('runs a try of a schedule trigger against its saved definition and shows the result', async () => {
+  it('runs a try against the saved definition and shows the result', async () => {
     route.params = { trigger: 'dependency-audit' };
     stored = scheduleFile;
     mocked.getIntakeTrigger.mockResolvedValue(schedule);
@@ -564,14 +556,7 @@ describe('the try and the model check', () => {
       reason: null,
       steps: [{ step: 'create', outcome: 'passed', reason: null }],
       item: { type: 'fix', station: 'build', lane: null, expedite: false, title: 'Update it', brief: '' },
-      model_check: {
-        worth: true,
-        reason: 'It names a fix.',
-        model: 'claude-haiku-5-5',
-        input_tokens: 1,
-        output_tokens: 1,
-        cost_usd: 0.01,
-      },
+      model_check: null,
     });
     renderPage();
     await screen.findByRole('heading', { level: 1 });
@@ -583,41 +568,55 @@ describe('the try and the model check', () => {
     expect(screen.getByText('Nothing was created. The try changed no item, event or limit.')).toBeTruthy();
   });
 
-  it('shows a question field under the model check, and Save stays off while the question is blank', async () => {
+  it('never asks about the model check, and keeps the key a file still has when saving another edit', async () => {
     route.params = { trigger: 'dependency-audit' };
     stored = scheduleFile;
     mocked.getIntakeTrigger.mockResolvedValue(schedule);
     renderPage();
     await screen.findByRole('heading', { level: 1 });
-    expect(screen.queryByRole('textbox', { name: 'Question for the model' })).toBeTruthy();
-
-    const question = screen.getByRole('textbox', { name: 'Question for the model' });
-    fireEvent.change(question, { target: { value: '   ' } });
-    expect(screen.getByText('Write the question the model answers. Save needs it.')).toBeTruthy();
-    expect(saveButton().hasAttribute('disabled')).toBe(true);
-
-    fireEvent.change(question, { target: { value: 'Is this worth an item?' } });
-    expect(saveButton().hasAttribute('disabled')).toBe(false);
-  });
-
-  it('writes the model check question when checked, and removes the check when unchecked', async () => {
-    renderPage();
-    await screen.findByRole('heading', { level: 1 });
-    const check = screen.getByRole('checkbox', { name: /A model agrees it is worth an item/ });
     expect(screen.queryByRole('textbox', { name: 'Question for the model' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /model agrees/i })).toBeNull();
 
-    fireEvent.click(check);
-    fireEvent.change(screen.getByRole('textbox', { name: 'Question for the model' }), {
-      target: { value: 'Is this a flake, not a regression?' },
-    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Pause while/ }));
+    expect(saveButton().hasAttribute('disabled')).toBe(false);
     fireEvent.click(saveButton());
     await screen.findByText("Saved. Software's definition is version 3 now.");
     const [, , , text] = mocked.putDraftFile.mock.calls[0] ?? [];
-    expect(text).toContain('modelAgrees');
-    expect(text).toContain('Is this a flake, not a regression?');
-    await waitFor(() =>
-      expect(yamlCard().querySelector('pre')?.textContent).toContain('Is this a flake, not a regression?'),
-    );
+    expect(text).toContain('Does this audit name a vulnerable direct dependency?');
+    expect(text).toContain('pauseOnBudget: true');
+  });
+});
+
+describe('the event filters', () => {
+  it('offers only the filters the event supplies, and writes a payload match and perHour', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const when = screen.getByRole('region', { name: 'When' });
+    // check_run supplies action, conclusion, branch and repo; label belongs to issues.
+    expect(within(when).queryByRole('textbox', { name: 'Label' })).toBeNull();
+    expect(within(when).getByRole('group', { name: 'Action' })).toBeTruthy();
+
+    fireEvent.change(within(when).getByRole('combobox', { name: 'Event' }), { target: { value: 'github.issues' } });
+    expect(within(when).getByRole('textbox', { name: 'Label' })).toBeTruthy();
+    expect(within(when).queryByRole('group', { name: 'Conclusion' })).toBeNull();
+
+    fireEvent.click(within(when).getByRole('button', { name: 'More filters' }));
+    fireEvent.click(within(when).getByRole('button', { name: 'Add a payload match' }));
+    fireEvent.change(within(when).getByRole('textbox', { name: 'Payload path' }), {
+      target: { value: 'issue.user.type' },
+    });
+    const values = within(within(when).getByRole('group', { name: 'Payload values' })).getByRole('textbox');
+    fireEvent.change(values, { target: { value: 'User' } });
+    fireEvent.keyDown(values, { key: 'Enter' });
+
+    const limits = screen.getByRole('region', { name: 'Limits' });
+    fireEvent.click(within(limits).getByRole('checkbox', { name: /items an hour/ }));
+    fireEvent.click(saveButton());
+    await screen.findByText("Saved. Software's definition is version 3 now.");
+    const [, , , text] = mocked.putDraftFile.mock.calls[0] ?? [];
+    expect(text).toContain('on: github.issues');
+    expect(text).toContain('issue.user.type');
+    expect(text).toContain('perHour: 10');
   });
 });
 
