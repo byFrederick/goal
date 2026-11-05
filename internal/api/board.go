@@ -407,16 +407,9 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		return nil, err
 	}
 
-	ids := itemIDs(items)
-
-	touches, err := s.items.TouchCounts(ctx, ids)
+	touches, repos, err := s.touchesAndRepositories(ctx, items)
 	if err != nil {
 		return nil, err
-	}
-
-	repos, err := s.items.ItemsRepositories(ctx, ids)
-	if err != nil {
-		return nil, fmt.Errorf("repositories of the cards: %w", err)
 	}
 
 	asms, err := s.assemblies(ctx, l.FactoryID, items)
@@ -492,14 +485,25 @@ func (s *server) filing(c *gen.ItemCard, it domain.Item) {
 	}
 }
 
-// itemIDs are the ids of items, in order.
-func itemIDs(items []domain.Item) []domain.ItemID {
+// touchesAndRepositories are the touch counts and the repository rows of each of items that has
+// any, by item, each read once for the page.
+func (s *server) touchesAndRepositories(ctx context.Context, items []domain.Item) (map[domain.ItemID]int, map[domain.ItemID][]domain.ItemRepository, error) {
 	ids := make([]domain.ItemID, 0, len(items))
 	for _, it := range items {
 		ids = append(ids, it.ID)
 	}
 
-	return ids
+	touches, err := s.items.TouchCounts(ctx, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	repos, err := s.items.ItemsRepositories(ctx, ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("repositories of the cards: %w", err)
+	}
+
+	return touches, repos, nil
 }
 
 // assemblyFields are an item's card's assembly, when it is a part of one of asms, and parts,

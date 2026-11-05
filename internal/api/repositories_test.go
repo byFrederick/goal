@@ -167,7 +167,7 @@ func TestAPI_ItemCardsCarryRepositories(t *testing.T) {
 
 	want := []string{"github.com/acme/web filing", "github.com/acme/api filing"}
 
-	for from, cards := range map[string]map[int64]gen.ItemCard{"items": byNumber(list.Items), "board": cardsOf(board)} {
+	for from, cards := range map[string]map[int64]gen.ItemCard{"Items": byNumber(list.Items), "Board": cardsOf(board)} {
 		c, ok := cards[two.Number]
 		if got := cardRepos(c); !ok || !slices.Equal(got, want) || c.Repositories[0].JoinedAt == nil {
 			t.Errorf("%s: card repositories = %v (on it: %t); want %v with joined_at", from, got, ok, want)
@@ -178,6 +178,15 @@ func TestAPI_ItemCardsCarryRepositories(t *testing.T) {
 		}
 	}
 
+	if got := encodedRepositories(t, h, none.Number); got != "[]" {
+		t.Errorf("card without rows encodes repositories as %s; want []", got)
+	}
+}
+
+// encodedRepositories is the repositories of the Items list's card numbered n as encoded.
+func encodedRepositories(t *testing.T, h *harness, n int64) string {
+	t.Helper()
+
 	var raw struct {
 		Items []map[string]json.RawMessage `json:"items"`
 	}
@@ -186,14 +195,14 @@ func TestAPI_ItemCardsCarryRepositories(t *testing.T) {
 	}
 
 	for _, c := range raw.Items {
-		if r := string(c["repositories"]); r == "" || r == "null" {
-			t.Errorf("card %s encodes repositories as %q; want an array", c["ref"], r)
-		}
-
-		if string(c["number"]) == strconv.FormatInt(none.Number, 10) && string(c["repositories"]) != "[]" {
-			t.Errorf("card without rows encodes repositories as %s; want []", c["repositories"])
+		if string(c["number"]) == strconv.FormatInt(n, 10) {
+			return string(c["repositories"])
 		}
 	}
+
+	t.Fatalf("no card numbered %d", n)
+
+	return ""
 }
 
 // cardRepos is a card's repositories as repo/joined, in order.

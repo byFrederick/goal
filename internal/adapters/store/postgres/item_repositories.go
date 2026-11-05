@@ -42,6 +42,7 @@ func (s *Store) ItemsRepositories(ctx context.Context, items []domain.ItemID) (m
 	}
 
 	out := make(map[domain.ItemID][]domain.ItemRepository)
+
 	for _, r := range rows {
 		id := domain.ItemID(r.ItemID.String())
 		out[id] = append(out[id], itemRepositoryFrom(r))
