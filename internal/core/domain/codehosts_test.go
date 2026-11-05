@@ -7,6 +7,12 @@ import (
 	"testing"
 )
 
+// The hosts these tests add, besides hostGitHub and hostGHE.
+const (
+	hostGitLab  = "gitlab.com"
+	hostGitAcme = "git.example.com"
+)
+
 func TestCodeHost_CheckAcceptsANamedPublicHost(t *testing.T) {
 	t.Parallel()
 
@@ -15,7 +21,7 @@ func TestCodeHost_CheckAcceptsANamedPublicHost(t *testing.T) {
 		kind CodeHostKind
 		want CodeHost
 	}{
-		{" GHE.Example.COM ", CodeHostGitHub, CodeHost{Host: "ghe.example.com", Kind: CodeHostGitHub}},
+		{" GHE.Example.COM ", CodeHostGitHub, CodeHost{Host: hostGHE, Kind: CodeHostGitHub}},
 		{"acme.ghe.com", CodeHostGitHub, CodeHost{Host: "acme.ghe.com", Kind: CodeHostGitHub}},
 		{"gitlab.example.com", CodeHostGitLab, CodeHost{Host: "gitlab.example.com", Kind: CodeHostGitLab}},
 	} {
@@ -45,10 +51,10 @@ func TestCodeHost_CheckRefusesWhatGoaldCannotOrMustNotDial(t *testing.T) {
 		{"an .internal name", "git.acme.internal", CodeHostGitLab, ErrCodeHostInvalid},
 		{"a .localhost name", "git.localhost", CodeHostGitLab, ErrCodeHostInvalid},
 		{"nothing", "  ", CodeHostGitHub, ErrCodeHostInvalid},
-		{"an unknown kind", "git.example.com", "bitbucket", ErrCodeHostInvalid},
-		{"no kind", "git.example.com", "", ErrCodeHostInvalid},
-		{"github.com", "GitHub.com", CodeHostGitHub, ErrCodeHostBuiltIn},
-		{"gitlab.com", "gitlab.com", CodeHostGitLab, ErrCodeHostBuiltIn},
+		{"an unknown kind", hostGitAcme, "bitbucket", ErrCodeHostInvalid},
+		{"no kind", hostGitAcme, "", ErrCodeHostInvalid},
+		{hostGitHub, "GitHub.com", CodeHostGitHub, ErrCodeHostBuiltIn},
+		{hostGitLab, hostGitLab, CodeHostGitLab, ErrCodeHostBuiltIn},
 	} {
 		if _, err := CheckCodeHost(c.host, c.kind); !errors.Is(err, c.want) || !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: CheckCodeHost(%q, %q) = %v; want %v", c.name, c.host, c.kind, err, c.want)
@@ -70,7 +76,7 @@ func TestCodeHost_CheckListSortsAndRefusesDuplicatesAndTooMany(t *testing.T) {
 		t.Errorf("CheckCodeHosts(nil) = %+v, %v; want none", got, err)
 	}
 
-	dup := []CodeHost{{Host: "git.example.com", Kind: CodeHostGitHub}, {Host: "GIT.example.com", Kind: CodeHostGitLab}}
+	dup := []CodeHost{{Host: hostGitAcme, Kind: CodeHostGitHub}, {Host: "GIT.example.com", Kind: CodeHostGitLab}}
 	if _, err := CheckCodeHosts(dup); !errors.Is(err, ErrCodeHostInvalid) {
 		t.Errorf("a duplicate: %v; want ErrCodeHostInvalid", err)
 	}
@@ -88,7 +94,7 @@ func TestCodeHost_CheckListSortsAndRefusesDuplicatesAndTooMany(t *testing.T) {
 		t.Errorf("%d hosts: %v; want ErrCodeHostInvalid", len(many), err)
 	}
 
-	if _, err := CheckCodeHosts([]CodeHost{{Host: "github.com", Kind: CodeHostGitHub}}); !errors.Is(err, ErrCodeHostBuiltIn) {
+	if _, err := CheckCodeHosts([]CodeHost{{Host: hostGitHub, Kind: CodeHostGitHub}}); !errors.Is(err, ErrCodeHostBuiltIn) {
 		t.Errorf("a built-in host: %v; want ErrCodeHostBuiltIn", err)
 	}
 }
@@ -96,14 +102,14 @@ func TestCodeHost_CheckListSortsAndRefusesDuplicatesAndTooMany(t *testing.T) {
 func TestCodeHost_BuiltInsAreGitHubAndGitLab(t *testing.T) {
 	t.Parallel()
 
-	want := []CodeHost{{Host: "github.com", Kind: CodeHostGitHub, BuiltIn: true}, {Host: "gitlab.com", Kind: CodeHostGitLab, BuiltIn: true}}
+	want := []CodeHost{{Host: hostGitHub, Kind: CodeHostGitHub, BuiltIn: true}, {Host: hostGitLab, Kind: CodeHostGitLab, BuiltIn: true}}
 	if got := BuiltInCodeHosts(); !reflect.DeepEqual(got, want) {
 		t.Errorf("BuiltInCodeHosts() = %+v; want %+v", got, want)
 	}
 
 	// A copy: changing it changes no later answer.
 	BuiltInCodeHosts()[0].Host = "example.com"
-	if got := BuiltInCodeHosts(); got[0].Host != "github.com" {
+	if got := BuiltInCodeHosts(); got[0].Host != hostGitHub {
 		t.Errorf("BuiltInCodeHosts()[0] = %+v after a caller changed its copy", got[0])
 	}
 }
@@ -115,10 +121,10 @@ func TestCodeHost_APIBase(t *testing.T) {
 		host CodeHost
 		want string
 	}{
-		{CodeHost{Host: "github.com", Kind: CodeHostGitHub}, "https://api.github.com"},
+		{CodeHost{Host: hostGitHub, Kind: CodeHostGitHub}, "https://api.github.com"},
 		{CodeHost{Host: "acme.ghe.com", Kind: CodeHostGitHub}, "https://api.acme.ghe.com"},
-		{CodeHost{Host: "ghe.example.com", Kind: CodeHostGitHub}, "https://ghe.example.com/api/v3"},
-		{CodeHost{Host: "gitlab.com", Kind: CodeHostGitLab}, "https://gitlab.com/api/v4"},
+		{CodeHost{Host: hostGHE, Kind: CodeHostGitHub}, "https://ghe.example.com/api/v3"},
+		{CodeHost{Host: hostGitLab, Kind: CodeHostGitLab}, "https://gitlab.com/api/v4"},
 		{CodeHost{Host: "gitlab.example.com", Kind: CodeHostGitLab}, "https://gitlab.example.com/api/v4"},
 	} {
 		if got := CodeHostAPIBase(c.host); got != c.want {

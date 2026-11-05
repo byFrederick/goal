@@ -24,6 +24,12 @@ var (
 // before it (from), each {host, kind}.
 const AuditOrgCodeHostsSet = "org.code_hosts_set"
 
+// The built-in hosts' names.
+const (
+	gitHubDotCom = "github.com"
+	gitLabDotCom = "gitlab.com"
+)
+
 // MaxCodeHosts is how many hosts an organization may add, besides the built-in ones.
 const MaxCodeHosts = 20
 
@@ -47,7 +53,7 @@ type CodeHost struct {
 
 // BuiltInCodeHosts are the hosts every organization lists, github.com first; a new slice each call.
 func BuiltInCodeHosts() []CodeHost {
-	return []CodeHost{{Host: "github.com", Kind: CodeHostGitHub, BuiltIn: true}, {Host: "gitlab.com", Kind: CodeHostGitLab, BuiltIn: true}}
+	return []CodeHost{{Host: gitHubDotCom, Kind: CodeHostGitHub, BuiltIn: true}, {Host: gitLabDotCom, Kind: CodeHostGitLab, BuiltIn: true}}
 }
 
 // CheckCodeHost returns host as an added code host of kind is stored, trimmed and lower case.
@@ -134,7 +140,7 @@ func CodeHostAPIBase(h CodeHost) string {
 	switch {
 	case h.Kind == CodeHostGitLab:
 		return "https://" + h.Host + "/api/v4"
-	case h.Host == "github.com" || strings.HasSuffix(h.Host, ".ghe.com"):
+	case h.Host == gitHubDotCom || strings.HasSuffix(h.Host, ".ghe.com"):
 		return "https://api." + h.Host
 	default:
 		return "https://" + h.Host + "/api/v3"

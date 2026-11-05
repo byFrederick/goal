@@ -3,11 +3,11 @@
 package postgres
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -49,14 +49,21 @@ func TestCodeHosts_RoundTripAndIsolation(t *testing.T) {
 		t.Errorf("hosts added by the local user = %d, %v; want 2", n, err)
 	}
 
-	for _, host := range []string{"github.com", "GIT.example.org", "localhost"} {
-		err := inOrgTx(t, pool, a, func(tx pgx.Tx) error {
+	refuseRawCodeHosts(t, pool, a, "github.com", "GIT.example.org", "localhost")
+}
+
+// refuseRawCodeHosts checks that code_hosts refuses each of hosts written straight in SQL as org.
+func refuseRawCodeHosts(t *testing.T, pool *pgxpool.Pool, org domain.OrgID, hosts ...string) {
+	t.Helper()
+
+	for _, host := range hosts {
+		err := inOrgTx(t, pool, org, func(tx pgx.Tx) error {
 			_, err := tx.Exec(t.Context(), "INSERT INTO code_hosts (host, kind, created_by) VALUES ($1, 'github', 'user:local')", host)
 
 			return err
 		})
-		if err == nil || errors.Is(err, pgx.ErrNoRows) {
-			t.Errorf("inserting %q: %v; want the table to refuse it", host, err)
+		if err == nil {
+			t.Errorf("inserting %q: no error; want the table to refuse it", host)
 		}
 	}
 }

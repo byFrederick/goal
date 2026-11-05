@@ -9,8 +9,11 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// codeHostsPath is acme's code hosts.
-const codeHostsPath = acmePath + "/code-hosts"
+// codeHostsPath is acme's code hosts; codeHostInvalid answers a host goald refuses.
+const (
+	codeHostsPath   = acmePath + "/code-hosts"
+	codeHostInvalid = "code-host-invalid"
+)
 
 // builtInHosts are the hosts every organization lists first.
 var builtInHosts = []gen.CodeHost{
@@ -42,6 +45,7 @@ func TestCodeHosts_FreshOwnerSetsAndMembersRead(t *testing.T) {
 	}
 
 	body := `{"hosts":[{"host":"GitLab.Example.com","kind":"gitlab"},{"host":"acme.ghe.com","kind":"github"},{"host":"ghe.example.com","kind":"github"}]}`
+
 	want := append(append([]gen.CodeHost{}, builtInHosts...),
 		gen.CodeHost{Host: "acme.ghe.com", Kind: gen.CodeHostKindGithub, ApiBase: "https://api.acme.ghe.com"},
 		gen.CodeHost{Host: "ghe.example.com", Kind: gen.CodeHostKindGithub, ApiBase: "https://ghe.example.com/api/v3"},
@@ -98,17 +102,19 @@ func TestCodeHosts_Refusals(t *testing.T) {
 	}{
 		{"a stale owner", ownerToken, ghe, http.StatusForbidden, codeReauth},
 		{"an admin", freshAdminToken, ghe, http.StatusForbidden, wantForbidden},
-		{"a member", viewerToken, ghe, http.StatusForbidden, wantForbidden},
+		{"a member with a factory role", viewerToken, ghe, http.StatusForbidden, wantForbidden},
 		{"github.com", freshOwnerToken, `{"hosts":[{"host":"github.com","kind":"github"}]}`, http.StatusBadRequest, "code-host-built-in"},
 		{"gitlab.com", freshOwnerToken, `{"hosts":[{"host":"GitLab.com","kind":"gitlab"}]}`, http.StatusBadRequest, "code-host-built-in"},
-		{"a URL", freshOwnerToken, `{"hosts":[{"host":"https://ghe.example.com","kind":"github"}]}`, http.StatusBadRequest, "code-host-invalid"},
-		{"a port", freshOwnerToken, `{"hosts":[{"host":"ghe.example.com:8443","kind":"github"}]}`, http.StatusBadRequest, "code-host-invalid"},
-		{"an IP address", freshOwnerToken, `{"hosts":[{"host":"10.0.0.7","kind":"gitlab"}]}`, http.StatusBadRequest, "code-host-invalid"},
-		{"localhost", freshOwnerToken, `{"hosts":[{"host":"localhost","kind":"gitlab"}]}`, http.StatusBadRequest, "code-host-invalid"},
-		{"an internal name", freshOwnerToken, `{"hosts":[{"host":"git.acme.internal","kind":"gitlab"}]}`, http.StatusBadRequest, "code-host-invalid"},
-		{"an unknown kind", freshOwnerToken, `{"hosts":[{"host":"git.example.com","kind":"bitbucket"}]}`, http.StatusBadRequest, "code-host-invalid"},
-		{"a host twice", freshOwnerToken, `{"hosts":[{"host":"git.example.com","kind":"github"},{"host":"GIT.example.com","kind":"gitlab"}]}`,
-			http.StatusBadRequest, "code-host-invalid"},
+		{"a URL", freshOwnerToken, `{"hosts":[{"host":"https://ghe.example.com","kind":"github"}]}`, http.StatusBadRequest, codeHostInvalid},
+		{"a port", freshOwnerToken, `{"hosts":[{"host":"ghe.example.com:8443","kind":"github"}]}`, http.StatusBadRequest, codeHostInvalid},
+		{"an IP address", freshOwnerToken, `{"hosts":[{"host":"10.0.0.7","kind":"gitlab"}]}`, http.StatusBadRequest, codeHostInvalid},
+		{"localhost", freshOwnerToken, `{"hosts":[{"host":"localhost","kind":"gitlab"}]}`, http.StatusBadRequest, codeHostInvalid},
+		{"an internal name", freshOwnerToken, `{"hosts":[{"host":"git.acme.internal","kind":"gitlab"}]}`, http.StatusBadRequest, codeHostInvalid},
+		{"an unknown kind", freshOwnerToken, `{"hosts":[{"host":"git.example.com","kind":"bitbucket"}]}`, http.StatusBadRequest, codeHostInvalid},
+		{
+			"a host twice", freshOwnerToken, `{"hosts":[{"host":"git.example.com","kind":"github"},{"host":"GIT.example.com","kind":"gitlab"}]}`,
+			http.StatusBadRequest, codeHostInvalid,
+		},
 	} {
 		if p := problem(t, h.as(t, c.token, http.MethodPut, codeHostsPath, c.body)); p.Status != c.status || deref(p.Code) != c.code {
 			t.Errorf("%s: %+v; want %d %q", c.name, p, c.status, c.code)
