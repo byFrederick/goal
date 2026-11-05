@@ -10446,7 +10446,7 @@ components:
     Webhook:
       type: object
       description: One of the organization's webhooks, never a secret's value
-      required: [id, name, sender, address, secret, enabled, token, openings, triggers, created_at, days]
+      required: [id, name, sender, address, secret, enabled, token, openings, triggers, created_at, days, pinged_at, setup_events, setup_all_events]
       properties:
         id: { type: string }
         name: { type: string }
@@ -10475,6 +10475,22 @@ components:
           minItems: 7
           maxItems: 7
           items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
+        pinged_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the receiver last accepted GitHub's ping to it; null when it never did
+        setup_events:
+          type: array
+          description: >-
+            The events to choose in the sender's settings: the sorted, distinct events of the
+            enabled triggers of the published definitions of the factories it is open to that
+            name it (<name>.<event>, webhook.<name>.<event>) or its sender (<sender>.<event>).
+            Archived factories are left out.
+          items: { type: string }
+        setup_all_events:
+          type: boolean
+          description: "true when such a trigger names it with no event, so the sender should send every event"
     CreatedWebhook:
       description: A new webhook, with the value of the secret goald generated for it, never readable again
       allOf:
@@ -10518,7 +10534,7 @@ components:
       description: "refused, with its reason; accepted, with no trigger matched; created, an item"
     WebhookDelivery:
       type: object
-      required: [id, received_at, outcome, reason, item]
+      required: [id, received_at, outcome, reason, item, event, receipt, duplicates, evaluations]
       properties:
         id: { type: string }
         received_at: { type: string, format: date-time }
@@ -10528,6 +10544,49 @@ components:
           description: The item it created; null for another outcome or once that item is gone
           allOf: [{ $ref: "#/components/schemas/WebhookDeliveryItem" }]
           nullable: true
+        event: { type: string, description: "The sender's event, such as check_run; empty when it names none or it was refused" }
+        receipt:
+          type: string
+          enum: [accepted, duplicate, refused]
+          nullable: true
+          description: >-
+            What the receiver made of it: accepted; duplicate, a delivery id it already had (the
+            first row counts the later ones in duplicates); refused, with its reason. null for a
+            delivery recorded before the receiver.
+        duplicates: { type: integer, description: How many later deliveries had its delivery id and created nothing }
+        evaluations:
+          type: array
+          description: >-
+            Its evaluation by each factory that names it, by factory. A factory's own routes list
+            only that factory's.
+          items: { $ref: "#/components/schemas/WebhookDeliveryEvaluation" }
+    WebhookDeliveryEvaluation:
+      type: object
+      required: [factory, factory_name, state, outcome, reason, item]
+      properties:
+        factory: { type: string, description: "The factory's metadata.id" }
+        factory_name: { type: string, description: "The factory's name; its metadata.id once the factory is gone" }
+        state:
+          type: string
+          enum: [pending, done, failed]
+          description: "pending, waiting to be evaluated or tried again; done, with its outcome; failed after five attempts"
+        outcome:
+          type: string
+          enum: [created, skipped, failed]
+          nullable: true
+          description: "created, an item; skipped, with the reason; failed, with the error; null while pending"
+        reason: { type: string, description: "Why it was skipped or failed, or the last attempt's error while pending; empty otherwise" }
+        item:
+          description: The item it created; null for another outcome or once that item is gone
+          allOf: [{ $ref: "#/components/schemas/WebhookEvaluationItem" }]
+          nullable: true
+    WebhookEvaluationItem:
+      type: object
+      required: [id, number, ref]
+      properties:
+        id: { type: string }
+        number: { type: integer, format: int64 }
+        ref: { type: string, description: "<factory name>#<number>, such as sre#88" }
     WebhookDeliveryItem:
       type: object
       required: [id, number]

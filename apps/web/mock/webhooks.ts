@@ -73,6 +73,10 @@ function delivery(
     outcome,
     reason: extra.reason ?? '',
     item: extra.item ?? null,
+    event: outcome === 'refused' ? '' : extra.event,
+    receipt: outcome === 'refused' ? 'refused' : 'accepted',
+    duplicates: 0,
+    evaluations: [],
     headers: {
       'content-type': 'application/json',
       'user-agent': 'example-sender/1.0',

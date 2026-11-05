@@ -134,11 +134,12 @@ func (s *server) CreateWebhook(ctx context.Context, req gen.CreateWebhookRequest
 		return nil, webhookError(err)
 	}
 
-	o := webhookOut(w, nil, []gen.WebhookTrigger{})
+	o := webhookOut(w, nil, webhookUse{triggers: []gen.WebhookTrigger{}, events: []string{}})
 
 	return gen.CreateWebhook201JSONResponse{
 		Id: o.Id, Name: o.Name, Sender: o.Sender, Address: o.Address, Secret: o.Secret, Enabled: o.Enabled, Token: o.Token,
-		Openings: o.Openings, Triggers: o.Triggers, CreatedAt: o.CreatedAt, Days: o.Days, SecretValue: value,
+		Openings: o.Openings, Triggers: o.Triggers, CreatedAt: o.CreatedAt, Days: o.Days, PingedAt: o.PingedAt,
+		SetupEvents: o.SetupEvents, SetupAllEvents: o.SetupAllEvents, SecretValue: value,
 	}, nil
 }
 
@@ -211,7 +212,7 @@ func (s *server) ListOrgWebhookDeliveries(ctx context.Context, req gen.ListOrgWe
 		return nil, err
 	}
 
-	page, err := s.deliveryPage(ctx, w.ID, req.Params.Limit, req.Params.After)
+	page, err := s.deliveryPage(ctx, w.ID, "", req.Params.Limit, req.Params.After)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +226,7 @@ func (s *server) GetOrgWebhookDelivery(ctx context.Context, req gen.GetOrgWebhoo
 		return nil, err
 	}
 
-	out, err := s.deliveryRequest(ctx, w.ID, req.Delivery)
+	out, err := s.deliveryRequest(ctx, w.ID, "", req.Delivery)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +290,7 @@ func (s *server) unused(ctx context.Context, w domain.WebhookEndpoint, p domain.
 		return err
 	}
 
-	triggers := uses(w)
+	triggers := uses(w).triggers
 	if !renamed {
 		triggers = slices.DeleteFunc(triggers, func(t gen.WebhookTrigger) bool { return !slices.Contains(closes, domain.FactoryID(t.Factory)) })
 	}
@@ -313,17 +314,27 @@ func (s *server) deletable(ctx context.Context, w domain.WebhookEndpoint) error 
 		return err
 	}
 
-	if triggers := uses(w); len(triggers) > 0 {
+	if triggers := uses(w).triggers; len(triggers) > 0 {
 		return &webhookInUseError{name: w.Name, triggers: triggers}
 	}
 
 	return nil
 }
 
+// webhookUse is what the published definitions of the factories a webhook reaches have of it:
+// the triggers whose on names it, and the events its sender must send for the enabled triggers
+// that name it or its sender (setup events), or every event (all).
+type webhookUse struct {
+	triggers []gen.WebhookTrigger
+	events   []string
+	all      bool
+}
+
 // webhookUses reads the published definitions once and returns what of them uses a webhook: the
 // enabled or disabled triggers of the factories it reaches whose on names it, by factory name then
-// trigger. Archived factories are left out, as for a secret's uses.
-func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) []gen.WebhookTrigger, error) {
+// trigger, and its setup events, sorted and distinct. Archived factories are left out, as for a
+// secret's uses.
+func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) webhookUse, error) {
 	recs, err := s.records(ctx)
 	if err != nil {
 		return nil, err
@@ -331,8 +342,8 @@ func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) 
 
 	factories := s.factories.Factories(ctx)
 
-	return func(w domain.WebhookEndpoint) []gen.WebhookTrigger {
-		out := []gen.WebhookTrigger{}
+	return func(w domain.WebhookEndpoint) webhookUse {
+		out := webhookUse{triggers: []gen.WebhookTrigger{}, events: []string{}}
 
 		for _, f := range factories {
 			id := domain.FactoryID(f.Metadata.ID)
@@ -342,12 +353,25 @@ func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) 
 
 			for _, t := range f.Spec.Board.Triggers {
 				if domain.TriggerNames(t.On, w.Name) {
-					out = append(out, gen.WebhookTrigger{Factory: string(id), FactoryName: f.Metadata.Name, Trigger: t.Name})
+					out.triggers = append(out.triggers, gen.WebhookTrigger{Factory: string(id), FactoryName: f.Metadata.Name, Trigger: t.Name})
+				}
+
+				if t.Enabled != nil && !*t.Enabled {
+					continue
+				}
+
+				if event, all, ok := domain.SetupEvent(t.On, w); ok {
+					out.all = out.all || all
+					if event != "" {
+						out.events = append(out.events, event)
+					}
 				}
 			}
 		}
 
-		slices.SortStableFunc(out, func(a, b gen.WebhookTrigger) int { return cmp.Compare(a.FactoryName, b.FactoryName) })
+		slices.SortStableFunc(out.triggers, func(a, b gen.WebhookTrigger) int { return cmp.Compare(a.FactoryName, b.FactoryName) })
+		slices.Sort(out.events)
+		out.events = slices.Compact(out.events)
 
 		return out
 	}, nil
@@ -411,14 +435,15 @@ func (d endpointDays) of(id domain.WebhookEndpointID) []gen.WebhookDeliveryDay {
 }
 
 // webhookOut is w as the contract has it, never a secret's value; nil days are seven empty ones.
-func webhookOut(w domain.WebhookEndpoint, days []gen.WebhookDeliveryDay, triggers []gen.WebhookTrigger) gen.Webhook {
+func webhookOut(w domain.WebhookEndpoint, days []gen.WebhookDeliveryDay, use webhookUse) gen.Webhook {
 	if days == nil {
 		days = endpointDays{since: utcDay(w.CreatedAt).AddDate(0, 0, 1-deliveryDays)}.of(w.ID)
 	}
 
 	out := gen.Webhook{
 		Id: string(w.ID), Name: w.Name, Sender: gen.WebhookSender(w.Sender), Address: "/hooks/" + string(w.ID), Secret: w.Secret,
-		Enabled: w.Enabled, Openings: make([]gen.WebhookOpening, 0, len(w.Openings)), Triggers: triggers, CreatedAt: w.CreatedAt, Days: days,
+		Enabled: w.Enabled, Openings: make([]gen.WebhookOpening, 0, len(w.Openings)), Triggers: use.triggers,
+		CreatedAt: w.CreatedAt, Days: days, PingedAt: w.PingedAt, SetupEvents: use.events, SetupAllEvents: use.all,
 	}
 
 	if w.Sender == domain.SenderToken {

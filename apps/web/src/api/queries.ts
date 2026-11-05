@@ -78,7 +78,16 @@ import {
   listVersions,
   validateDraft,
 } from './definitions';
-import { definitionFile, getIntake, getIntakeTrigger, type IntakeWindow, tryIntakeTrigger } from './intake';
+import {
+  clearTriggerState,
+  definitionFile,
+  getIntake,
+  getIntakeTrigger,
+  type IntakeWindow,
+  listTriggerChecks,
+  tryIntakeTrigger,
+  tryTriggerCheck,
+} from './intake';
 import { listApiKeys, listMemberTokens, listPersonalTokens } from './keys';
 import {
   findKnowledgeFiles,
@@ -721,6 +730,27 @@ export const intakeTriggerQuery = (org: string, factory: string, trigger: string
   queryOptions({
     queryKey: intakeKeys.trigger(org, factory, trigger),
     queryFn: ({ signal }) => getIntakeTrigger(org, factory, trigger, signal),
+  });
+
+/** A check trigger's checks, newest first: the page's log. Under the trigger's key, so item and definition events refresh it. */
+export const triggerChecksQuery = (org: string, factory: string, trigger: string) =>
+  queryOptions({
+    queryKey: [...intakeKeys.trigger(org, factory, trigger), 'checks'] as const,
+    queryFn: ({ signal }) => listTriggerChecks(org, factory, trigger, 100, signal),
+  });
+
+/** Try a check now: queues a check that files nothing. The log shows it once it is read again. */
+export const tryCheckMutation = (org: string, factory: string, trigger: string) =>
+  mutationOptions({
+    mutationKey: [...intakeKeys.trigger(org, factory, trigger), 'try-check'],
+    mutationFn: () => tryTriggerCheck(org, factory, trigger),
+  });
+
+/** Clear on a check's page: forgets the state its last check saved. */
+export const clearStateMutation = (org: string, factory: string, trigger: string) =>
+  mutationOptions({
+    mutationKey: [...intakeKeys.trigger(org, factory, trigger), 'clear-state'],
+    mutationFn: () => clearTriggerState(org, factory, trigger),
   });
 
 /**

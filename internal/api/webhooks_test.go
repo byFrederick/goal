@@ -1,11 +1,14 @@
 package api_test
 
 import (
+	"cmp"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -179,7 +182,7 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 	signed := map[string]string{"X-Goal-Signature": "sha256=00", "X-Hub-Signature-256": "sha256=00", contentType: "application/json"}
 	first := h.deliver(t, created.Id, domain.NewWebhookDelivery{ReceivedAt: t0.Add(-3 * 24 * time.Hour), Headers: signed, Body: []byte{0xff, 0xfe}})
 	second := h.deliver(t, created.Id, domain.NewWebhookDelivery{
-		ReceivedAt: t0.Add(-time.Hour), Outcome: domain.DeliveryRefused, Reason: "signature did not match",
+		ReceivedAt: t0.Add(-time.Hour), Outcome: domain.DeliveryRefused, Reason: signatureMismatch,
 	})
 	third := h.deliver(t, created.Id, domain.NewWebhookDelivery{
 		ReceivedAt: t0, Headers: signed, Body: []byte(`{"event":"deploy.failed"}`), Outcome: domain.DeliveryCreated, ItemID: domain.ItemID(it.Id),
@@ -197,7 +200,7 @@ func TestWebhooks_DeliveriesPage(t *testing.T) {
 		t.Errorf("created delivery's item = %+v; want #%d", item, it.Number)
 	}
 
-	if d := page.Deliveries[1]; d.Outcome != gen.WebhookDeliveryOutcome(domain.DeliveryRefused) || d.Reason != "signature did not match" || d.Item != nil {
+	if d := page.Deliveries[1]; d.Outcome != gen.WebhookDeliveryOutcome(domain.DeliveryRefused) || d.Reason != signatureMismatch || d.Item != nil {
 		t.Errorf("refused delivery = %+v", d)
 	}
 
@@ -547,4 +550,193 @@ func TestWebhooks_OrgUnusedChanges(t *testing.T) {
 	if r := h.request(t, http.MethodDelete, secretsPath+"/webhook-builds", "", nil); r.status != http.StatusNoContent {
 		t.Errorf("delete of its secret once it is gone = %d %s; want 204", r.status, r.body)
 	}
+}
+
+// getOrgHook reads the organization's webhook ref, with its raw answer.
+func (h *harness) getOrgHook(t *testing.T, ref string) (gen.Webhook, string) {
+	t.Helper()
+
+	r := h.request(t, http.MethodGet, orgHooksPath+"/"+ref, "", nil)
+
+	return decode[gen.Webhook](t, r, http.StatusOK), string(r.body)
+}
+
+// A webhook's setup events are the events of the enabled triggers that name it or its sender, in
+// the factories it is open to, sorted and distinct; a trigger naming it with no event asks for
+// every event. A webhook open to none answers an empty list, never null. GitHub's ping time reads
+// null until a ping is accepted, then that time.
+func TestWebhooks_SetupEventsAndPing(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	w := h.createOrgHook(t, `{"name":"ci-hooks","sender":"github"}`)
+
+	got, raw := h.getOrgHook(t, "ci-hooks")
+	if len(got.SetupEvents) != 0 || got.SetupAllEvents || !strings.Contains(raw, `"setup_events":[]`) || !strings.Contains(raw, `"pinged_at":null`) {
+		t.Fatalf("webhook open to none = %s; want no setup events, as [], and pinged_at null", raw)
+	}
+
+	h.request(t, http.MethodPatch, orgHooksPath+"/ci-hooks", `{"open":[{"factory":"`+acmeID+`"}]}`, nil)
+
+	// acme's flaky-test-on-main names the sender (github.check_run.failed); deploy-failed is disabled.
+	h.expectSetup(t, w.Id, []string{checkRunEvent}, false)
+
+	h.openDraft(t)
+	h.saveYAML(t, strings.Replace(acme, "        enabled: false\n        on: webhook.ci-hooks.deploy\n",
+		"        on: webhook.ci-hooks.deploy\n        create: { type: fix, station: inbox }\n      - name: every-hook\n        on: ci-hooks\n"+
+			"        create: { type: fix, station: inbox }\n      - name: other-check\n        on: github.check_run\n", 1))
+	h.publish(t, "use ci-hooks")
+
+	if _, err := h.versions.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	h.expectSetup(t, w.Id, []string{checkRunEvent, "deploy"}, true)
+
+	if _, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
+		WebhookID: domain.WebhookEndpointID(w.Id), ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "p-1", Event: "ping", Ping: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ = h.getOrgHook(t, "ci-hooks"); got.PingedAt == nil || !got.PingedAt.Equal(t0) {
+		t.Errorf("pinged_at = %v; want %v", got.PingedAt, t0)
+	}
+}
+
+// expectSetup checks webhook id's setup events are events, and all, as read and as listed.
+func (h *harness) expectSetup(t *testing.T, id string, events []string, all bool) {
+	t.Helper()
+
+	got, _ := h.getOrgHook(t, id)
+	if !slices.Equal(got.SetupEvents, events) || got.SetupAllEvents != all {
+		t.Errorf("setup events = %v, all %v; want %v, all %v", got.SetupEvents, got.SetupAllEvents, events, all)
+	}
+
+	list := decode[gen.WebhookList](t, h.request(t, http.MethodGet, orgHooksPath, "", nil), http.StatusOK)
+	if len(list.Webhooks) != 1 || !slices.Equal(list.Webhooks[0].SetupEvents, events) || list.Webhooks[0].SetupAllEvents != all {
+		t.Errorf("listed = %+v; want the same setup events", list.Webhooks)
+	}
+}
+
+// logPage reads a delivery log at path, with its raw answer.
+func (h *harness) logPage(t *testing.T, path string) (gen.WebhookDeliveryPage, string) {
+	t.Helper()
+
+	r := h.request(t, http.MethodGet, path, "", nil)
+
+	return decode[gen.WebhookDeliveryPage](t, r, http.StatusOK), string(r.body)
+}
+
+// The organization's delivery log shows each delivery's event, receipt and duplicates, and its
+// evaluation by each factory, by factory id: created with the item's ref, skipped with its
+// reason. A factory's log shows only its own evaluation. Neither log holds a body or headers.
+func TestWebhooks_DeliveryLogReceiptsAndEvaluations(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	w := h.createOrgHook(t, `{"name":"ci-hooks","sender":"github"}`)
+	h.request(t, http.MethodPatch, orgHooksPath+"/ci-hooks", `{"open":[{"factory":"`+acmeID+`"},{"factory":"`+lineID+`"}]}`, nil)
+
+	accepted, item := h.evaluatedDelivery(t, domain.WebhookEndpointID(w.Id))
+
+	if _, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
+		WebhookID: domain.WebhookEndpointID(w.Id), ReceivedAt: t0.Add(time.Minute), Receipt: domain.ReceiptRefused, Reason: signatureMismatch,
+		Headers: map[string]string{"x-github-event": checkRunEvent},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	created := gen.WebhookDeliveryEvaluation{
+		Factory: acmeID, FactoryName: acmeName, State: gen.WebhookDeliveryEvaluationStateDone,
+		Outcome: new(gen.WebhookDeliveryEvaluationOutcomeCreated),
+		Item:    &gen.WebhookEvaluationItem{Id: string(item.ID), Number: item.Number, Ref: fmt.Sprintf("%s#%d", acmeName, item.Number)},
+	}
+	skipped := gen.WebhookDeliveryEvaluation{
+		Factory: lineID, FactoryName: lineSlug, State: gen.WebhookDeliveryEvaluationStateDone,
+		Outcome: new(gen.WebhookDeliveryEvaluationOutcomeSkipped), Reason: lineSkip,
+	}
+
+	h.expectLog(t, orgHooksPath+"/ci-hooks/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{skipped, created})
+	h.expectLog(t, webhooksPath+"/"+w.Id+"/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{created})
+
+	one := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, orgHooksPath+"/ci-hooks/deliveries/"+string(accepted), "", nil), http.StatusOK)
+	if one.Duplicates != 2 || !reflect.DeepEqual(one.Evaluations, []gen.WebhookDeliveryEvaluation{skipped, created}) {
+		t.Errorf("one delivery = %+v; want its duplicates and both evaluations", one)
+	}
+}
+
+// expectLog checks the log at path: no headers or body, the refused delivery newest with its
+// reason and no evaluations, then the accepted one with its event, two duplicates and evals.
+func (h *harness) expectLog(t *testing.T, path, accepted string, evals []gen.WebhookDeliveryEvaluation) {
+	t.Helper()
+
+	page, raw := h.logPage(t, path)
+	if strings.Contains(raw, `"headers"`) || strings.Contains(raw, `"body"`) {
+		t.Errorf("%s = %s; want no headers or body", path, raw)
+	}
+
+	if len(page.Deliveries) != 2 {
+		t.Fatalf("%s = %+v; want the refused and the accepted delivery", path, page.Deliveries)
+	}
+
+	expectRefusedEntry(t, path, page.Deliveries[0])
+
+	got := page.Deliveries[1]
+	if got.Id != accepted || got.Event != checkRunEvent || got.Receipt == nil || *got.Receipt != gen.WebhookDeliveryReceiptAccepted ||
+		got.Duplicates != 2 || !reflect.DeepEqual(got.Evaluations, evals) {
+		t.Errorf("%s: accepted = %+v; want check_run, accepted, 2 duplicates and evaluations %+v", path, got, evals)
+	}
+}
+
+// expectRefusedEntry checks d, in the log at path, is refused with its reason and no evaluations.
+func expectRefusedEntry(t *testing.T, path string, d gen.WebhookDelivery) {
+	t.Helper()
+
+	if d.Receipt == nil || *d.Receipt != gen.WebhookDeliveryReceiptRefused || d.Reason != signatureMismatch || d.Evaluations == nil || len(d.Evaluations) != 0 {
+		t.Errorf("%s: refused = %+v; want refused with its reason and no evaluations, as []", path, d)
+	}
+}
+
+// lineSkip is why line skipped the evaluated delivery.
+const lineSkip = "acme/legacy is not one of line's repositories"
+
+// evaluatedDelivery receives d-1 to webhook w three times, evaluated by acme, which creates an
+// item, and by line, which skips it at once, and returns its row and the item.
+func (h *harness) evaluatedDelivery(t *testing.T, w domain.WebhookEndpointID) (domain.WebhookDeliveryID, domain.Item) {
+	t.Helper()
+
+	var row domain.WebhookDeliveryID
+
+	for range 3 {
+		r, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
+			WebhookID: w, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: firstDeliveryID, Event: checkRunEvent, Named: true,
+			Headers: map[string]string{"x-github-event": checkRunEvent}, Body: []byte(`{"action":"completed"}`),
+			Evaluations: []domain.NewDeliveryEvaluation{
+				{FactoryID: acmeID, Triggers: []string{"flaky-test-on-main"}},
+				{FactoryID: lineID, Triggers: []string{"flaky"}, Skip: lineSkip},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		row = cmp.Or(row, r.Row)
+	}
+
+	item := h.intakeItem(t, domain.ItemFromGitHub, "flaky-test-on-main", t0)
+
+	claimed, err := h.intake.ClaimEvaluations(inOrg(t), "goald-a", t0, time.Minute, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("ClaimEvaluations = %+v, %v; want acme's", claimed, err)
+	}
+
+	c := claimed[0]
+	if ok, err := h.intake.FinishEvaluation(inOrg(t), domain.EvaluationFinish{
+		ID: c.ID, Holder: c.LeaseHolder, Attempts: c.Attempts, State: domain.EvaluationDone, Outcome: domain.EvaluationCreated, ItemID: item.ID, At: t0,
+	}); err != nil || !ok {
+		t.Fatalf("FinishEvaluation = %v, %v", ok, err)
+	}
+
+	return row, item
 }

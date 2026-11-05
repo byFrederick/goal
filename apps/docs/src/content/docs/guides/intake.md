@@ -45,6 +45,12 @@ A trigger matches an event with `on`, narrows it with `filter` and `only`, and c
 
 An event trigger creates at most 10 items an hour unless `limits.perHour` says otherwise. A schedule has no hourly limit.
 
+### Edit a trigger in the web app
+
+A trigger's page opens from the Intake page. When picks the source (a schedule, GitHub or one organization webhook) and the event. For a GitHub event the page offers only the filters that event supplies: `action`, `conclusion`, `branch`, `repo` (one or a list), `label`, `paths` (for a push), `authors` and `skipBots`. A filter the event cannot supply is refused when you save, and the page shows the refusal under the field. More filters also takes payload matches: a dot path into the delivery's body and the values it may have, all of which must match (`filter.match`). Limits sets `perDay` and `perHour`.
+
+A file that still has the old keys `github.check_run.failed`, `github.issues.labeled` or `webhook.<name>` opens in the current words (`github.check_run` with `conclusion: failure`, and so on) and keeps its lines until you change `on` or `filter`. The page no longer offers the model check. A file that still has `only.modelAgrees` keeps the key when you save another change, and the definition warns that it is ignored.
+
 ### Untrusted items
 
 An item made from a webhook delivery is untrusted: its brief carries the event's text inside `<untrusted-event-data>`, which agents treat as data and never as instructions, and a person merges what the item builds. Follow-ups from an untrusted item wait instead of being delivered or filed. A trigger's `create.trusted: true` lifts this for deliveries you vouch for; publishing refuses it for the `gitlab` and `token` senders and for GitHub without `filter.authors`.
@@ -59,7 +65,7 @@ On the web, a trigger that is off in the definition appears in the Triggers tabl
 
 Try shows what a saved trigger would have done with one of its 20 newest events, without creating an item, recording an event or changing a limit. It reports each step (the filter, the checks and the limits) and why it stopped, and the item it would create. It works for a schedule's firings and for a webhook's deliveries while the webhook still keeps their body (30 days).
 
-On the trigger's page, choose Try with a past event and pick an event. From the CLI, take the event id from `goal triggers show`:
+On the trigger's page, choose Try with a delivery (Try with a past event for a schedule) and pick an event. From the CLI, take the event id from `goal triggers show`:
 
 ```sh
 goal triggers try acme-line red-main --event <id>
