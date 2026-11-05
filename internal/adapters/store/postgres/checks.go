@@ -533,3 +533,23 @@ func (in *Intake) ClearCheckState(ctx context.Context, factory domain.FactoryID,
 
 	return nil
 }
+
+// ItemCheckKey implements ports.Intake.
+func (in *Intake) ItemCheckKey(ctx context.Context, item domain.ItemID) (string, error) {
+	if !isUUID(string(item)) {
+		return "", nil // an id that is not a UUID names no item, which has no key
+	}
+
+	uid := uuid.MustParse(string(item))
+
+	keys, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]string, error) { return q.ItemCheckKey(ctx, &uid) })
+	if err != nil {
+		return "", fmt.Errorf("check key of item %s: %w", item, err)
+	}
+
+	if len(keys) == 0 {
+		return "", nil
+	}
+
+	return keys[0], nil
+}

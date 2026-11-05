@@ -90,6 +90,11 @@ type Store interface {
 	// An unknown item has none.
 	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
 
+	// FiledFrom returns the follow-ups filed as or onto an item, its sources, oldest first, each
+	// with its source item and the item whose landing filed it (domain.FiledFrom), another
+	// factory's included. An unknown item, or another organization's, has none.
+	FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error)
+
 	// ItemNotes returns at most limit of an item's item_note events, the notes other items' agents
 	// and triggers' checks left on it, oldest first. An unknown item has none.
 	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)

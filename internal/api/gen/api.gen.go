@@ -243,6 +243,27 @@ func (e BridgeStepComponent) Valid() bool {
 	}
 }
 
+// Defines values for CameFromTriggerKind.
+const (
+	CameFromTriggerKindCheck    CameFromTriggerKind = "check"
+	CameFromTriggerKindSchedule CameFromTriggerKind = "schedule"
+	CameFromTriggerKindWebhook  CameFromTriggerKind = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the CameFromTriggerKind enum.
+func (e CameFromTriggerKind) Valid() bool {
+	switch e {
+	case CameFromTriggerKindCheck:
+		return true
+	case CameFromTriggerKindSchedule:
+		return true
+	case CameFromTriggerKindWebhook:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ChangeOp.
 const (
 	ChangeOpAdded   ChangeOp = "added"
@@ -3164,6 +3185,41 @@ type BuilderModel struct {
 	Label string `json:"label"`
 }
 
+// CameFromFollowUp A follow-up an item was filed from, the item and run that wrote it and the landing that filed it
+type CameFromFollowUp struct {
+	// Agent The agent whose run wrote it
+	Agent string `json:"agent"`
+
+	// FromItem The source item, <factory name>#<number>, another factory's included
+	FromItem   string `json:"from_item"`
+	FromItemId string `json:"from_item_id"`
+
+	// Id The follow-up's id
+	Id string `json:"id"`
+
+	// LandedItem The item whose landing filed it, <factory name>#<number>: the source, or its assembly when the source is a part
+	LandedItem   string `json:"landed_item"`
+	LandedItemId string `json:"landed_item_id"`
+
+	// Station The station whose run wrote it
+	Station string `json:"station"`
+}
+
+// CameFromTrigger The trigger that filed an item
+type CameFromTrigger struct {
+	// Key The key a check filed the item under; absent for any other trigger, and when the check filed the key again since, which keeps only the key's last item
+	Key *string `json:"key,omitempty"`
+
+	// Kind check for a trigger with a check, schedule for another schedule trigger, webhook otherwise; absent when the trigger is not in the factory's loaded definition
+	Kind *CameFromTriggerKind `json:"kind,omitempty"`
+
+	// Name The trigger's name
+	Name string `json:"name"`
+}
+
+// CameFromTriggerKind check for a trigger with a check, schedule for another schedule trigger, webhook otherwise; absent when the trigger is not in the factory's loaded definition
+type CameFromTriggerKind string
+
 // CancelRequest defines model for CancelRequest.
 type CancelRequest struct {
 	// Reason Why the item is cancelled
@@ -4752,8 +4808,11 @@ type Inviter struct {
 // Item defines model for Item.
 type Item struct {
 	// Assembly The assembly the item is a part of, and its place among the parts in plan order; getItem only, absent unless the item is a part. The parts themselves are listItemParts
-	Assembly       *PartOf        `json:"assembly,omitempty"`
-	Body           string         `json:"body"`
+	Assembly *PartOf `json:"assembly,omitempty"`
+	Body     string  `json:"body"`
+
+	// CameFrom Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the follow-ups filed as it, or its trigger; getItem only, absent unless origin is follow-up or trigger
+	CameFrom       *ItemCameFrom  `json:"came_from,omitempty"`
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`
 	CreatedAt      time.Time      `json:"created_at"`
@@ -4857,6 +4916,15 @@ type ItemAt struct {
 type ItemBudget struct {
 	MaxTurnsPerTask *int     `json:"max_turns_per_task"`
 	PerItemUsd      *float64 `json:"per_item_usd"`
+}
+
+// ItemCameFrom Where an item came from; follow_ups for origin follow-up, trigger for origin trigger
+type ItemCameFrom struct {
+	// FollowUps The follow-ups filed as or onto the item, oldest first: its sources. Present, an empty list when none resolves, for origin follow-up; absent otherwise
+	FollowUps *[]CameFromFollowUp `json:"follow_ups,omitempty"`
+
+	// Trigger The trigger that filed the item; present for origin trigger, absent otherwise
+	Trigger *CameFromTrigger `json:"trigger,omitempty"`
 }
 
 // ItemCard An item as boards and lists show it

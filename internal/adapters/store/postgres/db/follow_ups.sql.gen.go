@@ -297,6 +297,62 @@ func (q *Queries) FollowUpItemsSince(ctx context.Context, arg FollowUpItemsSince
 	return count, err
 }
 
+const itemFiledFrom = `-- name: ItemFiledFrom :many
+SELECT f.id, f.station, f.agent, s.id AS source_id, s.factory_id AS source_factory_id, s.number AS source_number,
+       l.id AS landed_id, l.factory_id AS landed_factory_id, l.number AS landed_number
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+JOIN work_items l ON l.id = COALESCE(s.parent_id, s.id)
+WHERE f.filed_item_id = $1
+ORDER BY f.created_at, f.id
+`
+
+type ItemFiledFromRow struct {
+	ID              uuid.UUID
+	Station         string
+	Agent           string
+	SourceID        uuid.UUID
+	SourceFactoryID uuid.UUID
+	SourceNumber    int64
+	LandedID        uuid.UUID
+	LandedFactoryID uuid.UUID
+	LandedNumber    int64
+}
+
+// The follow-ups filed as or onto an item (follow_ups_filed_item_idx), its sources, oldest first,
+// each with its source item and the item whose landing filed it: the source, or its assembly for
+// a part, as ClaimLandedFollowUp takes it. The joins are under row-level security, so another
+// organization's row or item never resolves.
+func (q *Queries) ItemFiledFrom(ctx context.Context, itemID *uuid.UUID) ([]ItemFiledFromRow, error) {
+	rows, err := q.db.Query(ctx, itemFiledFrom, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemFiledFromRow
+	for rows.Next() {
+		var i ItemFiledFromRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Station,
+			&i.Agent,
+			&i.SourceID,
+			&i.SourceFactoryID,
+			&i.SourceNumber,
+			&i.LandedID,
+			&i.LandedFactoryID,
+			&i.LandedNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const itemFollowUps = `-- name: ItemFollowUps :many
 SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, coalesce(w.factory_id::text, '')::text AS filed_factory_id, coalesce(w.number, 0)::bigint AS filed_number
 FROM follow_ups f
