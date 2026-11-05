@@ -4,7 +4,7 @@
 // publishes a new version (trigger-save.ts). A name the definition does not have opens a blank trigger
 // when the URL carries the event the New trigger picker chose (?on=<event key>, with &check=<agent> for a check). A trigger with `check` shows
 // the check layout (intake/trigger-check.jpg): the Check block, its log of checks and Try a check.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { Check, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
@@ -75,14 +75,18 @@ export function TriggerPage() {
   const { trigger: name } = useParams({ from: '/o/$org/f/$factory/intake/$trigger' });
   const { on, check } = useSearch({ from: '/o/$org/f/$factory/intake/$trigger' });
   const factory = useQuery(factoryQuery(org.id, listed.id)).data ?? listed;
-  const definition = useQuery(definitionTextQuery(org.id, factory));
+  // The text's key follows the running version, which a save moves: keep the old text until the new one arrives, so
+  // the editor stays mounted and its "Saved" notice is not lost to the loading state.
+  const definition = useQuery({ ...definitionTextQuery(org.id, factory), placeholderData: keepPreviousData });
   const text = definition.data?.text;
   const saved = text === undefined ? undefined : readTrigger(text, name);
   const raw = text === undefined ? undefined : readRawTrigger(text, name);
   const detail = useQuery({ ...intakeTriggerQuery(org.id, factory.id, name), enabled: saved !== undefined });
   const title = titleOf(name);
 
-  if (definition.isError) {
+  // A refetch that fails (the draft file, once a save has published the draft away) keeps the page: only a
+  // definition that was never read, or whose new version failed to load, is an error screen.
+  if (definition.isError && (definition.data === undefined || definition.isPlaceholderData)) {
     return (
       <>
         <TopBarSlot crumb={title} />

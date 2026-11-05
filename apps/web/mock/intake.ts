@@ -96,7 +96,7 @@ const software: Intake = {
     },
     {
       name: 'deploy-failed',
-      enabled: true,
+      enabled: false,
       source: 'webhook',
       on: 'webhook.cloudflare.deploy.failed',
       when: 'webhook.cloudflare.deploy.failed',

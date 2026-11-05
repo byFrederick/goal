@@ -1,7 +1,7 @@
-// Intake (intake, ADR 0026) against the mock: the software factory's triggers and sources, the switch, and
+// Intake (ADR 0026 and 0040) against the mock: the software factory's triggers and sources, the switch, and
 // the New trigger picker. Not run in the box (no browser): the Vitest suites cover the same behavior.
 import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 const intake = '/o/acme/f/software/intake';
 
@@ -25,7 +25,13 @@ test('the Intake page lists what is coming up, where items came from, the trigge
   await expect(triggers.getByRole('switch', { name: 'deploy-failed' })).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByRole('region', { name: 'Webhooks open to Software' })).toBeVisible();
 
-  await expect(page.getByRole('link', { name: 'Webhooks' })).toHaveAttribute('href', `${intake}/webhooks`);
+  // The Webhooks button is in the top bar from 768 px; the card's Manage link reaches the same page on a phone.
+  await expect(
+    page.getByRole('region', { name: 'Webhooks open to Software' }).getByRole('link', { name: 'Manage' }),
+  ).toHaveAttribute('href', `${intake}/webhooks`);
+  if (!isPhone(page)) {
+    await expect(page.getByRole('link', { name: 'Webhooks' })).toHaveAttribute('href', `${intake}/webhooks`);
+  }
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -37,11 +43,14 @@ test('New trigger opens the picker over the page and Continue goes to the trigge
   const dialog = page.getByRole('dialog', { name: 'New trigger' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Slack' })).toHaveAttribute('aria-disabled', 'true');
+  // On a phone the picker is one pane: the events show once GitHub is chosen.
+  if (isPhone(page)) await dialog.getByRole('button', { name: 'GitHub' }).click();
   await expect(dialog.getByRole('radio', { name: 'Issue opened' })).toHaveAttribute('aria-disabled', 'true');
 
   await dialog.getByRole('radio', { name: 'Issue labeled' }).check();
   await dialog.getByRole('button', { name: 'Continue' }).click();
-  await expect(page).toHaveURL(`${intake}/new/github?on=github.issues.labeled`);
+  // The trigger page opens under the first free name for the event (ADR 0040, trigger-save).
+  await expect(page).toHaveURL(`${intake}/new-issues-labeled?on=github.issues.labeled`);
 });
 
 test('the picker is one pane with Back on a phone', async ({ page }) => {
@@ -82,7 +91,8 @@ for (const theme of ['light', 'dark'] as const) {
       }
 
       if (size.width >= 1440) {
-        const nav = page.getByRole('navigation', { name: 'Breadcrumb' });
+        // The open dialog hides the page from the accessibility tree, so the bar is found by its label.
+        const nav = page.locator('nav[aria-label="Breadcrumb"]');
         await expect(nav.getByText('Intake')).toBeVisible();
         await expect(nav.getByText('New trigger')).toBeVisible();
       }
