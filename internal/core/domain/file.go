@@ -68,9 +68,9 @@ type FileRequest struct {
 	Assembly *Item
 	// Start is when the item may start (ADR 0040 decision 3); nil starts it as soon as it can.
 	Start *StartRequest
-	// Repositories are the repositories the item works on, each an https URL or host/owner/name
-	// that one of the line's runtime.repositories entries covers; none gives it the default
-	// entry's (ADR 0041 decision 4).
+	// Repositories are the repositories the item works on, each an entry's name, owner/name, an
+	// https URL or host/owner/name that one of the line's runtime.repositories entries covers;
+	// none gives it the default entry's (ADR 0041 decision 4).
 	Repositories []string
 	At           time.Time
 }
@@ -85,8 +85,8 @@ type FileRequest struct {
 // untrusted, and a part's generation and untrusted are its assembly's. A start is resolved at
 // r.At (StartRequest.Resolve): its time becomes StartAt and its open after items After. An item
 // placed at a later station than the line's first has started when it is filed. Its repositories
-// are those the request names, matched against the line's entries (case, .git and owner patterns
-// included) and joined filing in the order named, once each and at most MaxItemRepositories, or
+// are those the request names, resolved against the line's entries by entry name, URL,
+// host/owner/name or owner/name (case, .git and owner patterns included) and joined filing in the order named, once each and at most MaxItemRepositories, or
 // the default entry's, joined default, when it names none; none without a default entry. The
 // item's branch takes the line's name (NewItem.FactoryName). Every refusal is ErrInvalid.
 func File(l Line, r FileRequest) (NewItem, error) {
