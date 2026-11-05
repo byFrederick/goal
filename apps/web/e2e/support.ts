@@ -26,6 +26,16 @@ export async function expectAccessible(page: Page) {
 }
 
 /**
+ * Every finite animation and transition has ended. axe reads the colours as drawn, so a page caught in
+ * its skeleton cross-fade (MOTION.md, Loading) reads as low contrast; wait for it before expectAccessible.
+ */
+export async function expectSettled(page: Page) {
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity),
+  );
+}
+
+/**
  * WCAG 2.5.3 (label in name): every control's accessible name contains its visible text. axe tags the rule
  * experimental, so the tag run above skips it; this runs it by id. It is not part of expectAccessible.
  */

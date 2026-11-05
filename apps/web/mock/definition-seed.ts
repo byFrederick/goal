@@ -222,7 +222,7 @@ source of truth for colour, type, spacing and components.
 - Every new state gets a test: loading, empty, error and success.
 - Use tokens, never raw colours. Check both themes.
 - Run task check:changed and attach the output as evidence.
-`,
+${o.draft ? '- Ask before you fetch a web page.\n' : ''}`,
     'agents/infra-engineer.md': `# infra-engineer
 
 Change Terraform and the deploy scripts the spec names. Never apply: CI applies from main.

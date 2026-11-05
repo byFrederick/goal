@@ -77,3 +77,10 @@ export async function replaceLine(page: Page, from: string, to: string) {
   if (to === '') await page.keyboard.press('Backspace');
   else await page.keyboard.insertText(to);
 }
+
+/** The file tree is open: on a phone it sits behind the Files button, from 640 px of editor width it is always there. */
+export async function showFiles(page: Page) {
+  if (!isPhone(page)) return;
+  const toggle = page.getByRole('button', { name: 'Files', exact: true });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+}

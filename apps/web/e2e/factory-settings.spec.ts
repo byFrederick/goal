@@ -2,7 +2,7 @@
 // Pause and Resume round trip, at every width against the mock. The first factory of the mock seed is
 // `goal`, which has a purpose.
 import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, expectToast, recordToasts } from './support';
+import { expectAccessible, expectNoHorizontalScroll, expectSettled, expectToast, recordToasts } from './support';
 
 test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
@@ -19,6 +19,7 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'People with access' }).getByText('Organization owner')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add people' })).toBeEnabled();
   await expect(page.getByRole('heading', { name: 'Danger zone' })).toBeVisible();
+  await expectSettled(page);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -40,9 +41,14 @@ test('Runtime points at environments and Notifications shows the Slack secret', 
     'href',
     '/o/acme/settings',
   );
-  await expect(
-    page.getByRole('navigation', { name: 'On this page' }).getByRole('link', { name: 'Notifications' }),
-  ).toBeVisible();
+  // The "On this page" list sits beside the sections from 1024 px; below it the design hides it
+  // (docs/design/screens/build/factory-settings.html, max-width 1150px).
+  const toc = page.getByRole('navigation', { name: 'On this page' });
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    await expect(toc.getByRole('link', { name: 'Notifications' })).toBeVisible();
+  } else {
+    await expect(toc).toBeHidden();
+  }
 });
 
 test('factory settings has no sideways scroll at 390 px', async ({ page }) => {
@@ -71,9 +77,12 @@ test('factory settings has Save changes in the top bar and flat sections', async
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
-  await expect(page.locator('main [aria-expanded]')).toHaveCount(0);
+  // Flat sections: nothing opens or closes (a select's trigger is a combobox, not a section).
+  await expect(page.locator('main [aria-expanded]:not([role=combobox])')).toHaveCount(0);
   await expect(page.getByText('Badge', { exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'true');
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    await expect(page.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'true');
+  }
 });
 
 // The pictures for the pull request: this screen at 1440 and 390 px, in both themes. They are attached to
