@@ -21,6 +21,7 @@ import {
   SquareTerminal,
   TextAlignStart,
   Users,
+  Webhook,
 } from 'lucide-react';
 
 interface Screen {
@@ -51,6 +52,7 @@ export type OrgPath =
   | '/o/$org/models'
   | '/o/$org/access'
   | '/o/$org/secrets'
+  | '/o/$org/webhooks'
   | '/o/$org/knowledge'
   | '/o/$org/runs'
   | '/o/$org/needs-you'
@@ -171,6 +173,14 @@ export const secretsScreen: OrgScreen = {
   to: '/o/$org/secrets',
   permissions: ['secret:read'],
 };
+/** The organization's webhooks (ADR 0040 decision 12): owners and admins connect a sender once and open it to factories. */
+export const webhooksScreen: OrgScreen = {
+  id: 'webhooks',
+  label: 'Webhooks',
+  icon: Webhook,
+  to: '/o/$org/webhooks',
+  permissions: ['webhook:read'],
+};
 /** The organization's knowledge base (spec 4 §10): every member reads and searches it; owners and admins change it. */
 export const knowledgeScreen: OrgScreen = {
   id: 'knowledge',
@@ -229,6 +239,7 @@ export const sidebarOrgScreens: readonly Listed<OrgPath>[] = [
   { ...runsScreen, available: true },
   { ...accessScreen, available: true },
   { ...secretsScreen, available: true },
+  { ...webhooksScreen, available: true },
   { ...knowledgeScreen, available: true },
 ];
 

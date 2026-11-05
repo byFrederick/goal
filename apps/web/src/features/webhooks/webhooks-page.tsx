@@ -1,137 +1,119 @@
-// Webhooks (docs/design/screens/intake/webhooks.html, ADR 0016 and ADR 0026): the addresses other systems
-// post to, one card each, with the triggers they feed, their last week and their newest deliveries; a
-// Send a test panel beside them. New webhook and Rotate show the signing secret once (secret-dialog.tsx).
-// The page reads the factory's endpoints; a delivery arrives as an item event or on a refocus, so the
-// stream's item events refresh this page (invalidation.ts).
+// Webhooks (ADR 0040 decision 20, canvas docs/design/screens/organization/webhooks.jpg): the organization's
+// webhooks, each with its sender, address, the name of the secret that signs it and the factories it is
+// open to. Owners and admins read them (webhook:read); webhook:manage adds New webhook. Nobody reads a
+// secret's value here.
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Webhook } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { intakeQuery, webhookDeliveriesQuery, webhooksQuery } from '../../api/queries';
-import type { WebhookEndpoint } from '../../api/webhooks';
+import { Link } from '@tanstack/react-router';
+import { Plus } from 'lucide-react';
+import { factoriesQuery, webhooksQuery } from '../../api/queries';
+import type { Webhook } from '../../api/webhooks';
 import { TopBarSlot } from '../../app/top-bar';
-import { useFactory } from '../../shared/factory';
-import { useOrg } from '../../shared/org';
+import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { EmptyState } from '../../ui/empty-state';
+import { InfoTip } from '../../ui/info-tip';
 import { Skeleton } from '../../ui/skeleton';
-import type { DeliveriesScope } from './deliveries';
-import { EndpointCard } from './endpoint-card';
-import { NewWebhookDialog } from './new-webhook-dialog';
-import { RequestDialog, type RequestTarget } from './request-dialog';
-import { SecretDialog, type ShownSecret } from './secret-dialog';
-import { TestPanel } from './test-panel';
-import { WebhooksShape } from './webhooks-skeleton';
+import { Card, FactoryChip, StatusChip, WebhooksShape } from './parts';
+import { senderLabel, statusOf, weekText } from './words';
 
 export function WebhooksPage() {
   const org = useOrg();
-  const factory = useFactory();
-  const canManage = factory.can.includes('webhook:manage');
-  const webhooks = useQuery(webhooksQuery(org.id, factory.id));
-  // The triggers' type, station and lane for the Feeds row; the cards show names alone until it answers.
-  const intake = useQuery(intakeQuery(org.id, factory.id));
-  const triggers = intake.data?.triggers;
-  const [creating, setCreating] = useState(false);
-  const [shown, setShown] = useState<ShownSecret | null>(null);
-  const [target, setTarget] = useState<RequestTarget | null>(null);
+  const manage = useOrgHolds('webhook:manage');
+  const list = useQuery(webhooksQuery(org.id));
+  const factories = useQuery(factoriesQuery(org.id)).data ?? [];
+  const webhooks = list.data ?? [];
 
-  const actions = useMemo(
-    () =>
-      canManage ? (
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          <Plus size={15} strokeWidth={1.5} aria-hidden="true" />
-          New webhook
-        </Button>
-      ) : null,
-    [canManage],
-  );
-
-  const endpoints = webhooks.data ?? [];
-  const first = endpoints[0];
-  const newestAccepted = useNewestAccepted(org.id, factory.id, first?.id);
+  const create = manage ? (
+    <Button asChild variant="primary">
+      <Link to="/o/$org/webhooks/new" params={{ org: org.slug }}>
+        <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+        New webhook
+      </Link>
+    </Button>
+  ) : undefined;
 
   return (
-    <div className="flex flex-col gap-5">
-      <TopBarSlot crumb="Webhooks" actions={actions} />
-      <header className="flex flex-col gap-1">
-        <h1 className="m-0 text-page-title tracking-display">Webhooks</h1>
-        <p className="m-0 text-body text-ink-soft">Addresses other systems post to. Each one feeds a trigger.</p>
-      </header>
-
-      {webhooks.isPending ? (
-        <Skeleton ready={false} placeholder={<WebhooksShape />}>
-          {null}
-        </Skeleton>
-      ) : webhooks.isError ? (
-        <div role="alert" className="flex flex-col items-start gap-3 rounded-card border border-line bg-card p-5">
-          <Callout tone="rework">Couldn’t load the webhooks. Check your connection and try again.</Callout>
-          <Button variant="secondary" onClick={() => void webhooks.refetch()}>
-            Try again
-          </Button>
+    <>
+      <TopBarSlot actions={create} />
+      <div className="flex min-w-0 flex-col gap-5">
+        <div className="flex items-center gap-1">
+          <h1 className="m-0 text-page-title tracking-display">Webhooks</h1>
+          <InfoTip about="webhooks">
+            Each one is connected once for the organization and opened to the factories that may use it. Triggers in
+            those factories name it, for example github-acme.check_run.
+          </InfoTip>
         </div>
-      ) : endpoints.length === 0 ? (
-        <EmptyState icon={<Webhook size={18} strokeWidth={1.5} aria-hidden="true" />} title="No webhooks yet">
-          Add a webhook, then give its address and signing secret to the system that posts to it.
-        </EmptyState>
-      ) : (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start">
-          <div className="flex min-w-0 flex-col gap-4">
-            {endpoints.map((endpoint) => (
-              <EndpointCard
-                key={endpoint.id}
-                scope={scopeOf(org.id, org.slug, factory.id, factory.name, endpoint)}
-                endpoint={endpoint}
-                orgSlug={org.slug}
-                factoryName={factory.name}
-                canManage={canManage}
-                triggers={triggers}
-                onShown={setShown}
-                onView={setTarget}
-              />
-            ))}
+
+        {list.isPending ? (
+          <Skeleton ready={false} placeholder={<WebhooksShape />}>
+            <span />
+          </Skeleton>
+        ) : list.isError ? (
+          <div
+            role="alert"
+            className="flex max-w-xl flex-col items-start gap-3 rounded-card border border-line bg-card p-5"
+          >
+            <Callout tone="rework">Couldn’t load the webhooks. Check your connection and try again.</Callout>
+            <Button variant="secondary" onClick={() => void list.refetch()}>
+              Try again
+            </Button>
           </div>
-          {first ? (
-            <TestPanel
-              scope={scopeOf(org.id, org.slug, factory.id, factory.name, first)}
-              endpoint={first}
-              newestAccepted={newestAccepted}
-            />
-          ) : null}
-        </div>
-      )}
-
-      {creating ? (
-        <NewWebhookDialog
-          org={org.id}
-          factory={factory.id}
-          onClose={() => setCreating(false)}
-          onCreated={(created) => {
-            setCreating(false);
-            setShown(created);
-          }}
-        />
-      ) : null}
-      <SecretDialog shown={shown} onDone={() => setShown(null)} />
-      <RequestDialog target={target} onClose={() => setTarget(null)} />
-    </div>
+        ) : webhooks.length === 0 ? (
+          <EmptyState title="No webhooks yet" actions={create}>
+            {manage
+              ? 'Connect GitHub, PagerDuty or any sender that posts events, then open it to the factories that use them.'
+              : `Owners and admins of ${org.name} connect webhooks.`}
+          </EmptyState>
+        ) : (
+          <Card title={`${webhooks.length} ${webhooks.length === 1 ? 'webhook' : 'webhooks'}`}>
+            <ul className="m-0 flex list-none flex-col p-0">
+              {webhooks.map((webhook) => (
+                <Row key={webhook.id} webhook={webhook} orgSlug={org.slug} factories={factories} />
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
+    </>
   );
 }
 
-function scopeOf(
-  org: string,
-  orgSlug: string,
-  factory: string,
-  factoryName: string,
-  endpoint: WebhookEndpoint,
-): DeliveriesScope {
-  return { org, orgSlug, factory, factoryName, endpoint: endpoint.id, endpointName: endpoint.name };
-}
-
-/** The id of the newest delivery the endpoint accepted, from the list its card already reads. */
-function useNewestAccepted(org: string, factory: string, endpoint: string | undefined): string | undefined {
-  const deliveries = useQuery({
-    ...webhookDeliveriesQuery(org, factory, endpoint ?? ''),
-    enabled: endpoint !== undefined,
-  });
-  return deliveries.data?.deliveries.find((d) => d.outcome !== 'refused')?.id;
+function Row({
+  webhook,
+  orgSlug,
+  factories,
+}: {
+  webhook: Webhook;
+  orgSlug: string;
+  factories: Parameters<typeof FactoryChip>[0]['factories'];
+}) {
+  return (
+    <li className="relative border-t border-line transition-colors duration-(--duration-quick) first:border-t-0 hover:bg-panel motion-reduce:transition-none">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_auto]">
+        <Link
+          to="/o/$org/webhooks/$webhook"
+          params={{ org: orgSlug, webhook: webhook.name }}
+          className="flex min-w-0 flex-col text-ink no-underline after:absolute after:inset-0 after:content-['']"
+        >
+          <span className="truncate text-body font-medium">{webhook.name}</span>
+          <span className="truncate text-meta text-muted">
+            {senderLabel(webhook.sender)}, <span className="font-mono">{webhook.address}</span>
+          </span>
+          <span className="truncate text-meta text-muted">
+            Secret <span className="font-mono">{webhook.secret}</span>
+          </span>
+        </Link>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 max-lg:order-last max-lg:col-span-2">
+          {webhook.openings.length === 0 ? (
+            <span className="text-secondary text-muted">Open to no factory</span>
+          ) : (
+            webhook.openings.map((o) => <FactoryChip key={o.factory} id={o.factory} factories={factories} />)
+          )}
+        </span>
+        <StatusChip status={statusOf(webhook)} />
+        <span className="text-secondary text-muted max-lg:hidden">{weekText(webhook)}</span>
+      </div>
+    </li>
+  );
 }

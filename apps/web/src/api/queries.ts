@@ -96,7 +96,7 @@ import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
 import type { AccessView, Factory, ItemEvent, ProposalState, SpendWindow } from './types';
-import { getWebhookDelivery, listWebhookDeliveries, listWebhookEndpoints } from './webhooks';
+import { getWebhook, getWebhookDelivery, listWebhookDeliveries, listWebhooks } from './webhooks';
 
 /**
  * The one way route loaders load (loaders.test.ts keeps it so): an ensureQueryData that survives
@@ -213,12 +213,12 @@ export const keys = {
   inbox: (org: string, factory?: string) => ['org', org, 'inbox', factory ?? 'all'] as const,
   factory: (org: string, factory: string) => ['org', org, 'factory', factory] as const,
   board: (org: string, factory: string) => ['org', org, 'factory', factory, 'board'] as const,
-  /** The factory's webhook endpoints; their deliveries sit under it, so one prefix refreshes both. */
-  webhooks: (org: string, factory: string) => ['org', org, 'factory', factory, 'webhooks'] as const,
-  webhookDeliveries: (org: string, factory: string, endpoint: string) =>
-    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries'] as const,
-  webhookDelivery: (org: string, factory: string, endpoint: string, delivery: string) =>
-    ['org', org, 'factory', factory, 'webhooks', endpoint, 'deliveries', delivery] as const,
+  /** The organization's webhooks (ADR 0040); a webhook's own reads and its delivery log sit under it, so one prefix refreshes all. */
+  webhooks: (org: string) => ['org', org, 'webhooks'] as const,
+  webhook: (org: string, webhook: string) => ['org', org, 'webhooks', 'one', webhook] as const,
+  webhookDeliveries: (org: string, webhook: string) => ['org', org, 'webhooks', 'one', webhook, 'deliveries'] as const,
+  webhookDelivery: (org: string, webhook: string, delivery: string) =>
+    ['org', org, 'webhooks', 'one', webhook, 'deliveries', delivery] as const,
   /** The mutation key of moving an item of the factory (the Move menu): the stream waits for it. */
   move: (org: string, factory: string) => ['org', org, 'factory', factory, 'move'] as const,
   metrics: (org: string, factory: string, range: FlowRange) =>
@@ -544,25 +544,38 @@ export const archivedFactoriesQuery = (org: string) =>
 export const boardQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: keys.board(org, factory), queryFn: ({ signal }) => getBoard(org, factory, signal) });
 
-/** The Webhooks screen's first page of deliveries per endpoint: the newest five. */
-export const webhookDeliveryLimit = 5;
+/** How many deliveries one page of a webhook's log holds. */
+export const webhookDeliveryLimit = 20;
 
-export const webhooksQuery = (org: string, factory: string) =>
+/** The organization's webhooks (webhook:read). */
+export const webhooksQuery = (org: string) =>
   queryOptions({
-    queryKey: keys.webhooks(org, factory),
-    queryFn: ({ signal }) => listWebhookEndpoints(org, factory, signal),
+    queryKey: keys.webhooks(org),
+    queryFn: ({ signal }) => listWebhooks(org, signal),
   });
 
-export const webhookDeliveriesQuery = (org: string, factory: string, endpoint: string) =>
+/** One webhook, by name. */
+export const webhookQuery = (org: string, webhook: string) =>
   queryOptions({
-    queryKey: keys.webhookDeliveries(org, factory, endpoint),
-    queryFn: ({ signal }) => listWebhookDeliveries(org, factory, endpoint, webhookDeliveryLimit, signal),
+    queryKey: keys.webhook(org, webhook),
+    queryFn: ({ signal }) => getWebhook(org, webhook, signal),
   });
 
-export const webhookDeliveryQuery = (org: string, factory: string, endpoint: string, delivery: string) =>
+/** A webhook's delivery log, newest first, a page at a time (`after` is the previous page's next_after). */
+export const webhookDeliveriesQuery = (org: string, webhook: string) =>
+  infiniteQueryOptions({
+    queryKey: keys.webhookDeliveries(org, webhook),
+    queryFn: ({ pageParam, signal }) =>
+      listWebhookDeliveries(org, webhook, { limit: webhookDeliveryLimit, after: pageParam }, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_after ?? undefined,
+  });
+
+/** One delivery with its headers and body (webhook:manage). */
+export const webhookDeliveryQuery = (org: string, webhook: string, delivery: string) =>
   queryOptions({
-    queryKey: keys.webhookDelivery(org, factory, endpoint, delivery),
-    queryFn: ({ signal }) => getWebhookDelivery(org, factory, endpoint, delivery, signal),
+    queryKey: keys.webhookDelivery(org, webhook, delivery),
+    queryFn: ({ signal }) => getWebhookDelivery(org, webhook, delivery, signal),
   });
 
 /**
