@@ -580,10 +580,12 @@ type Flow struct {
 
 // Outputs names the output fields goald reads besides a contract's own: FollowUps the one that
 // holds follow-ups (ADR 0040 decision 5), Close the one that closes a trigger's or a follow-up's
-// item (decision 11). An unset key maps no field.
+// item (decision 11), Repositories the one whose repositories join the item (ADR 0041 decision
+// 4). An unset key maps no field.
 type Outputs struct {
-	FollowUps string `json:"followUps,omitempty"`
-	Close     string `json:"close,omitempty"`
+	FollowUps    string `json:"followUps,omitempty"`
+	Close        string `json:"close,omitempty"`
+	Repositories string `json:"repositories,omitempty"`
 }
 
 // Dependencies names the output fields that set an item's dependencies: After the one listing

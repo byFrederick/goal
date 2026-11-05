@@ -48,6 +48,9 @@ type OutputPolicy struct {
 	// follow-up's item with that reason (CloseFrom, CheckClose; ADR 0040 decision 11); "" when no
 	// output can close its item.
 	Close string
+	// Repositories is the output field whose repositories join the item, joined output
+	// (RepositoriesFrom; ADR 0041 decision 4); "" when no output adds any.
+	Repositories string
 }
 
 // DependencyPolicy is board.flow.dependencies: which output fields set an item's dependencies.

@@ -727,6 +727,11 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "The top-level output field whose text closes the item: when an accepted output gives 10 to 500 characters there, goald cancels the item at its station with that text as the reason, the agent the actor. Only an item a trigger or a follow-up filed, and never a part, can be closed. On a person's item, a part, an output that also plans parts, or a text outside the limits, the output fails its check and the agent asks a person instead. Empty or only whitespace closes nothing."
+                },
+                "repositories": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The top-level output field whose list of repositories joins the item, recorded as joined output. Each entry is a runtime.repositories entry's name, owner/name or an https URL an entry covers, resolved as at filing. An item keeps at most 10 repositories: when the names would give it more, or one is not a repository of the factory, the output fails its check with the reason and the agent tries again. Repositories join only with an accepted output, never with a gate's rejection."
                 }
               }
             },

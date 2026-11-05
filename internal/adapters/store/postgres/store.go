@@ -970,6 +970,12 @@ func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Tra
 		return db.WorkItem{}, err
 	}
 
+	// The item's lock serializes this with the joins of pushes at FinishRun; one that joined
+	// since the engine counted the cap may leave a key out here.
+	if err := joinItemRepositories(ctx, q, cur.ID, domain.JoinedOutput, t.Repositories, t.At); err != nil {
+		return db.WorkItem{}, err
+	}
+
 	if t.Audit != nil {
 		if err := appendAudit(ctx, q, *t.Audit); err != nil {
 			return db.WorkItem{}, err
