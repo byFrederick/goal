@@ -32,6 +32,7 @@ type Worker struct {
 	branchExisted bool
 	branchHead    string
 	baseHead      string
+	prepared      []domain.WorkerRepository
 	exits         map[string][]int
 	diff          string
 	diffCode      int
@@ -68,6 +69,14 @@ func (w *Worker) Heads(branch, base string) {
 	defer w.mu.Unlock()
 
 	w.branchHead, w.baseHead = branch, base
+}
+
+// PreparedRepositories makes prepare report rows as its repositories list (ADR 0041 decision 5).
+func (w *Worker) PreparedRepositories(rows ...domain.WorkerRepository) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.prepared = rows
 }
 
 // Diff makes a try's diff (domain.PastTryDiffScript) print diff and exit with code.
@@ -118,7 +127,7 @@ func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer)
 func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 	w.mu.Lock()
 	w.prepares = append(w.prepares, c)
-	code, why, existed, branch, base := w.prepareCode, w.prepareStderr, w.branchExisted, w.branchHead, w.baseHead
+	code, why, existed, branch, base, rows := w.prepareCode, w.prepareStderr, w.branchExisted, w.branchHead, w.baseHead, w.prepared
 	w.mu.Unlock()
 
 	w.changes.signal()
@@ -130,7 +139,7 @@ func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 
 	writeLine(stdout, preparedLine{
 		Type: "prepared", At: time.Now().UTC().Format(time.RFC3339), Seconds: 0.1, BranchExisted: existed,
-		BranchHead: branch, BaseHead: base,
+		BranchHead: branch, BaseHead: base, Repositories: rows,
 	})
 
 	return 0
@@ -160,13 +169,29 @@ func (w *Worker) run(ctx context.Context, c ExecCall, stdout, stderr io.Writer) 
 		status = domain.RunFailed
 	}
 
-	writeLine(stdout, finishedLine{Type: "finished", WorkerFinished: domain.WorkerFinished{
+	fin := domain.WorkerFinished{
 		Status: string(status), Output: res.Output, Error: res.Error, CostUSD: res.CostUSD, Turns: res.Turns,
-		InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, SessionID: res.SessionID, PushedHead: res.PushedHead,
+		InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, SessionID: res.SessionID,
 		At: time.Now().UTC().Format(time.RFC3339),
-	}})
+	}
+	reportRepositories(&fin, res.Repositories)
+	writeLine(stdout, finishedLine{Type: "finished", WorkerFinished: fin})
 
 	return 0
+}
+
+// reportRepositories puts a result's repositories on the finished line: a repository without a
+// Repo as today's single pushed_head, as a worker image without the list reports it, and the
+// others in the repositories list.
+func reportRepositories(fin *domain.WorkerFinished, rows []domain.RunRepository) {
+	for _, r := range rows {
+		if r.Repo == "" {
+			fin.PushedHead = r.PushedHead
+			continue
+		}
+
+		fin.Repositories = append(fin.Repositories, domain.WorkerRepository{Repo: r.Repo, PushedHead: r.PushedHead, Wrote: r.Wrote})
+	}
 }
 
 // finishedLine is the worker's last stdout line.
@@ -184,6 +209,8 @@ type preparedLine struct {
 	BranchExisted bool    `json:"branch_existed"`
 	BranchHead    string  `json:"branch_head,omitempty"`
 	BaseHead      string  `json:"base_head,omitempty"`
+	// Repositories is omitted when empty, as a prepare from before the list reports.
+	Repositories []domain.WorkerRepository `json:"repositories,omitempty"`
 }
 
 func (w *Worker) check(c ExecCall, stdout io.Writer) int {

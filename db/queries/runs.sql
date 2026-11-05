@@ -15,16 +15,42 @@ UPDATE agent_runs SET
   status = sqlc.arg(status), session_id = sqlc.narg(session_id), turns = sqlc.arg(turns)::bigint,
   input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),
   cost_usd = sqlc.arg(cost_usd), error = sqlc.narg(error), ended_at = sqlc.arg(ended_at),
-  output = sqlc.narg(output), pushed_head = sqlc.narg(pushed_head)
+  output = sqlc.narg(output)
 WHERE id = sqlc.arg(id) AND status = 'running'
 RETURNING factory_id, item_id, station, agent;
 
 -- name: RecordRunInput :execrows
--- What a run was given (00085): its brief and, for a claim's first run, the heads before
--- prepare's rebase. Looked up by primary key; row-level security scopes it to the organization.
-UPDATE agent_runs SET
-  brief = sqlc.narg(brief), branch_head = sqlc.narg(branch_head), base_head = sqlc.narg(base_head)
-WHERE id = sqlc.arg(id);
+-- What a run was given (00085): its brief. Looked up by primary key; row-level security scopes it
+-- to the organization.
+UPDATE agent_runs SET brief = sqlc.narg(brief) WHERE id = sqlc.arg(id);
+
+-- name: RecordRunRepositoryInput :exec
+-- A repository the run's prepare checked out, with its base commit and branch head before the
+-- rebase (00132). Recording it again keeps the commits already known.
+INSERT INTO agent_run_repositories (run_id, repo, base_commit, branch_head)
+VALUES (sqlc.arg(run_id), sqlc.narg(repo), sqlc.narg(base_commit), sqlc.narg(branch_head))
+ON CONFLICT (run_id, repo) DO UPDATE SET
+  base_commit = coalesce(EXCLUDED.base_commit, agent_run_repositories.base_commit),
+  branch_head = coalesce(EXCLUDED.branch_head, agent_run_repositories.branch_head);
+
+-- name: RecordRunRepositoryPushed :exec
+-- A repository's head on the remote when the run's agent ended (00132). The run wrote when it
+-- said so or pushed a commit other than the branch head it started from; a repository it did not
+-- check out (a retry's) wrote when it pushed at all.
+INSERT INTO agent_run_repositories (run_id, repo, pushed_head, wrote)
+VALUES (sqlc.arg(run_id), sqlc.narg(repo), sqlc.narg(pushed_head)::text,
+        sqlc.arg(wrote)::boolean OR sqlc.narg(pushed_head)::text IS NOT NULL)
+ON CONFLICT (run_id, repo) DO UPDATE SET
+  pushed_head = coalesce(EXCLUDED.pushed_head, agent_run_repositories.pushed_head),
+  wrote = agent_run_repositories.wrote OR sqlc.arg(wrote)::boolean
+    OR (EXCLUDED.pushed_head IS NOT NULL AND EXCLUDED.pushed_head IS DISTINCT FROM agent_run_repositories.branch_head);
+
+-- name: RunRepositories :many
+-- The repositories of the runs, each run's in the order they were recorded. Row-level security
+-- scopes it to the organization.
+SELECT run_id, repo, base_commit, branch_head, pushed_head, wrote FROM agent_run_repositories
+WHERE run_id = ANY (sqlc.arg(run_ids)::uuid[])
+ORDER BY run_id, seq;
 
 -- name: FailRunningRuns :exec
 UPDATE agent_runs SET status = 'failed', error = sqlc.arg(error), ended_at = sqlc.arg(ended_at)

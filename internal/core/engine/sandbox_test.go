@@ -407,13 +407,17 @@ var (
 	pushedHead = strings.Repeat("c", 40)
 )
 
-// pushed is a succeeded result with output that pushed head.
+// pushed is a succeeded result with output that pushed head, reported as today's worker image
+// does, as the single pushed_head.
 func pushed(output, head string) domain.RunResult {
 	res := ok(output)
-	res.PushedHead = head
+	res.Repositories = []domain.RunRepository{{PushedHead: head}}
 
 	return res
 }
+
+// repoKey is repoURL's domain.RepositoryKey, which a run's repository rows are on.
+var repoKey, _ = domain.RepositoryKey(repoURL)
 
 // A claim's first run records what a try needs to rerun it (ADR 0039, decision 8): the brief the
 // agent was given, the bundle's and goald's feedback as the worker joins them, the heads prepare
@@ -437,24 +441,57 @@ func TestRun_RecordsTheBriefOutputAndHeads(t *testing.T) {
 		t.Fatalf("%d runs, want 1", len(runs))
 	}
 
+	row := domain.RunRepository{Repo: repoKey, BaseCommit: baseHead, BranchHead: branchHead, PushedHead: pushedHead, Wrote: true}
 	want := domain.RunInput{
-		Brief:      "Add a version command\n\nPrint the build's version.\n\n" + feedback,
-		BranchHead: branchHead, BaseHead: baseHead,
+		Brief:        "Add a version command\n\nPrint the build's version.\n\n" + feedback,
+		Repositories: []domain.RunRepository{row},
 	}
 
 	run := runs[0]
-	if run.Input != want {
+	if !reflect.DeepEqual(run.Input, want) {
 		t.Errorf("run input =\n%+v\nwant\n%+v", run.Input, want)
 	}
 
-	if string(run.Result.Output) != `{"lane":"backend"}` || run.Result.PushedHead != pushedHead {
-		t.Errorf("run output %s and pushed head %q; want the agent's output and %q", run.Result.Output, run.Result.PushedHead, pushedHead)
+	if string(run.Result.Output) != `{"lane":"backend"}` || !reflect.DeepEqual(run.Result.Repositories, []domain.RunRepository{row}) {
+		t.Errorf("run output %s and repositories %+v; want the agent's output and %+v", run.Result.Output, run.Result.Repositories, row)
+	}
+}
+
+// A worker that reports the repositories list (ADR 0041 decision 5) records one row per
+// repository it names, on its normalized name, with only the commits it may record; the list wins
+// over the single heads.
+func TestRun_RecordsTheReportedRepositories(t *testing.T) {
+	t.Parallel()
+
+	docs := "https://" + gitHost + "/Acme/Docs.git"
+	res := ok(`{"lane":"backend"}`)
+	res.Repositories = []domain.RunRepository{{Repo: repoKey, PushedHead: branchHead}, {Repo: docs, PushedHead: pushedHead, Wrote: true}}
+	h := newHarness(t, repoLine(), porttest.Sequence(res))
+	h.worker.Heads(pushedHead, pushedHead) // the single heads, which the list overrides
+	h.worker.PreparedRepositories(
+		domain.WorkerRepository{Repo: repoURL, BranchHead: branchHead, BaseCommit: baseHead},
+		domain.WorkerRepository{Repo: "not a repository", BranchHead: branchHead},
+		domain.WorkerRepository{Repo: docs, BranchHead: mainBranch, BaseCommit: baseHead},
+	)
+	it := h.submit(t, domain.NewItem{Title: "Add a health endpoint"})
+
+	h.step(t)
+
+	docsKey, _ := domain.RepositoryKey(docs)
+	want := []domain.RunRepository{
+		{Repo: repoKey, BaseCommit: baseHead, BranchHead: branchHead, PushedHead: branchHead},
+		{Repo: docsKey, BaseCommit: baseHead, PushedHead: pushedHead, Wrote: true},
+	}
+
+	run := h.runs(t, testOrg, it.ID)[0]
+	if !reflect.DeepEqual(run.Input.Repositories, want) {
+		t.Errorf("run repositories =\n%+v\nwant\n%+v", run.Input.Repositories, want)
 	}
 }
 
 // A retry runs in its claim's prepared box, so it records its own brief (with why its first
-// output was rejected), output and pushed head, and no heads: only a claim's first run can be
-// tried.
+// output was rejected), output and pushed head, and no branch head: only a claim's first run can
+// be tried. It wrote, as it pushed without a branch head to compare with.
 func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 	t.Parallel()
 
@@ -477,8 +514,10 @@ func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 	}
 
 	first, retry := runs[0], runs[1]
-	if first.Input.BranchHead != branchHead || first.Input.BaseHead != baseHead {
-		t.Errorf("first run heads %+v; want %q and %q", first.Input, branchHead, baseHead)
+
+	wantFirst := []domain.RunRepository{{Repo: repoKey, BaseCommit: baseHead, BranchHead: branchHead, PushedHead: branchHead}}
+	if !reflect.DeepEqual(first.Input.Repositories, wantFirst) {
+		t.Errorf("first run repositories %+v; want %+v: it pushed nothing new", first.Input.Repositories, wantFirst)
 	}
 
 	feedback := h.worker.Runs()[1].Env["GOAL_FEEDBACK"]
@@ -486,13 +525,19 @@ func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 		t.Fatalf("retry feedback %q does not carry the failed check", feedback)
 	}
 
-	want := domain.RunInput{Brief: "Add a version command\n\n" + feedback}
-	if retry.Input != want {
+	retryRows := []domain.RunRepository{{Repo: repoKey, PushedHead: pushedHead, Wrote: true}}
+
+	want := domain.RunInput{Brief: "Add a version command\n\n" + feedback, Repositories: retryRows}
+	if !reflect.DeepEqual(retry.Input, want) {
 		t.Errorf("retry input =\n%+v\nwant\n%+v", retry.Input, want)
 	}
 
-	if string(retry.Result.Output) != `{"try":2}` || retry.Result.PushedHead != pushedHead {
-		t.Errorf("retry output %s and pushed head %q; want its own", retry.Result.Output, retry.Result.PushedHead)
+	if _, ok := retry.Input.TryRepository(); ok {
+		t.Error("the retry has a repository to try from; want none, as it recorded no branch head")
+	}
+
+	if string(retry.Result.Output) != `{"try":2}` || !reflect.DeepEqual(retry.Result.Repositories, retryRows) {
+		t.Errorf("retry output %s and repositories %+v; want its own", retry.Result.Output, retry.Result.Repositories)
 	}
 }
 
@@ -512,8 +557,8 @@ func TestRun_WithoutARepositoryRecordsNoHeads(t *testing.T) {
 	}
 
 	run := h.runs(t, testOrg, it.ID)[0]
-	if run.Input != (domain.RunInput{Brief: "Write the release notes"}) || run.Result.PushedHead != "" {
-		t.Errorf("run input %+v and pushed head %q; want only the brief", run.Input, run.Result.PushedHead)
+	if !reflect.DeepEqual(run.Input, domain.RunInput{Brief: "Write the release notes"}) || run.Result.Repositories != nil {
+		t.Errorf("run input %+v and repositories %+v; want only the brief", run.Input, run.Result.Repositories)
 	}
 
 	if string(run.Result.Output) != `{"lane":"backend"}` {
