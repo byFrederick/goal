@@ -54,7 +54,7 @@ function searchOf(search: OnboardingSearch, factory?: string): OnboardingSearch 
 export function FactoryStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
   const [created, setCreated] = useState<Created>();
   const [choice, setChoice] = useState<string>();
-  const { templates, blank: blankTemplate, isPending, error, refetch } = useTemplates();
+  const { templates, blank: blankTemplate, isPending, error, refetch } = useTemplates(org.id);
   const catalog = blankTemplate ? [...templates, blankTemplate] : templates;
   const lines = useQueries({ queries: catalog.map((t) => templateQuery(org.id, t.name)) });
   // A template's line as the panel and the cards show it: its stations in order, with their WIP limits.

@@ -123,13 +123,10 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(saved(page)).toBeVisible();
   await checkPage(page);
 
-  // Connections: the template's github connection, given to the proposer.
-  await continueTo(page, 'Connections').click();
-  await expect(page.getByRole('heading', { level: 2, name: 'Connections and knowledge' })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: /^github/ })).toBeChecked();
-  await page.getByRole('checkbox', { name: 'proposer gets github' }).check();
-  await expect(page.getByRole('checkbox', { name: 'proposer gets github' })).toBeChecked();
-  await expect(saved(page)).toBeVisible();
+  // Environments (ADR 0037 replaced Connections: an agent's access is its environment's secrets and MCP servers).
+  await continueTo(page, 'Environments').click();
+  await expect(page).toHaveURL(/\/o\/acme\/new\/connections\?factory=/);
+  await expect(page.getByRole('heading', { level: 2, name: 'Environments', exact: true })).toBeVisible();
   await checkPage(page);
 
   // Review: the checks, the changes from the template, then Publish v1; the Floor opens.
@@ -279,9 +276,9 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
   await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   await checkPage(page);
 
-  // Continue setup opens the first step not left with Continue: Line.
-  if (isPhone(page)) await card.getByRole('link', { name: 'new-factory' }).click();
-  else await card.getByRole('link', { name: 'Continue setup' }).click();
+  // The draft's name resumes it and opens the first step not left with Continue: Line (the v3 design
+  // system's Factories home has no separate Continue setup link; docs/design/MASTER.md).
+  await card.getByRole('link', { name: 'new-factory' }).click();
   await expect(page).toHaveURL(new RegExp(`/o/acme/new/line\\?factory=${id}$`));
 
   await page.getByRole('button', { name: 'Delete this draft factory…' }).click();

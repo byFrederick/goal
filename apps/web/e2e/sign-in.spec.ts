@@ -121,10 +121,13 @@ test('signing in by code returns to the page that asked, and the session stays o
   await page.keyboard.press('Escape');
   await expect(account).toBeHidden();
 
-  // The organization menu names the organization's pages, and the two not built yet are disabled.
+  // The organization menu names the organization's pages; Spend and billing and Models and policies are built and link to them.
   const orgMenu = await openOrgMenu(page);
-  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('href', '/o/acme/spend');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute(
+    'href',
+    /\/o\/acme\/models$/,
+  );
   await page.keyboard.press('Escape');
 });
 
