@@ -18,6 +18,7 @@ func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 		{12, "  Fix: lease sweep (again)!  ", "goal/12-fix-lease-sweep-again"},
 		{3, "Ünïcode only ✓", "goal/3-n-code-only"},
 		{4, "???", "goal/4"},
+		{6, "\u0130stanbul \u212Aelvin", "goal/6-istanbul-kelvin"}, // Go lowercases these two to ASCII
 		{5, "a very long title that keeps going well past the limit of a branch", "goal/5-a-very-long-title-that-keeps-going-well-p"},
 	}
 

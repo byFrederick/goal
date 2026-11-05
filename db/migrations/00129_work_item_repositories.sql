@@ -41,6 +41,8 @@ ALTER TABLE work_items ADD COLUMN branch text;
 -- branchName does: the title lowercased in ASCII only (Go also lowercases U+0130 and U+212A to
 -- i and k), each run of other characters one dash, no dash at either end, and the slug cut at
 -- the first letter or digit that makes it 40 characters long, 41 when that letter follows a dash.
+-- The two letters are written as their UTF-8 bytes and replaced, not translated, so this also
+-- runs on a SQL_ASCII database, where a character is a byte.
 UPDATE work_items w SET branch = 'goal/' || w.number || CASE WHEN s.slug = '' THEN '' ELSE '-' || s.slug END
 FROM (
   SELECT id, CASE
@@ -50,7 +52,8 @@ FROM (
   END AS slug
   FROM (
     SELECT id, btrim(regexp_replace(
-      lower(translate(title, U&'\0130\212A', 'IK') COLLATE "C"), '[^a-z0-9]+' COLLATE "C", '-', 'g'
+      lower(replace(replace(title, convert_from('\xc4b0'::bytea, getdatabaseencoding()), 'I'),
+        convert_from('\xe284aa'::bytea, getdatabaseencoding()), 'K') COLLATE "C"), '[^a-z0-9]+' COLLATE "C", '-', 'g'
     ), '-') AS full_slug
     FROM work_items
   ) t
