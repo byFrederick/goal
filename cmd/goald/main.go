@@ -113,6 +113,8 @@ func main() { os.Exit(goald()) }
 
 // goald runs the daemon and returns its exit code: 2 for bad configuration, 1 for a failure.
 func goald() int {
+	started := time.Now()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -130,13 +132,26 @@ func goald() int {
 	}
 
 	if err := run(ctx, s, log); err != nil {
-		log.Error("goald stopped", slog.Any("error", err))
+		log.Error("goald stopped", append(stoppedAttrs(ctx, started), slog.Any("error", err))...)
 		return 1
 	}
 
-	log.Info("goald stopped")
+	log.Info("goald stopped", stoppedAttrs(ctx, started)...)
 
 	return 0
+}
+
+// stoppedAttrs are the "goald stopped" event's fields: the signal that stopped goald, "none" when
+// none did, and how long it ran. A platform that stops the container sends SIGTERM, so the signal
+// tells a stop from outside apart from a failure inside.
+func stoppedAttrs(ctx context.Context, started time.Time) []any {
+	sig := "none"
+	if cause := context.Cause(ctx); cause != nil && ctx.Err() != nil {
+		// signal.NotifyContext's cause reads "<signal> signal received".
+		sig = strings.TrimSuffix(cause.Error(), " signal received")
+	}
+
+	return []any{slog.String("signal", sig), slog.Duration("uptime", time.Since(started))}
 }
 
 func newLogger(s settings) *slog.Logger {

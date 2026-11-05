@@ -3,14 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"os/signal"
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -357,4 +361,47 @@ func TestWatchIdentity_AnAnsweringServiceIsOneLine(t *testing.T) {
 			t.Errorf("startup log %q; want only that the identity service answers", log)
 		}
 	})
+}
+
+func TestStopped_LogsSignalAndUptime(t *testing.T) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+	defer stop()
+
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("SIGTERM did not cancel the context")
+	}
+
+	var out bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&out, nil))
+	log.Info("goald stopped", stoppedAttrs(ctx, time.Now().Add(-90*time.Minute))...)
+
+	var line struct {
+		Msg    string        `json:"msg"`
+		Signal string        `json:"signal"`
+		Uptime time.Duration `json:"uptime"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &line); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+
+	if line.Msg != "goald stopped" || line.Signal != "terminated" {
+		t.Errorf("got msg %q signal %q, want goald stopped and terminated", line.Msg, line.Signal)
+	}
+
+	if line.Uptime < 90*time.Minute || line.Uptime > 91*time.Minute {
+		t.Errorf("uptime %v, want about 90m", line.Uptime)
+	}
+}
+
+func TestStopped_NoSignalIsNone(t *testing.T) {
+	attrs := stoppedAttrs(context.Background(), time.Now())
+	if got := attrs[0].(slog.Attr).Value.String(); got != "none" {
+		t.Errorf("signal %q, want none", got)
+	}
 }
