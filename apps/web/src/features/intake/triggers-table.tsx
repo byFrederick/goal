@@ -30,7 +30,7 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
         <span className="rounded-chip bg-hover px-2 text-meta font-semibold text-ink-soft">{triggers.length}</span>
         <p className="m-0 text-secondary text-muted md:ml-auto">New item, the goal CLI and the API are always on</p>
       </div>
-      <div className="overflow-x-auto px-2 pb-2 md:px-3">
+      <div className="relative overflow-x-auto px-2 pb-2 md:px-3">
         <table className="block w-full border-collapse text-secondary md:table">
           <thead className="hidden md:table-header-group">
             <tr>
