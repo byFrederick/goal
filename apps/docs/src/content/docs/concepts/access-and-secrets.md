@@ -65,7 +65,7 @@ A token an environment file names, such as `GH_TOKEN`, is the environment's: eve
 
 Two kinds of secret are named in the factory's runtime, not in an environment file:
 
-- `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab. Any other host needs `forge: github` or `forge: gitlab`; publishing refuses a version without it, and so does a merge.
+- `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab. An entry of `runtime.repositories` has no `forge`: the organization's code hosts give each host its kind. Only the shorthand keeps `forge`, and on any other host it needs `forge: github` or `forge: gitlab`; publishing refuses a version without it, and so does a merge.
 - `runtime.repositories` is the list form, described below. Each entry's `token` is a secret.
 - `runtime.modelKey` is the secret that gives every run its model. A value that starts with `sk-ant-oat` is a Claude subscription token and a run gets it as `CLAUDE_CODE_OAUTH_TOKEN`. Any other value is an Anthropic API key and becomes `ANTHROPIC_API_KEY`.
 
@@ -76,6 +76,8 @@ The repository token signs git in to the repository's host for three things: the
 goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request in a repository the entry doesn't cover is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run. With several entries, each repository uses its own entry's token, as the next section says.
 
 ### Repositories and what agents may write
+
+To set this up step by step, follow [Connect code to a factory](/docs/guides/connect-code/).
 
 `runtime.repositories` lists the repositories a factory's runs may open. A factory with none has no code.
 

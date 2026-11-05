@@ -38,6 +38,10 @@ The page shows the repository URL, a chip that says whether the token works, the
 | Repository token | `runtime.repository.token` | The secret whose token git signs in with, written as `{{secret-name}}`. Pick one, or choose New secret to make it here. "Use no token" is for a public repository. See [Access and secrets](../../concepts/access-and-secrets/). |
 | Base branch | none yet | Shows "Not available yet". The factory definition has no field for it. |
 
+The fields above edit the `runtime.repository` shorthand: one repository with `write` access, which is the factory's default entry. A factory with more than one repository, an owner pattern such as `https://github.com/acme/*`, or a `read` entry lists them in `runtime.repositories`, which is edited in the Definition's YAML view. See [Connect code to a factory](../connect-code/). A definition has one form or the other, never both.
+
+A shorthand line merges only in its own repository. A pull request in a sibling repository on the same host is refused with `engine.ErrNoWriteEntry` ("no repository entry that writes covers the pull request's repository"), because no `write` entry covers it. Add a `write` entry for that repository in `runtime.repositories` to merge there.
+
 ### Runtime
 
 A line at the top says "Box size, CLIs and what agents reach live in environments." The word "environments" links to the Definition's Environments section, where each environment's size, image, tools and setup are set. Settings no longer edits them.
