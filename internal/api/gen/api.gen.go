@@ -831,8 +831,75 @@ func (e InboxEntryKind) Valid() bool {
 	}
 }
 
+// Defines values for IntakeWindow.
+const (
+	IntakeWindowN30d IntakeWindow = "30d"
+	IntakeWindowN7d  IntakeWindow = "7d"
+	IntakeWindowN90d IntakeWindow = "90d"
+)
+
+// Valid indicates whether the value is a known member of the IntakeWindow enum.
+func (e IntakeWindow) Valid() bool {
+	switch e {
+	case IntakeWindowN30d:
+		return true
+	case IntakeWindowN7d:
+		return true
+	case IntakeWindowN90d:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IntakeComingUpOrigin.
+const (
+	IntakeComingUpOriginFollowUp IntakeComingUpOrigin = "follow-up"
+	IntakeComingUpOriginPerson   IntakeComingUpOrigin = "person"
+	IntakeComingUpOriginPlan     IntakeComingUpOrigin = "plan"
+	IntakeComingUpOriginTrigger  IntakeComingUpOrigin = "trigger"
+)
+
+// Valid indicates whether the value is a known member of the IntakeComingUpOrigin enum.
+func (e IntakeComingUpOrigin) Valid() bool {
+	switch e {
+	case IntakeComingUpOriginFollowUp:
+		return true
+	case IntakeComingUpOriginPerson:
+		return true
+	case IntakeComingUpOriginPlan:
+		return true
+	case IntakeComingUpOriginTrigger:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IntakeComingUpVia.
+const (
+	IntakeComingUpViaApi IntakeComingUpVia = "api"
+	IntakeComingUpViaCli IntakeComingUpVia = "cli"
+	IntakeComingUpViaWeb IntakeComingUpVia = "web"
+)
+
+// Valid indicates whether the value is a known member of the IntakeComingUpVia enum.
+func (e IntakeComingUpVia) Valid() bool {
+	switch e {
+	case IntakeComingUpViaApi:
+		return true
+	case IntakeComingUpViaCli:
+		return true
+	case IntakeComingUpViaWeb:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for IntakeEventOutcome.
 const (
+	IntakeEventOutcomeChecked IntakeEventOutcome = "checked"
 	IntakeEventOutcomeCreated IntakeEventOutcome = "created"
 	IntakeEventOutcomeMerged  IntakeEventOutcome = "merged"
 	IntakeEventOutcomeMissed  IntakeEventOutcome = "missed"
@@ -842,6 +909,8 @@ const (
 // Valid indicates whether the value is a known member of the IntakeEventOutcome enum.
 func (e IntakeEventOutcome) Valid() bool {
 	switch e {
+	case IntakeEventOutcomeChecked:
+		return true
 	case IntakeEventOutcomeCreated:
 		return true
 	case IntakeEventOutcomeMerged:
@@ -894,6 +963,27 @@ func (e IntakeTriggerSource) Valid() bool {
 	}
 }
 
+// Defines values for IntakeWebhookState.
+const (
+	Closed    IntakeWebhookState = "closed"
+	NoTrigger IntakeWebhookState = "no_trigger"
+	Receiving IntakeWebhookState = "receiving"
+)
+
+// Valid indicates whether the value is a known member of the IntakeWebhookState enum.
+func (e IntakeWebhookState) Valid() bool {
+	switch e {
+	case Closed:
+		return true
+	case NoTrigger:
+		return true
+	case Receiving:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ItemOrigin.
 const (
 	ItemOriginFollowUp ItemOrigin = "follow-up"
@@ -912,6 +1002,72 @@ func (e ItemOrigin) Valid() bool {
 	case ItemOriginPlan:
 		return true
 	case ItemOriginTrigger:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ItemVia.
+const (
+	ItemViaApi ItemVia = "api"
+	ItemViaCli ItemVia = "cli"
+	ItemViaWeb ItemVia = "web"
+)
+
+// Valid indicates whether the value is a known member of the ItemVia enum.
+func (e ItemVia) Valid() bool {
+	switch e {
+	case ItemViaApi:
+		return true
+	case ItemViaCli:
+		return true
+	case ItemViaWeb:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ItemCardOrigin.
+const (
+	ItemCardOriginFollowUp ItemCardOrigin = "follow-up"
+	ItemCardOriginPerson   ItemCardOrigin = "person"
+	ItemCardOriginPlan     ItemCardOrigin = "plan"
+	ItemCardOriginTrigger  ItemCardOrigin = "trigger"
+)
+
+// Valid indicates whether the value is a known member of the ItemCardOrigin enum.
+func (e ItemCardOrigin) Valid() bool {
+	switch e {
+	case ItemCardOriginFollowUp:
+		return true
+	case ItemCardOriginPerson:
+		return true
+	case ItemCardOriginPlan:
+		return true
+	case ItemCardOriginTrigger:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ItemCardVia.
+const (
+	ItemCardViaApi ItemCardVia = "api"
+	ItemCardViaCli ItemCardVia = "cli"
+	ItemCardViaWeb ItemCardVia = "web"
+)
+
+// Valid indicates whether the value is a known member of the ItemCardVia enum.
+func (e ItemCardVia) Valid() bool {
+	switch e {
+	case ItemCardViaApi:
+		return true
+	case ItemCardViaCli:
+		return true
+	case ItemCardViaWeb:
 		return true
 	default:
 		return false
@@ -1667,19 +1823,19 @@ func (e SpendBudgetState) Valid() bool {
 
 // Defines values for SpendWindow.
 const (
-	Month SpendWindow = "month"
-	N90d  SpendWindow = "90d"
-	Week  SpendWindow = "week"
+	SpendWindowMonth SpendWindow = "month"
+	SpendWindowN90d  SpendWindow = "90d"
+	SpendWindowWeek  SpendWindow = "week"
 )
 
 // Valid indicates whether the value is a known member of the SpendWindow enum.
 func (e SpendWindow) Valid() bool {
 	switch e {
-	case Month:
+	case SpendWindowMonth:
 		return true
-	case N90d:
+	case SpendWindowN90d:
 		return true
-	case Week:
+	case SpendWindowWeek:
 		return true
 	default:
 		return false
@@ -2283,6 +2439,27 @@ func (e GetAccessParamsBy) Valid() bool {
 	case GetAccessParamsByReach:
 		return true
 	case GetAccessParamsBySecret:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetIntakeParamsWindow.
+const (
+	GetIntakeParamsWindowN30d GetIntakeParamsWindow = "30d"
+	GetIntakeParamsWindowN7d  GetIntakeParamsWindow = "7d"
+	GetIntakeParamsWindowN90d GetIntakeParamsWindow = "90d"
+)
+
+// Valid indicates whether the value is a known member of the GetIntakeParamsWindow enum.
+func (e GetIntakeParamsWindow) Valid() bool {
+	switch e {
+	case GetIntakeParamsWindowN30d:
+		return true
+	case GetIntakeParamsWindowN7d:
+		return true
+	case GetIntakeParamsWindowN90d:
 		return true
 	default:
 		return false
@@ -4016,16 +4193,25 @@ type FollowUp struct {
 	Agent     string    `json:"agent"`
 	CreatedAt time.Time `json:"created_at"`
 
+	// FiledItem The <factory name>#<number> of filed_item_id, another factory's included; getItem only, absent when it is not filed or that item is gone
+	FiledItem *string `json:"filed_item,omitempty"`
+
 	// FiledItemId The item it was filed as or onto, a triage item for target triage
 	FiledItemId *string `json:"filed_item_id,omitempty"`
-	Id          string  `json:"id"`
+
+	// For A note's item, <factory name>#<number>, as the agent wrote it; absent for any other target
+	For *string `json:"for,omitempty"`
+	Id  string  `json:"id"`
 
 	// ItemId The source item
 	ItemId string `json:"item_id"`
 
 	// Reason Why it was dropped, or why it went to triage instead of where it said
-	Reason *string       `json:"reason,omitempty"`
-	State  FollowUpState `json:"state"`
+	Reason *string `json:"reason,omitempty"`
+
+	// Start A start's item, which it files when its work lands; absent for any other target
+	Start *FollowUpStart `json:"start,omitempty"`
+	State FollowUpState  `json:"state"`
 
 	// Station The station whose run wrote it
 	Station string `json:"station"`
@@ -4040,6 +4226,22 @@ type FollowUpState string
 
 // FollowUpTarget Where it goes, or went; absent for one dropped as it was read
 type FollowUpTarget string
+
+// FollowUpStart When the item a start follow-up files may start, as the agent wrote it: at a time, a wait after the work lands, after other items, or a mix
+type FollowUpStart struct {
+	// After Refs of the items it waits for
+	After *[]string `json:"after,omitempty"`
+
+	// At A time
+	At *string `json:"at,omitempty"`
+
+	// Factory The factory it is filed in
+	Factory *string `json:"factory,omitempty"`
+
+	// In A wait after the work lands, as in 7d
+	In    *string `json:"in,omitempty"`
+	Title string  `json:"title"`
+}
 
 // GateTally defines model for GateTally.
 type GateTally struct {
@@ -4184,11 +4386,20 @@ type InboxTriggerCheck struct {
 
 // Intake defines model for Intake.
 type Intake struct {
+	// ComingUp Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first; always answered
+	ComingUp *[]IntakeComingUp `json:"coming_up,omitempty"`
+
+	// ComingUpTotal How many items coming_up counts
+	ComingUpTotal *int `json:"coming_up_total,omitempty"`
+
 	// From The UTC day the oldest of them was created; null without items
 	From *openapi_types.Date `json:"from"`
 
 	// Items How many items the sources count
 	Items int `json:"items"`
+
+	// Origins How many of the factory's items created in the window came from each origin (ADR 0040 decision 2), zero included; always answered. Items filed before origins were recorded count as person, the column's default
+	Origins *IntakeOrigins `json:"origins,omitempty"`
 
 	// Sources How many of the items came from each source, zero included. Items whose creator recorded no source count in items only.
 	Sources struct {
@@ -4206,9 +4417,53 @@ type Intake struct {
 	// To The UTC day the newest of them was created; null without items
 	To *openapi_types.Date `json:"to"`
 
+	// Triage Follow-ups for the architect (ADR 0040 decision 9): the factory's collecting triage item and the items whose waiting triage follow-ups join it when they land; null when there is neither
+	Triage *IntakeTriage `json:"triage,omitempty"`
+
 	// Triggers The current definition's board.triggers, in definition order
 	Triggers []IntakeTrigger `json:"triggers"`
+
+	// Webhooks The organization's webhooks open to the factory, by name; always answered
+	Webhooks *[]IntakeWebhook `json:"webhooks,omitempty"`
+
+	// Window The window origins count over, the one asked for or 30d; always answered
+	Window *IntakeWindow `json:"window,omitempty"`
 }
+
+// IntakeWindow The window origins count over, the one asked for or 30d; always answered
+type IntakeWindow string
+
+// IntakeComingUp An item that hasn't started
+type IntakeComingUp struct {
+	CreatedAt time.Time `json:"created_at"`
+
+	// CreatedBy Who filed it; absent for items filed before ADR 0040 and for the engine's filings
+	CreatedBy *Actor `json:"created_by,omitempty"`
+
+	// FromItem The ref of the item whose follow-up filed it, another factory's included; absent otherwise
+	FromItem *string `json:"from_item,omitempty"`
+	Id       string  `json:"id"`
+
+	// Needs The refs of its open needs (neither done nor cancelled), oldest edge first
+	Needs  []string             `json:"needs"`
+	Origin IntakeComingUpOrigin `json:"origin"`
+
+	// Ref <factory name>#<number>
+	Ref string `json:"ref"`
+
+	// Start When it may start; absent when it waits only for its needs
+	Start *ItemStart `json:"start,omitempty"`
+	Title string     `json:"title"`
+
+	// Via How a person filed it; absent otherwise
+	Via *IntakeComingUpVia `json:"via,omitempty"`
+}
+
+// IntakeComingUpOrigin defines model for IntakeComingUp.Origin.
+type IntakeComingUpOrigin string
+
+// IntakeComingUpVia How a person filed it; absent otherwise
+type IntakeComingUpVia string
 
 // IntakeEvent defines model for IntakeEvent.
 type IntakeEvent struct {
@@ -4227,7 +4482,7 @@ type IntakeEvent struct {
 	// Missed How many schedule instants a missed event covers; 0 for any other outcome
 	Missed int `json:"missed"`
 
-	// Outcome created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late
+	// Outcome created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late; checked: it queued a check (ADR 0040 decision 19), a try among them, whose items and notes are its checks' (listTriggerChecks)
 	Outcome IntakeEventOutcome `json:"outcome"`
 
 	// Reason Why it was skipped or what it missed; null otherwise
@@ -4237,11 +4492,54 @@ type IntakeEvent struct {
 	Title string `json:"title"`
 }
 
-// IntakeEventOutcome created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late
+// IntakeEventOutcome created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late; checked: it queued a check (ADR 0040 decision 19), a try among them, whose items and notes are its checks' (listTriggerChecks)
 type IntakeEventOutcome string
+
+// IntakeOrigins defines model for IntakeOrigins.
+type IntakeOrigins struct {
+	// FollowUp Filed from follow-ups
+	FollowUp int `json:"follow_up"`
+
+	// Person Filed by a person
+	Person int `json:"person"`
+
+	// Plan Parts of assemblies
+	Plan int `json:"plan"`
+
+	// Trigger Filed by a trigger or a check
+	Trigger int `json:"trigger"`
+}
+
+// IntakeTriage defines model for IntakeTriage.
+type IntakeTriage struct {
+	// Item The collecting triage item: open, with no run yet; null when there is none, and the next item that lands with triage follow-ups files one
+	Item *struct {
+		// FollowUps How many follow-ups have joined it
+		FollowUps int    `json:"follow_ups"`
+		Id        string `json:"id"`
+		Ref       string `json:"ref"`
+		Station   string `json:"station"`
+		Title     string `json:"title"`
+	} `json:"item"`
+
+	// Waiting Each item of the factory with waiting triage follow-ups, oldest first, which join the collecting item when the item (or its assembly) lands. An untrusted item's are left out: they go to a paused triage item of their own
+	Waiting []struct {
+		FollowUps int    `json:"follow_ups"`
+		Id        string `json:"id"`
+		Ref       string `json:"ref"`
+		Title     string `json:"title"`
+	} `json:"waiting"`
+}
 
 // IntakeTrigger defines model for IntakeTrigger.
 type IntakeTrigger struct {
+	// Check The agent that checks a source each time it fires, instead of filing an item (ADR 0040 decision 19); absent without one
+	Check *struct {
+		Agent string `json:"agent"`
+
+		// MaxUsd The most one check may spend
+		MaxUsd float64 `json:"max_usd"`
+	} `json:"check,omitempty"`
 	Create struct {
 		Expedite bool    `json:"expedite"`
 		Lane     *string `json:"lane"`
@@ -4257,7 +4555,7 @@ type IntakeTrigger struct {
 	// On The trigger's event key, as in the definition (schedule, github.check_run.failed, webhook.<endpoint>[.<event>])
 	On string `json:"on"`
 
-	// Problem Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries.
+	// Problem Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted from the endpoints' daily delivery counts.
 	Problem *struct {
 		Kind    IntakeTriggerProblemKind `json:"kind"`
 		Message string                   `json:"message"`
@@ -4292,6 +4590,21 @@ type IntakeTriggerDetail struct {
 	} `json:"week"`
 }
 
+// IntakeWebhook An organization webhook open to the factory
+type IntakeWebhook struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+
+	// Sender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
+	Sender WebhookSender `json:"sender"`
+
+	// State Derived from the definition, not from recent deliveries. receiving: the webhook is enabled and an enabled trigger of the factory's current definition names it, by its sender (<sender>.<event>) or by its name; no_trigger: enabled, and no enabled trigger names it; closed: the webhook is turned off
+	State IntakeWebhookState `json:"state"`
+}
+
+// IntakeWebhookState Derived from the definition, not from recent deliveries. receiving: the webhook is enabled and an enabled trigger of the factory's current definition names it, by its sender (<sender>.<event>) or by its name; no_trigger: enabled, and no enabled trigger names it; closed: the webhook is turned off
+type IntakeWebhookState string
+
 // Invitation A pending invitation
 type Invitation struct {
 	CreatedAt time.Time `json:"created_at"`
@@ -4325,6 +4638,9 @@ type Item struct {
 	CostUsd        float64        `json:"cost_usd"`
 	CreatedAt      time.Time      `json:"created_at"`
 
+	// CreatedBy Who filed it; absent for items filed before ADR 0040 and for the engine's filings
+	CreatedBy *Actor `json:"created_by,omitempty"`
+
 	// Dependents The items that need this item, oldest edge first; getItem only
 	Dependents *[]ItemLink `json:"dependents,omitempty"`
 	DoneAt     *time.Time  `json:"done_at,omitempty"`
@@ -4332,12 +4648,18 @@ type Item struct {
 
 	// Flow How the item flows, on GET of one item only
 	Flow *ItemFlow `json:"flow,omitempty"`
-	Id   string    `json:"id"`
-	Lane *string   `json:"lane,omitempty"`
+
+	// FollowUps The follow-ups its runs wrote, oldest first, each saying where it went or will go; getItem only
+	FollowUps *[]FollowUp `json:"follow_ups,omitempty"`
+	Id        string      `json:"id"`
+	Lane      *string     `json:"lane,omitempty"`
 
 	// Needs The items this item needs, oldest edge first; getItem only
-	Needs  *[]ItemLink `json:"needs,omitempty"`
-	Number int64       `json:"number"`
+	Needs *[]ItemLink `json:"needs,omitempty"`
+
+	// Notes The notes other items' agents and triggers' checks left on it, oldest first, at most 200; getItem only
+	Notes  *[]ItemNoteFrom `json:"notes,omitempty"`
+	Number int64           `json:"number"`
 
 	// Origin Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)
 	Origin *ItemOrigin `json:"origin,omitempty"`
@@ -4372,9 +4694,15 @@ type Item struct {
 	ToolApproval *ToolApproval `json:"tool_approval,omitempty"`
 
 	// Touches The item's human touches; getItem only
-	Touches   *ItemTouches `json:"touches,omitempty"`
-	Type      string       `json:"type"`
-	UpdatedAt time.Time    `json:"updated_at"`
+	Touches *ItemTouches `json:"touches,omitempty"`
+	Type    string       `json:"type"`
+
+	// Untrusted Whether it, or an item it came from, was made from a webhook delivery (ADR 0040 decision 21): a person merges its work, and its follow-ups wait for a person
+	Untrusted *bool     `json:"untrusted,omitempty"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Via How a person filed it; absent for any other origin
+	Via *ItemVia `json:"via,omitempty"`
 
 	// Waiting Why the item is not claimed yet; getItem only, absent unless it is queued or ready with an open need
 	Waiting *ItemWaiting `json:"waiting,omitempty"`
@@ -4382,6 +4710,9 @@ type Item struct {
 
 // ItemOrigin Where the item came from: a person filed it, a plan made it a part, a trigger or follow-ups filed it (ADR 0040)
 type ItemOrigin string
+
+// ItemVia How a person filed it; absent for any other origin
+type ItemVia string
 
 // ItemAnswer A person's answer to an item's open question; exactly one of answer and choice
 type ItemAnswer struct {
@@ -4427,12 +4758,18 @@ type ItemCard struct {
 	ClassOfService ClassOfService `json:"class_of_service"`
 	CostUsd        float64        `json:"cost_usd"`
 	CreatedAt      time.Time      `json:"created_at"`
-	Id             string         `json:"id"`
+
+	// CreatedBy As Item's created_by
+	CreatedBy *Actor `json:"created_by,omitempty"`
+	Id        string `json:"id"`
 
 	// InBuffer Queued or ready at the drum (the line's configured constraint, else the constraint now)
 	InBuffer bool    `json:"in_buffer"`
 	Lane     *string `json:"lane,omitempty"`
 	Number   int64   `json:"number"`
+
+	// Origin As Item's origin
+	Origin *ItemCardOrigin `json:"origin,omitempty"`
 
 	// Parts For an assembly (an item with parts), where its parts stand; absent or null for any other item
 	Parts *PartsSummary `json:"parts,omitempty"`
@@ -4456,6 +4793,9 @@ type ItemCard struct {
 	// Slot While in progress at a station that runs several copies of its agent, the copy working it, 1-based (investigator-2); else null
 	Slot *int `json:"slot"`
 
+	// Start As Item's start, absent when it may start now; the inbox shows such items under Later
+	Start *ItemStart `json:"start,omitempty"`
+
 	// State assembly: the item was split into parts (its children) and closes when they are; never claimed (ADR 0012)
 	State   ItemState `json:"state"`
 	Station string    `json:"station"`
@@ -4468,13 +4808,25 @@ type ItemCard struct {
 	TouchCount int `json:"touch_count"`
 
 	// Turn The turns its running run has reported so far, while one runs; else null
-	Turn      *int      `json:"turn"`
-	Type      string    `json:"type"`
+	Turn *int   `json:"turn"`
+	Type string `json:"type"`
+
+	// Untrusted As Item's untrusted
+	Untrusted *bool     `json:"untrusted,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// Via As Item's via
+	Via *ItemCardVia `json:"via,omitempty"`
 
 	// Waiting Why the item is not claimed yet; absent or null unless it is queued or ready with an open need
 	Waiting *ItemWaiting `json:"waiting,omitempty"`
 }
+
+// ItemCardOrigin As Item's origin
+type ItemCardOrigin string
+
+// ItemCardVia As Item's via
+type ItemCardVia string
 
 // ItemFlow How the item flows, on GET of one item only
 type ItemFlow struct {
@@ -4517,6 +4869,31 @@ type ItemLink struct {
 
 // ItemLinkKind planned by whoever split the work, linked by a person, or overlap (their files overlap)
 type ItemLinkKind string
+
+// ItemNoteFrom A note another item's agent, or a trigger's check, left on the item (an item_note event); it reaches the item's next run after its brief
+type ItemNoteFrom struct {
+	Agent string    `json:"agent"`
+	At    time.Time `json:"at"`
+
+	// FromFactoryId The source item's factory; absent for a check's note
+	FromFactoryId *string `json:"from_factory_id,omitempty"`
+
+	// FromItem The source item, <factory name>#<number>; absent for a check's note
+	FromItem   *string `json:"from_item,omitempty"`
+	FromItemId *string `json:"from_item_id,omitempty"`
+
+	// Id The item_note event's id
+	Id int64 `json:"id"`
+
+	// Station The station whose run wrote it; absent for a check's note
+	Station *string `json:"station,omitempty"`
+
+	// Text The agent's text
+	Text string `json:"text"`
+
+	// Trigger The trigger whose check wrote it; absent for an item's note
+	Trigger *string `json:"trigger,omitempty"`
+}
 
 // ItemPage defines model for ItemPage.
 type ItemPage struct {
@@ -8382,7 +8759,13 @@ type ListDraftRequestsParams struct {
 type GetIntakeParams struct {
 	// Items How many of the newest items the sources count (default 48)
 	Items *int `form:"items,omitempty" json:"items,omitempty"`
+
+	// Window The days origins count over, ending now (default 30d)
+	Window *GetIntakeParamsWindow `form:"window,omitempty" json:"window,omitempty"`
 }
+
+// GetIntakeParamsWindow defines parameters for GetIntake.
+type GetIntakeParamsWindow string
 
 // ListTriggerChecksParams defines parameters for ListTriggerChecks.
 type ListTriggerChecksParams struct {
@@ -9937,7 +10320,7 @@ type ClientInterface interface {
 
 	// GetIntake Where the factory's newest items came from, and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 	GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -12999,7 +13382,7 @@ func (c *Client) TestEnvironment(ctx context.Context, org OrgRef, factory Factor
 
 // GetIntake Where the factory's newest items came from, and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -19849,6 +20232,18 @@ func NewGetIntakeRequest(server string, org OrgRef, factory FactoryRef, params *
 		if params.Items != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "items", *params.Items, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Window != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "window", *params.Window, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -27801,7 +28196,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -40553,7 +40948,7 @@ func (c *ClientWithResponses) TestEnvironmentWithResponse(ctx context.Context, o
 
 // GetIntakeWithResponse Where the factory's newest items came from, and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -53502,6 +53897,19 @@ func (siw *ServerInterfaceWrapper) GetIntake(w http.ResponseWriter, r *http.Requ
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "items"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "items", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "window" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "window", r.URL.Query(), &params.Window, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "window"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "window", Err: err})
 		}
 		return
 	}

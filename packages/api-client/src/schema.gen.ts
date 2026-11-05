@@ -1737,7 +1737,7 @@ export interface paths {
         };
         /**
          * Where the factory's newest items came from, and its triggers
-         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500.
+         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
          */
         get: operations["getIntake"];
         put?: never;
@@ -4676,8 +4676,48 @@ export interface components {
             reason?: string;
             /** @description The item it was filed as or onto, a triage item for target triage */
             filed_item_id?: string;
+            /** @description The <factory name>#<number> of filed_item_id, another factory's included; getItem only, absent when it is not filed or that item is gone */
+            filed_item?: string;
+            /** @description A note's item, <factory name>#<number>, as the agent wrote it; absent for any other target */
+            for?: string;
+            /** @description A start's item, which it files when its work lands; absent for any other target */
+            start?: components["schemas"]["FollowUpStart"];
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description When the item a start follow-up files may start, as the agent wrote it: at a time, a wait after the work lands, after other items, or a mix */
+        FollowUpStart: {
+            title: string;
+            /** @description A time */
+            at?: string;
+            /** @description A wait after the work lands, as in 7d */
+            in?: string;
+            /** @description Refs of the items it waits for */
+            after?: string[];
+            /** @description The factory it is filed in */
+            factory?: string;
+        };
+        /** @description A note another item's agent, or a trigger's check, left on the item (an item_note event); it reaches the item's next run after its brief */
+        ItemNoteFrom: {
+            /**
+             * Format: int64
+             * @description The item_note event's id
+             */
+            id: number;
+            /** @description The agent's text */
+            text: string;
+            /** @description The source item, <factory name>#<number>; absent for a check's note */
+            from_item?: string;
+            from_item_id?: string;
+            /** @description The source item's factory; absent for a check's note */
+            from_factory_id?: string;
+            /** @description The station whose run wrote it; absent for a check's note */
+            station?: string;
+            /** @description The trigger whose check wrote it; absent for an item's note */
+            trigger?: string;
+            agent: string;
+            /** Format: date-time */
+            at: string;
         };
         FileFollowUpRequest: {
             title: string;
@@ -4743,6 +4783,19 @@ export interface components {
             origin?: "person" | "plan" | "trigger" | "follow-up";
             /** @description When the item may start, absent when it may start now; it waits at the first station until then (ADR 0040). Its after items are its needs */
             start?: components["schemas"]["ItemStart"];
+            /**
+             * @description How a person filed it; absent for any other origin
+             * @enum {string}
+             */
+            via?: "web" | "cli" | "api";
+            /** @description Who filed it; absent for items filed before ADR 0040 and for the engine's filings */
+            created_by?: components["schemas"]["Actor"];
+            /** @description Whether it, or an item it came from, was made from a webhook delivery (ADR 0040 decision 21): a person merges its work, and its follow-ups wait for a person */
+            untrusted?: boolean;
+            /** @description The follow-ups its runs wrote, oldest first, each saying where it went or will go; getItem only */
+            follow_ups?: components["schemas"]["FollowUp"][];
+            /** @description The notes other items' agents and triggers' checks left on it, oldest first, at most 200; getItem only */
+            notes?: components["schemas"]["ItemNoteFrom"][];
             type: string;
             lane?: string;
             title: string;
@@ -5331,6 +5384,22 @@ export interface components {
             rework_count: number;
             /** Format: double */
             cost_usd: number;
+            /**
+             * @description As Item's origin
+             * @enum {string}
+             */
+            origin?: "person" | "plan" | "trigger" | "follow-up";
+            /**
+             * @description As Item's via
+             * @enum {string}
+             */
+            via?: "web" | "cli" | "api";
+            /** @description As Item's created_by */
+            created_by?: components["schemas"]["Actor"];
+            /** @description As Item's untrusted */
+            untrusted?: boolean;
+            /** @description As Item's start, absent when it may start now; the inbox shows such items under Later */
+            start?: components["schemas"]["ItemStart"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -6247,6 +6316,84 @@ export interface components {
             triggers: components["schemas"]["IntakeTrigger"][];
             /** @description The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers. */
             suggestions: components["schemas"]["TriggerSuggestion"][];
+            /**
+             * @description The window origins count over, the one asked for or 30d; always answered
+             * @enum {string}
+             */
+            window?: "7d" | "30d" | "90d";
+            /** @description How many of the factory's items created in the window came from each origin (ADR 0040 decision 2), zero included; always answered. Items filed before origins were recorded count as person, the column's default */
+            origins?: components["schemas"]["IntakeOrigins"];
+            /** @description Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first; always answered */
+            coming_up?: components["schemas"]["IntakeComingUp"][];
+            /** @description How many items coming_up counts */
+            coming_up_total?: number;
+            /** @description Follow-ups for the architect (ADR 0040 decision 9): the factory's collecting triage item and the items whose waiting triage follow-ups join it when they land; null when there is neither */
+            triage?: components["schemas"]["IntakeTriage"] | null;
+            /** @description The organization's webhooks open to the factory, by name; always answered */
+            webhooks?: components["schemas"]["IntakeWebhook"][];
+        };
+        IntakeOrigins: {
+            /** @description Filed by a person */
+            person: number;
+            /** @description Parts of assemblies */
+            plan: number;
+            /** @description Filed by a trigger or a check */
+            trigger: number;
+            /** @description Filed from follow-ups */
+            follow_up: number;
+        };
+        /** @description An item that hasn't started */
+        IntakeComingUp: {
+            id: string;
+            /** @description <factory name>#<number> */
+            ref: string;
+            title: string;
+            /** @enum {string} */
+            origin: "person" | "plan" | "trigger" | "follow-up";
+            /**
+             * @description How a person filed it; absent otherwise
+             * @enum {string}
+             */
+            via?: "web" | "cli" | "api";
+            /** @description Who filed it; absent for items filed before ADR 0040 and for the engine's filings */
+            created_by?: components["schemas"]["Actor"];
+            /** @description When it may start; absent when it waits only for its needs */
+            start?: components["schemas"]["ItemStart"];
+            /** @description The refs of its open needs (neither done nor cancelled), oldest edge first */
+            needs: string[];
+            /** @description The ref of the item whose follow-up filed it, another factory's included; absent otherwise */
+            from_item?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        IntakeTriage: {
+            /** @description The collecting triage item: open, with no run yet; null when there is none, and the next item that lands with triage follow-ups files one */
+            item: {
+                id: string;
+                ref: string;
+                title: string;
+                station: string;
+                /** @description How many follow-ups have joined it */
+                follow_ups: number;
+            } | null;
+            /** @description Each item of the factory with waiting triage follow-ups, oldest first, which join the collecting item when the item (or its assembly) lands. An untrusted item's are left out: they go to a paused triage item of their own */
+            waiting: {
+                id: string;
+                ref: string;
+                title: string;
+                follow_ups: number;
+            }[];
+        };
+        /** @description An organization webhook open to the factory */
+        IntakeWebhook: {
+            id: string;
+            name: string;
+            sender: components["schemas"]["WebhookSender"];
+            /**
+             * @description Derived from the definition, not from recent deliveries. receiving: the webhook is enabled and an enabled trigger of the factory's current definition names it, by its sender (<sender>.<event>) or by its name; no_trigger: enabled, and no enabled trigger names it; closed: the webhook is turned off
+             * @enum {string}
+             */
+            state: "receiving" | "no_trigger" | "closed";
         };
         TriggerSuggestion: {
             name: string;
@@ -6282,7 +6429,16 @@ export interface components {
             };
             /** @description The items it created on each of the last 7 UTC days, oldest first, ending today */
             days: number[];
-            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted over each endpoint's 100 newest deliveries. */
+            /** @description The agent that checks a source each time it fires, instead of filing an item (ADR 0040 decision 19); absent without one */
+            check?: {
+                agent: string;
+                /**
+                 * Format: double
+                 * @description The most one check may spend
+                 */
+                max_usd: number;
+            };
+            /** @description Why it may not be creating items. missing_connection: it listens on a webhook endpoint the factory does not have (no endpoint of its name for webhook.<name>, none of kind github for github.*). refused_deliveries: its endpoints refused deliveries in the last 7 days, counted from the endpoints' daily delivery counts. */
             problem: {
                 /** @enum {string} */
                 kind: "missing_connection" | "refused_deliveries";
@@ -6318,10 +6474,10 @@ export interface components {
              */
             at: string;
             /**
-             * @description created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late
+             * @description created an item; merged once that item has been merged; skipped with the reason; missed: a schedule's instants passed by more than 5 minutes while no goald ran, and none was fired late; checked: it queued a check (ADR 0040 decision 19), a try among them, whose items and notes are its checks' (listTriggerChecks)
              * @enum {string}
              */
-            outcome: "created" | "merged" | "skipped" | "missed";
+            outcome: "created" | "merged" | "skipped" | "missed" | "checked";
             /**
              * Format: int64
              * @description The item it created; null when it created none or that item is gone
@@ -11422,6 +11578,8 @@ export interface operations {
             query?: {
                 /** @description How many of the newest items the sources count (default 48) */
                 items?: number;
+                /** @description The days origins count over, ending now (default 30d) */
+                window?: "7d" | "30d" | "90d";
             };
             header?: never;
             path: {

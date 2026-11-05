@@ -2216,14 +2216,23 @@ paths:
         in definition order, each with the items it created on each of the last 7 UTC days and
         its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it
         on `item` and `definition` stream events.
+        It also answers, for the screens of ADR 0040 (decision 22): the items created in the
+        `window` by origin, counted from one grouped read of the factory's items and no read of
+        webhook deliveries; the items that haven't started; the open triage item and the items
+        whose follow-ups will join it; and the organization's webhooks open to the factory.
         Triggers are edited through the definition's draft and publish operations. 400 for items
-        outside 1 to 500.
+        outside 1 to 500 and for a window other than 7d, 30d or 90d.
       parameters:
         - name: items
           in: query
           required: false
           description: How many of the newest items the sources count (default 48)
           schema: { type: integer, minimum: 1, maximum: 500, default: 48 }
+        - name: window
+          in: query
+          required: false
+          description: The days origins count over, ending now (default 30d)
+          schema: { type: string, enum: [7d, 30d, 90d], default: 30d }
       responses:
         "200":
           description: The factory's intake
@@ -6149,7 +6158,49 @@ components:
         filed_item_id:
           type: string
           description: The item it was filed as or onto, a triage item for target triage
+        filed_item:
+          type: string
+          description: >-
+            The <factory name>#<number> of filed_item_id, another factory's included; getItem
+            only, absent when it is not filed or that item is gone
+        for:
+          type: string
+          description: "A note's item, <factory name>#<number>, as the agent wrote it; absent for any other target"
+        start:
+          description: A start's item, which it files when its work lands; absent for any other target
+          allOf: [{ $ref: "#/components/schemas/FollowUpStart" }]
         created_at: { type: string, format: date-time }
+    FollowUpStart:
+      type: object
+      description: >-
+        When the item a start follow-up files may start, as the agent wrote it: at a time, a
+        wait after the work lands, after other items, or a mix
+      required: [title]
+      properties:
+        title: { type: string }
+        at: { type: string, description: A time, as written }
+        in: { type: string, description: "A wait after the work lands, as in 7d" }
+        after:
+          type: array
+          description: Refs of the items it waits for
+          items: { type: string }
+        factory: { type: string, description: The factory it is filed in, when another than the source's }
+    ItemNoteFrom:
+      type: object
+      description: >-
+        A note another item's agent, or a trigger's check, left on the item (an item_note event);
+        it reaches the item's next run after its brief
+      required: [id, text, agent, at]
+      properties:
+        id: { type: integer, format: int64, description: The item_note event's id }
+        text: { type: string, description: The agent's text, to show as text, never markup }
+        from_item: { type: string, description: "The source item, <factory name>#<number>; absent for a check's note" }
+        from_item_id: { type: string }
+        from_factory_id: { type: string, description: The source item's factory; absent for a check's note }
+        station: { type: string, description: The station whose run wrote it; absent for a check's note }
+        trigger: { type: string, description: The trigger whose check wrote it; absent for an item's note }
+        agent: { type: string }
+        at: { type: string, format: date-time }
     FileFollowUpRequest:
       type: object
       required: [title]
@@ -6226,6 +6277,25 @@ components:
             When the item may start, absent when it may start now; it waits at the first station
             until then (ADR 0040). Its after items are its needs
           allOf: [{ $ref: "#/components/schemas/ItemStart" }]
+        via: { type: string, enum: [web, cli, api], description: "How a person filed it; absent for any other origin" }
+        created_by:
+          description: Who filed it; absent for items filed before ADR 0040 and for the engine's filings
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        untrusted:
+          type: boolean
+          description: >-
+            Whether it, or an item it came from, was made from a webhook delivery (ADR 0040
+            decision 21): a person merges its work, and its follow-ups wait for a person
+        follow_ups:
+          type: array
+          description: >-
+            The follow-ups its runs wrote, oldest first, each saying where it went or will go;
+            getItem only
+          items: { $ref: "#/components/schemas/FollowUp" }
+        notes:
+          type: array
+          description: The notes other items' agents and triggers' checks left on it, oldest first, at most 200; getItem only
+          items: { $ref: "#/components/schemas/ItemNoteFrom" }
         type: { type: string }
         lane: { type: string }
         title: { type: string }
@@ -6858,6 +6928,15 @@ components:
         class_of_service: { $ref: "#/components/schemas/ClassOfService" }
         rework_count: { type: integer }
         cost_usd: { type: number, format: double }
+        origin: { type: string, enum: [person, plan, trigger, follow-up], description: As Item's origin }
+        via: { type: string, enum: [web, cli, api], description: As Item's via }
+        created_by:
+          description: As Item's created_by
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        untrusted: { type: boolean, description: As Item's untrusted }
+        start:
+          description: As Item's start, absent when it may start now; the inbox shows such items under Later
+          allOf: [{ $ref: "#/components/schemas/ItemStart" }]
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         age_seconds:
@@ -7895,6 +7974,114 @@ components:
             onboarding Intake step offer to turn on, so no client names a station, agent or work
             type of its own. Each is also in triggers.
           items: { $ref: "#/components/schemas/TriggerSuggestion" }
+        window:
+          type: string
+          enum: [7d, 30d, 90d]
+          description: The window origins count over, the one asked for or 30d; always answered
+        origins:
+          description: >-
+            How many of the factory's items created in the window came from each origin (ADR 0040
+            decision 2), zero included; always answered. Items filed before origins were recorded
+            count as person, the column's default
+          allOf: [{ $ref: "#/components/schemas/IntakeOrigins" }]
+        coming_up:
+          type: array
+          description: >-
+            Up to 50 open items that haven't started (no started_at, the claim filters' rule):
+            those with a start first, soonest first, then those that wait only for their open
+            needs, oldest first; always answered
+          items: { $ref: "#/components/schemas/IntakeComingUp" }
+        coming_up_total: { type: integer, description: How many items coming_up counts, beyond its 50 too; always answered }
+        triage:
+          description: >-
+            Follow-ups for the architect (ADR 0040 decision 9): the factory's collecting triage
+            item and the items whose waiting triage follow-ups join it when they land; null when
+            there is neither
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/IntakeTriage" }]
+        webhooks:
+          type: array
+          description: The organization's webhooks open to the factory, by name; always answered
+          items: { $ref: "#/components/schemas/IntakeWebhook" }
+    IntakeOrigins:
+      type: object
+      required: [person, plan, trigger, follow_up]
+      properties:
+        person: { type: integer, description: Filed by a person, from New item, the CLI or the API }
+        plan: { type: integer, description: Parts of assemblies }
+        trigger: { type: integer, description: Filed by a trigger or a check }
+        follow_up: { type: integer, description: Filed from follow-ups, triage items included }
+    IntakeComingUp:
+      type: object
+      description: An item that hasn't started
+      required: [id, ref, title, origin, needs, created_at]
+      properties:
+        id: { type: string }
+        ref: { type: string, description: "<factory name>#<number>" }
+        title: { type: string }
+        origin: { type: string, enum: [person, plan, trigger, follow-up] }
+        via: { type: string, enum: [web, cli, api], description: How a person filed it; absent otherwise }
+        created_by:
+          description: Who filed it; absent for items filed before ADR 0040 and for the engine's filings
+          allOf: [{ $ref: "#/components/schemas/Actor" }]
+        start:
+          description: When it may start; absent when it waits only for its needs
+          allOf: [{ $ref: "#/components/schemas/ItemStart" }]
+        needs:
+          type: array
+          description: The refs of its open needs (neither done nor cancelled), oldest edge first
+          items: { type: string }
+        from_item:
+          type: string
+          description: The ref of the item whose follow-up filed it, another factory's included; absent otherwise
+        created_at: { type: string, format: date-time }
+    IntakeTriage:
+      type: object
+      required: [item, waiting]
+      properties:
+        item:
+          type: object
+          nullable: true
+          description: >-
+            The collecting triage item: open, with no run yet; null when there is none, and the
+            next item that lands with triage follow-ups files one
+          required: [id, ref, title, station, follow_ups]
+          properties:
+            id: { type: string }
+            ref: { type: string }
+            title: { type: string }
+            station: { type: string }
+            follow_ups: { type: integer, description: How many follow-ups have joined it }
+        waiting:
+          type: array
+          description: >-
+            Each item of the factory with waiting triage follow-ups, oldest first, which join the
+            collecting item when the item (or its assembly) lands. An untrusted item's are left
+            out: they go to a paused triage item of their own
+          items:
+            type: object
+            required: [id, ref, title, follow_ups]
+            properties:
+              id: { type: string }
+              ref: { type: string }
+              title: { type: string }
+              follow_ups: { type: integer }
+    IntakeWebhook:
+      type: object
+      description: An organization webhook open to the factory
+      required: [id, name, sender, state]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        sender: { $ref: "#/components/schemas/WebhookSender" }
+        state:
+          type: string
+          enum: [receiving, no_trigger, closed]
+          description: >-
+            Derived from the definition, not from recent deliveries. receiving: the webhook is
+            enabled and an enabled trigger of the factory's current definition names it, by its
+            sender (<sender>.<event>) or by its name; no_trigger: enabled, and no enabled trigger
+            names it; closed: the webhook is turned off
     TriggerSuggestion:
       type: object
       required: [name, source, "on", when, create]
@@ -7939,6 +8126,13 @@ components:
           minItems: 7
           maxItems: 7
           items: { type: integer }
+        check:
+          type: object
+          description: The agent that checks a source each time it fires, instead of filing an item (ADR 0040 decision 19); absent without one
+          required: [agent, max_usd]
+          properties:
+            agent: { type: string }
+            max_usd: { type: number, format: double, description: The most one check may spend }
         problem:
           type: object
           nullable: true
@@ -7946,7 +8140,7 @@ components:
             Why it may not be creating items. missing_connection: it listens on a webhook
             endpoint the factory does not have (no endpoint of its name for webhook.<name>, none
             of kind github for github.*). refused_deliveries: its endpoints refused deliveries in
-            the last 7 days, counted over each endpoint's 100 newest deliveries.
+            the last 7 days, counted from the endpoints' daily delivery counts.
           required: [kind, message]
           properties:
             kind: { type: string, enum: [missing_connection, refused_deliveries] }
@@ -7978,11 +8172,12 @@ components:
         at: { type: string, format: date-time, description: "When it fired; for missed, the gap's last instant" }
         outcome:
           type: string
-          enum: [created, merged, skipped, missed]
+          enum: [created, merged, skipped, missed, checked]
           description: >-
             created an item; merged once that item has been merged; skipped with the reason;
             missed: a schedule's instants passed by more than 5 minutes while no goald ran, and
-            none was fired late
+            none was fired late; checked: it queued a check (ADR 0040 decision 19), a try among
+            them, whose items and notes are its checks' (listTriggerChecks)
         item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
         reason: { type: string, nullable: true, description: Why it was skipped or what it missed; null otherwise }
         missed: { type: integer, description: How many schedule instants a missed event covers; 0 for any other outcome }
