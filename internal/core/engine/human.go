@@ -194,7 +194,7 @@ func (e *Engine) SetLane(ctx context.Context, id domain.ItemID, lane string, by 
 		return domain.Item{}, fmt.Errorf("set the lane of %s: %w", id, err)
 	}
 
-	routes := routedLanes(l)
+	routes := l.RoutedLanes()
 
 	switch {
 	case closed(it):
@@ -217,18 +217,6 @@ func (e *Engine) SetLane(ctx context.Context, id domain.ItemID, lane string, by 
 		Events: []domain.Event{decision(it, domain.EventLaneSet, now, by, data)},
 		Audit:  itemAudit(it, now, by, domain.AuditItemLaneSet, data),
 	})
-}
-
-// routedLanes are the lanes the stations of l route by, sorted; none when no station routes.
-func routedLanes(l domain.Line) []string {
-	var lanes []string
-	for _, s := range l.Stations {
-		lanes = append(lanes, slices.Collect(maps.Keys(s.Route))...)
-	}
-
-	slices.Sort(lanes)
-
-	return slices.Compact(lanes)
 }
 
 // Pause stops an open item where it is: it becomes blocked with a paused event (the reason is
@@ -256,7 +244,7 @@ func (e *Engine) Pause(ctx context.Context, id domain.ItemID, by domain.Actor, r
 	return e.control(ctx, "pause", it, by, ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateBlocked}, At: now,
 		Events: []domain.Event{decision(it, domain.EventPaused, now, by, withReason(nil, reason))},
-		Audit:  itemAudit(it, now, by, domain.AuditItemPaused, withReason(map[string]any{"station": it.Station}, reason)),
+		Audit:  itemAudit(it, now, by, domain.AuditItemPaused, withReason(map[string]any{keyStation: it.Station}, reason)),
 	})
 }
 
@@ -291,7 +279,7 @@ func cancelOf(it domain.Item, at time.Time, by domain.Actor, reason string, data
 		audit = map[string]any{}
 	}
 
-	audit["station"] = it.Station
+	audit[keyStation] = it.Station
 
 	return ports.Transition{
 		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: it.Station, State: domain.StateCancelled}, At: at,

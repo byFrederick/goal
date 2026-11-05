@@ -109,6 +109,7 @@ func controlProblem(err error) (gen.Problem, bool) {
 		{engine.ErrAlreadyBlocked, http.StatusConflict, "already-blocked"},
 		{engine.ErrCannotSendBack, http.StatusConflict, "cannot-send-back"},
 		{engine.ErrItemChanged, http.StatusConflict, "item-changed"},
+		{engine.ErrItemStarted, http.StatusConflict, "item-started"},
 	}
 
 	for _, r := range refusals {

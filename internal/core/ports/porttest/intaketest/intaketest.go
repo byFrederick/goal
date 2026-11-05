@@ -26,6 +26,9 @@ type Harness struct {
 	// Key returns master keys with ids, the first active; the same id is the same key in every
 	// call. With no ids it has none (ports.ErrNoMasterKey).
 	Key func(ids ...string) ports.MasterKey
+	// Secrets returns the organization secrets in Intake's store, sealing with key: the ones the
+	// organization's webhooks are signed by.
+	Secrets func(key ports.MasterKey) ports.OrgSecrets
 	// Store is the store items are created in and moved by, the one Intake reads them from.
 	Store ports.Store
 	// NewOrg returns a new organization.
@@ -73,12 +76,20 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Methods_NoOrgIsAnError", testNoOrg},
 	}
 
+	tests = append(tests, webhookTests...)
+	tests = append(tests, receiptTests...)
+	tests = append(tests, convertTests...)
+	tests = append(tests, evaluationTests...)
+	tests = append(tests, trimTests...)
+	tests = append(tests, checkTests...)
+	tests = append(tests, readsTests...)
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t)
-			f := &fixture{Harness: h, t: t, in: h.Intake(h.Key("k1")), org: h.NewOrg(t)}
+			f := &fixture{Harness: h, t: t, in: h.Intake(h.Key("k1")), secrets: h.Secrets(h.Key("k1")), org: h.NewOrg(t)}
 			f.factory = h.NewFactory(t, f.org)
 			tc.test(f)
 		})
@@ -103,6 +114,7 @@ type fixture struct {
 
 	t       *testing.T
 	in      ports.Intake
+	secrets ports.OrgSecrets
 	org     domain.OrgID
 	factory domain.FactoryID
 }
@@ -150,7 +162,7 @@ func (f *fixture) item(source domain.ItemSource, trigger string, at time.Time) d
 	f.t.Helper()
 
 	it, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
-		FactoryID: f.factory, Type: "fix", Title: "a flaky test", Station: station, State: domain.StateQueued,
+		FactoryID: f.factory, Type: typeFix, Title: "a flaky test", Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
 	})
 	if err != nil {
@@ -556,8 +568,8 @@ func testDeliveryRules(f *fixture) {
 	}
 }
 
-// PruneDeliveries deletes the deliveries received before the instant, in every organization, and
-// keeps the rest, the instant itself included.
+// PruneDeliveries deletes the deliveries received more than domain.DeliveryRetention before now,
+// in every organization, and keeps the rest, the cut itself included.
 func testPrune(f *fixture) {
 	t := f.t
 	s := f.endpoint(hooks, domain.WebhookGeneric)
@@ -571,7 +583,7 @@ func testPrune(f *fixture) {
 	theirs := labs.endpoint(hooks, domain.WebhookGeneric)
 	labs.deliver(theirs.Endpoint.ID, cut.Add(-time.Minute))
 
-	n, err := f.in.PruneDeliveries(context.Background(), cut)
+	n, err := f.in.PruneDeliveries(context.Background(), t0)
 	if err != nil || n != 2 {
 		t.Errorf("PruneDeliveries = %d, %v; want the 2 older rows", n, err)
 	}
@@ -795,7 +807,7 @@ func testTallies(f *fixture) {
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
-		FactoryID: otherFactory, Type: "fix", Title: "elsewhere", Station: station, State: domain.StateQueued,
+		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: t0, Source: domain.ItemFromGitHub, Trigger: flaky,
 	}); err != nil {
 		t.Fatal(err)
@@ -833,7 +845,7 @@ func testItemSources(f *fixture) {
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
-		FactoryID: otherFactory, Type: "fix", Title: "elsewhere", Station: station, State: domain.StateQueued,
+		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
 		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour), Source: domain.ItemFromAPI,
 	}); err != nil {
 		t.Fatal(err)
@@ -1095,7 +1107,24 @@ func testNoOrg(f *fixture) {
 		"TriggerStats":     func() error { _, err := f.in.TriggerStats(ctx, f.factory, t0); return err },
 		"ItemSources":      func() error { _, err := f.in.ItemSources(ctx, f.factory, 48); return err },
 		"TriggerDays":      func() error { _, err := f.in.TriggerDays(ctx, f.factory, t0); return err },
+		"OriginTally":      func() error { _, err := f.in.OriginTally(ctx, f.factory, t0); return err },
+		"ComingUp":         func() error { _, _, err := f.in.ComingUp(ctx, f.factory, 10); return err },
+		"TriageQueue":      func() error { _, err := f.in.TriageQueue(ctx, f.factory, 10); return err },
 		"Firings":          func() error { _, err := f.in.Firings(ctx, f.factory, flaky, 10); return err },
+		"CreateWebhook": func() error {
+			_, err := f.in.CreateWebhook(ctx, domain.NewWebhook{Name: orgHook, Sender: domain.SenderGitHub, Secret: hookToken})
+			return err
+		},
+		"Webhooks":          func() error { _, err := f.in.Webhooks(ctx); return err },
+		"WebhookByName":     func() error { _, err := f.in.WebhookByName(ctx, orgHook); return err },
+		"PatchWebhook":      func() error { _, err := f.in.PatchWebhook(ctx, id, domain.WebhookPatch{}); return err },
+		"WebhookSecretUses": func() error { _, err := f.in.WebhookSecretUses(ctx); return err },
+		"Receive": func() error {
+			_, err := f.in.Receive(ctx, domain.NewReceipt{WebhookID: id, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "d"})
+			return err
+		},
+		"UnnamedDays":      func() error { _, err := f.in.UnnamedDays(ctx, id, t0); return err },
+		"ConvertEndpoints": func() error { _, err := f.in.ConvertEndpoints(ctx, domain.LocalUser); return err },
 	}
 
 	for name, call := range calls {

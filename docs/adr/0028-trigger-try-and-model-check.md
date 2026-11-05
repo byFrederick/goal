@@ -1,6 +1,6 @@
 # ADR 0028 — Trying a trigger with a past event, and the model check in Only if
 
-Status: proposed · 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract, controls for features not built yet), [ADR 0017](0017-credentials.md) (organization credentials that connections refer to as `{{name}}`) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (connections, sealed secrets, the factory's model connection)
+Status: superseded in part by [ADR 0040](0040-one-door-for-every-source.md) (the model check, decisions 3–7, goes, and a check asks an agent instead; decisions 1 and 2 stay, and Try covers webhook deliveries and checks) · proposed 2026-10-27 · Builds on [ADR 0016](0016-ui-revamp.md) (the screens are the contract, controls for features not built yet), [ADR 0017](0017-credentials.md) (organization credentials that connections refer to as `{{name}}`) and [ADR 0008](0008-portable-runs-connections-and-knowledge.md) (connections, sealed secrets, the factory's model connection)
 
 ## Context
 

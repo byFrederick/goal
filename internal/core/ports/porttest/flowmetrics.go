@@ -49,7 +49,7 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 			}
 
 			perDay[it.DoneAt.UTC().Truncate(24*time.Hour)]++
-			leadTime = append(leadTime, it.DoneAt.Sub(it.CreatedAt).Seconds())
+			leadTime = append(leadTime, it.DoneAt.Sub(it.LeadFrom()).Seconds())
 		}
 	}
 
@@ -81,7 +81,7 @@ func (s *Store) assemblyLeadTime(org domain.OrgID, q ports.FlowQuery) (done int,
 	for _, it := range s.items {
 		if it.OrgID == org && it.FactoryID == q.FactoryID && ofType(it, q.Type) && parents[it.ID] &&
 			it.State == domain.StateDone && inWindow(it.DoneAt, q.Since, q.Until) {
-			lead = append(lead, it.DoneAt.Sub(it.CreatedAt).Seconds())
+			lead = append(lead, it.DoneAt.Sub(it.LeadFrom()).Seconds())
 		}
 	}
 
@@ -154,12 +154,12 @@ func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]
 		times := map[domain.Component]time.Duration{}
 
 		for _, sp := range s.spans[it.ID] {
-			if !sp.LeftAt.IsZero() {
+			if !sp.LeftAt.IsZero() && !sp.EnteredAt.Before(it.LeadFrom()) { // time before it started is not lead time
 				times[domain.ComponentOf(sp)] += sp.LeftAt.Sub(sp.EnteredAt)
 			}
 		}
 
-		out = append(out, domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.CreatedAt), Times: times})
+		out = append(out, domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.LeadFrom()), Times: times})
 	}
 
 	return out, nil

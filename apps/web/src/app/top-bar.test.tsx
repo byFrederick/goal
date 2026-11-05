@@ -126,19 +126,19 @@ function renderBar({ at, item }: { at: string; item?: { number: number } }) {
     component: () => <TopBarSlot crumb="New trigger" />,
   });
   const intakeIndex = createRoute({ getParentRoute: () => intake, path: '/', component: () => <p>Intake page</p> });
-  const webhooks = createRoute({
-    getParentRoute: () => intake,
-    path: 'webhooks',
-    component: () => <TopBarSlot crumb="Webhooks" />,
+  const webhook = createRoute({
+    getParentRoute: () => orgPages,
+    path: 'webhooks/$webhook',
+    component: () => <TopBarSlot crumb="github-acme" />,
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       orgRoute.addChildren([
-        orgPages.addChildren([home, connection, spend, models]),
+        orgPages.addChildren([home, connection, webhook, spend, models]),
         factoryRoute.addChildren([
           floor,
           items.addChildren([itemsIndex, itemRoute]),
-          intake.addChildren([intakeIndex, webhooks, newTrigger]),
+          intake.addChildren([intakeIndex, newTrigger]),
         ]),
       ]),
     ]),
@@ -226,11 +226,12 @@ describe('TopBar', () => {
     expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
   });
 
-  it('shows Software / Intake / Webhooks on the Webhooks page', async () => {
-    renderBar({ at: '/o/acme/f/software/intake/webhooks' });
+  it('starts a webhook page with the organization, then Webhooks, then its name', async () => {
+    renderBar({ at: '/o/acme/webhooks/github-acme' });
     const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(nav).getByRole('link', { name: 'Intake' }).getAttribute('href')).toBe('/o/acme/f/software/intake');
-    expect(within(nav).getByText('Webhooks').getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: 'Acme' }).getAttribute('href')).toBe('/o/acme');
+    expect(within(nav).getByRole('link', { name: 'Webhooks' }).getAttribute('href')).toBe('/o/acme/webhooks');
+    expect(within(nav).getByText('github-acme').getAttribute('aria-current')).toBe('page');
     expect(within(nav).getAllByRole('listitem')).toHaveLength(3);
   });
 

@@ -3,7 +3,7 @@
 // version, the try with a past event and the model check, and the layout at 375, 768 and 1440 px in light and dark. Not run in the box (no browser):
 // the pull request says so.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 const url = '/o/acme/f/software/intake/flaky-test-on-main';
 
@@ -20,14 +20,20 @@ test.describe('the trigger page', () => {
   test('shows the trigger as the picture does, with its week, events and YAML', async ({ page }) => {
     await page.goto(url);
     await expect(page.getByRole('heading', { level: 1, name: 'Flaky test on main' })).toBeVisible();
-    await expect(page.getByText('Created 3 items this week, 2 merged, $7.80 in all')).toBeVisible();
+    // The figures are NumberRoll: the glyphs are aria-hidden and each figure is spoken once in an sr-only span.
+    const week = page.getByRole('paragraph').filter({ hasText: 'items this week' });
+    await expect(week.locator('.sr-only')).toHaveText(['3', '2', '$7.80']);
+    await expect(week).toContainText('items this week');
     const when = page.getByRole('region', { name: 'When' });
-    await expect(when.getByRole('combobox', { name: 'Event' })).toHaveValue('github.check_run.failed');
+    await expect(when.getByRole('combobox', { name: 'Event' })).toHaveValue('github.check_run');
+    await expect(when.getByRole('group', { name: 'Action' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent events' })).toContainText('Created #150');
     const definition = page.getByRole('region', { name: 'In the definition' });
     await expect(definition.locator('pre')).toContainText('name: flaky-test-on-main');
     await expect(definition.getByRole('link', { name: 'Open file' })).toBeVisible();
-    await expect(page.getByText("Saving publishes a new version of Software's definition.")).toBeVisible();
+    // The sentence is the About saving tip beside the In the definition heading.
+    await definition.getByRole('button', { name: 'About saving' }).hover();
+    await expect(page.getByText('Saving publishes a new version of Software’s definition.')).toBeVisible();
   });
 
   test('disables only the controls that are not built yet', async ({ page }) => {
@@ -35,37 +41,41 @@ test.describe('the trigger page', () => {
     await expect(page.getByRole('button', { name: /Add another event/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
-  test('says why Try is unavailable for a GitHub trigger', async ({ page }) => {
+  test('offers Try with a delivery for a GitHub trigger that has events', async ({ page }) => {
     await page.goto(url);
-    await expect(page.getByRole('button', { name: 'Try with a past event' })).toBeDisabled();
-    await expect(
-      page.getByText("Only a schedule's events are stored, so this trigger's events cannot be tried."),
-    ).toBeVisible();
+    if (isPhone(page)) {
+      await page.getByRole('button', { name: 'More actions' }).click();
+      await expect(page.getByRole('menuitem', { name: 'Try with a delivery' })).toBeEnabled();
+    } else {
+      await expect(page.getByRole('button', { name: 'Try with a delivery' })).toBeEnabled();
+    }
   });
 
   test('runs a try of a schedule trigger against one of its past events, and creates nothing', async ({ page }) => {
     await page.goto('/o/acme/f/software/intake/dependency-audit');
-    await page.getByRole('button', { name: 'Try with a past event' }).click();
+    // On a phone the bar keeps only Save changes; the other actions sit behind More actions.
+    if (isPhone(page)) {
+      await page.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'Try with a past event' }).click();
+    } else {
+      await page.getByRole('button', { name: 'Try with a past event' }).click();
+    }
     const dialog = page.getByRole('dialog', { name: 'Try with a past event' });
     await dialog.getByRole('button', { name: 'Run the try' }).click();
     await expect(dialog.getByText('The trigger would create an item.')).toBeVisible();
     await expect(dialog.getByText('Nothing was created. The try changed no item, event or limit.')).toBeVisible();
   });
 
-  test('shows the question field when the model check is checked, and keeps Save off while it is blank', async ({
-    page,
-  }) => {
+  // ADR 0040 and software#645 removed the model check ("modelAgrees"): the page never asks about it.
+  test('never offers the removed model check, and saves another edit', async ({ page }) => {
     await page.goto('/o/acme/f/software/intake/dependency-audit');
-    const check = page.getByRole('checkbox', { name: /A model agrees it is worth an item/ });
-    await check.check();
-    const question = page.getByRole('textbox', { name: 'Question for the model' });
-    await expect(question).toBeVisible();
-    await question.fill('');
+    await expect(page.getByRole('heading', { level: 1, name: 'Dependency audit' })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: /model agrees/i })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Question for the model' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
-    await question.fill('Does this audit name a fix for a direct dependency?');
+    await page.getByRole('checkbox', { name: /Pause while/ }).check();
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText("Saved. Software's definition is version 3 now.")).toBeVisible();
-    await expect(page.getByRole('region', { name: 'In the definition' }).locator('pre')).toContainText('modelAgrees');
   });
 
   test('saves a change as a new version of the definition', async ({ page }) => {

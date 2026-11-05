@@ -151,6 +151,27 @@ type FactoryRecord struct {
 	ArchivedBy        *string
 }
 
+type FollowUp struct {
+	ID          uuid.UUID
+	OrgID       uuid.UUID
+	FactoryID   uuid.UUID
+	ItemID      uuid.UUID
+	RunID       *uuid.UUID
+	Station     string
+	Agent       string
+	Text        string
+	TextKey     string
+	Target      *string
+	ForFactory  *string
+	ForNumber   *int64
+	Start       []byte
+	State       string
+	Reason      *string
+	FiledItemID *uuid.UUID
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type GraderCheck struct {
 	ID         uuid.UUID
 	OrgID      uuid.UUID
@@ -380,4 +401,12 @@ type WorkItem struct {
 	Source            *string
 	IntegrationBranch *string
 	IntegrationLandAt *string
+	Origin            string
+	Via               *string
+	CreatedBy         *string
+	Generation        int32
+	Untrusted         bool
+	StartAt           *time.Time
+	StartedAt         *time.Time
+	Triage            bool
 }

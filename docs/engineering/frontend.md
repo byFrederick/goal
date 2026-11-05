@@ -181,7 +181,7 @@ The hints and the estimate are pure functions of the values (`budget-hints.ts`),
 
 Continue (`budget-step.tsx`) writes the picture's defaults ($150, $800, $12, Finish what's started, 10 items, 48 hours) for any field the draft leaves unset, flushes the draft, then calls `publishDraft` once with `expected_current_version_id: null` and `start: true` (ADR 0032 decision 4) and goes to `/o/<slug>/get-started/intake?factory=<id>`. A refusal (`definition-invalid` with its problems, `draft-base-moved`, 412 or an unreachable goald) shows its message on the step, lists the problems, and the step stays. The daily budget is shown and not enforced by goald yet (see the goald contract's `dailyUsd`).
 
-Step 6 (`features/onboarding/intake-step.tsx`, `docs/design/screens/get-started/triggers.jpg`) chooses where work comes from, at `/o/<slug>/get-started/intake?factory=<id>`. It reads the factory's triggers from `getIntake` (`intakeQuery`) and the published model (`versionModelQuery`, `current`). Each starter trigger is a row: its source's tile (`sourceIcon` from `intake/triggers-table.tsx`), its name, its `when` sentence, "Creates a <type> at <station>" ("in the expedite lane" when expedited) and a Switch. A switch starts at the trigger's `enabled`; one that is already on is shown on and cannot be turned off here (Intake does that). A trigger with `problem.kind` `missing_connection` shows "Connect GitHub" or "Connect Webhook", linking to the factory's webhooks page (`/intake/webhooks`), and its switch stays off and disabled. The "Always on:" chips are New item, goal item create and The API. The panel's Intake card lists the triggers switched on and "And New item, CLI, API". The step renders loading, error (with Retry), no triggers (a sentence and Continue) and ready.
+Step 6 (`features/onboarding/intake-step.tsx`, `docs/design/screens/get-started/triggers.jpg`) chooses where work comes from, at `/o/<slug>/get-started/intake?factory=<id>`. It reads the factory's triggers from `getIntake` (`intakeQuery`) and the published model (`versionModelQuery`, `current`). Each starter trigger is a row: its source's tile (`sourceIcon` from `intake/triggers-table.tsx`), its name, its `when` sentence, "Creates a <type> at <station>" ("in the expedite lane" when expedited) and a Switch. A switch starts at the trigger's `enabled`; one that is already on is shown on and cannot be turned off here (Intake does that). A trigger with `problem.kind` `missing_connection` shows "Connect GitHub" or "Connect Webhook", linking to the factory's webhooks page (`/intake/webhooks`), and its switch stays off and disabled. The "Always on:" chips are New item, goal run and The API. The panel's Intake card lists the triggers switched on and "And New item, CLI, API". The step renders loading, error (with Retry), no triggers (a sentence and Continue) and ready.
 
 "Turn on N triggers" (N is the switched-on triggers that were off, and "Continue" when N is 0) calls `setTriggersEnabled` (`intake/set-trigger-enabled.ts`): one `openDraft`, one `putDraftFile` of `factory.yaml` with `withTriggerEnabled` applied per trigger, and one `publishDraft` naming the factory's current version, so a version published in the meantime is a conflict. It then goes to `/o/<slug>/get-started/people?factory=<id>`. An open draft with someone's edits (`OpenDraftError`) or a refused publish shows its message on the step, and the step stays. The mock's code-review template carries the three starter triggers, off; the mock's intake reads the other factories' triggers from their `factory.yaml`.
 
@@ -211,7 +211,9 @@ The end of onboarding is the Floor's two cards for a new factory, shown only unt
 
 The count reads "N of 9 done" beside a ring (`role=img`). Closing the card (Hide setup) writes `goal.setup-hidden.<factory id>` to localStorage, so it stays closed in that browser only; the card renders nothing when all nine are done. Its loading, error (with Retry, which reads only the failed queries) and ready states are the Floor cards' own.
 
-**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. A "Label an issue" row for each enabled `github.issues.labeled` trigger shows the label it matches, read from the published intake entry's `filter.label` (`labelRows`), with a Copy button. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`). "goal item create" copies the CLI command. With no triggers, a line says so under the rows.
+**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. A "Label an issue" row for each enabled `github.issues.labeled` trigger shows the label it matches, read from the published intake entry's `filter.label` (`labelRows`), with a Copy button. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`). "goal run" copies the CLI command. With no triggers, a line says so under the rows.
+
+**Came from** (`shared/origin.tsx`, the item page's Details card) says where an item came from, from `getItem`'s `came_from`. A follow-up reads "A follow-up by <agent> on <source item>, filed when <item> landed", one line per follow-up, with both refs linked (another factory's included). A check's item reads "The check <name>, <key>" (no key: "The check <name>"), and a schedule's or webhook's reads the trigger's name. A person's reads "<name>, the CLI"; a part's reads "Part of <assembly ref> <title>". Intake's Coming up rows carry no `came_from`, so they keep "Follow-up from <ref>".
 
 ### Signing in (phase 3)
 
@@ -408,14 +410,32 @@ every other line and comment stays byte for byte. A file with no `triggers` key,
 trigger written in place (and `board` under `spec` when that is missing too). The draft-model API cannot carry `board.triggers`
 yet (`internal/factorymodel/model.go`), which is why the page does not use it.
 
-Try with a past event (ADR 0028, `trigger-try.tsx`) opens a dialog that runs `POST …/intake/triggers/{trigger}/try`
-(`tryIntakeTrigger`, through the `intakeTryMutation` key) against one of the trigger's events. It tries the
-saved trigger, not the open edits: Try is disabled with its reason while the form has unsaved edits, for a
-trigger that is not saved yet, for a trigger that is not a schedule (its events are not stored, the API's
-`event-not-stored`) and for a schedule with no past events. The result says whether the event matched, each step,
-the item it would create and, when the Only if has the model check, the model's answer and its cost; it also says
-nothing was created. The model check's question is the Only if's `modelAgrees.question`, written with the other
-keys; a blank question blocks Save. The connection and model of `modelAgrees` are kept as the file has them.
+The When block picks the sender or one webhook and any GitHub event. The event table (which filters each event
+supplies) is `github-events.ts`, mirrored by hand from `internal/catalog/senders/github.yaml` because no API serves
+it. The form offers only the filters the chosen event supplies (action, conclusion, branch, repo as a list, label,
+paths, authors, skipBots), then payload matches (`filter.match`) and `perHour` next to `perDay`. Legacy `on` keys
+(`github.check_run.failed`) read in the schema's current words through `normalizeTrigger` and `readRawTrigger`, and
+keep their lines until `on` or `filter` is edited. The model check is not on the page: the form never asks about it,
+and a file's `only.modelAgrees` is kept as it is on save (the draft shows its `field-ignored` warning).
+
+A trigger with `check` shows the check layout (`trigger-check-section.tsx`, `trigger-check-log.tsx`). `TriggerForm`
+and `CheckSection` take `value` and `onChange` and never fetch, so the New trigger page can mount them. The Check
+block has the agent, its tools as chips and the Brief (it shows the `check.brief` value; a `./triggers/<name>.md`
+path shows as the path). Remembers shows the open and closed counts and how far the check has read, with Clear
+(`clearTriggerState`; a 409 means a check is still running and shows that reason). Limits are `perCheck`, `perDay`,
+`maxUsd` and `perHour`. `RecentChecks` reads `triggerChecksQuery` (`listTriggerChecks`): each row has the time, the
+status (Filed, Noted, Nothing new, Failed), every filed, noted and skipped key with its reason and item link, and
+the cost. The Today line counts the newest 100 checks, since the API has no day total.
+
+Try with a past delivery (ADR 0028, `trigger-try.tsx`) opens a dialog that runs `POST …/intake/triggers/{trigger}/try`
+(`tryIntakeTrigger`, through the `intakeTryMutation` key) against one of the trigger's stored deliveries. It tries
+the saved trigger, not the open edits: Try is disabled with its reason while the form has unsaved edits and for a
+trigger that is not saved yet. A delivery older than 30 days answers `event-not-stored`, and the dialog shows
+`notStoredReason`. The result says whether the delivery matched, each step and the item it would create, and that
+nothing was created.
+
+Try a check (`TryCheck`, `tryTriggerCheck`) queues one check for the saved trigger and shows it as a row marked as a
+try. A 409 (a check is still running) holds the button off with that reason; a 422 (`no-check`) shows its problem.
 
 Rules the page follows:
 - A draft with edits of its own blocks the save, with a link to the definition editor: the page never
@@ -428,11 +448,12 @@ Rules the page follows:
   shows under that block, any other problem above the form. Save stays off while an error stands.
 - A name the definition does not have opens a blank trigger when the URL has `?on=<event key>` (the New
   trigger picker's choice). The picker itself is not on this page.
-- "Try with a past event", "A model agrees it is worth an item" and "+ Add another event" render disabled
-  with "Not available yet" (ADR 0016, decision 4; ADR 0028 for the model check).
+- "+ Add another event" renders disabled with "Not available yet" (ADR 0016, decision 4).
 
 Stream events: a `definition` event and an `item` event both invalidate `intakeKeys.root`, so the
-trigger's results and its YAML re-read.
+trigger's results and its YAML re-read. The stream has no check event and no query polls, so a queued try shows
+Queued until an item event, a definition event or a window-focus refetch. A check event in goald is the backend
+follow-up that would fix this.
 
 ### Intake
 
@@ -445,30 +466,17 @@ The Intake screens (ADR 0016, `intake/`; the triggers of ADR 0026) are `features
 - **New trigger** (`new-trigger-dialog.tsx`, `sources.ts`): MASTER.md's two-pane picker. Schedule, Webhook, GitHub and Cloudflare are choosable; Slack, Linear, Jira and Sentry are disabled ("Not available yet", ADR 0016 decision 4). Only `github.issues.labeled`, `github.check_run.failed` and `schedule` can be chosen (the schema's accepted keys). Continue goes to `…/intake/new/<source>?on=<event key>`, built by `newTriggerHref`.
 
 The Vitest suites are `intake-page.test.tsx` (the four states), `intake-switch.test.tsx` (the publish, the revert, the refusal while a draft is open and the permission), `trigger-yaml.test.ts` and `new-trigger-dialog.test.tsx`. `e2e/intake.spec.ts` covers the page at 1440 and 375 px and the picker; it was not run in the box. The mock's `software` factory has no seeded definition, so the switch's publish is covered by Vitest only.
-### Webhooks page
+### Webhooks pages
 
-`/o/$org/f/$factory/intake/webhooks` (`routes/o.$org.f.$factory.intake.webhooks.tsx`, `features/webhooks/`), the factory's Intake page for webhook endpoints (ADR 0026). The sidebar's Intake entry stays unavailable until the Intake list is built. The loader prefetches the list (`webhooksQuery`); the page shows its own loading, error, empty and ready states.
+The organization's webhooks (ADR 0040 decisions 12, 13 and 20; `features/webhooks/`, canvases `docs/design/screens/organization/webhooks`, `webhook` and `webhook-new`). The sidebar lists Webhooks right after Secrets for people with `webhook:read`. Routes: `/o/$org/webhooks` (the list), `/o/$org/webhooks/$webhook` (by name) and `/o/$org/webhooks/new`. The factory's old address `/o/$org/f/$factory/intake/webhooks` only redirects to the list, so Intake's and onboarding's links keep working.
 
-- **Data**: `api/webhooks.ts` calls the five webhook operations through the generated client. The list is `['org', org, 'factory', factory, 'webhooks']` (`keys.webhooks`), and each endpoint's deliveries sit under that prefix, so one prefix refreshes both. Addresses are `${origin}${address}`, where `address` is `/hooks/{endpoint id}` as the contract gives it.
-- **The one-time secret**: a create or a rotate returns the secret once. Its mutation keeps the answer in the page's state, not in the mutation result or the query cache, and then invalidates the list. The secret dialog (`secret-dialog.tsx`) closes only on Done, and dropping the page's state drops the secret. `webhooks-page.test.tsx` checks that the secret is in no DOM and no query after Done.
-- **Rotate** asks first (a confirmation that the sender stops until it has the new secret). A failed rotation keeps the confirmation open and says why inside it; the confirmation closes only when the new secret is shown. Create and Rotate need a sign-in from the last 10 minutes: the session wrapper (`session.ts`) opens the re-auth dialog on `reauth-required` and sends the request once more. `api/webhooks.test.ts` covers that path, and a 401 calls the unauthenticated handler.
-- **Refresh**: the list refetches on the factory's item events (`'webhooks'` in `workKeys`, `shared/invalidation.ts`), on resync and on window focus. A created delivery makes an item, so item events cover it. A refused delivery makes no item, and the stream has no event for it, so it shows on the next refetch. The stream's `intake` event is an API follow-up.
-- **Feeds**: an endpoint's triggers as chips, or "Nothing. n deliveries were kept but created no items." with a plain link to `…/intake/new` (the trigger page is built by the web-intake part). The count is the week's delivered and refused deliveries.
-- **Deliveries**: the newest five of each endpoint, one page; paging is not built. A refused row is red and says its reason. View request opens the request's headers and body; a body that is not UTF-8 text is labelled base64.
-- **Send a test**: a curl sample for the first endpoint, with `X-Goal-Signature` (`X-Hub-Signature-256` for a GitHub endpoint). The fields the trigger can read are the top-level keys of the newest accepted delivery's JSON body, or `event` alone. "Send a sample delivery" is `NotAvailable`: the browser never holds a secret, so it cannot sign a request to `/hooks/{id}`.
+- **Data**: `api/webhooks.ts` calls only the organization routes through the generated client. Keys: `keys.webhooks(org)` is the prefix of the list, of each webhook (`keys.webhook`) and of its delivery log (`keys.webhookDeliveries`, an infinite query paged by `next_after`, 20 a page). Item events and window focus refetch it (`invalidation.ts`).
+- **List**: each row links to the webhook and shows its sender, address, secret by name, the factories it is open to (letter badge and title), a status (Receiving, No trigger yet, Switched off) and the week's count. Loading, error, empty and ready are the page's states.
+- **A webhook**: Connection (address with Copy, secret by name linking to Secrets, sender, and for GitHub the ping from `pinged_at`), Deliveries, Open to with the triggers that use it, and Set it up in the sender with `setup_events` (or "every event" for `setup_all_events`). Delivery rows show the receipt (Accepted, Duplicate, Refused with its reason) and one line per factory in `evaluations`: Created with the item's ref, Skipped, Failed. A delivery accepted that no factory names has no row: the log counts those loaded in one line. View request (headers and body) is rendered only with `webhook:manage`; the page never calls `getOrgWebhookDelivery` without it.
+- **Edit openings** (`edit-webhook-dialog.tsx`) opens, closes, limits to repositories and renames in one `patchWebhook`. A 409 `webhook-in-use` lists `problem.triggers` with their factories (`TriggersInUse`, also used by Delete).
+- **New webhook**: six senders (`words.ts`), a name, a generated or an existing secret, and optional openings, which are a second request after the create (a failure leaves the webhook and says so in a toast). A generated `secret_value` goes to the page's state for the dialog (`secret-dialog.tsx`), closes only on Done, and never enters the mutation result, the query cache or the URL; the test checks all three. 400 and 409 problems show on the Name or Secret field.
 
-Differences from `docs/design/screens/intake/webhooks.jpg`, each for a reason:
-
-- The address is `/hooks/{endpoint id}`, not `/hooks/<factory>/<name>`: ADR 0026 decision 3, since a name keys the factory (AGENTS.md rule 2).
-- The secret is a sealed secret shown once with Rotate, not a credential "in Credentials": ADR 0026 decision 2.
-- The endpoint's name stands where the picture's display title does ("acme-deploys", not "Acme deploys"): the API has no display title.
-- Each trigger is named but not placed ("fix at Spec, expedite lane" is left out): the API does not return the placement.
-- A refusal has its reason only, with no second explanation line: the API gives no such text.
-- The delivery row has no event name ("deploy.failed"): the API has none; the row says the outcome.
-- The top bar's crumb reads "Webhooks" beside the factory badge, not "Intake › Webhooks": the Intake page is not built.
-- Each day bar's tooltip names the day and its counts; the card's words give the week's totals.
-- "Send a test" says the delivery shows "once the page refreshes", not "within seconds": the list refetches on item events and focus, not on a timer.
-- Rotate asks for a confirmation, which the picture does not show.
+Differences from the canvases: the sender's icon tile is left out (MASTER.md forbids icon tiles); a delivery row shows no "Today" divider, only each delivery's time; "counted only" counts the loaded deliveries no factory names, as the API gives no week-wide count of them; Delete is on the page's top bar, which the canvas does not show.
 
 ### Factory settings
 

@@ -18,10 +18,12 @@ func testItemTimes(f *fixture) {
 		return domain.Position{Station: station, State: state}
 	}
 
-	// Waits at work 1 h, is blocked 1 h, waits again 1 h, waits on a person at next 2 h, is
-	// sent back by next and waits 1 h in that round, then is done: 6 h in all.
-	it := f.create(t, domain.NewItem{CreatedAt: hours(0)})
+	// Waits 2 h at the inbox, which is not lead time, then waits at work 1 h, is blocked 1 h,
+	// waits again 1 h, waits on a person at next 2 h, is sent back by next and waits 1 h in that
+	// round, then is done: 6 h in all from when it left the inbox.
+	it := f.create(t, domain.NewItem{Station: stInbox, CreatedAt: hours(-2)})
 	for _, tr := range []ports.Transition{
+		{From: pos(stInbox, domain.StateQueued), To: pos(stWork, domain.StateQueued), At: hours(0)},
 		{From: pos(stWork, domain.StateQueued), To: pos(stWork, domain.StateBlocked), At: hours(1)},
 		{From: pos(stWork, domain.StateBlocked), To: pos(stWork, domain.StateQueued), At: hours(2)},
 		{From: pos(stWork, domain.StateQueued), To: pos(stNext, domain.StateWaitingHuman), At: hours(3)},

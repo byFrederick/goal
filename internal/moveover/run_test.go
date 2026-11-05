@@ -3,6 +3,7 @@ package moveover_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -63,6 +64,7 @@ type world struct {
 	conns       *porttest.Connections
 	secrets     *porttest.OrgSecrets
 	kb          *porttest.Knowledge
+	intake      *porttest.Intake
 	defs        *porttest.Definitions
 	conversions *porttest.FactoryConversions
 	settings    *porttest.NotificationSettings
@@ -100,6 +102,8 @@ func newWorld(t *testing.T) *world {
 	w.settings = porttest.NewNotificationSettings(w.secrets, w.tenancy)
 	w.kb = porttest.NewKnowledge(w.conns, w.tenancy)
 	w.kb.ReadSecrets(w.secrets)
+	w.intake = porttest.NewIntake(w.key, w.store)
+	w.intake.UseSecrets(w.secrets)
 	w.defs = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Items: w.store, Audit: w.tenancy, Now: w.clock.Now})
 	w.conversions = porttest.NewFactoryConversions()
 
@@ -155,7 +159,7 @@ func newWorld(t *testing.T) *world {
 	})
 
 	w.mover = moveover.New(moveover.Deps{
-		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Settings: w.settings, Knowledge: w.kb, Definitions: w.defs, Publisher: authors,
+		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Settings: w.settings, Knowledge: w.kb, Webhooks: w.intake, Definitions: w.defs, Publisher: authors,
 		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Tools: w.tools,
 		Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
@@ -496,7 +500,7 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 
 	ctx := w.ctx(t)
 
-	if _, err := e.Submit(ctx, domain.NewItem{FactoryID: factoryUUID, Type: "feature", Title: "Add the flag"}); err != nil {
+	if _, err := e.Submit(ctx, domain.FileRequest{Origin: domain.OriginPerson, FactoryID: factoryUUID, Type: "feature", Title: "Add the flag"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1387,5 +1391,97 @@ func TestRun_SourceOnScopedSecretNotMoved(t *testing.T) {
 
 	if strings.Contains(logs, "shared-docs-value-for-tests") {
 		t.Error("a secret's value reached the logs")
+	}
+}
+
+// Run moves the organization's factory webhook endpoints to the organization, open to their
+// factory, logs a rename without the value and counts them; a second Run converts none.
+func TestRun_ConvertsWebhookEndpoints(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.store.AddFactory(w.org, factoryUUID)
+
+	ctx := w.ctx(t)
+	values := map[string]string{}
+
+	for _, n := range []domain.NewWebhookEndpoint{
+		{FactoryID: factoryUUID, Name: "github", Kind: domain.WebhookGitHub},
+		{FactoryID: factoryUUID, Name: "ci-hooks", Kind: domain.WebhookGeneric},
+	} {
+		s, err := w.intake.CreateEndpoint(ctx, n)
+		if err != nil {
+			t.Fatalf("CreateEndpoint %s: %v", n.Name, err)
+		}
+
+		values[n.Name] = hex.EncodeToString(s.Secret)
+	}
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkWebhooks(t, values["github"])
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkWebhookLogs(t, values)
+}
+
+// checkWebhooks checks the organization has the webhooks github-2 (sender github, signed by
+// webhook-github-2 holding value) and ci-hooks (standard), both open to the factory.
+func (w *world) checkWebhooks(t *testing.T, value string) {
+	t.Helper()
+
+	ctx := w.ctx(t)
+
+	hooks, err := w.intake.Webhooks(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]domain.WebhookSender{}
+
+	for _, h := range hooks {
+		if _, ok := h.Opening(factoryUUID); ok {
+			got[h.Name] = h.Sender
+		}
+	}
+
+	if want := map[string]domain.WebhookSender{"github-2": domain.SenderGitHub, "ci-hooks": domain.SenderStandard}; !maps.Equal(got, want) {
+		t.Errorf("the organization's webhooks open to the factory = %v; want %v", got, want)
+	}
+
+	for _, h := range hooks {
+		if h.Name != "github-2" {
+			continue
+		}
+
+		if s, err := w.secrets.OpenSigning(ctx, h.SecretID); err != nil || s.Current != value || h.Secret != "webhook-github-2" {
+			t.Errorf("github-2's secret %s, %v; want webhook-github-2 holding the endpoint's value", h.Secret, err)
+		}
+	}
+}
+
+// checkWebhookLogs checks the two runs' lines count two webhooks and then none, the rename is
+// logged once and no value of values reached the logs.
+func (w *world) checkWebhookLogs(t *testing.T, values map[string]string) {
+	t.Helper()
+
+	logs := w.logs.String()
+	if !strings.Contains(logs, `"webhooks":2`) || !strings.Contains(logs, `"webhooks":0`) {
+		t.Errorf("the moved over lines do not count two webhooks, then none:\n%s", logs)
+	}
+
+	if n := strings.Count(logs, `"msg":"webhook renamed"`); n != 1 || !strings.Contains(logs, `"from":"github","to":"github-2"`) {
+		t.Errorf("%d webhook renamed lines; want one, github to github-2:\n%s", n, logs)
+	}
+
+	for _, v := range values {
+		if strings.Contains(logs, v) {
+			t.Error("a webhook's value reached the logs")
+		}
 	}
 }

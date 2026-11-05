@@ -70,6 +70,14 @@ export function formatClock(iso: string, now = new Date()): string {
   return sameDay ? clock.format(d) : `${dayMonth.format(d)}, ${clock.format(d)}`;
 }
 
+const weekdayDay = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+/** "Mon, Nov 10" and "09:00" for a start time, in the reader's time zone. */
+export function formatStart(iso: string): { day: string; time: string } {
+  const d = new Date(iso);
+  return { day: weekdayDay.format(d), time: clock.format(d) };
+}
+
 /** "Oct 17" from an ISO date or day ("2026-10-17"). */
 export function formatDay(day: string): string {
   return dayMonth.format(new Date(day.length === 10 ? `${day}T12:00:00Z` : day));
