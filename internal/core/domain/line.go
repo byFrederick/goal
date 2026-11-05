@@ -213,8 +213,30 @@ type Runtime struct {
 	WeeklyUSD   float64
 	OnExhausted BudgetPolicy
 	// Repository is cloned into every run's sandbox; the zero value means runs get an empty
-	// workspace.
+	// workspace. It is the default entry of Repositories until runs start with an item's
+	// repositories (ADR 0041).
 	Repository Repository
+	// Repositories are the factory's runtime.repositories entries, the shorthand's one entry
+	// included, which an item's repositories are matched against (ADR 0041 decision 2); nil for a
+	// factory with no code.
+	Repositories []RepositoryEntry
+}
+
+// RepositoryEntry is an entry of runtime.repositories: its name, the URL of one repository or of
+// an owner's every repository (an owner pattern ending in /*), the {{secret}} token that opens
+// it, its access (read or write) and whether an item that names no repository uses it.
+type RepositoryEntry struct {
+	Name, URL, Token, Access string
+	Default                  bool
+}
+
+// DefaultEntry is the entry an item that names no repository uses; false when none is.
+func (r Runtime) DefaultEntry() (RepositoryEntry, bool) {
+	if i := slices.IndexFunc(r.Repositories, func(e RepositoryEntry) bool { return e.Default }); i >= 0 {
+		return r.Repositories[i], true
+	}
+
+	return RepositoryEntry{}, false
 }
 
 // Repository is a git repository that agent tasks work on.

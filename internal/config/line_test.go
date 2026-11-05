@@ -414,6 +414,9 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		Model: "claude-sonnet-5-5", ModelConnection: "claude", Size: domain.SandboxLarge, Tools: []string{"go@1.26.10", "task@3.46.1"},
 		MaxTurnsPerTask: 50, PerItemUSD: 2.5,
 		Repository: domain.Repository{URL: "https://git.example.com/acme/line.git", Connection: "code"},
+		Repositories: []domain.RepositoryEntry{
+			{Name: "line", URL: "https://git.example.com/acme/line.git", Access: AccessWrite, Default: true},
+		},
 	}
 	if !reflect.DeepEqual(l.Runtime, wantRuntime) {
 		t.Errorf("runtime = %+v, want %+v", l.Runtime, wantRuntime)
@@ -1023,5 +1026,40 @@ func TestLine_RepositoryIsTheDefaultEntry(t *testing.T) {
 				t.Errorf("repository = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// The line carries every runtime.repositories entry, for items' repositories to match against,
+// with the default the single-repository entry gets; the default entry stays the line's
+// Repository, which run start reads.
+func TestLine_CarriesRepositoryEntries(t *testing.T) {
+	t.Parallel()
+
+	f := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{
+		{Name: "app", URL: "https://github.com/acme/app", Token: "{{gh}}", Access: AccessWrite, Default: true},
+		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead},
+	}}}}
+
+	l := f.Line()
+
+	want := []domain.RepositoryEntry{
+		{Name: "app", URL: "https://github.com/acme/app", Token: "{{gh}}", Access: AccessWrite, Default: true},
+		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead},
+	}
+	if !reflect.DeepEqual(l.Runtime.Repositories, want) {
+		t.Errorf("repositories =\n%+v\nwant\n%+v", l.Runtime.Repositories, want)
+	}
+
+	if got := l.Runtime.Repository; got != (domain.Repository{URL: "https://github.com/acme/app", Token: "{{gh}}"}) {
+		t.Errorf("repository = %+v; want the default entry", got)
+	}
+
+	one := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead}}}}}
+	if e, ok := one.Line().Runtime.DefaultEntry(); !ok || e.Name != "app" {
+		t.Errorf("a single entry's default = %+v, %t; want app", e, ok)
+	}
+
+	if got := (&Factory{}).Line().Runtime.Repositories; got != nil {
+		t.Errorf("no code: repositories = %+v; want none", got)
 	}
 }

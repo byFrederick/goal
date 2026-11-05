@@ -28,6 +28,50 @@ func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 	}
 }
 
+// A new item's branch names its factory: goal/<factory>/<number>-<slug>, with Branch's slug;
+// without a factory name it is today's goal/<number>-<slug>.
+func TestItemBranch_NamesTheFactory(t *testing.T) {
+	t.Parallel()
+
+	if got, want := ItemBranch("acme", 7, "Add a `goal version` subcommand"), "goal/acme/7-add-a-goal-version-subcommand"; got != want {
+		t.Errorf("ItemBranch = %q; want %q", got, want)
+	}
+
+	if got, want := ItemBranch("acme", 4, "???"), "goal/acme/4"; got != want {
+		t.Errorf("ItemBranch without a slug = %q; want %q", got, want)
+	}
+
+	if got, want := ItemBranch("", 12, "Fix it"), "goal/12-fix-it"; got != want {
+		t.Errorf("ItemBranch without a factory = %q; want %q", got, want)
+	}
+
+	if got := BranchFactory("goal/acme/7-x"); got != "acme" {
+		t.Errorf("BranchFactory = %q; want acme", got)
+	}
+
+	for _, b := range []string{"goal/7-x", "", "goal/a7-x"} {
+		if got := BranchFactory(b); got != "" {
+			t.Errorf("BranchFactory(%q) = %q; want none", b, got)
+		}
+	}
+}
+
+// The stored branch wins: renaming the item or its factory never moves it. Only an item without
+// one (an old instance's insert) falls back to goal/<number>-<slug>.
+func TestItemBranch_StoredBranchWins(t *testing.T) {
+	t.Parallel()
+
+	it := Item{Number: 7, Title: "Renamed since", StoredBranch: "goal/acme/7-add-a-flag"}
+	if got := it.Branch(); got != "goal/acme/7-add-a-flag" {
+		t.Errorf("Branch = %q; want the stored goal/acme/7-add-a-flag", got)
+	}
+
+	it.StoredBranch = ""
+	if got := it.Branch(); got != "goal/7-renamed-since" {
+		t.Errorf("Branch without a stored one = %q; want goal/7-renamed-since", got)
+	}
+}
+
 func TestAssemblyProgress_CountsMergedWorkingAndWaitingParts(t *testing.T) {
 	t.Parallel()
 

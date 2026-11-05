@@ -39,6 +39,12 @@ func (f *Factory) Line() domain.Line {
 		}
 	}
 
+	for _, e := range s.Runtime.RepositoryEntries() {
+		l.Runtime.Repositories = append(l.Runtime.Repositories, domain.RepositoryEntry{
+			Name: e.Name, URL: e.URL, Token: e.Token, Access: e.Access, Default: e.Default,
+		})
+	}
+
 	l.Environments = environments(f.environments)
 
 	for _, c := range s.Connections {

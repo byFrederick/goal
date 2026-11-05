@@ -77,7 +77,10 @@ type Item struct {
 	// branch).
 	IntegrationBranch string
 	IntegrationLandAt string
-	Type              string
+	// StoredBranch is the branch the store set at filing (ItemBranch), "" for an item an instance
+	// from before work_items.branch filed; read it through Branch.
+	StoredBranch string
+	Type         string
 	// Lane picks the agent at stations that route by lane. Empty until intake or an output sets it.
 	Lane     string
 	Title    string
@@ -142,17 +145,50 @@ func (it Item) Work() string {
 // maxSlug bounds the title part of a branch name.
 const maxSlug = 40
 
-// Branch is the git branch an item's changes live on: goal/<number>-<title slug>. It depends
-// only on the item's number and title, so every run of the item, rework included, works on
-// the same branch.
+// Branch is the git branch an item's changes live on: the one stored at filing (ItemBranch),
+// so every run of the item, rework included, works on the same branch, and renaming the item or
+// its factory never moves it. An item filed without one (by an instance from before
+// work_items.branch) gets goal/<number>-<title slug>, what the migration backfilled.
 func (it Item) Branch() string {
-	return branchName("goal/", it)
+	if it.StoredBranch != "" {
+		return it.StoredBranch
+	}
+
+	return branchName("goal/", it.Number, it.Title)
+}
+
+// ItemBranch is the branch an item filed now gets, which the store keeps:
+// goal/<factory>/<number>-<title slug>, factory being the factory's name at filing, so two
+// factories working in one repository never share a branch (ADR 0041 decision 6). Without a
+// factory name it is goal/<number>-<title slug>.
+func ItemBranch(factory string, number int64, title string) string {
+	if factory == "" {
+		return branchName("goal/", number, title)
+	}
+
+	return branchName("goal/"+factory+"/", number, title)
+}
+
+// BranchFactory is the factory part of a branch ItemBranch named, "" for one without (an item's
+// from before ADR 0041). A part's branch names its assembly's.
+func BranchFactory(branch string) string {
+	rest, ok := strings.CutPrefix(branch, "goal/")
+	if !ok {
+		return ""
+	}
+
+	factory, _, ok := strings.Cut(rest, "/")
+	if !ok {
+		return ""
+	}
+
+	return factory
 }
 
 // IntegrationBranch is the git branch an assembly's parts merge into in integration mode branch:
 // goal/a<root number>-<root title slug>, with the slug of Item.Branch (ADR 0033).
 func IntegrationBranch(root Item) string {
-	return branchName("goal/a", root)
+	return branchName("goal/a", root.Number, root.Title)
 }
 
 // Landing reports whether it is a landing root: an assembly with an integration branch, which
@@ -181,15 +217,15 @@ func RunBase(it, root Item, prBase string) (branch, base string) {
 	return it.Branch(), root.IntegrationBranch
 }
 
-// branchName is prefix, the item's number and, when its title has one, a dash and the title's
-// slug: lowercase ASCII letters and digits, each other run of characters one dash, cut near
-// maxSlug.
-func branchName(prefix string, it Item) string {
+// branchName is prefix, number and, when title has one, a dash and title's slug: lowercase
+// ASCII letters and digits, each other run of characters one dash, cut near maxSlug. Migration
+// 00129 computes the same in SQL for the items it backfills.
+func branchName(prefix string, number int64, title string) string {
 	var b strings.Builder
 
 	dash := false
 
-	for _, r := range strings.ToLower(it.Title) {
+	for _, r := range strings.ToLower(title) {
 		switch {
 		case r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r)):
 			if dash && b.Len() > 0 {
@@ -210,10 +246,10 @@ func branchName(prefix string, it Item) string {
 
 	slug := strings.TrimRight(b.String(), "-")
 	if slug == "" {
-		return fmt.Sprintf("%s%d", prefix, it.Number)
+		return fmt.Sprintf("%s%d", prefix, number)
 	}
 
-	return fmt.Sprintf("%s%d-%s", prefix, it.Number, slug)
+	return fmt.Sprintf("%s%d-%s", prefix, number, slug)
 }
 
 // NewItem is a filed item, as domain.File checks it, for the store to write.
@@ -247,6 +283,12 @@ type NewItem struct {
 	StartAt   time.Time
 	StartedAt time.Time
 	After     []ItemID
+	// FactoryName is the factory's name at filing, which the store puts in the item's branch
+	// (ItemBranch); a part's is its assembly's (BranchFactory). "" gives the branch no factory.
+	FactoryName string
+	// Repositories are the repositories the item starts with, in order (domain.File); the store
+	// writes each with the item, joined at CreatedAt.
+	Repositories []ItemRepository
 }
 
 // Assembly is an item with parts: a request split into several items (each part's ParentID is
