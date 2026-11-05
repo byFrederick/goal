@@ -16,7 +16,8 @@ import (
 // that names a pull request keeps the base the pull request was opened against, read from its code
 // host: a failed read fails the claim rather than guess the default branch. A landing root
 // (domain.Item.Landing) works on its integration branch with the default branch as its base, at
-// every station.
+// every station. A part that builds on the integration branch gives the assembly that branch in
+// each of its repositories (joinIntegration).
 func (e *Engine) integrate(ctx context.Context, log *slog.Logger, c *claimed) error {
 	it := c.item
 	if it.Landing() {
@@ -52,6 +53,36 @@ func (e *Engine) integrate(ctx context.Context, log *slog.Logger, c *claimed) er
 	// The default branch leaves both empty, so a trunk run's task token is as before.
 	if branch, base := domain.RunBase(it, root, prBase); base != "" {
 		c.branch, c.base = branch, base
+
+		return e.joinIntegration(ctx, log, c.line, it, root)
+	}
+
+	return nil
+}
+
+// joinIntegration gives root, whose part it builds on root's integration branch, that branch in
+// each of the part's repositories (ADR 0041 decision 5): one the assembly lacks joins it, so its
+// landing covers every repository a part changes. The store sets each once, so a retried claim
+// changes nothing; repositories past domain.MaxItemRepositories are left out and logged.
+func (e *Engine) joinIntegration(ctx context.Context, log *slog.Logger, l domain.Line, it, root domain.Item) error {
+	rows, err := e.store.ItemRepositories(ctx, it.ID)
+	if err != nil {
+		return fmt.Errorf("repositories of %s: %w", it.ID, err)
+	}
+
+	keys := domain.ItemRepositoryKeys(domain.ResolveItemRepositories(rows, l))
+	if len(keys) == 0 {
+		return nil
+	}
+
+	left, err := e.store.JoinIntegrationRepositories(ctx, root.ID, keys, root.IntegrationBranch, e.clock.Now())
+	if err != nil {
+		return fmt.Errorf("give the assembly its integration branch in the part's repositories: %w", err)
+	}
+
+	if len(left) > 0 {
+		log.WarnContext(ctx, "integration repositories left out", slog.String("assembly", string(root.ID)),
+			slog.Any("repositories", left), slog.Int("max", domain.MaxItemRepositories))
 	}
 
 	return nil

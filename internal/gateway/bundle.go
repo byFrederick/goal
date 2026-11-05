@@ -40,9 +40,10 @@ type runBundle struct {
 	Git []gitCredential `json:"git_credentials"`
 	// Repositories, RepositoryLogins and ReadOnly are a station run's code (domain.RunCode, ADR
 	// 0041 decisions 3 and 5): the item's repositories to clone, a login per entry with a token,
-	// and the URL prefixes the run may not write, each [] when it has none. A check's are its
-	// code (domain.Line.CheckCode): no clone, and every prefix read only. Prepare does not read
-	// them yet (software#718); every other run's bundle has them null.
+	// and the URL prefixes the run may not write, each [] when it has none. Prepare clones them by
+	// path, signs git in per repository path with the logins and refuses pushes under ReadOnly
+	// (apps/worker/README.md). A check's are its code (domain.Line.CheckCode): no clone, and every
+	// prefix read only. Every other run's bundle has them null.
 	Repositories     []bundleClone `json:"repositories"`
 	RepositoryLogins []bundleLogin `json:"repository_logins"`
 	ReadOnly         []string      `json:"read_only"`

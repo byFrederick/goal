@@ -32,7 +32,7 @@ When the last open part finishes, the assembly closes in the same step:
 - it becomes `done` when its parts are done, and
 - it becomes `cancelled` when every part was cancelled.
 
-When an assembly has an integration branch, it does not close at that step. It moves to its landing station first. See [integration branches](/docs/concepts/integration-branches/).
+When an assembly has an integration branch, it does not close at that step. It moves to its landing station first. Its integration branch has one name and is in each repository its parts work in, and its landing covers the union of its done parts' repositories. See [integration branches](/docs/concepts/integration-branches/).
 
 ## Acting on an assembly
 

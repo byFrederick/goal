@@ -12,6 +12,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const donePartRepositories = `-- name: DonePartRepositories :many
+SELECT r.repo
+FROM work_items w
+JOIN work_item_repositories r ON r.org_id = w.org_id AND r.item_id = w.id
+WHERE w.parent_id = $1::uuid AND w.part_key IS NOT NULL AND w.state = 'done'
+ORDER BY w.number, (r.joined <> 'filing'), r.joined_at, r.ordinal
+`
+
+// The repositories of an assembly's done parts, in plan order and each part's first-joined
+// order, repeats included: what its landing covers.
+func (q *Queries) DonePartRepositories(ctx context.Context, parentID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, donePartRepositories, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var repo string
+		if err := rows.Scan(&repo); err != nil {
+			return nil, err
+		}
+		items = append(items, repo)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertItemRepository = `-- name: InsertItemRepository :exec
 
 INSERT INTO work_item_repositories (item_id, repo, joined, joined_at, ordinal, base_commit)
@@ -140,6 +170,24 @@ func (q *Queries) OpenItemRepositories(ctx context.Context, factoryID uuid.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const setIntegrationBranchOfRepositories = `-- name: SetIntegrationBranchOfRepositories :exec
+UPDATE work_item_repositories SET integration_branch = $1::text
+WHERE item_id = $2 AND repo = ANY($3::text[]) AND integration_branch IS NULL
+`
+
+type SetIntegrationBranchOfRepositoriesParams struct {
+	IntegrationBranch string
+	ItemID            uuid.UUID
+	Repos             []string
+}
+
+// An assembly's integration branch in each of repos it has (ADR 0041 decision 5), set once: a
+// row that has one keeps it, and base_commit is left as it is.
+func (q *Queries) SetIntegrationBranchOfRepositories(ctx context.Context, arg SetIntegrationBranchOfRepositoriesParams) error {
+	_, err := q.db.Exec(ctx, setIntegrationBranchOfRepositories, arg.IntegrationBranch, arg.ItemID, arg.Repos)
+	return err
 }
 
 const setItemRepositoryBaseCommit = `-- name: SetItemRepositoryBaseCommit :exec

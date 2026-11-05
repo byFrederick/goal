@@ -278,7 +278,8 @@ func (s *Store) partsOf(parent domain.ItemID) domain.Parts {
 // line's done station, where a finished single item lands; cancelled, it keeps its own, as a
 // cancelled single item does. An assembly with an integration branch that would close done
 // lands instead: it moves to its landing station, queued, with an assembly_landing event, for
-// that station to merge the branch. Callers hold s.mu.
+// that station to merge the branch, and takes its integration branch in every repository of its
+// done parts (joinIntegration). Callers hold s.mu.
 func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if part.PartKey == "" || !closed(part.State) {
 		return
@@ -300,6 +301,7 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if parts.Done > 0 && !cancel && parent.IntegrationBranch != "" {
 		parent.State, parent.Station = domain.StateQueued, parent.IntegrationLandAt
 		started(parent, before.Station, at)
+		s.joinIntegration(parent.ID, s.doneRepositories(parts), parent.IntegrationBranch, at)
 
 		s.trackSpan(parent, &before, at)
 		s.append(domain.Event{
@@ -472,6 +474,58 @@ func (s *Store) repoBaseCommits(item domain.ItemID) map[string]string {
 	for _, r := range s.repos[item] {
 		if r.BaseCommit != "" {
 			out[r.Repo] = r.BaseCommit
+		}
+	}
+
+	return out
+}
+
+// JoinIntegrationRepositories implements ports.Store.
+func (s *Store) JoinIntegrationRepositories(ctx context.Context, root domain.ItemID, repos []string, branch string, at time.Time) ([]string, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if branch == "" {
+		return nil, fmt.Errorf("integration repositories of %s: a branch is required: %w", root, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(root, org); !ok {
+		return nil, fmt.Errorf("integration repositories of %s: %w", root, ports.ErrNotFound)
+	}
+
+	return s.joinIntegration(root, repos, branch, at), nil
+}
+
+// joinIntegration gives root a row for each of repos it lacks (domain.JoinIntegration) and sets
+// branch on each of repos' rows that has no integration branch, returning the repositories left
+// out. Callers hold s.mu.
+func (s *Store) joinIntegration(root domain.ItemID, repos []string, branch string, at time.Time) []string {
+	joins, left := domain.JoinIntegration(s.orderedRepos(root), repos, at)
+	s.repos[root] = append(s.repos[root], joins...)
+
+	for i, r := range s.repos[root] {
+		if r.IntegrationBranch == "" && slices.Contains(repos, r.Repo) {
+			s.repos[root][i].IntegrationBranch = branch
+		}
+	}
+
+	return left
+}
+
+// doneRepositories are the repositories of parts' done items, in plan order and each item's
+// first-joined order: what an assembly's landing covers. Callers hold s.mu.
+func (s *Store) doneRepositories(parts domain.Parts) []string {
+	var out []string
+
+	for _, p := range parts.Items {
+		if p.State == domain.StateDone {
+			out = append(out, domain.ItemRepositoryKeys(s.orderedRepos(p.ID))...)
 		}
 	}
 

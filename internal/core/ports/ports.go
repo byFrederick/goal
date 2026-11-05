@@ -249,6 +249,16 @@ type Store interface {
 	// assembly_landing event instead of closing it done.
 	SetIntegrationBranch(ctx context.Context, root domain.ItemID, branch, landAt string, at time.Time) (set bool, err error)
 
+	// JoinIntegrationRepositories gives the assembly root its integration branch in each of repos
+	// (RepositoryKey), its parts' repositories (ADR 0041 decision 5), in one transaction under
+	// root's lock: each repository root lacks joins filing at time at with the next ordinal
+	// (domain.JoinIntegration), and each of repos' rows gets branch as its integration_branch
+	// where it has none, so a second call with another branch changes no row that has one. It
+	// returns the repositories left out past domain.MaxItemRepositories. closeAssembly does the
+	// same, in its own transaction, for every repository of the assembly's done parts when it
+	// lands. An empty branch is domain.ErrInvalid, an unknown item ErrNotFound.
+	JoinIntegrationRepositories(ctx context.Context, root domain.ItemID, repos []string, branch string, at time.Time) (left []string, err error)
+
 	// Parts returns an assembly's parts in plan order and how many are done. An unknown item has
 	// none.
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
