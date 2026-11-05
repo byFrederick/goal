@@ -21,7 +21,8 @@ test('answering the question with one of its choices removes the card and record
   await card.getByRole('button', { name: 'Only this factory' }).click();
 
   await expect(card).toBeHidden();
-  await expect(page.getByText(/answered/)).toBeVisible();
+  // The timeline is in the page twice (one copy per layout); look at the one a person sees.
+  await expect(page.getByText('Local user answered').locator('visible=true').first()).toBeVisible();
 });
 
 test('answering the question in your own words sends the text and removes the card', async ({ page }) => {
@@ -36,5 +37,5 @@ test('answering the question in your own words sends the text and removes the ca
   await card.getByRole('button', { name: 'Send' }).click();
 
   await expect(card).toBeHidden();
-  await expect(page.getByText(words)).toBeVisible();
+  await expect(page.getByText(words).locator('visible=true').first()).toBeVisible();
 });

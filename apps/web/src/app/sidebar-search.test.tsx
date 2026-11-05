@@ -503,7 +503,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await type('spend');
-    expect(screen.getByRole('option', { name: /^goal #147, Show this week's spend/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /^#147 Show this week's spend/ })).toBeTruthy();
     expect(screen.queryByRole('option', { name: /^New item about "spend"/ })).toBeNull();
   });
 
@@ -557,7 +557,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await type('ship');
-    expect(screen.getByRole('option', { name: /^goal #12, Ship the report/ })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /^#12 Ship the report/ })).toBeTruthy();
     expect(screen.queryByRole('option', { name: /^Approve #12/ })).toBeNull();
   });
 });
