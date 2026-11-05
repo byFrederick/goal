@@ -423,3 +423,25 @@ func TestFromYAML_ReadsTheStarter(t *testing.T) {
 		t.Errorf("a factory.yaml without a starter has one in its model: %s", b)
 	}
 }
+
+// Basics reads spec.runtime.repositories as `repositories`, each entry's keys as written.
+func TestFromYAML_ReadsRepositories(t *testing.T) {
+	t.Parallel()
+
+	doc, err := os.ReadFile("testdata/edits/runtime-repositories/in.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m, _, err := FromYAML(doc, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := json.Marshal(m.Basics["repositories"])
+	want := `[{"access":"write","default":true,"name":"shop","url":"https://github.com/acme/shop"}]`
+
+	if string(got) != want {
+		t.Errorf("repositories = %s, want %s", got, want)
+	}
+}
