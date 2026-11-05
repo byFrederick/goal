@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -324,8 +325,9 @@ func (s *server) webhookEndpoint(ctx context.Context, factoryRef, id string) (*c
 }
 
 // deliveryEvaluations are the evaluations of the delivery rows by factory, or by every factory
-// for "", as the log lists them, by delivery. A factory's name is the organization's record of
-// it, as a webhook reaches factories the caller may not see; its id once the factory is gone.
+// for "", as the log lists them, by delivery, each by factory name then id. A factory's name is
+// the organization's record of it, as a webhook reaches factories the caller may not see; its id
+// once the factory is gone.
 func (s *server) deliveryEvaluations(ctx context.Context, factory domain.FactoryID, rows []domain.WebhookDeliveryID,
 ) (map[domain.WebhookDeliveryID][]gen.WebhookDeliveryEvaluation, error) {
 	es, err := s.intake.DeliveryEvaluationsOf(ctx, rows)
@@ -359,6 +361,12 @@ func (s *server) deliveryEvaluations(ctx context.Context, factory domain.Factory
 		}
 
 		out[e.Delivery] = append(out[e.Delivery], g)
+	}
+
+	for _, evals := range out {
+		slices.SortStableFunc(evals, func(a, b gen.WebhookDeliveryEvaluation) int {
+			return cmp.Or(cmp.Compare(a.FactoryName, b.FactoryName), cmp.Compare(a.Factory, b.Factory))
+		})
 	}
 
 	return out, nil
