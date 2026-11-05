@@ -45,6 +45,25 @@ RUN CGO_ENABLED=0 go build -trimpath -tags webui -ldflags="-s -w" -o /out/goald 
 # §5.12). Runs clone in their own box, so goald needs no git.
 FROM ${RUNTIME_IMAGE} AS runtime
 RUN apk add --no-cache ca-certificates
+# github-mcp-server, the tool catalog's one stdio MCP server (the github and github-read
+# templates' Enterprise lines): environment tests start it in goald from /usr/local/bin, the
+# start of the PATH it gets (ADR 0041 decision 15). Pinned, and checked by sha256 per arch.
+ARG TARGETARCH
+ARG GITHUB_MCP_SERVER_VERSION=2.1.0
+ARG GITHUB_MCP_SERVER_SHA256_AMD64=a442f9db287cea01008bcb55fe6bc0292270301046c3edbd1a8b22d6e4157b2b
+ARG GITHUB_MCP_SERVER_SHA256_ARM64=34d5a268f65cd1e9b7107fa976f3571ccd575f9df00cec489fec79a039923a22
+RUN set -eu; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) arch=x86_64; sum="${GITHUB_MCP_SERVER_SHA256_AMD64}" ;; \
+      arm64) arch=arm64; sum="${GITHUB_MCP_SERVER_SHA256_ARM64}" ;; \
+      *) echo "no github-mcp-server for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    wget -q -O /tmp/github-mcp-server.tar.gz \
+      "https://github.com/github/github-mcp-server/releases/download/v${GITHUB_MCP_SERVER_VERSION}/github-mcp-server_Linux_${arch}.tar.gz"; \
+    echo "${sum}  /tmp/github-mcp-server.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/github-mcp-server.tar.gz -C /usr/local/bin github-mcp-server; \
+    chmod 0755 /usr/local/bin/github-mcp-server; \
+    rm /tmp/github-mcp-server.tar.gz
 COPY --from=build /out/goald /usr/local/bin/goald
 USER 65532:65532
 EXPOSE 8080 8090

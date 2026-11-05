@@ -182,6 +182,12 @@ func TestTemplates_GitHubEnterprise(t *testing.T) {
 	}
 }
 
+// gitHubMCP is the program of the GitHub templates' stdio server.
+const gitHubMCP = "github-mcp-server"
+
+// stdioArg is the argument that starts it over stdio.
+const stdioArg = "stdio"
+
 // The commands goald may start to test a stdio server are the GitHub templates' Enterprise ones.
 func TestTemplates_CatalogCommands(t *testing.T) {
 	t.Parallel()
@@ -195,9 +201,9 @@ func TestTemplates_CatalogCommands(t *testing.T) {
 		command []string
 		want    bool
 	}{
-		{[]string{"github-mcp-server", "stdio"}, true},
-		{[]string{"github-mcp-server", "stdio", "--read-only"}, true},
-		{[]string{"github-mcp-server", "http"}, false},
+		{[]string{gitHubMCP, stdioArg}, true},
+		{[]string{gitHubMCP, stdioArg, "--read-only"}, true},
+		{[]string{gitHubMCP, "http"}, false},
 		{[]string{"npx", "-y", "@modelcontextprotocol/server-github"}, false},
 	} {
 		if ok := domain.CatalogCommand(got, tc.command); ok != tc.want {

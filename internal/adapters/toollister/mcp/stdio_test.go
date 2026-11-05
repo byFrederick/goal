@@ -32,6 +32,12 @@ const (
 	stdioHang = "hang-stdio"
 )
 
+// The tools the acme servers list.
+const (
+	toolGet    = "get_issue"
+	toolCreate = "create_issue"
+)
+
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		if serve, ok := map[string]func([]string) error{
@@ -61,7 +67,7 @@ func serveTools(tools ...*sdk.Tool) error {
 }
 
 func serveAcme([]string) error {
-	return serveTools(&sdk.Tool{Name: "get_issue", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}}, &sdk.Tool{Name: "create_issue"})
+	return serveTools(&sdk.Tool{Name: toolGet, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}}, &sdk.Tool{Name: toolCreate})
 }
 
 func serveEnv([]string) error {
@@ -80,7 +86,7 @@ func serveFail([]string) error {
 }
 
 func serveHang(args []string) error {
-	if err := os.WriteFile(args[0], []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Clean(args[0]), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil { //nolint:gosec // the test's own temp file
 		return err
 	}
 
@@ -113,7 +119,7 @@ func TestListTools_Stdio(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if want := []ports.Tool{{Name: "create_issue"}, {Name: "get_issue", ReadOnly: true}}; !slices.Equal(got, want) {
+		if want := []ports.Tool{{Name: toolCreate}, {Name: toolGet, ReadOnly: true}}; !slices.Equal(got, want) {
 			t.Errorf("tools = %+v; want %+v", got, want)
 		}
 	})
@@ -141,7 +147,7 @@ func TestListTools_Stdio(t *testing.T) {
 			t.Fatal("ListTools of a server that never answers succeeded")
 		}
 
-		b, err := os.ReadFile(pidFile)
+		b, err := os.ReadFile(pidFile) //nolint:gosec // the test's own temp file
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -18,6 +18,7 @@ import (
 const (
 	serverURL = "https://mcp.example.com/mcp"
 	keyValue  = "key-for-tests-1111"
+	toolGet   = "get_issue"
 )
 
 // opener opens secret key and refuses every other name as not found.
@@ -59,18 +60,18 @@ func TestServer_KeepsReadOnlyHints(t *testing.T) {
 
 	tools := porttest.NewToolLister()
 	tools.Serve(serverURL, "merge_pull_request")
-	tools.ServeReadOnly(serverURL, "search_code", "get_issue")
+	tools.ServeReadOnly(serverURL, "search_code", toolGet)
 
 	r, err := environmentcheck.Server(t.Context(), tools, opener, ports.MCPEndpoint{URL: serverURL}, nil)
 	if err != nil || !r.OK {
 		t.Fatalf("Server = %+v, %v; want its tools", r, err)
 	}
 
-	if want := []string{"get_issue", "merge_pull_request", "search_code"}; !slices.Equal(r.Tools, want) {
+	if want := []string{toolGet, "merge_pull_request", "search_code"}; !slices.Equal(r.Tools, want) {
 		t.Errorf("Tools = %v; want %v", r.Tools, want)
 	}
 
-	if want := []string{"get_issue", "search_code"}; !slices.Equal(r.ReadOnly, want) {
+	if want := []string{toolGet, "search_code"}; !slices.Equal(r.ReadOnly, want) {
 		t.Errorf("ReadOnly = %v; want %v", r.ReadOnly, want)
 	}
 }
@@ -83,12 +84,12 @@ func TestServer_StdioKeepsReadOnlyHints(t *testing.T) {
 	command := []string{"acme-mcp", "stdio"}
 	tools := porttest.NewToolLister()
 	tools.Serve(porttest.StdioKey(command...), "create_issue")
-	tools.ServeReadOnly(porttest.StdioKey(command...), "get_issue")
+	tools.ServeReadOnly(porttest.StdioKey(command...), toolGet)
 
 	env := map[string]string{"ACME_TOKEN": "{{key}}", "ACME_HOST": "https://acme.example.com"}
 
 	r, err := environmentcheck.Server(t.Context(), tools, opener, ports.MCPEndpoint{Command: command, Env: env}, nil)
-	if err != nil || !r.OK || !slices.Equal(r.Tools, []string{"create_issue", "get_issue"}) || !slices.Equal(r.ReadOnly, []string{"get_issue"}) {
+	if err != nil || !r.OK || !slices.Equal(r.Tools, []string{"create_issue", toolGet}) || !slices.Equal(r.ReadOnly, []string{toolGet}) {
 		t.Fatalf("Server = %+v, %v; want its tools with get_issue read-only", r, err)
 	}
 

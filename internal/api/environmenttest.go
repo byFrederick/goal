@@ -357,13 +357,13 @@ func (t envTest) stdioRefusal(ctx context.Context, e ports.MCPEndpoint) (string,
 	hosts := append(domain.BuiltInCodeHosts(), added...)
 
 	for _, v := range urls {
-		u, err := url.Parse(v)
-		if err != nil {
-			return "goald starts a stdio server only with URLs on the organization's code hosts: one of its env values is not a URL", nil
+		host := ""
+		if u, err := url.Parse(v); err == nil {
+			host = u.Host
 		}
 
-		if _, ok := domain.ListedCodeHost(hosts, u.Host); !ok {
-			return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: add %s in Code hosts", u.Host), nil
+		if _, ok := domain.ListedCodeHost(hosts, host); !ok {
+			return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: add %q in Code hosts", host), nil
 		}
 	}
 

@@ -47,7 +47,7 @@ func (l *Lister) stdio(ctx context.Context, e ports.MCPEndpoint) ([]ports.Tool, 
 
 	stderr := &lastBytes{max: maxStderr}
 
-	cmd := exec.CommandContext(ctx, path, e.Command[1:]...)
+	cmd := exec.CommandContext(ctx, path, e.Command[1:]...) //nolint:gosec // a command the tool catalog ships, checked by the caller
 	cmd.Env = stdioEnv(e.Env, home)
 	cmd.Dir = home
 	cmd.Stderr = stderr

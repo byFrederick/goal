@@ -69,8 +69,9 @@ type Result struct {
 func Server(ctx context.Context, tools ports.ToolLister, open Opener, e ports.MCPEndpoint, slots map[string]string) (Result, error) {
 	values := slots
 	if values == nil {
-		var err error
 		names := slices.Sorted(slices.Values(append(Referenced(e.Headers), Referenced(e.Env)...)))
+
+		var err error
 		if values, err = open(ctx, slices.Compact(names)); err != nil {
 			if !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, ports.ErrSecretNotAllowed) {
 				return Result{}, err
