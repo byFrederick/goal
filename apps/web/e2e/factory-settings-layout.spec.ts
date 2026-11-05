@@ -44,9 +44,13 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(path);
   await expect(page.getByRole('region', { name: 'Runtime' })).toBeVisible();
+  // A radio's tap target is its whole label, and a switch's is its 44 px ::before hit area (ui/switch.tsx),
+  // which getBoundingClientRect does not measure; the Switch is drawn 32 × 18 by design.
   const targets = page
     .getByRole('main')
-    .locator('a[href]:not(p a, dd a), button, input:not([type=hidden]), [role=combobox]');
+    .locator(
+      'a[href]:not(p a, dd a), button:not([role=switch]), input:not([type=hidden], [type=radio]), label:has(input[type=radio]), [role=combobox]',
+    );
   const boxes = await targets.evaluateAll((els) =>
     els.map((el) => {
       const { width, height } = el.getBoundingClientRect();
@@ -81,7 +85,7 @@ test('the environments Edit link is 44×44 and no Jonah ⓘ lies over the field 
     await expectTarget44(button, tip);
     await expectNoOverlap(
       button,
-      jonah.getByRole(field === 'Model' ? 'combobox' : 'textbox', { name: field }),
+      jonah.getByRole(field === 'Model' ? 'combobox' : 'spinbutton', { name: field }),
       `${tip} and ${field}`,
     );
   }
