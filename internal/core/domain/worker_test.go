@@ -150,6 +150,9 @@ func TestWorkerFinished_Result(t *testing.T) {
 	}
 }
 
+// workerRepo is the repository the worker tests report on.
+const workerRepo = "github.com/acme/app"
+
 func TestWorkerFinished_ResultKeepsOnlyACommitAsPushedHead(t *testing.T) {
 	t.Parallel()
 
@@ -158,7 +161,7 @@ func TestWorkerFinished_ResultKeepsOnlyACommitAsPushedHead(t *testing.T) {
 	for in, want := range map[string]string{
 		sha1: sha1, sha256: sha256, "": "", "main": "", strings.ToUpper(sha1): "", sha1 + "\n": "", sha1[:39]: "",
 	} {
-		f := WorkerFinished{Status: string(RunFailed), Repositories: []WorkerRepository{{Repo: "github.com/acme/app", PushedHead: in}}}
+		f := WorkerFinished{Status: string(RunFailed), Repositories: []WorkerRepository{{Repo: workerRepo, PushedHead: in}}}
 
 		got := ""
 		if rows := f.Result("").Repositories; len(rows) == 1 {
@@ -177,13 +180,13 @@ func TestWorkerFinished_ResultKeepsEachReportedRepositoryOnce(t *testing.T) {
 	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
 	f := WorkerFinished{Status: string(RunSucceeded), Output: json.RawMessage(`{}`), PushedHead: b, Repositories: []WorkerRepository{
 		{Repo: "https://GitHub.com/Acme/App.git", PushedHead: a, Wrote: true},
-		{Repo: "github.com/acme/app", PushedHead: b},
+		{Repo: workerRepo, PushedHead: b},
 		{Repo: "github.com/acme/docs", Wrote: true},
 		{Repo: "github.com/acme/empty"},
 		{Repo: "not a repository", PushedHead: a},
 	}}
 
-	want := []RunRepository{{Repo: "github.com/acme/app", PushedHead: a, Wrote: true}, {Repo: "github.com/acme/docs", Wrote: true}}
+	want := []RunRepository{{Repo: workerRepo, PushedHead: a, Wrote: true}, {Repo: "github.com/acme/docs", Wrote: true}}
 	if got := f.Result("https://github.com/acme/other").Repositories; !reflect.DeepEqual(got, want) {
 		t.Errorf("Result().Repositories = %+v; want %+v (the list wins over the single pushed head)", got, want)
 	}
@@ -195,7 +198,7 @@ func TestWorkerFinished_LegacyPushedHeadBecomesOneRepository(t *testing.T) {
 	head := strings.Repeat("c", 40)
 	f := WorkerFinished{Status: string(RunFailed), PushedHead: head}
 
-	want := []RunRepository{{Repo: "github.com/acme/app", PushedHead: head}}
+	want := []RunRepository{{Repo: workerRepo, PushedHead: head}}
 	if got := f.Result("https://github.com/Acme/app.git").Repositories; !reflect.DeepEqual(got, want) {
 		t.Errorf("Result(repo).Repositories = %+v; want %+v", got, want)
 	}
@@ -204,7 +207,7 @@ func TestWorkerFinished_LegacyPushedHeadBecomesOneRepository(t *testing.T) {
 		t.Errorf("Result without a repository = %+v; want none", got)
 	}
 
-	if got := (&WorkerFinished{Status: string(RunFailed), PushedHead: "main"}).Result("github.com/acme/app").Repositories; got != nil {
+	if got := (&WorkerFinished{Status: string(RunFailed), PushedHead: "main"}).Result(workerRepo).Repositories; got != nil {
 		t.Errorf("Result of a pushed head that is no commit = %+v; want none", got)
 	}
 }

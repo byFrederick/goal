@@ -537,7 +537,7 @@ func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]doma
 			runs[i] = runFrom(r)
 		}
 
-		return withRepositories(ctx, q, runs)
+		return listWithRepositories(ctx, q, runs)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("runs of item %s: %w", item, err)
@@ -546,9 +546,27 @@ func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]doma
 	return runs, nil
 }
 
+// runWithRepositories is r with its repositories (withRepositories).
+func runWithRepositories(ctx context.Context, q *db.Queries, r db.AgentRun) (domain.Run, error) {
+	run := runFrom(r)
+	err := withRepositories(ctx, q, &run)
+
+	return run, err
+}
+
+// listWithRepositories reads every run's repositories into it (withRepositories).
+func listWithRepositories(ctx context.Context, q *db.Queries, runs []domain.Run) error {
+	ptrs := make([]*domain.Run, len(runs))
+	for i := range runs {
+		ptrs[i] = &runs[i]
+	}
+
+	return withRepositories(ctx, q, ptrs...)
+}
+
 // withRepositories reads the runs' repositories (agent_run_repositories, 00131) into each run in
 // one query: every row whole in its Input, and the rows it pushed or wrote in its Result.
-func withRepositories(ctx context.Context, q *db.Queries, runs []domain.Run) error {
+func withRepositories(ctx context.Context, q *db.Queries, runs ...*domain.Run) error {
 	if len(runs) == 0 {
 		return nil
 	}
@@ -569,6 +587,7 @@ func withRepositories(ctx context.Context, q *db.Queries, runs []domain.Run) err
 	}
 
 	byRun := make(map[domain.RunID][]domain.RunRepository, len(runs))
+
 	for _, r := range rows {
 		id := domain.RunID(r.RunID.String())
 		byRun[id] = append(byRun[id], domain.RunRepository{
@@ -577,13 +596,13 @@ func withRepositories(ctx context.Context, q *db.Queries, runs []domain.Run) err
 		})
 	}
 
-	for i := range runs {
-		repos := byRun[runs[i].ID]
-		runs[i].Input.Repositories = repos
+	for _, run := range runs {
+		repos := byRun[run.ID]
+		run.Input.Repositories = repos
 
 		for _, r := range repos {
 			if r.PushedHead != "" || r.Wrote {
-				runs[i].Result.Repositories = append(runs[i].Result.Repositories, r)
+				run.Result.Repositories = append(run.Result.Repositories, r)
 			}
 		}
 	}
@@ -598,7 +617,7 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 		return domain.Run{}, err
 	}
 
-	runs := make([]domain.Run, 1)
+	var run domain.Run
 
 	err = s.read(ctx, func(q *db.Queries) error {
 		row, err := q.GetRun(ctx, uid)
@@ -606,9 +625,9 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 			return err
 		}
 
-		runs[0] = runFrom(row)
+		run, err = runWithRepositories(ctx, q, row)
 
-		return withRepositories(ctx, q, runs)
+		return err
 	})
 	if notFound(err) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
@@ -618,7 +637,7 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, err)
 	}
 
-	return runs[0], nil
+	return run, nil
 }
 
 // OrgRuns implements ports.Store: the page and the summary in one read-only transaction. Ids

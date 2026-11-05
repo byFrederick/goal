@@ -471,9 +471,9 @@ func TestRun_RecordsTheReportedRepositories(t *testing.T) {
 	h.worker.PreparedRepositories(
 		domain.WorkerRepository{Repo: repoURL, BranchHead: branchHead, BaseCommit: baseHead},
 		domain.WorkerRepository{Repo: "not a repository", BranchHead: branchHead},
-		domain.WorkerRepository{Repo: docs, BranchHead: "main", BaseCommit: baseHead},
+		domain.WorkerRepository{Repo: docs, BranchHead: mainBranch, BaseCommit: baseHead},
 	)
-	it := h.submit(t, domain.NewItem{Title: "Add a version command"})
+	it := h.submit(t, domain.NewItem{Title: "Add a health endpoint"})
 
 	h.step(t)
 
@@ -514,6 +514,7 @@ func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 	}
 
 	first, retry := runs[0], runs[1]
+
 	wantFirst := []domain.RunRepository{{Repo: repoKey, BaseCommit: baseHead, BranchHead: branchHead, PushedHead: branchHead}}
 	if !reflect.DeepEqual(first.Input.Repositories, wantFirst) {
 		t.Errorf("first run repositories %+v; want %+v: it pushed nothing new", first.Input.Repositories, wantFirst)
@@ -525,6 +526,7 @@ func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 	}
 
 	retryRows := []domain.RunRepository{{Repo: repoKey, PushedHead: pushedHead, Wrote: true}}
+
 	want := domain.RunInput{Brief: "Add a version command\n\n" + feedback, Repositories: retryRows}
 	if !reflect.DeepEqual(retry.Input, want) {
 		t.Errorf("retry input =\n%+v\nwant\n%+v", retry.Input, want)

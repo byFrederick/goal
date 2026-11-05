@@ -576,7 +576,7 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 		return domain.Run{}, err
 	}
 
-	runs := make([]domain.Run, 1)
+	var run domain.Run
 
 	err = s.read(ctx, func(q *db.Queries) error {
 		row, err := q.TryTarget(ctx, db.TryTargetParams{ItemID: &uid, Station: station})
@@ -584,9 +584,9 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 			return err
 		}
 
-		runs[0] = runFrom(row)
+		run, err = runWithRepositories(ctx, q, row)
 
-		return withRepositories(ctx, q, runs)
+		return err
 	})
 
 	switch {
@@ -596,7 +596,7 @@ func (s *Store) PastTryTarget(ctx context.Context, item domain.ItemID, station s
 		return domain.Run{}, fmt.Errorf("past try target of item %s at %s: %w", item, station, err)
 	}
 
-	return runs[0], nil
+	return run, nil
 }
 
 // AgentDoneItems implements ports.PastTries.
@@ -626,7 +626,7 @@ func (s *Store) AgentDoneItems(ctx context.Context, factory domain.FactoryID, ag
 			runs[i] = runFrom(r.AgentRun)
 		}
 
-		return withRepositories(ctx, q, runs)
+		return listWithRepositories(ctx, q, runs)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("done items of agent %s: %w", agent, err)
@@ -676,12 +676,12 @@ func (s *Store) PastTryInput(ctx context.Context, run domain.RunID) (domain.Past
 			return fmt.Errorf("outputs before run %s: %w", run, err)
 		}
 
-		runs := []domain.Run{runFrom(r)}
-		if err := withRepositories(ctx, q, runs); err != nil {
+		tried, err := runWithRepositories(ctx, q, r)
+		if err != nil {
 			return err
 		}
 
-		out = domain.PastTryInput{Run: runs[0], Outputs: make(map[string]json.RawMessage, len(rows))}
+		out = domain.PastTryInput{Run: tried, Outputs: make(map[string]json.RawMessage, len(rows))}
 		for _, o := range rows {
 			out.Outputs[o.Station] = rawJSON(o.Output)
 		}

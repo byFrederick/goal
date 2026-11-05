@@ -152,6 +152,9 @@ spec:
 	}
 }
 
+// tryRepoURL is the repository the try tests' version names.
+const tryRepoURL = "https://github.com/acme/api.git"
+
 // A try clones the run's first recorded repository with a branch head at its commits (ADR 0041
 // decision 17); a row recorded without a repository (before 00131) is the version's. A run with
 // no branch head, or whose repository the version has not, is refused.
@@ -170,7 +173,7 @@ func TestBundle_TryRecordedRepositories(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarnessWith(t, Config{}, harnessDeps{yaml: secretsBundleYAML("https://github.com/acme/api.git", ""), files: secretsBundleFiles})
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: secretsBundleYAML(tryRepoURL, ""), files: secretsBundleFiles})
 			_, try := h.pastTryOn(t, c.repos)
 
 			status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, h.tryClaims(try)))
@@ -191,7 +194,7 @@ func TestBundle_TryRecordedRepositories(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if b.Repository == nil || b.Repository.URL != "https://github.com/acme/api.git" {
+			if b.Repository == nil || b.Repository.URL != tryRepoURL {
 				t.Errorf("repository %+v; want the version's", b.Repository)
 			}
 

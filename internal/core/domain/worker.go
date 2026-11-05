@@ -157,6 +157,7 @@ func RunRepositories(reported []WorkerRepository, repo string, single WorkerRepo
 		}
 
 		seen[key] = true
+
 		out = append(out, row)
 	}
 
