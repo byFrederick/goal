@@ -32,6 +32,8 @@ const (
 	keyName     = "name"
 	keyAgents   = "agents"
 	keyStations = "stations"
+	keyTriggers = "triggers"
+	keyCreate   = "create"
 )
 
 func modelPath(p []string) (string, []string) {

@@ -1,13 +1,12 @@
 // Package gitlab implements ports.CodeHost with GitLab's REST API (v4, merge requests), called
-// from the goald host with a code host login (domain.CodeHostLogin), built today from a
-// connection whose kind's code host is gitlab (spec 4 §5.5).
+// from the goald host for one project on a GitLab host of the organization's list
+// (domain.CodeRepository) and the access token that signs in to it (ADR 0041, decision 7).
 //
 // It reads merge requests, merges them, rebases them on their target and deletes branches,
-// nothing else. The login says which host it serves (gitlab.com or a self-managed GitLab) and holds
-// the access token; a merge request URL on any other host is refused before anything is sent,
-// and the project is the URL's own (https://<host>/<namespace>/<project>/-/merge_requests/<iid>).
-// The API is https://<host>/api/v4. A merge names the head SHA it was asked for, so GitLab
-// refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
+// nothing else. A project on a host of another kind, and a merge request URL that is not the
+// project's (https://<host>/<namespace>/<project>/-/merge_requests/<iid>), are refused before
+// anything is sent. The API is the host's domain.CodeHostAPIBase, https://<host>/api/v4. A merge
+// names the head SHA it was asked for, so GitLab refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
 // conflicts, head moved) come back as ports.ErrNotMergeable. GitLab's rebase takes no expected
 // head: UpdateBranch reads the merge request first and rebases only if its head is the one it
 // was given, best effort against a push in between, and never forced; a rebase GitLab refuses
@@ -26,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,8 +37,8 @@ var _ ports.CodeHost = (*Client)(nil)
 
 // Config tunes the client. The zero value of each field means its default.
 type Config struct {
-	// APIURL, when set, is the REST API root for every host instead of https://<host>/api/v4: a
-	// stand-in GitLab in tests.
+	// APIURL, when set, is the REST API root for every host instead of the project host's
+	// domain.CodeHostAPIBase: a stand-in GitLab in tests.
 	APIURL string
 	// Timeout bounds one request. Default: 30s.
 	Timeout time.Duration
@@ -70,7 +70,7 @@ func New(cfg Config) *Client {
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
-			// A credentialed request is never sent anywhere but the login's API.
+			// A credentialed request is never sent anywhere but the project host's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
@@ -91,34 +91,56 @@ func (m mergeRequest) path(rest string) string {
 // mrPath is a merge request's path: a namespace (groups and subgroups), a project, its iid.
 var mrPath = regexp.MustCompile(`^/((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)/-/merge_requests/([1-9][0-9]*)/?$`)
 
-// open checks that mrURL is a merge request on the login's host and names it.
-func (cl *Client) open(login domain.CodeHostLogin, mrURL string) (mergeRequest, error) {
-	if err := login.Validate(); err != nil {
-		return mergeRequest{}, err
+// open checks repo and token (check) and that mrURL is a merge request of repo, and names it.
+func (cl *Client) open(repo domain.CodeRepository, token, mrURL string) (mergeRequest, error) {
+	m, err := cl.check(repo, token)
+	if err != nil {
+		return mergeRequest{}, fmt.Errorf("merge request %s: %w: %w", mrURL, err, ports.ErrNotMergeable)
 	}
-
-	host, token := login.Host, login.Token
 
 	u, err := url.Parse(mrURL)
 	if err != nil {
 		return mergeRequest{}, fmt.Errorf("merge request %q: %w", mrURL, ports.ErrNotMergeable)
 	}
 
-	m := mrPath.FindStringSubmatch(u.Path)
-	if u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
+	mm := mrPath.FindStringSubmatch(u.Path)
+	if u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || mm == nil {
 		return mergeRequest{}, fmt.Errorf("%q is not a merge request URL: %w", mrURL, ports.ErrNotMergeable)
 	}
 
-	if !strings.EqualFold(u.Host, host) {
-		return mergeRequest{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", mrURL, host, login.Name, ports.ErrNotMergeable)
+	if !strings.EqualFold(u.Host, repo.Host.Host) || !strings.EqualFold(mm[1], repo.Owner+"/"+repo.Name) {
+		return mergeRequest{}, fmt.Errorf("%s is not a merge request of %s: %w", mrURL, repo, ports.ErrNotMergeable)
+	}
+
+	m.iid = mm[2]
+
+	return m, nil
+}
+
+// projectSegment is one segment of a project's path: a group, a subgroup or the project.
+var projectSegment = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+// check refuses, before anything is sent, a project that is not on a GitLab host or names no
+// namespace or name, and an empty token, each wrapping domain.ErrInvalid; it names the project
+// with the API that reaches it.
+func (cl *Client) check(repo domain.CodeRepository, token string) (mergeRequest, error) {
+	segs := append(strings.Split(repo.Owner, "/"), repo.Name)
+
+	switch {
+	case repo.Host.Kind != domain.CodeHostGitLab || repo.Host.Host == "":
+		return mergeRequest{}, fmt.Errorf("%s is not on a GitLab host: %w", repo, domain.ErrInvalid)
+	case slices.ContainsFunc(segs, func(s string) bool { return !projectSegment.MatchString(s) || strings.Trim(s, ".") == "" }):
+		return mergeRequest{}, fmt.Errorf("%s is not a GitLab project: %w", repo, domain.ErrInvalid)
+	case token == "":
+		return mergeRequest{}, fmt.Errorf("%s: no token: %w", repo, domain.ErrInvalid)
 	}
 
 	api := cl.api
 	if api == "" {
-		api = "https://" + host + "/api/v4"
+		api = domain.CodeHostAPIBase(repo.Host)
 	}
 
-	return mergeRequest{api: api, token: token, project: url.PathEscape(m[1]), iid: m[2]}, nil
+	return mergeRequest{api: api, token: token, project: url.PathEscape(repo.Owner + "/" + repo.Name)}, nil
 }
 
 // mrJSON is the part of GitLab's merge request object goald reads.
@@ -167,8 +189,8 @@ func (cl *Client) read(ctx context.Context, m mergeRequest, mrURL string) (mrJSO
 }
 
 // PullRequest implements ports.CodeHost.
-func (cl *Client) PullRequest(ctx context.Context, login domain.CodeHostLogin, mrURL string) (ports.PullRequest, error) {
-	m, err := cl.open(login, mrURL)
+func (cl *Client) PullRequest(ctx context.Context, repo domain.CodeRepository, token, mrURL string) (ports.PullRequest, error) {
+	m, err := cl.open(repo, token, mrURL)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
@@ -194,8 +216,8 @@ func (cl *Client) PullRequest(ctx context.Context, login domain.CodeHostLogin, m
 }
 
 // Merge implements ports.CodeHost.
-func (cl *Client) Merge(ctx context.Context, login domain.CodeHostLogin, mrURL string, mm ports.Merge) (string, error) {
-	m, err := cl.open(login, mrURL)
+func (cl *Client) Merge(ctx context.Context, repo domain.CodeRepository, token, mrURL string, mm ports.Merge) (string, error) {
+	m, err := cl.open(repo, token, mrURL)
 	if err != nil {
 		return "", err
 	}
@@ -230,8 +252,8 @@ func (cl *Client) Merge(ctx context.Context, login domain.CodeHostLogin, mrURL s
 
 // UpdateBranch implements ports.CodeHost: GitLab rebases the source branch on the target, in
 // the background once it answers 202.
-func (cl *Client) UpdateBranch(ctx context.Context, login domain.CodeHostLogin, mrURL, headSHA string) error {
-	m, err := cl.open(login, mrURL)
+func (cl *Client) UpdateBranch(ctx context.Context, repo domain.CodeRepository, token, mrURL, headSHA string) error {
+	m, err := cl.open(repo, token, mrURL)
 	if err != nil {
 		return err
 	}
@@ -269,8 +291,8 @@ func (cl *Client) UpdateBranch(ctx context.Context, login domain.CodeHostLogin, 
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (cl *Client) DeleteBranch(ctx context.Context, login domain.CodeHostLogin, mrURL, branch string) error {
-	m, err := cl.open(login, mrURL)
+func (cl *Client) DeleteBranch(ctx context.Context, repo domain.CodeRepository, token, mrURL, branch string) error {
+	m, err := cl.open(repo, token, mrURL)
 	if err != nil {
 		return err
 	}
@@ -292,7 +314,7 @@ func (cl *Client) DeleteBranch(ctx context.Context, login domain.CodeHostLogin, 
 	}
 }
 
-// call sends one API request with the login's token and decodes a successful JSON answer
+// call sends one API request with the project's token and decodes a successful JSON answer
 // into out (when out is not nil). It returns the status and GitLab's message, if any; err is
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
@@ -386,23 +408,19 @@ func problem(raw []byte) string {
 }
 
 // BranchHead implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) BranchHead(context.Context, domain.CodeHostLogin, string, string) (string, error) {
+func (cl *Client) BranchHead(context.Context, domain.CodeRepository, string, string) (string, error) {
 	return "", fmt.Errorf("gitlab: branch head: %w", errors.ErrUnsupported)
 }
 
 // Compare implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) Compare(context.Context, domain.CodeHostLogin, string, string, string) (ports.Comparison, error) {
+func (cl *Client) Compare(context.Context, domain.CodeRepository, string, string, string) (ports.Comparison, error) {
 	return ports.Comparison{}, fmt.Errorf("gitlab: compare: %w", errors.ErrUnsupported)
 }
 
 // Repositories implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) Repositories(context.Context, domain.CodeHostLogin, string) (ports.RepositoryList, error) {
+func (cl *Client) Repositories(context.Context, domain.CodeHost, string, string) (ports.RepositoryList, error) {
 	return ports.RepositoryList{}, fmt.Errorf("gitlab: repositories: %w", errors.ErrUnsupported)
 }
-
-// projectPath is a project's path: a namespace (groups and subgroups) and a project, optionally
-// ending in .git.
-var projectPath = regexp.MustCompile(`^/((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
 
 // accessLevels are GitLab's role names by access level.
 var accessLevels = map[int]string{10: "Guest", 15: "Planner", 20: "Reporter", 30: "Developer", 40: "Maintainer", 50: "Owner"}
@@ -414,18 +432,13 @@ const pushLevel = 30
 // token can be read, and it can be pushed to when the higher of its project and group access
 // levels is Developer (30) or more. A refusal (401, 403, 404) is a failed read with GitLab's
 // message; a 5xx or no answer is an error.
-func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (ports.RepositoryAccess, error) {
-	host, project, err := projectOf(repoURL)
+func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (ports.RepositoryAccess, error) {
+	mr, err := cl.check(repo, token)
 	if err != nil {
-		return ports.RepositoryAccess{}, err
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access: %w", err)
 	}
 
-	api := cl.api
-	if api == "" {
-		api = "https://" + host + "/api/v4"
-	}
-
-	mr := mergeRequest{api: api, token: token, project: url.PathEscape(project)}
+	project := repo.Owner + "/" + repo.Name
 
 	type access struct {
 		Level int `json:"access_level"`
@@ -464,22 +477,6 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (
 		Read: ports.AccessCheck{OK: true, Reason: "GitLab shows " + project + " to the token"},
 		Push: pushCheck(level, project),
 	}, nil
-}
-
-// projectOf checks that repoURL is a project's https URL and returns its host, in lower case, and
-// its path.
-func projectOf(repoURL string) (host, project string, err error) {
-	u, err := url.Parse(repoURL)
-	if err != nil {
-		return "", "", fmt.Errorf("repository %q: %w", repoURL, domain.ErrInvalid)
-	}
-
-	m := projectPath.FindStringSubmatch(u.Path)
-	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
-		return "", "", fmt.Errorf("%q is not a repository URL such as https://gitlab.com/acme/app: %w", repoURL, domain.ErrInvalid)
-	}
-
-	return strings.ToLower(u.Host), m[1], nil
 }
 
 // pushCheck is whether access level can push to project: Developer (30) or more.

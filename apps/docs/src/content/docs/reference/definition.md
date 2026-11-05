@@ -160,6 +160,7 @@ object, required.
       - `expedite`: boolean. Put the item in the expedite flow.
       - `title`: string. The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.&lt;path&gt;}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters.
       - `brief`: string. The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md), as an agent's prompt is; {{field}} and {{payload.&lt;path&gt;}} placeholders take the event's values, which reach agents only as untrusted data.
+      - `repositories`: array of string. The item's repositories, each matched against runtime.repositories, owner patterns included and in any case: an entry's name, host/owner/name, an https URL, or a template such as {{repo}} (owner/name, on the host of the entry that covers it). A value that renders empty adds none; an item that names none gets the default entry. An event whose value no entry matches is skipped at Create.
       - `trusted`: boolean. File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set.
     - `limits`: object. Caps on what the trigger creates.
       - `perDay`: integer. At most this many items created by the trigger since the start of the UTC day.

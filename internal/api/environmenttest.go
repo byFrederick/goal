@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"slices"
@@ -22,11 +23,13 @@ import (
 	"github.com/byFrederick/goal/internal/environmentcheck"
 )
 
-// Environment tests (ADR 0037 decision 9): POST .../environments/{env}/test calls each remote MCP
-// server's tools/list with its headers' {{secret}} references opened inside goald, or a
+// Environment tests (ADR 0037 decision 9): POST .../environments/{env}/test calls each MCP
+// server's tools/list with its headers' or env's {{secret}} references opened inside goald, or a
 // template's MCP servers and HTTP test with the secrets the body puts in its slots, and keeps
-// each server's result. Opened values reach the ToolLister and the test request only: every
-// error is scrubbed of them before it is answered or kept.
+// each server's result. A stdio server is started in goald only when its command is exactly one
+// the tool catalog ships, and every URL in its env is on a code host the organization lists (ADR
+// 0041 decision 15): never a command a definition names. Opened values reach the ToolLister and
+// the test request only: every error is scrubbed of them before it is answered or kept.
 
 // Errors of the environment test route, answered with their codes by environmentTestProblem.
 var (
@@ -108,13 +111,8 @@ func (s *server) TestEnvironment(ctx context.Context, req gen.TestEnvironmentReq
 
 	for _, name := range names {
 		m := env.Spec.MCP[name]
-		if m.URL == "" {
-			out.Servers = append(out.Servers, gen.ServerTest{Server: name, Tools: []string{}})
 
-			continue
-		}
-
-		r, err := t.server(ctx, name, m.URL, m.Headers, nil)
+		r, err := t.server(ctx, name, ports.MCPEndpoint{URL: m.URL, Headers: m.Headers, Command: m.Command, Env: m.Env}, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +123,7 @@ func (s *server) TestEnvironment(ctx context.Context, req gen.TestEnvironmentReq
 	return gen.TestEnvironment200JSONResponse(out), nil
 }
 
-// retestSecretUsers re-tests the remote MCP servers whose headers name secret (ADR 0037 decision
+// retestSecretUsers re-tests the MCP servers whose headers or env name secret (ADR 0037 decision
 // 9: tests run when a referenced secret is replaced) and keeps their results, in the environment
 // files of each factory that is not archived: its open draft's, then its current version's. A
 // server both have is tested once, as the draft has it, since both keep one result. The tests run
@@ -215,7 +213,7 @@ func (s *server) environmentNames(ctx context.Context, factory domain.FactoryID,
 	return slices.Compact(out), nil
 }
 
-// retestEnvironment re-tests environment name's remote MCP servers whose headers name secret,
+// retestEnvironment re-tests environment name's MCP servers whose headers or env name secret,
 // unless tested holds them already, and adds them to it.
 func (s *server) retestEnvironment(ctx context.Context, secret string, factory domain.FactoryID, sel authoring.VersionSelector, name string,
 	tested map[[2]string]bool,
@@ -235,13 +233,13 @@ func (s *server) retestEnvironment(ctx context.Context, secret string, factory d
 		m := env.Spec.MCP[server]
 		key := [2]string{env.Name, server}
 
-		if m.URL == "" || tested[key] || !slices.Contains(environmentcheck.Referenced(m.Headers), secret) {
+		if tested[key] || !slices.Contains(environmentcheck.Referenced(mergeMaps(m.Headers, m.Env)), secret) {
 			continue
 		}
 
 		tested[key] = true
 
-		if _, err := t.server(ctx, server, m.URL, m.Headers, nil); err != nil {
+		if _, err := t.server(ctx, server, ports.MCPEndpoint{URL: m.URL, Headers: m.Headers, Command: m.Command, Env: m.Env}, nil); err != nil {
 			s.log.WarnContext(ctx, "secret retest failed", append(attrs, slog.String("server", server), slog.Any("error", err))...)
 		}
 	}
@@ -294,19 +292,37 @@ type envTest struct {
 	environment string
 }
 
-// server tests one remote MCP server: it opens the secrets its headers name (or takes slots'
-// values for a template's, when slots is set), lists its tools and keeps the result.
-func (t envTest) server(ctx context.Context, name, url string, headers, slots map[string]string) (gen.ServerTest, error) {
+// server tests one MCP server e, as its file has it: it opens the secrets its headers or env name
+// (or takes slots' values for a template's, when slots is set), lists its tools and keeps the
+// result. A stdio server goald may not start is answered untested and kept nowhere.
+func (t envTest) server(ctx context.Context, name string, e ports.MCPEndpoint, slots map[string]string) (gen.ServerTest, error) {
 	if !environmentName.MatchString(name) {
 		return gen.ServerTest{}, fmt.Errorf("%w: %q is not an MCP server's name", errEnvironmentTestInvalid, name)
+	}
+
+	var refuse environmentcheck.Refuser
+
+	if e.URL == "" {
+		if !domain.CatalogCommand(t.s.catalog, e.Command) {
+			refusal := fmt.Sprintf("goald starts only the tool catalog's commands for a stdio server, not %q", strings.Join(e.Command, " "))
+			return untestedServer(name, refusal), nil
+		}
+
+		refuse = func(ctx context.Context, rendered ports.MCPEndpoint) (string, error) {
+			return t.hostRefusal(ctx, e.Env, rendered.Env)
+		}
 	}
 
 	at := t.s.clock.Now().UTC()
 	r := domain.EnvironmentTest{Factory: t.factory, Environment: t.environment, Server: name, At: at}
 
-	res, err := environmentcheck.Server(ctx, t.s.tools, t.open, url, headers, slots)
+	res, err := environmentcheck.Server(ctx, t.s.tools, t.open, e, slots, refuse)
 	if err != nil {
 		return gen.ServerTest{}, secretError(err)
+	}
+
+	if res.Refused != "" {
+		return untestedServer(name, res.Refused), nil
 	}
 
 	r.OK, r.Tools, r.ReadOnly, r.Error = res.OK, res.Tools, res.ReadOnly, res.Error
@@ -316,6 +332,56 @@ func (t envTest) server(ctx context.Context, name, url string, headers, slots ma
 	}
 
 	return serverTestOut(r), nil
+}
+
+// untestedServer is server name's result when goald would not start it, for refusal.
+func untestedServer(name, refusal string) gen.ServerTest {
+	return gen.ServerTest{Server: name, Tools: []string{}, Error: new(environmentcheck.Cut(refusal))}
+}
+
+// hostRefusal is why goald does not start a stdio server with env, as its file has it, rendered
+// to rendered, or "": each URL rendered holds must be on a code host the organization lists, since
+// the process dials its host itself, not through goald's public-addresses-only transport. It
+// checks the env as the process would get it, so a URL a secret holds is checked too, and the
+// refusal then names the variable, never the secret's host.
+func (t envTest) hostRefusal(ctx context.Context, env, rendered map[string]string) (string, error) {
+	var keys []string
+
+	for _, k := range slices.Sorted(maps.Keys(rendered)) {
+		if v := rendered[k]; strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "http://") {
+			keys = append(keys, k)
+		}
+	}
+
+	if len(keys) == 0 {
+		return "", nil
+	}
+
+	added, err := t.s.orgs.CodeHosts(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	hosts := append(domain.BuiltInCodeHosts(), added...)
+
+	for _, k := range keys {
+		host := ""
+		if u, err := url.Parse(rendered[k]); err == nil {
+			host = u.Host
+		}
+
+		if _, ok := domain.ListedCodeHost(hosts, host); ok {
+			continue
+		}
+
+		if len(environmentcheck.Referenced(map[string]string{k: env[k]})) > 0 {
+			return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: list the host the secret in %s holds in Code hosts", k), nil
+		}
+
+		return fmt.Sprintf("goald starts a stdio server only with URLs on the organization's code hosts: add %q in Code hosts", host), nil
+	}
+
+	return "", nil
 }
 
 // template tests template tpl of the catalog, resolved with the request's parameters, with the
@@ -410,17 +476,14 @@ func (t envTest) openSlots(ctx context.Context, c domain.ToolTemplate, secrets m
 	return slots, openErr, nil
 }
 
-// templateServer tests a template's MCP server m with slots: not a stdio one, and not when its
-// secrets did not open (openErr).
+// templateServer tests a template's MCP server m with slots, unless its secrets did not open
+// (openErr).
 func (t envTest) templateServer(ctx context.Context, name string, m domain.TemplateMCP, slots map[string]string, openErr error) (gen.ServerTest, error) {
-	switch {
-	case m.URL == "":
-		return gen.ServerTest{Server: name, Tools: []string{}}, nil
-	case openErr != nil:
+	if openErr != nil {
 		return gen.ServerTest{Server: name, Tested: true, Tools: []string{}, Error: new(environmentcheck.Cut(openErr.Error())), At: new(t.s.clock.Now().UTC())}, nil
-	default:
-		return t.server(ctx, name, m.URL, m.Headers, slots)
 	}
+
+	return t.server(ctx, name, ports.MCPEndpoint{URL: m.URL, Headers: m.Headers, Command: m.Command, Env: m.Env}, slots)
 }
 
 // open opens the named secrets for the factory, without a run (audited as secret.used): their

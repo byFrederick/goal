@@ -463,7 +463,8 @@ func TestConnectionRepositories_ListsOwnersAndRepositories(t *testing.T) {
 	}
 }
 
-// Only a code host connection goald reaches lists repositories, of owners its host knows.
+// Only a code host connection goald reaches, on a host the organization lists, lists
+// repositories, of owners its host knows.
 func TestConnectionRepositories_Refusals(t *testing.T) {
 	t.Parallel()
 
@@ -474,6 +475,7 @@ func TestConnectionRepositories_Refusals(t *testing.T) {
 	for _, body := range []string{
 		`{"name":"docs","kind":"mcp-server","fields":{"url":"https://docs.example.com/mcp"}}`,
 		`{"name":"gitlab","kind":"gitlab","secrets":{"token":"glpat-test-token"}}`,
+		`{"name":"ghe","kind":"github","fields":{"host":"ghe.example.com","api_url":"https://ghe.example.com/api/v3"},"secrets":{"token":"glpat-test-token"}}`,
 	} {
 		decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath, body, nil), http.StatusCreated)
 	}
@@ -486,6 +488,7 @@ func TestConnectionRepositories_Refusals(t *testing.T) {
 		{"unknown connection", connectionsPath + "/nothing/repositories", http.StatusNotFound, codeConnectionNotFound},
 		{"a kind with no code host", connectionsPath + "/docs/repositories", http.StatusUnprocessableEntity, "connection-not-code-host"},
 		{"a code host that lists none", connectionsPath + "/gitlab/repositories", http.StatusUnprocessableEntity, "repositories-not-supported"},
+		{"a host the organization doesn't list", connectionsPath + "/ghe/repositories", http.StatusUnprocessableEntity, "connection-not-code-host"},
 		{"unknown owner", reposPath + "?owner=nobody", http.StatusNotFound, "owner-not-found"},
 	}
 

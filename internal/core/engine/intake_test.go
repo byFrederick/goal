@@ -366,3 +366,94 @@ func TestIntake_ModelAgreesSkipsUntilTurnedIntoACheck(t *testing.T) {
 
 	wantSkipped(t, h.receive(t, failure("check-run-1", "unit")), "only.failuresInARow")
 }
+
+// create.repositories names the item's repositories: each value rendered with the event and
+// matched against the line's entries. Empty values add none, so the item gets the default
+// entry's, and a repository the factory doesn't have skips the Create step and files nothing.
+func TestIntake_CreateRepositories(t *testing.T) {
+	t.Parallel()
+
+	repoHarness := func(t *testing.T, repos ...string) *harness {
+		t.Helper()
+
+		tr := failedCheck()
+		tr.Create.Repositories = repos
+
+		line := lineOf(agentStation(stWork, agWorker, 1, 1))
+		line.Name = "SRE"
+		line.Triggers = []domain.Trigger{tr}
+		line.Runtime.Repositories = []domain.RepositoryEntry{
+			{Name: "app", URL: "https://github.com/acme/app.git", Default: true},
+			{Name: "tools", URL: "https://github.com/acme/tools"},
+			{Name: "labs", URL: "https://github.com/acme-labs/*"},
+		}
+
+		h := newHarness(t, line, porttest.Succeed(`{}`))
+		h.store.AddFactory(testOrg, factoryID)
+
+		return h
+	}
+
+	from := func(repo string) domain.IntakeEvent {
+		ev := failure("check-run-1", "unit")
+		ev.Sender, ev.Fields["repo"] = domain.SenderGitHub, repo
+
+		return ev
+	}
+
+	repos := func(t *testing.T, h *harness, f domain.TriggerFiring) []string {
+		t.Helper()
+		wantCreated(t, f)
+
+		rows, err := h.store.ItemRepositories(inOrg(t), f.ItemID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		out := make([]string, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, r.Repo+" "+string(r.Joined))
+		}
+
+		return out
+	}
+
+	t.Run("the event's repository and a fixed name", func(t *testing.T) {
+		t.Parallel()
+
+		h := repoHarness(t, "{{repo}}", "tools")
+		got := repos(t, h, h.receive(t, from("Acme-Labs/Web")))
+
+		if want := []string{"github.com/acme-labs/web filing", "github.com/acme/tools filing"}; strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("repositories = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an empty value adds none", func(t *testing.T) {
+		t.Parallel()
+
+		h := repoHarness(t, "{{repo}}")
+		got := repos(t, h, h.receive(t, from("")))
+
+		if want := "github.com/acme/app default"; strings.Join(got, ",") != want {
+			t.Errorf("repositories = %v, want the default entry's %q", got, want)
+		}
+	})
+
+	t.Run("a repository the factory doesn't have", func(t *testing.T) {
+		t.Parallel()
+
+		h := repoHarness(t, "{{repo}}")
+		f := h.receive(t, from("byFrederick/legacy"))
+
+		wantSkipped(t, f, domain.StepCreate)
+
+		if want := "create: byFrederick/legacy is not one of SRE's repositories"; f.Reason != want {
+			t.Errorf("reason = %q, want %q", f.Reason, want)
+		}
+
+		if n := h.items(t); n != 0 {
+			t.Errorf("%d items filed, want none", n)
+		}
+	})
+}

@@ -167,3 +167,81 @@ func TestResolveItemRepositories_FirstIsFirstNamed(t *testing.T) {
 		}
 	}
 }
+
+// keyLabsWeb is a repository the labs owner pattern covers, and ownerAPI keyAPI's owner/name.
+const (
+	keyLabsWeb = "github.com/acme-labs/web"
+	ownerAPI   = "acme/api"
+)
+
+// A trigger's or a check's repository value resolves against the line's entries, owner
+// patterns included and in any case: an entry's name, host/owner/name, an https URL or
+// owner/name, on the sender's own host when entries on several hosts cover it. An empty value
+// and one no entry covers resolve to nothing.
+func TestTriggerRepositories_Resolve(t *testing.T) {
+	t.Parallel()
+
+	twoHosts := fileLine()
+	twoHosts.Runtime.Repositories = []RepositoryEntry{
+		{Name: "lab", URL: "https://gitlab.com/acme/*"},
+		{Name: "hub", URL: "https://github.com/acme/*"},
+	}
+
+	tests := []struct {
+		name   string
+		l      Line
+		value  string
+		sender WebhookSender
+		want   string
+	}{
+		{"an entry's name", repoLine(""), entryAPI, "", keyAPI},
+		{"an entry's name in any case", repoLine(""), "API", "", keyAPI},
+		{"an owner pattern's name", repoLine(""), "labs", "", ""},
+		{"host/owner/name", repoLine(""), "GitHub.com/acme/api", "", keyAPI},
+		{"an https URL with .git", repoLine(""), "https://github.com/acme/API.git", "", keyAPI},
+		{"owner/name", repoLine(""), ownerAPI, SenderGitHub, keyAPI},
+		{"owner/name an owner pattern covers", repoLine(""), "Acme-Labs/Web", SenderGitHub, keyLabsWeb},
+		{"a nested owner's owner/name", repoLine(""), "acme/platform/infra", SenderGitLab, "gitlab.example.com/acme/platform/infra"},
+		{"owner/name on the sender's host", twoHosts, "acme/app", SenderGitHub, "github.com/acme/app"},
+		{"owner/name on the other sender's host", twoHosts, "acme/app", SenderGitLab, "gitlab.com/acme/app"},
+		{"owner/name on the first entry's host", twoHosts, "acme/app", SenderPagerDuty, "gitlab.com/acme/app"},
+		{"a repository no entry covers", repoLine(""), "byFrederick/legacy", SenderGitHub, ""},
+		{"a URL no entry covers", repoLine(""), "https://example.com/acme/api", "", ""},
+		{"an empty value", repoLine(""), " ", "", ""},
+		{"a line without entries", fileLine(), ownerAPI, SenderGitHub, ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := tc.l.ResolveRepository(tc.value, tc.sender)
+			if got != tc.want || ok != (tc.want != "") {
+				t.Errorf("ResolveRepository(%q) = %q, %v; want %q", tc.value, got, ok, tc.want)
+			}
+		})
+	}
+}
+
+// Resolving a list skips empty values, keeps each match once, and stops at the first value no
+// entry covers with NotTheFactorysRepository's reason.
+func TestTriggerRepositories_ResolveList(t *testing.T) {
+	t.Parallel()
+
+	l := repoLine("")
+	l.Name = "SRE"
+
+	keys, skip := l.ResolveRepositories([]string{"", ownerAPI, entryAPI, "acme-labs/web"}, SenderGitHub)
+	if want := []string{keyAPI, keyLabsWeb}; !reflect.DeepEqual(keys, want) || skip != "" {
+		t.Errorf("ResolveRepositories = %v, %q; want %v", keys, skip, want)
+	}
+
+	if keys, _ := l.ResolveRepositories([]string{"", " "}, SenderPagerDuty); keys != nil {
+		t.Errorf("empty values resolve to %v, want none", keys)
+	}
+
+	_, skip = l.ResolveRepositories([]string{ownerAPI, "byFrederick/legacy"}, SenderGitHub)
+	if want := "byFrederick/legacy is not one of SRE's repositories"; skip != want {
+		t.Errorf("skip = %q, want %q", skip, want)
+	}
+}
