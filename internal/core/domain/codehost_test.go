@@ -72,7 +72,7 @@ func TestCodeHost_RepositoryParseRefuses(t *testing.T) {
 		"", "::", "http://github.com/acme/app", "https://github.com/acme", "https://github.com/acme/app?x=1",
 		"https://github.com/acme/app#x", "https://github.com/acme/app/issues/7", "https://github.com/acme/app/pull/0",
 		"https://github.com/acme/app/tree/main", "https://github.com/acme/team/app", "https://gitlab.com/acme",
-		"https://gitlab.com/acme/web/-/issues/3", "https://gitlab.com/-/merge_requests/3", "https://github.com/acme/a%20b",
+		"https://gitlab.com/acme/web/-/issues/3", "https://gitlab.com/-/merge_requests/3", "https://github.com/acme/a%20b", "https://github.com/../app",
 		"https://x-token:ghp_secret-value@github.com/acme/app",
 	} {
 		_, err := ParseCodeRepository(BuiltInCodeHosts(), raw)

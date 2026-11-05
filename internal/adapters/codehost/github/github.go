@@ -1,14 +1,14 @@
 // Package github implements ports.CodeHost with GitHub's REST API, called from the goald host
-// with a code host login (domain.CodeHostLogin), built today from a connection whose kind's code
-// host is github (spec 4 §5.5).
+// for one repository on a GitHub host of the organization's list (domain.CodeRepository) and the
+// token that signs in to it (ADR 0041, decision 7).
 //
 // It reads pull requests, merges them, updates their branches with their base and deletes
 // branches, reads a repository's branch heads and the commits between two commits, and lists the
-// owners and repositories the login reaches, nothing else. The login says which host it serves
-// and holds the token; a pull request URL on any
-// other host is refused before anything is sent, and the repository is the URL's own. The API is
-// https://api.github.com for github.com, https://api.<host> for a GitHub Enterprise Cloud host
-// (<name>.ghe.com) and https://<host>/api/v3 for a GitHub Enterprise Server. A merge names the
+// owners and repositories a token reaches, nothing else. A repository on a host of another kind,
+// and a pull request URL that is not the repository's, are refused before anything is sent. The
+// API is the host's domain.CodeHostAPIBase: https://api.github.com for github.com,
+// https://api.<host> for a GitHub Enterprise Cloud host (<name>.ghe.com) and
+// https://<host>/api/v3 for a GitHub Enterprise Server. A merge names the
 // head SHA it was asked for, so GitHub refuses it if the branch moved, and it is never forced:
 // GitHub's refusals (not mergeable, head moved, invalid) come back as ports.ErrNotMergeable. A
 // branch update names the expected head SHA the same way; its conflicts come back as a
@@ -44,7 +44,7 @@ var _ ports.CodeHost = (*Client)(nil)
 // Config tunes the client. The zero value of each field means its default.
 type Config struct {
 	// APIURL, when set, is the REST API root for every host instead of the one derived from the
-	// connection's: a stand-in GitHub in tests.
+	// repository's host: a stand-in GitHub in tests.
 	APIURL string
 	// Timeout bounds one request. Default: 30s.
 	Timeout time.Duration
@@ -79,7 +79,6 @@ const (
 	// maxListBytes bounds a listing's answer: a page of 100 repositories carries every one's
 	// whole object.
 	maxListBytes = 8 << 20
-	dotCom       = "github.com"
 )
 
 // Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
@@ -111,7 +110,7 @@ func New(cfg Config) *Client {
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
-			// A credentialed request is never sent anywhere but the login's API.
+			// A credentialed request is never sent anywhere but the repository host's API.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
@@ -131,13 +130,12 @@ func (p pull) repoPath(rest string) string {
 
 var pullPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)/?$`)
 
-// open checks that prURL is a pull request on the login's host and names it.
-func (cl *Client) open(login domain.CodeHostLogin, prURL string) (pull, error) {
-	if err := login.Validate(); err != nil {
-		return pull{}, err
+// open checks repo and token (check) and that prURL is a pull request of repo, and names it.
+func (cl *Client) open(repo domain.CodeRepository, token, prURL string) (pull, error) {
+	p, err := cl.check(repo, token)
+	if err != nil {
+		return pull{}, fmt.Errorf("pull request %s: %w: %w", prURL, err, ports.ErrNotMergeable)
 	}
-
-	host, token := login.Host, login.Token
 
 	pu, err := url.Parse(prURL)
 	if err != nil {
@@ -149,50 +147,41 @@ func (cl *Client) open(login domain.CodeHostLogin, prURL string) (pull, error) {
 		return pull{}, fmt.Errorf("%q is not a pull request URL: %w", prURL, ports.ErrNotMergeable)
 	}
 
-	if !strings.EqualFold(pu.Host, host) {
-		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s: %w", prURL, host, login.Name, ports.ErrNotMergeable)
+	if !strings.EqualFold(pu.Host, repo.Host.Host) || !strings.EqualFold(m[1], repo.Owner) || !strings.EqualFold(m[2], repo.Name) {
+		return pull{}, fmt.Errorf("%s is not a pull request of %s: %w", prURL, repo, ports.ErrNotMergeable)
 	}
 
-	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2], number: m[3]}, nil
+	p.number = m[3]
+
+	return p, nil
 }
 
-var repoPath = regexp.MustCompile(`^/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
+// repoName is a repository's owner or name on GitHub.
+var repoName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 
-// openRepo checks that repoURL is a repository on the login's host and names it.
-func (cl *Client) openRepo(login domain.CodeHostLogin, repoURL string) (pull, error) {
-	if err := login.Validate(); err != nil {
-		return pull{}, err
-	}
-
-	host, token := login.Host, login.Token
-
-	u, err := url.Parse(repoURL)
-	if err != nil {
-		return pull{}, fmt.Errorf("repository %q: %w", repoURL, err)
-	}
-
-	m := repoPath.FindStringSubmatch(u.Path)
-	if u.Scheme != "https" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
-		return pull{}, fmt.Errorf("%q is not a repository URL", repoURL)
-	}
-
-	if !strings.EqualFold(u.Host, host) {
-		return pull{}, fmt.Errorf("%s is not on %s, the host of connection %s", repoURL, host, login.Name)
-	}
-
-	return pull{api: cl.apiFor(host), token: token, owner: m[1], repo: m[2]}, nil
-}
-
-// apiFor is the REST API root of host.
-func (cl *Client) apiFor(host string) string {
+// check refuses, before anything is sent, a repository that is not on a GitHub host or names no
+// owner or name, and an empty token, each wrapping domain.ErrInvalid; it names the repository
+// with the API that reaches it.
+func (cl *Client) check(repo domain.CodeRepository, token string) (pull, error) {
 	switch {
-	case cl.api != "":
-		return cl.api
-	case host == dotCom || strings.HasSuffix(host, ".ghe.com"):
-		return "https://api." + host
-	default:
-		return "https://" + host + "/api/v3"
+	case repo.Host.Kind != domain.CodeHostGitHub || repo.Host.Host == "":
+		return pull{}, fmt.Errorf("%s is not on a GitHub host: %w", repo, domain.ErrInvalid)
+	case !repoName.MatchString(repo.Owner) || !repoName.MatchString(repo.Name) || strings.Trim(repo.Owner, ".") == "" || strings.Trim(repo.Name, ".") == "":
+		return pull{}, fmt.Errorf("%s is not a GitHub repository: %w", repo, domain.ErrInvalid)
+	case token == "":
+		return pull{}, fmt.Errorf("%s: no token: %w", repo, domain.ErrInvalid)
 	}
+
+	return pull{api: cl.apiFor(repo.Host), token: token, owner: repo.Owner, repo: repo.Name}, nil
+}
+
+// apiFor is the REST API root of h: cl.api when set, else domain.CodeHostAPIBase.
+func (cl *Client) apiFor(h domain.CodeHost) string {
+	if cl.api != "" {
+		return cl.api
+	}
+
+	return domain.CodeHostAPIBase(h)
 }
 
 // pullJSON is the part of GitHub's pull request object goald reads.
@@ -270,8 +259,8 @@ func sleep(ctx context.Context, d time.Duration) error {
 }
 
 // PullRequest implements ports.CodeHost.
-func (cl *Client) PullRequest(ctx context.Context, login domain.CodeHostLogin, prURL string) (ports.PullRequest, error) {
-	p, err := cl.open(login, prURL)
+func (cl *Client) PullRequest(ctx context.Context, repo domain.CodeRepository, token, prURL string) (ports.PullRequest, error) {
+	p, err := cl.open(repo, token, prURL)
 	if err != nil {
 		return ports.PullRequest{}, err
 	}
@@ -305,8 +294,8 @@ const headWasModified = "head branch was modified"
 // refuses with 409 "Head branch was modified". Merge reads the pull request again after each of
 // cl.retries and merges at the head it reports now; a pull request found merged meanwhile is not
 // merged twice. Any other refusal, or the last 409, is ErrNotMergeable.
-func (cl *Client) Merge(ctx context.Context, login domain.CodeHostLogin, prURL string, m ports.Merge) (string, error) {
-	p, err := cl.open(login, prURL)
+func (cl *Client) Merge(ctx context.Context, repo domain.CodeRepository, token, prURL string, m ports.Merge) (string, error) {
+	p, err := cl.open(repo, token, prURL)
 	if err != nil {
 		return "", err
 	}
@@ -403,8 +392,8 @@ const dirty = "dirty"
 // background once it answers 202. The pull request is read once first: a dirty one is a conflict
 // without asking. A branch already up to date is a success; a 422 is a conflict only when GitHub
 // names one, and any other refusal is ErrNotMergeable.
-func (cl *Client) UpdateBranch(ctx context.Context, login domain.CodeHostLogin, prURL, headSHA string) error {
-	p, err := cl.open(login, prURL)
+func (cl *Client) UpdateBranch(ctx context.Context, repo domain.CodeRepository, token, prURL, headSHA string) error {
+	p, err := cl.open(repo, token, prURL)
 	if err != nil {
 		return err
 	}
@@ -454,8 +443,8 @@ func updateAnswer(prURL string, status int, msg string) error {
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (cl *Client) DeleteBranch(ctx context.Context, login domain.CodeHostLogin, prURL, branch string) error {
-	p, err := cl.open(login, prURL)
+func (cl *Client) DeleteBranch(ctx context.Context, repo domain.CodeRepository, token, prURL, branch string) error {
+	p, err := cl.open(repo, token, prURL)
 	if err != nil {
 		return err
 	}
@@ -478,8 +467,8 @@ func (cl *Client) DeleteBranch(ctx context.Context, login domain.CodeHostLogin, 
 }
 
 // BranchHead implements ports.CodeHost. An empty branch is the repository's default_branch.
-func (cl *Client) BranchHead(ctx context.Context, login domain.CodeHostLogin, repoURL, branch string) (string, error) {
-	p, err := cl.openRepo(login, repoURL)
+func (cl *Client) BranchHead(ctx context.Context, repo domain.CodeRepository, token, branch string) (string, error) {
+	p, err := cl.check(repo, token)
 	if err != nil {
 		return "", err
 	}
@@ -494,7 +483,7 @@ func (cl *Client) BranchHead(ctx context.Context, login domain.CodeHostLogin, re
 		}
 
 		if err := cl.get(ctx, p, p.repoPath(""), &repo, maxBodyBytes); err != nil {
-			return "", fmt.Errorf("default branch of %s: %w", repoURL, err)
+			return "", fmt.Errorf("default branch of %s: %w", repo, err)
 		}
 
 		branch = repo.DefaultBranch
@@ -507,11 +496,11 @@ func (cl *Client) BranchHead(ctx context.Context, login domain.CodeHostLogin, re
 	}
 
 	if err := cl.get(ctx, p, p.repoPath("/branches/"+refPath(branch)), &b, maxBodyBytes); err != nil {
-		return "", fmt.Errorf("head of %s in %s: %w", branch, repoURL, err)
+		return "", fmt.Errorf("head of %s in %s: %w", branch, repo, err)
 	}
 
 	if b.Commit.SHA == "" {
-		return "", fmt.Errorf("head of %s in %s: GitHub named no commit", branch, repoURL)
+		return "", fmt.Errorf("head of %s in %s: GitHub named no commit", branch, repo)
 	}
 
 	return b.Commit.SHA, nil
@@ -534,15 +523,15 @@ type commitJSON struct {
 // read once more for its own (up to ports.MaxCompareCommits+1 requests in all); any failure
 // fails the whole call. GitHub lists at most 300 files of one commit, and Compare does not page
 // past them.
-func (cl *Client) Compare(ctx context.Context, login domain.CodeHostLogin, repoURL, base, head string) (ports.Comparison, error) {
-	p, err := cl.openRepo(login, repoURL)
+func (cl *Client) Compare(ctx context.Context, repo domain.CodeRepository, token, base, head string) (ports.Comparison, error) {
+	p, err := cl.check(repo, token)
 	if err != nil {
 		return ports.Comparison{}, err
 	}
 
 	for _, ref := range []string{base, head} {
 		if ref == "" || strings.Contains(ref, "..") {
-			return ports.Comparison{}, fmt.Errorf("compare %q...%q in %s: not a commit", base, head, repoURL)
+			return ports.Comparison{}, fmt.Errorf("compare %q...%q in %s: not a commit", base, head, repo)
 		}
 	}
 
@@ -553,7 +542,7 @@ func (cl *Client) Compare(ctx context.Context, login domain.CodeHostLogin, repoU
 
 	path := p.repoPath("/compare/"+refPath(base)+"..."+refPath(head)) + "?per_page=" + strconv.Itoa(ports.MaxCompareCommits) + "&page=1"
 	if err := cl.get(ctx, p, path, &cmp, maxCommitBytes); err != nil {
-		return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: %w", base, head, repoURL, err)
+		return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: %w", base, head, repo, err)
 	}
 
 	commits := cmp.Commits[:min(len(cmp.Commits), ports.MaxCompareCommits)]
@@ -565,7 +554,7 @@ func (cl *Client) Compare(ctx context.Context, login domain.CodeHostLogin, repoU
 	for _, cj := range commits {
 		var full commitJSON
 		if err := cl.get(ctx, p, p.repoPath("/commits/"+url.PathEscape(cj.SHA)), &full, maxCommitBytes); err != nil {
-			return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: files of %s: %w", base, head, repoURL, cj.SHA, err)
+			return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: files of %s: %w", base, head, repo, cj.SHA, err)
 		}
 
 		files := make([]string, 0, len(full.Files))
@@ -597,12 +586,13 @@ var loginName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 // page. Each repository's languages are read once more (GET /repos/{full_name}/languages),
 // languageReads at a time, the largest by bytes first: up to ports.MaxRepositories+3 requests in
 // all, and any failure fails the whole call.
-func (cl *Client) Repositories(ctx context.Context, login domain.CodeHostLogin, owner string) (ports.RepositoryList, error) {
-	if err := login.Validate(); err != nil {
-		return ports.RepositoryList{}, err
+func (cl *Client) Repositories(ctx context.Context, host domain.CodeHost, token, owner string) (ports.RepositoryList, error) {
+	switch {
+	case host.Kind != domain.CodeHostGitHub || host.Host == "":
+		return ports.RepositoryList{}, fmt.Errorf("repositories: %s is not a GitHub host", host.Host)
+	case token == "":
+		return ports.RepositoryList{}, fmt.Errorf("repositories on %s: no token: %w", host.Host, domain.ErrInvalid)
 	}
-
-	host, token := login.Host, login.Token
 
 	if owner != "" && !loginName.MatchString(owner) {
 		return ports.RepositoryList{}, fmt.Errorf("repositories of %q: not an account or organization name", owner)
@@ -772,7 +762,7 @@ func refPath(ref string) string {
 	return strings.Join(segments, "/")
 }
 
-// call sends one API request with the login's token and decodes a successful JSON answer
+// call sends one API request with the repository's token and decodes a successful JSON answer
 // into out (when out is not nil). It returns the status and GitHub's message, if any; err is
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
@@ -876,28 +866,22 @@ func messageOf(raw []byte) (string, error) {
 // true. For a fine-grained token that is the token's own grant; for a classic one it is the
 // account's role, which a token without the repo scope cannot use, so push ok can be optimistic.
 // A refusal (401, 403, 404) is a failed read with GitHub's message; a 5xx or no answer is an error.
-func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (ports.RepositoryAccess, error) {
-	u, err := url.Parse(repoURL)
+func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (ports.RepositoryAccess, error) {
+	p, err := cl.check(repo, token)
 	if err != nil {
-		return ports.RepositoryAccess{}, fmt.Errorf("repository %q: %w", repoURL, domain.ErrInvalid)
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access: %w", err)
 	}
 
-	m := repoPath.FindStringSubmatch(u.Path)
-	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || m == nil {
-		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL such as https://github.com/acme/app: %w", repoURL, domain.ErrInvalid)
-	}
-
-	p := pull{api: cl.apiFor(strings.ToLower(u.Host)), token: token, owner: m[1], repo: m[2]}
 	full := p.owner + "/" + p.repo
 
-	var repo struct {
+	var answer struct {
 		Permissions struct {
 			Pull bool `json:"pull"`
 			Push bool `json:"push"`
 		} `json:"permissions"`
 	}
 
-	status, msg, _, err := cl.exchange(ctx, p, http.MethodGet, p.repoPath(""), nil, &repo, maxBodyBytes)
+	status, msg, _, err := cl.exchange(ctx, p, http.MethodGet, p.repoPath(""), nil, &answer, maxBodyBytes)
 
 	switch {
 	case err != nil:
@@ -913,10 +897,10 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repoURL, token string) (
 
 	out := ports.RepositoryAccess{
 		Read: ports.AccessCheck{OK: true, Reason: "GitHub shows " + full + " to the token"},
-		Push: ports.AccessCheck{OK: repo.Permissions.Push, Reason: "GitHub grants the token push to " + full},
+		Push: ports.AccessCheck{OK: answer.Permissions.Push, Reason: "GitHub grants the token push to " + full},
 	}
 
-	if !repo.Permissions.Push {
+	if !answer.Permissions.Push {
 		out.Push.Reason = "GitHub grants the token no push to " + full + " (permissions.push is false)"
 	}
 

@@ -11,7 +11,7 @@ import (
 
 // ErrCodeHostUnlisted means a repository on a host that is not one of the organization's code
 // hosts (ListedCodeHosts): goald sends it no token (ADR 0041, decision 1). It wraps ErrInvalid.
-var ErrCodeHostUnlisted = fmt.Errorf("not one of the organization's code hosts: %w", ErrInvalid)
+var ErrCodeHostUnlisted = fmt.Errorf("the host is not one of the organization's code hosts: %w", ErrInvalid)
 
 // CodeRepository is one repository on a listed code host, what ports.CodeHost works on (ADR 0041,
 // decision 7). Owner is the repository's owner path as its URL spells it: an account or
@@ -59,12 +59,12 @@ func ParseCodeRepository(hosts []CodeHost, raw string) (CodeRepository, error) {
 
 	host, ok := ListedCodeHost(hosts, u.Host)
 	if !ok {
-		return CodeRepository{}, fmt.Errorf("%s is %w, so goald sends it no token: an owner can add it under Code hosts in the organization's settings",
+		return CodeRepository{}, fmt.Errorf("%s: %w; goald sends it no token, and an owner can add it under Code hosts in the organization's settings",
 			strings.ToLower(u.Host), ErrCodeHostUnlisted)
 	}
 
 	segs, ok := repositorySegments(host.Kind, strings.Split(strings.Trim(u.Path, "/"), "/"))
-	if !ok || slices.ContainsFunc(segs, func(s string) bool { return !pathSegment.MatchString(s) }) {
+	if !ok || slices.ContainsFunc(segs, func(s string) bool { return !pathSegment.MatchString(s) || strings.Trim(s, ".") == "" }) {
 		return CodeRepository{}, fmt.Errorf("%s names no repository of %s, such as https://%s/acme/app: %w", u.Redacted(), host.Host, host.Host, ErrInvalid)
 	}
 
