@@ -34,3 +34,25 @@ func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]dom
 
 	return out, nil
 }
+
+// OpenItemRepositories implements ports.Store.
+func (s *Store) OpenItemRepositories(ctx context.Context, factory domain.FactoryID) ([]domain.RepositoryUse, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.OpenItemRepositoriesRow, error) {
+		return q.OpenItemRepositories(ctx, fid)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("repositories of factory %s's open items: %w", factory, err)
+	}
+
+	out := make([]domain.RepositoryUse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.RepositoryUse{Repo: r.Repo, Item: domain.ItemID(r.ItemID.String()), Number: r.Number})
+	}
+
+	return out, nil
+}

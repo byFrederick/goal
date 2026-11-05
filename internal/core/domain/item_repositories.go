@@ -229,6 +229,46 @@ func resolveWithoutHost(entries []RepositoryEntry, raw, name string) (string, er
 	}
 }
 
+// RepositoryUse is an open item's use of a repository: one of its rows (ItemRepository).
+type RepositoryUse struct {
+	Repo   string
+	Item   ItemID
+	Number int64
+}
+
+// RemovedRepository is a repository open items use that a new version's entries no longer
+// cover, with the numbers of those items in the order of uses.
+type RemovedRepository struct {
+	Repo  string
+	Items []int64
+}
+
+// RemovedRepositories are the repositories of uses that an entry of current covers and no entry
+// of next does, in the order of uses (ADR 0041 decision 4). Entries match by URL, never by
+// name, so an entry renamed with its URL kept, or a repository an owner pattern of next covers,
+// removes nothing.
+func RemovedRepositories(current, next []RepositoryEntry, uses []RepositoryUse) []RemovedRepository {
+	var out []RemovedRepository
+
+	for _, u := range uses {
+		if !coveredBy(current, u.Repo) || coveredBy(next, u.Repo) {
+			continue
+		}
+
+		i := slices.IndexFunc(out, func(r RemovedRepository) bool { return r.Repo == u.Repo })
+		if i < 0 {
+			out = append(out, RemovedRepository{Repo: u.Repo})
+			i = len(out) - 1
+		}
+
+		if !slices.Contains(out[i].Items, u.Number) {
+			out[i].Items = append(out[i].Items, u.Number)
+		}
+	}
+
+	return out
+}
+
 // coveredBy reports whether one of entries covers key.
 func coveredBy(entries []RepositoryEntry, key string) bool {
 	return slices.ContainsFunc(entries, func(e RepositoryEntry) bool { return e.Covers(key) })
