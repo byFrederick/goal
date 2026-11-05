@@ -1509,8 +1509,7 @@ func TestOwnerAccess(t *testing.T) {
 }
 
 // An empty token or owner, an owner that is not a login and a host of another kind are refused
-// before anything is sent; a token GitHub echoes is in no reason; a redirect is not followed and
-// is a refusal; a host that does not answer, or answers 5xx, is an error.
+// before anything is sent, and a token GitHub echoes is in no reason.
 func TestOwnerAccess_Refusals(t *testing.T) {
 	t.Parallel()
 
@@ -1521,8 +1520,11 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 		host         domain.CodeHost
 		token, owner string
 	}{
-		{gitHubDotCom, "", acmeOwner}, {gitHubDotCom, token, ""}, {gitHubDotCom, token, "../user"},
-		{domain.BuiltInCodeHosts()[1], token, acmeOwner}, {domain.CodeHost{Kind: domain.CodeHostGitHub}, token, acmeOwner},
+		{gitHubDotCom, "", acmeOwner},
+		{gitHubDotCom, token, ""},
+		{gitHubDotCom, token, "../user"},
+		{domain.BuiltInCodeHosts()[1], token, acmeOwner},
+		{domain.CodeHost{Kind: domain.CodeHostGitHub}, token, acmeOwner},
 	} {
 		if _, err := c.OwnerAccess(t.Context(), bad.host, bad.token, bad.owner); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("OwnerAccess(%+v, %q) err = %v; want domain.ErrInvalid", bad.host, bad.owner, err)
@@ -1544,6 +1546,12 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 	if err != nil || got.Readable != 0 || got.Reason == "" || strings.Contains(got.Reason, token) {
 		t.Errorf("OwnerAccess with an echoed token = %+v, %v; want a refusal without the token", got, err)
 	}
+}
+
+// A redirect is not followed and is a refusal; a host that does not answer, or answers 5xx, is
+// an error.
+func TestOwnerAccess_RedirectsAndFailures(t *testing.T) {
+	t.Parallel()
 
 	var leaked atomic.Bool
 
@@ -1557,7 +1565,7 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 	}))
 	t.Cleanup(redirect.Close)
 
-	got, err = New(Config{APIURL: redirect.URL}).OwnerAccess(t.Context(), gitHubDotCom, token, acmeOwner)
+	got, err := New(Config{APIURL: redirect.URL}).OwnerAccess(t.Context(), gitHubDotCom, token, acmeOwner)
 	if err != nil || got.Readable != 0 || leaked.Load() {
 		t.Errorf("OwnerAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a refusal and no token sent", got, err, leaked.Load())
 	}

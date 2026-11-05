@@ -30,8 +30,11 @@ const (
 	keyMessage  = "message"
 	squashSHA   = "squash-sha"
 	cannotMerge = "Branch cannot be merged"
-	// octo is a user the stand-in GitLab knows.
-	octo = "octo"
+	// octo is a user the stand-in GitLab knows, and acme/platform a group of the group acme.
+	octo          = "octo"
+	acmeGroup     = "acme"
+	platformGroup = "acme/platform"
+	unauthorized  = "401 Unauthorized"
 )
 
 // selfManagedHost is a self-managed GitLab host.
@@ -659,7 +662,7 @@ func ownerGitLab(t *testing.T, group, user []int) (*httptest.Server, func() []st
 		switch {
 		case r.Method != http.MethodGet || r.Header.Get("PRIVATE-TOKEN") != token:
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "401 Unauthorized"})
+			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: unauthorized})
 
 			return
 		case !ok:
@@ -674,6 +677,7 @@ func ownerGitLab(t *testing.T, group, user []int) (*httptest.Server, func() []st
 		least, _ := strconv.Atoi(q.Get("min_access_level"))
 
 		var matching []int
+
 		for _, l := range levels {
 			if l >= least {
 				matching = append(matching, l)
@@ -725,17 +729,17 @@ func TestOwnerAccess(t *testing.T) {
 		reason             string
 	}{
 		{
-			name: "nested group", owner: "acme/platform", token: token, group: slices.Concat(levels(2, 20), levels(3, 30), levels(1, 50)),
+			name: "nested group", owner: platformGroup, token: token, group: slices.Concat(levels(2, 20), levels(3, 30), levels(1, 50)),
 			want: ports.OwnerAccess{Readable: 6, Pushable: 4}, reason: "6",
 		},
 		{name: "user namespace", owner: octo, token: token, user: levels(150, 10), want: ports.OwnerAccess{Readable: 150}},
 		{
-			name: "truncated", owner: "acme/platform", token: token, group: levels(ports.MaxOwnerRepositories+1, 40),
+			name: "truncated", owner: platformGroup, token: token, group: levels(ports.MaxOwnerRepositories+1, 40),
 			want: ports.OwnerAccess{Readable: ports.MaxOwnerRepositories, Pushable: ports.MaxOwnerRepositories, Truncated: true},
 		},
 		{name: "unknown owner", owner: "acme/gone", token: token, reason: "acme/gone"},
 		{name: "unknown user", owner: "nobody", token: token, reason: "nobody"},
-		{name: "bad token", owner: "acme/platform", token: "glpat-wrong", group: levels(1, 30), reason: "401 Unauthorized"},
+		{name: "bad token", owner: platformGroup, token: "glpat-wrong", group: levels(1, 30), reason: unauthorized},
 	} {
 		srv, paths := ownerGitLab(t, tc.group, tc.user)
 
@@ -766,8 +770,7 @@ func TestOwnerAccess(t *testing.T) {
 }
 
 // An empty token or owner, an owner that is not a namespace path and a host of another kind are
-// refused before anything is sent; a token GitLab echoes is in no reason; a redirect is not
-// followed and is a refusal; a host that does not answer, or answers 5xx, is an error.
+// refused before anything is sent, and a token GitLab echoes is in no reason.
 func TestOwnerAccess_Refusals(t *testing.T) {
 	t.Parallel()
 
@@ -778,8 +781,12 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 		host         domain.CodeHost
 		token, owner string
 	}{
-		{gitLabDotCom, "", "acme"}, {gitLabDotCom, token, ""}, {gitLabDotCom, token, "acme/.."}, {gitLabDotCom, token, "acme//x"},
-		{domain.BuiltInCodeHosts()[0], token, "acme"}, {domain.CodeHost{Kind: domain.CodeHostGitLab}, token, "acme"},
+		{gitLabDotCom, "", acmeGroup},
+		{gitLabDotCom, token, ""},
+		{gitLabDotCom, token, "acme/.."},
+		{gitLabDotCom, token, "acme//x"},
+		{domain.BuiltInCodeHosts()[0], token, acmeGroup},
+		{domain.CodeHost{Kind: domain.CodeHostGitLab}, token, acmeGroup},
 	} {
 		if _, err := c.OwnerAccess(t.Context(), bad.host, bad.token, bad.owner); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("OwnerAccess(%+v, %q) err = %v; want domain.ErrInvalid", bad.host, bad.owner, err)
@@ -797,10 +804,16 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 	}))
 	t.Cleanup(echo.Close)
 
-	got, err := New(Config{APIURL: echo.URL}).OwnerAccess(t.Context(), gitLabDotCom, token, "acme")
+	got, err := New(Config{APIURL: echo.URL}).OwnerAccess(t.Context(), gitLabDotCom, token, acmeGroup)
 	if err != nil || got.Readable != 0 || got.Reason == "" || strings.Contains(got.Reason, token) {
 		t.Errorf("OwnerAccess with an echoed token = %+v, %v; want a refusal without the token", got, err)
 	}
+}
+
+// A redirect is not followed and is a refusal; a host that does not answer, or answers 5xx, is
+// an error.
+func TestOwnerAccess_RedirectsAndFailures(t *testing.T) {
+	t.Parallel()
 
 	var leaked atomic.Bool
 
@@ -814,7 +827,7 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 	}))
 	t.Cleanup(redirect.Close)
 
-	got, err = New(Config{APIURL: redirect.URL}).OwnerAccess(t.Context(), gitLabDotCom, token, "acme")
+	got, err := New(Config{APIURL: redirect.URL}).OwnerAccess(t.Context(), gitLabDotCom, token, acmeGroup)
 	if err != nil || got.Readable != 0 || leaked.Load() {
 		t.Errorf("OwnerAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a refusal and no token sent", got, err, leaked.Load())
 	}
@@ -828,7 +841,7 @@ func TestOwnerAccess_Refusals(t *testing.T) {
 	dead.Close()
 
 	for name, api := range map[string]string{"502": failing.URL, "no answer": dead.URL} {
-		if _, err := New(Config{APIURL: api}).OwnerAccess(t.Context(), gitLabDotCom, token, "acme"); err == nil {
+		if _, err := New(Config{APIURL: api}).OwnerAccess(t.Context(), gitLabDotCom, token, acmeGroup); err == nil {
 			t.Errorf("a host with %s: err = nil; want an error", name)
 		}
 	}

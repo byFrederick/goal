@@ -505,6 +505,27 @@ func pushCheck(level int, project string) ports.AccessCheck {
 	}
 }
 
+// checkOwner refuses, before anything is sent, a host that is not a GitLab one, an empty token
+// and an owner that is no namespace path, each wrapping domain.ErrInvalid; it names the API that
+// reaches the host.
+func (cl *Client) checkOwner(host domain.CodeHost, token, owner string) (mergeRequest, error) {
+	switch {
+	case host.Kind != domain.CodeHostGitLab || host.Host == "":
+		return mergeRequest{}, fmt.Errorf("%s is not a GitLab host: %w", host.Host, domain.ErrInvalid)
+	case token == "":
+		return mergeRequest{}, fmt.Errorf("%s: no token: %w", owner, domain.ErrInvalid)
+	case !ownerPath(owner):
+		return mergeRequest{}, fmt.Errorf("%q is not a GitLab group or user: %w", owner, domain.ErrInvalid)
+	}
+
+	m := mergeRequest{api: cl.api, token: token}
+	if m.api == "" {
+		m.api = domain.CodeHostAPIBase(host)
+	}
+
+	return m, nil
+}
+
 // ownerPath is a GitLab namespace's full path: a user, or a group and its subgroups.
 func ownerPath(owner string) bool {
 	segs := strings.Split(owner, "/")
@@ -520,18 +541,9 @@ func ownerPath(owner string) bool {
 // them. A refusal (401, 403, an unknown owner, a redirect) is in the result with GitLab's
 // message; a 5xx or no answer is an error.
 func (cl *Client) OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (ports.OwnerAccess, error) {
-	switch {
-	case host.Kind != domain.CodeHostGitLab || host.Host == "":
-		return ports.OwnerAccess{}, fmt.Errorf("owner access: %s is not a GitLab host: %w", host.Host, domain.ErrInvalid)
-	case token == "":
-		return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: no token: %w", owner, domain.ErrInvalid)
-	case !ownerPath(owner):
-		return ports.OwnerAccess{}, fmt.Errorf("owner access of %q: not a GitLab group or user: %w", owner, domain.ErrInvalid)
-	}
-
-	m := mergeRequest{api: cl.api, token: token}
-	if m.api == "" {
-		m.api = domain.CodeHostAPIBase(host)
+	m, err := cl.checkOwner(host, token, owner)
+	if err != nil {
+		return ports.OwnerAccess{}, fmt.Errorf("owner access: %w", err)
 	}
 
 	listing, query := "/groups/"+url.PathEscape(owner)+"/projects", "&include_subgroups=true"
