@@ -237,7 +237,7 @@ describe('DetailsCard', () => {
 
     const text = (await screen.findByText(new RegExp(title))) as HTMLElement;
     expect(text.className).not.toMatch(/truncate/);
-    expect(screen.getByRole('link', { name: 'software#150' }).className).toMatch(/underline/);
+    expect(screen.getByRole('link', { name: 'software#150' }).className.split(' ')).toContain('underline');
   });
 });
 

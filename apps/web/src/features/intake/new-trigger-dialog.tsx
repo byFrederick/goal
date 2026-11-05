@@ -115,7 +115,7 @@ export function NewTriggerDialog() {
               )}
             >
               <legend className="sr-only">Sources</legend>
-              <label className="mb-2 flex h-11 items-center gap-2 rounded-control border md:h-9 md: border-rule bg-card px-3 text-ink-soft">
+              <label className="mb-2 flex h-11 items-center gap-2 rounded-control border md:h-9 border-rule bg-card px-3 text-ink-soft">
                 <Search aria-hidden="true" className="size-4 flex-none" />
                 <span className="sr-only">Search sources</span>
                 <input
@@ -156,29 +156,39 @@ export function NewTriggerDialog() {
               {servers.loading || shownServers.length > 0 ? (
                 <div className="flex flex-col gap-1">
                   <h3 className="m-0 px-2 pt-2 pb-1 text-meta font-semibold text-muted">Check with an agent</h3>
-                  {servers.loading ? (
-                    <div aria-hidden="true" className="flex h-11 items-center px-2 md:h-10">
-                      <span className="h-4 w-28 rounded-chip bg-hover" />
+                  <Skeleton
+                    ready={!servers.loading}
+                    placeholder={
+                      <div className="flex flex-col gap-1">
+                        {['one', 'two'].map((k) => (
+                          <div key={k} className="flex h-11 items-center px-2 md:h-10">
+                            <span className="h-4 w-28 rounded-chip bg-hover" />
+                          </div>
+                        ))}
+                      </div>
+                    }
+                  >
+                    <div className="flex flex-col gap-1">
+                      {shownServers.map((t) => (
+                        <button
+                          key={t.name}
+                          type="button"
+                          aria-pressed={source === 'check' && tool === t.name}
+                          onClick={() => {
+                            setSource('check');
+                            setTool(t.name);
+                            setDetailsShown(true);
+                          }}
+                          className="press flex h-11 min-w-0 shrink-0 grow items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink transition-colors duration-(--duration-fast) ease-out hover:bg-hover aria-pressed:bg-hover md:h-10"
+                        >
+                          <span title={t.label} className="min-w-0 flex-1 truncate">
+                            {t.label}
+                          </span>
+                          <Chip>its tool</Chip>
+                        </button>
+                      ))}
                     </div>
-                  ) : null}
-                  {shownServers.map((t) => (
-                    <button
-                      key={t.name}
-                      type="button"
-                      aria-pressed={source === 'check' && tool === t.name}
-                      onClick={() => {
-                        setSource('check');
-                        setTool(t.name);
-                        setDetailsShown(true);
-                      }}
-                      className="press flex h-11 min-w-0 shrink-0 grow items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink transition-colors duration-(--duration-fast) ease-out hover:bg-hover aria-pressed:bg-hover md:h-10"
-                    >
-                      <span title={t.label} className="min-w-0 flex-1 truncate">
-                        {t.label}
-                      </span>
-                      <Chip>its tool</Chip>
-                    </button>
-                  ))}
+                  </Skeleton>
                 </div>
               ) : null}
             </fieldset>
