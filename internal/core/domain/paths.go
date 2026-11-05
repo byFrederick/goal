@@ -39,6 +39,97 @@ func PathsOverlap(a, b []string) []PathOverlap {
 	return out
 }
 
+// RepositoryPathsOverlap is PathsOverlap for entries that may name their repository (ADR 0041
+// decision 5, amending ADR 0015): an entry `owner/name:glob` is glob in owner/name, and an entry
+// without a prefix is in its item's first repository, firstA for a and firstB for b. Pairs in
+// different repositories never overlap. Repositories compare by owner/name in lower case, the
+// last two segments of a key, so the host is ignored, which only ever holds more items. An
+// entry whose repository is unknown, with no prefix and no first repository, meets every
+// repository's paths. Pairs keep the entries as written.
+func RepositoryPathsOverlap(a []string, firstA string, b []string, firstB string) []PathOverlap {
+	ra, rb := repositoryGlobs(a, firstA), repositoryGlobs(b, firstB)
+
+	var out []PathOverlap
+
+	for _, x := range ra {
+		for _, y := range rb {
+			if (x.repo == "" || y.repo == "" || x.repo == y.repo) && x.meets(y.glob) {
+				out = append(out, PathOverlap{A: x.src, B: y.src})
+			}
+		}
+	}
+
+	return out
+}
+
+// RepositoryGlobs are the globs of the entries of paths in repo, a repository key, without
+// their prefix and in order: those whose prefix names repo, those without one when first, the
+// item's first repository, is repo, and those without one when first is unknown.
+func RepositoryGlobs(paths []string, first, repo string) []string {
+	want := repositoryOwnerName(repo)
+
+	var out []string
+
+	for _, p := range paths {
+		if r, g := splitRepositoryPath(p, first); r == "" || r == want {
+			out = append(out, g)
+		}
+	}
+
+	return out
+}
+
+// repositoryGlob is a compiled glob with its repository as owner/name, "" when unknown.
+type repositoryGlob struct {
+	glob
+
+	repo string
+}
+
+func repositoryGlobs(paths []string, first string) []repositoryGlob {
+	out := make([]repositoryGlob, 0, len(paths))
+
+	for _, p := range paths {
+		repo, g := splitRepositoryPath(p, first)
+		for _, c := range compileGlobs([]string{g}) {
+			c.src = p
+			out = append(out, repositoryGlob{glob: c, repo: repo})
+		}
+	}
+
+	return out
+}
+
+// splitRepositoryPath splits a paths entry into its repository as owner/name in lower case and
+// its glob. Only a leading `owner/name:`, where owner and name are single non-empty segments
+// without wildcards, is a prefix, so `C:x` and `docs:a/b` are globs in first.
+func splitRepositoryPath(entry, first string) (string, string) {
+	s := strings.TrimSpace(entry)
+
+	if prefix, glob, ok := strings.Cut(s, ":"); ok {
+		if owner, name, ok := strings.Cut(prefix, "/"); ok && plainSegment(owner) && plainSegment(name) {
+			return strings.ToLower(prefix), glob
+		}
+	}
+
+	return repositoryOwnerName(first), s
+}
+
+// plainSegment reports whether s is a non-empty path segment without wildcards or spaces.
+func plainSegment(s string) bool {
+	return s != "" && !strings.ContainsAny(s, "/*?[]{}\\ \t")
+}
+
+// repositoryOwnerName is the last two segments of a repository key in lower case, "" for fewer.
+func repositoryOwnerName(key string) string {
+	segs := strings.Split(strings.Trim(strings.ToLower(strings.TrimSpace(key)), "/"), "/")
+	if len(segs) < 2 || segs[len(segs)-2] == "" {
+		return ""
+	}
+
+	return segs[len(segs)-2] + "/" + segs[len(segs)-1]
+}
+
 // glob is one compiled glob: its alternatives, or every path when they were too many.
 type glob struct {
 	src   string

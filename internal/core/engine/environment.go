@@ -35,7 +35,8 @@ var errNoOrgSecrets = errors.New("this goald has no secrets store")
 //
 // Each entry token code's logins pick is opened in the same call too, once however many logins
 // pick it, and goes to prepare alone in its entry's domain.RepositoryEntryTokenEnv variable, for
-// the credential helper per path (ADR 0041 decision 5). code is zero for every run but a station's.
+// the credential helper per path (ADR 0041 decision 5). code is zero for every run but a station's
+// and a check's.
 func (e *Engine) secretEnv(
 	ctx context.Context, use domain.SecretUse, modelKey string, env domain.Environment, repo domain.Repository, code domain.RunCode,
 ) (runEnv, error) {
