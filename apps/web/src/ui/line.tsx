@@ -113,14 +113,9 @@ export function Line({
   );
 }
 
-// A stopped line dims its graphics (connectors, bars, slots) by opacity; its words turn muted instead, because
-// opacity on text fails WCAG contrast (MASTER.md, the buffer cards).
+// A stopped line mutes its ink; opacity would fail text contrast (MASTER.md, the board's dimmed cards).
 const DIM =
-  'transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none data-[dimmed=true]:opacity-40';
-const DIM_PART =
-  'transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none group-data-[dimmed=true]:opacity-40';
-const DIM_TEXT =
-  'transition-colors duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none group-data-[dimmed=true]:text-muted';
+  'transition-colors duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none data-[dimmed=true]:text-muted';
 
 /** One station, and the connector before it from the second station on. */
 function StationItem({
@@ -155,7 +150,8 @@ function StationItem({
       <li
         data-dimmed={dim}
         className={cn(
-          'group grid min-h-16 min-w-0 flex-1 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-rule py-3 md:flex md:min-h-0 md:flex-col md:items-stretch md:gap-2 md:border-b-0 md:py-0',
+          'group/station grid min-h-16 min-w-0 flex-1 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-rule py-3 md:flex md:min-h-0 md:flex-col md:items-stretch md:gap-2 md:border-b-0 md:py-0',
+          DIM,
         )}
       >
         <StationColumn station={station} compact={compact} />
@@ -174,12 +170,13 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
         value={s.count}
         className={cn(
           'col-start-1 row-span-4 row-start-1 text-center text-kpi md:order-2 md:text-left',
-          DIM_TEXT,
           compact && 'text-body font-medium',
         )}
       />
       <span className="col-start-2 flex flex-wrap items-center gap-2 md:order-1">
-        <span className={cn('text-secondary font-medium text-ink', DIM_TEXT)}>{s.name}</span>
+        <span className="text-secondary font-medium text-ink transition-colors duration-(--duration-fast) ease-(--ease-out) group-data-[dimmed=true]/station:text-muted motion-reduce:transition-none">
+          {s.name}
+        </span>
         {s.constraint ? (
           <span className="flex items-center gap-1 text-meta text-amber-ink">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />
@@ -190,10 +187,7 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
       {s.load !== null ? (
         <span
           aria-hidden="true"
-          className={cn(
-            'col-start-2 block h-1 w-full max-w-45 overflow-hidden rounded-full bg-hover md:order-3 md:max-w-none',
-            DIM_PART,
-          )}
+          className="col-start-2 block h-1 w-full max-w-45 overflow-hidden rounded-full bg-hover md:order-3 md:max-w-none"
         >
           <span
             className={cn(
@@ -205,12 +199,7 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
         </span>
       ) : null}
       {s.slots ? (
-        <span
-          className={cn(
-            'col-start-3 row-span-4 row-start-1 flex justify-end self-center md:order-4 md:justify-start',
-            DIM_PART,
-          )}
-        >
+        <span className="col-start-3 row-span-4 row-start-1 flex justify-end self-center md:order-4 md:justify-start">
           <Slots slots={s.slots} label={s.slotsLabel} />
         </span>
       ) : null}

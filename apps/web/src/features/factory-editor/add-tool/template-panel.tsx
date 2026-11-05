@@ -11,9 +11,11 @@ import { useFactory } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Field, Input } from '../../../ui/field';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { refusalText } from '../../secrets/words';
 import { useDraftSession } from '../draft/use-draft';
 import { fillAdds, type ToolMode } from '../environments/env-file';
+import { useSecretOptions } from '../environments/parts';
 import { pickedNames, type SlotPick, suggested } from './apply-template';
 import {
   AddFooter,
@@ -27,22 +29,30 @@ import {
 
 const plainValue = (v: string) => !v.includes('{{');
 
-export function TemplatePanel({
-  template,
-  environment,
-  onEnvironment,
-}: {
+type PanelProps = {
   template: ToolTemplate;
   environment: string;
   onEnvironment: (name: string) => void;
-}) {
+};
+
+/** Waits for the organization's secrets, so the suggested name of a new one is free from the first keystroke. */
+export function TemplatePanel(props: PanelProps) {
+  const { options, ready } = useSecretOptions();
+  return (
+    <Skeleton ready={ready} placeholder={<SkeletonRows rows={6} />}>
+      {ready ? <Panel {...props} taken={new Set(options.map((o) => o.value))} /> : null}
+    </Skeleton>
+  );
+}
+
+function Panel({ template, environment, onEnvironment, taken }: PanelProps & { taken: ReadonlySet<string> }) {
   const factory = useFactory();
   const session = useDraftSession();
   const create = useCreateSecrets();
   const servers = Object.entries(template.adds.mcp);
   const remote = servers.filter(([, s]) => s.url);
   const [url, setUrl] = useState(remote[0]?.[1].url ?? '');
-  const [picks, setPicks] = useState<Record<string, SlotPick>>(() => suggested(template));
+  const [picks, setPicks] = useState<Record<string, SlotPick>>(() => suggested(template, taken));
   const [plain, setPlain] = useState<Record<string, string>>({});
   const [modes, setModes] = useState<Record<string, Record<string, ToolMode>>>(() =>
     Object.fromEntries(servers.map(([name, s]) => [name, { ...s.tools } as Record<string, ToolMode>])),

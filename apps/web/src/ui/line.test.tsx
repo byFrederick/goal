@@ -76,14 +76,7 @@ describe('Line', () => {
     expect(strip.className).toContain('motion-andon');
     for (const li of stationItems()) {
       expect(li.getAttribute('data-dimmed')).toBe('true');
-      // A connector dims by opacity. A station turns its words muted (and dims its bar and slots by opacity):
-      // opacity on text fails WCAG contrast.
-      if (li.className.includes('group')) {
-        expect(li.querySelector('[class*="group-data-[dimmed=true]:text-muted"]')).not.toBeNull();
-        expect(li.className).not.toContain('opacity-40');
-      } else {
-        expect(li.className).toContain('data-[dimmed=true]:opacity-40');
-      }
+      expect(li.className).toContain('data-[dimmed=true]:text-muted');
     }
   });
 

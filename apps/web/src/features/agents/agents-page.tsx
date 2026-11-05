@@ -240,8 +240,8 @@ function Line({
 /** Station widths on a wide screen, as the design's grid: narrow cells, flexible agent stations, a wider routed one. */
 const columns = {
   narrow: { track: '6.5rem', min: 104 },
-  agent: { track: 'minmax(0,1fr)', min: 176 },
-  routed: { track: 'minmax(0,1.7fr)', min: 300 },
+  agent: { track: 'minmax(0,1fr)', min: 160 },
+  routed: { track: 'minmax(0,1.7fr)', min: 270 },
 };
 const gapPx = 16;
 

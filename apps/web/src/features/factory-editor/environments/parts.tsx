@@ -145,7 +145,8 @@ export function useSecretOptions(extra: readonly string[] = []): { options: Sele
     value: name,
     label: name,
   }));
-  return { options, ready: secrets.data !== undefined };
+  // A failed query counts as settled, so a panel waiting on `ready` shows with no taken names instead of waiting forever.
+  return { options, ready: secrets.data !== undefined || secrets.isError };
 }
 
 /** Picks one of the organization's secrets; a name the file holds that the organization lacks still shows, so nothing is hidden. */

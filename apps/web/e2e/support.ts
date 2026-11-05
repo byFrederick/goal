@@ -5,6 +5,20 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
 export async function expectAccessible(page: Page) {
+  // A skeleton's content cross-fades in from opacity 0: axe reads its text mid-fade and fails contrast, so a screen
+  // that is still loading is given its moment. One that stays loading is audited as it is...
+  await expect(page.locator('[aria-busy="true"]:has(> .sr-only)'))
+    .toHaveCount(0, { timeout: 5000 })
+    .catch(() => {});
+  // ...and what has loaded finishes fading in: transitions and other finite animations run out before axe reads colours.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();

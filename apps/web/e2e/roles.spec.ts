@@ -3,7 +3,7 @@
 // plays the caller in a role (POST /__mock/reset {role}, mock/roles.ts) and refuses what the role
 // lacks with 403 forbidden, as goald does, so each test also checks the server refuses anyway.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgNav } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, openNavigation, orgNav } from './support';
 
 type Role = 'owner' | 'admin' | 'member' | 'editor' | 'approver' | 'viewer';
 
@@ -12,7 +12,10 @@ const as = (role: Role) =>
     await request.post('/__mock/reset', { data: { role } });
   });
 
-/** The andon cord on the board, as the current width shows it. */
+/**
+ * The andon cord on the board, from 768 px. A phone's top bar holds only Filter and New item and
+ * shows the cord's state as a status line once pulled (board-header.tsx, board-page.test.tsx).
+ */
 const andon = (page: Page) =>
   page.getByRole('button', { name: /^(Pull andon|Clear the andon)$/ }).filter({ visible: true });
 
@@ -23,14 +26,16 @@ test.describe('a viewer', () => {
 
   test('sees the board without moving cards, submitting work or pulling the cord', async ({ page }) => {
     await page.goto('/o/acme/f/sre/board');
-    await expect(page.getByRole('heading', { level: 1, name: 'SRE board' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
     await expect(page.getByText('You’re a viewer of sre')).toBeVisible();
 
-    await expect(andon(page)).toHaveAttribute('aria-disabled', 'true');
-    await expect(andon(page)).toHaveAccessibleDescription('Approvers and editors can pull the cord');
-    // aria-disabled keeps it focusable: Playwright waits for it to be enabled unless forced.
-    await andon(page).click({ force: true });
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    if (!isPhone(page)) {
+      await expect(andon(page)).toHaveAttribute('aria-disabled', 'true');
+      await expect(andon(page)).toHaveAccessibleDescription('Approvers and editors can clear the andon');
+      // aria-disabled keeps it focusable: Playwright waits for it to be enabled unless forced.
+      await andon(page).click({ force: true });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    }
 
     await expect(page.getByRole('button', { name: /^Move / })).toHaveCount(0);
     await expect(page.getByRole('main').getByRole('button', { name: /New item/ })).toHaveCount(0);
@@ -55,7 +60,7 @@ test.describe('a viewer', () => {
     await expect(approve).toHaveAttribute('aria-disabled', 'true');
     await expect(approve).toHaveAccessibleDescription('Approvers of goal decide here.');
     await approve.click({ force: true });
-    await expect(page.getByText('Waiting on an approver').first()).toBeVisible();
+    await expect(page.getByText('Approvers of goal decide here.').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Pause' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Move' })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: /^Note to/ })).toHaveCount(0);
@@ -71,10 +76,10 @@ test.describe('a viewer', () => {
   test('reads the Definition view only: the running version, no edits, who approves', async ({ page, request }) => {
     await page.goto('/o/acme/f/goal/definition/basics');
     await expect(page.getByText('View only. Editors of goal change its definition.')).toBeVisible();
-    await expect(page.getByText('v8, running')).toBeVisible();
+    await expect(page.getByText('v8 running').first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Review changes' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Definition sections' }).getByRole('link')).toHaveCount(4);
+    await expect(page.getByRole('navigation', { name: 'Definition sections' }).getByRole('link')).toHaveCount(5);
 
     const name = page.getByRole('textbox', { name: 'Name' });
     await expect(name).toHaveValue('goal');
@@ -83,7 +88,7 @@ test.describe('a viewer', () => {
     await expect(page.getByRole('heading', { name: 'Who approves' })).toBeVisible();
     await expect(
       page.getByText(
-        'Owners and admins of Acme, and this factory’s approvers and editors: F. Cruz, M. Okafor, J. Lindqvist.',
+        'Owners and admins of Acme, and this factory’s approvers and editors: F. Cruz, J. Lindqvist, M. Okafor.',
       ),
     ).toBeVisible();
     // Only whoever manages people changes it.
@@ -115,14 +120,14 @@ test.describe('an approver', () => {
   test('moves and decides, pulls the cord, and reads the Definition view only', async ({ page }) => {
     await page.goto('/o/acme/f/sre/board');
     await expect(page.getByText('You’re an approver of sre')).toBeVisible();
-    await expect(andon(page)).not.toHaveAttribute('aria-disabled', 'true');
+    if (!isPhone(page)) await expect(andon(page)).not.toHaveAttribute('aria-disabled', 'true');
     await expect(
       page
         .getByRole('button', { name: /^Move / })
         .filter({ visible: true })
         .first(),
     ).toBeVisible();
-    await expect(page.getByRole('main').getByRole('button', { name: /New item/ })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: /New item/ })).toBeVisible();
 
     await page.goto('/o/acme/f/goal/items/12');
     const approve = page.getByRole('button', { name: /^Approve/ }).filter({ visible: true });
@@ -180,6 +185,7 @@ test.describe('an admin', () => {
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
     await expect(page.getByText(/^View only/)).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Danger zone' })).toHaveCount(0);
+    await openNavigation(page);
     await expect(newFactory(page)).toBeVisible();
   });
 });
@@ -191,7 +197,7 @@ test.describe('an owner', () => {
     await page.goto('/o/acme/settings');
     await expect(page.getByRole('heading', { name: 'Danger zone' })).toBeVisible();
     await page.goto('/o/acme/f/sre/board');
-    await expect(andon(page)).not.toHaveAttribute('aria-disabled', 'true');
+    if (!isPhone(page)) await expect(andon(page)).not.toHaveAttribute('aria-disabled', 'true');
     await expect(page.getByText(/^You’re an? /)).toHaveCount(0);
   });
 });
@@ -199,9 +205,10 @@ test.describe('an owner', () => {
 test('the local user of GOAL_AUTH=none is offered everything, with no role named', async ({ page, request }) => {
   await request.post('/__mock/reset');
   await page.goto('/o/acme/f/sre/board');
-  await expect(andon(page)).not.toHaveAttribute('aria-disabled', 'true');
+  if (!isPhone(page)) await expect(andon(page)).not.toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByText(/^You’re an? /)).toHaveCount(0);
   if (!isPhone(page)) await expect(page.getByRole('button', { name: /^Move / }).first()).toBeVisible();
+  await openNavigation(page);
   await expect(newFactory(page)).toBeVisible();
 });
 
@@ -228,7 +235,7 @@ test.describe('factory roles on the settings page', () => {
     const change = page.getByRole('dialog', { name: /^A\. Ortiz on / });
     await change.getByLabel('Role').selectOption('editor');
     await change.getByRole('button', { name: 'Save' }).click();
-    await expect(people.getByText('Edits the definition and creates items')).toBeVisible();
+    await expect(row.getByText('Edits the definition and creates items')).toBeVisible();
 
     await row.getByRole('button', { name: 'Change role' }).click();
     await page
