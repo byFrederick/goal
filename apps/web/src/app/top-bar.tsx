@@ -32,6 +32,7 @@ import {
   settingsScreen,
   sidebarFactoryPages,
   spendScreen,
+  webhooksScreen,
 } from './screens';
 
 /**
@@ -74,7 +75,6 @@ const factoryRoutePages: Record<string, string> = {
   '/o/$org/f/$factory/definition/$section': 'definition',
   '/o/$org/f/$factory/definition_/add-tool': 'definition',
   '/o/$org/f/$factory/intake/': 'intake',
-  '/o/$org/f/$factory/intake/webhooks': 'intake',
   '/o/$org/f/$factory/intake/$trigger': 'intake',
   '/o/$org/f/$factory/intake/new': 'intake',
   '/o/$org/f/$factory/settings': 'settings',
@@ -99,6 +99,9 @@ export const orgRoutePages: Record<string, { label: string; to?: OrgPath }> = {
   '/o/$org/_org/secrets/': secretsScreen,
   '/o/$org/_org/secrets/$secret': secretsScreen,
   '/o/$org/_org/secrets/import': secretsScreen,
+  '/o/$org/_org/webhooks/': webhooksScreen,
+  '/o/$org/_org/webhooks/$webhook': webhooksScreen,
+  '/o/$org/_org/webhooks/new': webhooksScreen,
   '/o/$org/_org/knowledge/': knowledgeScreen,
   '/o/$org/_org/knowledge/$source': knowledgeScreen,
   '/o/$org/_org/knowledge/new': knowledgeScreen,
