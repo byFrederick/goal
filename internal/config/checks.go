@@ -122,6 +122,9 @@ const (
 	codeCronInvalid        = "cron-invalid"
 	codeTimeZoneInvalid    = "time-zone-invalid"
 	codePlaceholderInvalid = "placeholder-invalid"
+	// codeTriggerRepository: a fixed create.repositories value no runtime.repositories entry
+	// matches.
+	codeTriggerRepository = "trigger-repository-unknown"
 
 	// codeOnNeedsEvent: on: names a sender with no event (github, not github.check_run).
 	codeOnNeedsEvent = "on-needs-event"

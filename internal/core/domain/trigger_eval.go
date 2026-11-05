@@ -102,6 +102,9 @@ type TriggerItem struct {
 	// Title is create.title rendered with quoted values (EventTitle); Body is create.brief rendered with quoted
 	// values, then the event's fields in a block marked as untrusted data (UntrustedEventBlock).
 	Title, Body string
+	// Repositories are create.repositories rendered and resolved to repository keys, none for an
+	// item that gets the default entry's.
+	Repositories []string
 }
 
 // TriggerEvaluation is a trigger's evaluation of one event (ADR 0028 decision 1): each of its

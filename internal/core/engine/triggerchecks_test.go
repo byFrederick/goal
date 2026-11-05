@@ -497,3 +497,65 @@ func TestChecks_ClearState(t *testing.T) {
 		t.Errorf("%d trigger.state_cleared entries; want none for a refused clear", len(a))
 	}
 }
+
+// A check's file entry names its item's repositories, matched against the line's entries as a
+// trigger's are; one that names a repository the factory doesn't have is refused with the
+// reason, and the others are still filed.
+func TestCheckItems_Repositories(t *testing.T) {
+	t.Parallel()
+
+	answer := `{"file": [
+		{"key": "INC-1", "title": "API down", "brief": "5xx", "repositories": ["acme/tools", "app"]},
+		{"key": "INC-2", "title": "Old site down", "brief": "5xx", "repositories": ["byFrederick/legacy"]},
+		{"key": "INC-3", "title": "Disk full", "brief": "95%"}
+	]}`
+	tr := checkTrigger(incidents)
+	tr.Create.Station = stApprove
+
+	line := lineOf(domain.Station{ID: stApprove, Kind: domain.KindHuman})
+	line.Name = "SRE"
+	line.Runtime.Repositories = []domain.RepositoryEntry{
+		{Name: "app", URL: "https://github.com/acme/app", Default: true},
+		{Name: "tools", URL: "https://github.com/acme/tools"},
+	}
+	h := checkHarness(t, line, porttest.Succeed(answer), tr)
+
+	h.fireAt(t, t0.Add(2*time.Minute))
+	h.tick(t)
+	h.wait(t, h.e)
+
+	f := h.firing(t, incidents, at0900)
+	if f.Applied == nil || len(f.Applied.Filed) != 2 || len(f.Applied.Skipped) != 1 ||
+		f.Applied.Skipped[0].Reason != "can't file it: byFrederick/legacy is not one of SRE's repositories" {
+		t.Fatalf("applied = %+v; want INC-1 and INC-3 filed, INC-2 refused for its repository", f.Applied)
+	}
+
+	items, err := h.store.ListItems(inOrg(t), ports.ItemQuery{FactoryID: factoryID, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[string]string{}
+
+	for _, it := range items {
+		rows, err := h.store.ItemRepositories(inOrg(t), it.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var repos []string
+		for _, r := range rows {
+			repos = append(repos, r.Repo+" "+string(r.Joined))
+		}
+
+		got[it.Title] = strings.Join(repos, ",")
+	}
+
+	want := map[string]string{
+		"API down":  "github.com/acme/tools filing,github.com/acme/app filing",
+		"Disk full": "github.com/acme/app default",
+	}
+	if len(got) != len(want) || got["API down"] != want["API down"] || got["Disk full"] != want["Disk full"] {
+		t.Errorf("item repositories = %v, want %v", got, want)
+	}
+}
