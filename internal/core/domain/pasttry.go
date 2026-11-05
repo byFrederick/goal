@@ -534,7 +534,7 @@ func HitRatesOf(checks []GraderCheck) GraderHitRates {
 
 // TryRepository is l's repository that a try starting from row, a run's recorded repository
 // (RunInput.TryRepository), clones read only at its commits (ADR 0041 decision 17). A row recorded
-// without a repository (moved from a run before 00131) is on l's repository, as the run used it.
+// without a repository (moved from a run before 00132) is on l's repository, as the run used it.
 // False when l has no repository, or until the bundle carries several, when row is on another.
 func (l Line) TryRepository(row RunRepository) (Repository, bool) {
 	repo := l.Runtime.Repository

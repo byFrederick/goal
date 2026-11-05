@@ -570,7 +570,7 @@ type RecordRunRepositoryInputParams struct {
 }
 
 // A repository the run's prepare checked out, with its base commit and branch head before the
-// rebase (00131). Recording it again keeps the commits already known.
+// rebase (00132). Recording it again keeps the commits already known.
 func (q *Queries) RecordRunRepositoryInput(ctx context.Context, arg RecordRunRepositoryInputParams) error {
 	_, err := q.db.Exec(ctx, recordRunRepositoryInput,
 		arg.RunID,
@@ -598,7 +598,7 @@ type RecordRunRepositoryPushedParams struct {
 	Wrote      bool
 }
 
-// A repository's head on the remote when the run's agent ended (00131). The run wrote when it
+// A repository's head on the remote when the run's agent ended (00132). The run wrote when it
 // said so or pushed a commit other than the branch head it started from; a repository it did not
 // check out (a retry's) wrote when it pushed at all.
 func (q *Queries) RecordRunRepositoryPushed(ctx context.Context, arg RecordRunRepositoryPushedParams) error {

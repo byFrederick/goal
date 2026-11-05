@@ -564,7 +564,7 @@ func listWithRepositories(ctx context.Context, q *db.Queries, runs []domain.Run)
 	return withRepositories(ctx, q, ptrs...)
 }
 
-// withRepositories reads the runs' repositories (agent_run_repositories, 00131) into each run in
+// withRepositories reads the runs' repositories (agent_run_repositories, 00132) into each run in
 // one query: every row whole in its Input, and the rows it pushed or wrote in its Result.
 func withRepositories(ctx context.Context, q *db.Queries, runs ...*domain.Run) error {
 	if len(runs) == 0 {

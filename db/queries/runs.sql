@@ -26,7 +26,7 @@ UPDATE agent_runs SET brief = sqlc.narg(brief) WHERE id = sqlc.arg(id);
 
 -- name: RecordRunRepositoryInput :exec
 -- A repository the run's prepare checked out, with its base commit and branch head before the
--- rebase (00131). Recording it again keeps the commits already known.
+-- rebase (00132). Recording it again keeps the commits already known.
 INSERT INTO agent_run_repositories (run_id, repo, base_commit, branch_head)
 VALUES (sqlc.arg(run_id), sqlc.narg(repo), sqlc.narg(base_commit), sqlc.narg(branch_head))
 ON CONFLICT (run_id, repo) DO UPDATE SET
@@ -34,7 +34,7 @@ ON CONFLICT (run_id, repo) DO UPDATE SET
   branch_head = coalesce(EXCLUDED.branch_head, agent_run_repositories.branch_head);
 
 -- name: RecordRunRepositoryPushed :exec
--- A repository's head on the remote when the run's agent ended (00131). The run wrote when it
+-- A repository's head on the remote when the run's agent ended (00132). The run wrote when it
 -- said so or pushed a commit other than the branch head it started from; a repository it did not
 -- check out (a retry's) wrote when it pushed at all.
 INSERT INTO agent_run_repositories (run_id, repo, pushed_head, wrote)

@@ -8,7 +8,7 @@ import (
 )
 
 // A try starts from its run's first recorded repository with a branch head, at that commit (ADR
-// 0041 decision 17): a row recorded without a repository (before 00131) is the factory's. A run
+// 0041 decision 17): a row recorded without a repository (before 00132) is the factory's. A run
 // with no branch head, or whose repository the factory has not, cannot be tried.
 func TestTries_RequestFromRecordedRepositories(t *testing.T) {
 	t.Parallel()

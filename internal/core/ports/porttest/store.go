@@ -770,7 +770,7 @@ func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.R
 }
 
 // recordRunRepositories are a run's repository rows with add recorded, as agent_run_repositories
-// keeps them (00131): one row per repository in the order first recorded, a known commit kept
+// keeps them (00132): one row per repository in the order first recorded, a known commit kept
 // when add has none. A finish (pushed) records pushed heads; a row wrote when add says so or
 // pushed a commit other than its branch head, a row without a branch head when it pushed at all.
 func recordRunRepositories(rows, add []domain.RunRepository, pushed bool) []domain.RunRepository {

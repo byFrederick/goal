@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Migration 00131 moves each run's heads into agent_run_repositories: one row per run with a
+// Migration 00132 moves each run's heads into agent_run_repositories: one row per run with a
 // head, on the item's first repository when it has one and without a repository otherwise, that
 // wrote when it pushed a commit other than its branch head. A run without heads gets no row, and
 // agent_runs loses the three columns.
@@ -102,12 +102,12 @@ func TestMigrate_RunHeadsBecomeRunRepositories(t *testing.T) {
 		{retry, "-", "", "", c, true},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("agent_run_repositories after 00131 =\n%+v\nwant\n%+v", got, want)
+		t.Errorf("agent_run_repositories after 00132 =\n%+v\nwant\n%+v", got, want)
 	}
 
 	cols := queryStrings(t, owner, `SELECT column_name::text FROM information_schema.columns
 		WHERE table_name = 'agent_runs' AND column_name IN ('branch_head', 'base_head', 'pushed_head')`)
 	if len(cols) != 0 {
-		t.Errorf("agent_runs still has %v after 00131", cols)
+		t.Errorf("agent_runs still has %v after 00132", cols)
 	}
 }

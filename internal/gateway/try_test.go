@@ -156,7 +156,7 @@ spec:
 const tryRepoURL = "https://github.com/acme/api.git"
 
 // A try clones the run's first recorded repository with a branch head at its commits (ADR 0041
-// decision 17); a row recorded without a repository (before 00131) is the version's. A run with
+// decision 17); a row recorded without a repository (before 00132) is the version's. A run with
 // no branch head, or whose repository the version has not, is refused.
 func TestBundle_TryRecordedRepositories(t *testing.T) {
 	t.Parallel()

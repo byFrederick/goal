@@ -797,7 +797,7 @@ type TryTargetParams struct {
 }
 
 // The item's newest finished station run at station that was a claim's first run: its branch
-// head is recorded in one of its repositories (agent_runs_try_target_idx, 00131).
+// head is recorded in one of its repositories (agent_runs_try_target_idx, 00132).
 func (q *Queries) TryTarget(ctx context.Context, arg TryTargetParams) (AgentRun, error) {
 	row := q.db.QueryRow(ctx, tryTarget, arg.ItemID, arg.Station)
 	var i AgentRun

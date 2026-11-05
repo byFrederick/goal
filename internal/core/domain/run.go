@@ -112,7 +112,7 @@ func (in RunInput) TryRepository() (RunRepository, bool) {
 // RunRepository is one repository a run fetched or pushed, as agent_run_repositories keeps it
 // (ADR 0041 decision 5). Empty commits are unknown.
 type RunRepository struct {
-	// Repo is the repository's RepositoryKey. It is empty only on a run recorded before 00131
+	// Repo is the repository's RepositoryKey. It is empty only on a run recorded before 00132
 	// whose item had no repository row: the repository entry the run's factory version named.
 	Repo string
 	// BaseCommit and BranchHead are the base's and the item branch's commits when prepare checked
