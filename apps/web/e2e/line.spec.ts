@@ -176,7 +176,7 @@ test('the merge switch is disabled without a repository', async ({ page }) => {
   await expect(spec).not.toHaveAttribute('aria-disabled', 'true');
   await spec.click();
   await expect(spec).toHaveAttribute('aria-checked', 'true');
-  await expect(row(page, 'Approve spec')).toContainText('Approving merges the pull request');
+  await expect(row(page, 'Approve spec')).toContainText('A person merges the pull request');
 });
 
 test('add a station, name it, raise its WIP, add a check and change its kind', async ({ page }) => {

@@ -1,6 +1,8 @@
 // Add station (D §10.6): an agent station, a human station or a queue, inserted after the row that
 // last had focus, else before Done; its name takes focus so it can be named at once.
+
 import { Bot, ChevronDown, Inbox, Plus, Users } from 'lucide-react';
+import { useRef } from 'react';
 import type { StationKind } from '../../../shared/definition/model';
 import { Button } from '../../../ui/button';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../../ui/menu';
@@ -15,11 +17,14 @@ const choices: { kind: Exclude<StationKind, 'done'>; label: string; name: string
 
 export function AddStationMenu() {
   const editor = useLineEditor();
+  // The new row's name takes focus; the menu must not hand focus back to its trigger after it.
+  const added = useRef(false);
 
   const add = (kind: Exclude<StationKind, 'done'>, name: string) => {
     const after = editor.lastFocused.current;
     const known = after !== undefined && editor.stations.some((s) => s.id === after && s.kind !== 'done');
     const { edit, station } = addStation(editor.line, kind, { name, ...(known ? { after } : {}) });
+    added.current = true;
     editor.insert(edit, station);
   };
 
@@ -32,7 +37,16 @@ export function AddStationMenu() {
           <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
         </Button>
       </MenuTrigger>
-      <MenuContent side="bottom" align="end" className="w-60">
+      <MenuContent
+        side="bottom"
+        align="end"
+        className="w-60"
+        onCloseAutoFocus={(event) => {
+          if (!added.current) return;
+          added.current = false;
+          event.preventDefault();
+        }}
+      >
         {choices.map(({ kind, label, name, Icon }) => (
           <MenuItem key={kind} onSelect={() => add(kind, name)}>
             <Icon size={18} strokeWidth={1.5} aria-hidden="true" />

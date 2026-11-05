@@ -33,6 +33,8 @@ export function registerServiceWorker(): void {
   container
     .register('/sw.js', { scope: '/' })
     .then((registration) => {
+      // A browser that blocks workers (a test browser, a privacy setting) can resolve with nothing.
+      if (!registration) return;
       if (registration.waiting && controlled) offer(registration.waiting);
       registration.addEventListener('updatefound', () => {
         const installing = registration.installing;
