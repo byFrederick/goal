@@ -182,6 +182,30 @@ func TestTemplates_GitHubEnterprise(t *testing.T) {
 	}
 }
 
+// The commands goald may start to test a stdio server are the GitHub templates' Enterprise ones.
+func TestTemplates_CatalogCommands(t *testing.T) {
+	t.Parallel()
+
+	got, err := catalog.Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		command []string
+		want    bool
+	}{
+		{[]string{"github-mcp-server", "stdio"}, true},
+		{[]string{"github-mcp-server", "stdio", "--read-only"}, true},
+		{[]string{"github-mcp-server", "http"}, false},
+		{[]string{"npx", "-y", "@modelcontextprotocol/server-github"}, false},
+	} {
+		if ok := domain.CatalogCommand(got, tc.command); ok != tc.want {
+			t.Errorf("CatalogCommand(%q) = %v; want %v", tc.command, ok, tc.want)
+		}
+	}
+}
+
 // Resolve refuses a value that is not a host, an unknown parameter, and names neither's value.
 func TestResolve_RefusesValue(t *testing.T) {
 	t.Parallel()
