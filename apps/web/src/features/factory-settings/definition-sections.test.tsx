@@ -6,9 +6,9 @@ import {
   defKeys,
   draftFileQuery,
   draftFilesQuery,
+  factoryRepositoryTestsQuery,
   membersQuery,
   orgQuery,
-  repositoryTestQuery,
   secretsQuery,
 } from '../../api/queries';
 import type { Factory, OrgSummary, Secret, SectionSave } from '../../api/types';
@@ -127,7 +127,6 @@ function setDraft(over: Partial<Model> = {}) {
 }
 
 const secrets = [{ name: 'github-token' }, { name: 'slack-bot' }] as unknown as Secret[];
-const passing = { tested: true, read: { ok: true, reason: 'ok' }, push: { ok: true, reason: 'ok' } };
 
 function factoryDetail(): Factory {
   return {
@@ -169,7 +168,7 @@ async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
         text: 'spec:\n  runtime:\n    modelKey: "{{claude}}"\n  agents:\n    - name: sre\n    - name: deploy-bot\n      environment: deploy\nlearning:\n  # Jonah\n  jonah:\n    share: 8%\n',
       },
     ],
-    [repositoryTestQuery(org.id, 'https://github.com/acme/sre', 'github-token').queryKey, passing],
+    [factoryRepositoryTestsQuery(org.id, factoryId).queryKey, []],
     [membersQuery(org.id).queryKey, []],
   ];
   const rendered = renderFactoryPage({
@@ -180,9 +179,8 @@ async function renderSettings({ canEdit = true }: { canEdit?: boolean } = {}) {
     seed,
     topBar: true,
   });
-  await screen.findByRole('region', { name: 'Repository' });
+  await screen.findByRole('region', { name: 'Code' });
   await waitFor(() => expect(screen.getByText('github.com/acme/sre')).toBeTruthy(), { timeout: 3000 });
-  if (canEdit) fireEvent.click(screen.getByRole('button', { name: 'Change' }));
   return rendered;
 }
 
@@ -198,46 +196,16 @@ async function savedSection(section: Section, check: (value: Saved) => boolean =
   return api.saves.filter((s) => s.section === section).at(-1)?.value as Saved;
 }
 
-describe('Repository', () => {
-  it('shows the URL, Token works and the token secret, and Change opens the editor', async () => {
-    await renderSettings({ canEdit: false });
-    expect(screen.getByText('Token works')).toBeTruthy();
-    expect(screen.getByText('github-token')).toBeTruthy();
-    expect(screen.queryByText(/connect/i)).toBeNull();
-    expect(screen.queryByLabelText('Repository URL')).toBeNull();
-    cleanup();
-    await renderSettings();
-    expect(screen.getByLabelText('Repository URL')).toBeTruthy();
-  });
-
+describe('Code', () => {
   it('has no accordion buttons: every section is open', async () => {
     await renderSettings();
     expect(document.querySelector('[aria-expanded]:not([role="combobox"])')).toBeNull();
     expect(screen.getByLabelText('Each week')).toBeTruthy();
   });
 
-  it('writes the repository URL to basics.repository.url', async () => {
+  it('shows the Default branch as not available, with aria-disabled and no write', async () => {
     await renderSettings();
-    const url = screen.getByLabelText('Repository URL');
-    fireEvent.change(url, { target: { value: 'https://github.com/acme/tools' } });
-    fireEvent.blur(url);
-
-    const basics = await savedSection('basics', (v) => v.repository?.url === 'https://github.com/acme/tools');
-    expect(basics.repository).toEqual({ url: 'https://github.com/acme/tools', token: '{{github-token}}' });
-  });
-
-  it('writes the token secret git signs in with to basics.repository.token, and none clears it', async () => {
-    await renderSettings();
-    expect(screen.queryByLabelText('Repository connection')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Use no token' }));
-
-    const basics = await savedSection('basics', (v) => v.repository?.token === undefined);
-    expect(basics.repository).toEqual({ url: 'https://github.com/acme/sre' });
-  });
-
-  it('shows Base branch as not available, with aria-disabled and no write', async () => {
-    await renderSettings();
-    const base = screen.getByRole('textbox', { name: 'Base branch' });
+    const base = screen.getByRole('textbox', { name: 'Default branch' });
     expect(base.getAttribute('aria-disabled')).toBe('true');
     expect(base.getAttribute('placeholder')).toBe('Not available yet');
     fireEvent.change(base, { target: { value: 'develop' } });

@@ -1,4 +1,4 @@
-// Factory settings (canvas build/factory-settings) against the mock (Repository with its token, Runtime with its environments line, the model key and the environments, Notifications with the Slack secret): at 1440, 1280, 1024, 768
+// Factory settings (canvas build/factory-settings) against the mock (Code with its repositories, Runtime with its environments line, the model key and the environments, Notifications with the Slack secret): at 1440, 1280, 1024, 768
 // and 390 px, in light and dark, nothing goes past the viewport edge, no text is clipped, and a phone's
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
 import { expect, test } from '@playwright/test';

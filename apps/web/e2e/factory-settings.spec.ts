@@ -85,7 +85,7 @@ for (const theme of ['light', 'dark'] as const) {
       await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
       await page.goto('/o/acme/f/goal/settings');
       await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Repository' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Code' })).toBeVisible();
       await testInfo.attach(`factory-settings-${width}-${theme}`, {
         body: await page.screenshot({ fullPage: true }),
         contentType: 'image/png',

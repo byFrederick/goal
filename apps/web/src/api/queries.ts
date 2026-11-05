@@ -100,7 +100,7 @@ import {
 import { getNotificationPreferences } from './notifications';
 import { getOrgNotificationSettings } from './org-notifications';
 import { getOrgPolicy } from './policy';
-import { testRepository } from './repositories';
+import { listFactoryRepositoryTests, testRepository } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
@@ -408,6 +408,14 @@ export const accessQuery = (org: string, by: AccessView) =>
   queryOptions({
     queryKey: keys.access(org, by),
     queryFn: ({ signal }) => getAccess(org, by, signal),
+    staleTime: 30_000,
+  });
+
+/** The results kept for a factory's repositories (factory:read); reading tests nothing. */
+export const factoryRepositoryTestsQuery = (org: string, factory: string) =>
+  queryOptions({
+    queryKey: ['org', org, 'factories', factory, 'repository-tests'] as const,
+    queryFn: ({ signal }) => listFactoryRepositoryTests(org, factory, signal),
     staleTime: 30_000,
   });
 
