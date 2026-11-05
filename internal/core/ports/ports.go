@@ -894,6 +894,11 @@ type Transition struct {
 	// domain.FollowUpKey matches a follow-up already kept for the item is skipped, so a rerun
 	// or a retry of the transaction keeps each text once.
 	FollowUps []domain.FollowUp
+	// Repositories are the keys (domain.RepositoryKey) an accepted output adds to the item, joined
+	// output at At with the change (ADR 0041 decision 4): those the item lacks, until it has
+	// domain.MaxItemRepositories (domain.AppendRepositories). The engine refuses an output past
+	// the cap at its check, so the store's cap only drops a key when a push joined meanwhile.
+	Repositories []string
 }
 
 // ItemNotices streams a notice of every item event as it is committed, from any goald

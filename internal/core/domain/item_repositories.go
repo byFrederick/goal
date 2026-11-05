@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -173,6 +175,70 @@ func AppendRepositories(have []ItemRepository, joined RepositoryJoin, keys []str
 	}
 
 	return out
+}
+
+// ErrBadRepositories is an output's repositories that goald refuses: it fails the output's check.
+var ErrBadRepositories = errors.New("bad repositories")
+
+// RepositoriesFrom reads the repositories an accepted output adds to its item from its field
+// (board.flow.outputs.repositories, ADR 0041 decision 4): the keys (RepositoryKey) of the
+// field's list of strings, each resolved against l's entries as filing resolves them (an entry's
+// name, owner/name or an https URL), once and in order. None when the line maps no field, the
+// output has none, or it is null. A value that is not a list of strings, or one no entry
+// resolves, is ErrBadRepositories quoting the value.
+func RepositoriesFrom(output json.RawMessage, field string, l Line) ([]string, error) {
+	if field == "" {
+		return nil, nil
+	}
+
+	var v map[string]json.RawMessage
+
+	_ = json.Unmarshal(output, &v) // an output that is not an object adds nothing
+
+	raw, ok := v[field]
+	if !ok || string(raw) == "null" {
+		return nil, nil
+	}
+
+	var names []string
+	if err := json.Unmarshal(raw, &names); err != nil {
+		return nil, fmt.Errorf("%s is %s, not a list of repositories: %w", field, raw, ErrBadRepositories)
+	}
+
+	var keys []string
+
+	for _, n := range names {
+		key, err := resolveRepository(l.repositoryEntries(), n)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w: %w", field, err, ErrBadRepositories)
+		}
+
+		if !slices.Contains(keys, key) {
+			keys = append(keys, key)
+		}
+	}
+
+	return keys, nil
+}
+
+// OutputRepositories are the keys of an output's repositories (RepositoriesFrom) that an item
+// with have lacks, in order; ErrBadRepositories giving the count and the cap when they would
+// give the item more than MaxItemRepositories. Pushes past the cap are only left off the item
+// (AppendRepositories), but an output's names fail its check, so the agent can try again.
+func OutputRepositories(have []ItemRepository, keys []string) ([]string, error) {
+	var out []string
+
+	for _, k := range keys {
+		if !slices.ContainsFunc(have, func(r ItemRepository) bool { return r.Repo == k }) && !slices.Contains(out, k) {
+			out = append(out, k)
+		}
+	}
+
+	if n := len(have) + len(out); n > MaxItemRepositories {
+		return nil, fmt.Errorf("the output would give the item %d repositories, more than an item's %d: %w", n, MaxItemRepositories, ErrBadRepositories)
+	}
+
+	return out, nil
 }
 
 // ItemRepositoryKeys are the keys of rs, in order.
