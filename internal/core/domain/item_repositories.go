@@ -11,6 +11,9 @@ import (
 // MaxItemRepositories is how many repositories one item may have (ADR 0041 decision 4).
 const MaxItemRepositories = 10
 
+// schemeHTTPS is the only scheme a repository's URL may have.
+const schemeHTTPS = "https"
+
 // RepositoryJoin is how a repository joined an item. Values match work_item_repositories.joined.
 type RepositoryJoin string
 
@@ -141,11 +144,11 @@ func RepositoryKey(raw string) (string, bool) {
 func repositorySegments(raw string) ([]string, bool) {
 	raw = strings.TrimSpace(raw)
 	if !strings.Contains(raw, "://") {
-		raw = "https://" + raw
+		raw = schemeHTTPS + "://" + raw
 	}
 
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+	if err != nil || u.Scheme != schemeHTTPS || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
 		return nil, false
 	}
 

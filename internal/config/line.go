@@ -28,22 +28,7 @@ func (f *Factory) Line() domain.Line {
 		Agents:   make([]domain.AgentSpec, 0, len(s.Agents)),
 	}
 
-	// The line keeps one repository, the default entry, until runs start with an item's
-	// repositories (ADR 0041); the shorthand keeps its connection and forge.
-	switch r := s.Runtime.Repository; {
-	case r != nil:
-		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, Token: r.Token, Forge: r.Forge}
-	default:
-		if e, ok := s.Runtime.DefaultRepository(); ok {
-			l.Runtime.Repository = domain.Repository{URL: e.URL, Token: e.Token}
-		}
-	}
-
-	for _, e := range s.Runtime.RepositoryEntries() {
-		l.Runtime.Repositories = append(l.Runtime.Repositories, domain.RepositoryEntry{
-			Name: e.Name, URL: e.URL, Token: e.Token, Access: e.Access, Default: e.Default,
-		})
-	}
+	l.Runtime.Repository, l.Runtime.Repositories = s.Runtime.lineRepositories()
 
 	l.Environments = environments(f.environments)
 
@@ -478,4 +463,29 @@ func (b Builtins) rules() (allow, deny []string) {
 	}
 
 	return allow, deny
+}
+
+// lineRepositories are the line's repository and every runtime.repositories entry. The line
+// keeps one repository, the default entry, until runs start with an item's repositories
+// (ADR 0041); the shorthand keeps its connection and forge.
+func (r Runtime) lineRepositories() (domain.Repository, []domain.RepositoryEntry) {
+	var repo domain.Repository
+
+	switch short := r.Repository; {
+	case short != nil:
+		repo = domain.Repository{URL: short.URL, Connection: short.Connection, Token: short.Token, Forge: short.Forge}
+	default:
+		if e, ok := r.DefaultRepository(); ok {
+			repo = domain.Repository{URL: e.URL, Token: e.Token}
+		}
+	}
+
+	var entries []domain.RepositoryEntry
+	for _, e := range r.RepositoryEntries() {
+		entries = append(entries, domain.RepositoryEntry{
+			Name: e.Name, URL: e.URL, Token: e.Token, Access: e.Access, Default: e.Default,
+		})
+	}
+
+	return repo, entries
 }

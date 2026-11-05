@@ -84,6 +84,7 @@ func TestMigrate_BackfillsItemBranch(t *testing.T) {
 
 	if !slices.Equal(got, want) {
 		var b strings.Builder
+
 		for i := range want {
 			if i >= len(got) || got[i] != want[i] {
 				fmt.Fprintf(&b, "\n%q: got %q, want %q", titles[i], at0(got, i), want[i])

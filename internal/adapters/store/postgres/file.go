@@ -85,13 +85,8 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 		return db.WorkItem{}, err
 	}
 
-	for i, r := range n.Repositories {
-		err := q.InsertItemRepository(ctx, db.InsertItemRepositoryParams{
-			ItemID: id, Repo: r.Repo, Joined: string(r.Joined), JoinedAt: n.CreatedAt, Ordinal: int32(min(i, maxInt32)),
-		})
-		if err != nil {
-			return db.WorkItem{}, fmt.Errorf("repository %s of item %d: %w", r.Repo, number, err)
-		}
+	if err := insertItemRepositories(ctx, q, row, n.Repositories); err != nil {
+		return db.WorkItem{}, err
 	}
 
 	created, audit := domain.FiledRecords(it, by)
@@ -110,4 +105,18 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 	}
 
 	return row, nil
+}
+
+// insertItemRepositories writes an item's repositories joined at its creation, in order.
+func insertItemRepositories(ctx context.Context, q *db.Queries, item db.WorkItem, repos []domain.ItemRepository) error {
+	for i, r := range repos {
+		err := q.InsertItemRepository(ctx, db.InsertItemRepositoryParams{
+			ItemID: item.ID, Repo: r.Repo, Joined: string(r.Joined), JoinedAt: item.CreatedAt, Ordinal: int32(min(i, maxInt32)),
+		})
+		if err != nil {
+			return fmt.Errorf("repository %s of item %d: %w", r.Repo, item.Number, err)
+		}
+	}
+
+	return nil
 }

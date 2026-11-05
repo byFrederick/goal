@@ -11,13 +11,17 @@ const (
 	repoAPI  = "https://github.com/acme/api.git"
 	repoAll  = "https://github.com/acme-labs/*"
 	repoDeep = "https://gitlab.example.com/acme/platform/*"
+
+	// entryAPI is the repoAPI entry's name and keyAPI its key.
+	entryAPI = "api"
+	keyAPI   = "github.com/acme/api"
 )
 
 // repoLine is fileLine with runtime.repositories; def names the default entry ("" for none).
 func repoLine(def string) Line {
 	l := fileLine()
 	l.Runtime.Repositories = []RepositoryEntry{
-		{Name: "api", URL: repoAPI, Access: "write", Default: def == "api"},
+		{Name: entryAPI, URL: repoAPI, Access: "write", Default: def == entryAPI},
 		{Name: "labs", URL: repoAll, Access: "read"},
 		{Name: "platform", URL: repoDeep, Access: "write"},
 	}
@@ -41,13 +45,13 @@ func fileRepos(t *testing.T, l Line, repos ...string) NewItem {
 func TestFile_RepositoriesMatchEntries(t *testing.T) {
 	t.Parallel()
 
-	n := fileRepos(t, repoLine("api"),
+	n := fileRepos(t, repoLine(entryAPI),
 		"github.com/Acme-Labs/Web", "https://GitHub.com/acme/API", "github.com/acme/api.git",
 		"https://gitlab.example.com/acme/platform/infra/deploy.git", "github.com/acme-labs/web/")
 
 	want := []ItemRepository{
 		{Repo: "github.com/acme-labs/web", Joined: JoinedFiling},
-		{Repo: "github.com/acme/api", Joined: JoinedFiling, Ordinal: 1},
+		{Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1},
 		{Repo: "gitlab.example.com/acme/platform/infra/deploy", Joined: JoinedFiling, Ordinal: 2},
 	}
 	if !reflect.DeepEqual(n.Repositories, want) {
@@ -72,10 +76,10 @@ func TestFile_RepositoriesRefused(t *testing.T) {
 		"a pattern":         {"github.com/acme-labs/*"},
 		"credentials":       {"https://x:y@github.com/acme/api"},
 		"not https":         {"http://github.com/acme/api"},
-		"empty":             {" "},
+		"blank":             {" "},
 		"more than the cap": eleven,
 	} {
-		_, err := File(repoLine("api"), FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: repos})
+		_, err := File(repoLine(entryAPI), FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: repos})
 		if !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: File(%v) = %v; want ErrInvalid", name, repos, err)
 		}
@@ -92,8 +96,8 @@ func TestFile_RepositoriesRefused(t *testing.T) {
 func TestFile_DefaultRepositoryWhenNoneNamed(t *testing.T) {
 	t.Parallel()
 
-	want := []ItemRepository{{Repo: "github.com/acme/api", Joined: JoinedDefault}}
-	if n := fileRepos(t, repoLine("api")); !reflect.DeepEqual(n.Repositories, want) {
+	want := []ItemRepository{{Repo: keyAPI, Joined: JoinedDefault}}
+	if n := fileRepos(t, repoLine(entryAPI)); !reflect.DeepEqual(n.Repositories, want) {
 		t.Errorf("Repositories = %+v; want %+v", n.Repositories, want)
 	}
 }
@@ -110,7 +114,7 @@ func TestFile_NoRepositoriesWithoutDefault(t *testing.T) {
 		t.Errorf("no entries: Repositories = %+v; want none", n.Repositories)
 	}
 
-	if _, err := File(fileLine(), FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: []string{"github.com/acme/api"}}); !errors.Is(err, ErrInvalid) {
+	if _, err := File(fileLine(), FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: []string{keyAPI}}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("a repository on a line without entries = %v; want ErrInvalid", err)
 	}
 }
@@ -120,8 +124,8 @@ func TestFile_NoRepositoriesWithoutDefault(t *testing.T) {
 func TestResolveItemRepositories_OldItemUsesDefault(t *testing.T) {
 	t.Parallel()
 
-	got := ResolveItemRepositories(nil, repoLine("api"))
-	if want := (ItemRepositories{{Repo: "github.com/acme/api", Joined: JoinedDefault}}); !reflect.DeepEqual(got, want) {
+	got := ResolveItemRepositories(nil, repoLine(entryAPI))
+	if want := (ItemRepositories{{Repo: keyAPI, Joined: JoinedDefault}}); !reflect.DeepEqual(got, want) {
 		t.Errorf("no rows = %+v; want %+v", got, want)
 	}
 
@@ -134,7 +138,7 @@ func TestResolveItemRepositories_OldItemUsesDefault(t *testing.T) {
 	}
 
 	rows := []ItemRepository{{Repo: "github.com/acme-labs/web", Joined: JoinedFiling}}
-	if got := ResolveItemRepositories(rows, repoLine("api")); !reflect.DeepEqual(got, ItemRepositories(rows)) {
+	if got := ResolveItemRepositories(rows, repoLine(entryAPI)); !reflect.DeepEqual(got, ItemRepositories(rows)) {
 		t.Errorf("own rows = %+v; want %+v", got, rows)
 	}
 }
@@ -145,7 +149,7 @@ func TestResolveItemRepositories_FirstIsFirstNamed(t *testing.T) {
 	t.Parallel()
 
 	push := ItemRepository{Repo: "github.com/acme-labs/push", Joined: JoinedPush, Ordinal: 0}
-	def := ItemRepository{Repo: "github.com/acme/api", Joined: JoinedDefault, Ordinal: 1}
+	def := ItemRepository{Repo: keyAPI, Joined: JoinedDefault, Ordinal: 1}
 	named := ItemRepository{Repo: "github.com/acme-labs/web", Joined: JoinedFiling, Ordinal: 2}
 	output := ItemRepository{Repo: "github.com/acme-labs/out", Joined: JoinedOutput, Ordinal: 3}
 
@@ -157,7 +161,7 @@ func TestResolveItemRepositories_FirstIsFirstNamed(t *testing.T) {
 		{[]ItemRepository{push, def, output}, def},
 		{[]ItemRepository{output, push}, output},
 	} {
-		got, ok := ResolveItemRepositories(tc.rows, repoLine("api")).First()
+		got, ok := ResolveItemRepositories(tc.rows, repoLine(entryAPI)).First()
 		if !ok || got != tc.want {
 			t.Errorf("First(%+v) = %+v, %t; want %+v", tc.rows, got, ok, tc.want)
 		}

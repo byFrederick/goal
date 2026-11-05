@@ -22,6 +22,9 @@ const (
 	repoAPI = "github.com/acme/api"
 	repoWeb = "github.com/acme/web"
 	repoOps = "gitlab.example.com/acme/ops"
+
+	// factoryNameAcme is the factory name the cases file under.
+	factoryNameAcme = "acme"
 )
 
 func (f *fixture) itemRepositories(t *testing.T, id domain.ItemID) []domain.ItemRepository {
@@ -42,21 +45,21 @@ func (f *fixture) itemRepositories(t *testing.T, id domain.ItemID) []domain.Item
 func testCreateItemStoresBranchAndRepositories(f *fixture) {
 	t := f.t
 
-	asm, l := f.planning(t, domain.NewItem{Title: titleBig, FactoryName: "acme"})
+	asm, l := f.planning(t, domain.NewItem{Title: titleBig, FactoryName: factoryNameAcme})
 
 	_, parts := f.assemble(t, assembly(asm, l, plan()))
 	for _, p := range parts.Items {
-		if got := f.item(t, p.ID).Branch(); got != domain.ItemBranch("acme", p.Number, p.Title) {
+		if got := f.item(t, p.ID).Branch(); got != domain.ItemBranch(factoryNameAcme, p.Number, p.Title) {
 			t.Errorf("part %s branch = %q; want its assembly's factory in it", p.PartKey, got)
 		}
 	}
 
 	it := f.create(t, domain.NewItem{
-		Title: "Add a flag", FactoryName: "acme",
+		Title: "Add a flag", FactoryName: factoryNameAcme,
 		Repositories: []domain.ItemRepository{{Repo: repoWeb, Joined: domain.JoinedFiling}, {Repo: repoAPI, Joined: domain.JoinedFiling}},
 	})
 
-	want := domain.ItemBranch("acme", it.Number, "Add a flag")
+	want := domain.ItemBranch(factoryNameAcme, it.Number, "Add a flag")
 	if !strings.HasPrefix(want, "goal/acme/") || it.Branch() != want || f.item(t, it.ID).Branch() != want {
 		t.Errorf("branch = %q, read back %q; want %q", it.Branch(), f.item(t, it.ID).Branch(), want)
 	}

@@ -34,11 +34,11 @@ func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 func TestItemBranch_NamesTheFactory(t *testing.T) {
 	t.Parallel()
 
-	if got, want := ItemBranch("acme", 7, "Add a `goal version` subcommand"), "goal/acme/7-add-a-goal-version-subcommand"; got != want {
+	if got, want := ItemBranch("acme-api", 7, "Add a `goal version` subcommand"), "goal/acme-api/7-add-a-goal-version-subcommand"; got != want {
 		t.Errorf("ItemBranch = %q; want %q", got, want)
 	}
 
-	if got, want := ItemBranch("acme", 4, "???"), "goal/acme/4"; got != want {
+	if got, want := ItemBranch("acme-web", 4, "???"), "goal/acme-web/4"; got != want {
 		t.Errorf("ItemBranch without a slug = %q; want %q", got, want)
 	}
 
@@ -46,8 +46,8 @@ func TestItemBranch_NamesTheFactory(t *testing.T) {
 		t.Errorf("ItemBranch without a factory = %q; want %q", got, want)
 	}
 
-	if got := BranchFactory("goal/acme/7-x"); got != "acme" {
-		t.Errorf("BranchFactory = %q; want acme", got)
+	if got := BranchFactory("goal/acme-api/7-x"); got != "acme-api" {
+		t.Errorf("BranchFactory = %q; want acme-api", got)
 	}
 
 	for _, b := range []string{"goal/7-x", "", "goal/a7-x"} {

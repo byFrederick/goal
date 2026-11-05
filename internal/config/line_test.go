@@ -1036,26 +1036,26 @@ func TestLine_CarriesRepositoryEntries(t *testing.T) {
 	t.Parallel()
 
 	f := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{
-		{Name: "app", URL: "https://github.com/acme/app", Token: "{{gh}}", Access: AccessWrite, Default: true},
+		{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite, Default: true},
 		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead},
 	}}}}
 
 	l := f.Line()
 
 	want := []domain.RepositoryEntry{
-		{Name: "app", URL: "https://github.com/acme/app", Token: "{{gh}}", Access: AccessWrite, Default: true},
+		{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite, Default: true},
 		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead},
 	}
 	if !reflect.DeepEqual(l.Runtime.Repositories, want) {
 		t.Errorf("repositories =\n%+v\nwant\n%+v", l.Runtime.Repositories, want)
 	}
 
-	if got := l.Runtime.Repository; got != (domain.Repository{URL: "https://github.com/acme/app", Token: "{{gh}}"}) {
+	if got := l.Runtime.Repository; got != (domain.Repository{URL: urlApp, Token: tokenRef}) {
 		t.Errorf("repository = %+v; want the default entry", got)
 	}
 
-	one := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead}}}}}
-	if e, ok := one.Line().Runtime.DefaultEntry(); !ok || e.Name != "app" {
+	one := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{{Name: nameApp, URL: urlApp, Access: AccessRead}}}}}
+	if e, ok := one.Line().Runtime.DefaultEntry(); !ok || e.Name != nameApp {
 		t.Errorf("a single entry's default = %+v, %t; want app", e, ok)
 	}
 
