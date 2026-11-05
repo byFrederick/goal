@@ -41,7 +41,10 @@ async function smallTargets(page: Page) {
       if (box.width === 0 || box.height === 0) continue;
       // A bare text link inside a sentence keeps its line; a control is a target.
       if (el.tagName === 'A' && el.closest('p, h1, h2, h3')) continue;
-      if (box.height < 43.5)
+      // MASTER.md, Buttons: a control drawn smaller keeps a 44 px hit area, an absolutely placed ::before.
+      const hit = getComputedStyle(el, '::before');
+      const reach = hit.position === 'absolute' ? Number.parseFloat(hit.height) || 0 : 0;
+      if (box.height < 43.5 && reach < 43.5)
         small.push(
           `${el.tagName.toLowerCase()} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)}" ${Math.round(box.height)}px`,
         );
@@ -98,7 +101,7 @@ test('the Form view shows Environments, with a tab per environment, and Add a to
   await page.goto('/o/acme/f/goal/definition/environments');
   await expect(page.getByRole('link', { name: /^Environments/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /^Connections/ })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /deploy/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^deploy\b/ })).toBeVisible();
   await page.getByRole('link', { name: 'Add a tool' }).first().click();
   await expect(page).toHaveURL(/definition\/add-tool\?environment=default/);
   await expect(page.getByRole('heading', { name: 'Add a tool', level: 1 })).toBeVisible();

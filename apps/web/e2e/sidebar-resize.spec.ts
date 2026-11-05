@@ -25,6 +25,13 @@ async function dragTo(page: import('@playwright/test').Page, to: number) {
   await page.mouse.up();
 }
 
+/** Opens a page and waits until it has loaded: the handle a pending screen shows is replaced when the page arrives. */
+async function open(page: import('@playwright/test').Page, path: string) {
+  await page.goto(path);
+  await expect(orgNav(page)).toBeVisible();
+  await page.waitForLoadState('networkidle');
+}
+
 const sidebarWidth = (page: import('@playwright/test').Page) =>
   orgNav(page).evaluate((el) => el.parentElement?.getBoundingClientRect().width ?? 0);
 
@@ -81,7 +88,7 @@ test('the keyboard steps the width, and Home collapses it', async ({ page }) => 
 });
 
 test('no element inside the sidebar overflows at 216 px and at 400 px', async ({ page }) => {
-  await page.goto('/o/acme/f/goal');
+  await open(page, '/o/acme/f/goal');
   for (const width of [216, 400]) {
     await dragTo(page, width);
     await expect.poll(() => sidebarWidth(page)).toBe(width);
@@ -97,7 +104,7 @@ test('no element inside the sidebar overflows at 216 px and at 400 px', async ({
 });
 
 test('the Board fills the viewport beside the sidebar at every width', async ({ page }) => {
-  await page.goto('/o/acme/f/goal/board');
+  await open(page, '/o/acme/f/goal/board');
   for (const to of [216, 400]) {
     await dragTo(page, to);
     await expect.poll(() => sidebarWidth(page)).toBe(to);

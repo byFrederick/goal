@@ -55,13 +55,20 @@ test('the notification table shows the saved boxes, and a box keeps its change a
   await page.goto('/account');
   const digestEmail = page.getByRole('checkbox', { name: 'Daily digest at 08:00, Email' });
   await expect(digestEmail).toBeChecked();
-  await expect(page.getByRole('row', { name: /Daily digest at 08:00/ }).getByText('None')).toBeVisible();
+  // The table has a "None" cell where the digest has no in-Goal box; below 768 px the list simply has no such box.
+  const digestRow = page.getByRole('row', { name: /Daily digest at 08:00/ });
+  if (await digestRow.isVisible()) {
+    await expect(digestRow.getByText('None')).toBeVisible();
+  } else {
+    await expect(page.getByRole('checkbox', { name: /^Daily digest at 08:00, In Goal/ })).toHaveCount(0);
+  }
 
   const budgetSlack = page.getByRole('checkbox', { name: 'A budget passes 80%, Slack' });
   await expect(budgetSlack).not.toBeChecked();
   await expect(budgetSlack).not.toHaveAttribute('aria-disabled', 'true');
   const saved = page.waitForResponse((r) => r.url().endsWith('/v1/me/notifications') && r.request().method() === 'PUT');
-  await budgetSlack.click();
+  // The input is visually hidden: a person clicks the box drawn in its label, which Playwright's hit test cannot do on the input itself.
+  await budgetSlack.locator('xpath=..').click();
   await saved;
   await page.reload();
   await expect(page.getByRole('checkbox', { name: 'A budget passes 80%, Slack' })).toBeChecked();

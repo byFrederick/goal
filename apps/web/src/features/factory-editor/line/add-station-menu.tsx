@@ -1,6 +1,8 @@
 // Add station (D §10.6): an agent station, a human station or a queue, inserted after the row that
 // last had focus, else before Done; its name takes focus so it can be named at once.
+
 import { Bot, ChevronDown, Inbox, Plus, Users } from 'lucide-react';
+import { useRef } from 'react';
 import type { StationKind } from '../../../shared/definition/model';
 import { Button } from '../../../ui/button';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../../ui/menu';
@@ -15,11 +17,14 @@ const choices: { kind: Exclude<StationKind, 'done'>; label: string; name: string
 
 export function AddStationMenu() {
   const editor = useLineEditor();
+  // The new row's name takes focus; the menu must not hand focus back to its trigger after it.
+  const added = useRef<string | null>(null);
 
   const add = (kind: Exclude<StationKind, 'done'>, name: string) => {
     const after = editor.lastFocused.current;
     const known = after !== undefined && editor.stations.some((s) => s.id === after && s.kind !== 'done');
     const { edit, station } = addStation(editor.line, kind, { name, ...(known ? { after } : {}) });
+    added.current = station.id;
     editor.insert(edit, station);
   };
 
@@ -32,7 +37,22 @@ export function AddStationMenu() {
           <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
         </Button>
       </MenuTrigger>
-      <MenuContent side="bottom" align="end" className="w-60">
+      <MenuContent
+        side="bottom"
+        align="end"
+        className="w-60"
+        onCloseAutoFocus={(event) => {
+          const id = added.current;
+          if (!id) return;
+          added.current = null;
+          event.preventDefault();
+          // The menu has finished closing: the new row's name takes focus now, whatever the menu did on the way out.
+          requestAnimationFrame(() => {
+            const name = document.querySelector<HTMLElement>(`[data-station="${CSS.escape(id)}"] [data-station-name]`);
+            if (name && document.activeElement !== name) name.focus();
+          });
+        }}
+      >
         {choices.map(({ kind, label, name, Icon }) => (
           <MenuItem key={kind} onSelect={() => add(kind, name)}>
             <Icon size={18} strokeWidth={1.5} aria-hidden="true" />

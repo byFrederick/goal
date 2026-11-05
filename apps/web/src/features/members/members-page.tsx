@@ -528,6 +528,7 @@ function InvitationActions({
       <Button
         variant="white"
         size="sm"
+        className="max-md:h-11"
         aria-label={`Resend the invitation to ${invitation.email}`}
         disabled={busy(changes.resend)}
         onClick={() => changes.resend.mutate(invitation)}
@@ -537,7 +538,7 @@ function InvitationActions({
       <Button
         variant="white"
         size="sm"
-        className="text-rework-ink"
+        className="text-rework-ink max-md:h-11"
         aria-label={`Revoke the invitation to ${invitation.email}`}
         disabled={busy(changes.cancel)}
         onClick={() => changes.cancel.mutate(invitation)}

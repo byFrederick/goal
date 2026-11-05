@@ -46,7 +46,7 @@ export function StartStep({ search }: { search: StartSearch }) {
   const [error, setError] = useState<string>();
 
   const factories = useQuery(factoriesQuery(org.id)).data ?? [];
-  const { blank, templates } = useTemplates();
+  const { blank, templates } = useTemplates(org.id);
   // The first template is chosen until another one is (the board's default).
   const template = search.template ?? templates[0]?.name;
   const taken = factories.map((f) => f.name);

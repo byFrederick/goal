@@ -4,7 +4,7 @@
 // publishes a new version (trigger-save.ts). A name the definition does not have opens a blank trigger
 // when the URL carries the event the New trigger picker chose (?on=<event key>, with &check=<agent> for a check). A trigger with `check` shows
 // the check layout (intake/trigger-check.jpg): the Check block, its log of checks and Try a check.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { Check, MoreHorizontal } from 'lucide-react';
 import { useState } from 'react';
@@ -75,7 +75,8 @@ export function TriggerPage() {
   const { trigger: name } = useParams({ from: '/o/$org/f/$factory/intake/$trigger' });
   const { on, check } = useSearch({ from: '/o/$org/f/$factory/intake/$trigger' });
   const factory = useQuery(factoryQuery(org.id, listed.id)).data ?? listed;
-  const definition = useQuery(definitionTextQuery(org.id, factory));
+  // A save publishes a version, which is a new key: the old text stays up until the new one lands, so the editor (and its notice) is not remounted.
+  const definition = useQuery({ ...definitionTextQuery(org.id, factory), placeholderData: keepPreviousData });
   const text = definition.data?.text;
   const saved = text === undefined ? undefined : readTrigger(text, name);
   const raw = text === undefined ? undefined : readRawTrigger(text, name);
@@ -269,8 +270,9 @@ function TriggerEditor({ org, factory, text, saved, raw, blank, board, detail }:
         tone: 'ok',
         text: `Saved. ${factoryTitle(factory)}'s definition is version ${outcome.version.number ?? ''} now.`,
       });
+      // The factory first: it says the draft is closed, so the draft's file is not read after it is gone.
+      await queryClient.invalidateQueries({ queryKey: defKeys.factory(org.id, factory.id) });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: defKeys.factory(org.id, factory.id) }),
         queryClient.invalidateQueries({ queryKey: defKeys.draft(org.id, factory.id) }),
         queryClient.invalidateQueries({ queryKey: defKeys.versions(org.id, factory.id) }),
         queryClient.invalidateQueries({ queryKey: intakeKeys.root(org.id, factory.id) }),

@@ -18,6 +18,7 @@ import { DraftSessionProvider, useDraft, useDraftOpen, useDraftSession, useSecti
 import { DraftFailed, DraftLoading } from './frame/draft-states';
 import { DefinitionFrame } from './frame/editor-frame';
 import { LaterSection } from './frame/section-shell';
+import { ViewToggle } from './frame/view-toggle';
 import { type SectionViewProps, sectionViews, yamlView } from './section-views';
 import { type DefinitionSearch, type EditorSection, isEditorSection } from './sections';
 
@@ -76,7 +77,7 @@ export function SectionView({
   if (session.readOnly && section === 'review' && View !== yamlView) return <ViewOnlyReview />;
   return View ? (
     <ReadOnly when={session.readOnly}>
-      <Suspense fallback={<DraftLoading />}>
+      <Suspense fallback={<ViewPending section={section} yaml={View === yamlView} />}>
         <View place={place} search={search} />
       </Suspense>
     </ReadOnly>
@@ -119,5 +120,19 @@ function ParseErrorState({ line }: { line: number }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+/** While a lazy view loads, the Form | YAML switch stays, with the view asked for checked. */
+function ViewPending({ section, yaml }: { section: EditorSection; yaml: boolean }) {
+  return (
+    <>
+      {yaml ? (
+        <div className="mb-3 flex justify-end">
+          <ViewToggle section={section} yaml />
+        </div>
+      ) : null}
+      <DraftLoading />
+    </>
   );
 }

@@ -55,9 +55,14 @@ describe('FileTree', () => {
 
   it('marks the changed file and folder, and the file with errors, in words too', () => {
     renderTree();
-    expect(screen.getByRole('button', { name: /reviewer\.md, changed/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'reviewer.md, changed' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^agents, 2 files, changed/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /factory\.yaml, 1 error/ }).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('names a file that is changed and has a problem with both', () => {
+    renderTree({ changed: new Set(['factory.yaml']) });
+    expect(screen.getByRole('button', { name: 'factory.yaml, 1 error, changed' })).toBeTruthy();
   });
 
   it('starts a file in a folder from the folder row, and offers no add in evals/', () => {

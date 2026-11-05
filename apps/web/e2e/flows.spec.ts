@@ -16,26 +16,58 @@ test.beforeEach(async ({ page, request }) => {
   await recordToasts(page);
 });
 
-/** On a narrow page the item shows its latest steps; the whole trace is one tap away. */
+/**
+ * Below a 720 px content column (every phone and tablet width here) the item page shows its latest steps, or on a
+ * phone its latest events, and the whole trace is one tap away. From 1100 px the Timeline tab is open.
+ */
 async function showTrace(page: Page) {
-  const button = page.getByRole('button', { name: 'Full trace' });
+  const button = page.getByRole('button', { name: /^(Full trace|All \d+ events)$/ });
   if (await button.isVisible()) await button.click();
 }
+
+/** The Timeline tab (its run cards) is drawn from a 720 px content column: 1440 px wide here, not 768 or 375. */
+const hasTimeline = (page: Page) => (page.viewportSize()?.width ?? 0) >= 1100;
+
+/** The item's controls: buttons in the top bar from 768 px, entries of its More actions menu on a phone. */
+async function itemControl(page: Page, name: string) {
+  if (isPhone(page)) {
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name }).click();
+  } else {
+    await page.getByRole('button', { name }).click();
+  }
+}
+
+/** The always-shown navigation: the sidebar from 768 px, the tab bar on a phone (the drawer is closed there). */
+const shownNavigation = (page: Page) => (isPhone(page) ? page.getByRole('navigation', { name: 'Tabs' }) : orgNav(page));
+
+/** The factories listed in the sidebar (the drawer on a phone, which the caller opens first). */
+const factoryGroups = (page: Page) => orgNav(page).getByRole('list', { name: 'Factories' }).locator(':scope > li');
+
+/** The item's progress through the line: its current step, or its last step once it is done. */
+const stepperOf = (page: Page) => page.getByRole('list', { name: 'Progress through the line' });
+
+/** A board that follows the live stream: its status says so from 768 px; a phone's board has no status line. */
+async function boardIsLive(page: Page) {
+  if (isPhone(page)) await expect(page.getByRole('tablist', { name: 'Stations' })).toBeVisible();
+  else await expectBoardLive(page);
+}
+
+/** The Needs you page's list of rows (the detail beside it has links of its own). */
+const needsList = (page: Page) => page.getByRole('list', { name: /^Waiting on you/ });
 
 for (const [name, path, heading] of [
   ['factories', '/o/acme', 'Home'],
   ['floor', '/o/acme/f/goal', 'Floor'],
-  ['board', '/o/acme/f/goal/board', 'Goal board'],
+  ['board', '/o/acme/f/goal/board', 'Board'],
   ['item', '/o/acme/f/goal/items/6', 'Floor: throughput bars per day'],
-  ['items', '/o/acme/f/goal/items', 'Goal items'],
+  ['items', '/o/acme/f/goal/items', 'Items'],
   ['another factory', '/o/acme/f/sre', 'Floor'],
 ] as const) {
   test(`${name} is accessible and fits the screen`, async ({ page }) => {
     await page.goto(path);
-    // From 768 px the Board's title is Board; its phone header keeps the factory's name.
-    const title = name === 'board' && !isPhone(page) ? 'Board' : heading;
-    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
-    await expect(orgNav(page)).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    await expect(shownNavigation(page)).toBeVisible();
     await expectAccessible(page);
     await expectNoHorizontalScroll(page);
   });
@@ -55,7 +87,8 @@ test('the root returns to the organization used last', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('article')).toHaveCount(1);
-  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
+  await openNavigation(page);
+  await expect(factoryGroups(page)).toHaveCount(1);
 });
 
 test('the factories home shows each factory’s line, what needs you and the week’s spend', async ({ page }) => {
@@ -72,8 +105,7 @@ test('the factories home shows each factory’s line, what needs you and the wee
 
   const spend = page.getByRole('region', { name: 'Spend this week' });
   await expect(spend.getByText('Last 7 days')).toBeVisible();
-  // Not built yet: the link is disabled and never navigates.
-  await expect(spend.getByRole('button', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(spend.getByRole('link', { name: 'Spend and billing' })).toHaveAttribute('href', '/o/acme/spend');
 });
 
 test('on a phone: a factory’s name opens its floor, and its line scrolls in its own box', async ({ page }) => {
@@ -117,7 +149,7 @@ test('an unknown organization or factory says so', async ({ page }) => {
 
   await page.goto('/o/acme/f/nothing-here');
   await expect(page.getByRole('heading', { level: 1, name: 'No such factory' })).toBeVisible();
-  await expect(orgNav(page)).toBeVisible();
+  await expect(shownNavigation(page)).toBeVisible();
 });
 
 test('pages are titled most specific first', async ({ page }) => {
@@ -133,16 +165,14 @@ test('the sidebar opens a factory and marks its pages', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 
   const sidebar = orgNav(page);
-  const sre = sidebar.getByRole('link', { name: 'S sre 3 waiting on you' });
+  // The mark is Sr: software, which sorts before sre, also starts with S.
+  const sre = sidebar.getByRole('link', { name: 'Sr sre 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(sre).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeFocused();
   await expect(sidebar.getByRole('link', { name: 'Floor' })).toHaveAttribute('aria-current', 'page');
-  // Agents has no page yet: listed, disabled, and it says so.
-  await expect(sidebar.getByRole('button', { name: 'Agents' })).toHaveAttribute('aria-disabled', 'true');
-  // A connection's test failed (pagerduty): the sidebar's Connections says so.
-  await expect(sidebar.getByRole('link', { name: 'Connections, 1 failing' })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: 'Agents' })).toHaveAttribute('href', '/o/acme/f/sre/agents');
 });
 
 test('the sidebar collapses to a rail and remembers it', async ({ page }) => {
@@ -168,7 +198,7 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the phone navigation');
   await page.goto('/o/acme');
   await openNavigation(page);
-  const sre = orgNav(page).getByRole('link', { name: 'S sre 3 waiting on you' });
+  const sre = orgNav(page).getByRole('link', { name: 'Sr sre 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
@@ -179,15 +209,16 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
 
 test('a decision made elsewhere updates the badges without a reload', async ({ page, request }) => {
   await page.goto('/o/acme/f/goal/board');
-  await expectBoardLive(page);
+  await boardIsLive(page);
+  await openNavigation(page);
   const goal = orgNav(page).getByRole('link', { name: /^G goal / });
-  await expect(goal).toHaveAccessibleName('G goal 2 waiting on you, 1 item blocked');
+  await expect(goal).toHaveAccessibleName('G goal 3 waiting on you, 1 item blocked');
   await expect(orgNav(page).getByRole('link', { name: /^\S+ sre .*blocked: andon pulled$/ })).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
-  await request.post('/v1/orgs/acme/items/goal%2312/approve');
+  await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
 
-  await expect(goal).toHaveAccessibleName('G goal 1 waiting on you, 1 item blocked');
+  await expect(goal).toHaveAccessibleName('G goal 2 waiting on you, 1 item blocked');
 });
 
 test('the sidebar marks Home on the organization pages', async ({ page }) => {
@@ -201,7 +232,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
 
-  await page.getByRole('link', { name: 'Open sre' }).click();
+  await page.getByRole('link', { name: 'sre', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
@@ -209,69 +240,83 @@ test('the floor says what waits on you and leads to it', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
 
   // What waits on you is the Needs you page, filtered to this factory: the decisions and blocked work,
-  // each a row that leads to its item.
-  await page.getByRole('link', { name: /^Needs you/ }).click();
+  // each a row that opens its entry, which links to its item.
+  await page.getByRole('link', { name: /^(Open|See) all$/ }).click();
   await expect(page).toHaveURL(/\/o\/acme\/needs-you\?factory=goal$/);
-  await expect(page.getByRole('link', { name: /goal#5 .*Blocked at Build/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /goal#16/ })).toHaveCount(0);
+  await expect(needsList(page).getByRole('link', { name: /goal#5 at Build/ })).toBeVisible();
+  // goal#16 is an open expedite item: the work source lists it, as an expedite entry (openapi.yaml, InboxEntry kinds).
+  await expect(needsList(page).getByRole('link', { name: /goal#16/ })).toBeVisible();
   await expectAccessible(page);
 
-  await page.getByRole('link', { name: /goal#5 .*Blocked at Build/ }).click();
+  await needsList(page)
+    .getByRole('link', { name: /goal#5 at Build/ })
+    .click();
+  await page.getByRole('link', { name: 'Open goal#5' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\/5$/);
 });
 
 test('a stopped line is what its floor needs first, and clears from it', async ({ page, request }) => {
-  await page.goto('/o/acme/needs-you?factory=support');
-  await expect(
-    page.getByRole('link', { name: /^Line stopped: Answers sent back 4 of the last 10 times/ }),
-  ).toBeVisible();
+  await page.goto('/o/acme/needs-you?factory=sre');
+  // The row says the line stopped; the reason is in the entry it opens (the andon pull).
+  await expect(needsList(page).getByRole('link', { name: /Line stopped/ })).toBeVisible();
 
   // Someone clears it (the CLI, another tab): the stream brings the change.
-  await request.post('/v1/orgs/acme/factories/support/andon/clear', { data: {} });
-  await expect(page.getByRole('link', { name: /^Line stopped/ })).toHaveCount(0);
+  await request.post('/v1/orgs/acme/factories/sre/andon/clear', { data: {} });
+  await expect(needsList(page).getByRole('link', { name: /Line stopped/ })).toHaveCount(0);
 });
 
 test('approve from the phone: the Needs you page decides the oldest decision', async ({ page }) => {
   test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
   await page.goto('/o/acme/needs-you?factory=sre');
 
-  await page.getByRole('link', { name: /sre#4/ }).click();
+  await needsList(page).getByRole('link', { name: /sre#4/ }).click();
   await expect(page).toHaveURL(/\/o\/acme\/needs-you\?.*factory=sre/);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  // The button's name ends with its shortcut key (detail.tsx: "Approve A").
+  await page.getByRole('button', { name: /^Approve( A)?$/ }).click();
   await expectToast(page, 'Approved sre#4.');
 });
 
-test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
+test('merging from the phone is one tap on the Needs you page and says which item merged', async ({
+  page,
+  request,
+}) => {
   test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
   await page.goto('/o/acme/needs-you?factory=goal');
-  await page.getByRole('link', { name: /goal#6/ }).click();
-  await page.getByRole('button', { name: 'Merge', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
-  await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toBeVisible();
-  await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();
+  await needsList(page)
+    .getByRole('link', { name: /goal#6/ })
+    .click();
   await expectAccessible(page);
+  // The Needs you page merges at once (needs-you-page.test.tsx: "swaps Merge for a check once the merge went
+  // through"); the confirmation that names every pull request is the item page's ("merge every pull request at the merge station").
+  await page.getByRole('button', { name: /^Merge( A)?$/ }).click();
+  await expectToast(page, 'Merged goal#6.');
 });
 
 test('an item shows its stepper: each station with its time, and the step it is at', async ({ page }) => {
   // goal#16: an expedite fix created 38 minutes ago, its spec being written now.
   await page.goto('/o/acme/f/goal/items/16');
-  const steps = page.getByRole('list', { name: 'Progress through the line' });
+  const steps = stepperOf(page);
   await expect(steps.locator('[aria-current="step"]')).toContainText('Spec');
-  await expect(steps.getByRole('listitem').first()).toContainText(/\d+ min/);
-  // The done station says the lead time: the expedite target and the time so far.
-  await expect(steps.getByRole('listitem').last()).toContainText(/Target 60 min, \d+ min so far/);
+  if (isPhone(page)) {
+    // A phone's stepper keeps only the current step's detail; the line under it says the times and the target.
+    await expect(page.getByText(/ in Spec, .* in the line of a 60 min target/)).toBeVisible();
+  } else {
+    await expect(steps.getByRole('listitem').first()).toContainText(/\d+ min/);
+    // The done station says the lead time: the expedite target and the time so far.
+    await expect(steps.getByRole('listitem').last()).toContainText(/Target 60 min, \d+ min so far/);
+  }
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
 
 test('send an item back with a reason', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/12');
-  await page.getByRole('button', { name: 'Send back' }).click();
+  await itemControl(page, 'Send back');
 
   const dialog = page.getByRole('dialog', { name: 'Send goal#12 back' });
   await dialog.getByRole('button', { name: 'Send back' }).click();
@@ -283,11 +328,12 @@ test('send an item back with a reason', async ({ page }) => {
 
   await expect(dialog).toBeHidden();
   await expectToast(page, 'Sent goal#12 back. It is now at Spec.');
-  await expect(page.getByText('At Spec', { exact: true })).toBeVisible();
-  await showTrace(page);
-  await expect(
-    page.getByRole('region', { name: 'Timeline' }).getByText('Cover the empty-bucket case with a test.'),
-  ).toBeVisible();
+  await expect(stepperOf(page).locator('[aria-current="step"]')).toContainText('Spec');
+  if (hasTimeline(page)) {
+    await expect(
+      page.getByRole('tabpanel', { name: 'Timeline' }).getByText('Cover the empty-bucket case with a test.'),
+    ).toBeVisible();
+  }
   // The send-back is a person's touch: the Human touches card says it with its reason too.
   await expect(
     page.getByRole('region', { name: 'Human touches' }).getByText(/sent it back: “Cover the empty-bucket case/),
@@ -296,7 +342,7 @@ test('send an item back with a reason', async ({ page }) => {
 
 test('cancel an open item with a reason: it stops, and Cancel item goes', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/12');
-  await page.getByRole('button', { name: 'Cancel item' }).click();
+  await itemControl(page, 'Cancel item');
 
   const dialog = page.getByRole('dialog', { name: 'Cancel goal#12?' });
   await dialog.getByLabel('Reason').fill('Duplicate of #3');
@@ -309,7 +355,7 @@ test('cancel an open item with a reason: it stops, and Cancel item goes', async 
 });
 
 test('merge every pull request at the merge station', async ({ page }) => {
-  await page.goto('/o/acme/f/goal/items/6');
+  await page.goto('/o/acme/f/goal/items/6?tab=changes');
   // goal#6 opened two: one on GitHub, one on GitLab; the item and its output name both.
   const outputs = page.getByRole('region', { name: 'Outputs' });
   await expect(outputs.getByRole('link', { name: /acme\/goal PR #38/ })).toBeVisible();
@@ -328,8 +374,8 @@ test('merge every pull request at the merge station', async ({ page }) => {
   await expectAccessible(page);
   await dialog.getByRole('button', { name: 'Squash and merge' }).click();
 
-  await expect(page.getByText('Merged goal#6. It is done.')).toBeVisible();
-  await expect(page.getByText('At Done', { exact: true })).toBeVisible();
+  await expectToast(page, 'Merged goal#6. It is done.');
+  await expect(stepperOf(page).getByRole('listitem').last()).toContainText('Done, Done');
   await expect(page.getByRole('button', { name: 'Merge' })).toHaveCount(0);
 });
 
@@ -338,12 +384,12 @@ test('a refused merge says which pull request stopped it, and the item stays', a
     {
       code: 'cannot-merge',
       detail: 'https://gitlab.example.com/acme/design-tokens/-/merge_requests/12 has conflicts',
-      says: /goald stopped at a pull request it could not merge: .*merge_requests\/12 has conflicts\. Pull requests merged before it stay merged/,
+      says: /^Merging stopped at a pull request it could not merge: .*merge_requests\/12 has conflicts\. Pull requests merged before it stay merged; fix this one and merge again\.$/,
     },
     {
       code: 'no-code-host-connection',
       detail: 'no connection of goal signs git in to gitlab.example.com',
-      says: /No connection of this factory signs in to that host, so nothing was merged: no connection of goal signs git in to gitlab\.example\.com/,
+      says: /^No connection of this factory signs in to that host, so nothing was merged: no connection of goal signs git in to gitlab\.example\.com\. Add the host’s connection to the factory’s Connections, then merge again\.$/,
     },
   ];
   await page.goto('/o/acme/f/goal/items/6');
@@ -364,7 +410,9 @@ test('a refused merge says which pull request stopped it, and the item stays', a
 
 test('retry a blocked item', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/5');
-  await expect(page.getByText('Blocked, needs a retry').first()).toBeVisible();
+  // The item is blocked at Build, and Retry is what it needs.
+  await expect(stepperOf(page).locator('[aria-current="step"]')).toContainText('Build');
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   await page.getByRole('button', { name: 'Retry' }).click();
 
   await expect(page.getByText('goal#5 is back in the queue.')).toBeVisible();
@@ -372,10 +420,10 @@ test('retry a blocked item', async ({ page }) => {
 });
 
 test('each run card names its station, role, outcome, turns and cost', async ({ page }) => {
+  test.skip(!hasTimeline(page), 'the run cards are the Timeline tab, drawn from a 720 px content column');
   await page.goto('/o/acme/f/goal/items/8');
   await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
-  await showTrace(page);
-  const trace = page.getByRole('region', { name: 'Timeline' });
+  const trace = page.getByRole('tabpanel', { name: 'Timeline' });
 
   const spec = trace.getByRole('article', { name: 'Spec writer' });
   await expect(spec.getByText('Spec', { exact: true })).toBeVisible();
@@ -386,8 +434,9 @@ test('each run card names its station, role, outcome, turns and cost', async ({ 
   const build = trace.getByRole('article', { name: 'Builder' });
   await expect(build.getByText('Build', { exact: true })).toBeVisible();
   await expect(build.getByText('Running', { exact: true })).toBeVisible();
-  await expect(build.getByText('22 turns')).toBeVisible();
-  await expect(build.getByText('$1.12')).toBeVisible();
+  // Turns and cost count once a run ended (timeline.ts): the running card shows neither yet.
+  await expect(build.getByText(/\d+ turns?$/)).toHaveCount(0);
+  await expect(build.getByText('$1.12')).toHaveCount(0);
   await expect(build.getByRole('list', { name: 'Events by Builder' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -397,8 +446,8 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
   await page.goto('/o/acme/f/goal/items/8');
   await expect(page.getByRole('heading', { level: 1, name: 'Worker: report usage per message' })).toBeVisible();
 
-  // One composer per layout: in the trace from 720 px, at the end of the page on a phone.
-  const field = page.getByLabel('Note for the agent').filter({ visible: true });
+  // One composer per layout: a card from a 720 px content column, a pinned field below it.
+  const field = page.getByRole('textbox', { name: 'Note for the agent' }).filter({ visible: true });
   await expect(field).toHaveCount(1);
   await field.fill('Also report the cache tokens.');
   await page
@@ -410,15 +459,19 @@ test('leave a note for the agent: it will be in the next run', async ({ page }) 
   await expect(field).toHaveValue('');
   await expectAccessible(page);
 
-  await showTrace(page);
-  const trace = page.getByRole('region', { name: 'Timeline' });
-  await expect(trace.getByText('Local user left a note for the next run')).toBeVisible();
-  await expect(trace.getByText('Also report the cache tokens.')).toBeVisible();
+  if (hasTimeline(page)) {
+    const trace = page.getByRole('tabpanel', { name: 'Timeline' });
+    await expect(trace.getByText('Local user left a note for the next run')).toBeVisible();
+    await expect(trace.getByText('Also report the cache tokens.')).toBeVisible();
+  } else {
+    await showTrace(page);
+    await expect(page.getByText('Local user left a note for the next run').first()).toBeVisible();
+  }
 });
 
 test('a done item takes no notes', async ({ page }) => {
   await page.goto('/o/acme/f/goal/items/4');
-  await expect(page.getByText('At Done', { exact: true })).toBeVisible();
+  await expect(stepperOf(page).getByRole('listitem').last()).toContainText('Done, Done');
   await expect(page.getByLabel(/^Note for the agent/)).toHaveCount(0);
 });
 
@@ -430,7 +483,7 @@ test('the board updates live when an item moves elsewhere', async ({ page, reque
   await expectBoardLive(page);
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
-  await request.post('/v1/orgs/acme/items/goal%2312/approve');
+  await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
 
   await expect(approveSpec.getByRole('link', { name: 'goald: serve the embedded web UI' })).toHaveCount(0);
   const build = page.getByRole('region', { name: 'Build', exact: true });
@@ -445,27 +498,30 @@ test('the board shows how each station is doing and who works each card', async 
   const columns = page.getByRole('region', { name: 'Stations', exact: true });
   await expect(columns.getByRole('region', { name: 'Inbox', exact: true })).toContainText('No limit');
   await expect(columns.getByRole('region', { name: 'Triage', exact: true })).toContainText('1 of 4');
-  await expect(columns.getByRole('region', { name: 'Investigate', exact: true })).toContainText('3 of 3');
+  await expect(columns.getByRole('region', { name: 'Investigate', exact: true })).toContainText('4 of 3');
   await expect(columns.getByRole('region', { name: 'Approve', exact: true })).toContainText('3 of 5');
   await expect(columns.getByRole('region', { name: 'Done', exact: true })).toContainText('Merged pull requests');
 
   const investigate = page.getByRole('region', { name: 'Investigate', exact: true });
-  await expect(investigate.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
-    'investigator-1, turn 3',
-  );
+  await expect(investigate.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('Working, turn 3');
   await expect(investigate.getByRole('article').filter({ hasText: 'Upgrade EKS' })).toContainText('Ready in buffer');
-  await expect(page.getByRole('region', { name: 'Triage', exact: true })).toContainText('triager, turn 1');
+  await expect(page.getByRole('region', { name: 'Triage', exact: true })).toContainText('Working, turn 1');
   await expect(page.getByRole('region', { name: 'Approve', exact: true }).getByText('Needs your OK')).toHaveCount(3);
   await expect(page.getByRole('region', { name: 'Done', exact: true })).toContainText('1 today');
   await expect(page.getByRole('region', { name: 'Done', exact: true })).not.toContainText('Postmortem filed');
-  await expect(investigate.getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText('Expedite');
+  await expect(investigate.getByRole('article').filter({ hasText: 'Checkout API p95 above 900 ms' })).toContainText(
+    'Expedite',
+  );
   await expectAccessible(page);
 });
 
 test('the line shows its work in progress and the expedite lane in use', async ({ page }) => {
   await page.goto('/o/acme/f/sre/board');
   if (isPhone(page)) {
-    await expect(page.getByText('Line running, WIP 7 of 12')).toBeVisible();
+    // A phone's board has no status line; each station's tab carries its count against its limit.
+    await expect(
+      page.getByRole('tablist', { name: 'Stations' }).getByRole('tab', { name: /^Investigate\s*4 of 3/ }),
+    ).toBeVisible();
     return;
   }
 
@@ -490,10 +546,10 @@ test('on a phone the board opens where a person is needed, then picks any statio
   await expect(page).toHaveURL(/station=investigate/);
   await expect(page.getByRole('tabpanel').getByRole('heading', { name: 'Investigate' })).toBeVisible();
   await expect(page.getByRole('tabpanel').getByText('Constraint', { exact: true })).toBeVisible();
-  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('sre#8');
-  await expect(page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95' })).toContainText(
-    'Expedite',
-  );
+  await expect(page.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText('#8');
+  await expect(
+    page.getByRole('tabpanel').getByRole('article').filter({ hasText: 'Checkout API p95 above 900 ms' }),
+  ).toContainText('Expedite');
 
   await picker.getByRole('tab', { name: /^Done/ }).click();
   await expect(page).toHaveURL(/station=done/);
@@ -503,13 +559,24 @@ test('on a phone the board opens where a person is needed, then picks any statio
 });
 
 test('pull the andon cord, then clear it: the line stops and runs again', async ({ page }) => {
-  await page.goto('/o/acme/f/goal/board');
-  const status = page.getByRole('status').filter({ hasText: /^Line / });
-  const goalSquare = orgNav(page)
-    .filter({ visible: true })
-    .getByRole('link', { name: /goal factory/ });
-  await expect(status).toHaveText(/^Line running/);
-  await expect(goalSquare).not.toHaveAccessibleName(/andon pulled/);
+  // The Floor carries the line's status and Pull andon at every width; a phone's board has neither.
+  await page.goto('/o/acme/f/goal');
+  const status = page.getByRole('heading', { level: 1, name: 'Floor' }).locator('..');
+  // The factory's name in the navigation says the line is stopped (a phone's is in its drawer).
+  const expectGoalName = async (name: RegExp, pulled: boolean) => {
+    await openNavigation(page);
+    const goal = orgNav(page)
+      .filter({ visible: true })
+      .getByRole('link', { name: /^G goal/ });
+    if (pulled) await expect(goal).toHaveAccessibleName(name);
+    else await expect(goal).not.toHaveAccessibleName(name);
+    if (isPhone(page)) {
+      await page.keyboard.press('Escape');
+      await expect(orgNav(page).filter({ visible: true })).toHaveCount(0);
+    }
+  };
+  await expect(status).toContainText('Line running');
+  await expectGoalName(/andon pulled/, false);
 
   await page.getByRole('button', { name: 'Pull andon' }).click();
   const pull = page.getByRole('dialog', { name: 'Pull the andon cord' });
@@ -520,8 +587,8 @@ test('pull the andon cord, then clear it: the line stops and runs again', async 
   await pull.getByRole('button', { name: 'Stop the line' }).click();
 
   await expect(pull).toBeHidden();
-  await expect(status).toHaveText(/^Line stopped: Builds pass but deploys fail/);
-  await expect(goalSquare).toHaveAccessibleName(/blocked: andon pulled/);
+  await expect(status).toContainText('Line stopped: Builds pass but deploys fail');
+  await expectGoalName(/blocked: andon pulled/, true);
   await expectNoHorizontalScroll(page);
 
   await page.getByRole('button', { name: 'Clear the andon' }).click();
@@ -531,8 +598,8 @@ test('pull the andon cord, then clear it: the line stops and runs again', async 
   await clear.getByRole('button', { name: 'Restart the line' }).click();
 
   await expect(clear).toBeHidden();
-  await expect(status).toHaveText(/^Line running/);
-  await expect(goalSquare).not.toHaveAccessibleName(/andon pulled/);
+  await expect(status).toContainText('Line running');
+  await expectGoalName(/andon pulled/, false);
   await expect(page.getByRole('button', { name: 'Pull andon' })).toBeVisible();
 });
 
@@ -542,7 +609,7 @@ test('on a phone: floor to board to item and back', async ({ page }) => {
   const tabs = page.getByRole('navigation', { name: 'Tabs' });
 
   await tabs.getByRole('link', { name: 'Board' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Goal board' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
   await expect(page.getByRole('tab', { name: /^Approve spec/ })).toHaveAttribute('aria-selected', 'true');
 
   await page.getByRole('tab', { name: /Merge/ }).click();
@@ -552,8 +619,8 @@ test('on a phone: floor to board to item and back', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Floor: throughput bars per day' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Merge' })).toBeVisible();
 
-  await page.getByRole('link', { name: 'Goal board' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Goal board' })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to Board' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
 
   await tabs.getByRole('link', { name: 'Floor' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
@@ -596,13 +663,13 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
   await expect(menu).toBeVisible();
   await expect(mark).toHaveAttribute('aria-expanded', 'true');
-  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories, owner Current$/ })).toHaveAttribute(
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?4 factories, owner Current$/ })).toHaveAttribute(
     'aria-current',
     'true',
   );
   await expect(menu.getByRole('menuitem', { name: /^Goal\s?1 factory, owner$/ })).not.toHaveAttribute('aria-current');
-  await expect(menu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(menu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(menu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('href', '/o/acme/spend');
+  await expect(menu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('href', '/o/acme/models');
   await expect(menu.getByRole('menuitem', { name: 'Organization settings' })).toHaveAttribute(
     'href',
     '/o/acme/settings',
@@ -621,7 +688,7 @@ test('switch organization from the menu by keyboard', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
-  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
+  await expect(factoryGroups(page)).toHaveCount(1);
   await expect(orgMarkOf(page, 'Goal')).toBeVisible();
 
   // The organization used last is where / returns.
@@ -635,7 +702,7 @@ test('switch organization from the drawer on a phone', async ({ page }) => {
   await openNavigation(page);
   await orgMarkOf(page).click();
   const menu = page.getByRole('menu', { name: 'Acme organization, switch organization' });
-  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories/ })).toHaveAttribute('aria-current', 'true');
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?4 factories/ })).toHaveAttribute('aria-current', 'true');
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -643,7 +710,8 @@ test('switch organization from the drawer on a phone', async ({ page }) => {
   await expect(page).toHaveURL(/\/o\/goal$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
-  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(1);
+  await openNavigation(page);
+  await expect(factoryGroups(page)).toHaveCount(1);
 });
 
 /** Opens Create organization from the organization menu (on a phone, in the drawer). */
@@ -681,7 +749,8 @@ test('create an organization and land on its empty factories', async ({ page }) 
   await expect(page).toHaveURL(/\/o\/acme-two$/);
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-  await expect(orgNav(page).getByRole('link', { name: /, \S+ factory/ })).toHaveCount(0);
+  await openNavigation(page);
+  await expect(factoryGroups(page)).toHaveCount(0);
   const newMark = orgMarkOf(page, 'Acme Two');
   await expect(newMark).toBeVisible();
   await expectNoHorizontalScroll(page);

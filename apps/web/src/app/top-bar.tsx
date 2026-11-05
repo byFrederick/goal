@@ -125,7 +125,13 @@ export function pageLabel(routeId: string): string | undefined {
 
 /** The bar, from 768 px: one 56 px row, or the crumbs with the actions in a right-aligned row under them when they do not fit side by side. Phones use phone-chrome.tsx's top bar instead (ShellFrame picks one). */
 export function TopBar({ state }: { state: TopBarState | null }) {
-  const routeId = useMatches({ select: (matches) => matches.at(-1)?.routeId ?? '' });
+  // A factory that is not found still matches its child routes, but has no factory for the crumbs to name.
+  const routeId = useMatches({
+    select: (matches) =>
+      matches.some((m) => m.routeId === '/o/$org/f/$factory' && (m.status === 'notFound' || m.status === 'error'))
+        ? ''
+        : (matches.at(-1)?.routeId ?? ''),
+  });
   const inFactory = routeId.startsWith('/o/$org/f/$factory/');
   return (
     <header className="shell-topbar hidden min-h-14 flex-none flex-wrap items-center gap-x-2 gap-y-1 border-b border-rule bg-shell px-7 py-2 md:flex">

@@ -115,7 +115,7 @@ export function NewTriggerDialog() {
               )}
             >
               <legend className="sr-only">Sources</legend>
-              <label className="mb-2 flex h-11 items-center gap-2 rounded-control border md:h-9 border-rule bg-card px-3 text-ink-soft">
+              <label className="mb-2 flex h-11 items-center gap-2 rounded-control ring-1 ring-inset ring-rule md:h-9 bg-card px-3 text-ink-soft">
                 <Search aria-hidden="true" className="size-4 flex-none" />
                 <span className="sr-only">Search sources</span>
                 <input
@@ -123,7 +123,7 @@ export function NewTriggerDialog() {
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Search sources"
-                  className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
+                  className="h-full min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
                 />
               </label>
               {groups.map((group) => {

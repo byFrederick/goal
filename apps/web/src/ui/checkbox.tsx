@@ -1,5 +1,6 @@
 // A checkbox (MOTION.md, Checkbox): a native input, visually hidden, so the keyboard and the screen
-// reader see the real control, and a box drawn beside it. The box fills first, then the check draws
+// reader see the real control (it covers the whole label, transparent, so a click or a tap lands on
+// it and a test can reach it), and a box drawn beside it. The box fills first, then the check draws
 // (styles.css, .check-box). The name is the visible label, or aria-label when there is no label.
 import type { ComponentProps, ReactNode } from 'react';
 import { cn } from './cn';
@@ -33,7 +34,7 @@ export function Checkbox({
   return (
     <label
       className={cn(
-        'inline-flex items-center gap-2 text-body text-ink',
+        'relative inline-flex items-center gap-2 text-body text-ink',
         disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer',
         className,
       )}
@@ -59,12 +60,12 @@ export function Checkbox({
         onChange={(event) => {
           if (!disabled) onCheckedChange(event.currentTarget.checked);
         }}
-        className="peer sr-only"
+        className="peer absolute inset-0 m-0 size-full appearance-none opacity-0 disabled:cursor-not-allowed"
       />
       <span
         aria-hidden="true"
         data-checked={checked || undefined}
-        className="check-box relative flex size-4 shrink-0 items-center justify-center rounded-chip border border-rule bg-card transition-[background-color,border-color] duration-(--duration-quick) peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-run data-checked:border-run data-checked:bg-run"
+        className="check-box pointer-events-none relative flex size-4 shrink-0 items-center justify-center rounded-chip border border-rule bg-card transition-[background-color,border-color] duration-(--duration-quick) peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-run data-checked:border-run data-checked:bg-run"
       >
         <svg
           viewBox="0 0 12 12"

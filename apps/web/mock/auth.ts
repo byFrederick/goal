@@ -777,10 +777,6 @@ export function createMockAuth(clock: () => number, dir: MockDirectory): MockAut
         unauthenticated(res);
         return true;
       }
-      if (path === '/v1/orgs' && method === 'POST' && !now.user.platformAdmin) {
-        send(res, 403, { title: 'Forbidden', status: 403, code: 'forbidden' });
-        return true;
-      }
       // Managing API keys, creating a personal token and revoking a member's need a sign-in from
       // the last 10 minutes; revoking one's own token does not (the people routes and deleting the
       // organization ask in api.ts, once the caller's role holds the permission).

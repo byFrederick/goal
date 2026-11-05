@@ -110,7 +110,12 @@ function stubMatchMedia() {
 /** The account page inside the organization's shell, with the person's state as `me`. */
 function renderAccount(
   me: Me | 'pending',
-  { prefs = saved, slackSecret = 'slack-bot' }: { prefs?: NotificationPreferences; slackSecret?: string | null } = {},
+  {
+    prefs = saved,
+    slackSecret = 'slack-bot',
+    entry = '/account',
+    orgPrefsLoaded = true,
+  }: { prefs?: NotificationPreferences; slackSecret?: string | null; entry?: string; orgPrefsLoaded?: boolean } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const grants = { ...org, created_at: '2026-09-01T00:00:00Z', can: ['personal_token:read'] } as Org;
@@ -118,7 +123,7 @@ function renderAccount(
   client.setQueryData(factoriesQuery(org.id).queryKey, []);
   client.setQueryData(personalTokensQuery(org.id).queryKey, []);
   client.setQueryData(notificationsQuery.queryKey, prefs);
-  client.setQueryData(orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret });
+  if (orgPrefsLoaded) client.setQueryData(orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret });
   if (me === 'pending') vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
   else client.setQueryData(meQuery.queryKey, me);
 
@@ -136,7 +141,7 @@ function renderAccount(
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([accountRoute]),
-    history: createMemoryHistory({ initialEntries: ['/account'] }),
+    history: createMemoryHistory({ initialEntries: [entry] }),
   });
 
   render(
@@ -181,6 +186,33 @@ describe('the account page', () => {
       'Connected apps',
       'Sessions',
     ]);
+  });
+
+  it('scrolls to Personal tokens only after the sections above have their data', async () => {
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    let release: (r: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/notifications') && url.includes('/orgs/'))
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      return answer(input, init);
+    });
+    renderAccount(session, { entry: '/account#personal-tokens', orgPrefsLoaded: false });
+    const heading = await screen.findByRole('heading', { name: 'Personal tokens' });
+    expect(scrolled.includes(heading)).toBe(false);
+    release(
+      new Response(JSON.stringify({ slack_secret: 'slack-bot' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await waitFor(() => expect(scrolled.includes(heading)).toBe(true));
+    expect(document.activeElement).toBe(heading);
   });
 
   it('marks the current section on the hover fill and moves the mark when a section is followed', async () => {

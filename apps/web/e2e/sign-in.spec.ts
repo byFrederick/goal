@@ -113,21 +113,21 @@ test('signing in by code returns to the page that asked, and the session stays o
   await expect(account.getByText('Owner', { exact: true })).toBeVisible();
   await expect(account.getByText('Platform admin')).toBeVisible();
   await expect(account.getByRole('link', { name: 'Profile' })).toBeVisible();
-  // Pages not built yet are listed, disabled, and do nothing when chosen.
-  for (const name of ['Notifications', 'Connected apps', 'Keyboard shortcuts']) {
-    await expect(account.getByRole('button', { name: new RegExp(`^${name}`) })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-  }
+  // Notifications and Keyboard shortcuts open something now; the page not built yet is listed, disabled.
+  await expect(account.getByRole('link', { name: /^Notifications/ })).toBeVisible();
+  await expect(account.getByRole('button', { name: /^Keyboard shortcuts/ })).toBeVisible();
+  await expect(account.getByRole('button', { name: /^Connected apps/ })).toHaveAttribute('aria-disabled', 'true');
   await expectAccessible(page);
   await page.keyboard.press('Escape');
   await expect(account).toBeHidden();
 
-  // The organization menu names the organization's pages, and the two not built yet are disabled.
+  // The organization menu names the organization's pages; Spend and billing and Models and policies are built and link to them.
   const orgMenu = await openOrgMenu(page);
-  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Spend and billing' })).toHaveAttribute('href', '/o/acme/spend');
+  await expect(orgMenu.getByRole('menuitem', { name: 'Models and policies' })).toHaveAttribute(
+    'href',
+    /\/o\/acme\/models$/,
+  );
   await page.keyboard.press('Escape');
 });
 
@@ -251,7 +251,6 @@ test('a Google-only install offers Google alone, to sign in and to confirm it’
 
   await signInOn(page.request, { email_codes: 'off', signed_in: 'stale' });
   await page.goto('/o/acme/settings');
-  await page.getByRole('button', { name: 'Delete organization…' }).click();
   await page.getByLabel('Type Acme to confirm').fill('Acme');
   await page.getByRole('button', { name: 'Delete organization', exact: true }).click();
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
@@ -269,21 +268,18 @@ test('an address that may not sign in gets the same answer, and no code works fo
   await expect(page.getByText('That code didn’t work. Check it, or send a new one.', { exact: true })).toBeVisible();
 });
 
-test('signed in to no organization, the person can only sign out', async ({ page, request }) => {
+test('signed in to no organization, the person lands on step 1 and can only sign out', async ({ page, request }) => {
   await signInOn(request);
   await page.goto('/sign-in');
   await askForCode(page, 'j.doe@example.com');
   await codeField(page).fill('000000');
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Not in an organization yet' })).toBeVisible();
-  await expect(
-    page.getByText(
-      'You’re signed in as j.doe@example.com but not in an organization yet. Ask an owner for an invitation.',
-    ),
-  ).toBeVisible();
+  // ADR 0032 decisions 1 and 2: a person in no organization is sent to /get-started, not to a dead end.
+  await expect(page).toHaveURL(/\/get-started$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Name your organization' })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('button', { name: 'Save and finish later' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to Goal' })).toBeVisible();
 });
 
@@ -312,7 +308,8 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
   await page.getByLabel('Name', { exact: true }).fill('Fred Cruz');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expectToast(page, 'Name saved');
-  await page.goto('/o/acme');
+  // Not the Factories home: the dialog's scrim would sit over its muted line labels, which axe reads as low contrast.
+  await page.goto('/o/acme/settings');
 
   // Sign out everywhere asks first; Cancel has focus, so Enter never signs anyone out by accident.
   await (await openAccount('FC, Fred Cruz')).getByRole('button', { name: 'Sign out everywhere' }).click();
@@ -343,7 +340,6 @@ test('edit name, sign out everywhere, sign out', async ({ page }) => {
 test('a change that needs a recent sign-in asks to confirm it’s you, then goes through', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'stale' });
   await page.goto('/o/acme/settings');
-  await page.getByRole('button', { name: 'Delete organization…' }).click();
   await page.getByLabel('Type Acme to confirm').fill('Acme');
   await page.getByRole('button', { name: 'Delete organization', exact: true }).click();
 
@@ -367,13 +363,12 @@ test('a change that needs a recent sign-in asks to confirm it’s you, then goes
 test('cancelling the confirmation leaves the change undone', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'stale' });
   await page.goto('/o/acme/settings');
-  await page.getByRole('button', { name: 'Delete organization…' }).click();
   await page.getByLabel('Type Acme to confirm').fill('Acme');
   await page.getByRole('button', { name: 'Delete organization', exact: true }).click();
   const reauth = page.getByRole('dialog', { name: 'Confirm it’s you' });
   await reauth.getByRole('button', { name: 'Cancel' }).click();
   await expect(reauth).toBeHidden();
-  await expect(page.getByRole('dialog', { name: 'Delete Acme?' })).toBeVisible();
+  await expect(page.getByLabel('Type Acme to confirm')).toHaveValue('Acme');
   expect((await page.request.get('/v1/orgs/acme')).status()).toBe(200);
 });
 
@@ -388,14 +383,14 @@ async function openOrgMenu(page: Page) {
 
 const createOrg = (_page: Page, menu: Locator) => menu.getByRole('menuitem', { name: 'Create organization' });
 
-test('only platform admins are offered Create organization, and goald refuses anyone else', async ({ page }) => {
+test('anyone signed in is offered Create organization, and goald lets them create one (ADR 0032)', async ({ page }) => {
   await signInOn(page.request, { signed_in: 'fresh', platform_admin: false });
   await page.goto('/o/acme');
-  const menu = await openOrgMenu(page);
-  await expect(createOrg(page, menu)).toHaveCount(0);
+  await expect(createOrg(page, await openOrgMenu(page))).toBeVisible();
   await expectAccessible(page);
-  const refused = await page.request.post('/v1/orgs', { data: { name: 'Acme Two', slug: 'acme-two' } });
-  expect(refused.status()).toBe(403);
+  await page.keyboard.press('Escape');
+  const created = await page.request.post('/v1/orgs', { data: { name: 'Acme Two', slug: 'acme-two' } });
+  expect(created.status()).toBe(201);
 
   await signInOn(page.request, { signed_in: 'fresh' });
   await page.goto('/o/acme');

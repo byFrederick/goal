@@ -64,6 +64,8 @@ export function KeptTestsList() {
   const query = useQuery({
     ...draftKeptTestsQuery(org, factory),
     enabled: hasDraft && started,
+    // The start answer just seeded the cache; the first read comes one poll later.
+    staleTime: pollMs,
     refetchInterval: (q) => (q.state.data?.state === 'trying' ? pollMs : false),
   });
   const data = query.data;

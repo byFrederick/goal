@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import { ChevronDown, Inbox } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { factoriesQuery, inboxQuery } from '../../api/queries';
 import type { InboxEntry } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
@@ -88,6 +88,11 @@ export function NeedsYouPage() {
   // A phone slides the list in from the left when it comes back from an entry, and the entry in from the right.
   const wasApproving = useRef(false);
   const cameBack = phone && !approving && wasApproving.current;
+  // Back from an entry puts the list where it was: the page keeps the scroll it had when an entry opened.
+  const listScroll = useRef(0);
+  useLayoutEffect(() => {
+    if (cameBack) window.scrollTo(0, listScroll.current);
+  }, [cameBack]);
   useEffect(() => {
     wasApproving.current = approving;
   }, [approving]);
@@ -134,6 +139,8 @@ export function NeedsYouPage() {
     if (denying) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      // Below 1024 px the list shows no detail, so no entry is in view for the keys to act on.
+      if (phone && !approving) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       const at = visible.findIndex((e) => e.id === selected?.id);
@@ -228,6 +235,7 @@ export function NeedsYouPage() {
             to="/o/$org/needs-you"
             params={{ org: org.slug }}
             search={{ type: search.type, factory: search.factory }}
+            resetScroll={false}
             aria-label="Back to Needs you"
             className="text-link no-underline hover:text-run-ink"
           >
@@ -260,6 +268,9 @@ export function NeedsYouPage() {
           <section
             aria-label="Waiting on you"
             className="flex min-h-0 flex-col min-w-0 lg:w-90 lg:flex-none lg:border-r lg:border-line"
+            onClickCapture={() => {
+              listScroll.current = window.scrollY;
+            }}
           >
             {visible.length === 0 ? (
               <p className="m-0 px-4 py-5 text-secondary text-muted">Nothing of this type waits on you.</p>
@@ -276,8 +287,9 @@ export function NeedsYouPage() {
               <Kbd>J</Kbd> <Kbd>K</Kbd> to move, <Kbd>A</Kbd> approve, <Kbd>D</Kbd> deny
             </p>
           </section>
+          {/* Below 1024 px the list stands alone; an entry opens as its own view (approving, above). */}
           <div className="min-w-0 flex-1">
-            {selected ? (
+            {selected && !phone ? (
               <Detail
                 entry={selected}
                 factory={factoryOf(selected)}

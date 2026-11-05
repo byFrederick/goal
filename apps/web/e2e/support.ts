@@ -5,10 +5,56 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
 export async function expectAccessible(page: Page) {
+  // Axe reads the colour a frame paints. Wait until no route still shows its skeleton (rows mount and fade in
+  // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
+  // Looping animations (the skeleton pulse) never finish and are left alone.
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  const settled = () =>
+    page.evaluate(() =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity),
+    );
+  await expect
+    .poll(async () => (await settled()) && (await page.waitForTimeout(100), await settled()), { timeout: 10_000 })
+    .toBe(true);
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+}
+
+/**
+ * Every finite animation and transition has ended. axe reads the colours as drawn, so a page caught in
+ * its skeleton cross-fade (MOTION.md, Loading) reads as low contrast; wait for it before expectAccessible.
+ */
+export async function expectSettled(page: Page) {
+  // Three frames in a row with nothing running or pending: a transition that starts a frame after the
+  // data lands (a skeleton reveal, a row entering) would otherwise slip between two checks.
+  await page.waitForFunction(() => {
+    const w = window as unknown as { __settledFrames?: number; __settledPolling?: boolean };
+    const busy = document
+      .getAnimations()
+      .some(
+        (a) => a.playState !== 'finished' && a.playState !== 'idle' && a.effect?.getTiming().iterations !== Infinity,
+      );
+    w.__settledFrames = busy ? 0 : (w.__settledFrames ?? 0);
+    if (!w.__settledPolling) {
+      w.__settledPolling = true;
+      const tick = () => {
+        const stillBusy = document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.playState !== 'finished' && a.playState !== 'idle' && a.effect?.getTiming().iterations !== Infinity,
+          );
+        w.__settledFrames = stillBusy ? 0 : (w.__settledFrames ?? 0) + 1;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+    return !busy && (w.__settledFrames ?? 0) >= 3;
+  });
 }
 
 /**
@@ -63,6 +109,10 @@ export async function expectNoClippedElements(page: Page) {
       const style = getComputedStyle(el);
       if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) continue;
       if (el.closest('[aria-hidden="true"], [inert], .sr-only')) continue;
+      // Monaco lays its text out in a 16,777,216 px wide layer that its editor box clips: what a person
+      // sees ends at the editor, so an editor inside the window is not past its edge.
+      const editor = el.closest('.monaco-editor');
+      if (editor && editor.getBoundingClientRect().right <= edge + 0.5) continue;
       if (style.position === 'fixed' && box.left >= edge) continue;
       if (scrolls(el.parentElement) || scrolls(el)) continue;
       found.push(`${label(el)} ends ${Math.round((box.right - edge) * 10) / 10}px past the right edge`);

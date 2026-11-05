@@ -85,16 +85,6 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
     ]);
   }
   const repository = isObject(basics.repository) ? basics.repository : undefined;
-  if (typeof repository?.token === 'string') {
-    add(
-      'env-reference-removed',
-      'error',
-      'removed',
-      '/basics/repository/token',
-      'runtime.repository.token is removed: name a connection that signs git in to the host',
-      [remove('Remove the token', 'basics', '/repository/token')],
-    );
-  }
   connections.forEach((c, i) => {
     if (isOrgConnection(c)) return;
     add(
@@ -121,21 +111,11 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
     );
   });
 
-  // a definition with agents names a model connection, which gives model access
+  // a model connection a definition still names gives model access (ADR 0037: goald asks for none; runtime.modelKey replaces it)
   const modelName = typeof basics.model_connection === 'string' ? basics.model_connection : '';
   const modelFixes = () =>
     names.filter((n) => byName.get(n)?.model).map((n) => replace(`Use ${n}`, 'basics', '/model_connection', n));
   const modelTitles = () => [...new Set(conns.filter((x) => x.model).map((x) => x.title))].sort().join(', ');
-  if (!modelName && agents.length > 0) {
-    add(
-      'model-connection-missing',
-      'error',
-      'connections',
-      '/basics/model_connection',
-      `runtime.modelConnection: the factory has agents but names no model connection, which gives every run its model; name a connection of a kind with model access (${modelTitles()})`,
-      modelFixes(),
-    );
-  }
   if (modelName) {
     const fixes = modelFixes();
     const c = byName.get(modelName);

@@ -2,10 +2,10 @@
 // environments/<name>.yaml with the agents that use it, then the box, the command-line tools, the
 // variables, the files, the MCP servers and the checks. Every edit writes the environment file of the
 // draft (use-environments.ts), so the YAML view shows the same file. The tab is `?environment=`.
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { useId, useState } from 'react';
-import { useFactory, useFactoryParams } from '../../../shared/factory';
+import { useFactoryParams } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
@@ -14,8 +14,9 @@ import { cn } from '../../../ui/cn';
 import { EmptyState } from '../../../ui/empty-state';
 import { Skeleton } from '../../../ui/skeleton';
 import { TabNav, tabNavUnderlineItem } from '../../../ui/tab-nav';
-import { useDraftSession, useViewOnly } from '../draft/use-draft';
+import { useDraftSession, useModel, useViewOnly } from '../draft/use-draft';
 import { bareSection, SectionShell } from '../frame/section-shell';
+import { SearchLink, useSetSearch } from '../search-link';
 import type { SectionViewProps } from '../section-views';
 import { BoxCard, FilesCard, ToolsCard, VariablesCard } from './box-cards';
 import { defaultEnvironment, envPath, newEnvText } from './env-file';
@@ -27,9 +28,8 @@ import { useEnvironment, useEnvironmentAgents, useEnvironmentNames } from './use
 
 const slug = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
 
-export function EnvironmentsSection({ search }: SectionViewProps) {
+export function EnvironmentsSection({ place, search }: SectionViewProps) {
   const org = useOrg();
-  const params = useFactoryParams();
   const viewOnly = useViewOnly();
   const { names, ready, error, refetch } = useEnvironmentNames();
   const agents = useEnvironmentAgents();
@@ -49,20 +49,7 @@ export function EnvironmentsSection({ search }: SectionViewProps) {
           .
         </>
       }
-      aside={
-        viewOnly ? null : (
-          <Button asChild variant="white">
-            <Link
-              to="/o/$org/f/$factory/definition/add-tool"
-              params={{ org: org.slug, factory: params.factory }}
-              search={{ environment: current }}
-            >
-              <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
-              Add a tool
-            </Link>
-          </Button>
-        )
-      }
+      aside={viewOnly || place !== 'definition' ? null : <AddToolButton environment={current} />}
     >
       {error ? (
         <div role="alert" className="flex flex-col items-start gap-3">
@@ -79,7 +66,7 @@ export function EnvironmentsSection({ search }: SectionViewProps) {
               Create one to say what an agent’s box installs and can reach.
             </EmptyState>
           ) : (
-            <EnvironmentView key={current} name={current} agents={agents?.[current] ?? []} />
+            <EnvironmentView key={current} place={place} name={current} agents={agents?.[current] ?? []} />
           )}
         </Skeleton>
       )}
@@ -110,10 +97,8 @@ function Tabs({
   agents: Record<string, string[]>;
   viewOnly: boolean;
 }) {
-  const org = useOrg();
-  const params = useFactoryParams();
   const session = useDraftSession();
-  const navigate = useNavigate();
+  const setSearch = useSetSearch();
   const [creating, setCreating] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const errorId = useId();
@@ -126,28 +111,22 @@ function Tabs({
     session.editFile(envPath(name), newEnvText(name));
     setCreating(false);
     setProblem(null);
-    void navigate({
-      to: '/o/$org/f/$factory/definition/$section',
-      params: { org: org.slug, factory: params.factory, section: 'environments' },
-      search: { environment: name },
-    });
+    setSearch({ environment: name });
   };
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line">
       <TabNav label="Environments" variant="underline" className="border-b-0">
         {names.map((name) => (
-          <Link
+          <SearchLink
             key={name}
-            to="/o/$org/f/$factory/definition/$section"
-            params={{ org: org.slug, factory: params.factory, section: 'environments' }}
-            search={{ environment: name }}
+            patch={{ environment: name }}
             aria-current={name === current ? 'page' : undefined}
             className={cn(tabNavUnderlineItem, 'flex-col items-start justify-center gap-0 no-underline')}
           >
             <span className="font-mono">{name}</span>
             <span className="text-xs font-normal text-muted">{plural(agents[name]?.length ?? 0, 'agent')}</span>
-          </Link>
+          </SearchLink>
         ))}
       </TabNav>
       {viewOnly ? null : creating ? (
@@ -182,9 +161,17 @@ function Tabs({
   );
 }
 
-function EnvironmentView({ name, agents }: { name: string; agents: string[] }) {
+function EnvironmentView({
+  place,
+  name,
+  agents,
+}: {
+  place: SectionViewProps['place'];
+  name: string;
+  agents: string[];
+}) {
   const viewOnly = useViewOnly();
-  const factory = useFactory();
+  const factoryName = useModel().basics.name || 'this factory';
   const { spec, change, ready } = useEnvironment(name);
   const { results, test, run } = useEnvironmentTest(name);
   const secret = NewSecretSheetFor();
@@ -220,6 +207,7 @@ function EnvironmentView({ name, agents }: { name: string; agents: string[] }) {
         />
         <FilesCard {...props} />
         <McpCard
+          place={place}
           environment={name}
           spec={spec}
           change={change}
@@ -241,7 +229,7 @@ function EnvironmentView({ name, agents }: { name: string; agents: string[] }) {
           apply={fixes.apply}
           readOnly={viewOnly}
           results={results}
-          factoryName={factory.name}
+          factoryName={factoryName}
           testAll={() => run()}
           testing={test.isPending}
         />
@@ -249,5 +237,23 @@ function EnvironmentView({ name, agents }: { name: string; agents: string[] }) {
       {fixes.sheet}
       {secret.sheet}
     </Skeleton>
+  );
+}
+
+/** Definition only: Add a tool has a page of its own under the factory's Definition. */
+function AddToolButton({ environment }: { environment: string }) {
+  const org = useOrg();
+  const params = useFactoryParams();
+  return (
+    <Button asChild variant="white">
+      <Link
+        to="/o/$org/f/$factory/definition/add-tool"
+        params={{ org: org.slug, factory: params.factory }}
+        search={{ environment }}
+      >
+        <Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+        Add a tool
+      </Link>
+    </Button>
   );
 }

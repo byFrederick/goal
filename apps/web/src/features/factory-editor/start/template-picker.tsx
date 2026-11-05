@@ -4,7 +4,7 @@
 // The blank template is the Blank card's, so it is not listed here.
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, LayoutTemplate } from 'lucide-react';
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { templateQuery, templatesQuery } from '../../../api/queries';
 import type { TemplateSummary } from '../../../api/types';
 import { modelOf } from '../../../shared/definition/model';
@@ -19,9 +19,8 @@ import { agentsSentence, blankTemplate, lineChips } from './start-choice';
 const card = 'flex min-w-0 flex-col gap-4 rounded-card border border-line bg-card p-4 md:p-5';
 
 /** The catalog's templates but the blank one, by title. */
-export function useTemplates() {
-  const org = useOrg();
-  const q = useQuery(templatesQuery(org.id));
+export function useTemplates(orgId: string) {
+  const q = useQuery(templatesQuery(orgId));
   const templates = (q.data ?? [])
     .filter((t) => t.name !== blankTemplate)
     .toSorted((a, b) => a.title.localeCompare(b.title));
@@ -29,7 +28,14 @@ export function useTemplates() {
 }
 
 export function TemplatePicker({ value, onChange }: { value: string | undefined; onChange: (name: string) => void }) {
-  const { templates, isPending, error } = useTemplates();
+  const org = useOrg();
+  // The choice lives in the URL, which the parent updates after a navigation: the radio shows the click at once.
+  const [clicked, setClicked] = useState<string>();
+  useEffect(() => {
+    if (clicked !== undefined && clicked === value) setClicked(undefined);
+  }, [clicked, value]);
+  const shown = clicked ?? value;
+  const { templates, isPending, error } = useTemplates(org.id);
   const headingId = useId();
 
   if (isPending) return <div aria-busy="true" className={cn(card, 'h-64')} />;
@@ -62,8 +68,11 @@ export function TemplatePicker({ value, onChange }: { value: string | undefined;
         <RadioList
           legend="Template"
           name="template"
-          value={value}
-          onChange={onChange}
+          value={shown}
+          onChange={(name) => {
+            setClicked(name);
+            onChange(name);
+          }}
           options={templates.map((t) => ({
             value: t.name,
             label: t.title,
@@ -72,7 +81,7 @@ export function TemplatePicker({ value, onChange }: { value: string | undefined;
           }))}
         />
       </section>
-      {value ? <TemplateDetail summary={templates.find((t) => t.name === value)} name={value} /> : null}
+      {shown ? <TemplateDetail summary={templates.find((t) => t.name === shown)} name={shown} /> : null}
     </div>
   );
 }

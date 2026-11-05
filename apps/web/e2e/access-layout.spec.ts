@@ -73,10 +73,10 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
 test('switches the view and opens an environment’s file from a row', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'the 1440 project');
   await page.goto('/o/acme/access');
-  await page.getByRole('radio', { name: 'By factory' }).check({ force: true });
+  await page.getByRole('radio', { name: 'By factory' }).click();
   await expect(page).toHaveURL(/by=factory/);
-  await page.getByRole('radio', { name: 'By what they reach' }).check({ force: true });
-  await page.getByRole('table').getByRole('link', { name: 'CLOUDFLARE_API_TOKEN' }).click();
+  await page.getByRole('radio', { name: 'By what they reach' }).click();
+  await page.getByRole('table').getByRole('link', { name: 'CLOUDFLARE_API_TOKEN', exact: true }).click();
   await expect(page).toHaveURL(
     /\/o\/acme\/f\/software\/definition\/basics\?mode=yaml&file=environments%2Fdeploy\.yaml/,
   );

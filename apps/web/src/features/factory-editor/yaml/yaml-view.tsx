@@ -97,7 +97,7 @@ function useDebounced<T>(value: T, ms: number): T {
 
 /** How many lines Monaco shows before it scrolls inside: the window's height less the editor's frame. */
 function useEditorLines(): number {
-  const read = useCallback(() => Math.max(16, Math.floor((window.innerHeight - 180) / 23)), []);
+  const read = useCallback(() => Math.max(16, Math.floor((window.innerHeight - 140) / 23)), []);
   const [lines, setLines] = useState(read);
   useEffect(() => {
     const onResize = () => setLines(read());
@@ -122,6 +122,13 @@ const toMarker = (p: DefinitionProblem): EditorMarker => ({
   severity: p.severity,
   message: p.message,
 });
+
+/** The first line of the last run of consecutive changed lines (ascending), or undefined. */
+function lastChangeStart(changed: number[]): number | undefined {
+  let at = changed.length - 1;
+  while (at > 0 && changed[at - 1] === (changed[at] as number) - 1) at--;
+  return changed[at];
+}
 
 export function YamlView({ search }: SectionViewProps) {
   const session = useDraftSession();
@@ -198,12 +205,13 @@ export function YamlView({ search }: SectionViewProps) {
   }, [problems]);
 
   // The change gutter: this file against the version the draft is based on.
-  const comparison = useQuery({
+  const comparisonQuery = useQuery({
     queryKey: defKeys.compare(org, f, 'base', 'draft', revision),
     queryFn: ({ signal }) => compareVersions(org, f, 'base', 'draft', signal),
     enabled: hasDraft,
     placeholderData: keepPreviousData,
-  }).data;
+  });
+  const comparison = comparisonQuery.data;
   const changedFiles = useMemo(
     () => new Set((hasDraft ? (comparison?.files ?? []) : []).filter((x) => x.op !== 'unchanged').map((x) => x.path)),
     [comparison, hasDraft],
@@ -234,8 +242,18 @@ export function YamlView({ search }: SectionViewProps) {
   const written = useRef<number | undefined>(undefined);
   const revealed = useRef('');
   const { mode: _m, file: _f, line: _l, compare: _c, add: _a, ...entity } = search;
+  // A file opens where it changed last, so a tool just added is on screen (a tool written back in block
+  // style also rewrites the lines above it, so the first change is not where the tool is); factory.yaml
+  // opens at its place.
+  const changesPending =
+    hasDraft &&
+    path !== factoryFile &&
+    (comparison === undefined ||
+      comparisonQuery.isPlaceholderData ||
+      (fileChange?.op === 'modified' && baseText === undefined));
   const entryLine =
-    search.line ?? (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : undefined);
+    search.line ??
+    (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : lastChangeStart(changed));
   // biome-ignore lint/correctness/useExhaustiveDependencies: revealed once per file and asked-for line
   useEffect(() => {
     if (!editor || text === undefined) return;
@@ -245,20 +263,30 @@ export function YamlView({ search }: SectionViewProps) {
       revealed.current = key;
       return;
     }
+    if (entryLine === undefined && changesPending) return;
     if (entryLine === undefined || editor.reveal(entryLine)) revealed.current = key;
-  }, [editor, path, search.line, entryLine, text === undefined]);
+  }, [editor, path, search.line, entryLine, text === undefined, changesPending]);
 
   const cursorLine = cursor?.line;
+  // The file the cursor last moved in, and the latest search, so a pending write never lands on another file.
+  const cursorPath = useRef(path);
+  const latestSearch = useRef(search);
+  latestSearch.current = search;
+  const onCursor = (c: CursorPosition) => {
+    cursorPath.current = path;
+    setCursor(c);
+  };
   // biome-ignore lint/correctness/useExhaustiveDependencies: only the cursor's moves write the URL
   useEffect(() => {
     if (cursorLine === undefined) return;
     const t = setTimeout(() => {
-      if (cursorLine === search.line) return;
+      const current = latestSearch.current;
+      if (cursorPath.current !== path || cursorLine === current.line) return;
       written.current = cursorLine;
-      go(undefined, { ...search, line: cursorLine }, true);
+      go(undefined, { ...current, line: cursorLine }, true);
     }, 400);
     return () => clearTimeout(t);
-  }, [cursorLine]);
+  }, [cursorLine, path]);
 
   const revealProblem = (p: DefinitionProblem) => {
     const file = cleanPath(p.file ?? factoryFile);
@@ -345,7 +373,7 @@ export function YamlView({ search }: SectionViewProps) {
       <h2 className="sr-only" data-route-focus="" tabIndex={-1}>
         YAML of the {version}
       </h2>
-      <div className="grid min-h-180 min-w-0 overflow-hidden rounded-card border border-rule @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
+      <div className="grid [overflow-anchor:none] min-h-180 min-w-0 overflow-hidden rounded-card border border-rule @[640px]:grid-cols-[250px_minmax(0,1fr)] @[1024px]:grid-cols-[250px_minmax(0,1fr)_260px]">
         <div id={treeId} className={cn(filesOpen ? 'flex' : 'hidden', '@[640px]:flex', 'min-w-0 border-r border-line')}>
           <FileTree
             nodes={tree}
@@ -369,7 +397,7 @@ export function YamlView({ search }: SectionViewProps) {
                 aria-expanded={filesOpen}
                 aria-controls={treeId}
                 onClick={() => setFilesOpen((v) => !v)}
-                className="inline-flex items-center px-3 text-secondary font-control text-ink @[640px]:hidden"
+                className="inline-flex min-h-10 items-center px-3 text-secondary font-control text-ink max-md:min-h-11 @[640px]:hidden"
               >
                 Files
               </button>
@@ -380,14 +408,14 @@ export function YamlView({ search }: SectionViewProps) {
                   aria-selected="true"
                   aria-controls={panelId}
                   tabIndex={0}
-                  className="inline-flex h-10 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
+                  className="inline-flex h-10 max-md:h-11 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
                 >
                   <span className="truncate">{path}</span>
                 </button>
               </div>
             </div>
             <div className="flex items-center px-3 py-1">
-              <ViewToggle section={section} yaml />
+              <ViewToggle section={section} yaml cursorLine={cursorPath.current === path ? cursorLine : undefined} />
             </div>
           </div>
 
@@ -444,7 +472,7 @@ export function YamlView({ search }: SectionViewProps) {
                 markers={here.map(toMarker)}
                 changedLines={changed}
                 zones={zones}
-                onCursor={setCursor}
+                onCursor={onCursor}
               />
             )}
           </div>

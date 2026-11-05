@@ -265,19 +265,10 @@ describe('a blank factory', () => {
     const lined = await call<SaveResult>(`${path}/draft/model/line`, put({ value: line }, m.etags.line));
     expect(lined.status).toBe(200);
 
-    // An agent's runs need a model: publish refuses until Basics names the model connection.
-    const refused = await call<Problem>(`${path}/draft/publish`, {
-      method: 'POST',
-      body: JSON.stringify({ revision: lined.body.revision }),
-    });
-    expect([refused.status, refused.body.problems?.map((p) => p.code)]).toEqual([409, ['model-connection-missing']]);
-    const basics = { ...(m.model.basics as Record<string, unknown>), model_connection: 'claude' };
-    const saved = await call<SaveResult>(`${path}/draft/model/basics`, put({ value: basics }, m.etags.basics));
-    expect(saved.status).toBe(200);
-
+    // ADR 0037: goald asks for no model connection; a model key is optional, so publish needs none.
     const published = await call<Version>(`${path}/draft/publish`, {
       method: 'POST',
-      body: JSON.stringify({ revision: saved.body.revision }),
+      body: JSON.stringify({ revision: lined.body.revision }),
     });
     expect(published.status).toBe(201);
     expect(published.body.number).toBe(1);

@@ -47,6 +47,7 @@ export function editorTheme(rawRead: TokenReader, dark: boolean): monaco.editor.
       'editor.background': read('shell'),
       'editor.foreground': read('ink'),
       'editorLineNumber.foreground': read('muted'),
+      'editorLineNumber.dimmedForeground': read('muted'),
       'editorLineNumber.activeForeground': read('ink'),
       'editorCursor.foreground': read('run'),
       'editor.selectionBackground': read('run-tint'),

@@ -11,7 +11,7 @@ import { SquareTerminal } from 'lucide-react';
 import { type ComponentProps, type FormEvent, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
-import { meQuery, notificationsQuery } from '../../api/queries';
+import { meQuery, notificationsQuery, orgNotificationsQuery } from '../../api/queries';
 import type { Me, NotificationPreferences, OrgSummary } from '../../api/types';
 import { useAccount } from '../../app/account-menu';
 import { AppearanceChoice } from '../../app/appearance-choice';
@@ -66,6 +66,7 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
   const active = sections.some((s) => s.id === hash) ? hash : 'profile';
   const update = useUpdateName();
   const preferences = useQuery({ ...notificationsQuery, enabled: person !== undefined });
+  const orgPreferences = useQuery({ ...orgNotificationsQuery(org.id), enabled: person !== undefined });
   const save = useSaveNotifications();
 
   return (
@@ -84,7 +85,10 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
             </h2>
             <NotificationsTable org={org.id} signedIn={person !== undefined} />
           </section>
-          <PersonalTokensSection org={org} />
+          <PersonalTokensSection
+            org={org}
+            settled={person === undefined || !(preferences.isPending || orgPreferences.isPending)}
+          />
           <ConnectedAppsSection />
           <SessionsSection signedIn={person !== undefined} />
         </div>
@@ -211,15 +215,7 @@ function ProfileSection({
         {role ? <Chip tone={org.role === 'owner' ? 'ok' : org.role === 'admin' ? 'you' : 'plain'}>{role}</Chip> : null}
       </div>
       {person ? (
-        // Keyed by whether the saved email has loaded, so the email field starts from it.
-        <NameForm
-          key={saved ? 'saved' : 'loading'}
-          name={person.name}
-          signInEmail={person.email}
-          saved={saved}
-          update={update}
-          save={save}
-        />
+        <NameForm name={person.name} signInEmail={person.email} saved={saved} update={update} save={save} />
       ) : null}
     </section>
   );
@@ -267,7 +263,10 @@ function NameForm({
 }) {
   const [value, setValue] = useState(name);
   const [invalid, setInvalid] = useState<string>();
-  const [email, setEmail] = useState(saved?.email ?? '');
+  // The email field shows the saved address once it loads, until the person types: the form is not
+  // remounted by the load, so what they typed in the name field is kept.
+  const [typedEmail, setEmail] = useState<string>();
+  const email = typedEmail ?? saved?.email ?? '';
   const [emailInvalid, setEmailInvalid] = useState<string>();
 
   const onSubmit = (e: FormEvent) => {

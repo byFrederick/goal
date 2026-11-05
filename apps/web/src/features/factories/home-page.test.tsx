@@ -375,6 +375,18 @@ describe('Home: the ready state', () => {
     expect(within(line).queryByText(/in progress/)).toBeNull();
   });
 
+  it('mutes the counts of a stopped line instead of dimming it with opacity, which fails text contrast', async () => {
+    await renderReady();
+
+    const stopped = within(screen.getByRole('article', { name: 'sre' })).getByRole('region', { name: 'sre line' });
+    expect(stopped.className).not.toContain('opacity');
+    expect(stopped.querySelector('.text-muted.text-heading')).not.toBeNull();
+    const running = within(screen.getByRole('article', { name: 'software' })).getByRole('region', {
+      name: 'software line',
+    });
+    expect(running.querySelector('.text-muted.text-heading')).toBeNull();
+  });
+
   it('colours the type word: orange for questions, red for alerts, and shows Deny and Approve on a tool approval', async () => {
     await renderReady({ inboxList: inboxEntries([question, expedite, toolApproval]) });
 

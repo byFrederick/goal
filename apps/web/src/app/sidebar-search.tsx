@@ -168,7 +168,8 @@ export function SidebarSearch({
 
     const items: Row[] = found.items.map((hit) => ({
       key: `item-${hit.id}`,
-      label: `${hit.factory_name} #${hit.number}, ${hit.title}`,
+      // The name holds all the visible text (WCAG 2.5.3): the number and title, then the station chip.
+      label: `${mark(hit.factory_name)} #${hit.number} ${hit.title}, ${humanize(hit.station)}, ${hit.factory_name}`,
       content: (
         <>
           <span aria-hidden="true" className={badgeClass}>
@@ -176,7 +177,7 @@ export function SidebarSearch({
           </span>
           <span className="min-w-0 flex-1 truncate">
             #{hit.number} {hit.title}
-          </span>
+          </span>{' '}
           <span className="flex-none text-meta text-muted">{humanize(hit.station)}</span>
         </>
       ),
@@ -220,7 +221,7 @@ export function SidebarSearch({
         content: (
           <>
             <screen.icon {...iconProps} />
-            <span className="min-w-0 flex-1 truncate">{screen.label}</span>
+            <span className="min-w-0 flex-1 truncate">{screen.label}</span>{' '}
             <span className="flex-none text-meta text-muted">{detail}</span>
           </>
         ),
@@ -233,7 +234,7 @@ export function SidebarSearch({
       content: (
         <>
           <Bot {...iconProps} />
-          <span className="min-w-0 flex-1 truncate">{hit.name}</span>
+          <span className="min-w-0 flex-1 truncate">{hit.name}</span>{' '}
           <span className="flex-none text-meta text-muted">{hit.factory_name}</span>
         </>
       ),
@@ -276,7 +277,7 @@ export function SidebarSearch({
       ? [
           {
             key: 'action-new-item',
-            label: `New item about "${q}"`,
+            label: `New item about "${q}" C`,
             content: (
               <>
                 <Plus {...iconProps} />
@@ -294,7 +295,7 @@ export function SidebarSearch({
         ? [
             {
               key: 'action-pause-line',
-              label: pauseLabel,
+              label: `${pauseLabel}, ${factoryTitle(openFactory)}`,
               content: (
                 <>
                   {openFactory.paused ? <Play {...iconProps} /> : <Pause {...iconProps} />}
@@ -313,7 +314,7 @@ export function SidebarSearch({
       return [
         {
           key: `action-approve-${hit.id}`,
-          label: `Approve #${hit.number}`,
+          label: `Approve #${hit.number}, ${hit.factory_name}`,
           content: (
             <>
               <Check {...iconProps} />
