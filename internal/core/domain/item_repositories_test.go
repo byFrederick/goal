@@ -16,6 +16,8 @@ const (
 	// entryAPI is the repoAPI entry's name and keyAPI its key.
 	entryAPI = "api"
 	keyAPI   = "github.com/acme/api"
+	// keyLabsWeb is a repository under the repoAll pattern.
+	keyLabsWeb = "github.com/acme-labs/web"
 )
 
 // repoLine is fileLine with runtime.repositories; def names the default entry ("" for none).
@@ -51,7 +53,7 @@ func TestFile_RepositoriesMatchEntries(t *testing.T) {
 		"https://gitlab.example.com/acme/platform/infra/deploy.git", "github.com/acme-labs/web/")
 
 	want := []ItemRepository{
-		{Repo: "github.com/acme-labs/web", Joined: JoinedFiling},
+		{Repo: keyLabsWeb, Joined: JoinedFiling},
 		{Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1},
 		{Repo: "gitlab.example.com/acme/platform/infra/deploy", Joined: JoinedFiling, Ordinal: 2},
 	}
@@ -64,7 +66,7 @@ func TestFile_RepositoriesMatchEntries(t *testing.T) {
 	n = fileRepos(t, repoLine(""), "Acme-Labs/web", entryAPI, "acme/platform/infra/deploy", "acme/api", "github.com/acme/api")
 
 	want = []ItemRepository{
-		{Repo: "github.com/acme-labs/web", Joined: JoinedFiling},
+		{Repo: keyLabsWeb, Joined: JoinedFiling},
 		{Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1},
 		{Repo: "gitlab.example.com/acme/platform/infra/deploy", Joined: JoinedFiling, Ordinal: 2},
 	}
@@ -91,7 +93,7 @@ func TestFile_RepositoriesRefusalNamesTheValue(t *testing.T) {
 		"pattern entry": {repoLine(""), "labs", []string{`"labs"`, "owner/name"}},
 		"unknown owner": {repoLine(""), "Acme/Web", []string{`"Acme/Web"`}},
 		"unknown host":  {repoLine(""), "GitHub.com/acme/web", []string{`"GitHub.com/acme/web"`}},
-		"two hosts":     {ambiguous, "acme/api", []string{`"acme/api"`, "github.com", "git.example.com"}},
+		"two hosts":     {ambiguous, "acme/api", []string{`"acme/api"`, gitHubDotCom, hostGitAcme}},
 		"owner only":    {repoLine(""), "acme-labs", []string{`"acme-labs"`}},
 		"malformed":     {repoLine(""), "https://x:y@github.com/acme/api", []string{`"https://x:y@github.com/acme/api"`}},
 	} {
@@ -129,7 +131,7 @@ func TestFile_RepositoriesRefused(t *testing.T) {
 		"blank":              {" "},
 		"owner/name nowhere": {"acme/web"},
 		"a pattern's name":   {"labs"},
-		"an unknown name":    {"web"},
+		"an unknown name":    {"mobile-app"},
 		"more than the cap":  eleven,
 	} {
 		_, err := File(repoLine(entryAPI), FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: repos})
@@ -190,7 +192,7 @@ func TestResolveItemRepositories_OldItemUsesDefault(t *testing.T) {
 		t.Error("First of none = ok; want none")
 	}
 
-	rows := []ItemRepository{{Repo: "github.com/acme-labs/web", Joined: JoinedFiling}}
+	rows := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling}}
 	if got := ResolveItemRepositories(rows, repoLine(entryAPI)); !reflect.DeepEqual(got, ItemRepositories(rows)) {
 		t.Errorf("own rows = %+v; want %+v", got, rows)
 	}

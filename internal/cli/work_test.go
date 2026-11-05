@@ -855,6 +855,9 @@ func TestDeny_SendsTheDecision(t *testing.T) {
 		[]string{verbDeny, notedRef, "--note", "  "})
 }
 
+// verbRun is goal run's command.
+const verbRun = "run"
+
 // goal run --repo, repeatable, sends each value as given and in order as the item's repositories.
 func TestRun_RepoFlagsBecomeRepositories(t *testing.T) {
 	t.Parallel()
@@ -862,7 +865,7 @@ func TestRun_RepoFlagsBecomeRepositories(t *testing.T) {
 	g := &startGoald{}
 	env := testEnv(t, g.serve(t), map[string]string{envOrg: orgAcme})
 
-	args := []string{"run", startFactory, "Add a flag", "--repo", "acme/web", "--detach", "--repo", "api"}
+	args := []string{verbRun, startFactory, "Add a flag", "--repo", "acme/web", "--detach", "--repo", "api"}
 	if err := run(t.Context(), args, &printer{w: &bytes.Buffer{}}, env, nil); err != nil {
 		t.Fatalf("goal run: %v", err)
 	}
@@ -871,7 +874,7 @@ func TestRun_RepoFlagsBecomeRepositories(t *testing.T) {
 		t.Errorf("repositories sent = %v; want [acme/web api]", g.bodies[0]["repositories"])
 	}
 
-	if err := run(t.Context(), []string{"run", startFactory, "Later", "--detach"}, &printer{w: &bytes.Buffer{}}, env, nil); err != nil {
+	if err := run(t.Context(), []string{verbRun, startFactory, "Fix a typo", "--detach"}, &printer{w: &bytes.Buffer{}}, env, nil); err != nil {
 		t.Fatalf("goal run without --repo: %v", err)
 	}
 
