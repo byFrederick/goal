@@ -62,7 +62,8 @@ const sameViewMs = 400;
  * Waits for the view's `data-route-focus` heading to mount (a lazy section's code arriving; the
  * old view stays on screen until then) and focuses it, unless focus moved meanwhile. A heading
  * that was there before (`stale`) is the new one if it is still there after `sameViewMs` (one view
- * serving both routes); after `viewWaitMs` the h1 takes focus. Returns a cancel.
+ * serving both routes); after `viewWaitMs` the h1 takes focus. A page without such a heading takes focus on its
+ * new h1 as soon as the old one is replaced. Returns a cancel.
  */
 function awaitViewHeading(h1: HTMLElement, stale: HTMLElement | null): () => void {
   const main = document.querySelector('#main');
@@ -77,15 +78,25 @@ function awaitViewHeading(h1: HTMLElement, stale: HTMLElement | null): () => voi
     done();
     if (document.activeElement === from || document.activeElement === document.body) focusHeading(heading);
   };
+  // The page's heading replaced by another one: the router resolved before the new page drew, so the h1 seen
+  // at the time was the old page's, which the new page takes the place of.
+  const replaced = () => {
+    const next = main?.querySelector<HTMLElement>('h1');
+    return next && next !== h1 ? next : null;
+  };
   const observer = new MutationObserver(() => {
     const view = current();
     if (view && view !== stale) settle(view);
+    else if (!view && !stale) {
+      const next = replaced();
+      if (next) settle(next);
+    }
   });
   if (main) observer.observe(main, { childList: true, subtree: true });
   const same = setTimeout(() => {
     if (stale?.isConnected && current() === stale) settle(stale);
   }, sameViewMs);
-  const timer = setTimeout(() => settle(h1), viewWaitMs);
+  const timer = setTimeout(() => settle(replaced() ?? h1), viewWaitMs);
   return done;
 }
 

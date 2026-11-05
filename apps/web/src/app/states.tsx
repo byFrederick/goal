@@ -84,6 +84,12 @@ export function ErrorScreen({ error, reset }: ErrorComponentProps) {
 }
 
 /**
+ * What a not-found of a known organization says it is about. A not-found thrown in a route's beforeLoad is shown by
+ * the parent route's boundary, so the organization route reads this to name the missing factory.
+ */
+export const unknownFactory = { unknown: 'factory' } as const;
+
+/**
  * Not found, centred in the content area under the top bar (the design's "Not found"): a heading, one
  * sentence and one action. The caller's main region provides the Route change fade and rise.
  */
