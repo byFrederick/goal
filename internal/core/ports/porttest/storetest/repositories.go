@@ -12,7 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// repositoriesTests cover items' branches and repositories (ADR 0041 decisions 4 and 6).
+// repositoriesTests cover items' branches and repositories (ADR 0041 decisions 4, 5 and 6).
 var repositoriesTests = []struct {
 	name string
 	test func(f *fixture)
@@ -27,6 +27,9 @@ var repositoriesTests = []struct {
 	{"ItemRepositories_PushedJoinAtFinish", testPushedRepositoriesJoinAtFinish},
 	{"ItemRepositories_ReadOnlyStaysOnRun", testReadOnlyRepositoriesStayOnRun},
 	{"ItemRepositories_PushPastCapStaysOnRun", testPushPastCapStaysOnRun},
+	{"IntegrationBranch_PerRepositorySetOnce", testIntegrationBranchPerRepositorySetOnce},
+	{"IntegrationBranch_PerRepositoryUpToTheCap", testIntegrationBranchPerRepositoryUpToTheCap},
+	{"IntegrationBranch_LandingTakesThePartsRepositories", testIntegrationBranchLandingTakesThePartsRepositories},
 	{"Transition_JoinsOutputRepositories", testTransitionJoinsOutputRepositories},
 }
 

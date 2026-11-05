@@ -576,9 +576,20 @@ func finishAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db
 }
 
 // landAssembly moves parent, an assembly with an integration branch whose last part closed with
-// c.Done parts done, to its landing station, queued, with an assembly_landing event.
+// c.Done parts done, to its landing station, queued, with an assembly_landing event, and gives
+// it its integration branch in every repository of its done parts (joinIntegration), so the
+// landing covers their union. Repositories past domain.MaxItemRepositories are left out.
 func landAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db.PartCountsRow, at time.Time) error {
 	station := deref(parent.IntegrationLandAt)
+
+	repos, err := q.DonePartRepositories(ctx, parent.ID)
+	if err != nil {
+		return fmt.Errorf("repositories of the assembly's done parts: %w", err)
+	}
+
+	if _, err := joinIntegration(ctx, q, parent.ID, repos, *parent.IntegrationBranch, at); err != nil {
+		return err
+	}
 
 	if _, err := q.MoveItem(ctx, db.MoveItemParams{
 		ID: parent.ID, Station: station, State: string(domain.StateQueued), UpdatedAt: at,
