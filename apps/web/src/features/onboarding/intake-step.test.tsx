@@ -104,7 +104,16 @@ function intakeOf(triggers: IntakeTrigger[]): Intake {
     to: null,
     sources: { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 },
     triggers,
-    suggestions: [],
+    // The API's suggestions are the definition's disabled triggers.
+    suggestions: triggers
+      .filter((t) => !t.enabled)
+      .map((t) => ({
+        name: t.name,
+        source: t.source,
+        on: t.on,
+        when: t.when,
+        create: { ...t.create, title: '' },
+      })),
   };
 }
 
@@ -211,7 +220,7 @@ describe('step 6, choose where work comes from', () => {
     expect(openDraft).not.toHaveBeenCalled();
   });
 
-  it('lists each trigger with what it creates, and its switch starts at its enabled value', async () => {
+  it('lists only the suggestions, with what each creates, and leaves out a trigger that is already on', async () => {
     vi.mocked(getIntake).mockResolvedValue(
       intakeOf([issues, trigger({ name: 'weekly-dependency-audit', enabled: true, when: '0 9 * * MON, UTC' })]),
     );
@@ -219,12 +228,12 @@ describe('step 6, choose where work comes from', () => {
     expect(await screen.findByRole('heading', { name: 'Starter triggers' })).toBeTruthy();
 
     expect(within(rowOf('issues-labeled-factory')).getByText('Creates a feature at spec')).toBeTruthy();
-    expect(within(rowOf('weekly-dependency-audit')).getByText('0 9 * * MON, UTC')).toBeTruthy();
-    expect(screen.getByRole('switch', { name: 'weekly-dependency-audit' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('switch', { name: 'weekly-dependency-audit' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('switch', { name: 'issues-labeled-factory' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByRole('switch', { name: 'weekly-dependency-audit' })).toBeNull();
     expect(screen.getByText('Always on:')).toBeTruthy();
     expect(screen.getByText('New item')).toBeTruthy();
-    expect(screen.getByText('goal item create')).toBeTruthy();
+    expect(screen.getByText('goal run')).toBeTruthy();
+    expect(screen.queryByText('goal item create')).toBeNull();
     expect(screen.getByText('The API')).toBeTruthy();
   });
 

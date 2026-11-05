@@ -56,7 +56,7 @@ test('the picker is one pane with Back on a phone', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
-// The picker at the desktop and phone widths in both themes: plain icons, one suggestion per row, the breadcrumb.
+// The picker at the desktop and phone widths in both themes: plain icons, one suggestion per row, when the factory has them, the breadcrumb.
 for (const theme of ['light', 'dark'] as const) {
   for (const size of [
     { width: 1440, height: 900 },
@@ -73,11 +73,13 @@ for (const theme of ['light', 'dark'] as const) {
       const github = dialog.getByRole('button', { name: 'GitHub' });
       await expect(github.locator('[class*="bg-"]')).toHaveCount(0);
 
-      const rows = dialog.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Use' }) });
-      const first = await rows.nth(0).boundingBox();
-      const second = await rows.nth(1).boundingBox();
-      expect(second?.y ?? 0).toBeGreaterThan((first?.y ?? 0) + (first?.height ?? 0) - 1);
-      expect(second?.x).toBe(first?.x);
+      const rows = dialog.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Turn on' }) });
+      if ((await rows.count()) >= 2) {
+        const first = await rows.nth(0).boundingBox();
+        const second = await rows.nth(1).boundingBox();
+        expect(second?.y ?? 0).toBeGreaterThan((first?.y ?? 0) + (first?.height ?? 0) - 1);
+        expect(second?.x).toBe(first?.x);
+      }
 
       if (size.width >= 1440) {
         const nav = page.getByRole('navigation', { name: 'Breadcrumb' });

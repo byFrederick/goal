@@ -1,10 +1,19 @@
 // The New trigger picker's catalog and the addresses it leads to (ADR 0016 decision 4, ADR 0026 decision 6).
 // The schema accepts two GitHub event keys (contracts/definitions/factory.schema.json, the trigger's `on`),
 // so only those can be chosen; the other events and the sources not built yet are listed disabled.
-import { CircleDot, Clock, Cloud, GitBranch, type LucideIcon, Webhook } from 'lucide-react';
+import { Bot, CircleDot, Clock, Cloud, GitBranch, type LucideIcon, Webhook } from 'lucide-react';
 
 /** A source the picker can start from: its route's `$source` and the trigger's `source` in the API. */
-export type SourceKey = 'schedule' | 'webhook' | 'github' | 'cloudflare' | 'slack' | 'linear' | 'jira' | 'sentry';
+export type SourceKey =
+  | 'schedule'
+  | 'check'
+  | 'webhook'
+  | 'github'
+  | 'cloudflare'
+  | 'slack'
+  | 'linear'
+  | 'jira'
+  | 'sentry';
 
 export interface PickerSource {
   key: SourceKey;
@@ -18,6 +27,7 @@ export interface PickerSource {
 
 export const pickerSources: readonly PickerSource[] = [
   { key: 'schedule', label: 'Schedule', icon: Clock, available: true, route: 'schedule' },
+  { key: 'check', label: 'Check with an agent', icon: Bot, available: true, route: 'schedule' },
   { key: 'webhook', label: 'Webhook', icon: Webhook, available: true, route: 'webhook' },
   { key: 'github', label: 'GitHub', icon: GitBranch, available: true, route: 'github' },
   { key: 'cloudflare', label: 'Cloudflare', icon: Cloud, available: true, route: 'webhook' },
@@ -35,9 +45,9 @@ export const pickerSources: readonly PickerSource[] = [
 export function pickerGroups(
   connectedKinds: ReadonlySet<string>,
 ): readonly { title: string; keys: readonly SourceKey[] }[] {
-  const external = pickerSources.filter((s) => s.key !== 'schedule' && s.key !== 'webhook');
+  const external = pickerSources.filter((s) => !['schedule', 'check', 'webhook'].includes(s.key));
   return [
-    { title: 'Built in', keys: ['schedule', 'webhook'] },
+    { title: 'Built in', keys: ['schedule', 'check', 'webhook'] },
     { title: 'Connected', keys: external.filter((s) => s.available && connectedKinds.has(s.key)).map((s) => s.key) },
     {
       title: 'Not connected',
@@ -84,21 +94,21 @@ export const githubEventGroups: readonly { title: string; events: readonly Picke
   },
 ];
 
-/** The event keys the schema accepts for a trigger's `on` and the picker can choose. */
-export const choosableEvents: ReadonlySet<string> = new Set([
-  'github.issues.labeled',
-  'github.check_run.failed',
-  'schedule',
-]);
-
 /** The default choice of the GitHub pane, as the picture has it. */
 export const defaultEvent = 'github.check_run.failed';
 
+/** A trigger name the definition does not have, from `base`: `new-check`, then `new-check-2`. */
+export function freeTriggerName(base: string, taken: (name: string) => boolean): string {
+  if (!taken(base)) return base;
+  for (let n = 2; ; n++) if (!taken(`${base}-${n}`)) return `${base}-${n}`;
+}
+
 /**
- * The trigger page's address for a choice (`/o/$org/f/$factory/intake/new/$source?on=<event key>`). A
- * source without an event key (a webhook endpoint is chosen on the trigger page) has no `on`.
+ * The trigger page's address for a choice (`/o/$org/f/$factory/intake/<name>?on=<event key>`), which opens
+ * a blank trigger. A check adds `check=<agent>`, so the page opens it in the check layout.
  */
-export function newTriggerHref(org: string, factory: string, route: PickerSource['route'], on?: string): string {
-  const base = `/o/${org}/f/${factory}/intake/new/${route}`;
-  return on ? `${base}?${new URLSearchParams({ on })}` : base;
+export function newTriggerHref(org: string, factory: string, name: string, on: string, check?: string): string {
+  const query = new URLSearchParams({ on });
+  if (check) query.set('check', check);
+  return `/o/${org}/f/${factory}/intake/${name}?${query}`;
 }
