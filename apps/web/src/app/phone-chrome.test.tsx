@@ -196,6 +196,22 @@ describe('the phone top bar with actions', () => {
     expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
 
+  it('leaves out an action marked desktop-only, so a lone primary action sits in the bar with no More actions', () => {
+    topBar(
+      <>
+        <a key="webhooks" href="/webhooks" data-desktop-only>
+          Webhooks
+        </a>
+        <button key="new" type="button">
+          New trigger
+        </button>
+      </>,
+    );
+    expect(screen.getByRole('button', { name: 'New trigger' })).toBeTruthy();
+    expect(screen.queryByText('Webhooks')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
+  });
+
   it('keeps the title with three actions, the last inline and the others in More actions', async () => {
     topBar(
       <>

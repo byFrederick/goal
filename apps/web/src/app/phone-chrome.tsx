@@ -111,11 +111,13 @@ function flattenActions(node: ReactNode): ReactNode[] {
 }
 
 /**
- * The page's actions: the last (the primary one) stays in the bar, the others sit behind More actions, so the
+ * The page's actions, except those marked data-desktop-only (the page reaches them another way on a phone): the last (the primary one) stays in the bar, the others sit behind More actions, so the
  * title keeps its room. Keycap hints are hidden and every control is 44 px tall.
  */
 function TopBarActions({ children }: { children: ReactNode }) {
-  const actions = flattenActions(children);
+  const actions = flattenActions(children).filter(
+    (a) => !(isValidElement<{ 'data-desktop-only'?: boolean }>(a) && a.props['data-desktop-only']),
+  );
   if (actions.length === 0) return null;
   const primary = actions[actions.length - 1];
   const more = actions.slice(0, -1);

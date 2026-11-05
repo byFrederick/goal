@@ -71,13 +71,13 @@ function Ready({
   );
 }
 
-/** The top bar's actions: Webhooks (its page comes with the Webhooks item) and New trigger, the primary one last. */
+/** The top bar's actions: Webhooks (its page comes with the Webhooks item) and New trigger, the primary one last. A phone's bar keeps New trigger only; the webhooks card links to Webhooks. */
 function IntakeActions() {
   const params = useFactoryParams();
   return (
     <TopBarSlot
       actions={[
-        <Button key="webhooks" asChild variant="secondary">
+        <Button key="webhooks" asChild variant="secondary" data-desktop-only>
           <Link to="/o/$org/f/$factory/intake/webhooks" params={params}>
             <Webhook aria-hidden="true" />
             Webhooks

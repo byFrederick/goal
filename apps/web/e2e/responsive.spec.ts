@@ -1,6 +1,6 @@
 // No page scrolls sideways (MASTER.md "Layout" and "Accessibility and checks"): the document is never wider than
 // the window (documentElement.scrollWidth against clientWidth, which counts a button's hit area), at 1440, 1280, 1024, 768 and 390 px wide, in light and
-// dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), New trigger, Jonah, Home,
+// dark, against the mock. The routes: Runs, Items, Needs you, Item (/items/12), Item follow-ups (the same item's Follow-ups card), Intake, Check, Webhooks, New trigger, Jonah, Home,
 // Definition line, Definition knowledge, Board, Account, Factory settings, Assembly item (/items/17), Agents, Agent (reviewer),
 // Connections, GitHub connection, Knowledge, Add a source (upload, repository, Confluence), Knowledge source (goal-docs, handbook), Secrets, the New secret sheet, a secret (github-token), Import secrets and Spend. A wide table scrolls in its own box, so
 // the document's width is asserted, and so is that no visible element ends past the right edge outside a
@@ -47,6 +47,13 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     open: async (page) => {
       await page.goto('/o/acme/f/goal/items/12');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    },
+  },
+  {
+    name: 'Item follow-ups',
+    open: async (page) => {
+      await page.goto('/o/acme/f/goal/items/12');
+      await expect(page.getByRole('heading', { level: 2, name: /Follow-ups/ })).toBeVisible();
     },
   },
   {
