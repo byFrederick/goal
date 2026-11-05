@@ -216,7 +216,8 @@ type Step =
   | { check: string; exit: number; ms: number }
   | { note: string; by: string }
   | { gate: 'approve' | 'reject'; agent: string; reason?: string }
-  | { human: 'approved' | 'rejected'; by: string; reason?: string }
+  /** touch: a person's decision counted as a human touch (touches.ts reads data.actor); the other seeded ones are not. */
+  | { human: 'approved' | 'rejected'; by: string; reason?: string; touch?: boolean }
   | { waiting: true; reason?: string }
   /** The agent asks a person a question: the run ends and the item waits (ADR 0018). */
   | { ask: { text: string; choices: string[]; agent: string } }
@@ -1272,7 +1273,7 @@ const goalSeeds: Seed[] = [
       specRun([['Read', 'cmd/goal/main.go', 'Read 120 lines']], 0.15, 4),
       { move: 'approve-spec' },
       { waiting: true },
-      { human: 'approved', by: 'fcruz' },
+      { human: 'approved', by: 'fcruz', touch: true },
       { move: 'build' },
       { run: 'builder-1', cost: 0.88, turns: 14, tools: [['Edit', 'cmd/goal/main.go', 'Added version']] },
       { check: 'go test -race ./...', exit: 1, ms: 82_000 },
@@ -1289,7 +1290,7 @@ const goalSeeds: Seed[] = [
       { gate: 'approve', agent: 'reviewer' },
       { move: 'merge' },
       { waiting: true },
-      { human: 'approved', by: 'fcruz' },
+      { human: 'approved', by: 'fcruz', touch: true },
       { move: 'done' },
       { done: true },
     ],
@@ -1975,7 +1976,10 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           step.reason ? { reason: step.reason } : {},
         );
       } else if ('human' in step) {
-        push(step.human, step.by, step.reason ? { reason: step.reason } : {});
+        push(step.human, step.by, {
+          ...(step.reason ? { reason: step.reason } : {}),
+          ...(step.touch ? { actor: `user:${step.by}` } : {}),
+        });
       } else if ('waiting' in step) {
         push('waiting_human', 'engine', step.reason ? { reason: step.reason } : {});
       } else if ('ask' in step) {
