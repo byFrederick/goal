@@ -233,6 +233,51 @@ func TestAssemble_PartPlanIsBlocked(t *testing.T) {
 	}
 }
 
+// Each part is filed through domain.File by the agent that planned it, with origin plan.
+func TestAssemble_PartsAreFiledByThePlanner(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, planLine(true), porttest.Succeed(plan))
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	architect := domain.Actor{Kind: domain.ActorAgent, ID: agArchitect}
+	for _, p := range h.parts(t, it.ID).Items {
+		if p.Origin != domain.OriginPlan || p.CreatedBy != architect.Ref() {
+			t.Errorf("part %s origin %q by %q, want plan by %s", p.PartKey, p.Origin, p.CreatedBy, architect.Ref())
+		}
+
+		if ev := h.eventsOf(p.ID, domain.EventPartCreated); len(ev) != 1 || ev[0].Actor != agArchitect {
+			t.Errorf("part %s part_created %+v, want one by %s", p.PartKey, ev, agArchitect)
+		}
+	}
+}
+
+// A plan whose part domain.File refuses, here a lane no station routes, blocks the planning item
+// and creates no part.
+func TestAssemble_RefusedPartBlocks(t *testing.T) {
+	t.Parallel()
+
+	l := planLine(true)
+	build := slices.IndexFunc(l.Stations, func(s domain.Station) bool { return s.ID == stBuild })
+	l.Stations[build].Agent, l.Stations[build].Route = "", map[string]string{laneBack: agWorker}
+
+	h := newHarness(t, l, porttest.Succeed(plan))
+	it := h.submit(t, domain.NewItem{})
+
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateBlocked || h.parts(t, it.ID).Total != 0 {
+		t.Fatalf("item %s with %d parts, want blocked with none", got.State, h.parts(t, it.ID).Total)
+	}
+
+	ev := h.eventsOf(it.ID, domain.EventBlocked)
+	if len(ev) != 1 || !strings.Contains(fmt.Sprint(ev[0].Data["reason"]), `lane "frontend"`) {
+		t.Errorf("blocked events %+v, want one naming the refused lane", ev)
+	}
+}
+
 // A part's agent hears which assembly it serves: the assembly's ref and title, the part's key,
 // the other parts with their state, what it needs and that a part returns a spec, never a plan.
 // An item that is not a part hears none of it.

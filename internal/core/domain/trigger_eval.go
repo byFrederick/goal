@@ -1,7 +1,10 @@
 package domain
 
+import "fmt"
+
 // The steps of a trigger's evaluation, in the order they run (ADR 0028 decision 1): When, each
-// configured Only if condition (the model check last), Create, then each configured limit.
+// configured Only if condition (a deprecated model check last), Create, then each configured
+// limit.
 const (
 	StepWhen     = "when"
 	StepFailures = "only.failuresInARow"
@@ -9,8 +12,64 @@ const (
 	StepModel    = "only.modelAgrees"
 	StepCreate   = "create"
 	StepPerDay   = "limits.perDay"
+	StepPerHour  = "limits.perHour"
 	StepBudget   = "limits.pauseOnBudget"
 )
+
+// ModelCheckRemoved is only.modelAgrees's reason: the model check is gone (ADR 0040 decision 18),
+// so a trigger that still has one skips its events, as a check that gave no answer did.
+const ModelCheckRemoved = "the model check is removed; turn this trigger into a check (check:) to have an agent decide"
+
+// DedupeSkip is only.dedupe's reason when item is open for the same value of field.
+func DedupeSkip(item ItemID, field string) string {
+	return fmt.Sprintf("item %s is open for the same %s", item, field)
+}
+
+// PerDaySkip is limits.perDay's reason when created items were created today, the limit n.
+func PerDaySkip(created, n int) string {
+	return fmt.Sprintf("%d items created today (UTC), the limit is %d", created, n)
+}
+
+// PerHourSkip is limits.perHour's reason when created items were created in the hour before.
+func PerHourSkip(created, n int) string {
+	return fmt.Sprintf("%d items created in the last hour, the limit is %d", created, n)
+}
+
+// FireLimits are what a firing that creates an item checks again under its trigger's lock (ADR
+// 0040 decision 16), so they hold across goald instances: only.dedupe's field (with the
+// firing's Dedupe value), limits.perDay and limits.perHour.
+type FireLimits struct {
+	DedupeField     string
+	PerDay, PerHour int
+}
+
+// LimitsOf are t's FireLimits.
+func LimitsOf(t Trigger) FireLimits {
+	return FireLimits{DedupeField: t.Only.Dedupe, PerDay: t.Limits.PerDay, PerHour: t.Limits.PerHour}
+}
+
+// FireCounts are what a store read under the trigger's lock: the open item with the firing's
+// dedupe value ("" for none), and how many items the trigger created since the UTC day began and
+// in the hour before the firing.
+type FireCounts struct {
+	OpenDedupe      ItemID
+	Today, LastHour int
+}
+
+// Skip is the reason (step: why, as FiringReason writes it) the firing is skipped by l with
+// counts c, "" when it may create its item: only.dedupe, then limits.perDay, then limits.perHour.
+func (l FireLimits) Skip(c FireCounts) string {
+	switch {
+	case l.DedupeField != "" && c.OpenDedupe != "":
+		return StepDedupe + ": " + DedupeSkip(c.OpenDedupe, l.DedupeField)
+	case l.PerDay > 0 && c.Today >= l.PerDay:
+		return StepPerDay + ": " + PerDaySkip(c.Today, l.PerDay)
+	case l.PerHour > 0 && c.LastHour >= l.PerHour:
+		return StepPerHour + ": " + PerHourSkip(c.LastHour, l.PerHour)
+	}
+
+	return ""
+}
 
 // StepOutcome is what one step of an evaluation did with the event.
 type StepOutcome string
@@ -25,7 +84,7 @@ const (
 )
 
 // TriggerStep is one step of an evaluation. Reason is a sentence a person reads, without the
-// step's name; a model check's is the model's, so it is shaped by the event and untrusted.
+// step's name.
 type TriggerStep struct {
 	Step    string
 	Outcome StepOutcome
@@ -40,23 +99,21 @@ type TriggerItem struct {
 	State   ItemState
 	Lane    string
 	Class   ClassOfService
-	// Title is create.title rendered with plain values; Body is create.brief rendered with quoted
+	// Title is create.title rendered with quoted values (EventTitle); Body is create.brief rendered with quoted
 	// values, then the event's fields in a block marked as untrusted data (UntrustedEventBlock).
 	Title, Body string
 }
 
 // TriggerEvaluation is a trigger's evaluation of one event (ADR 0028 decision 1): each of its
-// steps in order, the item Create rendered (nil when Create was not reached) and the model check's
-// answer (nil when the check did not run or gave no answer).
+// steps in order and the item Create rendered (nil when Create was not reached).
 type TriggerEvaluation struct {
 	Steps []TriggerStep
 	Item  *TriggerItem
-	Model *ModelAnswer
 }
 
 // NewTriggerEvaluation is t's evaluation before any step ran: each step t has, every one not
 // reached. A check is one of t's steps when it is configured: only.failuresInARow above 0,
-// only.dedupe, only.modelAgrees, limits.perDay above 0 and limits.pauseOnBudget.
+// only.dedupe, a deprecated only.modelAgrees, limits.perDay and limits.perHour above 0, and limits.pauseOnBudget.
 func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 	steps := []string{StepWhen}
 
@@ -68,7 +125,7 @@ func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 		steps = append(steps, StepDedupe)
 	}
 
-	if t.Only.ModelAgrees != nil {
+	if t.Only.ModelAgrees {
 		steps = append(steps, StepModel)
 	}
 
@@ -76,6 +133,10 @@ func NewTriggerEvaluation(t Trigger) TriggerEvaluation {
 
 	if t.Limits.PerDay > 0 {
 		steps = append(steps, StepPerDay)
+	}
+
+	if t.Limits.PerHour > 0 {
+		steps = append(steps, StepPerHour)
 	}
 
 	if t.Limits.PauseOnBudget {
@@ -142,10 +203,12 @@ type TriggerTry struct {
 	Evaluation TriggerEvaluation
 }
 
-// The audit entry of a try (ADR 0028 decision 2), whose target is the trigger by its name.
+// The audit entries of a try (ADR 0028 decision 2) and of a check's Clear (ADR 0040 decision
+// 19), whose target is the trigger by its name.
 const (
-	AuditTriggerTried  = "trigger.tried"
-	AuditTargetTrigger = "trigger"
+	AuditTriggerTried        = "trigger.tried"
+	AuditTriggerStateCleared = "trigger.state_cleared"
+	AuditTargetTrigger       = "trigger"
 )
 
 // The outcomes of a try: the item the event would create, or the step that would skip it.

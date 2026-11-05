@@ -76,7 +76,11 @@ permissions:
   # trigger (intake:read) is not enough.
   - {name: trigger:try,        level: factory, factory_role: editor,   keys: true, pat: true}
   - {name: factory:manage,     level: factory, factory_role: editor,   keys: true}
-  # A factory's webhook endpoints (ADR 0026 decision 2): anyone who sees the factory reads them
-  # (factory:read); its editors create, rotate and delete them after a recent sign-in, never with
-  # a key or a personal token, as the create and rotate answers show a signing secret.
-  - {name: webhook:manage,     level: factory, factory_role: editor,   fresh: true}
+  # The organization's webhooks (ADR 0040 decision 12, in place of ADR 0026's factory-level
+  # webhook:manage): an organization webhook carries every repository's events, private ones
+  # included, so only owners and admins read them (webhook:read), and create, change and delete
+  # them and read a delivery's headers and body (webhook:manage) after a recent sign-in, never with
+  # a key or a personal token, as a create answers a generated secret's value. A factory's
+  # endpoints and their delivery log stay readable to anyone who sees the factory (factory:read).
+  - {name: webhook:read,       level: org, org_roles: [owner, admin]}
+  - {name: webhook:manage,     level: org, org_roles: [owner, admin], fresh: true}

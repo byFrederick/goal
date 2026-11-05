@@ -66,12 +66,12 @@ type Touch struct {
 }
 
 // IsTouchEvent reports whether e is part of a touch: a person's event (data.actor user:…) other
-// than created (the submission is the input) and lease_taken (it accompanies the person's own
+// than created and part_created (the filing is the input) and lease_taken (it accompanies the person's own
 // event). API keys, agents and the engine never touch.
 func IsTouchEvent(e Event) bool {
 	actor, _ := e.Data["actor"].(string)
 
-	return strings.HasPrefix(actor, personRef) && e.Kind != EventCreated && e.Kind != EventLeaseTaken
+	return strings.HasPrefix(actor, personRef) && e.Kind != EventCreated && e.Kind != EventPartCreated && e.Kind != EventLeaseTaken
 }
 
 // PlannedEvent reports whether e is a decision the line requires: data.planned when the event

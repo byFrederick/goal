@@ -1,6 +1,6 @@
 # ADR 0038 — Knowledge is files: synced folders, factory memory, an index in every prompt
 
-Status: proposed · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 11: how Jonah fills factory memory)
+Status: accepted · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-the-line.md) (decision 11: how Jonah fills factory memory) and [ADR 0041](0041-code-and-github-without-an-app.md) (a repository source's secret opens only for the factories that list it; hosts come from the organization's list)
 
 Amended during the build: the migration that drops the old tables (00099, with 00098 for the embeddings) does not drop the `vector` extension, because the administrator owns it and the migration role may not drop it. `goal db init` creates it and the administrator drops it, once no database needs 00054's `vector` columns on a fresh install; row 8 of the build plan reads that way. Uploads keep the original in the bucket and their name and content hash in `knowledge_uploads` (decision 2).
 

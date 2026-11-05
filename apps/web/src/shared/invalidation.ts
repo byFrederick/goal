@@ -23,9 +23,6 @@ const workKeys = [
   'agent',
   // The intake reads the newest items' sources, so every item move can change it.
   'intake',
-  // The webhook endpoints and their deliveries: a created delivery makes an item, and the stream
-  // has no event for a refused one, so a refetch on item events and on focus is what refreshes it.
-  'webhooks',
 ] as const;
 
 /** Run progress: it changes a card on the board, not where work is or what waits on people. */
@@ -42,6 +39,9 @@ export function invalidationsFor(org: string, event: StreamEvent): QueryKey[] {
     keys.inboxes(org),
     // Every item event can start, end or change a run, so the Runs page's queries are all stale.
     keys.runs(org),
+    // A created delivery makes an item, so the organization's webhooks and their delivery logs refetch with it.
+    // The stream has no event for a refused one: a refetch on focus is what shows it.
+    keys.webhooks(org),
     ...(runProgress.has(event.kind)
       ? [keys.board(org, event.factory_id)]
       : factoryWorkInvalidations(org, event.factory_id)),

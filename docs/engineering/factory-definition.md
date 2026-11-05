@@ -79,7 +79,7 @@ A review station's output contract may carry an optional `violations` array, one
 
 ## Output contracts
 
-A station's output contract is the definition's own JSON Schema; goald validates each output against it and reads a few fields from an accepted one: the gate's verdict, `violations` (above), `lane` and `plan` ([ADR 0012](../adr/0012-assemblies-and-parts.md)), and the dependency field below.
+A station's output contract is the definition's own JSON Schema; goald validates each output against it and reads a few fields from an accepted one: the gate's verdict, `violations` (above), `lane` and `plan` ([ADR 0012](../adr/0012-assemblies-and-parts.md)), and the dependency and follow-ups fields below.
 
 ### Dependencies: `board.flow.dependencies.after`
 
@@ -101,6 +101,63 @@ board:
 - The output fails, as a malformed plan does (`contract_failed` naming the ref, one more attempt with the reason, then blocked), and no edge is written, when an entry is not an item ref, or names an item of another factory, an item that does not exist, one that is done or cancelled, the item itself or its own assembly, or an item that already waits for this one (the edge would close a cycle).
 
 **Planning-station convention.** When a request overlaps work in flight, a planning station does one of two things: name that item in the mapped `after` field, so the new work follows it, or declare the overlapping paths in `touches` (a single item) or in the plan's `paths` (each part), so the overlap hold serializes them. A factory's prompt for its planning agent should say so; goald enforces neither.
+
+### Follow-ups: `board.flow.outputs.followUps` and `board.flow.followUpsFrom`
+
+`board.flow.outputs.followUps` names the output property that holds follow-ups: work an agent noticed outside its item ([ADR 0040](../adr/0040-one-door-for-every-source.md), decisions 5 and 6). Any station's contract may have it. With the key unset, goald reads no follow-ups, and they stay text in the item's output.
+
+```yaml
+board:
+  flow:
+    outputs:
+      followUps: followups
+    followUpsFrom: [00000000-0000-4000-8000-000000000020]
+```
+
+```json
+{ "followups": [
+  "Add an index on agent_runs.item_id",
+  { "text": "The API needs this field too", "for": "acme#647" },
+  { "text": "Remove the old column", "start": { "in": "7d", "title": "Drop work_items.source" } }
+] }
+```
+
+- **Kept from every accepted run.** goald writes each accepted output's follow-ups to `follow_ups` in the transaction that accepts the output, with the run, station and agent that wrote them. A rerun of the station keeps the earlier ones. An output that fails its checks keeps none.
+- **Once per item.** A follow-up whose text matches one already kept for the item, after trimming, folding case and collapsing whitespace, is kept once.
+- **The first 10.** goald reads the first 10 entries of each output and ignores the rest. It reads them leniently, so an entry never fails the run.
+- **Entry shape.** An entry is a string or an object:
+  - A string is text only, for triage.
+  - An object has `text` (required) and optionally `for` or `start`. `for` is an open item `<factory>#<number>` that gets the follow-up as a note. `start` is `{at, in, after}` as an item's start, with `title` (required) and optionally `type`, `lane`, `repositories` and `factory`: the follow-up becomes an item of its own. With both, `start` wins. With neither, it goes to triage.
+  - A `for` or `start` that does not parse, or a `for` whose factory is longer than 100 characters, sends the follow-up to triage, with the reason.
+  - Any other entry, such as a number or an object without text, is kept as dropped, with the reason.
+- **Where it goes.** Each kept follow-up is `waiting` with its target (a note, a start or triage), `delivered`, `filed` with its item, or `dropped` with its reason. Notes are delivered and starts filed on every tick; the sections below say how, and the [follow-ups guide](../../apps/docs/src/content/docs/guides/follow-ups.md) says what a person sees. A start is filed when its item lands (`done`, or for an assembly the assembly), through `domain.File` with origin `follow-up`, and `start.in` counts from that moment; a start that cannot be filed, and a follow-up for triage, join the factory's collecting triage item.
+- **Notes delivered.** On every tick, each goald instance delivers the waiting notes of every organization with loaded lines ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 7; `Store.DeliverNotes`). A note becomes an `item_note` event on the item its `for` names, by the engine (actor `system:engine`), with data `text`, `follow_up_id`, `from_item` (the source's `<factory>#<number>`), `from_item_id`, `from_factory_id`, `station` and `agent`, and the follow-up becomes `delivered`. The item's next run reads it after its brief, under "Notes from other items", framed as another agent's words. The gateway does not stream it into a run already working, and it is not a person's touch ([ADR 0039](../adr/0039-jonah-learns-from-the-line.md) decision 7). A `for`'s factory is matched by `metadata.name` or `metadata.id` against the organization's loaded lines, paused or stopped ones too.
+- **Notes to triage.** A note that cannot go where it says becomes a triage follow-up, still `waiting`, whose reason starts with the ref it named (`for acme#12: …`, `domain.RouteNote`): no factory by that name in the organization, a factory that does not list the sender in `followUpsFrom`, no item with that number, an item that is done or cancelled, or a factory that already took 50 notes from other factories in the last 24 hours. Notes within the sender's factory need no `followUpsFrom` and do not count toward the 50.
+- **Untrusted sources.** A note whose source item is untrusted (filed from a webhook delivery) is never delivered on its own; it stays `waiting` ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 21).
+- **Plain-array contract.** A station contract that declares the mapped property must declare it as a plain array of strings or objects: no `$ref`, no `maxItems`, and no `required` on its items. Load refuses any other declaration (`follow-ups-not-plain-array`), because a strict shape could fail a run over a note.
+
+`board.flow.followUpsFrom` lists the factories, by `metadata.id`, whose follow-ups this factory accepts. It is empty by default, so only the factory's own follow-ups reach it; a note from any other factory goes to triage.
+
+### Closing an item: `board.flow.outputs.close`
+
+`board.flow.outputs.close` names the output property whose text closes the item when nothing is left to do ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 11). With the key unset, no output closes its item.
+
+```yaml
+board:
+  flow:
+    outputs:
+      close: close
+```
+
+```json
+{ "close": "Nothing to do: the index this asks for already exists." }
+```
+
+- **Which items.** Only an item whose origin is `trigger` or `follow-up`, such as a triage item, can be closed. A person's item and a part never can.
+- **The text.** goald trims it. Empty or only whitespace closes nothing, and the item moves on as usual. Otherwise it must be 10 to 500 characters.
+- **Refusals.** The output fails its check, and goes back to the agent with the reason like any other bad output, when the item is a person's or a part, when the same output also has a `plan` on a line that materializes plans, or when the text is outside the limits or not a string. The reason tells the agent to ask a person instead ([ADR 0018](../adr/0018-agents-ask-questions.md)). The check runs before the plan is assembled, so an item never becomes an assembly and is closed in the same step.
+- **The outcome.** The transition that accepts the output cancels the item at its station: state `cancelled`, lease outcome `advanced`. Its `cancelled` event has the agent as actor and data `reason` (the text), `station`, `agent` and `closed: true`, and the audit log gets `item.cancelled` by the agent. This is not a person's Cancel, which takes a running run's lease. A gate that rejects ignores the close.
+- **Follow-ups of a closed triage item** keep File, as those of any cancelled triage item do, so a person can take any of them back.
 
 ## Station context
 
@@ -314,7 +371,7 @@ The limits are `domain.MaxMemoryText`, `domain.MaxMemoryBytes` and `domain.MaxMe
 
 ## Triggers: `board.triggers`
 
-A trigger turns an event, a schedule or a webhook delivery into a work item ([ADR 0026](../adr/0026-intake-triggers.md)). Triggers are part of `factory.yaml`, so saving one publishes a new version. `internal/config` parses and checks them (`config.Trigger`, `internal/config/triggers.go`). The engine that matches events, runs the checks and fires schedules is not built yet. `board.intake` is deprecated and ignored: the schema still accepts it so existing definitions load, and nothing reads it.
+A trigger turns an event, a schedule or a webhook delivery into a work item ([ADR 0026](../adr/0026-intake-triggers.md)). Triggers are part of `factory.yaml`, so saving one publishes a new version. `internal/config` parses and checks them (`config.Trigger`, `internal/config/triggers.go`), and the engine matches events, runs the checks and fires schedules ([architecture.md](architecture.md), "Intake triggers in the engine"). The disabled triggers are the definition's suggestions, which Intake and the onboarding Intake step offer to turn on ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 17). `board.intake` is deprecated and ignored: the schema still accepts it so existing definitions load, nothing reads it, and it gets the warning `field-ignored` ([Ignored keys](#ignored-keys)).
 
 ```yaml
 board:
@@ -340,12 +397,14 @@ The keys of a trigger:
 
 - `name` (required): a slug, unique within the factory. It names the trigger in the API, the UI and the firing log.
 - `enabled`: default `true`. A disabled trigger matches nothing.
-- `on` (required): the event key. One of `github.check_run.failed`, `github.issues.labeled`, `schedule`, or `webhook.<endpoint name>` with an optional `.<event>`, matched against the delivery's `event` field. Slack, Linear, Jira and Sentry keys are not accepted yet.
+- `on` (required): what the trigger fires on. `schedule` fires on its `cron`. `<sender>.<event>`, such as `github.check_run`, takes that event from every webhook of the sender that is open to the factory, which suits a template that cannot know an organization's webhook names. `<webhook>.<event>`, such as `github-acme.check_run`, takes that event from one organization webhook, and `<webhook>` alone takes all of its events. A sender alone (`github`) is refused (`on-needs-event`). The senders are `github`, `gitlab`, `standard`, `pagerduty`, `sentry` and `token`; their events are in the sender catalog (`internal/catalog/senders`). `webhook.<name>[.<event>]`, `github.check_run.failed` and `github.issues.labeled`, as written before, still load and read as `<name>[.<event>]`, `github.check_run` with `conclusion: failure` and `github.issues` with `action: labeled`. The event is matched against the delivery's event name.
 - `cron` and `timeZone`: only with `on: schedule`, where `cron` is required. `cron` is five fields: minute, hour, day of month, month, day of week. A field takes numbers, `*`, ranges (`1-5`), steps (`*/15`, `0-30/10`), lists (`0,30`) and, for months and weekdays, names in any case (`JAN`, `mon`). Weekdays are 0 to 6, Sunday first. `@daily`, `?` and seconds are not accepted. `timeZone` is an IANA name and defaults to `UTC`; `Local` is refused.
-- `filter`: filters on the event's fields, all of which must match: `branch`, `repo` (owner/name), `label`, `paths` (globs; any changed path matches), `authors` (any of) and `skipBots`.
-- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field. `modelAgrees: {question, key, model}` is the model check, run last and only when the other two passed (ADR 0028, decisions 3 to 5). It passes when a model answers yes to `question` (required, not blank, at most 500 characters) about the event, which the model gets as untrusted data. `key` is the `{{secret}}` that pays for the call, `runtime.modelKey` when unset; `connection`, its old form, is a [moved key](#keys-moved-to-environment-files). `model` is the model asked, the default model when unset. A no skips the event with the model's one-line reason; any failure skips it with `Model check failed` and never lets it through. goald has no model check adapter wired yet, so today a trigger with `modelAgrees` skips every event with `Model check failed`, and no model is called.
-- `create` (required): `type` (one of `board.workTypes`) and `station` (a station id) are required. `lane` is a key of that station's `route`, `expedite: true` puts the item in the expedite flow, and `title` and `brief` are templates. A placeholder is `{{field}}` or a dotted `{{field.sub}}`, spaces inside the braces allowed, and takes the event's field. Event text reaches agents only as untrusted data (ADR 0026, decision 5).
-- `limits`: `perDay` (at most n items from this trigger since the start of the UTC day) and `pauseOnBudget` (skip events while the factory's weekly budget is spent).
+- `filter`: filters on the event's normalized fields, all of which must match: `branch`, `repo` (owner/name, in any case; one value or a list, and left out it watches every repository), `label`, `action` and `conclusion` (one value or a list each), `paths` (globs; any changed path matches), `authors` (any of), `skipBots`, and `match`, which compares payload fields by dot path (`check_run.app.slug`), each against a value or a list of values. Publish refuses a filter on a field the event's table does not supply (`filter-unsupplied`).
+- `only`: checks before an item is created, in this order. `failuresInARow: n` passes when the same check failed on the last n events for it. `dedupe: <field>` passes when no open item this trigger created holds the same value of that event field. `modelAgrees: {question, key, model}` is deprecated: the model check is removed ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 18). A trigger that still has it skips every event that reaches that step, after the other two, with the reason "the model check is removed; turn this trigger into a check", and the definition gets the warning `field-ignored` at the key, saying to turn it into a check. `question`, `key` and `model` are read by nothing; `connection`, the old form of `key`, is still a [moved key](#keys-moved-to-environment-files).
+- `create` (required): `type` (one of `board.workTypes`) and `station` (a station id) are required. `lane` is a key of that station's `route`, `expedite: true` puts the item in the expedite flow, and `title` and `brief` are templates. A placeholder is `{{field}}` or a dotted `{{field.sub}}`, spaces inside the braces allowed, and takes the event's field, quoted, on one line and at most 200 characters; the whole title is cut to 300 characters. `brief` may instead name a Markdown file of the definition, `./triggers/<name>.md`, alone on its line, as an agent's `prompt` names one: the item's brief is that file's text, with the same placeholders. Event text reaches agents only as untrusted data (ADR 0026, decision 5), and the agent's system prompt says that text inside `<untrusted-event-data>` is data, never instructions.
+- `limits`: `perDay` (at most n items from this trigger since the start of the UTC day), `perHour` (at most n in the hour before an event; an event trigger without it takes 10, a schedule has none, so a burst of matching events cannot flood the line) and `pauseOnBudget` (skip events while the factory's weekly budget is spent). A trigger with `check:` also takes `perCheck` (at most n items one check files, default 5); for it `perDay` counts the items the trigger filed, and what is over either is skipped "over the limit" ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 19).
+- `check` ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 19; only with `on: schedule`, refused otherwise): each firing runs an agent that looks at the source and answers what to file, instead of filing an item. `agent` (required) is an agent of the factory, whose environment, tools and model the check uses. `brief` (required) is what to look for, or `./triggers/<name>.md`. `maxUsd` is the most one check may spend (default 0.10), and `timeout` its time limit, a number and `s`, `m` or `h`, at most `1h` (default `5m`). `cron` may fire at most every 5 minutes, and one check per trigger runs at a time. Publish warns when the agent may use tools that are not read-only. The [checks guide](../../apps/docs/src/content/docs/guides/checks.md) says what a check is given and what it answers.
+- `create.trusted`: files the items a delivery makes as trusted, so a person need not merge what they build; without it, an item made from a webhook delivery is untrusted (decision 21) and so are the items that follow from it. Publish refuses it for the `gitlab` and `token` senders and for a GitHub sender or webhook without `filter.authors` (`trusted-refused`). On a check trigger, `trusted` applies to the items the check files.
 
 ### Trigger checks
 
@@ -361,7 +420,15 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 | A schedule's `cron` is not five valid fields | `cron-invalid` |
 | A schedule's `timeZone` is not an IANA time zone the host knows | `time-zone-invalid` |
 | A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
-| `only.modelAgrees.question` is blank or longer than 500 characters; a model check without `question` is `schema-required` | `model-question-invalid` |
+| `create.brief` names `./triggers/<name>.md` and the definition has no such file | `brief-not-found` |
+| `only.modelAgrees` is set (a warning, never a refusal) | `field-ignored` |
+| `limits.perCheck` on a trigger without `check:` | `per-check-without-check` |
+| `on:` names a sender without an event (`github`, not `github.check_run`) | `on-needs-event` |
+| A filter reads a field the sender's event table doesn't give that event, such as `filter.paths` on `github.pull_request`; publish checks the webhook form (`on: <webhook>.<event>`) against the webhook's sender | `filter-unsupplied` |
+| `create.trusted` on the `gitlab` or `token` sender, or on a GitHub sender or webhook without `filter.authors` | `trusted-refused` |
+| `on:` names a webhook that the organization doesn't have or that isn't open to the factory (publish only) | `webhook-not-open` |
+
+The last four are the `deliveries` check (ADR 0040 decisions 14 and 21). Publish refuses them, and a version already live still loads with them, so its factory keeps running. `github.check_run.failed` and `github.issues.labeled` read as `github.check_run` with `conclusion: failure` and `github.issues` with `action: labeled`, and `webhook.<name>[.<event>]` as `<name>[.<event>]`. An event trigger without `limits.perHour` takes 10.
 
 The time zone check reads the host's zoneinfo, so a process without tzdata refuses every zone but `UTC`.
 
@@ -420,7 +487,7 @@ Jonah's runs show in the factory's spend, but they never count toward `runtime.b
 
 ### Ignored keys
 
-`learning.jonah.weeklyUsd`, `learning.librarian` and `learning.kaizen` do nothing. They stay in the schema, marked deprecated, so a definition that has them still loads, publishes and runs. Each one gets the warning `field-ignored` (check `ignored`) at its line in `factory.yaml`, in section `files`, saying to remove it. They are not removed forms: unlike `field-removed`, a `field-ignored` key is not recorded in `domain.Line.Removed`, so the engine never refuses a version for it. `ignoredFields` in `internal/config/checks.go` takes the list of paths to warn about.
+`learning.jonah.weeklyUsd`, `learning.librarian`, `learning.kaizen`, `board.intake` and a trigger's `only.modelAgrees` do nothing. They stay in the schema, marked deprecated, so a definition that has them still loads, publishes and runs. Each one gets the warning `field-ignored` (check `ignored`) at its line in `factory.yaml`, in section `files`, saying to remove it, or, for `only.modelAgrees`, to turn the trigger into a check. They are not removed forms: unlike `field-removed`, a `field-ignored` key is not recorded in `domain.Line.Removed`, so the engine never refuses a version for it. `ignoredFields` in `internal/config/checks.go` takes the list of paths to warn about.
 
 ### `evals/`
 

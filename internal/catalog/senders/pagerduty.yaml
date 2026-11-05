@@ -1,0 +1,30 @@
+# PagerDuty's v3 webhook subscriptions: an HMAC-SHA256 of the body, in hex after v1=, with several
+# comma-separated values while a secret is being changed.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: pagerduty
+  title: PagerDuty
+spec:
+  scheme: hmac
+  signature:
+    header: X-PagerDuty-Signature
+    prefix: "v1="
+    separator: ","
+    encoding: hex
+  signed: body
+  secret: text
+  id:
+    path: event.id
+  event:
+    paths: [event.event_type]
+  # The event table (ADR 0040 decision 14), by event.event_type.
+  events:
+    incident.triggered: &incident
+      incident.id: event.data.id
+      incident.title: event.data.title
+      incident.url: event.data.html_url
+      service: event.data.service.summary
+      urgency: event.data.urgency
+    incident.acknowledged: *incident
+    incident.resolved: *incident

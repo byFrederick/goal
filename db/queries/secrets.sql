@@ -102,3 +102,43 @@ FOR NO KEY UPDATE;
 -- name: ResealSecret :exec
 UPDATE secrets SET key_id = sqlc.arg(key_id), nonce = sqlc.arg(nonce), ciphertext = sqlc.arg(ciphertext)
 WHERE id = sqlc.arg(id);
+
+-- name: KeepPreviousSecret :exec
+-- Before a replace: a secret an organization webhook is signed by keeps its value as the previous
+-- one for 24 hours (ADR 0040 decision 15), so deliveries signed with either pass.
+UPDATE secrets AS t SET previous_key_id = t.key_id, previous_nonce = t.nonce, previous_ciphertext = t.ciphertext,
+                        previous_until = now() + interval '24 hours'
+WHERE t.id = sqlc.arg(id)
+  AND EXISTS (SELECT 1 FROM webhook_endpoints w WHERE w.org_id = t.org_id AND w.secret_id = t.id);
+
+-- name: SigningSecret :one
+-- A webhook's secret, sealed, with its previous value while it has not lapsed.
+SELECT key_id, nonce, ciphertext, previous_key_id, previous_nonce, previous_ciphertext, previous_until,
+       coalesce(previous_until > now(), false)::bool AS previous_live
+FROM secrets WHERE id = sqlc.arg(id);
+
+-- name: SecretWebhooks :many
+-- The organization webhooks secret name signs, by name: it cannot be deleted while one does.
+SELECT w.name FROM webhook_endpoints w JOIN secrets s ON s.org_id = w.org_id AND s.id = w.secret_id
+WHERE s.name = sqlc.arg(name)
+ORDER BY w.name;
+
+-- name: ClearLapsedPreviousSecrets :exec
+-- goal db rekey, as goal_owner: previous values past their 24 hours go, in every organization.
+UPDATE secrets SET previous_key_id = NULL, previous_nonce = NULL, previous_ciphertext = NULL, previous_until = NULL
+WHERE previous_until <= now();
+
+-- name: StalePreviousSecrets :many
+-- goal db rekey, as goal_owner: a batch of previous values sealed under another key than the
+-- active one, in every organization, locked.
+SELECT id, org_id, coalesce(previous_key_id, '')::text AS key_id, coalesce(previous_nonce, ''::bytea)::bytea AS nonce,
+       coalesce(previous_ciphertext, ''::bytea)::bytea AS ciphertext
+FROM secrets
+WHERE previous_key_id <> sqlc.arg(active)::text
+ORDER BY id
+LIMIT sqlc.arg(batch)
+FOR NO KEY UPDATE;
+
+-- name: ResealPreviousSecret :exec
+UPDATE secrets SET previous_key_id = sqlc.arg(key_id), previous_nonce = sqlc.arg(nonce), previous_ciphertext = sqlc.arg(ciphertext)
+WHERE id = sqlc.arg(id);

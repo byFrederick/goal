@@ -803,3 +803,52 @@ describe('Watch live', () => {
     expect(within(screen.getByLabelText('Top bar')).queryByRole('button', { name: 'Watch live' })).toBeNull();
   });
 });
+
+describe('the item page, follow-ups, start and closing', () => {
+  it('shows the start banner above the tabs, and the Follow-ups and Notes cards on the timeline', async () => {
+    renderPage(
+      item({
+        state: 'queued',
+        station: 'intake',
+        start: { at: '2026-11-19T09:00:00' },
+        follow_ups: [
+          {
+            id: 'fu-1',
+            item_id: 'item-147',
+            station: 'build',
+            agent: 'backend-engineer',
+            text: 'Remove the old path.',
+            target: 'triage',
+            state: 'waiting',
+            created_at: '2026-11-01T10:00:00Z',
+          },
+        ],
+        notes: [
+          { id: 1, text: 'Check the brief.', from_item: 'goal#9', agent: 'architect', at: '2026-11-01T10:00:00Z' },
+        ],
+      }),
+    );
+
+    expect(await screen.findByText(/Starts Thu, Nov 19 at 09:00\./)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Start now/ })).toBeTruthy();
+    expect(screen.getByRole('region', { name: /Follow-ups/ })).toBeTruthy();
+    expect(screen.getByText('Check the brief.')).toBeTruthy();
+  });
+
+  it('says who closed an item an agent closed, and why', async () => {
+    renderPage(item({ state: 'cancelled' }), [
+      {
+        id: 7,
+        item_id: 'item-147',
+        at: '2026-10-25T11:00:00Z',
+        kind: 'cancelled',
+        station: 'spec',
+        actor: 'agent:architect',
+        data: { closed: true, agent: 'architect', reason: 'This is not work.' },
+      },
+    ]);
+
+    expect(await screen.findByText('Closed by architect.')).toBeTruthy();
+    expect(screen.getByText('This is not work.')).toBeTruthy();
+  });
+});

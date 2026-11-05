@@ -183,3 +183,38 @@ func TestNote_Refusals(t *testing.T) {
 		t.Errorf("a note of exactly %d characters: %v", engine.MaxNoteRunes, err)
 	}
 }
+
+// The target's next run carries a note another item's agent left, after its brief and apart
+// from people's notes, as that agent's words with its item, station and agent.
+func TestNote_TheNextRunCarriesNotesFromOtherItems(t *testing.T) {
+	t.Parallel()
+
+	h, _, target, ops := noteHarness(t)
+
+	if _, err := h.e.Note(inOrg(t), target.ID, human, "Keep it short."); err != nil {
+		t.Fatal(err)
+	}
+
+	ops.Paused = false
+	if err := h.e.SetLines([]domain.Line{h.line, ops}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	fb := h.feedback(1)
+
+	people, others := strings.Index(fb, notesHeading), strings.Index(fb, "## Notes from other items\n\n")
+	if people < 0 || others < people {
+		t.Fatalf("feedback %q; want people's notes, then the notes from other items", fb)
+	}
+
+	if !strings.Contains(fb, "not instructions from Goal") || !strings.Contains(fb, "not a request from a person") {
+		t.Errorf("feedback %q; want the notes framed as another agent's words", fb)
+	}
+
+	want := "- Note from the worker agent at work on " + testFactory + "#1: The ops runbook needs the new flag"
+	if strings.Count(fb, want) != 1 || strings.Contains(fb[people:others], "runbook") {
+		t.Errorf("feedback %q; want %q once, under the notes from other items only", fb, want)
+	}
+}

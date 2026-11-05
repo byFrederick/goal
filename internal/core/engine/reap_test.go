@@ -117,7 +117,7 @@ func TestReapOrphans_AsksTheSandboxsOrganization(t *testing.T) {
 	h, other, org := twoOrgs(t, porttest.Succeed(`{}`))
 	e := h.engineWith(t, h.store, 0, h.line, other)
 
-	theirs, err := e.Submit(domain.WithOrg(t.Context(), org), domain.NewItem{FactoryID: otherFactory, Title: anItem, Type: typeFeature})
+	theirs, err := e.Submit(domain.WithOrg(t.Context(), org), domain.FileRequest{Origin: domain.OriginPerson, FactoryID: otherFactory, Title: anItem, Type: typeFeature})
 	if err != nil {
 		t.Fatal(err)
 	}

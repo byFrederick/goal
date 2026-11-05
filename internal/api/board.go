@@ -437,6 +437,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
 			PullRequests: []string{},
 		}
+		s.filing(&c, it)
 
 		// Whoever merges sees every pull request the merge lands (spec 4 §4.7), not just the latest.
 		st, _ := l.Station(it.Station)
@@ -468,6 +469,20 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 	}
 
 	return out, nil
+}
+
+// filing sets how it was filed on its card c: its origin, how and by whom, whether it is
+// untrusted and when it may start (ADR 0040).
+func (s *server) filing(c *gen.ItemCard, it domain.Item) {
+	c.CreatedBy, c.Untrusted, c.Start = s.createdBy(it), new(it.Untrusted), itemStartOf(it)
+
+	if it.Origin != "" {
+		c.Origin = new(gen.ItemCardOrigin(it.Origin))
+	}
+
+	if it.Via != "" {
+		c.Via = new(gen.ItemCardVia(it.Via))
+	}
 }
 
 // touchCounts counts the touches of each of items that has any, by item.
@@ -526,11 +541,12 @@ func (s *server) assemblies(ctx context.Context, f domain.FactoryID, items []dom
 	return asms, nil
 }
 
-// ageSeconds is how long it has been open at now, or was from created to done.
+// ageSeconds is how long it has been open at now, or was to done, from when it started
+// (Item.LeadFrom).
 func ageSeconds(it domain.Item, now time.Time) int64 {
-	age := now.Sub(it.CreatedAt)
+	age := now.Sub(it.LeadFrom())
 	if !it.DoneAt.IsZero() {
-		age = it.DoneAt.Sub(it.CreatedAt)
+		age = it.DoneAt.Sub(it.LeadFrom())
 	}
 
 	return int64(max(age, 0) / time.Second)

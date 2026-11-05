@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. A server that fails its test keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. A server that fails its test keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
@@ -44,7 +44,7 @@ spec:
       tools: {create_comment: ask, "delete_*": off}
 ```
 
-The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
+The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists, signs no webhook and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
 
 An environment can set `image` to run its box from an image of your own. A box on Cloudflare runs only the Worker's own images, so a run there fails on it. Publishing shows a warning at `image` and still publishes, since a box on Docker Compose runs it.
 
@@ -62,6 +62,57 @@ Neither reaches the agent's environment unless an environment file names it, for
 The repository token signs git in to the repository's host for three things: the clone, the push of a new base branch (an assembly's integration branch), and the agent's own `git push`. Git signs in as `x-access-token` on GitHub and as `oauth2` on GitLab, with the token as the password. Goal keeps the token in git's credential store inside the run's box, outside the workspace, so the agent's push works without the token in its environment. The box and its store are thrown away after the run. The agent's prompt says that git signs in with the repository token. A public repository needs no token: it clones without a login.
 
 goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request on a host other than the repository's is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run.
+
+## Webhook secrets
+
+An organization webhook is signed by one of the organization's secrets, which no run can hold. Creating a webhook (`POST /v1/orgs/{org}/webhooks`) either creates a secret named `webhook-<name>`, cut to 40 characters without a trailing hyphen, with a generated value shown once, or uses a secret that exists, for a sender that issues its own value, such as PagerDuty or Sentry. A generated value is 64 hexadecimal characters, or `whsec_` and base64 for a Standard Webhooks sender. A created secret is open to no factory.
+
+The webhook refers to the secret by id, so renaming the secret keeps the webhook signed by it. The secret can't be deleted while a webhook uses it, and its uses list the webhook.
+
+Publishing refuses a version whose environment file, `runtime.repository.token`, `runtime.modelKey` or trigger key names a secret that signs a webhook (`secret-signs-webhook`), even when the secret is open to the factory. A run that held the value could sign deliveries of its own.
+
+A factory's webhook endpoint made before organization webhooks is converted once when goald starts. Its signing secret becomes an organization secret named `webhook-<name>`, open to no factory, holding the value the endpoint showed when it was made. The endpoint becomes the organization's webhook with the same address, the `github` sender for a `github` endpoint and `standard` for a `generic` one, and is open to its factory for every repository. An endpoint keeps its name unless the name is reserved (a sender name, `schedule` or `webhook`) or an older endpoint of another factory has it; then it takes the first free suffix, such as `github-2`, cut to fit 40 characters. A secret name that is taken gets a suffix the same way. goald logs each rename as `webhook renamed` with the factory and both names: a published trigger that named the endpoint by its old name needs its `on` changed.
+
+Replacing the value of a secret that signs a webhook keeps the previous value for 24 hours, sealed apart from the new one, so a delivery signed with either passes while you update the sender. Checking a signature opens the secret without a `secret.used` audit entry and leaves its last use as it was. `goal db rekey` reseals the previous value too and drops it once its 24 hours are over.
+
+### Receiving deliveries
+
+A sender posts each delivery to the webhook's address, `POST /hooks/{webhook id}`, with no session or API key. goald reads at most 1 MiB and checks the signature against the raw body before it reads anything in it. The current value of the secret passes, and so does the previous one for 24 hours after a replace.
+
+How each sender signs:
+
+| Sender | Signature | Delivery id | Event |
+| --- | --- | --- | --- |
+| `github` | `X-Hub-Signature-256`: `sha256=` and the hex HMAC-SHA256 of the body | `X-GitHub-Delivery` | `X-GitHub-Event` |
+| `gitlab` | `X-Gitlab-Token`: the secret's value as it is | `X-Gitlab-Event-UUID` | the body's `object_kind` |
+| `standard` | `webhook-signature`: one or more space-separated `v1,` values, each the base64 HMAC-SHA256 of `<webhook-id>.<webhook-timestamp>.<body>` under the base64 key after `whsec_`. A `webhook-timestamp` more than 5 minutes off is refused | `webhook-id` | the body's `type`, else `event` |
+| `pagerduty` | `X-PagerDuty-Signature`: one or more comma-separated `v1=` values, each the hex HMAC-SHA256 of the body | the body's `event.id` | the body's `event.event_type` |
+| `sentry` | `Sentry-Hook-Signature`: the hex HMAC-SHA256 of the body | `Request-ID` | `Sentry-Hook-Resource` |
+| `token` | `Authorization: Bearer <value>`, or the value alone in the webhook's own header | the webhook's id path in the body | the webhook's event path in the body |
+
+When a sender names no delivery id, the id is the hex SHA-256 of the body. An id over 200 characters is replaced by its hex SHA-256.
+
+The answers:
+
+| Status | When |
+| --- | --- |
+| 202 | Accepted. The body is `{"id": "<delivery id>", "receipt": "accepted"}`. |
+| 200 | The webhook already took this delivery id. Nothing is created, and the body says `"receipt": "duplicate"`. |
+| 401 | The signature, token or timestamp is missing or wrong. |
+| 404 | No enabled organization webhook has this id. |
+| 405 | A method other than `POST`. |
+| 413 | The body is over 1 MiB. |
+| 429 | Past 30 refused deliveries a minute to one webhook, or past 60 requests a minute from one address to unknown webhooks. `Retry-After` says when to try again. Each goald counts in its own memory. A signed delivery is never limited. |
+
+Each delivery gets a receipt: Accepted, Duplicate or Refused. What goald keeps:
+
+- **The ledger.** Every accepted delivery id goes into the webhook's ledger, without its body, for a year. A delivery replayed with the same id within that year is a duplicate, even after its row is gone.
+- **Deliveries a trigger names** keep their row, headers and body for 30 days. A trigger names a delivery when it is enabled, in a factory the webhook is open to, and its `on` names the webhook or the sender and event, such as `github.check_run`.
+- **GitHub's ping**, sent when you add the webhook in GitHub, keeps no row of its own: only its ledger id and its daily count. Goald records when it accepted the ping on the webhook (`pinged_at`), which the webhook shows as "Received GitHub's ping". A duplicate ping leaves that time as it is.
+- **Deliveries no trigger names** keep only their ledger id and a count per day.
+- **Refused deliveries** keep their headers and the reason, with no body, for 30 days.
+
+No delivery keeps a signature or token header.
 
 ## What a run receives
 

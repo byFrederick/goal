@@ -341,16 +341,65 @@ type Trigger struct {
 	Only     *TriggerOnly   `json:"only,omitempty"`
 	Create   TriggerCreate  `json:"create"`
 	Limits   *TriggerLimits `json:"limits,omitempty"`
+	// Check, only on a schedule, makes each firing run an agent that decides what to file (ADR 0040
+	// decision 19) instead of filing an item.
+	Check *TriggerCheck `json:"check,omitempty"`
+}
+
+// TriggerCheck is a schedule trigger's check: the agent that runs it, its brief (the text, or
+// ./triggers/<name>.md), the most one check may spend and how long it may run (a Go duration
+// such as 5m); zero takes domain.DefaultCheckMaxUSD and domain.DefaultCheckTimeout.
+type TriggerCheck struct {
+	Agent   string  `json:"agent"`
+	Brief   string  `json:"brief"`
+	MaxUSD  float64 `json:"maxUsd,omitempty"`
+	Timeout string  `json:"timeout,omitempty"`
 }
 
 // TriggerFilter holds filters on an event's fields; every one set must match.
 type TriggerFilter struct {
-	Branch   string   `json:"branch,omitempty"`
-	Repo     string   `json:"repo,omitempty"`
-	Label    string   `json:"label,omitempty"`
-	Paths    []string `json:"paths,omitempty"`
-	Authors  []string `json:"authors,omitempty"`
-	SkipBots bool     `json:"skipBots,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// Repo, Action and Conclusion take one value or a list, any of which matches.
+	Repo       StringList `json:"repo,omitempty"`
+	Action     StringList `json:"action,omitempty"`
+	Conclusion StringList `json:"conclusion,omitempty"`
+	Label      string     `json:"label,omitempty"`
+	Paths      []string   `json:"paths,omitempty"`
+	Authors    []string   `json:"authors,omitempty"`
+	SkipBots   bool       `json:"skipBots,omitempty"`
+	// Match maps a dot path into the payload to a value or a list of values; all must match.
+	Match map[string]StringList `json:"match,omitempty"`
+}
+
+// StringList is a value written as one string or a list of strings.
+type StringList []string
+
+// UnmarshalJSON reads one string as a list of it.
+func (l *StringList) UnmarshalJSON(b []byte) error {
+	var one string
+	if err := json.Unmarshal(b, &one); err == nil {
+		*l = StringList{one}
+
+		return nil
+	}
+
+	var many []string
+	if err := json.Unmarshal(b, &many); err != nil {
+		return fmt.Errorf("a string or a list of strings: %w", err)
+	}
+
+	*l = many
+
+	return nil
+}
+
+// MarshalJSON writes a list of one as that string.
+func (l StringList) MarshalJSON() ([]byte, error) {
+	if len(l) == 1 {
+		return json.Marshal(l[0])
+	}
+
+	return json.Marshal([]string(l))
 }
 
 // TriggerOnly holds the checks made before an item is created.
@@ -379,11 +428,17 @@ type TriggerCreate struct {
 	Expedite bool   `json:"expedite,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Brief    string `json:"brief,omitempty"`
+	// Trusted files a delivery's item trusted (ADR 0040 decision 21).
+	Trusted bool `json:"trusted,omitempty"`
 }
 
 // TriggerLimits caps what a trigger creates.
 type TriggerLimits struct {
-	PerDay        int  `json:"perDay,omitempty"`
+	PerDay int `json:"perDay,omitempty"`
+	// PerHour is domain.DefaultPerHour for an event trigger that sets none.
+	PerHour int `json:"perHour,omitempty"`
+	// PerCheck is domain.DefaultCheckPerCheck for a check that sets none; only a check has it.
+	PerCheck      int  `json:"perCheck,omitempty"`
 	PauseOnBudget bool `json:"pauseOnBudget,omitempty"`
 }
 
@@ -507,6 +562,18 @@ type Flow struct {
 	Retry      *Retry      `json:"retry,omitempty"`
 	// Dependencies maps the output fields that set an item's dependencies.
 	Dependencies *Dependencies `json:"dependencies,omitempty"`
+	// Outputs maps the other output fields goald reads.
+	Outputs *Outputs `json:"outputs,omitempty"`
+	// FollowUpsFrom are the factories (metadata.id) this one accepts follow-ups from.
+	FollowUpsFrom []string `json:"followUpsFrom,omitempty"`
+}
+
+// Outputs names the output fields goald reads besides a contract's own: FollowUps the one that
+// holds follow-ups (ADR 0040 decision 5), Close the one that closes a trigger's or a follow-up's
+// item (decision 11). An unset key maps no field.
+type Outputs struct {
+	FollowUps string `json:"followUps,omitempty"`
+	Close     string `json:"close,omitempty"`
 }
 
 // Dependencies names the output fields that set an item's dependencies: After the one listing
@@ -595,7 +662,7 @@ func Load(files fs.FS) (*Factory, error) {
 	var errs []error
 
 	for _, p := range problems {
-		skipped := p.Check == checkRemoved || p.Check == checkMoved || oldPath && p.Check == checkEnvironments
+		skipped := p.Check == checkRemoved || p.Check == checkMoved || p.Check == CheckDeliveries || oldPath && p.Check == checkEnvironments
 		if p.Blocking() && !skipped {
 			errs = append(errs, problemError(p))
 		}

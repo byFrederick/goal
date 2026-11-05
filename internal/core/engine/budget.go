@@ -188,13 +188,19 @@ func (e *Engine) untrack(r *activeRun) {
 	r.cancel(nil)
 }
 
-// cancelRuns cancels, with cause, every run this instance is working on at factory. Each run's
-// work returns its item to the queue (release).
+// cancelRuns cancels, with cause, every run this instance is working on at factory, its checks
+// included. Each run's work returns its item to the queue (release); a check is failed.
 func (e *Engine) cancelRuns(factory domain.FactoryID, cause error) {
 	e.activeMu.Lock()
 	defer e.activeMu.Unlock()
 
 	for _, r := range e.active {
+		if r.factory == factory {
+			r.cancel(cause)
+		}
+	}
+
+	for _, r := range e.checks {
 		if r.factory == factory {
 			r.cancel(cause)
 		}

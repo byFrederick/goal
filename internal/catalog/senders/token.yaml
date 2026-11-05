@@ -1,0 +1,15 @@
+# A sender that can only add a header holding a shared value, such as a script: by default
+# "Authorization: Bearer <value>". The webhook's own settings (domain.TokenSettings) replace the
+# header, with no prefix, and give the body paths of the event and of an id.
+apiVersion: goal/v1
+kind: Sender
+metadata:
+  name: token
+  title: Token
+spec:
+  scheme: token
+  signature:
+    header: Authorization
+    prefix: "Bearer "
+  settings: token
+  events: {}
