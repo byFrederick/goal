@@ -3,17 +3,18 @@ import { useMatch, useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { toast } from 'sonner';
-import { submitItem } from '../api/client';
+import { ApiError, fileFollowUp, submitItem } from '../api/client';
 import { factoriesQuery } from '../api/queries';
 import type { Factory } from '../api/types';
 import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog';
 import { Select } from '../ui/select';
 import { findFactory, refParam } from './factory';
-import { humanize } from './format';
+import { formatDay, humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
 import { holds } from './permissions';
+import { defaultStart, StartField, startOf } from './start-field';
 
 const field =
   'w-full rounded-control border border-rule bg-card px-3 text-base text-ink placeholder:text-muted aria-[invalid=true]:border-rework';
@@ -25,6 +26,17 @@ interface NewItemProps {
   trigger?: ReactNode;
   /** The title the composer starts with each time it opens. */
   title?: string;
+  /** The details the composer starts with each time it opens. */
+  body?: string;
+  /** Files the item from a follow-up of this item (fileFollowUp), in this item's factory, instead of creating one. */
+  file?: FollowUpFile;
+}
+
+/** The follow-up a composer files its item from. */
+export interface FollowUpFile {
+  /** The follow-up's source item, by id. */
+  itemId: string;
+  followUpId: string;
 }
 
 /**
@@ -35,7 +47,7 @@ export function NewItemButton(props: NewItemProps) {
   return holds(props.factory, 'item:create') ? <NewItem {...props} /> : null;
 }
 
-function NewItem({ factory, compact, trigger, title }: NewItemProps) {
+function NewItem({ factory, compact, trigger, title, body, file }: NewItemProps) {
   const [open, setOpen] = useState(false);
   return (
     <Composer
@@ -43,6 +55,8 @@ function NewItem({ factory, compact, trigger, title }: NewItemProps) {
       onOpenChange={setOpen}
       factory={factory}
       initialTitle={title}
+      initialBody={body}
+      file={file}
       trigger={
         trigger ??
         (compact ? (
@@ -189,10 +203,14 @@ interface ComposerProps {
   trigger?: ReactNode;
   /** The title each opening starts with, when it is not empty. Read on mount and again on each opening. */
   initialTitle?: string | undefined;
+  /** The details each opening starts with, when it is not empty. */
+  initialBody?: string | undefined;
+  /** Files the item from a follow-up instead of creating one. */
+  file?: FollowUpFile | undefined;
 }
 
 /** The "New item" dialog: the title, the factory (with a picker), the work type and the details. */
-function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }: ComposerProps) {
+function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, initialBody, file }: ComposerProps) {
   const id = useId();
   const client = useQueryClient();
   const org = useOrg();
@@ -204,39 +222,62 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }
     if (open && initialTitle) setTitle(initialTitle);
   }, [open, initialTitle]);
   const [type, setType] = useState('');
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(initialBody ?? '');
+  useEffect(() => {
+    if (open && initialBody) setBody(initialBody);
+  }, [open, initialBody]);
   const [touched, setTouched] = useState(false);
+  const [start, setStart] = useState(defaultStart);
+  // goald's refusal of the start (a time too far ahead, an item that is not there), said on the Start field.
+  const [startProblem, setStartProblem] = useState<string>();
+  const when = startOf(start);
 
   const target = factory ?? picker?.factories.find((f) => f.id === picker.value);
   const workTypes = target?.work_types ?? [];
   const workType = workTypes.includes(type) ? type : (workTypes[0] ?? '');
 
   const submit = useMutation({
-    mutationFn: (to: Factory) =>
-      submitItem(org.id, to.id, {
+    mutationFn: (to: Factory) => {
+      const request = {
         title: title.trim(),
         ...(workType ? { type: workType } : {}),
         ...(body.trim() ? { body: body.trim() } : {}),
-      }),
+        ...(when.start ? { start: when.start } : {}),
+      };
+      return file ? fileFollowUp(org.id, file.itemId, file.followUpId, request) : submitItem(org.id, to.id, request);
+    },
     onSuccess: (item, to) => {
       onOpenChange(false);
       setTitle('');
       setBody('');
       setTouched(false);
-      toast.success(`Created ${item.ref}. It waits at ${humanize(item.station)}.`);
+      setStart(defaultStart());
+      toast.success(
+        item.start
+          ? `Scheduled ${item.ref} for ${formatDay(item.start.at)}.`
+          : `Created ${item.ref}. It waits at ${humanize(item.station)}.`,
+      );
+      if (file) void client.invalidateQueries({ queryKey: ['org', org.id, 'item'] });
       for (const queryKey of factoryWorkInvalidations(org.id, to.id)) client.invalidateQueries({ queryKey });
       navigate({
         to: '/o/$org/f/$factory/items/$ref',
         params: { org: org.slug, factory: to.name, ref: refParam(item.ref) },
       });
     },
-    onError: (err) => toast.error('Could not create the item', { description: err.message }),
+    onError: (err) => {
+      if (err instanceof ApiError && (err.status === 400 || err.status === 409) && when.start) {
+        setStartProblem(err.detail ?? err.title);
+        return;
+      }
+      toast.error('Could not create the item', { description: err.message });
+    },
   });
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (title.trim() && target) submit.mutate(target);
+    setStartProblem(undefined);
+    if (title.trim() && target && !when.missing) submit.mutate(target);
   };
 
   const missing = touched && !title.trim();
@@ -301,12 +342,21 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle }
               className={`${field} min-h-24 resize-y py-2`}
             />
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <StartField
+            id={id}
+            value={start}
+            onChange={(next) => {
+              setStart(next);
+              setStartProblem(undefined);
+            }}
+            error={startProblem ?? (touched ? when.missing : undefined)}
+          />
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
             <Button type="submit" variant="primary" disabled={submit.isPending || picker?.status === 'loading'}>
-              {submit.isPending ? 'Creating…' : 'Create item'}
+              {submit.isPending ? 'Creating…' : start.mode === 'later' ? 'Schedule' : 'Create item'}
             </Button>
           </div>
         </form>

@@ -258,3 +258,31 @@ describe('Show N more', () => {
     expect(within(build).queryByRole('button', { name: /Show/ })).toBeNull();
   });
 });
+
+describe('items that have not started', () => {
+  it('groups them under Later with a count, soonest first, and shows their start date', async () => {
+    renderBoardPage({
+      page: ShellBoard,
+      org,
+      factory,
+      board: board([
+        item(1, { title: 'Now item', state: 'queued' }),
+        item(2, { title: 'Second later', state: 'queued', start: { at: '2026-11-19T09:00:00Z' } }),
+        item(3, { title: 'First later', state: 'queued', start: { at: '2026-11-10T09:00:00Z' } }),
+      ]),
+    });
+    const column = await buildColumn();
+    const later = within(column).getByRole('region', { name: 'Later' });
+
+    expect(within(later).getByText('2')).toBeTruthy();
+    expect(titles(later)).toEqual(['First later', 'Second later']);
+    expect(within(later).getByText('Nov 10')).toBeTruthy();
+    expect(titles(column).slice(0, 1)).toEqual(['Now item']);
+  });
+
+  it('shows no Later group when every item may start', async () => {
+    renderBoardPage({ page: ShellBoard, org, factory, board: board([item(1, { state: 'queued' })]) });
+    const column = await buildColumn();
+    expect(within(column).queryByRole('region', { name: 'Later' })).toBeNull();
+  });
+});

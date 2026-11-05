@@ -16,7 +16,7 @@ Each item records an origin and who filed it:
 | `trigger` | A schedule, a webhook delivery or a check. |
 | `follow-up` | An agent's follow-up that asked for an item of its own, or the factory's triage item. |
 
-The factory's Intake page at `/o/<org>/f/<factory>/intake` counts the factory's newest items by source. The API answers more: `GET /v1/orgs/{org}/factories/{factory}/intake` counts the items created in a window of `7d`, `30d` (the default) or `90d` by origin, lists the items that have not started (`coming_up`, at most 50, with their total), the open triage item, and the organization's webhooks that are open to the factory. An item filed before origins were recorded counts as `person`.
+The factory's Intake page at `/o/<org>/f/<factory>/intake` shows the same picture in five sections, each with an ⓘ that says what it holds: Coming up, Where items came from, Follow-ups to triage, Triggers and Webhooks open to the factory. The API answers: `GET /v1/orgs/{org}/factories/{factory}/intake` counts the items created in a window of `7d`, `30d` (the default) or `90d` by origin, lists the items that have not started (`coming_up`, at most 50, with their total), the open triage item, and the organization's webhooks that are open to the factory. An item filed before origins were recorded counts as `person`.
 
 The CLI prints the same picture:
 
@@ -28,7 +28,7 @@ It lists the items that have not started (when each may start, or the needs it w
 
 ## Items that have not started
 
-An item with a start time, or one waiting for other items, waits at the line's first station until it may start. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
+An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
 
 ## Triggers
 
@@ -53,7 +53,7 @@ An item made from a webhook delivery is untrusted: its brief carries the event's
 
 The API and `goal intake` return a definition's disabled triggers as `suggestions`.
 
-The web app does not show those yet. Its Intake page and its New trigger dialog (under "Or start from a suggestion") offer a fixed set of suggested triggers, grouped as For the factory, Incidents, Code health, Pull requests and Security. Use opens the trigger page with the source and event chosen. A suggestion whose event Goal cannot create yet has Use turned off.
+On the web, a trigger that is off in the definition appears in the Triggers table as a suggestion; turning it on publishes a new version. A trigger that runs a check shows **Check** and the agent that runs it. The Webhooks section shows each open webhook as Receiving, No trigger yet or Closed, with **Manage** opening the organization's webhooks page. The New trigger dialog still offers a fixed set of suggestions under "Or start from a suggestion".
 
 ## Try a trigger on a past event
 
