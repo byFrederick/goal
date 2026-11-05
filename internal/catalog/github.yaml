@@ -7,6 +7,22 @@ metadata:
 spec:
   secrets:
     - {slot: token, title: Token, description: "A fine-grained token: only the repositories and permissions agents need.", suggest: github-token}
+  parameters:
+    - name: host
+      title: Host
+      description: github.com, or your GitHub Enterprise Server's host name.
+      default: github.com
+      otherwise:
+        tools: [gh, "github:github/github-mcp-server"]
+        env:
+          GH_HOST: "{{host}}"
+          GH_ENTERPRISE_TOKEN: "{{token}}"
+        mcp:
+          github:
+            command: [github-mcp-server, stdio]
+            env: {GITHUB_PERSONAL_ACCESS_TOKEN: "{{token}}", GITHUB_HOST: "https://{{host}}"}
+            tools: {merge_pull_request: ask, "delete_*": ask}
+        test: {method: GET, url: "https://{{host}}/api/v3/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
   tools: [gh]
   env:
     GH_TOKEN: "{{token}}"
