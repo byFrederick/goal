@@ -37,7 +37,8 @@ for (const width of [375, 768, 1440]) {
       await rename.getByRole('button', { name: 'Rename' }).click();
       await expect(nav(page).getByRole('link', { name: 'Waiting', exact: true })).toBeVisible();
 
-      // Delete it after the person confirms.
+      // Delete it after the person confirms. The first menu finishes its exit before the next one opens.
+      await expect(page.getByRole('menu')).toHaveCount(0);
       await nav(page).getByRole('button', { name: 'Actions for Waiting' }).click();
       await page.getByRole('menuitem', { name: 'Delete…' }).click();
       await page

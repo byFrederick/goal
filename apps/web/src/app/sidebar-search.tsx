@@ -168,7 +168,8 @@ export function SidebarSearch({
 
     const items: Row[] = found.items.map((hit) => ({
       key: `item-${hit.id}`,
-      label: `${hit.factory_name} #${hit.number}, ${hit.title}`,
+      // The name holds all the visible text (WCAG 2.5.3): the title, then the station chip.
+      label: `${hit.factory_name} #${hit.number}, ${hit.title}, ${humanize(hit.station)}`,
       content: (
         <>
           <span aria-hidden="true" className={badgeClass}>
@@ -276,7 +277,7 @@ export function SidebarSearch({
       ? [
           {
             key: 'action-new-item',
-            label: `New item about "${q}"`,
+            label: `New item about "${q}" C`,
             content: (
               <>
                 <Plus {...iconProps} />
@@ -294,7 +295,7 @@ export function SidebarSearch({
         ? [
             {
               key: 'action-pause-line',
-              label: pauseLabel,
+              label: `${pauseLabel}, ${factoryTitle(openFactory)}`,
               content: (
                 <>
                   {openFactory.paused ? <Play {...iconProps} /> : <Pause {...iconProps} />}
@@ -313,7 +314,7 @@ export function SidebarSearch({
       return [
         {
           key: `action-approve-${hit.id}`,
-          label: `Approve #${hit.number}`,
+          label: `Approve #${hit.number}, ${hit.factory_name}`,
           content: (
             <>
               <Check {...iconProps} />

@@ -471,7 +471,7 @@ const granting = (can: string[], stations: Factory['stations'] = []): Factory[] 
   factories.map((f) => ({ ...f, can, stations: f.name === 'goal' ? stations : [] }));
 
 /** Presses ArrowDown until the named row is the highlighted one, as a person reaches a row with the keys. */
-function highlight(name: string) {
+function highlight(name: string | RegExp) {
   const input = screen.getByRole('combobox', { name: 'Search' });
   for (let i = 0; i < 20; i++) {
     if (screen.queryByRole('option', { name })?.getAttribute('aria-selected') === 'true') return;
@@ -488,7 +488,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
 
     await type('spend');
-    highlight('New item about "spend"');
+    highlight(/^New item about "spend"/);
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
 
     const dialog = await screen.findByRole('dialog', { name: 'New item' });
@@ -503,8 +503,8 @@ describe('the Actions group of search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await type('spend');
-    expect(screen.getByRole('option', { name: "goal #147, Show this week's spend" })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'New item about "spend"' })).toBeNull();
+    expect(screen.getByRole('option', { name: /^goal #147, Show this week's spend/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /^New item about "spend"/ })).toBeNull();
   });
 
   it('Pause the line calls pauseFactory for the open factory', async () => {
@@ -515,7 +515,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
 
     await type('pause');
-    highlight('Pause the line');
+    highlight(/^Pause the line/);
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
 
     await waitFor(() => expect(pauseFactory).toHaveBeenCalledWith('org-1', 'goal-id'));
@@ -528,7 +528,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await type('pause');
-    expect(screen.queryByRole('option', { name: 'Pause the line' })).toBeNull();
+    expect(screen.queryByRole('option', { name: /^Pause the line/ })).toBeNull();
   });
 
   it('Approve calls approveItem for an item waiting on the caller', async () => {
@@ -543,7 +543,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(within(sidebar).getByRole('button', { name: 'Search' }));
 
     await type('ship');
-    highlight('Approve #12');
+    highlight(/^Approve #12/);
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search' }), { key: 'Enter' });
 
     await waitFor(() => expect(approveItem).toHaveBeenCalledWith('org-1', 'item-goal-12'));
@@ -557,7 +557,7 @@ describe('the Actions group of search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await type('ship');
-    expect(screen.getByRole('option', { name: 'goal #12, Ship the report' })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'Approve #12' })).toBeNull();
+    expect(screen.getByRole('option', { name: /^goal #12, Ship the report/ })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /^Approve #12/ })).toBeNull();
   });
 });

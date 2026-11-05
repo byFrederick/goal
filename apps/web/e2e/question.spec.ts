@@ -1,6 +1,6 @@
 // The item page's question card (ADR 0018, screens/daily-work/item): the agent asks, a person answers
 // with one of its choices or in their own words, and the card goes while the timeline shows the answer.
-// Runs against the mock API (GOAL_API=mock): item 14 of the goal factory holds the pictured question.
+// Runs against the mock API (GOAL_API=mock): item 14 of the software factory holds the pictured question.
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ request }) => {
@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 test('answering the question with one of its choices removes the card and records the answer', async ({ page }) => {
-  await page.goto('/o/acme/f/goal/items/14');
+  await page.goto('/o/acme/f/software/items/14');
 
   const card = page.getByRole('region', { name: 'frontend-engineer asks you' });
   await expect(card).toBeVisible();
@@ -25,7 +25,7 @@ test('answering the question with one of its choices removes the card and record
 });
 
 test('answering the question in your own words sends the text and removes the card', async ({ page }) => {
-  await page.goto('/o/acme/f/goal/items/14');
+  await page.goto('/o/acme/f/software/items/14');
 
   const card = page.getByRole('region', { name: 'frontend-engineer asks you' });
   await expect(card).toBeVisible();
