@@ -90,8 +90,12 @@ type Runtime struct {
 	ModelConnection string   `json:"modelConnection,omitempty"`
 	Size            string   `json:"size,omitempty"`
 	Tools           []string `json:"tools,omitempty"`
-	// Repository is the git repository runs work on; nil means an empty workspace.
+	// Repository is the shorthand for one write entry of Repositories (RepositoryEntries); a
+	// definition has one form or the other, and neither is a factory with no code.
 	Repository *Repository `json:"repository,omitempty"`
+	// Repositories are the repositories the factory's runs may open, each with its access (ADR
+	// 0041 decision 2).
+	Repositories []RepositoryEntry `json:"repositories,omitempty"`
 	Budget     *Budget     `json:"budget,omitempty"`
 }
 
@@ -274,6 +278,9 @@ type Agent struct {
 		Deny  []string `json:"deny,omitempty"`
 	} `json:"tools,omitempty"`
 	Builtins *Builtins `json:"builtins,omitempty"`
+	// Code is write or read: whether the agent may push, open pull requests and merge (ADR 0041
+	// decision 3). "" is Factory.AgentCode's default.
+	Code string `json:"code,omitempty"`
 }
 
 // Built-in tool modes.
@@ -653,7 +660,9 @@ func LoadDir(dir string) (*Factory, error) {
 // moved. A version published before the cutover may have the forms; it loads, so its items stay
 // visible, and its line names them (domain.Line.Removed), so the engine refuses to run it. A
 // version published before ADR 0037 has the moved keys and no environments folder; it loads
-// without the environment checks and runs on the old path until Goal converts it. Referenced
+// without the environment checks and runs on the old path until Goal converts it. The
+// repositories check is publish's (ADR 0041), so a version published before it keeps running.
+// Referenced
 // paths resolve inside files only; a path that leaves it is not found.
 func Load(files fs.FS) (*Factory, error) {
 	f, problems := Check(files)
@@ -662,7 +671,7 @@ func Load(files fs.FS) (*Factory, error) {
 	var errs []error
 
 	for _, p := range problems {
-		skipped := p.Check == checkRemoved || p.Check == checkMoved || p.Check == CheckDeliveries || oldPath && p.Check == checkEnvironments
+		skipped := p.Check == checkRemoved || p.Check == checkMoved || p.Check == CheckDeliveries || p.Check == checkRepositories || oldPath && p.Check == checkEnvironments
 		if p.Blocking() && !skipped {
 			errs = append(errs, problemError(p))
 		}

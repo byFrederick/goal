@@ -184,6 +184,7 @@ func (c *checker) run() []domain.DefinitionProblem {
 	c.ignoredFields(append(slices.Clone(ignoredKeys), c.ignoredTriggerKeys()...))
 	c.moved()
 	c.environments()
+	c.repositories()
 	c.evalsIgnored()
 	c.triggers()
 	c.starter()

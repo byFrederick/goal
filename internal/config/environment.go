@@ -209,6 +209,7 @@ type SecretRef struct {
 // is any one key or index. Every other key that has one is a secret-placement problem.
 var factoryRefPlaces = [][]string{
 	{keySpec, "runtime", "repository", "token"},
+	{keySpec, "runtime", "repositories", "*", "token"},
 	{keySpec, "runtime", "modelKey"},
 	{keySpec, keyBoard, "triggers", "*", "only", "modelAgrees", "key"},
 }
@@ -510,8 +511,9 @@ func (c *checker) forge() {
 
 // factoryPlacement checks factory.yaml's {{…}}: a {{secret}} only in the keys decision 6 allows,
 // where it is written well, and the event placeholders of a trigger's title and brief left to
-// the triggers check. runtime.modelKey and modelAgrees.key are one whole reference; a
-// repository token that has none is the removed form env-reference-removed.
+// the triggers check. runtime.modelKey, modelAgrees.key and a runtime.repositories entry's token
+// are one whole reference; a runtime.repository token that has none is the removed form
+// env-reference-removed.
 func (c *checker) factoryPlacement() {
 	walkScalars(c.f.doc.root, nil, func(p []string, value string) {
 		braces := strings.Contains(value, "{{") || strings.Contains(value, "}}")
@@ -521,10 +523,11 @@ func (c *checker) factoryPlacement() {
 		case !matchesAny(p, factoryRefPlaces):
 			if braces {
 				c.errorf(checkEnvironments, codeSecretPlacement, p,
-					"%s: a {{secret}} reference is valid only in runtime.repository.token, runtime.modelKey, a trigger's modelAgrees.key "+
+					"%s: a {{secret}} reference is valid only in runtime.repository.token, a runtime.repositories entry's token, "+
+							"runtime.modelKey, a trigger's modelAgrees.key "+
 						"and environment files; a literal {{ is not supported", displayPath(p[1:]))
 			}
-		case p[len(p)-1] == "token" && !braces:
+		case slices.Equal(p, []string{keySpec, "runtime", "repository", "token"}) && !braces:
 			// env-reference-removed
 		case !wholeReference(value):
 			c.errorf(checkEnvironments, codeReferenceInvalid, p,

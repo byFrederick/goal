@@ -997,3 +997,31 @@ func TestLoad_RefusesStrictFollowUpsField(t *testing.T) {
 		})
 	}
 }
+
+// The line's one repository is the default entry of runtime.repositories, and none when no entry
+// is the default, such as an owner pattern alone.
+func TestLine_RepositoryIsTheDefaultEntry(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, doc string
+		want      domain.Repository
+	}{
+		{name: "one repository", doc: withRepos(appEntry), want: domain.Repository{URL: "https://github.com/acme/app", Token: "{{gh-token}}"}},
+		{name: "an owner pattern", doc: withRepos(ownerEntry)},
+		{name: "no code", doc: baseFactory},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := Load(checkTree(tt.doc, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.Line().Runtime.Repository; got != tt.want {
+				t.Errorf("repository = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
