@@ -1,6 +1,5 @@
 // "How work gets in" on the Floor (ready.jpg, ADR 0032 decision 2): the ways an item reaches the factory.
-// A GitHub row per enabled `github.issues.labeled` trigger, with the label the trigger matches (read from
-// the published model's intake entry, where its filter says `label`). The Slack row connects while the
+// The Slack row connects while the
 // organization has no slack connection. New item opens the composer (and C does too); goal run
 // is the CLI's way in. Its states: loading (sr-only), error (with Retry) and ready, with an empty line
 // when the factory has no triggers.
@@ -9,8 +8,7 @@ import { Link } from '@tanstack/react-router';
 import { Hash, Plus, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { connectionsQuery, intakeQuery, versionModelQuery } from '../../api/queries';
-import type { IntakeTrigger } from '../../api/types';
-import { type Model, modelOf } from '../../shared/definition/model';
+import { modelOf } from '../../shared/definition/model';
 import { useFactory } from '../../shared/factory';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
@@ -19,34 +17,10 @@ import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { CopyButton } from '../../ui/copy-button';
-import { GitHubMark } from '../../ui/github-mark';
 import { CardEmpty, CardFailed, CardLoading } from './card-states';
 
 /** The CLI command the last row copies. */
 export const runCommand = 'goal run';
-
-/** One GitHub row: the label an enabled `github.issues.labeled` trigger matches. */
-export interface LabelRow {
-  name: string;
-  label: string;
-}
-
-/**
- * The labels the enabled GitHub label triggers match. The label lives in the published intake entry of the
- * same name, as `filter.label`; a trigger with no label matches no row (there is nothing to copy).
- */
-export function labelRows(triggers: readonly IntakeTrigger[], model: Model): LabelRow[] {
-  const intake = model.line?.intake ?? [];
-  return triggers
-    .filter((trigger) => trigger.enabled && trigger.on === 'github.issues.labeled')
-    .flatMap((trigger) => {
-      const entry = intake.find((candidate) => candidate.name === trigger.name);
-      const filter = entry?.filter as { label?: unknown } | undefined;
-      return typeof filter?.label === 'string' && filter.label !== ''
-        ? [{ name: trigger.name, label: filter.label }]
-        : [];
-    });
-}
 
 export function WaysInCard() {
   const org = useOrg();
@@ -80,7 +54,6 @@ export function WaysInCard() {
   }
 
   const triggers = intake.data.triggers;
-  const labels = labelRows(triggers, model.data);
   const hasSlack = (connections.data ?? []).some((connection) => connection.kind === 'slack');
   const canCreate = holds(factory, 'item:create');
 
@@ -93,14 +66,6 @@ export function WaysInCard() {
         <CardEmpty>This factory has no triggers yet. Work comes in through New item or the CLI.</CardEmpty>
       ) : null}
       <ul className="m-0 flex list-none flex-col p-0">
-        {labels.map((row) => (
-          <li key={row.name}>
-            <WayLine icon={<GitHubMark className="text-muted" />} text="Label an issue">
-              <Chip>{row.label}</Chip>
-              <CopyButton text={row.label} aria-label={`Copy label ${row.label}`} />
-            </WayLine>
-          </li>
-        ))}
         <li>
           <WayLine
             icon={<Hash size={14} strokeWidth={1.6} aria-hidden="true" />}

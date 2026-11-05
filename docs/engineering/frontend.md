@@ -200,10 +200,10 @@ The mock starts with no organization on `POST /__mock/reset` with `{"orgs": "non
 The end of onboarding is the Floor's two cards for a new factory, shown only until its first item merges (ADR 0032 decision 2, `docs/design/screens/get-started/ready.jpg`). **Finish setting up** (`setup-card.tsx`, the rules in `setup-progress.ts`) lists nine rows in the picture's order, each done or to do from data the factory already has, with no stored progress:
 
 - Invite people: more than one member, or any invitation (`membersQuery`, `invitationsQuery`). To do links to `/o/<slug>/members`.
-- Connect Slack: a connection of kind `slack` (the Floor's card still reads the connections list; ADR 0037's Slack secret is not wired). To do links to `/o/<slug>/secrets?new=true`.
+- Set up Slack notifications: the organization's notification setting names a Slack secret (`orgNotificationsQuery`, ADR 0037). To do links to the settings page's Notifications section.
 - Add knowledge: any knowledge source. To do links to `/o/<slug>/knowledge/new`.
 - Organization: always done.
-- GitHub, N repositories: a connection of kind `github`. N is the published definition's `basics.repository` (one or none). To do links to the GitHub connection form.
+- Code: the factory's code choice from the published definition's `basics.repositories` (`codeChoice`): "No code", "Code, read only, N repositories" (every entry reads) or "Code, read and write, N repositories" (any entry writes; the legacy `basics.repository` counts as one with write). No code is a valid choice (ADR 0041 decision 9), so the row is always done and has no action.
 - The line, N stations: the published version's stations, not counting the Done station (`versionModelQuery`, `modelOf`). The picture's "4 stations" is Intake, Spec, Build and Review.
 - Budgets and targets: `review.budget` sets a cap, or `line.flow.targets` sets a target. To do links to the Review section of the definition.
 - N triggers: every trigger in `intakeQuery`, switched on or off. Done when there is one. To do links to the factory's intake.
@@ -211,7 +211,7 @@ The end of onboarding is the Floor's two cards for a new factory, shown only unt
 
 The count reads "N of 9 done" beside a ring (`role=img`). Closing the card (Hide setup) writes `goal.setup-hidden.<factory id>` to localStorage, so it stays closed in that browser only; the card renders nothing when all nine are done. Its loading, error (with Retry, which reads only the failed queries) and ready states are the Floor cards' own.
 
-**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. A "Label an issue" row for each enabled `github.issues.labeled` trigger shows the label it matches, read from the published intake entry's `filter.label` (`labelRows`), with a Copy button. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`). "goal run" copies the CLI command. With no triggers, a line says so under the rows.
+**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. There is no "Label an issue" row: nothing implements it. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`). "goal run" copies the CLI command. With no triggers, a line says so under the rows.
 
 **Came from** (`shared/origin.tsx`, the item page's Details card) says where an item came from, from `getItem`'s `came_from`. A follow-up reads "A follow-up by <agent> on <source item>, filed when <item> landed", one line per follow-up, with both refs linked (another factory's included). A check's item reads "The check <name>, <key>" (no key: "The check <name>"), and a schedule's or webhook's reads the trigger's name. A person's reads "<name>, the CLI"; a part's reads "Part of <assembly ref> <title>". Intake's Coming up rows carry no `came_from`, so they keep "Follow-up from <ref>".
 
