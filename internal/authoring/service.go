@@ -220,15 +220,18 @@ func (e *InvalidError) Error() string {
 // Unwrap makes the error match ErrDefinitionInvalid.
 func (e *InvalidError) Unwrap() error { return ErrDefinitionInvalid }
 
-// Loads reads the open items per station (ports.Store has it).
+// Loads reads the open items per station and the repositories open items use (ports.Store has
+// both).
 type Loads interface {
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
+	OpenItemRepositories(ctx context.Context, factory domain.FactoryID) ([]domain.RepositoryUse, error)
 }
 
 // Deps is what the service works with. Store, Templates and Clock are required.
 type Deps struct {
 	Store ports.DefinitionStore
-	// Loads, when set, lets validation report open items at stations a draft removes.
+	// Loads, when set, lets validation report open items at stations a draft removes and on
+	// repositories it drops.
 	Loads Loads
 	// Templates is the bucket the template catalog (catalog/templates/) is read from.
 	Templates ports.ObjectStore

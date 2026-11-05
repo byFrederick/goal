@@ -74,3 +74,39 @@ func (q *Queries) ItemRepositories(ctx context.Context, itemID uuid.UUID) ([]Wor
 	}
 	return items, nil
 }
+
+const openItemRepositories = `-- name: OpenItemRepositories :many
+SELECT r.repo, w.id AS item_id, w.number
+FROM work_item_repositories r
+JOIN work_items w ON w.org_id = r.org_id AND w.id = r.item_id
+WHERE w.factory_id = $1 AND w.state NOT IN ('done', 'cancelled')
+ORDER BY r.repo, w.number
+`
+
+type OpenItemRepositoriesRow struct {
+	Repo   string
+	ItemID uuid.UUID
+	Number int64
+}
+
+// The repositories the factory's open items use, by repository then item number: publish
+// refuses a version that drops the entry one of them needs (ADR 0041 decision 4).
+func (q *Queries) OpenItemRepositories(ctx context.Context, factoryID uuid.UUID) ([]OpenItemRepositoriesRow, error) {
+	rows, err := q.db.Query(ctx, openItemRepositories, factoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenItemRepositoriesRow
+	for rows.Next() {
+		var i OpenItemRepositoriesRow
+		if err := rows.Scan(&i.Repo, &i.ItemID, &i.Number); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

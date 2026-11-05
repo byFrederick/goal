@@ -10,3 +10,12 @@ VALUES (sqlc.arg(item_id), sqlc.arg(repo), sqlc.arg(joined), sqlc.arg(joined_at)
 -- joined, then by ordinal.
 SELECT * FROM work_item_repositories WHERE item_id = $1
 ORDER BY (joined <> 'filing'), joined_at, ordinal;
+
+-- name: OpenItemRepositories :many
+-- The repositories the factory's open items use, by repository then item number: publish
+-- refuses a version that drops the entry one of them needs (ADR 0041 decision 4).
+SELECT r.repo, w.id AS item_id, w.number
+FROM work_item_repositories r
+JOIN work_items w ON w.org_id = r.org_id AND w.id = r.item_id
+WHERE w.factory_id = $1 AND w.state NOT IN ('done', 'cancelled')
+ORDER BY r.repo, w.number;
