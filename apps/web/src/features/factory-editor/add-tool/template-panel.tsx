@@ -14,6 +14,7 @@ import { Field, Input } from '../../../ui/field';
 import { refusalText } from '../../secrets/words';
 import { useDraftSession } from '../draft/use-draft';
 import { fillAdds, type ToolMode } from '../environments/env-file';
+import { useSecretOptions } from '../environments/parts';
 import { pickedNames, type SlotPick, suggested } from './apply-template';
 import {
   AddFooter,
@@ -27,22 +28,27 @@ import {
 
 const plainValue = (v: string) => !v.includes('{{');
 
-export function TemplatePanel({
-  template,
-  environment,
-  onEnvironment,
-}: {
+type PanelProps = {
   template: ToolTemplate;
   environment: string;
   onEnvironment: (name: string) => void;
-}) {
+};
+
+/** Waits for the organization's secrets, so the suggested name of a new one is free from the first keystroke. */
+export function TemplatePanel(props: PanelProps) {
+  const { options, ready } = useSecretOptions();
+  if (!ready) return <div aria-hidden="true" className="h-96 rounded-control bg-hover" />;
+  return <Panel {...props} taken={new Set(options.map((o) => o.value))} />;
+}
+
+function Panel({ template, environment, onEnvironment, taken }: PanelProps & { taken: ReadonlySet<string> }) {
   const factory = useFactory();
   const session = useDraftSession();
   const create = useCreateSecrets();
   const servers = Object.entries(template.adds.mcp);
   const remote = servers.filter(([, s]) => s.url);
   const [url, setUrl] = useState(remote[0]?.[1].url ?? '');
-  const [picks, setPicks] = useState<Record<string, SlotPick>>(() => suggested(template));
+  const [picks, setPicks] = useState<Record<string, SlotPick>>(() => suggested(template, taken));
   const [plain, setPlain] = useState<Record<string, string>>({});
   const [modes, setModes] = useState<Record<string, Record<string, ToolMode>>>(() =>
     Object.fromEntries(servers.map(([name, s]) => [name, { ...s.tools } as Record<string, ToolMode>])),
