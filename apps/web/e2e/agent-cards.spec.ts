@@ -2,7 +2,7 @@
 // version that runs. sre's investigator has three skills and legacy tool rules; goal's reviewer
 // has neither and gets the worker's read-only tools.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 /** The page's tab for the definition's cards (?view=tools). */
 const toolsTab = (page: Page) =>
@@ -45,12 +45,21 @@ test('skills, tool policy and Open prompt file come from the version that runs',
   await expect(tools.getByText('Blocked this week: 2 calls, both aws ssm put-parameter.')).toBeVisible();
   await expect(page.getByText(/^Blocked this week/)).toHaveCount(1);
 
-  await expect(page.getByRole('link', { name: 'Open prompt file' })).toHaveAttribute(
-    'href',
-    '/o/acme/f/sre/definition/agents?agent=investigator',
-  );
-  await expectAccessible(page);
-  await expectNoHorizontalScroll(page);
+  if (isPhone(page)) {
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+    // On a phone Open prompt file sits behind More actions (#602); choosing it goes to the same place.
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Open prompt file' }).click();
+    await expect(page).toHaveURL(/\/o\/acme\/f\/sre\/definition\/agents\?agent=investigator$/);
+  } else {
+    await expect(page.getByRole('link', { name: 'Open prompt file' })).toHaveAttribute(
+      'href',
+      '/o/acme/f/sre/definition/agents?agent=investigator',
+    );
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+  }
 });
 
 test('“Add a skill from skills.sh” opens Definition › Agents with the picker focused (flow 8)', async ({ page }) => {
@@ -94,7 +103,12 @@ test('an agent without settings reads; a draft that changes it says so and links
   await expect(page.getByText('The draft changes this agent.', { exact: false })).toBeHidden();
 
   // Give it a skill in the draft: the page still shows what runs, and points at Review.
-  await page.getByRole('link', { name: 'Open prompt file' }).click();
+  if (isPhone(page)) {
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'Open prompt file' }).click();
+  } else {
+    await page.getByRole('link', { name: 'Open prompt file' }).click();
+  }
   await expect(page).toHaveURL(/\/definition\/agents\?agent=reviewer$/);
   await page.getByRole('combobox', { name: 'Add a skill from the catalog' }).click();
   await page.getByRole('option', { name: 'acme-conventions' }).click();
