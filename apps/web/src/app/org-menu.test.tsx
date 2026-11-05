@@ -145,10 +145,9 @@ describe('the organization menu', () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('hides Create organization from someone who may not create one', async () => {
+  it('offers Create organization to a session that is not a platform admin (ADR 0032)', async () => {
     renderMenu({ platformAdmin: false });
-    await menu();
-    expect(screen.queryByRole('menuitem', { name: 'Create organization' })).toBeNull();
+    expect(await screen.findByRole('menuitem', { name: 'Create organization' })).toBeTruthy();
   });
 
   it('names the organization in its section, with the member count once loaded', async () => {

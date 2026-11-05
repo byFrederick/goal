@@ -38,7 +38,8 @@ test('an item with no runs shows the empty state', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/o/acme/f/goal/items/15?tab=trace');
 
-  await expect(page.getByText('No tool calls yet.')).toBeVisible();
+  // The Latest steps card says it too (hidden from 720 px of main), so the line is read inside the tab.
+  await expect(page.getByRole('tabpanel', { name: 'Trace' }).getByText('No tool calls yet.')).toBeVisible();
 });
 
 test('Watch live opens the Trace tab and keeps a new step in view', async ({ page, request }) => {

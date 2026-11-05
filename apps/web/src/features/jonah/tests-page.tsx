@@ -113,7 +113,12 @@ function TestMenu({ test }: { test: KeptTest }) {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={`Actions for test #${test.item.number}`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="max-md:size-11"
+          aria-label={`Actions for test #${test.item.number}`}
+        >
           <MoreHorizontal aria-hidden="true" size={16} />
         </Button>
       </MenuTrigger>
