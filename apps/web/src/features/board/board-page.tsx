@@ -385,7 +385,14 @@ export function BoardPage() {
     <>
       <TopBarSlot actions={actions} />
       {phone ? (
-        <h1 className="sr-only">Board</h1>
+        <>
+          <h1 className="sr-only">Board</h1>
+          {role ? (
+            <div>
+              <Chip tone="plain">{role}</Chip>
+            </div>
+          ) : null}
+        </>
       ) : (
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
