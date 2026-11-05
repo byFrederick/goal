@@ -3,6 +3,7 @@
 package postgres
 
 import (
+	"context"
 	"reflect"
 	"sync"
 	"testing"
@@ -72,29 +73,7 @@ func TestCodeHosts_SeedOnTwoInstancesAddsEachOnce(t *testing.T) {
 		{Host: "gitlab.example.com", Kind: domain.CodeHostGitLab},
 	}
 
-	var (
-		wg      sync.WaitGroup
-		start   = make(chan struct{})
-		results = make([]bool, len(stores))
-		errs    = make([]error, len(stores))
-	)
-
-	for i, s := range stores {
-		wg.Go(func() {
-			<-start
-
-			results[i], errs[i] = s.SeedCodeHosts(ctx, domain.LocalUser, hosts)
-		})
-	}
-
-	close(start)
-	wg.Wait()
-
-	for i, err := range errs {
-		if err != nil {
-			t.Fatalf("instance %d: SeedCodeHosts: %v", i, err)
-		}
-	}
+	results := seedAtOnce(ctx, t, stores, hosts)
 
 	if results[0] == results[1] {
 		t.Errorf("seeded = %v; want exactly one instance to seed", results)
@@ -120,6 +99,37 @@ func TestCodeHosts_SeedOnTwoInstancesAddsEachOnce(t *testing.T) {
 	if got, err := stores[0].CodeHosts(ctx); err != nil || !reflect.DeepEqual(got, hosts[:1]) {
 		t.Errorf("after the removal and a later seed = %+v, %v; want %+v", got, err, hosts[:1])
 	}
+}
+
+// seedAtOnce calls SeedCodeHosts on each of stores at the same time and returns what each said.
+func seedAtOnce(ctx context.Context, t *testing.T, stores []*Store, hosts []domain.CodeHost) []bool {
+	t.Helper()
+
+	var (
+		wg      sync.WaitGroup
+		start   = make(chan struct{})
+		results = make([]bool, len(stores))
+		errs    = make([]error, len(stores))
+	)
+
+	for i, s := range stores {
+		wg.Go(func() {
+			<-start
+
+			results[i], errs[i] = s.SeedCodeHosts(ctx, domain.LocalUser, hosts)
+		})
+	}
+
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("instance %d: SeedCodeHosts: %v", i, err)
+		}
+	}
+
+	return results
 }
 
 // refuseRawCodeHosts checks that code_hosts refuses each of hosts written straight in SQL as org.

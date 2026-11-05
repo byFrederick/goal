@@ -115,28 +115,7 @@ func testCodeHostsSeededOnce(f *fixture) {
 
 	f.setCodeHosts(b, gitlab)
 	f.setCodeHosts(a, ghe)
-
-	asGitLab := domain.CodeHost{Host: ghe.Host, Kind: domain.CodeHostGitLab}
-	if !f.seedCodeHosts(a, asGitLab, gitlab) {
-		f.t.Fatal("first SeedCodeHosts seeded nothing; want it to seed")
-	}
-
-	if got, want := f.codeHosts(a), []domain.CodeHost{ghe, gitlab}; !reflect.DeepEqual(got, want) {
-		f.t.Errorf("after the seed = %+v; want %+v, the listed host keeping its kind", got, want)
-	}
-
-	entries := f.log(a, ports.AuditQuery{Action: domain.AuditOrgCodeHostsSet})
-	if len(entries) != 2 {
-		f.t.Fatalf("org.code_hosts_set entries = %d; want 2, the set and the seed", len(entries))
-	}
-
-	wantData := map[string]any{
-		"hosts": []any{map[string]any{"host": ghe.Host, "kind": "github"}, map[string]any{"host": gitlab.Host, "kind": "gitlab"}},
-		"from":  []any{map[string]any{"host": ghe.Host, "kind": "github"}},
-	}
-	if seed := entries[0]; !reflect.DeepEqual(seed.Data, wantData) || seed.Actor.Ref() != domain.LocalUser.Ref() || seed.TargetID != string(a.ID) {
-		f.t.Errorf("seed entry = %+v; want data %v by the local user on the organization", seed, wantData)
-	}
+	f.checkFirstSeed(a)
 
 	f.setCodeHosts(a, ghe) // an owner removes the seeded host
 
@@ -152,16 +131,38 @@ func testCodeHostsSeededOnce(f *fixture) {
 		f.t.Errorf("org.code_hosts_set entries = %d; want 3, none for the second seed", n)
 	}
 
-	if got := f.codeHosts(b); !reflect.DeepEqual(got, []domain.CodeHost{gitlab}) {
-		f.t.Errorf("another organization's hosts = %+v; want only %+v", got, gitlab)
-	}
-
 	// The first seed of an organization with nothing to add still counts as its seed.
 	if !f.seedCodeHosts(b) || f.seedCodeHosts(b, ghe) {
 		f.t.Error("an empty first seed did not count as the seed")
 	}
 
 	if got := f.codeHosts(b); !reflect.DeepEqual(got, []domain.CodeHost{gitlab}) {
-		f.t.Errorf("after the empty seed = %+v; want only %+v", got, gitlab)
+		f.t.Errorf("another organization's hosts = %+v; want only %+v", got, gitlab)
+	}
+}
+
+// checkFirstSeed seeds a, which lists ghe, with ghe as GitLab and gitlab: gitlab is added, ghe
+// keeps its kind, and one entry by the local user says so.
+func (f *fixture) checkFirstSeed(a domain.Org) {
+	f.t.Helper()
+
+	asGitLab := domain.CodeHost{Host: ghe.Host, Kind: domain.CodeHostGitLab}
+	if !f.seedCodeHosts(a, asGitLab, gitlab) {
+		f.t.Fatal("first SeedCodeHosts seeded nothing; want it to seed")
+	}
+
+	want := []domain.CodeHost{ghe, gitlab}
+	if got := f.codeHosts(a); !reflect.DeepEqual(got, want) {
+		f.t.Errorf("after the seed = %+v; want %+v, the listed host keeping its kind", got, want)
+	}
+
+	entries := f.log(a, ports.AuditQuery{Action: domain.AuditOrgCodeHostsSet})
+	if len(entries) != 2 {
+		f.t.Fatalf("org.code_hosts_set entries = %d; want 2, the set and the seed", len(entries))
+	}
+
+	wantData := domain.CodeHostsAuditData(want, []domain.CodeHost{ghe})
+	if seed := entries[0]; !reflect.DeepEqual(seed.Data, wantData) || seed.Actor.Ref() != domain.LocalUser.Ref() || seed.TargetID != string(a.ID) {
+		f.t.Errorf("seed entry = %+v; want data %v by the local user on the organization", seed, wantData)
 	}
 }
