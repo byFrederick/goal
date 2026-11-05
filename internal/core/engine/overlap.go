@@ -116,7 +116,17 @@ func (e *Engine) holdBehind(ctx context.Context, p *progress, held, open []domai
 
 	for _, it := range held {
 		for _, o := range open {
-			if !overlaps(it, o, needs[it.ID]) {
+			if !mayOverlap(it, o, needs[it.ID]) {
+				continue
+			}
+
+			overlap, err := p.pathsOverlap(ctx, it.ID, it.Paths, o.ID, o.Paths)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+
+			if !overlap {
 				continue
 			}
 
@@ -164,10 +174,9 @@ func (e *Engine) openWithPaths(ctx context.Context, factory domain.FactoryID) ([
 	}
 }
 
-// overlaps reports whether it may have to wait for o: o is another item, is not a part of its
-// own assembly, is not already needed and their paths overlap. goesFirst decides whether it
-// does.
-func overlaps(it, o domain.Item, needs []domain.OpenNeed) bool {
+// mayOverlap reports whether it may have to wait for o: o is another item, is not a part of
+// its own assembly and is not already needed. pathsOverlap and goesFirst decide whether it does.
+func mayOverlap(it, o domain.Item, needs []domain.OpenNeed) bool {
 	if o.ID == it.ID || o.ID == it.ParentID || (it.ParentID != "" && o.ParentID == it.ParentID) {
 		return false
 	}
@@ -178,22 +187,25 @@ func overlaps(it, o domain.Item, needs []domain.OpenNeed) bool {
 		}
 	}
 
-	return len(domain.PathsOverlap(it.Paths, o.Paths)) > 0
+	return true
 }
 
 // progress ranks items by how far along the line they are, reading an item's runs at most
-// once per turn.
+// once per turn, and compares their paths per repository, reading an item's repositories at
+// most once per turn.
 type progress struct {
 	store ports.Store
 	line  domain.Line
 	// first is the index of the line's first agent station in line.Stations, or -1.
 	first   int
 	started map[domain.ItemID]bool
+	// firsts are items' first repositories (RepositoryKey), "" for an item with none.
+	firsts map[domain.ItemID]string
 }
 
 func newProgress(store ports.Store, l domain.Line) *progress {
 	return &progress{
-		store: store, line: l, started: map[domain.ItemID]bool{},
+		store: store, line: l, started: map[domain.ItemID]bool{}, firsts: map[domain.ItemID]string{},
 		first: slices.IndexFunc(l.Stations, func(s domain.Station) bool { return s.Kind == domain.KindAgent }),
 	}
 }
@@ -229,6 +241,40 @@ func (p *progress) hasStarted(ctx context.Context, it domain.Item) (bool, error)
 	return len(runs) > 0, nil
 }
 
+// firstRepository is the item's first repository (ADR 0041 decision 4), its rows' or else the
+// line's default entry's, "" when it has none.
+func (p *progress) firstRepository(ctx context.Context, id domain.ItemID) (string, error) {
+	if r, ok := p.firsts[id]; ok {
+		return r, nil
+	}
+
+	rows, err := p.store.ItemRepositories(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("item %s: read repositories: %w", id, err)
+	}
+
+	first, _ := domain.ResolveItemRepositories(rows, p.line).First()
+	p.firsts[id] = first.Repo
+
+	return first.Repo, nil
+}
+
+// pathsOverlap reports whether it's paths and o's overlap, comparing repository and path
+// (domain.RepositoryPathsOverlap) with each item's first repository.
+func (p *progress) pathsOverlap(ctx context.Context, it domain.ItemID, paths []string, o domain.ItemID, oPaths []string) (bool, error) {
+	a, err := p.firstRepository(ctx, it)
+	if err != nil {
+		return false, err
+	}
+
+	b, err := p.firstRepository(ctx, o)
+	if err != nil {
+		return false, err
+	}
+
+	return len(domain.RepositoryPathsOverlap(paths, a, oPaths, b)) > 0, nil
+}
+
 // goesFirst reports whether o goes before it: a started item before one that has not started,
 // of two started items the one at the later station, and otherwise the lower number.
 func (p *progress) goesFirst(ctx context.Context, o, it domain.Item) (bool, error) {
@@ -259,14 +305,20 @@ func (p *progress) goesFirst(ctx context.Context, o, it domain.Item) (bool, erro
 func (p *progress) stale(ctx context.Context, it domain.Item, n domain.OpenNeed, open map[domain.ItemID]domain.Item) (string, error) {
 	o, ok := open[n.Item]
 	if !ok {
-		if len(domain.PathsOverlap(it.Paths, n.Paths)) == 0 {
-			return reasonNoOverlap, nil
+		overlap, err := p.pathsOverlap(ctx, it.ID, it.Paths, n.Item, n.Paths)
+		if err != nil || overlap {
+			return "", err
 		}
 
-		return "", nil
+		return reasonNoOverlap, nil
 	}
 
-	if len(domain.PathsOverlap(it.Paths, o.Paths)) == 0 {
+	overlap, err := p.pathsOverlap(ctx, it.ID, it.Paths, o.ID, o.Paths)
+	if err != nil {
+		return "", err
+	}
+
+	if !overlap {
 		return reasonNoOverlap, nil
 	}
 
