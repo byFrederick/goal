@@ -169,7 +169,7 @@ export function SidebarSearch({
     const items: Row[] = found.items.map((hit) => ({
       key: `item-${hit.id}`,
       // The name holds all the visible text (WCAG 2.5.3): the number and title, then the station chip.
-      label: `#${hit.number} ${hit.title}, ${humanize(hit.station)}, ${hit.factory_name}`,
+      label: `${mark(hit.factory_name)} #${hit.number} ${hit.title}, ${humanize(hit.station)}, ${hit.factory_name}`,
       content: (
         <>
           <span aria-hidden="true" className={badgeClass}>
