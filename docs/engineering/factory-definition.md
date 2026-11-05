@@ -227,6 +227,8 @@ Nothing reads the settings yet: the store, the engine and the worker follow in t
 
 ## Repositories: `runtime.repositories` and an agent's code
 
+The task guides are [Connect code to a factory](../../apps/docs/src/content/docs/guides/connect-code.md) and [Connect GitHub](../../apps/docs/src/content/docs/guides/connect-github.md), served at `/docs/guides/connect-code/` and `/docs/guides/connect-github/`.
+
 A factory's code is a list of repositories, each with its access ([ADR 0041](../adr/0041-code-and-github-without-an-app.md), decisions 2 and 3). No repositories is a factory with no code.
 
 ```yaml
@@ -321,7 +323,7 @@ spec:
 
 `{{name}}` names one of the organization's secrets, and it is the only placeholder. It is valid in an environment file's `env`, `files`, `mcp.<server>.headers` and a stdio server's `env`, and in `runtime.repository.token`, a `runtime.repositories` entry's `token`, `runtime.modelKey` and a trigger's `only.modelAgrees.key`; the last four take one whole reference. Each counts as a use of the secret (`Factory.SecretRefs`), so the secret can't be deleted while a current version uses it, and Access lists it. A trigger's `create.title`, `create.brief` and `create.repositories` keep their `{{field}}` event placeholders. A literal `{{` is not supported.
 
-`runtime.repository` is `{url, token}`, the shorthand described in [Repositories](#repositories-runtimerepositories-and-an-agents-code). A URL on `github.com` or `gitlab.com` picks its code host; any other host needs `forge: github` or `forge: gitlab`.
+`runtime.repository` is `{url, token}`, the shorthand described in [Repositories](#repositories-runtimerepositories-and-an-agents-code). A URL on `github.com` or `gitlab.com` picks its code host; on any other host the shorthand needs `forge: github` or `forge: gitlab` (`forge-missing`, `internal/config/environment.go`). A `runtime.repositories` entry has no `forge`: the organization's code hosts give the kind.
 
 ### Environment checks
 

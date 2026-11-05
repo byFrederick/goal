@@ -13,6 +13,11 @@ VALUES (sqlc.arg(item_id), sqlc.arg(repo), sqlc.arg(joined), sqlc.arg(joined_at)
 SELECT * FROM work_item_repositories WHERE item_id = $1
 ORDER BY (joined <> 'filing'), joined_at, ordinal;
 
+-- name: ItemsRepositories :many
+-- The repositories of a page of items, by item, each item's in ItemRepositories' order.
+SELECT * FROM work_item_repositories WHERE item_id = ANY(sqlc.arg(item_ids)::uuid[])
+ORDER BY item_id, (joined <> 'filing'), joined_at, ordinal;
+
 -- name: JoinItemRepository :exec
 -- One repository joining an item after it was filed, with the next ordinal the caller computed;
 -- a repository the item already has stays as it is.

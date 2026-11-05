@@ -34,7 +34,7 @@ Only a factory the webhook is open to can have a trigger on it. A trigger's `on`
 
 ## Connect GitHub without an app
 
-One organization webhook, added by an owner of the GitHub organization, covers every repository, including ones created later. A repository webhook posts to the same address for one repository. In GitHub, set the payload URL to the webhook's address and the secret to the value `create` printed. Send only the events your triggers use. GitHub's ping, sent when you add the webhook, is accepted and shown as "Received GitHub's ping".
+One organization webhook, added by an owner of the GitHub organization, covers every repository, including ones created later; [Connect GitHub](../connect-github/) has the steps, and the repository webhooks for a personal account. A repository webhook posts to the same address for one repository. In GitHub, set the payload URL to the webhook's address and the secret to the value `create` printed. Send only the events your triggers use. GitHub's ping, sent when you add the webhook, is accepted and shown as "Received GitHub's ping".
 
 ## Read the delivery log
 

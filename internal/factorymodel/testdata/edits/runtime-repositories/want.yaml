@@ -1,0 +1,22 @@
+apiVersion: goal/v1
+kind: Factory
+
+metadata:
+  name: acme-shop
+
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    # Code the runs may open.
+    repositories:
+      - name: shop
+        url: https://github.com/acme/shop
+        access: write
+        default: true
+      - name: docs
+        url: https://github.com/acme/docs
+        token: '{{acme_token}}'
+        access: read
+  agents:
+    - name: engineer
+      prompt: ./agents/engineer.md

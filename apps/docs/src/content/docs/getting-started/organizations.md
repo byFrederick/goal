@@ -51,6 +51,8 @@ Each host in the answer has the API base goald derives for it:
 
 When goald first started with the list, it added, once, the hosts the organization's factories and knowledge sources already used: the host of every published version's `runtime.repository`, with its `forge`, and the host of every knowledge repository source, with its `code_host`. That entry is in the audit log as `org.code_hosts_set` by Goal. A host it couldn't add, such as one with a port or with no kind, is in goald's log as `code host not seeded` with the reason. goald doesn't add hosts again, so a host an owner removes stays removed, and a factory published later on a new host needs an owner to add that host.
 
+To use a listed host in a factory, follow [Connect GitHub](/docs/guides/connect-github/#add-a-code-host-for-enterprise-or-self-managed-gitlab) and [Connect code to a factory](/docs/guides/connect-code/).
+
 goald sends repository tokens and knowledge secrets only to hosts on the list. Publishing refuses a version whose repository is on another host. The repository test answers `repository-host-unknown` for another host without opening the secret. A knowledge source that reads a repository with a secret fails its sync on another host, with an error that names the host, and its secret is never opened. On a listed host, the kind on the list picks the API goald calls.
 
 ## Pick the organization the CLI acts in

@@ -5016,7 +5016,7 @@ export interface components {
             tool_approval?: components["schemas"]["ToolApproval"] | null;
             /** @description The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it */
             branch?: string;
-            /** @description The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only. An item filed before repositories shows the factory's default entry's, and an item of a factory without code none */
+            /** @description The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only (ItemCard has them too). An item filed before repositories shows the factory's default entry's, and an item of a factory without code none */
             repositories?: components["schemas"]["ItemRepository"][];
         };
         /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
@@ -5615,6 +5615,8 @@ export interface components {
             rope_held: boolean;
             /** @description The item's human touches so far */
             touch_count: number;
+            /** @description As Item's repositories: the repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4). An item filed before repositories shows the factory's default entry's, and an item of a factory without code an empty array */
+            repositories: components["schemas"]["ItemRepository"][];
             /** @description The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its lease while in progress, else the agent its station routes its lane to at an agent station, the person lane at a human station; absent or null at queue and done stations, or when the station has no route for the item's lane */
             board_lane?: string | null;
             /** @description For a part of an assembly (an item whose parent has parts), the assembly and the part's place in it; absent or null for any other item */

@@ -10,6 +10,8 @@ Each guide starts with the result you get and lists the steps to reach it. Comma
 - [Submit and follow items](./submit-and-follow-items/): start work from the CLI or the web app, and follow it until a person has to act.
 - [Review what enters a factory](./intake/): see where items came from, what has not started, which triggers create work, and try a trigger on a past event.
 - [Let agents leave follow-ups](./follow-ups/): let an agent note another item or schedule later work, and file or drop what it left.
+- [Connect code to a factory](./connect-code/): list the repositories a factory may use, with read or write access, a token for each and the agents that write.
+- [Connect GitHub](./connect-github/): add one organization webhook, give agents GitHub tools and add a GitHub Enterprise or self-managed GitLab host.
 - [Receive events with organization webhooks](./webhooks/): connect a sender once, open it to factories and read the delivery log.
 - [Connect a webhook in the web app](./connect-a-webhook/): create a webhook on the Webhooks page, paste it into the sender, open it to factories and read the log.
 - [Ask an agent what to file](./checks/): add a check to a schedule trigger so an agent reads a source and files what is new.

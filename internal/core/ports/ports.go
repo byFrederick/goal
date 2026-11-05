@@ -91,6 +91,11 @@ type Store interface {
 	// entry (domain.ResolveItemRepositories) and records it (JoinItemRepositories).
 	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 
+	// ItemsRepositories returns the repositories of each of items that has any, by item, each
+	// item's in ItemRepositories' order, in one read: a page of cards. Unknown ids and ids that
+	// are not UUIDs have none.
+	ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error)
+
 	// JoinItemRepositories adds to item the repositories of keys it lacks, joined as joined at
 	// time at with the next ordinals, under the item's lock, until it has
 	// domain.MaxItemRepositories (domain.AppendRepositories); the rest are left out without an

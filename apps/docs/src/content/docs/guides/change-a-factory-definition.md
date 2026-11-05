@@ -92,6 +92,19 @@ You can also change the line in the draft's form: open the factory's Definition 
 - Open Rules under a row to set its checks, rework rule, merge step and note. A row that has a problem opens its rules for you.
 - Checks on this line, under the table, lists what passed, what to know and what must be fixed before you can publish.
 
+## Edit repositories and an agent's code in the app
+
+Open the factory's Definition and choose Basics. Under Runtime, Repositories lists the repositories runs may open (`runtime.repositories`). Each row has its name, its URL, its access, its token and whether it is the default.
+
+- **Access** is Read only or Read and write. Only a repository with write access lets agents push, open pull requests and merge, and it needs a token.
+- **Token** is one of the organization's secrets, written as `{{secret}}`. Leave it empty for a public repository you only read. **New secret…** in the list creates one.
+- **Default** marks the repository an item uses when it names none. The only repository is the default, and a URL that ends in `/*` (every repository of an owner) cannot be.
+- **Add a repository** adds a row, and **Remove** takes one out of the draft. A factory with none shows "No code. Agents work through their tools."
+
+A definition that still has the `runtime.repository` shorthand keeps its single URL and token field; the app does not convert it. Choose one form: publish refuses a definition that has both.
+
+An agent's **Code** is on its page in Agents, as Write or Read. Write lets the agent push, open pull requests and merge in repositories whose access is write. When you choose nothing, an agent writes if the factory has a repository that writes, and reads otherwise.
+
 ## Edit knowledge and factory memory in the app
 
 Open the factory's Definition and choose Knowledge. It has three cards.
