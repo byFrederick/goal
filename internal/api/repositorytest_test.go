@@ -1,11 +1,15 @@
 package api_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
@@ -77,7 +81,7 @@ func TestRepositoryTest_ReadAndPush(t *testing.T) {
 	}
 }
 
-// A missing secret is 404, a host other than github.com and gitlab.com 400, a URL naming no
+// A missing secret is 404, a host the organization doesn't list 400, a URL naming no
 // repository 400, and a secret limited to some factories 400: nothing reaches a code host.
 func TestRepositoryTest_Refusals(t *testing.T) {
 	t.Parallel()
@@ -124,5 +128,94 @@ func TestRepositoryTest_HostTimeout(t *testing.T) {
 
 	if strings.Contains(string(r.body), repoTokenValue) {
 		t.Error("the answer holds the token")
+	}
+}
+
+// enterpriseHost is a GitHub Enterprise host acme lists in the tests that add it.
+const enterpriseHost = "git.example.com"
+
+// countedSecrets counts the secrets it opens.
+type countedSecrets struct {
+	ports.OrgSecrets
+
+	resolves atomic.Int32
+}
+
+func (c *countedSecrets) Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error) {
+	c.resolves.Add(1)
+
+	return c.OrgSecrets.Resolve(ctx, names, use)
+}
+
+// listHosts sets acme's added code hosts to hosts.
+func (h *harness) listHosts(t *testing.T, hosts ...domain.CodeHost) {
+	t.Helper()
+
+	if _, err := h.tenancy.SetCodeHosts(domain.WithOrg(t.Context(), testOrg), domain.LocalUser, hosts); err != nil {
+		t.Fatalf("set code hosts: %v", err)
+	}
+}
+
+// A repository on a host acme doesn't list, a GitHub Enterprise host another organization lists
+// included, is refused with repository-host-unknown naming the host and Code hosts, before the
+// secret is opened or any code host is called.
+func TestRepositoryTest_UnlistedHostSendsNothing(t *testing.T) {
+	t.Parallel()
+
+	secrets := &countedSecrets{}
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) {
+		secrets.OrgSecrets = d.OrgSecrets
+		d.OrgSecrets = secrets
+	})
+	h.createRepoSecret(t)
+
+	if _, err := h.tenancy.SetCodeHosts(domain.WithOrg(t.Context(), otherOrg), domain.LocalUser,
+		[]domain.CodeHost{{Host: enterpriseHost, Kind: domain.CodeHostGitHub}}); err != nil {
+		t.Fatalf("set the other organization's code hosts: %v", err)
+	}
+
+	h.listHosts(t, domain.CodeHost{Host: "ghe.example.com", Kind: domain.CodeHostGitHub})
+
+	for _, repo := range []string{"https://" + enterpriseHost + "/acme/app", "https://ghe.example.com:8443/acme/app"} {
+		r := h.testRepository(t, repo, repoSecret)
+		p := refused(t, repo, r, http.StatusBadRequest, "repository-host-unknown")
+
+		host := strings.TrimPrefix(strings.TrimSuffix(repo, "/acme/app"), "https://")
+		if d := valueOf(p.Detail); !strings.Contains(d, host) || !strings.Contains(d, "Code hosts") {
+			t.Errorf("%s: detail %q; want it to name %s and Code hosts", repo, d, host)
+		}
+	}
+
+	if n := secrets.resolves.Load(); n != 0 {
+		t.Errorf("the secret was opened %d times; want none", n)
+	}
+
+	if n := len(h.codehost.AccessTokens()); n != 0 {
+		t.Errorf("the code host was called %d times; want none", n)
+	}
+}
+
+// A repository on a GitHub Enterprise host acme lists as github goes to the github adapter with
+// the token, and answers its read and push checks.
+func TestRepositoryTest_ListedEnterpriseHost(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+	h.listHosts(t, domain.CodeHost{Host: enterpriseHost, Kind: domain.CodeHostGitHub})
+
+	repo := "https://GIT.example.com/acme/app"
+	h.codehost.SetAccess(repo, repoTokenValue, ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "GitHub shows acme/app to the token"},
+		Push: ports.AccessCheck{Reason: "GitHub grants the token no push to acme/app (permissions.push is false)"},
+	})
+
+	got := decode[gen.RepositoryTestResult](t, h.testRepository(t, repo, repoSecret), http.StatusOK)
+	if !got.Tested || !got.Read.Ok || got.Push.Ok || !strings.Contains(got.Push.Reason, "no push") {
+		t.Errorf("test = %s; want read ok, push failed with the host's reason", body(t, got))
+	}
+
+	if tokens := h.codehost.AccessTokens(); len(tokens) != 1 || tokens[0] != repoTokenValue {
+		t.Errorf("the code host got %d tokens; want the secret's value once", len(tokens))
 	}
 }

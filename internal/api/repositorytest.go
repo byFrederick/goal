@@ -10,16 +10,16 @@ import (
 	"strings"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/environmentcheck"
 )
 
 // Repository tests (ADR 0037 decision 14): POST /v1/orgs/{org}/repositories/test opens a secret
 // without a factory and asks the code host of the repository's host, through its API and never
-// git, whether the token can read the repository and push to it. Onboarding calls it before any
-// factory exists, and factory settings with a repository token call it too. The opened value
-// reaches the code host only: every reason is scrubbed of it before it is answered.
+// git, whether the token can read the repository and push to it. The host must be one of the
+// organization's code hosts (ADR 0041 decision 1), or nothing is opened or sent. Onboarding calls
+// it before any factory exists, and factory settings with a repository token call it too. The
+// opened value reaches the code host only: every reason is scrubbed of it before it is answered.
 
 // Errors of the repository test route, answered with their codes by repositoryTestProblem.
 var (
@@ -65,9 +65,24 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 			errRepositoryURLInvalid, u.Redacted())
 	}
 
-	ch, ok := s.codehosts[config.KnownForge(u.Hostname())]
+	// The token goes only to a host the organization lists (ADR 0041 decision 1), to the
+	// adapter of the kind it is listed as.
+	added, err := s.orgs.CodeHosts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list code hosts: %w", err)
+	}
+
+	host := strings.ToLower(u.Host)
+
+	listed, ok := domain.ListedCodeHost(append(domain.BuiltInCodeHosts(), added...), host)
 	if !ok {
-		return nil, fmt.Errorf("%w: goald tests repositories on github.com and gitlab.com, not on %s", errRepositoryHostUnknown, u.Hostname())
+		return nil, fmt.Errorf("%w: %s is not one of the organization's code hosts, so goald sends it no token; "+
+			"an owner can add it under Code hosts in the organization's settings", errRepositoryHostUnknown, host)
+	}
+
+	ch, ok := s.codehosts[string(listed.Kind)]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s is a %s host, and this goald has no %s code host", errRepositoryHostUnknown, host, listed.Kind, listed.Kind)
 	}
 
 	opened, err := s.secrets.Resolve(ctx, []string{b.Secret}, domain.SecretUse{})
