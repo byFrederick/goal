@@ -143,8 +143,8 @@ func JoinIntegration(have []ItemRepository, keys []string, at time.Time) (joins 
 	return joinKeys(have, keys, at, func(string) bool { return true })
 }
 
-// joinKeys are the rows of keep's keys have lacks, once and in order, joined filing at at with
-// the next ordinal while the item has room, and the keys left for want of it.
+// joinKeys are the rows of keep's keys have lacks, once and in order, joined filing at time at
+// with the next ordinal while the item has room, and the keys left for want of it.
 func joinKeys(have []ItemRepository, keys []string, at time.Time, keep func(key string) bool) (out []ItemRepository, left []string) {
 	next := len(have)
 

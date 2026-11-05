@@ -245,7 +245,7 @@ type Store interface {
 
 	// JoinIntegrationRepositories gives the assembly root its integration branch in each of repos
 	// (RepositoryKey), its parts' repositories (ADR 0041 decision 5), in one transaction under
-	// root's lock: each repository root lacks joins filing at at with the next ordinal
+	// root's lock: each repository root lacks joins filing at time at with the next ordinal
 	// (domain.JoinIntegration), and each of repos' rows gets branch as its integration_branch
 	// where it has none, so a second call with another branch changes no row that has one. It
 	// returns the repositories left out past domain.MaxItemRepositories. closeAssembly does the

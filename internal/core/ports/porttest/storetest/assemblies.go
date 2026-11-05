@@ -235,8 +235,8 @@ func (f *fixture) integrationRows(t *testing.T, id domain.ItemID) []string {
 
 // An assembly's integration branch is kept per repository (ADR 0041 decision 5): a repository it
 // lacks joins filing with the next ordinal and the branch, one it has gets the branch, and a
-// second call with another branch changes no row that has one. Repositories past the cap are left
-// out and returned. An empty branch is invalid and an unknown item not found.
+// second call with another branch changes no row that has one. An empty branch is invalid and an
+// unknown item not found.
 func testIntegrationBranchPerRepositorySetOnce(f *fixture) {
 	t := f.t
 
@@ -265,12 +265,28 @@ func testIntegrationBranchPerRepositorySetOnce(f *fixture) {
 		t.Errorf("after a second call with another branch rows = %v; want %v", got, want)
 	}
 
-	more := []string{repoOps}
+	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, []string{repoAPI}, "", t2); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("JoinIntegrationRepositories without a branch: %v; want ErrInvalid", err)
+	}
+
+	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), missingItem, []string{repoAPI}, branchIntg, t2); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("JoinIntegrationRepositories of an unknown item: %v; want ErrNotFound", err)
+	}
+}
+
+// Repositories past domain.MaxItemRepositories get no row and are returned as left out.
+func testIntegrationBranchPerRepositoryUpToTheCap(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Repositories: filed(repoAPI)})
+	asm, _ := f.assemble(t, assembly(it, l, plan()[:1]))
+
+	more := []string{repoWeb, repoOps}
 	for i := range domain.MaxItemRepositories - 2 {
 		more = append(more, fmt.Sprintf("github.com/acme/r%d", i))
 	}
 
-	left, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, more, branchIntg, t2)
+	left, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, more, branchIntg, t1)
 	if err != nil {
 		t.Fatalf("JoinIntegrationRepositories past the cap: %v", err)
 	}
@@ -282,14 +298,6 @@ func testIntegrationBranchPerRepositorySetOnce(f *fixture) {
 	got := f.integrationRows(t, asm.ID)
 	if len(got) != domain.MaxItemRepositories || got[2] != repoOps+" filing #2 "+branchIntg {
 		t.Errorf("rows past the cap = %v; want %d, %s third", got, domain.MaxItemRepositories, repoOps)
-	}
-
-	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, []string{repoAPI}, "", t2); !errors.Is(err, domain.ErrInvalid) {
-		t.Errorf("JoinIntegrationRepositories without a branch: %v; want ErrInvalid", err)
-	}
-
-	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), missingItem, []string{repoAPI}, branchIntg, t2); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("JoinIntegrationRepositories of an unknown item: %v; want ErrNotFound", err)
 	}
 }
 

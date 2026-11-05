@@ -113,8 +113,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"IntegrationBranch_SetOnceAndSticky", testIntegrationBranchSetOnceAndSticky},
 		{"IntegrationBranch_AssemblyLandsAtItsStation", testIntegrationBranchAssemblyLandsAtItsStation},
 		{"IntegrationBranch_NoDonePartOrCancelClosesAsToday", testIntegrationBranchNoDonePartOrCancelClosesAsToday},
-		{"IntegrationBranch_PerRepositorySetOnce", testIntegrationBranchPerRepositorySetOnce},
-		{"IntegrationBranch_LandingTakesThePartsRepositories", testIntegrationBranchLandingTakesThePartsRepositories},
 		{"StationLoads_CountWaitingAndInProgress", testStationLoads},
 		{"StationLoads_CountNoOpenAssembly", testStationLoadsCountNoOpenAssembly},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},

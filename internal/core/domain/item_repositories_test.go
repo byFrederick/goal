@@ -349,11 +349,11 @@ func TestFile_InheritedRepositoriesOnlyThoseTheLineCovers(t *testing.T) {
 		return keys
 	}
 
-	if got, want := file("github.com/other/x", keyLabsWeb, keyLabsWeb), []string{keyLabsWeb}; !reflect.DeepEqual(got, want) {
+	if got, want := file(keyOther, keyLabsWeb, keyLabsWeb), []string{keyLabsWeb}; !reflect.DeepEqual(got, want) {
 		t.Errorf("covered only = %v; want %v", got, want)
 	}
 
-	if got, want := file("github.com/other/x"), []string{keyAPI}; !reflect.DeepEqual(got, want) {
+	if got, want := file(keyOther), []string{keyAPI}; !reflect.DeepEqual(got, want) {
 		t.Errorf("none covered = %v; want the default %v", got, want)
 	}
 
@@ -367,13 +367,16 @@ func TestFile_InheritedRepositoriesOnlyThoseTheLineCovers(t *testing.T) {
 	}
 }
 
+// keyOther is a repository no entry of repoLine covers.
+const keyOther = "github.com/other/x"
+
 // JoinRepositories are the rows an item gains: each covered key it lacks, joined filing at time at
 // with the next ordinal, until it has MaxItemRepositories.
 func TestJoinRepositories_SkipsWhatTheItemHasUpToTheCap(t *testing.T) {
 	t.Parallel()
 
 	have := []ItemRepository{{Repo: keyAPI, Joined: JoinedDefault}}
-	got := JoinRepositories(repoLine(entryAPI), have, []string{keyAPI, "github.com/other/x", keyLabsWeb, keyLabsWeb}, fileAt)
+	got := JoinRepositories(repoLine(entryAPI), have, []string{keyAPI, keyOther, keyLabsWeb, keyLabsWeb}, fileAt)
 
 	if want := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 1}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("JoinRepositories = %+v; want %+v", got, want)
@@ -395,10 +398,10 @@ func TestJoinIntegration_JoinsWhatTheAssemblyLacksUpToTheCap(t *testing.T) {
 	t.Parallel()
 
 	have := []ItemRepository{{Repo: keyAPI, Joined: JoinedDefault}}
-	joins, left := JoinIntegration(have, []string{keyAPI, "github.com/other/x", keyLabsWeb, "github.com/other/x"}, fileAt)
+	joins, left := JoinIntegration(have, []string{keyAPI, keyOther, keyLabsWeb, keyOther}, fileAt)
 
 	want := []ItemRepository{
-		{Repo: "github.com/other/x", Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 1},
+		{Repo: keyOther, Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 1},
 		{Repo: keyLabsWeb, Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 2},
 	}
 	if !reflect.DeepEqual(joins, want) || len(left) != 0 {

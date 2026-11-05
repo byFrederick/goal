@@ -10,7 +10,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// repositoriesTests cover items' branches and repositories (ADR 0041 decisions 4 and 6).
+// repositoriesTests cover items' branches and repositories (ADR 0041 decisions 4, 5 and 6).
 var repositoriesTests = []struct {
 	name string
 	test func(f *fixture)
@@ -21,6 +21,9 @@ var repositoriesTests = []struct {
 	{"ItemRepositories_StartFollowUpTakesItsSources", testStartFollowUpTakesItsSourcesRepositories},
 	{"ItemRepositories_TriageGainsJoiningSourcesUpToTheCap", testTriageGainsJoiningSourcesRepositories},
 	{"OpenItemRepositories_OnlyOpenItems", testOpenItemRepositoriesOnlyOpenItems},
+	{"IntegrationBranch_PerRepositorySetOnce", testIntegrationBranchPerRepositorySetOnce},
+	{"IntegrationBranch_PerRepositoryUpToTheCap", testIntegrationBranchPerRepositoryUpToTheCap},
+	{"IntegrationBranch_LandingTakesThePartsRepositories", testIntegrationBranchLandingTakesThePartsRepositories},
 }
 
 // The repositories the cases name.
