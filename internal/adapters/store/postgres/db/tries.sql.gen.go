@@ -13,15 +13,15 @@ import (
 )
 
 const agentDoneItems = `-- name: AgentDoneItems :many
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.branch_head, r.base_head, r.pushed_head, w.number AS item_number, w.title AS item_title, w.cost_usd AS item_cost_usd,
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, w.number AS item_number, w.title AS item_title, w.cost_usd AS item_cost_usd,
        w.done_at::timestamptz AS done_at,
        coalesce((SELECT array_agg(coalesce(e.station, '') ORDER BY e.at, e.id) FROM item_events e
                  WHERE e.item_id = w.id AND e.kind IN ('rejected', 'gate_rejected')), '{}')::text[] AS sent_back_at
 FROM work_items w
 JOIN LATERAL (
   SELECT a.id FROM agent_runs a
-  WHERE a.item_id = w.id AND a.agent = $1 AND a.kind = 'station' AND a.branch_head IS NOT NULL
-    AND a.status <> 'running'
+  WHERE a.item_id = w.id AND a.agent = $1 AND a.kind = 'station' AND a.status <> 'running'
+    AND EXISTS (SELECT 1 FROM agent_run_repositories rr WHERE rr.run_id = a.id AND rr.branch_head IS NOT NULL)
   ORDER BY a.started_at DESC, a.id DESC
   LIMIT 1
 ) pick ON true
@@ -80,9 +80,6 @@ func (q *Queries) AgentDoneItems(ctx context.Context, arg AgentDoneItemsParams) 
 			&i.AgentRun.Kind,
 			&i.AgentRun.Brief,
 			&i.AgentRun.Output,
-			&i.AgentRun.BranchHead,
-			&i.AgentRun.BaseHead,
-			&i.AgentRun.PushedHead,
 			&i.ItemNumber,
 			&i.ItemTitle,
 			&i.ItemCostUsd,
@@ -709,7 +706,7 @@ func (q *Queries) RecordTryRun(ctx context.Context, arg RecordTryRunParams) (uui
 }
 
 const runByID = `-- name: RunByID :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs WHERE id = $1
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs WHERE id = $1
 `
 
 func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
@@ -736,9 +733,6 @@ func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 		&i.Kind,
 		&i.Brief,
 		&i.Output,
-		&i.BranchHead,
-		&i.BaseHead,
-		&i.PushedHead,
 	)
 	return i, err
 }
@@ -789,9 +783,10 @@ func (q *Queries) TryByID(ctx context.Context, id uuid.UUID) (TryByIDRow, error)
 }
 
 const tryTarget = `-- name: TryTarget :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs
 WHERE item_id = $1 AND station = $2 AND kind = 'station'
-  AND branch_head IS NOT NULL AND status <> 'running'
+  AND status <> 'running'
+  AND EXISTS (SELECT 1 FROM agent_run_repositories rr WHERE rr.run_id = agent_runs.id AND rr.branch_head IS NOT NULL)
 ORDER BY started_at DESC, id DESC
 LIMIT 1
 `
@@ -802,7 +797,7 @@ type TryTargetParams struct {
 }
 
 // The item's newest finished station run at station that was a claim's first run: its branch
-// head is recorded (agent_runs_try_target_idx).
+// head is recorded in one of its repositories (agent_runs_try_target_idx, 00132).
 func (q *Queries) TryTarget(ctx context.Context, arg TryTargetParams) (AgentRun, error) {
 	row := q.db.QueryRow(ctx, tryTarget, arg.ItemID, arg.Station)
 	var i AgentRun
@@ -827,9 +822,6 @@ func (q *Queries) TryTarget(ctx context.Context, arg TryTargetParams) (AgentRun,
 		&i.Kind,
 		&i.Brief,
 		&i.Output,
-		&i.BranchHead,
-		&i.BaseHead,
-		&i.PushedHead,
 	)
 	return i, err
 }

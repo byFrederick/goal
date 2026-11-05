@@ -91,10 +91,38 @@ type RunInput struct {
 	// Brief is the brief the agent was given: the bundle's brief (the item's work) and the run's
 	// feedback (its notes, answers and rejections), joined as the worker's prompt joins them.
 	Brief string
-	// BranchHead and BaseHead are the item branch's and its base's commits when prepare checked
+	// Repositories are the repositories prepare checked out, in the order it reported them, each
+	// with its BaseCommit and BranchHead (ADR 0041 decision 5). Read back from the store, each
+	// row is whole: its PushedHead and Wrote too.
+	Repositories []RunRepository
+}
+
+// TryRepository is the repository a try of the run starts from (ADR 0041 decision 17): the first
+// of its repositories with a branch head, false when it recorded none.
+func (in RunInput) TryRepository() (RunRepository, bool) {
+	for _, r := range in.Repositories {
+		if r.BranchHead != "" {
+			return r, true
+		}
+	}
+
+	return RunRepository{}, false
+}
+
+// RunRepository is one repository a run fetched or pushed, as agent_run_repositories keeps it
+// (ADR 0041 decision 5). Empty commits are unknown.
+type RunRepository struct {
+	// Repo is the repository's RepositoryKey. It is empty only on a run recorded before 00132
+	// whose item had no repository row: the repository entry the run's factory version named.
+	Repo string
+	// BaseCommit and BranchHead are the base's and the item branch's commits when prepare checked
 	// the branch out, before it brought the branch up to date with the base.
+	BaseCommit string
 	BranchHead string
-	BaseHead   string
+	// PushedHead is the item branch's commit on the remote when the agent ended.
+	PushedHead string
+	// Wrote reports whether the run pushed a change to the repository.
+	Wrote bool
 }
 
 // ListedRun is a run with the number and title of the item it worked, as the organization's run
@@ -131,9 +159,10 @@ type RunResult struct {
 	SessionID    string
 	// Error explains a failed or cancelled run.
 	Error string
-	// PushedHead is the item branch's commit on the remote when the agent ended, as the worker
-	// read it; empty without a repository or when it could not be read.
-	PushedHead string
+	// Repositories are the repositories the worker reported at the end, each with its PushedHead
+	// and whether it Wrote; none without a repository or when the worker could not read them.
+	// Read back from the store, they are the run's rows with a pushed head or a write, whole.
+	Repositories []RunRepository
 	// Diff is a try's change against the commit it started from, as engine.RunTask read it from
 	// the box once the agent ended; empty for every other run.
 	Diff string

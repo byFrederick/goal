@@ -250,7 +250,7 @@ func (q *Queries) EvidenceItems(ctx context.Context, arg EvidenceItemsParams) ([
 }
 
 const evidenceRuns = `-- name: EvidenceRuns :many
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs WHERE item_id = ANY($1::uuid[]) ORDER BY item_id, started_at, id
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs WHERE item_id = ANY($1::uuid[]) ORDER BY item_id, started_at, id
 `
 
 // The runs of the items, by item, oldest first (agent_runs_item_id_idx).
@@ -284,9 +284,6 @@ func (q *Queries) EvidenceRuns(ctx context.Context, itemIds []uuid.UUID) ([]Agen
 			&i.Kind,
 			&i.Brief,
 			&i.Output,
-			&i.BranchHead,
-			&i.BaseHead,
-			&i.PushedHead,
 		); err != nil {
 			return nil, err
 		}
