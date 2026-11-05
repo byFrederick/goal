@@ -309,7 +309,7 @@ func (t envTest) server(ctx context.Context, name, url string, headers, slots ma
 		return gen.ServerTest{}, secretError(err)
 	}
 
-	r.OK, r.Tools, r.Error = res.OK, res.Tools, res.Error
+	r.OK, r.Tools, r.ReadOnly, r.Error = res.OK, res.Tools, res.ReadOnly, res.Error
 
 	if err := t.s.envTests.Record(ctx, r); err != nil {
 		return gen.ServerTest{}, err
@@ -318,15 +318,20 @@ func (t envTest) server(ctx context.Context, name, url string, headers, slots ma
 	return serverTestOut(r), nil
 }
 
-// template tests template tpl of the catalog with the secrets its slots take: its remote MCP
-// servers (only server, when set), kept as the environment's, and its HTTP test.
+// template tests template tpl of the catalog, resolved with the request's parameters, with the
+// secrets its slots take: its remote MCP servers (only server, when set), kept as the
+// environment's, and its HTTP test. A parameter value the template refuses is
+// errEnvironmentTestInvalid.
 func (t envTest) template(ctx context.Context, tpl gen.EnvironmentTestTemplate, server string, out gen.EnvironmentTestResult) (gen.TestEnvironmentResponseObject, error) {
 	i := slices.IndexFunc(t.s.catalog, func(c domain.ToolTemplate) bool { return c.Name == tpl.Name })
 	if i < 0 {
 		return nil, fmt.Errorf("%w: no template %q", errTemplateNotFound, tpl.Name)
 	}
 
-	c := t.s.catalog[i]
+	c, err := t.s.catalog[i].Resolve(deref(tpl.Parameters))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errEnvironmentTestInvalid, err)
+	}
 
 	servers := slices.Sorted(maps.Keys(c.MCP))
 	if server != "" {

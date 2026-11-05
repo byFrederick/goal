@@ -13,7 +13,7 @@ import (
 )
 
 const environmentTests = `-- name: EnvironmentTests :many
-SELECT org_id, factory_id, environment, server, at, ok, error, tools FROM environment_tests
+SELECT org_id, factory_id, environment, server, at, ok, error, tools, read_only_tools FROM environment_tests
 WHERE $1::uuid IS NULL OR factory_id = $1::uuid
 ORDER BY factory_id, environment, server
 `
@@ -37,6 +37,7 @@ func (q *Queries) EnvironmentTests(ctx context.Context, factoryID *uuid.UUID) ([
 			&i.Ok,
 			&i.Error,
 			&i.Tools,
+			&i.ReadOnlyTools,
 		); err != nil {
 			return nil, err
 		}
@@ -50,23 +51,26 @@ func (q *Queries) EnvironmentTests(ctx context.Context, factoryID *uuid.UUID) ([
 
 const upsertEnvironmentTest = `-- name: UpsertEnvironmentTest :execrows
 
-INSERT INTO environment_tests (factory_id, environment, server, at, ok, error, tools)
-VALUES ($1, $2, $3, $4, $5, $6, $7::text[])
+INSERT INTO environment_tests (factory_id, environment, server, at, ok, error, tools, read_only_tools)
+VALUES ($1, $2, $3, $4, $5, $6, $7::text[],
+  $8::text[])
 ON CONFLICT (org_id, factory_id, environment, server)
-DO UPDATE SET at = EXCLUDED.at, ok = EXCLUDED.ok, error = EXCLUDED.error, tools = EXCLUDED.tools
+DO UPDATE SET at = EXCLUDED.at, ok = EXCLUDED.ok, error = EXCLUDED.error, tools = EXCLUDED.tools,
+  read_only_tools = EXCLUDED.read_only_tools
 `
 
 type UpsertEnvironmentTestParams struct {
-	FactoryID   uuid.UUID
-	Environment string
-	Server      string
-	At          time.Time
-	Ok          bool
-	Error       string
-	Tools       []string
+	FactoryID     uuid.UUID
+	Environment   string
+	Server        string
+	At            time.Time
+	Ok            bool
+	Error         string
+	Tools         []string
+	ReadOnlyTools []string
 }
 
-// Environment tests (ports.EnvironmentTests; migration 00087), under row-level security: every
+// Environment tests (ports.EnvironmentTests; migrations 00087 and 00129), under row-level security: every
 // statement sees the transaction's organization only.
 // org_id comes from its default, goal_org(); a factory the organization does not have violates
 // the foreign key.
@@ -79,6 +83,7 @@ func (q *Queries) UpsertEnvironmentTest(ctx context.Context, arg UpsertEnvironme
 		arg.Ok,
 		arg.Error,
 		arg.Tools,
+		arg.ReadOnlyTools,
 	)
 	if err != nil {
 		return 0, err

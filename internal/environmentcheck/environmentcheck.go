@@ -51,12 +51,14 @@ func Opens(secrets Resolver, use domain.SecretUse) Opener {
 	}
 }
 
-// Result is one server's test: OK with its tools, or Error, scrubbed of every value and cut to
+// Result is one server's test: OK with its tools' names and the names of those the server marked
+// read-only (annotations.readOnlyHint), both sorted, or Error, scrubbed of every value and cut to
 // domain.MaxEnvironmentTestError characters.
 type Result struct {
-	OK    bool
-	Tools []string
-	Error string
+	OK       bool
+	Tools    []string
+	ReadOnly []string
+	Error    string
 }
 
 // Server tests the remote MCP server at url: it opens the secrets headers refer to with open (or
@@ -76,12 +78,21 @@ func Server(ctx context.Context, tools ports.ToolLister, open Opener, url string
 		}
 	}
 
-	names, err := tools.ListTools(ctx, ports.MCPEndpoint{URL: url, Headers: Render(headers, values)})
+	listed, err := tools.ListTools(ctx, ports.MCPEndpoint{URL: url, Headers: Render(headers, values)})
 	if err != nil {
 		return Result{Error: Scrub(err.Error(), values)}, nil
 	}
 
-	return Result{OK: true, Tools: names}, nil
+	r := Result{OK: true, Tools: make([]string, 0, len(listed))}
+
+	for _, t := range listed {
+		r.Tools = append(r.Tools, t.Name)
+		if t.ReadOnly {
+			r.ReadOnly = append(r.ReadOnly, t.Name)
+		}
+	}
+
+	return r, nil
 }
 
 // Referenced are the secrets values refer to, sorted, each once.
