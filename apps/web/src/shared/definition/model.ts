@@ -17,6 +17,16 @@ export interface Repository {
   token?: string;
 }
 
+/** One runtime.repositories entry (ADR 0041): a repository, or an owner's every repository (…/acme/*). */
+export interface RepositoryEntry {
+  name: string;
+  url: string;
+  /** The {{secret}} that opens it; absent for a public repository that is read. */
+  token?: string;
+  access: 'read' | 'write';
+  default?: boolean;
+}
+
 /** Each run's box (runtime.size); medium when absent. */
 export type SandboxSize = 'small' | 'medium' | 'large';
 
@@ -33,6 +43,8 @@ export interface BasicsSection {
   /** runtime.tools: mise tool specs every run installs after the repository's own. */
   tools?: string[];
   repository?: Repository | null;
+  /** runtime.repositories: the repositories runs may open, each with its access. */
+  repositories?: RepositoryEntry[];
   /** knowledge.sources: the organization's knowledge sources the factory may search. */
   knowledge_sources?: (string | KnowledgeEntry)[];
   // Removed in phase 4 (field-removed): present while factory.yaml has them, so their fixes apply.
@@ -120,6 +132,8 @@ export interface Prompt {
 export interface ModelAgent {
   name: string;
   description?: string;
+  /** Whether the agent may push, open pull requests and merge (write) or only read; unset follows the repositories. */
+  code?: 'write' | 'read';
   prompt?: Prompt;
   model?: string;
   max_turns?: number;
