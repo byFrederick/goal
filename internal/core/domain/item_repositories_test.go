@@ -408,3 +408,67 @@ func TestAppendRepositories_NextOrdinalsUpToTheCap(t *testing.T) {
 		t.Errorf("a full item gains %+v; want none", got)
 	}
 }
+
+// RepositoriesFrom resolves the mapped field's names as filing does, once each and in order;
+// an unmapped, missing or null field names none, and a value that is not a list of strings or
+// that no entry resolves is ErrBadRepositories quoting the value.
+func TestRepositoriesFrom(t *testing.T) {
+	t.Parallel()
+
+	const repos = "repos"
+
+	l := repoLine(entryAPI)
+
+	tests := []struct {
+		name, field, output string
+		want                []string
+		bad                 string
+	}{
+		{name: "field unmapped", output: `{"repos":["api"]}`},
+		{name: "field missing", field: repos, output: `{}`},
+		{name: "field null", field: repos, output: `{"repos":null}`},
+		{name: "output an array", field: repos, output: `[]`},
+		{
+			name: "names resolved", field: repos,
+			output: `{"repos":["acme-labs/web","api","https://github.com/acme/api","github.com/Acme-Labs/Web"]}`,
+			want:   []string{keyLabsWeb, keyAPI},
+		},
+		{name: "a string", field: repos, output: `{"repos":"api"}`, bad: `"api"`},
+		{name: "numbers", field: repos, output: `{"repos":[1]}`, bad: `[1]`},
+		{name: "not the factory's", field: repos, output: `{"repos":["api","acme/unknown"]}`, bad: `"acme/unknown"`},
+	}
+
+	for _, tt := range tests {
+		got, err := RepositoriesFrom([]byte(tt.output), tt.field, l)
+
+		switch {
+		case tt.bad != "":
+			if !errors.Is(err, ErrBadRepositories) || !strings.Contains(err.Error(), tt.bad) {
+				t.Errorf("%s: err = %v; want ErrBadRepositories quoting %s", tt.name, err, tt.bad)
+			}
+		case err != nil || !reflect.DeepEqual(got, tt.want):
+			t.Errorf("%s: RepositoriesFrom = %v, %v; want %v", tt.name, got, err, tt.want)
+		}
+	}
+}
+
+// OutputRepositories are the keys an item lacks; more than MaxItemRepositories with the item's
+// own is ErrBadRepositories giving the count and the cap.
+func TestOutputRepositories_PastTheCapFails(t *testing.T) {
+	t.Parallel()
+
+	have := make([]ItemRepository, MaxItemRepositories-1)
+	for i := range have {
+		have[i] = ItemRepository{Repo: "github.com/acme-labs/r" + string(rune('a'+i)), Ordinal: i}
+	}
+
+	got, err := OutputRepositories(have, []string{have[0].Repo, keyAPI})
+	if err != nil || !reflect.DeepEqual(got, []string{keyAPI}) {
+		t.Errorf("OutputRepositories = %v, %v; want [%s]", got, err, keyAPI)
+	}
+
+	_, err = OutputRepositories(have, []string{keyAPI, keyLabsWeb})
+	if !errors.Is(err, ErrBadRepositories) || !strings.Contains(err.Error(), "11 repositories") || !strings.Contains(err.Error(), "10") {
+		t.Errorf("past the cap: err = %v; want ErrBadRepositories with 11 and 10", err)
+	}
+}

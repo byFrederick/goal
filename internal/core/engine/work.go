@@ -41,6 +41,8 @@ type checked struct {
 	next  domain.Line
 	// close is the reason the output closes its item with (domain.CloseFrom); "" when it does not.
 	close string
+	// repositories are the keys the output adds to its item (repositoriesOf).
+	repositories []string
 }
 
 // claimed is an item this instance holds a lease on at an agent station.
@@ -401,7 +403,7 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
 	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
 		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, domain.ErrBadClose) ||
-		errors.Is(err, errCheckFailed)
+		errors.Is(err, domain.ErrBadRepositories) || errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
@@ -426,8 +428,8 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 
 // check validates an output against the station's contract (of the version the run started
 // on), at a gate reads its verdict and, when the output is not a rejection, the items it says
-// the work follows (followed), its close (closeOf) and, when the current line materializes plans,
-// its plan. The current line is read once here and finish moves the item along the same one, so a
+// the work follows (followed), its close (closeOf), the repositories it adds to its item
+// (repositoriesOf) and, when the current line materializes plans, its plan. The current line is read once here and finish moves the item along the same one, so a
 // plan is assembled only by a line that parsed it.
 func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (checked, error) {
 	if c.station.Output != "" {
@@ -457,6 +459,10 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	}
 
 	chk.close = reason
+
+	if chk.repositories, err = e.repositoriesOf(ctx, c, output); err != nil {
+		return checked{}, err
+	}
 
 	after, err := e.followed(ctx, c, output, chk.next.Flow.Dependencies.After)
 	if err != nil {
@@ -508,6 +514,25 @@ func closeOf(c claimed, output json.RawMessage, next domain.Line) (string, error
 	}
 
 	return reason, nil
+}
+
+// repositoriesOf are the repositories the output names in the field the line maps
+// (flow.outputs.repositories) that its item lacks, resolved against the version the run started
+// on: domain.ErrBadRepositories when one is not the factory's, or when they would give the item
+// more than domain.MaxItemRepositories with its rows, this run's pushes included (FinishRun joined
+// them before the check). None when the output names none.
+func (e *Engine) repositoriesOf(ctx context.Context, c claimed, output json.RawMessage) ([]string, error) {
+	keys, err := domain.RepositoriesFrom(output, c.line.Flow.Outputs.Repositories, c.line)
+	if err != nil || len(keys) == 0 {
+		return nil, err
+	}
+
+	have, err := e.store.ItemRepositories(ctx, c.item.ID)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of item %s: %w", c.item.ID, err)
+	}
+
+	return domain.OutputRepositories(have, keys)
 }
 
 // runOnce runs the claim's next run with the shared run lifecycle (runTask) under the claim's
@@ -803,7 +828,7 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 
 // finish moves an item whose output passed its checks, with an event for each declared rule the
 // output says was broken (violations) and the paths it lists in the field the line maps
-// (flow.dependencies.paths) and the follow-ups of run it holds (followUps), with the base commit it was planned against (baseCommit): through the gate's verdict when the
+// (flow.dependencies.paths), the follow-ups of run it holds (followUps) and the repositories it adds (chk.repositories), with the base commit it was planned against (baseCommit): through the gate's verdict when the
 // station has one, to cancelled at its station when its output closes the item (closeItem), into
 // state assembly when its output has a plan (assemble), otherwise to the next station. An approving gate whose action is merge leaves the merge to a person when the
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
@@ -818,6 +843,7 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
 		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), BaseCommit: e.baseCommit(ctx, log, c),
 		Output: output, At: e.clock.Now(), FollowUps: followUps(c, run, output),
+		Repositories: chk.repositories,
 	}
 	t.Events = e.violations(ctx, log, c, output, t.At)
 
