@@ -55,34 +55,30 @@ func (e *Engine) itemCodeRepositories(ctx context.Context, l domain.Line, item d
 // repositoryURL is the https URL of the repository key names.
 func repositoryURL(key string) string { return "https://" + key }
 
-// repositoryHost is the repository at url on one of the organization's code hosts, opened for the
-// engine's use on the item, with the code host that serves it and its token: the token of the
-// entry of runtime.repositories that covers it, a read entry's first (domain.TokenEntry), opened
-// through OrgSecrets for the line's factory; for a repository no entry with a token covers, the
-// line's code host connection or runtime.repository.token (mergeTargets).
+// repositoryHost is the repository at url (a repository's, or a pull request's) on one of the
+// organization's code hosts, opened for the engine's use on the item to read, with the code host
+// that serves it and its token: the token of the entry of runtime.repositories that covers it, a
+// read entry's first (domain.TokenEntry), opened through OrgSecrets for the line's factory
+// (entryToken); for a repository no entry with a token covers, the line's code host connection or
+// runtime.repository.token (loginTargets). Merges pick their tokens with mergeTargets instead.
 func (e *Engine) repositoryHost(ctx context.Context, l domain.Line, it domain.Item, url string) (mergeTarget, error) {
-	entry, ok := domain.TokenEntry(l.Runtime.Repositories, url, true)
+	targets, err := e.codeRepositories(ctx, l, []string{url})
+	if err != nil {
+		return mergeTarget{}, err
+	}
+
+	entry, ok := domain.TokenEntry(l.Runtime.Repositories, targets[0].repo.Key(), true)
 	if !ok || entry.Token == "" {
-		targets, err := e.mergeTargets(ctx, l, []string{url}, domain.ConnectionUse{By: domain.EngineActor, Item: it.ID})
-		if err != nil {
+		if targets, err = e.loginTargets(ctx, l, []string{url}, domain.ConnectionUse{By: domain.EngineActor, Item: it.ID}); err != nil {
 			return mergeTarget{}, err
 		}
 
 		return targets[0], nil
 	}
 
-	targets, err := e.codeRepositories(ctx, l, []string{url})
-	if err != nil {
+	if targets[0].token, err = e.entryToken(ctx, l, entry); err != nil {
 		return mergeTarget{}, err
 	}
-
-	values, err := e.openSecrets(ctx, domain.SecretNames(entry.Token), domain.SecretUse{Factory: l.FactoryID}, "",
-		"runtime.repositories "+entry.Name+" token")
-	if err != nil {
-		return mergeTarget{}, err
-	}
-
-	targets[0].token = domain.FillSecrets(entry.Token, values)
 
 	return targets[0], nil
 }

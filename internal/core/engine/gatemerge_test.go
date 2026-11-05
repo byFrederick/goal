@@ -614,8 +614,15 @@ func TestGateMerge_BlocksAfterTheDeferralLimit(t *testing.T) {
 
 // expectDeferredAtGate fails unless item is queued at the review gate, its latest events are
 // gate_approved then a merge_deferred by the engine counting deferrals in a row, whose reason
-// says reason, and it has no merged event.
+// says reason, for app#7, and it has no merged event.
 func (h *harness) expectDeferredAtGate(t *testing.T, item domain.ItemID, deferrals int, reason string) {
+	t.Helper()
+
+	h.expectDeferredFor(t, item, prURL, deferrals, reason)
+}
+
+// expectDeferredFor is expectDeferredAtGate for the pull request at url.
+func (h *harness) expectDeferredFor(t *testing.T, item domain.ItemID, url string, deferrals int, reason string) {
 	t.Helper()
 
 	if got := h.item(t, item); got.Position() != (domain.Position{Station: stReview, State: domain.StateQueued}) {
@@ -631,12 +638,71 @@ func (h *harness) expectDeferredAtGate(t *testing.T, item domain.ItemID, deferra
 	last := deferred[len(deferred)-1]
 
 	if r, _ := last.Data["reason"].(string); !strings.Contains(r, reason) || last.Actor != domain.ActorEngine ||
-		last.Station != stReview || last.Data["pull_request"] != prURL || last.Data["deferrals"] != deferrals {
+		last.Station != stReview || last.Data["pull_request"] != url || last.Data["deferrals"] != deferrals {
 		t.Errorf("merge_deferred %+v by %s at %s; want by the engine at the gate, for %s, deferral %d, its reason saying %q",
-			last.Data, last.Actor, last.Station, prURL, deferrals, reason)
+			last.Data, last.Actor, last.Station, url, deferrals, reason)
 	}
 
 	if merged := h.eventsOf(item, domain.EventMerged); len(merged) != 0 {
 		t.Errorf("merged events %+v, want none on a deferred item", merged)
+	}
+}
+
+// twoRepositoryGate is a harness on gateMergeLine with two write entries whose build opens a
+// pull request in each repository, app#7 then web#5, from the item's branch.
+func twoRepositoryGate(t *testing.T) (*harness, domain.Item) {
+	t.Helper()
+
+	h := newHarness(t, withEntries(gateMergeLine()), byAgent(map[string]string{
+		agWorker: `{"pull_requests":["` + prURL + `","` + webPR + `"]}`, agReviewer: approve,
+	}))
+	h.addSecrets(t)
+	h.addSecret(t, secAcmeRead, acmeReadValue)
+	h.codehost.Add(openPR(prURL))
+	h.codehost.Add(openPR(webPR))
+
+	return h, h.submit(t, domain.NewItem{})
+}
+
+// A conflict in the second repository sends the item back to build; the first repository's pull
+// request stays merged.
+func TestGateMerge_ConflictInTheSecondRepositoryReworks(t *testing.T) {
+	t.Parallel()
+
+	h, it := twoRepositoryGate(t)
+	h.codehost.Conflict(webPR, "go.mod")
+
+	h.step(t)
+	h.step(t)
+
+	if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stBuild, State: domain.StateQueued}) {
+		t.Fatalf("item at %+v, want queued at build (events %v)", got.Position(), h.kinds(it.ID))
+	}
+
+	conflicts := h.eventsOf(it.ID, domain.EventMergeConflict)
+	if len(conflicts) != 1 || conflicts[0].Data["pull_request"] != webPR {
+		t.Errorf("merge_conflict events %+v, want one naming web#5", conflicts)
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{entrySquash(prURL, githubTokenValue)}) {
+		t.Errorf("merges %+v, want app#7 alone, with the app entry's token", merges)
+	}
+}
+
+// A pull request in the second repository that is not mergeable yet sends the item back to the
+// gate's queue.
+func TestGateMerge_NotMergeableYetInTheSecondRepositoryDefers(t *testing.T) {
+	t.Parallel()
+
+	h, it := twoRepositoryGate(t)
+	h.codehost.RefuseMerges(webPR, 1)
+
+	h.step(t)
+	h.step(t)
+
+	h.expectDeferredFor(t, it.ID, webPR, 1, "required checks")
+
+	if merges := h.codehost.Merges(); len(merges) != 2 || merges[0] != entrySquash(prURL, githubTokenValue) || merges[1].Token != acmeReadValue {
+		t.Errorf("merges %+v, want app#7 with the app entry's token, then web#5's refused one with the web entry's", merges)
 	}
 }

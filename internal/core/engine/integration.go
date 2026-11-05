@@ -135,15 +135,15 @@ func (e *Engine) setIntegrationBranch(ctx context.Context, log *slog.Logger, l d
 	return root, nil
 }
 
-// pullRequestBase reads the branch the pull request at url was opened against, through the
-// line's code host connection for its host (mergeTargets).
+// pullRequestBase reads the branch the pull request at url was opened against, signed in to its
+// repository as reads are (repositoryHost).
 func (e *Engine) pullRequestBase(ctx context.Context, l domain.Line, it domain.Item, url string) (string, error) {
-	targets, err := e.mergeTargets(ctx, l, []string{url}, domain.ConnectionUse{By: domain.EngineActor, Item: it.ID})
+	t, err := e.repositoryHost(ctx, l, it, url)
 	if err != nil {
 		return "", fmt.Errorf("the base of pull request %s: %w", url, err)
 	}
 
-	pr, err := targets[0].host.PullRequest(ctx, targets[0].repo, targets[0].token, url)
+	pr, err := t.host.PullRequest(ctx, t.repo, t.token, url)
 	if err != nil {
 		return "", fmt.Errorf("read pull request %s: %w", url, err)
 	}
