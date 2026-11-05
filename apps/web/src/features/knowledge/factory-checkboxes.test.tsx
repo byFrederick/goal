@@ -6,9 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listInDraft, listInDrafts } from './draft';
 import { FactoryCheckboxes } from './factory-checkboxes';
 
-const files = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), publish: vi.fn() }));
+const files = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), open: vi.fn(async () => ({})), publish: vi.fn() }));
 vi.mock('../../api/definitions', () => ({
   getDraftFile: files.get,
+  openDraft: files.open,
   putDraftFile: files.put,
   publishDraft: files.publish,
 }));

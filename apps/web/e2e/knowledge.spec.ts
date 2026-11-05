@@ -339,7 +339,9 @@ test.describe('phone tap areas at 390 px', () => {
     };
     await page.goto('/o/acme/knowledge');
     await apart(page.getByRole('table', { name: 'Most read files' }).getByRole('link'));
-    await page.goto('/o/acme/knowledge?q=md');
+    // Find a file matches the start of a path or title (ADR 0038, findKnowledgeFiles), so a query for a
+    // file extension finds nothing: "a" starts api-latency.md and AGENTS.md, in two sources.
+    await page.goto('/o/acme/knowledge?q=a');
     await apart(page.getByRole('list', { name: 'Files found' }).getByRole('link'));
   });
 });

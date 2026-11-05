@@ -85,7 +85,7 @@ export function ProblemsPanel({ problems, onGo, headingId }: ProblemsPanelProps)
                   <button
                     type="button"
                     onClick={() => onGo(p)}
-                    className="text-ink-soft underline underline-offset-3 hover:text-ink"
+                    className="relative text-ink-soft underline underline-offset-3 hover:text-ink max-md:before:absolute max-md:before:inset-x-0 max-md:before:top-1/2 max-md:before:h-11 max-md:before:-translate-y-1/2 max-md:before:content-['']"
                   >
                     {problemLocation(p)}
                   </button>
