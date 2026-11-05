@@ -78,6 +78,16 @@ describe('the knowledge source page', () => {
     expect(table.parentElement?.className).toContain('overflow-x-auto');
   });
 
+  it('lets a keyboard reach the files scroller: a focusable region named Files table', async () => {
+    renderSource();
+
+    const region = await screen.findByRole('region', { name: 'Files table' });
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain('overflow-x-auto');
+    expect(region.className).toContain('focus-visible:outline-run');
+    expect(within(region).getByRole('table', { name: 'Files of runbooks' })).toBeTruthy();
+  });
+
   it('shows the files with their reads, the latest sync, the settings, the line agents see and who reads it', async () => {
     renderSource();
 

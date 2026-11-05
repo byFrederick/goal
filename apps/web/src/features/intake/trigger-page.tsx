@@ -354,9 +354,16 @@ function TriggerEditor({ org, factory, text, saved, blank, board, detail }: Edit
                 </Link>
               </div>
               {saved ? (
-                <pre className="m-0 overflow-x-auto rounded-cell border border-line bg-panel p-3 font-mono text-meta leading-relaxed text-ink">
-                  <HighlightedYaml text={triggerYaml(saved)} />
-                </pre>
+                <section
+                  aria-label="Trigger file"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+                  tabIndex={0}
+                  className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+                >
+                  <pre className="m-0 w-max min-w-full rounded-cell border border-line bg-panel p-3 font-mono text-meta leading-relaxed text-ink">
+                    <HighlightedYaml text={triggerYaml(saved)} />
+                  </pre>
+                </section>
               ) : (
                 <p className="m-0 text-secondary text-muted">Not in the definition yet. Save to add it.</p>
               )}

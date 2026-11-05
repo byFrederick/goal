@@ -80,7 +80,7 @@ export function KpiTile({
       className={cn('flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card px-4 pt-4 pb-3', className)}
     >
       <span className="text-secondary text-ink-soft">{label}</span>
-      <p className="m-0 flex items-baseline text-kpi tabular-nums">
+      <p className="m-0 flex min-w-0 flex-wrap items-baseline break-words text-kpi tabular-nums">
         {value}
         {unit ? <span className="ml-1 text-body font-medium text-ink-soft">{unit}</span> : null}
       </p>

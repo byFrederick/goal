@@ -94,3 +94,26 @@ test('the 24-part assembly fits a phone, on its page and in the Items list', asy
   const fits = await meter.evaluate((el) => el.getBoundingClientRect().right <= document.documentElement.clientWidth);
   expect(fits).toBe(true);
 });
+
+// A Progress figure of any length stays inside its stat cell at 390 px (the figures wrap between words). Not run in the build box.
+for (const theme of ['light', 'dark'] as const) {
+  test(`the Progress figures stay inside their cells at 390, ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
+    await page.goto('/o/acme/f/goal/items/17');
+    const progress = page.getByRole('region', { name: 'Assembly figures' });
+    await expect(progress).toBeVisible();
+    const outside = await progress.evaluate(
+      (strip) =>
+        [...strip.children].filter((cell) => {
+          const cellBox = cell.getBoundingClientRect();
+          return [...cell.querySelectorAll('.text-kpi')].some((fig) => {
+            const b = fig.getBoundingClientRect();
+            return b.left < cellBox.left - 1 || b.right > cellBox.right + 1;
+          });
+        }).length,
+    );
+    expect(outside).toBe(0);
+    await expectNoHorizontalScroll(page);
+  });
+}
