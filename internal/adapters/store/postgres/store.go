@@ -824,21 +824,37 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			return nil
 		}
 
-		if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: *item, CostUsd: res.CostUSD}); err != nil {
-			return err
-		}
-
-		return appendEvents(ctx, q, []domain.Event{{
-			FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: domain.ItemID(item.String()), RunID: id,
-			At: endedAt, Kind: domain.EventRunFinished, Station: row.Station, Actor: row.Agent,
-			Data: runFinished(res),
-		}})
+		return finishRunItem(ctx, q, id, run, *item, row, res, endedAt)
 	})
 	if err != nil {
 		return fmt.Errorf("finish run %s: %w", id, err)
 	}
 
 	return nil
+}
+
+// finishRunItem is FinishRun's part for the run's item, which the caller has locked: the
+// repositories the run wrote join the item (ADR 0041 decision 5), its cost adds to the item's and
+// a run_finished event is appended.
+func finishRunItem(ctx context.Context, q *db.Queries, id domain.RunID, run, item uuid.UUID, row db.FinishRunRow, res domain.RunResult, endedAt time.Time) error {
+	wrote, err := wroteRepositories(ctx, q, run)
+	if err == nil {
+		err = joinItemRepositories(ctx, q, item, domain.JoinedPush, wrote, endedAt)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: item, CostUsd: res.CostUSD}); err != nil {
+		return err
+	}
+
+	return appendEvents(ctx, q, []domain.Event{{
+		FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: domain.ItemID(item.String()), RunID: id,
+		At: endedAt, Kind: domain.EventRunFinished, Station: row.Station, Actor: row.Agent,
+		Data: runFinished(res),
+	}})
 }
 
 // RecordRunInput implements ports.Store.

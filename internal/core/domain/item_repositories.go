@@ -124,14 +124,20 @@ func fileRepositories(l Line, named, inherited []string) ([]ItemRepository, erro
 }
 
 // JoinRepositories are the rows an item that has have gains from keys, the repositories
-// (RepositoryKey) of the items it comes from: each key one of l's entries covers and have lacks,
-// once and in order, joined filing at time at with the next ordinal, until the item has
-// MaxItemRepositories. The rest are left out without an error.
+// (RepositoryKey) of the items it comes from: each key one of l's entries covers, joined filing
+// at time at (AppendRepositories). The rest are left out without an error.
 func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time) []ItemRepository {
 	entries := l.repositoryEntries()
-	out, _ := joinKeys(have, keys, at, func(key string) bool { return coveredBy(entries, key) })
 
-	return out
+	covered := make([]string, 0, len(keys))
+
+	for _, raw := range keys {
+		if key, ok := RepositoryKey(raw); ok && coveredBy(entries, key) {
+			covered = append(covered, key)
+		}
+	}
+
+	return AppendRepositories(have, JoinedFiling, covered, at)
 }
 
 // JoinIntegration are the rows an assembly that has have gains for its integration branch from
@@ -140,12 +146,21 @@ func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time
 // The parts' repositories were covered when they joined, so no entry is asked again. left are the
 // keys past the cap, which get no integration branch.
 func JoinIntegration(have []ItemRepository, keys []string, at time.Time) (joins []ItemRepository, left []string) {
-	return joinKeys(have, keys, at, func(string) bool { return true })
+	return appendKeys(have, JoinedFiling, keys, at)
 }
 
-// joinKeys are the rows of keep's keys have lacks, once and in order, joined filing at time at
-// with the next ordinal while the item has room, and the keys left for want of it.
-func joinKeys(have []ItemRepository, keys []string, at time.Time, keep func(key string) bool) (out []ItemRepository, left []string) {
+// AppendRepositories are the rows an item that has have gains from keys (RepositoryKey): each
+// key have lacks, once and in order, joined as joined at time at with the next ordinal, until
+// the item has MaxItemRepositories. A value that is no key and the rest past the cap are left
+// out without an error.
+func AppendRepositories(have []ItemRepository, joined RepositoryJoin, keys []string, at time.Time) []ItemRepository {
+	out, _ := appendKeys(have, joined, keys, at)
+
+	return out
+}
+
+// appendKeys are AppendRepositories' rows and the keys left out past the cap, once and in order.
+func appendKeys(have []ItemRepository, joined RepositoryJoin, keys []string, at time.Time) (out []ItemRepository, left []string) {
 	next := len(have)
 
 	for _, r := range have {
@@ -154,7 +169,7 @@ func joinKeys(have []ItemRepository, keys []string, at time.Time, keep func(key 
 
 	for _, raw := range keys {
 		key, ok := RepositoryKey(raw)
-		if !ok || !keep(key) {
+		if !ok {
 			continue
 		}
 
@@ -169,7 +184,7 @@ func joinKeys(have []ItemRepository, keys []string, at time.Time, keep func(key 
 			continue
 		}
 
-		out = append(out, ItemRepository{Repo: key, Joined: JoinedFiling, JoinedAt: at, Ordinal: next})
+		out = append(out, ItemRepository{Repo: key, Joined: joined, JoinedAt: at, Ordinal: next})
 		next++
 	}
 

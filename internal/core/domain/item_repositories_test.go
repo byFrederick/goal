@@ -418,3 +418,23 @@ func TestJoinIntegration_JoinsWhatTheAssemblyLacksUpToTheCap(t *testing.T) {
 		t.Errorf("an assembly with room for one gains %+v, left %v; want %s, %s left", joins, left, keyAPI, keyLabsWeb)
 	}
 }
+
+func TestAppendRepositories_NextOrdinalsUpToTheCap(t *testing.T) {
+	t.Parallel()
+
+	have := []ItemRepository{{Repo: keyAPI, Joined: JoinedFiling}}
+	got := AppendRepositories(have, JoinedPush, []string{keyAPI, "not a key", keyLabsWeb, keyLabsWeb}, fileAt)
+
+	if want := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedPush, JoinedAt: fileAt, Ordinal: 1}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("AppendRepositories = %+v; want %+v", got, want)
+	}
+
+	full := make([]ItemRepository, MaxItemRepositories)
+	for i := range full {
+		full[i] = ItemRepository{Repo: "github.com/acme-labs/r" + string(rune('a'+i)), Ordinal: i}
+	}
+
+	if got := AppendRepositories(full, JoinedPush, []string{keyLabsWeb}, fileAt); len(got) != 0 {
+		t.Errorf("a full item gains %+v; want none", got)
+	}
+}
