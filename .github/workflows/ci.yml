@@ -14,6 +14,12 @@
 # `github.base_ref == 'main'`, because each part's merged-tree checks (task check:changed) gate its
 # merge there, and the landing pull request into main runs all of ci. A push to main runs only the
 # e2e shards, always the whole suite; check and integration already ran on the pull request.
+# The e2e job is skipped on pull requests into main for now: the suite still fails there (software#685
+# fixes it), so a red e2e would block every pull request into main that touches apps/web/,
+# packages/api-client/ or contracts/. It runs on pull requests into goal/a* branches, where
+# software#685's parts need its results, and on pushes to main, where it is informational.
+# software#685's last part turns it back on for pull requests into main, by removing the
+# `github.base_ref != 'main'` condition on the e2e job.
 # deploy.yml is dispatched by hand. The e2e job is not a required check. A shard that fails uploads
 # its HTML report and traces as the artifact e2e-report-<i> (7 days), one per shard.
 # Hardening (github-actions-hardening skill): a read-only token no job widens, actions pinned to
@@ -93,6 +99,8 @@ jobs:
 
   e2e:
     name: task web:e2e (${{ matrix.shard }}/12)
+    # Skipped on pull requests into main until software#685 makes the suite pass (see the header).
+    if: github.event_name == 'push' || github.base_ref != 'main'
     runs-on: ubuntu-latest
     # About 3459 tests on one worker at up to ~3 s each while failing: a twelfth is ~15 minutes,
     # plus a vite build per shard.

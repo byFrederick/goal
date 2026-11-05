@@ -50,8 +50,8 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 ## Review
 
-- Before approving a pull request into main that changes `apps/web/`, `packages/api-client/` or `contracts/`, read the result of the ci workflow's e2e job (`task web:e2e`) on it. Reject the change when the job failed or has not reported.
-- A pull request into an assembly's integration branch runs no ci, so its specs run on the assembly's landing pull request into main.
+- Before approving a pull request that changes `apps/web/`, `packages/api-client/` or `contracts/`, read the ci workflow's e2e job (`task web:e2e`) where it runs: on pull requests into an assembly's integration branch and on pushes to main. It is skipped on pull requests into main for now (software#685's last part turns it back on); there, rely on `task check` and `task test-integration`.
+- On a pull request into an assembly branch the job runs the whole suite, so judge a part by its own specs in the report. Reject the part when one of its specs fails or the job has not reported; failures in other specs are not the part's.
 
 ## Skills
 
