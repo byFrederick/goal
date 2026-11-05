@@ -1616,7 +1616,7 @@ export interface paths {
         put?: never;
         /**
          * Submit a work item to a factory's first station
-         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
          */
         post: operations["submitItem"];
         delete?: never;
@@ -4727,6 +4727,23 @@ export interface components {
             priority?: number;
             /** @description When the item may start; absent, as soon as it can */
             start?: components["schemas"]["Start"];
+            /** @description The repositories the item works on, in order, the first being its first repository (ADR 0041 decision 4). Each is a runtime.repositories entry's name, owner/name (or group/sub/name) under one of the entries' hosts, host/owner/name or an https URL, that an entry covers. Values naming the same repository count once. Absent or empty, the factory's default entry's, or none without a default entry */
+            repositories?: string[];
+        };
+        /** @description One repository of an item and how it joined it (ADR 0041 decision 4) */
+        ItemRepository: {
+            /** @description The repository's normalized host/owner/name in lower case, as in github.com/acme/api */
+            repo: string;
+            /**
+             * @description How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+             * @enum {string}
+             */
+            joined: "filing" | "default" | "push" | "output";
+            /**
+             * Format: date-time
+             * @description When it joined; absent for an older item's default entry, resolved when it is read
+             */
+            joined_at?: string;
         };
         /** @description When an item may start (ADR 0040): at a time, after a wait, after other items, or a time and items. at and in cannot both be set. The start is at most 365 days ahead. */
         Start: {
@@ -4947,6 +4964,10 @@ export interface components {
             question?: components["schemas"]["ItemQuestion"] | null;
             /** @description The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none */
             tool_approval?: components["schemas"]["ToolApproval"] | null;
+            /** @description The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it */
+            branch?: string;
+            /** @description The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only. An item filed before repositories shows the factory's default entry's, and an item of a factory without code none */
+            repositories?: components["schemas"]["ItemRepository"][];
         };
         /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
         ToolApproval: {

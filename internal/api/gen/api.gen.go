@@ -1134,6 +1134,30 @@ func (e ItemLinkKind) Valid() bool {
 	}
 }
 
+// Defines values for ItemRepositoryJoined.
+const (
+	ItemRepositoryJoinedDefault ItemRepositoryJoined = "default"
+	ItemRepositoryJoinedFiling  ItemRepositoryJoined = "filing"
+	ItemRepositoryJoinedOutput  ItemRepositoryJoined = "output"
+	ItemRepositoryJoinedPush    ItemRepositoryJoined = "push"
+)
+
+// Valid indicates whether the value is a known member of the ItemRepositoryJoined enum.
+func (e ItemRepositoryJoined) Valid() bool {
+	switch e {
+	case ItemRepositoryJoinedDefault:
+		return true
+	case ItemRepositoryJoinedFiling:
+		return true
+	case ItemRepositoryJoinedOutput:
+		return true
+	case ItemRepositoryJoinedPush:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ItemState.
 const (
 	ItemStateAssembly     ItemState = "assembly"
@@ -1409,16 +1433,16 @@ func (e LeadTimeBridgeStatus) Valid() bool {
 
 // Defines values for LineReleasePolicy.
 const (
-	DrumBufferRope LineReleasePolicy = "drum-buffer-rope"
-	Push           LineReleasePolicy = "push"
+	LineReleasePolicyDrumBufferRope LineReleasePolicy = "drum-buffer-rope"
+	LineReleasePolicyPush           LineReleasePolicy = "push"
 )
 
 // Valid indicates whether the value is a known member of the LineReleasePolicy enum.
 func (e LineReleasePolicy) Valid() bool {
 	switch e {
-	case DrumBufferRope:
+	case LineReleasePolicyDrumBufferRope:
 		return true
-	case Push:
+	case LineReleasePolicyPush:
 		return true
 	default:
 		return false
@@ -4892,6 +4916,9 @@ type Item struct {
 	Assembly *PartOf `json:"assembly,omitempty"`
 	Body     string  `json:"body"`
 
+	// Branch The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it
+	Branch *string `json:"branch,omitempty"`
+
 	// CameFrom Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the follow-ups filed as it, or its trigger; getItem only, absent unless origin is follow-up or trigger
 	CameFrom       *ItemCameFrom  `json:"came_from,omitempty"`
 	ClassOfService ClassOfService `json:"class_of_service"`
@@ -4939,8 +4966,11 @@ type Item struct {
 	Question *ItemQuestion `json:"question,omitempty"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string `json:"ref"`
-	ReworkCount int    `json:"rework_count"`
+	Ref string `json:"ref"`
+
+	// Repositories The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only. An item filed before repositories shows the factory's default entry's, and an item of a factory without code none
+	Repositories *[]ItemRepository `json:"repositories,omitempty"`
+	ReworkCount  int               `json:"rework_count"`
 
 	// Start When the item may start, absent when it may start now; it waits at the first station until then (ADR 0040). Its after items are its needs
 	Start *ItemStart `json:"start,omitempty"`
@@ -5187,6 +5217,21 @@ type ItemQuestion struct {
 	// Text The question
 	Text string `json:"text"`
 }
+
+// ItemRepository One repository of an item and how it joined it (ADR 0041 decision 4)
+type ItemRepository struct {
+	// Joined How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+	Joined ItemRepositoryJoined `json:"joined"`
+
+	// JoinedAt When it joined; absent for an older item's default entry, resolved when it is read
+	JoinedAt *time.Time `json:"joined_at,omitempty"`
+
+	// Repo The repository's normalized host/owner/name in lower case, as in github.com/acme/api
+	Repo string `json:"repo"`
+}
+
+// ItemRepositoryJoined How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+type ItemRepositoryJoined string
 
 // ItemSpan A stretch of time the item spent at one station in one state and rework round
 type ItemSpan struct {
@@ -6109,6 +6154,9 @@ type NewItem struct {
 	Body     *string `json:"body,omitempty"`
 	Lane     *string `json:"lane,omitempty"`
 	Priority *int    `json:"priority,omitempty"`
+
+	// Repositories The repositories the item works on, in order, the first being its first repository (ADR 0041 decision 4). Each is a runtime.repositories entry's name, owner/name (or group/sub/name) under one of the entries' hosts, host/owner/name or an https URL, that an entry covers. Values naming the same repository count once. Absent or empty, the factory's default entry's, or none without a default entry
+	Repositories *[]string `json:"repositories,omitempty"`
 
 	// Start When the item may start; absent, as soon as it can
 	Start *Start `json:"start,omitempty"`
@@ -10834,7 +10882,7 @@ type ClientInterface interface {
 
 	// SubmitItemWithBody Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10843,7 +10891,7 @@ type ClientInterface interface {
 
 	// SubmitItem Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -14038,7 +14086,7 @@ func (c *Client) ListItems(ctx context.Context, org OrgRef, factory FactoryRef, 
 
 // SubmitItemWithBody Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes any type of body and a specified content type.
 //
@@ -14057,7 +14105,7 @@ func (c *Client) SubmitItemWithBody(ctx context.Context, org OrgRef, factory Fac
 
 // SubmitItem Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -28957,7 +29005,7 @@ type ClientWithResponsesInterface interface {
 
 	// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28966,7 +29014,7 @@ type ClientWithResponsesInterface interface {
 
 	// SubmitItemWithResponse Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -41948,7 +41996,7 @@ func (c *ClientWithResponses) ListItemsWithResponse(ctx context.Context, org Org
 
 // SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41963,7 +42011,7 @@ func (c *ClientWithResponses) SubmitItemWithBodyWithResponse(ctx context.Context
 
 // SubmitItemWithResponse Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
