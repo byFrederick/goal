@@ -180,7 +180,9 @@ function Ready({
   const [pending, setPending] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
 
-  const triggers = intake.triggers;
+  // Only the definition's disabled triggers, as the API names them, are offered; a trigger already on is not.
+  const offered = new Set(intake.suggestions.map((s) => s.name));
+  const triggers = intake.triggers.filter((t) => offered.has(t.name));
   const isOn = (t: IntakeTrigger) => t.enabled || chosen.has(t.name);
   const toTurnOn = triggers.filter((t) => !t.enabled && chosen.has(t.name) && !needsConnection(t));
   const count = toTurnOn.length;
