@@ -226,13 +226,21 @@ usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal intake <factory> [--window 7d|30d|90d] [--json]
+                                                  what is coming to the factory: the items that
+                                                  haven't started (when each may start or the needs
+                                                  it waits for, and where it came from), its items
+                                                  by origin over the window (default 30d), its
+                                                  follow-ups to triage and the items they join from,
+                                                  its triggers (a check marked) and the webhooks open
+                                                  to it: receiving, no trigger or closed
   goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
                                                   when they fire, what they create, the items they
                                                   created in the last 7 days, and why one may not be
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
-                                                  and its recent events: created, merged, skipped
-                                                  or missed
+                                                  and its recent events: created, merged, skipped,
+                                                  missed or checked
   goal triggers try <factory> <trigger> --event ID [--json]
                                                   dry-run the trigger on one of its 20 newest events
                                                   (ID from goal triggers show): whether it matched,

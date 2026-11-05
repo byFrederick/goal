@@ -15,8 +15,15 @@ INSERT INTO follow_ups (
 ON CONFLICT (org_id, item_id, text_key) DO NOTHING;
 
 -- name: ItemFollowUps :many
--- An item's follow-ups, oldest first and in output order within a run (UUIDv7 ids).
-SELECT * FROM follow_ups WHERE item_id = sqlc.arg(item_id) ORDER BY created_at, id;
+-- An item's follow-ups, oldest first and in output order within a run (UUIDv7 ids), each with the
+-- factory and number of the item it was filed as or onto, another factory's included (empty and 0
+-- when it is not filed or that item is gone). The join is under row-level security, so another
+-- organization's item never resolves.
+SELECT sqlc.embed(f), coalesce(w.factory_id::text, '')::text AS filed_factory_id, coalesce(w.number, 0)::bigint AS filed_number
+FROM follow_ups f
+LEFT JOIN work_items w ON w.id = f.filed_item_id
+WHERE f.item_id = sqlc.arg(item_id)
+ORDER BY f.created_at, f.id;
 
 -- name: ClaimNote :one
 -- The oldest waiting note whose source item is trusted (follow_ups_waiting_notes_idx), with its
@@ -157,3 +164,25 @@ FOR UPDATE OF f;
 UPDATE work_items SET state = 'blocked', updated_at = sqlc.arg(at)
 WHERE id = sqlc.arg(id)
 RETURNING *;
+
+-- name: TriageQueueItem :one
+-- The factory's collecting triage item, as CollectingTriageItem finds it but unlocked, for
+-- Intake, with how many follow-ups have joined it (follow_ups_filed_item_idx).
+SELECT sqlc.embed(w),
+  (SELECT count(*) FROM follow_ups f WHERE f.filed_item_id = w.id AND f.state = 'filed' AND f.target = 'triage')::bigint AS follow_ups
+FROM work_items w
+WHERE w.factory_id = sqlc.arg(factory_id) AND w.triage AND NOT w.untrusted AND w.state NOT IN ('done', 'cancelled')
+  AND NOT EXISTS (SELECT 1 FROM agent_runs r WHERE r.item_id = w.id)
+ORDER BY w.created_at
+LIMIT 1;
+
+-- name: WaitingTriageSources :many
+-- The factory's items with waiting triage follow-ups (follow_ups_factory_idx), trusted ones only:
+-- an untrusted item's go to a triage item of their own. Oldest first by their first follow-up.
+SELECT s.id, s.number, s.title, count(*)::bigint AS follow_ups
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+WHERE f.factory_id = sqlc.arg(factory_id) AND f.state = 'waiting' AND f.target = 'triage' AND NOT s.untrusted
+GROUP BY s.id, s.number, s.title
+ORDER BY min(f.created_at), s.id
+LIMIT sqlc.arg(max_items);

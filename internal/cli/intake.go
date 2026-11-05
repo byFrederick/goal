@@ -65,6 +65,161 @@ func webhooksCommand(ctx context.Context, out *printer, getenv func(string) stri
 	return handler(ctx, out, getenv, args[1:])
 }
 
+// intakeCommand is goal intake <factory> [--window 7d|30d|90d] [--json]: what is coming to the
+// factory (ADR 0040 decision 22): the items that haven't started, where its items came from over
+// the window, its follow-ups for the architect, its triggers and the webhooks open to it.
+func intakeCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs, orgFlag, asJSON := intakeFlags("intake")
+	window := fs.String("window", "30d", "the days origins count over: 7d, 30d or 90d")
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 || !gen.IntakeWindow(*window).Valid() {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *orgFlag)
+	if err != nil {
+		return err
+	}
+
+	w := gen.GetIntakeParamsWindow(*window)
+
+	res, err := c.GetIntakeWithResponse(ctx, c.org, pos[0], &gen.GetIntakeParams{Window: &w})
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	if *asJSON {
+		out.printf("%s", res.Body)
+
+		return nil
+	}
+
+	printIntake(out, pos[0], *window, res.JSON200)
+
+	return nil
+}
+
+// printIntake prints a factory's intake: coming up, origins, triage, triggers and webhooks.
+func printIntake(out *printer, factory, window string, in *gen.Intake) {
+	printComingUp(out, deref(in.ComingUp), deref(in.ComingUpTotal))
+
+	if o := in.Origins; o != nil {
+		out.printf("\nWhere items came from (%s): %d person, %d plan, %d trigger, %d follow-up\n",
+			string(deref(in.Window)), o.Person, o.Plan, o.Trigger, o.FollowUp)
+	} else {
+		out.printf("\nWhere items came from (%s): not answered by this goald\n", window)
+	}
+
+	out.printf("\n")
+	printTriage(out, in.Triage)
+
+	out.printf("\nTriggers\n")
+	printTriggers(out, in.Triggers)
+
+	out.printf("\nWebhooks open to %s\n", factory)
+	printOpenWebhooks(out, deref(in.Webhooks))
+}
+
+// printComingUp prints a row per item that hasn't started: when it may start (or the needs it
+// waits for), its ref and title, and where it came from.
+func printComingUp(out *printer, items []gen.IntakeComingUp, total int) {
+	if len(items) == 0 {
+		out.printf("Nothing coming up\n")
+
+		return
+	}
+
+	if total > len(items) {
+		out.printf("Coming up (%d of %d)\n", len(items), total)
+	} else {
+		out.printf("Coming up\n")
+	}
+
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "STARTS\tITEM\tTITLE\tFROM")
+
+	for _, c := range items {
+		when := "after " + strings.Join(c.Needs, ", ")
+
+		switch {
+		case c.Start != nil && len(c.Needs) > 0:
+			when = stamp(c.Start.At) + ", " + when
+		case c.Start != nil:
+			when = stamp(c.Start.At)
+		}
+
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", when, c.Ref, cut(oneLine(c.Title), intakeTitleWidth), cameFrom(c))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", b.String())
+}
+
+// cameFrom is where an item came from: its origin, how a person filed it, and the item whose
+// follow-up filed it.
+func cameFrom(c gen.IntakeComingUp) string {
+	s := string(c.Origin)
+
+	if c.Via != nil {
+		s += " via " + string(*c.Via)
+	}
+
+	if c.FromItem != nil {
+		s += " of " + *c.FromItem
+	}
+
+	return s
+}
+
+// printTriage prints the collecting triage item and the items whose follow-ups will join it.
+func printTriage(out *printer, t *gen.IntakeTriage) {
+	if t == nil {
+		out.printf("No follow-ups to triage\n")
+
+		return
+	}
+
+	if it := t.Item; it != nil {
+		out.printf("Follow-ups to triage: %s %s at %s, %d follow-ups\n", it.Ref, oneLine(it.Title), it.Station, it.FollowUps)
+	} else {
+		out.printf("Follow-ups to triage: no triage item yet\n")
+	}
+
+	for _, w := range t.Waiting {
+		out.printf("  joins when it lands: %s %s, %d follow-ups\n", w.Ref, cut(oneLine(w.Title), intakeTitleWidth), w.FollowUps)
+	}
+}
+
+// printOpenWebhooks prints a row per webhook open to the factory with its state.
+func printOpenWebhooks(out *printer, hooks []gen.IntakeWebhook) {
+	if len(hooks) == 0 {
+		out.printf("None: open one with goal webhooks open <webhook> <factory>\n")
+
+		return
+	}
+
+	var b bytes.Buffer
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "NAME\tSENDER\tSTATE")
+
+	for _, h := range hooks {
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", h.Name, h.Sender, strings.ReplaceAll(string(h.State), "_", " "))
+	}
+
+	_ = tw.Flush()
+
+	out.printf("%s", b.String())
+}
+
 // intakeFlags are the flags every intake command takes: --org and --json.
 func intakeFlags(name string) (fs *flag.FlagSet, org *string, asJSON *bool) {
 	fs = newFlags(name)
@@ -496,9 +651,12 @@ func printTriggerCheck(out *printer, factory string, ch gen.TriggerCheck) {
 }
 
 // creates is what a trigger creates: its work type, the station it starts at, and expedite and
-// the lane when it sets them.
+// the lane when it sets them, after the agent that checks first when it has a check.
 func creates(tr gen.IntakeTrigger) string {
 	s := tr.Create.Type + " → " + tr.Create.Station
+	if tr.Check != nil {
+		s = "checked by " + tr.Check.Agent + ", " + s
+	}
 
 	if tr.Create.Expedite {
 		s += ", expedite"

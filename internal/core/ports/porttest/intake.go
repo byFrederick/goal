@@ -1305,6 +1305,214 @@ func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, las
 	return w, nil
 }
 
+// OriginTally implements ports.Intake.
+func (in *Intake) OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := map[domain.Origin]int{}
+	for _, it := range in.items(org, factory, since) {
+		counts[cmp.Or(it.Origin, domain.OriginPerson)]++
+	}
+
+	out := []domain.OriginCount{}
+	for _, o := range slices.Sorted(maps.Keys(counts)) {
+		out = append(out, domain.OriginCount{Origin: o, Items: counts[o]})
+	}
+
+	return out, nil
+}
+
+// ComingUp implements ports.Intake.
+func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	var all []domain.ComingUp
+
+	for _, it := range in.store.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		if c, ok := in.comingUpLocked(org, it); ok {
+			all = append(all, c)
+		}
+	}
+
+	slices.SortFunc(all, comingUpOrder)
+
+	return all[:min(len(all), max(limit, 0))], len(all), nil
+}
+
+// comingUpLocked is it as coming up, when it is open, hasn't started and has a start or an open
+// planned or linked need. Callers hold in.store.mu.
+func (in *Intake) comingUpLocked(org domain.OrgID, it *domain.Item) (domain.ComingUp, bool) {
+	if !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		return domain.ComingUp{}, false
+	}
+
+	c := domain.ComingUp{Item: clone(it), Needs: []int64{}}
+
+	for _, e := range in.store.edges {
+		if e.Item == it.ID && e.Kind != domain.EdgeOverlap && in.openLocked(org, e.Needs) {
+			c.Needs = append(c.Needs, in.store.items[e.Needs].Number)
+		}
+	}
+
+	if it.StartAt.IsZero() && len(c.Needs) == 0 {
+		return domain.ComingUp{}, false
+	}
+
+	if !it.Triage {
+		c.FromFactory, c.FromNumber = in.filedFromLocked(org, it.ID)
+	}
+
+	return c, true
+}
+
+// comingUpOrder puts items with a start first, soonest first, then the rest oldest first.
+func comingUpOrder(a, b domain.ComingUp) int {
+	x, y := a.Item, b.Item
+	if x.StartAt.IsZero() != y.StartAt.IsZero() {
+		if x.StartAt.IsZero() {
+			return 1
+		}
+
+		return -1
+	}
+
+	return cmp.Or(x.StartAt.Compare(y.StartAt), x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
+}
+
+// filedFromLocked is the factory and number of the source item of the oldest follow-up filed as
+// or onto item; "" and 0 for none. Callers hold in.store.mu.
+func (in *Intake) filedFromLocked(org domain.OrgID, item domain.ItemID) (domain.FactoryID, int64) {
+	var found *domain.FollowUp
+
+	for i, f := range in.store.followUps {
+		if f.FiledItem == item && f.State == domain.FollowUpFiled &&
+			(found == nil || cmp.Or(f.CreatedAt.Compare(found.CreatedAt), cmp.Compare(f.ID, found.ID)) < 0) {
+			found = &in.store.followUps[i]
+		}
+	}
+
+	if found == nil {
+		return "", 0
+	}
+
+	src, ok := in.store.visible(found.ItemID, org)
+	if !ok {
+		return "", 0
+	}
+
+	return src.FactoryID, src.Number
+}
+
+// TriageQueue implements ports.Intake.
+func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, limit int) (domain.TriageQueue, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.TriageQueue{}, err
+	}
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	q := domain.TriageQueue{Item: in.collectingLocked(org, factory)}
+
+	if q.Item != nil {
+		for _, f := range in.store.followUps {
+			if f.FiledItem == q.Item.ID && f.State == domain.FollowUpFiled && f.Target == domain.FollowUpTriage {
+				q.FollowUps++
+			}
+		}
+	}
+
+	q.Waiting = in.triageSourcesLocked(org, factory, limit)
+
+	return q, nil
+}
+
+// collectingLocked is the factory's oldest open, trusted triage item without a run; nil for none.
+// Callers hold in.store.mu.
+func (in *Intake) collectingLocked(org domain.OrgID, factory domain.FactoryID) *domain.Item {
+	var found *domain.Item
+
+	for _, it := range in.store.items {
+		if it.OrgID != org || it.FactoryID != factory || !it.Triage || it.Untrusted || !in.openLocked(org, it.ID) || in.hasRunLocked(it.ID) {
+			continue
+		}
+
+		if found == nil || cmp.Or(it.CreatedAt.Compare(found.CreatedAt), cmp.Compare(it.ID, found.ID)) < 0 {
+			c := clone(it)
+			found = &c
+		}
+	}
+
+	return found
+}
+
+// triageSourcesLocked are at most limit of the factory's trusted items with waiting triage
+// follow-ups, oldest first by their first one. Callers hold in.store.mu.
+func (in *Intake) triageSourcesLocked(org domain.OrgID, factory domain.FactoryID, limit int) []domain.TriageSource {
+	type source struct {
+		ts    domain.TriageSource
+		first domain.FollowUp
+	}
+
+	sources := map[domain.ItemID]*source{}
+
+	for _, f := range in.store.followUps {
+		if f.FactoryID != factory || f.State != domain.FollowUpWaiting || f.Target != domain.FollowUpTriage {
+			continue
+		}
+
+		src, ok := in.store.visible(f.ItemID, org)
+		if !ok || src.Untrusted {
+			continue
+		}
+
+		s, ok := sources[src.ID]
+		if !ok {
+			s = &source{ts: domain.TriageSource{ID: src.ID, Number: src.Number, Title: src.Title}, first: f}
+			sources[src.ID] = s
+		}
+
+		s.ts.FollowUps++
+	}
+
+	all := slices.Collect(maps.Values(sources))
+	slices.SortFunc(all, func(a, b *source) int {
+		return cmp.Or(a.first.CreatedAt.Compare(b.first.CreatedAt), cmp.Compare(a.ts.ID, b.ts.ID))
+	})
+
+	out := []domain.TriageSource{}
+	for _, s := range all[:min(len(all), max(limit, 0))] {
+		out = append(out, s.ts)
+	}
+
+	return out
+}
+
+// hasRunLocked reports whether item has a run. Callers hold in.store.mu.
+func (in *Intake) hasRunLocked(item domain.ItemID) bool {
+	for _, r := range in.store.runs {
+		if r.ItemID == item {
+			return true
+		}
+	}
+
+	return false
+}
+
 // TriggerDays implements ports.Intake.
 func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
 	org, err := orgOf(ctx)

@@ -85,8 +85,14 @@ type Store interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 
 	// FollowUps returns the follow-ups kept for an item (Transition.FollowUps), oldest first and
-	// in output order within a run. An unknown item has none.
+	// in output order within a run, each filed one with the factory and number of the item it was
+	// filed as or onto (FiledFactory, FiledNumber), another factory's included, in the same read.
+	// An unknown item has none.
 	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
+
+	// ItemNotes returns at most limit of an item's item_note events, the notes other items' agents
+	// and triggers' checks left on it, oldest first. An unknown item has none.
+	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 
 	// DeliverNotes delivers up to limit waiting notes of the context's organization, oldest
 	// first (ADR 0040 decision 7), and returns them as they now are. factories are the

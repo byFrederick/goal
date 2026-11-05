@@ -151,6 +151,19 @@ type Intake interface {
 	// ItemSources counts the factory's newest last items (by created_at, then id) by source, by
 	// source, with when the oldest and the newest of them were created.
 	ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error)
+	// OriginTally counts the factory's items created at or after since by origin, by origin; an
+	// origin without items has no entry.
+	OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error)
+	// ComingUp is at most limit of the factory's open items (neither done nor cancelled) that
+	// haven't started (no StartedAt, as the claim filters read it) and have a start or an open
+	// planned or linked need: those with a start first, soonest first, then the rest oldest first
+	// (created_at, then id), with how many there are in all. Each has its open needs' numbers and
+	// the item whose follow-up filed it (none for a triage item).
+	ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error)
+	// TriageQueue is the factory's collecting triage item (open, triage, trusted, no run yet; the
+	// oldest), with how many follow-ups joined it, and at most limit of its trusted items with
+	// waiting triage follow-ups, oldest first by their first one, each with how many.
+	TriageQueue(ctx context.Context, factory domain.FactoryID, limit int) (domain.TriageQueue, error)
 	// TriggerDays count the factory's firings that created an item at or after since, per trigger
 	// and UTC day, by trigger then day; days without one are left out.
 	TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error)

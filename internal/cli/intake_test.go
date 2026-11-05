@@ -42,6 +42,8 @@ const (
 	answerCreated  = "created"
 	flagKind       = "--kind"
 	eventSchedule  = "schedule"
+	cmdIntake      = "intake"
+	stationTriage  = "triage"
 )
 
 // intakeGoald is a stub goald for the intake commands: it answers the factory docs's intake, its
@@ -77,7 +79,7 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		Name: triggerNightly, Enabled: true, On: eventSchedule, Source: eventSchedule,
 		When: "0 8 * * MON-FRI, Europe/Berlin", Days: []int{0, 1, 0, 2, 1, 0, 1},
 	}
-	nightly.Create.Type, nightly.Create.Station = "task", "triage"
+	nightly.Create.Type, nightly.Create.Station = "task", stationTriage
 
 	ci := gen.IntakeTrigger{
 		Name: "ci-failures", On: "github.check_run.failed", Source: importedGitHub,
@@ -99,7 +101,7 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	wouldCreate, skipped := tryAnswers()
 
 	g := &intakeGoald{bodies: map[string][]byte{
-		"intake":  indented(t, gen.Intake{Triggers: []gen.IntakeTrigger{nightly, ci}}),
+		cmdIntake: indented(t, intakeAnswer(nightly, ci, at)),
 		"trigger": indented(t, detail),
 		subDeliveries: indented(t, gen.WebhookDeliveryPage{NextAfter: &next, Deliveries: []gen.WebhookDelivery{
 			{Id: "d2", ReceivedAt: at, Outcome: gen.WebhookDeliveryOutcomeCreated, Item: &gen.WebhookDeliveryItem{Id: "i12", Number: 12}},
@@ -115,7 +117,7 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	reply := g.reply
 	base := "/v1/orgs/acme/factories/" + intakeFactory
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET "+base+"/intake", reply("intake", http.StatusOK))
+	mux.HandleFunc("GET "+base+"/intake", reply(cmdIntake, http.StatusOK))
 	mux.HandleFunc("GET "+base+"/intake/triggers/"+triggerNightly, reply("trigger", http.StatusOK))
 	mux.HandleFunc("GET "+base+"/intake/triggers/{other}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")
@@ -169,6 +171,38 @@ func (g *intakeGoald) reply(name string, status int) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write(g.bodies[name])
+	}
+}
+
+// intakeAnswer is docs's intake: the triggers given and one with a check, items coming up of each
+// kind, origins, a triage item with a waiting source, and webhooks in each state.
+func intakeAnswer(nightly, ci gen.IntakeTrigger, at time.Time) gen.Intake {
+	checked := gen.IntakeTrigger{Name: "new-incidents", Enabled: true, On: eventSchedule, Source: eventSchedule, When: "*/5 * * * *, UTC", Days: make([]int, 7)}
+	checked.Create.Type, checked.Create.Station = "task", stationTriage
+	checked.Check = &struct {
+		Agent  string  `json:"agent"`
+		MaxUsd float64 `json:"max_usd"`
+	}{Agent: "watcher", MaxUsd: 0.5}
+
+	window, total, via, from := gen.IntakeWindowN7d, 3, gen.IntakeComingUpVia("cli"), "app#9"
+	triage := &gen.IntakeTriage{
+		Item:    &gen.IntakeTriageItem{FollowUps: 3, Id: "i20", Ref: "docs#20", Station: stationTriage, Title: "Follow-ups from docs#11"},
+		Waiting: []gen.IntakeTriageSource{{FollowUps: 2, Id: "i12", Ref: "docs#12", Title: "Write the guide"}},
+	}
+
+	return gen.Intake{
+		Triggers: []gen.IntakeTrigger{nightly, ci, checked}, Suggestions: []gen.TriggerSuggestion{}, Window: &window,
+		Origins: &gen.IntakeOrigins{Person: 12, Plan: 3, Trigger: 5, FollowUp: 2},
+		ComingUp: &[]gen.IntakeComingUp{
+			{Id: "i14", Ref: "docs#14", Title: "Check the cache again", Origin: "follow-up", Start: &gen.ItemStart{At: at.Add(24 * time.Hour)}, Needs: []string{}, FromItem: &from, CreatedAt: at},
+			{Id: "i15", Ref: "docs#15", Title: "Ship the guide", Origin: "person", Via: &via, Start: &gen.ItemStart{At: at.Add(48 * time.Hour)}, Needs: []string{"docs#12"}, CreatedAt: at},
+		},
+		ComingUpTotal: &total, Triage: triage,
+		Webhooks: &[]gen.IntakeWebhook{
+			{Id: "w1", Name: "github-main", Sender: "github", State: gen.Receiving},
+			{Id: "w2", Name: "pager", Sender: "pagerduty", State: gen.NoTrigger},
+			{Id: "w3", Name: "old-ci", Sender: "standard", State: gen.Closed},
+		},
 	}
 }
 
@@ -309,7 +343,7 @@ func tryAnswers() (gen.TriggerTry, gen.TriggerTry) {
 		Station  string  `json:"station"`
 		Title    string  `json:"title"`
 		Type     string  `json:"type"`
-	}{Brief: "Sweep the docs.", Station: "triage", Title: "Nightly docs sweep", Type: "task"}
+	}{Brief: "Sweep the docs.", Station: stationTriage, Title: "Nightly docs sweep", Type: "task"}
 
 	skip := gen.TriggerTry{Firing: firingSkip, Matched: true, Outcome: gen.TriggerTryOutcome("skipped"), Reason: reason("only.dedupe: an open item has the title"), Steps: []gen.TriggerTryStep{
 		{Step: "when", Outcome: stepPassed, Reason: reason("the schedule fired at 2026-10-25T08:00:00Z")},
@@ -350,6 +384,29 @@ func goalIntake(t *testing.T, api string, args ...string) (string, string, error
 	err := run(t.Context(), args, &printer{w: &stdout, e: &stderr}, testEnv(t, api, map[string]string{envOrg: orgAcme}), nil)
 
 	return stdout.String(), stderr.String(), err
+}
+
+// goal intake asks for the window and prints what's coming: the items that haven't started with
+// when they start or what they wait for and where they came from, the origins, the triage item and
+// its waiting source, the triggers with the check marked, and the open webhooks with their state.
+func TestIntakeCommands_IntakeShowsComingUp(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	out, _, err := goalIntake(t, g.srv.URL, cmdIntake, intakeFactory, flagWindow, "7d")
+	if err != nil {
+		t.Fatalf("goal intake = %v", err)
+	}
+
+	checkGolden(t, cmdIntake, out)
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if got := g.query.Get("window"); got != "7d" {
+		t.Errorf("window sent = %q; want 7d", got)
+	}
 }
 
 // The triggers print in definition order: name, on or off, when, what they create, the 7-day
@@ -672,7 +729,8 @@ func TestIntakeCommands_JSONAsSent(t *testing.T) {
 		line []string
 		body string
 	}{
-		{[]string{cmdTriggers, subList, intakeFactory}, "intake"},
+		{[]string{cmdIntake, intakeFactory}, cmdIntake},
+		{[]string{cmdTriggers, subList, intakeFactory}, cmdIntake},
 		{[]string{cmdTriggers, subShow, intakeFactory, triggerNightly}, "trigger"},
 		{[]string{cmdTriggers, subTry, intakeFactory, triggerNightly, flagEvent, firingCreate}, firingCreate},
 		{[]string{cmdWebhooks, subList}, subList},
@@ -694,6 +752,9 @@ func TestIntakeCommands_Usage(t *testing.T) {
 	t.Parallel()
 
 	for _, line := range [][]string{
+		{cmdIntake},
+		{cmdIntake, intakeFactory, argExtra},
+		{cmdIntake, intakeFactory, flagWindow, "1d"},
 		{cmdTriggers},
 		{cmdTriggers, "edit", intakeFactory},
 		{cmdTriggers, subList},

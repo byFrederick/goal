@@ -233,6 +233,29 @@ func testFileIntoAnotherFactory(f *fixture) {
 			t.Errorf("%s joined %+v; want the sender's triage item", text, it)
 		}
 	}
+
+	f.expectFiledWhere(t, src)
+}
+
+// expectFiledWhere checks that FollowUps reads each filed follow-up of src with the factory and
+// number of the item it was filed as or onto, another factory's included.
+func (f *fixture) expectFiledWhere(t *testing.T, src domain.Item) {
+	t.Helper()
+
+	kept, err := f.Store.FollowUps(f.ctx(t), src.ID)
+	if err != nil {
+		t.Fatalf("FollowUps: %v", err)
+	}
+
+	for _, fu := range kept {
+		if fu.State != domain.FollowUpFiled {
+			continue
+		}
+
+		if it := f.item(t, fu.FiledItem); fu.FiledFactory != it.FactoryID || fu.FiledNumber != it.Number {
+			t.Errorf("%s filed at %s#%d; want %s#%d", fu.Text, fu.FiledFactory, fu.FiledNumber, it.FactoryID, it.Number)
+		}
+	}
 }
 
 // A cancelled item's waiting follow-ups, and its parts', are dropped: the work was cancelled.

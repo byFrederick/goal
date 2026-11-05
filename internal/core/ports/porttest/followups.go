@@ -29,7 +29,41 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 
 	for _, f := range s.followUps {
 		if f.ItemID == item {
-			out = append(out, cloneFollowUp(f))
+			f = cloneFollowUp(f)
+			if it, ok := s.visible(f.FiledItem, org); ok && f.FiledItem != "" {
+				f.FiledFactory, f.FiledNumber = it.FactoryID, it.Number
+			}
+
+			out = append(out, f)
+		}
+	}
+
+	return out, nil
+}
+
+// ItemNotes implements ports.Store.
+func (s *Store) ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []domain.Event
+
+	if _, ok := s.visible(item, org); !ok {
+		return out, nil
+	}
+
+	for _, e := range s.events {
+		if len(out) == limit {
+			break
+		}
+
+		if e.ItemID == item && e.Kind == domain.EventItemNote {
+			out = append(out, e)
 		}
 	}
 

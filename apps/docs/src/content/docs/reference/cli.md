@@ -769,6 +769,16 @@ what the organization's agent runs cost (default this week), per merged item and
 
 Flags: `--window week|month|90d`, `--json`.
 
+## goal intake
+
+```text
+goal intake <factory> [--window 7d|30d|90d] [--json]
+```
+
+what is coming to the factory: the items that haven't started (when each may start or the needs it waits for, and where it came from), its items by origin over the window (default 30d), its follow-ups to triage and the items they join from, its triggers (a check marked) and the webhooks open to it: receiving, no trigger or closed
+
+Flags: `--window 7d|30d|90d`, `--json`.
+
 ## goal triggers list
 
 ```text
@@ -785,7 +795,7 @@ Flags: `--json`.
 goal triggers show <factory> <trigger> [--json]
 ```
 
-a trigger, what its items did in the last 7 days and its recent events: created, merged, skipped or missed
+a trigger, what its items did in the last 7 days and its recent events: created, merged, skipped, missed or checked
 
 Flags: `--json`.
 

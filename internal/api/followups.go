@@ -112,5 +112,67 @@ func followUpOf(f domain.FollowUp) gen.FollowUp {
 		out.Target = new(gen.FollowUpTarget(f.Target))
 	}
 
+	if f.For != nil {
+		out.For = new(f.For.String())
+	}
+
+	if p := f.Start; p != nil {
+		out.Start = &gen.FollowUpStart{Title: p.Title, At: optional(p.At), In: optional(p.In), Factory: optional(p.Factory)}
+		if len(p.After) > 0 {
+			out.Start.After = new(append([]string{}, p.After...))
+		}
+	}
+
 	return out
+}
+
+// followUpsAndNotes are item's follow-ups, each filed one with the ref of the item it was filed
+// as or onto, and the notes left on it, as getItem answers them.
+func (s *server) followUpsAndNotes(ctx context.Context, item domain.ItemID) (*[]gen.FollowUp, *[]gen.ItemNoteFrom, error) {
+	fs, err := s.items.FollowUps(ctx, item)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	follows := make([]gen.FollowUp, 0, len(fs))
+
+	for _, f := range fs {
+		out := followUpOf(f)
+		if f.FiledNumber > 0 {
+			out.FiledItem = new(s.ref(ctx, f.FiledFactory, f.FiledNumber))
+		}
+
+		follows = append(follows, out)
+	}
+
+	events, err := s.items.ItemNotes(ctx, item, maxItemNotes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	notes := make([]gen.ItemNoteFrom, 0, len(events))
+	for _, e := range events {
+		notes = append(notes, noteOf(e))
+	}
+
+	return &follows, &notes, nil
+}
+
+// maxItemNotes is the most notes getItem answers.
+const maxItemNotes = 200
+
+// noteOf is an item_note event as getItem answers it: from another item, or from a trigger's
+// check.
+func noteOf(e domain.Event) gen.ItemNoteFrom {
+	str := func(key string) *string {
+		v, _ := e.Data[key].(string)
+
+		return optional(v)
+	}
+
+	return gen.ItemNoteFrom{
+		Id: e.ID, Text: deref(str("text")), Agent: deref(str(domain.KeyNoteAgent)), At: e.At,
+		FromItem: str(domain.KeyNoteFromItem), FromItemId: str(domain.KeyNoteFromItemID), FromFactoryId: str(domain.KeyNoteFromFactory),
+		Station: str(domain.KeyNoteStation), Trigger: str(domain.KeyNoteTrigger),
+	}
 }

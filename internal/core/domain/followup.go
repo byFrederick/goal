@@ -94,9 +94,13 @@ type FollowUp struct {
 	// Reason is why a dropped follow-up goes nowhere, or why one for triage could not go where
 	// it said; "" otherwise.
 	Reason string
-	// FiledItem is the item a filed follow-up became.
-	FiledItem ItemID
-	CreatedAt time.Time
+	// FiledItem is the item a filed follow-up became. FiledFactory and FiledNumber are its
+	// factory and number, of any factory of the organization, as reads of an item's follow-ups
+	// resolve them; "" and 0 when it is not filed, that item is gone, or the read does not.
+	FiledItem    ItemID
+	FiledFactory FactoryID
+	FiledNumber  int64
+	CreatedAt    time.Time
 }
 
 // FollowUpKey is the text follow-ups of an item are kept once by: trimmed, case folded and its

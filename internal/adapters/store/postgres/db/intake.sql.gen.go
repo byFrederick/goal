@@ -12,6 +12,109 @@ import (
 	"github.com/google/uuid"
 )
 
+const comingUpItems = `-- name: ComingUpItems :many
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, n.needs::bigint[] AS needs,
+  coalesce(src.factory_id::text, '')::text AS from_factory_id, coalesce(src.number, 0)::bigint AS from_number,
+  count(*) OVER ()::bigint AS total
+FROM work_items w
+CROSS JOIN LATERAL (
+  SELECT array(
+    SELECT d.number FROM item_edges e JOIN work_items d ON d.id = e.needs_id
+    WHERE e.item_id = w.id AND e.kind <> 'overlap' AND d.state NOT IN ('done', 'cancelled')
+    ORDER BY e.created_at, e.needs_id
+  ) AS needs
+) n
+LEFT JOIN LATERAL (
+  SELECT s.factory_id, s.number FROM follow_ups f JOIN work_items s ON s.id = f.item_id
+  WHERE f.filed_item_id = w.id AND f.state = 'filed'
+  ORDER BY f.created_at, f.id
+  LIMIT 1
+) src ON NOT w.triage
+WHERE w.factory_id = $1 AND w.started_at IS NULL AND w.state NOT IN ('done', 'cancelled')
+  AND (w.start_at IS NOT NULL OR cardinality(n.needs) > 0)
+ORDER BY w.start_at NULLS LAST, w.created_at, w.id
+LIMIT $2
+`
+
+type ComingUpItemsParams struct {
+	FactoryID uuid.UUID
+	MaxItems  int32
+}
+
+type ComingUpItemsRow struct {
+	WorkItem      WorkItem
+	Needs         []int64
+	FromFactoryID string
+	FromNumber    int64
+	Total         int64
+}
+
+// The factory's open items that haven't started (started_at IS NULL, the claim filters' rule) and
+// have a start or an open planned or linked need: those with a start first, soonest first, then
+// the rest oldest first. Each comes with the numbers of those needs, oldest edge first, the
+// factory and number of the item whose follow-up filed it (empty and 0 for none; any factory of the
+// organization, under row-level security) and how many rows the query has before its limit.
+func (q *Queries) ComingUpItems(ctx context.Context, arg ComingUpItemsParams) ([]ComingUpItemsRow, error) {
+	rows, err := q.db.Query(ctx, comingUpItems, arg.FactoryID, arg.MaxItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ComingUpItemsRow
+	for rows.Next() {
+		var i ComingUpItemsRow
+		if err := rows.Scan(
+			&i.WorkItem.ID,
+			&i.WorkItem.FactoryID,
+			&i.WorkItem.Number,
+			&i.WorkItem.ParentID,
+			&i.WorkItem.Type,
+			&i.WorkItem.Lane,
+			&i.WorkItem.Title,
+			&i.WorkItem.Body,
+			&i.WorkItem.Station,
+			&i.WorkItem.State,
+			&i.WorkItem.ClassOfService,
+			&i.WorkItem.Priority,
+			&i.WorkItem.Size,
+			&i.WorkItem.ReworkCount,
+			&i.WorkItem.CostUsd,
+			&i.WorkItem.Outputs,
+			&i.WorkItem.CreatedAt,
+			&i.WorkItem.UpdatedAt,
+			&i.WorkItem.DoneAt,
+			&i.WorkItem.OrgID,
+			&i.WorkItem.PartKey,
+			&i.WorkItem.PartPaths,
+			&i.WorkItem.Paths,
+			&i.WorkItem.BaseCommit,
+			&i.WorkItem.Trigger,
+			&i.WorkItem.Source,
+			&i.WorkItem.IntegrationBranch,
+			&i.WorkItem.IntegrationLandAt,
+			&i.WorkItem.Origin,
+			&i.WorkItem.Via,
+			&i.WorkItem.CreatedBy,
+			&i.WorkItem.Generation,
+			&i.WorkItem.Untrusted,
+			&i.WorkItem.StartAt,
+			&i.WorkItem.StartedAt,
+			&i.WorkItem.Triage,
+			&i.Needs,
+			&i.FromFactoryID,
+			&i.FromNumber,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const convertWebhookEndpoint = `-- name: ConvertWebhookEndpoint :exec
 UPDATE webhook_endpoints SET factory_id = NULL, name = $1, sender = $2, secret_id = $3
 WHERE id = $4
@@ -589,6 +692,45 @@ func (q *Queries) OrgWebhooks(ctx context.Context) ([]OrgWebhooksRow, error) {
 			&i.CreatedAt,
 			&i.RotatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const originTally = `-- name: OriginTally :many
+SELECT origin::text AS origin, count(*)::bigint AS items FROM work_items
+WHERE factory_id = $1 AND created_at >= $2
+GROUP BY 1
+ORDER BY 1
+`
+
+type OriginTallyParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+}
+
+type OriginTallyRow struct {
+	Origin string
+	Items  int64
+}
+
+// The factory's items created at or after the instant, by origin: Intake's day counts, which read
+// no delivery.
+func (q *Queries) OriginTally(ctx context.Context, arg OriginTallyParams) ([]OriginTallyRow, error) {
+	rows, err := q.db.Query(ctx, originTally, arg.FactoryID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OriginTallyRow
+	for rows.Next() {
+		var i OriginTallyRow
+		if err := rows.Scan(&i.Origin, &i.Items); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

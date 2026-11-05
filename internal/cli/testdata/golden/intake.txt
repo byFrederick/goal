@@ -1,0 +1,22 @@
+Coming up (2 of 3)
+STARTS                               ITEM     TITLE                  FROM
+2026-10-27 08:00 UTC                 docs#14  Check the cache again  follow-up of app#9
+2026-10-28 08:00 UTC, after docs#12  docs#15  Ship the guide         person via cli
+
+Where items came from (7d): 12 person, 3 plan, 5 trigger, 2 follow-up
+
+Follow-ups to triage: docs#20 Follow-ups from docs#11 at triage, 3 follow-ups
+  joins when it lands: docs#12 Write the guide, 2 follow-ups
+
+Triggers
+NAME           STATE  WHEN                            CREATES                            7 DAYS
+nightly        on     0 8 * * MON-FRI, Europe/Berlin  task → triage                      5
+ci-failures    off    github.check_run.failed         bug → ship, expedite, lane fast    0
+new-incidents  on     */5 * * * *, UTC                checked by watcher, task → triage  0
+! ci-failures: the factory has no webhook endpoint of kind github
+
+Webhooks open to docs
+NAME         SENDER     STATE
+github-main  github     receiving
+pager        pagerduty  no trigger
+old-ci       standard   closed
