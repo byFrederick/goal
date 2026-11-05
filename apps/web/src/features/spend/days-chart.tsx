@@ -81,38 +81,41 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
           Some spend is not split by factory: a factory you cannot see spent it.
         </p>
       )}
-      <table className="sr-only">
-        <caption>Spend by day, {spend.days.length} days</caption>
-        <thead>
-          <tr>
-            <th scope="col" className="font-medium">
-              Day
-            </th>
-            <th scope="col" className="font-medium">
-              Total
-            </th>
-            <th scope="col" className="font-medium">
-              By factory
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {spend.days.map((d) => (
-            <tr key={d.day}>
-              <th scope="row" className="font-medium">
-                {shortDay(d.day)}
+      {/* A table ignores the 1 px width of sr-only, so a div clips it: the table's own width never widens the page. */}
+      <div className="sr-only">
+        <table>
+          <caption>Spend by day, {spend.days.length} days</caption>
+          <thead>
+            <tr>
+              <th scope="col" className="font-medium">
+                Day
               </th>
-              <td>{money(d.usd)}</td>
-              <td>
-                {spend.complete
-                  ? d.by_factory.map((f) => `${nameOf.get(f.factory_id) ?? 'Factory'} ${money(f.usd)}`).join(', ') ||
-                    '—'
-                  : '—'}
-              </td>
+              <th scope="col" className="font-medium">
+                Total
+              </th>
+              <th scope="col" className="font-medium">
+                By factory
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {spend.days.map((d) => (
+              <tr key={d.day}>
+                <th scope="row" className="font-medium">
+                  {shortDay(d.day)}
+                </th>
+                <td>{money(d.usd)}</td>
+                <td>
+                  {spend.complete
+                    ? d.by_factory.map((f) => `${nameOf.get(f.factory_id) ?? 'Factory'} ${money(f.usd)}`).join(', ') ||
+                      '—'
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
