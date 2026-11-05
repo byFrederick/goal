@@ -5,6 +5,13 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
 export async function expectAccessible(page: Page) {
+  // Axe reads the colour a frame paints: wait out the finite entrance fades first, or it measures text mid-fade.
+  // Looping animations (the skeleton pulse) never finish and are left alone.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity),
+  );
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
