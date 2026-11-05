@@ -504,6 +504,52 @@ paths:
       responses:
         "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/code-hosts:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getCodeHosts
+      x-goal-scope: org:read
+      tags: [orgs]
+      summary: The code hosts the organization's repository tokens and knowledge secrets may go to
+      description: >-
+        The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in
+        and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners
+        added, sorted by host. Each host comes with the API base goald derives for it.
+      responses:
+        "200":
+          description: The code hosts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CodeHosts" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setCodeHosts
+      x-goal-scope: org:code_hosts
+      tags: [orgs]
+      summary: Replace the organization's added code hosts
+      description: >-
+        Replaces the hosts the organization added with hosts: a host not in the list is removed,
+        and a host already added takes the kind sent. Only an owner may set them, with a sign-in
+        from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable
+        from the internet, because goald dials public addresses only (ADR 0009): an IP address,
+        localhost, a single-label name or a name under .local, .internal or .localhost is 400
+        code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts.
+        github.com and gitlab.com are always listed and never sent: either is 400
+        code-host-built-in. Audited as org.code_hosts_set with the hosts before and after;
+        sending the hosts already stored changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeHostsInput" }
+      responses:
+        "200":
+          description: The code hosts now listed, the built-in ones first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CodeHosts" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/settings/notifications:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -5849,6 +5895,46 @@ components:
         join_role:
           description: The factory role people who join get; viewer when absent
           allOf: [{ $ref: "#/components/schemas/FactoryRole" }]
+    CodeHostKind:
+      type: string
+      enum: [github, gitlab]
+      description: The API the host speaks, GitHub's or GitLab's
+    CodeHost:
+      type: object
+      required: [host, kind, api_base, built_in]
+      properties:
+        host: { type: string, description: "A DNS name in lower case, such as ghe.example.com" }
+        kind: { $ref: "#/components/schemas/CodeHostKind" }
+        api_base:
+          type: string
+          description: >-
+            The REST API root goald derives: for GitHub, https://api.github.com for github.com,
+            https://api.<name>.ghe.com for <name>.ghe.com and https://<host>/api/v3 for any other
+            host; for GitLab, https://<host>/api/v4
+        built_in: { type: boolean, description: "true for github.com and gitlab.com, which every organization lists" }
+    CodeHosts:
+      type: object
+      required: [hosts]
+      properties:
+        hosts:
+          type: array
+          description: The built-in hosts first, then the added ones sorted by host
+          items: { $ref: "#/components/schemas/CodeHost" }
+    CodeHostInput:
+      type: object
+      required: [host, kind]
+      properties:
+        host: { type: string, minLength: 1, maxLength: 253, description: "A DNS name such as ghe.example.com; case is ignored" }
+        kind: { $ref: "#/components/schemas/CodeHostKind" }
+    CodeHostsInput:
+      type: object
+      required: [hosts]
+      properties:
+        hosts:
+          type: array
+          maxItems: 20
+          description: Every host the organization adds, without github.com and gitlab.com; empty removes them all
+          items: { $ref: "#/components/schemas/CodeHostInput" }
     OrgSlots:
       type: object
       description: >-

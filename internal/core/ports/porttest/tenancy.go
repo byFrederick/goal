@@ -44,6 +44,8 @@ type orgRow struct {
 	owner   domain.UserID // NewOrg.Owner
 	deleted time.Time     // zero while live
 	signup  *domain.SignupDomain
+	// codeHosts are the organization's added code hosts, sorted by host.
+	codeHosts []domain.CodeHost
 }
 
 type auditRow struct {

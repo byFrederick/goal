@@ -291,6 +291,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/code-hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The code hosts the organization's repository tokens and knowledge secrets may go to
+         * @description The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+         */
+        get: operations["getCodeHosts"];
+        /**
+         * Replace the organization's added code hosts
+         * @description Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+         */
+        put: operations["setCodeHosts"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/settings/notifications": {
         parameters: {
             query?: never;
@@ -4459,6 +4486,33 @@ export interface components {
             domain: string;
             /** @description The factory role people who join get; viewer when absent */
             join_role?: components["schemas"]["FactoryRole"];
+        };
+        /**
+         * @description The API the host speaks, GitHub's or GitLab's
+         * @enum {string}
+         */
+        CodeHostKind: "github" | "gitlab";
+        CodeHost: {
+            /** @description A DNS name in lower case, such as ghe.example.com */
+            host: string;
+            kind: components["schemas"]["CodeHostKind"];
+            /** @description The REST API root goald derives: for GitHub, https://api.github.com for github.com, https://api.<name>.ghe.com for <name>.ghe.com and https://<host>/api/v3 for any other host; for GitLab, https://<host>/api/v4 */
+            api_base: string;
+            /** @description true for github.com and gitlab.com, which every organization lists */
+            built_in: boolean;
+        };
+        CodeHosts: {
+            /** @description The built-in hosts first, then the added ones sorted by host */
+            hosts: components["schemas"]["CodeHost"][];
+        };
+        CodeHostInput: {
+            /** @description A DNS name such as ghe.example.com; case is ignored */
+            host: string;
+            kind: components["schemas"]["CodeHostKind"];
+        };
+        CodeHostsInput: {
+            /** @description Every host the organization adds, without github.com and gitlab.com; empty removes them all */
+            hosts: components["schemas"]["CodeHostInput"][];
         };
         /** @description Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap. */
         OrgSlots: {
@@ -9705,6 +9759,58 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCodeHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The code hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeHosts"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setCodeHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeHostsInput"];
+            };
+        };
+        responses: {
+            /** @description The code hosts now listed, the built-in ones first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeHosts"];
+                };
             };
             default: components["responses"]["Problem"];
         };

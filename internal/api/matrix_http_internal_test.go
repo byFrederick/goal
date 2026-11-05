@@ -216,6 +216,10 @@ func (mxOrgs) SetSignupDomain(context.Context, domain.Actor, string, domain.Fact
 	panic(errReached)
 }
 func (mxOrgs) ClearSignupDomain(context.Context, domain.Actor) error { panic(errReached) }
+func (mxOrgs) CodeHosts(context.Context) ([]domain.CodeHost, error)  { panic(errReached) }
+func (mxOrgs) SetCodeHosts(context.Context, domain.Actor, []domain.CodeHost) ([]domain.CodeHost, error) {
+	panic(errReached)
+}
 
 func (mxOrgs) Org(_ context.Context, ref string) (domain.Org, error) {
 	for _, o := range []domain.Org{{ID: mxAcme, Slug: "acme", Name: "Acme"}, {ID: mxOther, Slug: "other", Name: "Other"}} {

@@ -22,7 +22,7 @@ func TestTenancy_Conformance(t *testing.T) {
 		var factories atomic.Int64
 
 		return tenancytest.Harness{
-			Tenancy: tn, Audit: tn,
+			Tenancy: tn, Audit: tn, CodeHosts: tn,
 			NewFactory: func(_ *testing.T, org domain.OrgID) domain.FactoryID {
 				id := domain.FactoryID(fmt.Sprintf("00000000-0000-4000-8000-%012d", factories.Add(1)))
 				store.AddFactory(org, id)

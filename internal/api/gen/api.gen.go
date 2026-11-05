@@ -378,6 +378,24 @@ func (e CloneStartKind) Valid() bool {
 	}
 }
 
+// Defines values for CodeHostKind.
+const (
+	CodeHostKindGithub CodeHostKind = "github"
+	CodeHostKindGitlab CodeHostKind = "gitlab"
+)
+
+// Valid indicates whether the value is a known member of the CodeHostKind enum.
+func (e CodeHostKind) Valid() bool {
+	switch e {
+	case CodeHostKindGithub:
+		return true
+	case CodeHostKindGitlab:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConnectionStatus.
 const (
 	ConnectionStatusFailing       ConnectionStatus = "failing"
@@ -3309,6 +3327,45 @@ type CloneStart struct {
 
 // CloneStartKind defines model for CloneStart.Kind.
 type CloneStartKind string
+
+// CodeHost defines model for CodeHost.
+type CodeHost struct {
+	// ApiBase The REST API root goald derives: for GitHub, https://api.github.com for github.com, https://api.<name>.ghe.com for <name>.ghe.com and https://<host>/api/v3 for any other host; for GitLab, https://<host>/api/v4
+	ApiBase string `json:"api_base"`
+
+	// BuiltIn true for github.com and gitlab.com, which every organization lists
+	BuiltIn bool `json:"built_in"`
+
+	// Host A DNS name in lower case, such as ghe.example.com
+	Host string `json:"host"`
+
+	// Kind The API the host speaks, GitHub's or GitLab's
+	Kind CodeHostKind `json:"kind"`
+}
+
+// CodeHostInput defines model for CodeHostInput.
+type CodeHostInput struct {
+	// Host A DNS name such as ghe.example.com; case is ignored
+	Host string `json:"host"`
+
+	// Kind The API the host speaks, GitHub's or GitLab's
+	Kind CodeHostKind `json:"kind"`
+}
+
+// CodeHostKind The API the host speaks, GitHub's or GitLab's
+type CodeHostKind string
+
+// CodeHosts defines model for CodeHosts.
+type CodeHosts struct {
+	// Hosts The built-in hosts first, then the added ones sorted by host
+	Hosts []CodeHost `json:"hosts"`
+}
+
+// CodeHostsInput defines model for CodeHostsInput.
+type CodeHostsInput struct {
+	// Hosts Every host the organization adds, without github.com and gitlab.com; empty removes them all
+	Hosts []CodeHostInput `json:"hosts"`
+}
 
 // CompareSide One side of a comparison; id, number and state are null for a starting tree no version holds
 type CompareSide struct {
@@ -9397,6 +9454,9 @@ type DeleteOrgJSONRequestBody = OrgDeletion
 // CreateAPIKeyJSONRequestBody defines body for CreateAPIKey for application/json ContentType.
 type CreateAPIKeyJSONRequestBody = NewApiKey
 
+// SetCodeHostsJSONRequestBody defines body for SetCodeHosts for application/json ContentType.
+type SetCodeHostsJSONRequestBody = CodeHostsInput
+
 // PutConnectionKindJSONRequestBody defines body for PutConnectionKind for application/json ContentType.
 type PutConnectionKindJSONRequestBody = ConnectionKindFile
 
@@ -10075,6 +10135,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+	//
+	// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+	//
+	// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+	GetCodeHosts(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetCodeHostsWithBody Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHostsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetCodeHosts Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHosts(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListConnectionKinds The connection kinds the organization can make connections of
 	//
@@ -12434,6 +12519,61 @@ func (c *Client) SearchSkills(ctx context.Context, org OrgRef, params *SearchSki
 // Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 func (c *Client) GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSkillFilesRequest(c.Server, org, owner, repo, skill)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+//
+// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+//
+// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+func (c *Client) GetCodeHosts(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCodeHostsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetCodeHostsWithBody Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *Client) SetCodeHostsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetCodeHostsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetCodeHosts Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *Client) SetCodeHosts(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetCodeHostsRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -17711,6 +17851,87 @@ func NewGetSkillFilesRequest(server string, org OrgRef, owner SkillName, repo Sk
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetCodeHostsRequest constructs an http.Request for the GetCodeHosts method
+func NewGetCodeHostsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/code-hosts", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetCodeHostsRequest calls the generic SetCodeHosts builder with application/json body
+func NewSetCodeHostsRequest(server string, org OrgRef, body SetCodeHostsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetCodeHostsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewSetCodeHostsRequestWithBody constructs an http.Request for the SetCodeHosts method, with any body, and a specified content type
+func NewSetCodeHostsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/code-hosts", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -27962,6 +28183,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFilesWithResponse(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*GetSkillFilesResponse, error)
 
+	// GetCodeHostsWithResponse The code hosts the organization's repository tokens and knowledge secrets may go to
+	//
+	// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+	GetCodeHostsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetCodeHostsResponse, error)
+
+	// SetCodeHostsWithBodyWithResponse Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHostsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error)
+
+	// SetCodeHostsWithResponse Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHostsWithResponse(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error)
+
 	// ListConnectionKindsWithResponse The connection kinds the organization can make connections of
 	//
 	// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
@@ -31092,6 +31340,102 @@ func (r GetSkillFilesResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetSkillFilesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCodeHostsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CodeHosts
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCodeHostsResponse) GetJSON200() *CodeHosts {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetCodeHostsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCodeHostsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCodeHostsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCodeHostsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCodeHostsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetCodeHostsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CodeHosts
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetCodeHostsResponse) GetJSON200() *CodeHosts {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetCodeHostsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetCodeHostsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetCodeHostsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetCodeHostsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetCodeHostsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -40341,6 +40685,51 @@ func (c *ClientWithResponses) GetSkillFilesWithResponse(ctx context.Context, org
 	return ParseGetSkillFilesResponse(rsp)
 }
 
+// GetCodeHostsWithResponse The code hosts the organization's repository tokens and knowledge secrets may go to
+//
+// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+func (c *ClientWithResponses) GetCodeHostsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetCodeHostsResponse, error) {
+	rsp, err := c.GetCodeHosts(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCodeHostsResponse(rsp)
+}
+
+// SetCodeHostsWithBodyWithResponse Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *ClientWithResponses) SetCodeHostsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error) {
+	rsp, err := c.SetCodeHostsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetCodeHostsResponse(rsp)
+}
+
+// SetCodeHostsWithResponse Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *ClientWithResponses) SetCodeHostsWithResponse(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error) {
+	rsp, err := c.SetCodeHosts(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetCodeHostsResponse(rsp)
+}
+
 // ListConnectionKindsWithResponse The connection kinds the organization can make connections of
 //
 // The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
@@ -44635,6 +45024,72 @@ func ParseGetSkillFilesResponse(rsp *http.Response) (*GetSkillFilesResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SkillFiles
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCodeHostsResponse parses an HTTP response from a GetCodeHostsWithResponse call
+func ParseGetCodeHostsResponse(rsp *http.Response) (*GetCodeHostsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCodeHostsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CodeHosts
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetCodeHostsResponse parses an HTTP response from a SetCodeHostsWithResponse call
+func ParseSetCodeHostsResponse(rsp *http.Response) (*SetCodeHostsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetCodeHostsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CodeHosts
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -50969,6 +51424,12 @@ type ServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(w http.ResponseWriter, r *http.Request, org OrgRef, owner SkillName, repo SkillName, skill SkillName)
+	// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+	// (GET /v1/orgs/{org}/code-hosts)
+	GetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SetCodeHosts Replace the organization's added code hosts
+	// (PUT /v1/orgs/{org}/code-hosts)
+	SetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListConnectionKinds The connection kinds the organization can make connections of
 	// (GET /v1/orgs/{org}/connection-kinds)
 	ListConnectionKinds(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -52147,6 +52608,58 @@ func (siw *ServerInterfaceWrapper) GetSkillFiles(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSkillFiles(w, r, org, owner, repo, skill)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCodeHosts operation middleware
+func (siw *ServerInterfaceWrapper) GetCodeHosts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCodeHosts(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetCodeHosts operation middleware
+func (siw *ServerInterfaceWrapper) SetCodeHosts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetCodeHosts(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -60039,6 +60552,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.ClearSignupDomain)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.SetSignupDomain)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/code-hosts", wrapper.GetCodeHosts)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/code-hosts", wrapper.SetCodeHosts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.GetNotificationSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.SetNotificationSettings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications/test", wrapper.TestNotificationSettings)
@@ -60972,6 +61487,85 @@ type GetSkillFilesdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetSkillFilesdefaultApplicationProblemPlusJSONResponse) VisitGetSkillFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCodeHostsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetCodeHostsResponseObject interface {
+	VisitGetCodeHostsResponse(w http.ResponseWriter) error
+}
+
+type GetCodeHosts200JSONResponse CodeHosts
+
+func (response GetCodeHosts200JSONResponse) VisitGetCodeHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCodeHostsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCodeHostsdefaultApplicationProblemPlusJSONResponse) VisitGetCodeHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCodeHostsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *SetCodeHostsJSONRequestBody
+}
+
+type SetCodeHostsResponseObject interface {
+	VisitSetCodeHostsResponse(w http.ResponseWriter) error
+}
+
+type SetCodeHosts200JSONResponse CodeHosts
+
+func (response SetCodeHosts200JSONResponse) VisitSetCodeHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCodeHostsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetCodeHostsdefaultApplicationProblemPlusJSONResponse) VisitSetCodeHostsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -68926,6 +69520,12 @@ type StrictServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(ctx context.Context, request GetSkillFilesRequestObject) (GetSkillFilesResponseObject, error)
+	// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+	// (GET /v1/orgs/{org}/code-hosts)
+	GetCodeHosts(ctx context.Context, request GetCodeHostsRequestObject) (GetCodeHostsResponseObject, error)
+	// SetCodeHosts Replace the organization's added code hosts
+	// (PUT /v1/orgs/{org}/code-hosts)
+	SetCodeHosts(ctx context.Context, request SetCodeHostsRequestObject) (SetCodeHostsResponseObject, error)
 	// ListConnectionKinds The connection kinds the organization can make connections of
 	// (GET /v1/orgs/{org}/connection-kinds)
 	ListConnectionKinds(ctx context.Context, request ListConnectionKindsRequestObject) (ListConnectionKindsResponseObject, error)
@@ -70063,6 +70663,65 @@ func (sh *strictHandler) GetSkillFiles(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSkillFilesResponseObject); ok {
 		if err := validResponse.VisitGetSkillFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCodeHosts operation middleware
+func (sh *strictHandler) GetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetCodeHostsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCodeHosts(ctx, request.(GetCodeHostsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCodeHosts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCodeHostsResponseObject); ok {
+		if err := validResponse.VisitGetCodeHostsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetCodeHosts operation middleware
+func (sh *strictHandler) SetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request SetCodeHostsRequestObject
+
+	request.Org = org
+
+	var body SetCodeHostsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetCodeHosts(ctx, request.(SetCodeHostsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetCodeHosts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetCodeHostsResponseObject); ok {
+		if err := validResponse.VisitSetCodeHostsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
