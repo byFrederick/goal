@@ -11,7 +11,7 @@ import { SquareTerminal } from 'lucide-react';
 import { type ComponentProps, type FormEvent, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../api/client';
-import { meQuery, notificationsQuery } from '../../api/queries';
+import { meQuery, notificationsQuery, orgNotificationsQuery } from '../../api/queries';
 import type { Me, NotificationPreferences, OrgSummary } from '../../api/types';
 import { useAccount } from '../../app/account-menu';
 import { AppearanceChoice } from '../../app/appearance-choice';
@@ -66,6 +66,7 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
   const active = sections.some((s) => s.id === hash) ? hash : 'profile';
   const update = useUpdateName();
   const preferences = useQuery({ ...notificationsQuery, enabled: person !== undefined });
+  const orgPreferences = useQuery({ ...orgNotificationsQuery(org.id), enabled: person !== undefined });
   const save = useSaveNotifications();
 
   return (
@@ -84,7 +85,10 @@ function AccountContent({ me, org }: { me: Me; org: OrgSummary }) {
             </h2>
             <NotificationsTable org={org.id} signedIn={person !== undefined} />
           </section>
-          <PersonalTokensSection org={org} />
+          <PersonalTokensSection
+            org={org}
+            settled={person === undefined || !(preferences.isPending || orgPreferences.isPending)}
+          />
           <ConnectedAppsSection />
           <SessionsSection signedIn={person !== undefined} />
         </div>

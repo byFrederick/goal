@@ -323,7 +323,7 @@ export default function MonacoEditor({
         const n = Math.min(Math.max(1, line), editor.getModel()?.getLineCount() ?? 1);
         editor.setPosition({ lineNumber: n, column: 1 });
         editor.revealLineInCenter(n);
-        host.current.scrollIntoView({ block: 'nearest' });
+        if (focus) host.current.scrollIntoView({ block: 'nearest' });
         if (focus) editor.focus();
         return true;
       },

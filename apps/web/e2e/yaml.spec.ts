@@ -65,8 +65,7 @@ test('Form ↔ YAML: one draft, comments kept, the place kept (flow 2)', async (
   await showFiles(page);
   await expect(page.getByRole('button', { name: /^factory\.yaml.*changed/ })).toBeAttached();
 
-  // The cursor's line is written to the URL once it settles (400 ms); Form opens at the station under it.
-  await expect(page).toHaveURL(/[?&]line=\d+/);
+  // Form opens at the station under the cursor: it reads the cursor's line, not ?line=, which settles 400 ms later.
   const form = editorView(page).getByRole('radio', { name: 'Form' });
   await form.click();
   await expect(page).toHaveURL(/\/definition\/line\?station=spec$/);
