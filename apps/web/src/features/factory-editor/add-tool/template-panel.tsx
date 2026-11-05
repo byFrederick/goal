@@ -11,6 +11,7 @@ import { useFactory } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Field, Input } from '../../../ui/field';
+import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { refusalText } from '../../secrets/words';
 import { useDraftSession } from '../draft/use-draft';
 import { fillAdds, type ToolMode } from '../environments/env-file';
@@ -37,8 +38,11 @@ type PanelProps = {
 /** Waits for the organization's secrets, so the suggested name of a new one is free from the first keystroke. */
 export function TemplatePanel(props: PanelProps) {
   const { options, ready } = useSecretOptions();
-  if (!ready) return <div aria-hidden="true" className="h-96 rounded-control bg-hover" />;
-  return <Panel {...props} taken={new Set(options.map((o) => o.value))} />;
+  return (
+    <Skeleton ready={ready} placeholder={<SkeletonRows rows={6} />}>
+      {ready ? <Panel {...props} taken={new Set(options.map((o) => o.value))} /> : null}
+    </Skeleton>
+  );
 }
 
 function Panel({ template, environment, onEnvironment, taken }: PanelProps & { taken: ReadonlySet<string> }) {
