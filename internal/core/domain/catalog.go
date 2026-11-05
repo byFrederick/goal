@@ -462,6 +462,39 @@ func (t ToolTemplate) checkMCP(name string, refs func(where, value string)) []er
 	return errs
 }
 
+// CatalogCommand reports whether command is exactly the command of a stdio MCP server one of
+// catalog's templates ships, in its own lines or a parameter's otherwise lines: the only commands
+// goald starts to test a stdio server (ADR 0041 decision 15), never one a definition names.
+func CatalogCommand(catalog []ToolTemplate, command []string) bool {
+	if len(command) == 0 {
+		return false
+	}
+
+	ships := func(servers map[string]TemplateMCP) bool {
+		for _, m := range servers {
+			if slices.Equal(m.Command, command) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	for _, t := range catalog {
+		if ships(t.MCP) {
+			return true
+		}
+
+		for _, p := range t.Parameters {
+			if p.Otherwise != nil && ships(p.Otherwise.MCP) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // shape is what is wrong with m's form, or "": it is remote (an https url and headers) or stdio
 // (a command and env), never both.
 func (m TemplateMCP) shape() string {

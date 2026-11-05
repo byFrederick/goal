@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -90,8 +91,9 @@ func (e *EnvironmentTests) List(ctx context.Context, factory domain.FactoryID) (
 	return out, nil
 }
 
-// ToolLister answers tools/list from a table by URL, and records the endpoints it was asked
-// about. A URL neither served nor failed answers an error.
+// ToolLister answers tools/list from a table by URL, or by a stdio server's command joined with
+// spaces (StdioKey), and records the endpoints it was asked about. A key neither served nor
+// failed answers an error.
 type ToolLister struct {
 	mu     sync.Mutex
 	tools  map[string][]ports.Tool
@@ -146,15 +148,20 @@ func (l *ToolLister) ListTools(_ context.Context, e ports.MCPEndpoint) ([]ports.
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.called = append(l.called, ports.MCPEndpoint{URL: e.URL, Headers: maps.Clone(e.Headers)})
+	l.called = append(l.called, ports.MCPEndpoint{URL: e.URL, Headers: maps.Clone(e.Headers), Command: slices.Clone(e.Command), Env: maps.Clone(e.Env)})
 
-	if err := l.errs[e.URL]; err != nil {
+	key := e.URL
+	if len(e.Command) > 0 {
+		key = StdioKey(e.Command...)
+	}
+
+	if err := l.errs[key]; err != nil {
 		return nil, err
 	}
 
-	tools, ok := l.tools[e.URL]
+	tools, ok := l.tools[key]
 	if !ok {
-		return nil, fmt.Errorf("%s: no MCP server answers", e.URL)
+		return nil, fmt.Errorf("%s: no MCP server answers", key)
 	}
 
 	out := slices.Clone(tools)
@@ -162,3 +169,6 @@ func (l *ToolLister) ListTools(_ context.Context, e ports.MCPEndpoint) ([]ports.
 
 	return out, nil
 }
+
+// StdioKey is the key Serve, ServeReadOnly and Fail take for the stdio server command starts.
+func StdioKey(command ...string) string { return strings.Join(command, " ") }
