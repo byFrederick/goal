@@ -1,6 +1,6 @@
-// Package environmentcheck tests a remote MCP server of an environment file (ADR 0037 decision 9):
-// it opens the secrets the server's headers name, calls tools/list with them and scrubs every
-// error of the opened values. The environment test route (internal/api) and the conversion at
+// Package environmentcheck tests an MCP server of an environment file (ADR 0037 decision 9): it
+// opens the secrets a remote server's headers or a stdio server's env name, calls tools/list with
+// them and scrubs every error of the opened values. The environment test route (internal/api) and the conversion at
 // goald's start (internal/moveover, decision 19) both test servers with it. Opened values reach
 // the ToolLister only.
 package environmentcheck
@@ -61,15 +61,17 @@ type Result struct {
 	Error    string
 }
 
-// Server tests the remote MCP server at url: it opens the secrets headers refer to with open (or
-// takes slots' values, when slots is not nil), and lists its tools with the headers rendered. A
-// secret that does not exist or is not open to the use fails the test; err is any other refusal
-// to open, such as a missing master key, and nothing is tested then.
-func Server(ctx context.Context, tools ports.ToolLister, open Opener, url string, headers, slots map[string]string) (Result, error) {
+// Server tests the MCP server e, as its file has it: remote at e.URL, or stdio from e.Command,
+// which the caller checked is one the tool catalog ships. It opens the secrets e's headers and env
+// refer to with open (or takes slots' values, when slots is not nil), and lists its tools with
+// them rendered. A secret that does not exist or is not open to the use fails the test; err is
+// any other refusal to open, such as a missing master key, and nothing is tested then.
+func Server(ctx context.Context, tools ports.ToolLister, open Opener, e ports.MCPEndpoint, slots map[string]string) (Result, error) {
 	values := slots
 	if values == nil {
 		var err error
-		if values, err = open(ctx, Referenced(headers)); err != nil {
+		names := slices.Sorted(slices.Values(append(Referenced(e.Headers), Referenced(e.Env)...)))
+		if values, err = open(ctx, slices.Compact(names)); err != nil {
 			if !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, ports.ErrSecretNotAllowed) {
 				return Result{}, err
 			}
@@ -78,7 +80,9 @@ func Server(ctx context.Context, tools ports.ToolLister, open Opener, url string
 		}
 	}
 
-	listed, err := tools.ListTools(ctx, ports.MCPEndpoint{URL: url, Headers: Render(headers, values)})
+	e.Headers, e.Env = Render(e.Headers, values), Render(e.Env, values)
+
+	listed, err := tools.ListTools(ctx, e)
 	if err != nil {
 		return Result{Error: Scrub(err.Error(), values)}, nil
 	}

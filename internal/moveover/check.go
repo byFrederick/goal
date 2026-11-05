@@ -61,7 +61,7 @@ func (m *Mover) check(ctx context.Context, factory domain.FactoryID, tree map[st
 			}
 
 			tctx, cancel := context.WithTimeout(ctx, m.timeout())
-			r, err := environmentcheck.Server(tctx, m.d.Tools, open, s.URL, s.Headers, nil)
+			r, err := environmentcheck.Server(tctx, m.d.Tools, open, ports.MCPEndpoint{URL: s.URL, Headers: s.Headers}, nil)
 
 			cancel()
 

@@ -42,7 +42,8 @@ func TestServer_OpensHeadersAndListsTools(t *testing.T) {
 	tools := porttest.NewToolLister()
 	tools.Serve(serverURL, "search", "fetch")
 
-	r, err := environmentcheck.Server(t.Context(), tools, opener, serverURL, map[string]string{"Authorization": "Bearer {{ key }}"}, nil)
+	r, err := environmentcheck.Server(t.Context(), tools, opener,
+		ports.MCPEndpoint{URL: serverURL, Headers: map[string]string{"Authorization": "Bearer {{ key }}"}}, nil)
 	if err != nil || !r.OK || !slices.Equal(r.Tools, []string{"fetch", "search"}) || r.Error != "" {
 		t.Fatalf("Server = %+v, %v; want its tools", r, err)
 	}
@@ -60,7 +61,7 @@ func TestServer_KeepsReadOnlyHints(t *testing.T) {
 	tools.Serve(serverURL, "merge_pull_request")
 	tools.ServeReadOnly(serverURL, "search_code", "get_issue")
 
-	r, err := environmentcheck.Server(t.Context(), tools, opener, serverURL, nil, nil)
+	r, err := environmentcheck.Server(t.Context(), tools, opener, ports.MCPEndpoint{URL: serverURL}, nil)
 	if err != nil || !r.OK {
 		t.Fatalf("Server = %+v, %v; want its tools", r, err)
 	}
@@ -74,6 +75,36 @@ func TestServer_KeepsReadOnlyHints(t *testing.T) {
 	}
 }
 
+// A stdio server starts with its env's references opened, and its read-only tools come back as a
+// remote server's do; its error is scrubbed of the opened values too.
+func TestServer_StdioKeepsReadOnlyHints(t *testing.T) {
+	t.Parallel()
+
+	command := []string{"acme-mcp", "stdio"}
+	tools := porttest.NewToolLister()
+	tools.Serve(porttest.StdioKey(command...), "create_issue")
+	tools.ServeReadOnly(porttest.StdioKey(command...), "get_issue")
+
+	env := map[string]string{"ACME_TOKEN": "{{key}}", "ACME_HOST": "https://acme.example.com"}
+
+	r, err := environmentcheck.Server(t.Context(), tools, opener, ports.MCPEndpoint{Command: command, Env: env}, nil)
+	if err != nil || !r.OK || !slices.Equal(r.Tools, []string{"create_issue", "get_issue"}) || !slices.Equal(r.ReadOnly, []string{"get_issue"}) {
+		t.Fatalf("Server = %+v, %v; want its tools with get_issue read-only", r, err)
+	}
+
+	called := tools.Called()[0]
+	if !slices.Equal(called.Command, command) || called.Env["ACME_TOKEN"] != keyValue || called.Env["ACME_HOST"] != "https://acme.example.com" {
+		t.Errorf("started %q with %d env values; want the command with its env rendered", called.Command, len(called.Env))
+	}
+
+	tools.Fail(porttest.StdioKey(command...), errors.New("exit status 1; stderr: bad token "+keyValue))
+
+	r, err = environmentcheck.Server(t.Context(), tools, opener, ports.MCPEndpoint{Command: command, Env: env}, nil)
+	if err != nil || r.OK || r.Error != "exit status 1; stderr: bad token [secret]" {
+		t.Errorf("Server of a failing stdio server = %+v, %v; want the scrubbed error", r, err)
+	}
+}
+
 // A failed tools/list is the test's error, with no opened value in it.
 func TestServer_ErrorScrubbed(t *testing.T) {
 	t.Parallel()
@@ -81,7 +112,8 @@ func TestServer_ErrorScrubbed(t *testing.T) {
 	tools := porttest.NewToolLister()
 	tools.Fail(serverURL, errors.New("401: bad key "+keyValue))
 
-	r, err := environmentcheck.Server(t.Context(), tools, opener, serverURL, map[string]string{"X-Key": "{{key}}"}, nil)
+	r, err := environmentcheck.Server(t.Context(), tools, opener,
+		ports.MCPEndpoint{URL: serverURL, Headers: map[string]string{"X-Key": "{{key}}"}}, nil)
 	if err != nil || r.OK || r.Error != "401: bad key [secret]" {
 		t.Errorf("Server = %+v, %v; want the scrubbed error", r, err)
 	}
@@ -94,7 +126,8 @@ func TestServer_SecretRefusals(t *testing.T) {
 
 	tools := porttest.NewToolLister()
 
-	r, err := environmentcheck.Server(t.Context(), tools, opener, serverURL, map[string]string{"X-Key": "{{other}}"}, nil)
+	r, err := environmentcheck.Server(t.Context(), tools, opener,
+		ports.MCPEndpoint{URL: serverURL, Headers: map[string]string{"X-Key": "{{other}}"}}, nil)
 	if err != nil || r.OK || !strings.Contains(r.Error, "secret other") || len(tools.Called()) != 0 {
 		t.Errorf("Server with a missing secret = %+v, %v (%d calls); want a failed test and no call", r, err, len(tools.Called()))
 	}
@@ -102,7 +135,7 @@ func TestServer_SecretRefusals(t *testing.T) {
 	locked := errors.New("no master key")
 
 	_, err = environmentcheck.Server(t.Context(), tools, func(context.Context, []string) (map[string]string, error) { return nil, locked },
-		serverURL, map[string]string{"X-Key": "{{key}}"}, nil)
+		ports.MCPEndpoint{URL: serverURL, Headers: map[string]string{"X-Key": "{{key}}"}}, nil)
 	if !errors.Is(err, locked) {
 		t.Errorf("Server without a master key = %v; want its error", err)
 	}
