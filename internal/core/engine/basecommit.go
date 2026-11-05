@@ -52,7 +52,7 @@ func (e *Engine) branchHead(ctx context.Context, l domain.Line, it domain.Item) 
 		return "", err
 	}
 
-	sha, err := t.host.BranchHead(ctx, t.login, t.url, "")
+	sha, err := t.host.BranchHead(ctx, t.repo, t.token, "")
 	if err != nil {
 		return "", fmt.Errorf("read the default branch's head: %w", err)
 	}
@@ -98,7 +98,7 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 		return "", err
 	}
 
-	head, err := t.host.BranchHead(ctx, t.login, t.url, "")
+	head, err := t.host.BranchHead(ctx, t.repo, t.token, "")
 	if err != nil {
 		return "", fmt.Errorf("read the default branch's head: %w", err)
 	}
@@ -107,7 +107,7 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 		return "", nil
 	}
 
-	cmp, err := t.host.Compare(ctx, t.login, t.url, it.BaseCommit, head)
+	cmp, err := t.host.Compare(ctx, t.repo, t.token, it.BaseCommit, head)
 	if err != nil {
 		return "", fmt.Errorf("compare %s with the default branch: %w", it.BaseCommit, err)
 	}
