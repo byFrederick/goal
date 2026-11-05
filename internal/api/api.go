@@ -102,6 +102,7 @@ type Items interface {
 	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
+	ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
@@ -551,6 +552,13 @@ func (s *server) itemRepositories(ctx context.Context, it domain.Item, l domain.
 		return nil, fmt.Errorf("item %s: repositories: %w", it.ID, err)
 	}
 
+	out := repositoriesOf(rows, l)
+
+	return &out, nil
+}
+
+// repositoriesOf are an item's rows as the API shows them (itemRepositories), never nil.
+func repositoriesOf(rows []domain.ItemRepository, l domain.Line) []gen.ItemRepository {
 	rs := domain.ResolveItemRepositories(rows, l)
 	out := make([]gen.ItemRepository, 0, len(rs))
 
@@ -563,7 +571,7 @@ func (s *server) itemRepositories(ctx context.Context, it domain.Item, l domain.
 		out = append(out, o)
 	}
 
-	return &out, nil
+	return out
 }
 
 // submittedFrom is where an item the request submits comes from, for Intake, and how its person

@@ -1,8 +1,10 @@
 package api_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -135,4 +137,71 @@ func TestAPI_SubmitRefusesAnUnknownRepository(t *testing.T) {
 	if code := h.call(t, http.MethodGet, acmeItems, "", &page); code != http.StatusOK || len(page.Items) != 0 {
 		t.Errorf("list items = %d with %d items; want none filed", code, len(page.Items))
 	}
+}
+
+// A card for an item with two repositories lists both in first-joined order with how each
+// joined, on the Items list and the Board, read once per page; a card for an item without rows,
+// in a factory without a default entry, sends an empty array, never null.
+func TestAPI_ItemCardsCarryRepositories(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.publishRepositories(t)
+
+	var two, none gen.Item
+	if code := h.call(t, http.MethodPost, acmeItems, `{"title":"Add a flag","type":"fix","repositories":["acme/web","acme/api"]}`, &two); code != http.StatusCreated {
+		t.Fatalf("submit with repositories = %d", code)
+	}
+
+	if code := h.call(t, http.MethodPost, acmeItems, `{"title":"Fix a typo","type":"fix"}`, &none); code != http.StatusCreated {
+		t.Fatalf("submit without repositories = %d", code)
+	}
+
+	var (
+		list  gen.ItemPage
+		board gen.Board
+	)
+
+	h.getReadingOnce(t, "ItemsRepositories", acmeItems, &list)
+	h.getReadingOnce(t, "ItemsRepositories", "/v1/orgs/acme/factories/acme/board", &board)
+
+	want := []string{"github.com/acme/web filing", "github.com/acme/api filing"}
+
+	for from, cards := range map[string]map[int64]gen.ItemCard{"items": byNumber(list.Items), "board": cardsOf(board)} {
+		c, ok := cards[two.Number]
+		if got := cardRepos(c); !ok || !slices.Equal(got, want) || c.Repositories[0].JoinedAt == nil {
+			t.Errorf("%s: card repositories = %v (on it: %t); want %v with joined_at", from, got, ok, want)
+		}
+
+		if c, ok := cards[none.Number]; !ok || c.Repositories == nil || len(c.Repositories) != 0 {
+			t.Errorf("%s: card without rows has repositories %#v (on it: %t); want an empty array", from, c.Repositories, ok)
+		}
+	}
+
+	var raw struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(h.request(t, http.MethodGet, acmeItems, "", nil).body, &raw); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range raw.Items {
+		if r := string(c["repositories"]); r == "" || r == "null" {
+			t.Errorf("card %s encodes repositories as %q; want an array", c["ref"], r)
+		}
+
+		if string(c["number"]) == strconv.FormatInt(none.Number, 10) && string(c["repositories"]) != "[]" {
+			t.Errorf("card without rows encodes repositories as %s; want []", c["repositories"])
+		}
+	}
+}
+
+// cardRepos is a card's repositories as repo/joined, in order.
+func cardRepos(c gen.ItemCard) []string {
+	out := make([]string, 0, len(c.Repositories))
+	for _, r := range c.Repositories {
+		out = append(out, r.Repo+" "+string(r.Joined))
+	}
+
+	return out
 }

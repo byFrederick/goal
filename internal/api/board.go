@@ -397,7 +397,7 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 // cards renders items of factory f as cards: for every item in progress the agent working it, the
 // copy (1-based) when its station runs several, and the turns, latest tool call (activity) and
 // plan steps of its running run; for every item
-// the pull request and the summary its outputs name, its human touches, and whether it waits in the buffer of drum
+// the pull request and the summary its outputs name, its human touches, its repositories, and whether it waits in the buffer of drum
 // (none when drum is ""), for an assembly where its parts stand, for a part its assembly and
 // which part it is, and for a waiting item what holds it, read for the whole page at once. Nothing is held by the rope until
 // drum-buffer-rope is enforced.
@@ -407,9 +407,16 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		return nil, err
 	}
 
-	touches, err := s.touchCounts(ctx, items)
+	ids := itemIDs(items)
+
+	touches, err := s.items.TouchCounts(ctx, ids)
 	if err != nil {
 		return nil, err
+	}
+
+	repos, err := s.items.ItemsRepositories(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of the cards: %w", err)
 	}
 
 	asms, err := s.assemblies(ctx, l.FactoryID, items)
@@ -435,7 +442,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: ageSeconds(it, now),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
 			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
-			PullRequests: []string{},
+			PullRequests: []string{}, Repositories: repositoriesOf(repos[it.ID], l),
 		}
 		s.filing(&c, it)
 
@@ -485,14 +492,14 @@ func (s *server) filing(c *gen.ItemCard, it domain.Item) {
 	}
 }
 
-// touchCounts counts the touches of each of items that has any, by item.
-func (s *server) touchCounts(ctx context.Context, items []domain.Item) (map[domain.ItemID]int, error) {
+// itemIDs are the ids of items, in order.
+func itemIDs(items []domain.Item) []domain.ItemID {
 	ids := make([]domain.ItemID, 0, len(items))
 	for _, it := range items {
 		ids = append(ids, it.ID)
 	}
 
-	return s.items.TouchCounts(ctx, ids)
+	return ids
 }
 
 // assemblyFields are an item's card's assembly, when it is a part of one of asms, and parts,
