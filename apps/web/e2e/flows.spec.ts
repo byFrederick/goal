@@ -274,11 +274,15 @@ test('approve from the phone: the Needs you page decides the oldest decision', a
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  // The button's name ends with its shortcut key (detail.tsx: "Approve A").
+  await page.getByRole('button', { name: /^Approve( A)?$/ }).click();
   await expectToast(page, 'Approved sre#4.');
 });
 
-test('merging from the phone names every pull request the merge lands', async ({ page, request }) => {
+test('merging from the phone is one tap on the Needs you page and says which item merged', async ({
+  page,
+  request,
+}) => {
   test.skip(!isPhone(page), 'the approve view is the phone layout of the Needs you page');
   // goal#12 is older; once approved, goal#6 (two pull requests, at Merge) is the one to decide.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
@@ -286,11 +290,11 @@ test('merging from the phone names every pull request the merge lands', async ({
   await needsList(page)
     .getByRole('link', { name: /goal#6/ })
     .click();
-  await page.getByRole('button', { name: 'Merge', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Merge 2 pull requests?' });
-  await expect(dialog.getByRole('link', { name: /Review acme\/goal PR #38 first/ })).toBeVisible();
-  await expect(dialog.getByRole('link', { name: /Review acme\/design-tokens MR !12 first/ })).toBeVisible();
   await expectAccessible(page);
+  // The Needs you page merges at once (needs-you-page.test.tsx: "swaps Merge for a check once the merge went
+  // through"); the confirmation that names every pull request is the item page's ("merge every pull request at the merge station").
+  await page.getByRole('button', { name: /^Merge( A)?$/ }).click();
+  await expectToast(page, 'Merged goal#6.');
 });
 
 test('an item shows its stepper: each station with its time, and the step it is at', async ({ page }) => {
