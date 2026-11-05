@@ -76,6 +76,9 @@ type claimed struct {
 	// code is what the runs get of the item's repositories and the factory's entries, decided at
 	// the claim's start (Line.RunCode).
 	code domain.RunCode
+	// hostKind is the kind of the code host of a landing root's first repository (firstHostKind),
+	// which picks the command its landing note opens a pull request with; "" for GitHub's.
+	hostKind domain.CodeHostKind
 }
 
 // webTools are the Claude Code tools of the builtins.web group, which the organization policy's
@@ -261,6 +264,7 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 
 	if err == nil && refusal == "" {
 		c.code, err = e.runCode(ctx, c.line, c.agent, c.item.ID)
+		c.hostKind = e.firstHostKind(ctx, log, *c)
 	}
 
 	switch {
@@ -744,6 +748,11 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 
 	note := joinParts(fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
 		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host)), code)
+	if c.item.Landing() && c.agent.Code == domain.CodeRead {
+		return note + fmt.Sprintf("\n\nThis is the assembly's integration branch `%s`; it lands on the default branch. "+
+			"You only read code: push nothing and open no pull request.", c.branch)
+	}
+
 	// A landing root lands only at its landing station; anywhere else (build, after the landing
 	// was rejected) it is reworked on the integration branch, so a landing note there would have
 	// the agent check the landing instead of fixing what the rejection asks for.
@@ -757,9 +766,9 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 		return note + fmt.Sprintf("\n\nYou are landing the whole assembly: `%s` is its integration branch, which holds "+
 			"every part's merged work, and it lands on the default branch (origin/HEAD). First merge the default branch into `%s` "+
 			"and resolve any conflicts there; never rebase it. Then, if no pull request from `%s` into the default branch is open, "+
-			"open one with `gh pr create --base <default branch> --head %s`, and name it in your output's pull_request. "+
+			"open one with `%s`, and name it in your output's pull_request. "+
 			"When `%s` has no commits beyond the default branch, open none and report `\"pull_requests\": []` instead.",
-			c.branch, c.branch, c.branch, c.branch, c.branch)
+			c.branch, c.branch, c.branch, openCommand(c.hostKind, c.branch), c.branch) + eachRepository(c)
 	}
 
 	if c.base == "" {
@@ -767,10 +776,71 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 	}
 
 	refresh := cmp.Or(c.line.Flow.Assemblies.Integration.Refresh, domain.RefreshOnLand)
+	open := fmt.Sprintf("open your pull request into `%s`", c.base)
+
+	if c.agent.Code == domain.CodeRead {
+		open = "you only read code, so push nothing and open no pull request"
+	}
 
 	return note + fmt.Sprintf("\n\nThis part builds on its assembly's integration branch `%s`, not the default branch: "+
-		"open your pull request into `%s`. The integration branch takes in the default branch %s (refresh: %s).",
-		c.base, c.base, refreshWhen[refresh], refresh)
+		"%s. The integration branch takes in the default branch %s (refresh: %s).",
+		c.base, open, refreshWhen[refresh], refresh)
+}
+
+// eachRepository tells a landing with several repositories to land each of them, and is empty
+// for one.
+func eachRepository(c claimed) string {
+	if len(c.code.Clones) < 2 {
+		return ""
+	}
+
+	return fmt.Sprintf(" Do this in each of the item's repositories where `%s` has commits beyond its default branch, "+
+		"and name every pull request in your output's pull_requests.", c.branch)
+}
+
+// openCommand is the command that opens a pull request from branch into the default branch on a
+// code host of kind (ADR 0041 decision 7): glab on GitLab, gh on GitHub and when kind is unknown.
+func openCommand(kind domain.CodeHostKind, branch string) string {
+	if kind == domain.CodeHostGitLab {
+		return "glab mr create --target-branch <default branch> --source-branch " + branch
+	}
+
+	return "gh pr create --base <default branch> --head " + branch
+}
+
+// firstHostKind is the kind the organization lists the host of a landing root's first repository
+// as: its first clone's, else the line's repository's. "" for any other claim, for one with no
+// repository, and when the host is not listed or cannot be read, which is logged: the note then
+// names GitHub's command.
+func (e *Engine) firstHostKind(ctx context.Context, log *slog.Logger, c claimed) domain.CodeHostKind {
+	if !c.item.Landing() {
+		return ""
+	}
+
+	raw := c.line.Runtime.Repository.URL
+	if len(c.code.Clones) > 0 {
+		raw = c.code.Clones[0].URL
+	}
+
+	if raw == "" {
+		return ""
+	}
+
+	hosts, err := e.listedCodeHosts(ctx)
+	if err != nil {
+		log.WarnContext(ctx, "code host kind unknown", slog.Any("error", err))
+
+		return ""
+	}
+
+	repo, err := domain.ParseCodeRepository(hosts, raw)
+	if err != nil {
+		log.WarnContext(ctx, "code host kind unknown", slog.String("repository", raw), slog.Any("error", err))
+
+		return ""
+	}
+
+	return repo.Host.Kind
 }
 
 // codeNote lists the item's repositories, each with where it is and whether this agent may push

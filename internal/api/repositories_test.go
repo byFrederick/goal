@@ -9,8 +9,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
-// acmeWithRepositories is acme with one entry, for every repository of the acme owner. Publish
-// takes only one entry that writes until 4-merges lands (config's notSupportedYet), so the
+// acmeWithRepositories is acme with one entry, for every repository of the acme owner; the
 // domain's tests cover several entries and the default entry beside an owner pattern.
 var acmeWithRepositories = strings.Replace(acme, `runtime: { modelKey: "{{claude-key}}" }`,
 	`runtime: { modelKey: "{{claude-key}}", repositories: [`+

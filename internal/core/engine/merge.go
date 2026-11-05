@@ -26,15 +26,28 @@ var ErrNotMergeStep = errors.New("item is not waiting at a merge station")
 // runtime.repository.token.
 var ErrNoCodeHost = errors.New("no code host serves the pull request's host")
 
+// ErrNoWriteEntry means a pull request is in a repository that only a read entry of
+// runtime.repositories covers, or none does: goald never updates a branch, merges or deletes a
+// branch there (ADR 0041 decision 3).
+var ErrNoWriteEntry = errors.New("no repository entry that writes covers the pull request's repository")
+
+// ErrNotTheItems means a pull request's head is not the item's branch, or its assembly's
+// integration branch, in its own repository: no station checked it, so goald does not merge it
+// (ADR 0041 decision 5).
+var ErrNotTheItems = errors.New("the pull request is not the item's")
+
 // MergeSquash is the merge method goald uses unless told otherwise.
 const MergeSquash = "squash"
 
 // Merge merges every pull request of an item waiting at a merge station, then approves the item
 // on by's behalf (spec 4 §4.7). The pull requests are the ones the item's outputs name
-// (domain.Item.PullRequests), each merged through the code host mergeTargets picks for its URL's
-// host: on connections the factory's connection that serves it, opened for by's merge of the item
-// (connection.used names both), on secrets runtime.repository's token; a host nothing serves is
-// refused (ErrNoCodeHost) before anything is opened or merged. Merge
+// (domain.Item.PullRequests), in the order they name them, each in its own repository through the
+// code host and token mergeTargets picks for it: the token of the runtime.repositories entry that
+// covers it, else the factory's connection that serves its host, opened for by's merge of the item
+// (connection.used names both), or runtime.repository's token. A host nothing serves is refused
+// (ErrNoCodeHost), and a repository no entry that writes covers (ErrNoWriteEntry), before anything
+// is opened or merged; a pull request whose head is not the item's branch is refused
+// (ErrNotTheItems) before its branch is touched. Merge
 // never forces: each pull request's branch is first brought up to date with its base, and one
 // that is not open and mergeable then, or whose head moves meanwhile, stops the merge with an
 // error wrapping ports.ErrNotMergeable, and the item does not move. A branch that conflicts with
@@ -148,10 +161,15 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 		return nil, err
 	}
 
+	heads, err := e.itemHeads(ctx, it)
+	if err != nil {
+		return nil, err
+	}
+
 	events := make([]domain.Event, 0, len(targets))
 
 	for _, t := range targets {
-		data, err := e.mergeOne(ctx, it.ID, t, method, lease)
+		data, err := e.mergeOne(ctx, it.ID, t, heads(t.repo.Key()), method, lease)
 		if err != nil {
 			return nil, err
 		}
@@ -163,8 +181,8 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 }
 
 // mergeTarget is one pull request to merge, or a repository to read, with its repository on one
-// of the organization's code hosts, the token it is called with (from the connection
-// mergeTargets picked, or runtime.repository.token) and the code host adapter of the host's kind.
+// of the organization's code hosts, the token it is called with (an entry's, the connection
+// loginTargets picked, or runtime.repository.token) and the code host adapter of the host's kind.
 type mergeTarget struct {
 	url   string
 	repo  domain.CodeRepository
@@ -227,12 +245,122 @@ func (e *Engine) codeRepositories(ctx context.Context, l domain.Line, urls []str
 	return out, nil
 }
 
-// mergeTargets picks, for each pull request URL (or the line's repository URL), its repository
-// on the organization's code hosts (codeRepositories) and the first of the line's connections
+// mergeTargets are the pull requests at urls as a merge writes them (ADR 0041 decisions 3 and 5).
+// On a line with runtime.repositories, each repository must be covered by an entry that writes:
+// the most specific entry that covers it (domain.TokenEntry, reads false) is a write entry, or the
+// merge is refused, naming the repository, before anything is opened (ErrNoWriteEntry). That
+// entry's token signs in, opened once per entry for the line's factory through OrgSecrets; an
+// entry without one (the shorthand on connections) signs in as loginTargets picks. A line without
+// runtime.repositories is loginTargets' alone.
+func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
+	if len(l.Runtime.Repositories) == 0 {
+		return e.loginTargets(ctx, l, urls, use)
+	}
+
+	targets, err := e.codeRepositories(ctx, l, urls)
+	if err != nil {
+		return nil, err
+	}
+
+	picked, err := writeEntries(l, targets)
+	if err != nil {
+		return nil, err
+	}
+
+	tokens := map[string]string{}
+
+	var logins []int // the targets whose entry has no token
+
+	for i, entry := range picked {
+		if entry.Token == "" {
+			logins = append(logins, i)
+
+			continue
+		}
+
+		if _, ok := tokens[entry.Name]; !ok {
+			if tokens[entry.Name], err = e.entryToken(ctx, l, entry); err != nil {
+				return nil, err
+			}
+		}
+
+		targets[i].token = tokens[entry.Name]
+	}
+
+	if len(logins) == 0 {
+		return targets, nil
+	}
+
+	rest := make([]string, len(logins))
+	for j, i := range logins {
+		rest[j] = targets[i].url
+	}
+
+	signed, err := e.loginTargets(ctx, l, rest, use)
+	if err != nil {
+		return nil, err
+	}
+
+	for j, i := range logins {
+		targets[i] = signed[j]
+	}
+
+	return targets, nil
+}
+
+// writeEntries are the entries that write targets' repositories, one per target: the most
+// specific entry that covers each, which must be a write entry. The shorthand's
+// runtime.repository.forge, when set, must agree with the kind its host is listed as.
+func writeEntries(l domain.Line, targets []mergeTarget) ([]domain.RepositoryEntry, error) {
+	picked := make([]domain.RepositoryEntry, len(targets))
+
+	for i, t := range targets {
+		entry, ok := domain.TokenEntry(l.Runtime.Repositories, t.repo.Key(), false)
+		if !ok || entry.Access != domain.AccessWrite {
+			return nil, refusal(l, noWriteEntry(t, entry, ok))
+		}
+
+		if f := l.Runtime.Repository.Forge; f != "" && entry.URL == l.Runtime.Repository.URL && f != string(t.repo.Host.Kind) {
+			return nil, refusal(l, fmt.Errorf("the repository %s names runtime.repository.forge %s, but the organization lists %s as a %s host: %w",
+				entry.URL, f, t.repo.Host.Host, t.repo.Host.Kind, ErrNoCodeHost))
+		}
+
+		picked[i] = entry
+	}
+
+	return picked, nil
+}
+
+// noWriteEntry is the refusal of the pull request of t, whose repository entry, the most specific
+// that covers it, only reads, or that no entry covers (covered false).
+func noWriteEntry(t mergeTarget, entry domain.RepositoryEntry, covered bool) error {
+	if !covered {
+		return fmt.Errorf("%s: no entry of runtime.repositories covers %s; an entry with access write must cover it for goald to merge there: %w",
+			t.url, t.repo, ErrNoWriteEntry)
+	}
+
+	return fmt.Errorf("%s: %s is covered by entry %s, which only reads; an entry with access write must cover it for goald to merge there: %w",
+		t.url, t.repo, entry.Name, ErrNoWriteEntry)
+}
+
+// entryToken is the token of entry, opened for the line's factory through OrgSecrets, which checks
+// its scope, audits it as secret.used and sets its last use.
+func (e *Engine) entryToken(ctx context.Context, l domain.Line, entry domain.RepositoryEntry) (string, error) {
+	values, err := e.openSecrets(ctx, domain.SecretNames(entry.Token), domain.SecretUse{Factory: l.FactoryID}, "",
+		"runtime.repositories "+entry.Name+" token")
+	if err != nil {
+		return "", err
+	}
+
+	return domain.FillSecrets(entry.Token, values), nil
+}
+
+// loginTargets picks, for each pull request URL (or a repository URL), its repository on the
+// organization's code hosts (codeRepositories) and the first of the line's connections
 // (domain.Line.MergeConnections) whose kind names a code host goald has and whose git login is
 // for the URL's host, then opens the ones it picked for use and takes each one's token. A version
 // on secrets reads no connection: repositoryTargets picks for it.
-func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
+func (e *Engine) loginTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
 	if l.OnSecrets() {
 		return e.repositoryTargets(ctx, l, urls)
 	}
@@ -290,7 +418,7 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 // repositoryLogin names the token of a version on secrets, in errors and logs.
 const repositoryLogin = "runtime.repository.token"
 
-// repositoryTargets are mergeTargets on a version on secrets (ADR 0037 decision 7): every pull
+// repositoryTargets are loginTargets on a version on secrets (ADR 0037 decision 7): every pull
 // request must be on the host of runtime.repository.url, one of the organization's code hosts,
 // whose kind picks the adapter; runtime.repository.forge, when set, must agree with it. The
 // runtime.repository.token signs in. The token is opened once for the line's factory through
@@ -385,10 +513,50 @@ func (e *Engine) codeHostConnections(ctx context.Context, l domain.Line) ([]code
 	return out, nil
 }
 
+// itemHeads are, for each repository key, the branches a pull request of it may come from (ADR 0041
+// decision 5): its own branch (domain.Item.Branch) and, for a landing root, its integration
+// branch in that repository, from its repository row, else work_items.integration_branch.
+func (e *Engine) itemHeads(ctx context.Context, it domain.Item) (func(key string) []string, error) {
+	own := it.Branch()
+	if !it.Landing() {
+		return func(string) []string { return []string{own} }, nil
+	}
+
+	rows, err := e.store.ItemRepositories(ctx, it.ID)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of %s: %w", it.ID, err)
+	}
+
+	return func(key string) []string {
+		branch := it.IntegrationBranch
+		if i := slices.IndexFunc(rows, func(r domain.ItemRepository) bool { return r.Repo == key && r.IntegrationBranch != "" }); i >= 0 {
+			branch = rows[i].IntegrationBranch
+		}
+
+		return []string{own, branch}
+	}, nil
+}
+
+// theItems refuses pr, the pull request at url, unless its head is one of heads in its own
+// repository: a fork's, or another branch's, is no station's work (ErrNotTheItems).
+func theItems(url string, pr ports.PullRequest, heads []string) error {
+	if !pr.SameRepository {
+		return fmt.Errorf("%s comes from a fork (branch %s), not from the item's branch %s in that repository: %w: %w",
+			url, pr.HeadBranch, heads[0], ErrNotTheItems, ports.ErrNotMergeable)
+	}
+
+	if !slices.Contains(heads, pr.HeadBranch) {
+		return fmt.Errorf("%s comes from branch %s, not the item's branch (%s): no station checked it: %w: %w",
+			url, pr.HeadBranch, strings.Join(slices.Compact(heads), " or "), ErrNotTheItems, ports.ErrNotMergeable)
+	}
+
+	return nil
+}
+
 // mergeOne merges one pull request unless it already is, deletes its head branch, and returns
-// the data of its merged event.
-func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, method string, lease *domain.Lease) (map[string]any, error) {
-	pr, err := e.merge(ctx, t, method, lease)
+// the data of its merged event. A pull request not from heads is refused (theItems) first.
+func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, heads []string, method string, lease *domain.Lease) (map[string]any, error) {
+	pr, err := e.merge(ctx, t, heads, method, lease)
 	if err != nil {
 		return nil, err
 	}
@@ -415,9 +583,13 @@ func (e *Engine) mergeOne(ctx context.Context, id domain.ItemID, t mergeTarget, 
 // merge refused, its mergeability still pending, not mergeable after a clean update) is a
 // *notMergeableYetError: after a clean update the host knows of no conflict, and the port
 // cannot tell required checks that have not run yet on the new head from ones that fail.
-func (e *Engine) merge(ctx context.Context, t mergeTarget, method string, lease *domain.Lease) (ports.PullRequest, error) {
+func (e *Engine) merge(ctx context.Context, t mergeTarget, heads []string, method string, lease *domain.Lease) (ports.PullRequest, error) {
 	pr, err := t.host.PullRequest(ctx, t.repo, t.token, t.url)
 	if err != nil {
+		return ports.PullRequest{}, err
+	}
+
+	if err := theItems(t.url, pr, heads); err != nil {
 		return ports.PullRequest{}, err
 	}
 

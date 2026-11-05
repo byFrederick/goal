@@ -39,8 +39,6 @@ const (
 	// codeReaderWriteToken, a warning: an agent that only reads would get a write entry's token,
 	// because no read entry matches.
 	codeReaderWriteToken = "reader-write-token"
-	// codeRepositoryNotSupported: what run start and merges can't do yet (notSupportedYet).
-	codeRepositoryNotSupported = "repository-not-supported"
 )
 
 // shorthandName names the shorthand's entry when its URL's last segment is not a slug.
@@ -219,7 +217,6 @@ func (c *checker) repositories() {
 
 	c.mergesNeedWrite()
 	c.readerTokens()
-	c.notSupportedYet()
 }
 
 // mergesNeedWrite reports each merge station, and integration branches, on a line without an
@@ -265,31 +262,6 @@ func (c *checker) readerTokens() {
 				c.warnf(checkRepositories, codeReaderWriteToken, at("spec", keyAgents, i, "code"),
 					"%s only reads, but the only token for %s can write.", a.Name, e.Name)
 			}
-		}
-	}
-}
-
-// notSupportedYet refuses a second repository entry, access read and code read: run start and
-// merges work on one repository that writes until part 4-merges (software#720) lands, and that
-// part removes this function and its call (ADR 0041 decision 19).
-func (c *checker) notSupportedYet() {
-	const why = "is not supported yet: runs work on one repository that writes until Goal can start and merge them in several (ADR 0041)"
-
-	for i, e := range c.f.Spec.Runtime.Repositories {
-		switch {
-		case i > 0:
-			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", keyRuntime, "repositories", i),
-				"repository %s: a second repository %s", e.Name, why)
-		case e.Access == AccessRead:
-			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", keyRuntime, "repositories", i, "access"),
-				"repository %s: access read %s", e.Name, why)
-		}
-	}
-
-	for i, a := range c.f.Spec.Agents {
-		if a.Code == CodeRead {
-			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", keyAgents, i, "code"),
-				"agent %s: code read %s", a.Name, why)
 		}
 	}
 }

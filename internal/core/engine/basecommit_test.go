@@ -391,11 +391,11 @@ func TestEngine_OverlappingRequestsMergeInOrder(t *testing.T) {
 	s := newScripted()
 	h := newHarness(t, changedSinceGateLine(), s.agent)
 	h.codehost.SetBranchHead(appRepo, "", base)
-	h.codehost.Add(openPR(prURL))
-	h.codehost.Add(openPR(secondPR))
 
 	first := h.submit(t, domain.NewItem{Title: "Rename the items table"})
 	second := h.submit(t, domain.NewItem{Title: "Add an items index"})
+	h.codehost.Add(prFrom(prURL, first))
+	h.codehost.Add(prFrom(secondPR, second))
 
 	for it, pr := range map[domain.ItemID]string{first.ID: prURL, second.ID: secondPR} {
 		s.set(it, stSpec, touchesStore)

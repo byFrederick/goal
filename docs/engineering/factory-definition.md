@@ -249,7 +249,7 @@ spec:
 - **The shorthand** `runtime.repository` reads as one `write` entry that is the default (`Runtime.RepositoryEntries`, `internal/config/repositories.go`). Its name is the URL's last segment in lower case without `.git`, or `repo` when that isn't a slug, so `https://github.com/acme/web-app.git` is `web-app` and `https://github.com/acme/ui` is `repo`. The shorthand keeps its `forge` and an optional token, so every published version loads.
 - **An agent's `code`** is `write` or `read`. Without it, an agent writes when the factory has a `write` entry and reads otherwise (`Factory.AgentCode`), so definitions written before `code` keep writing.
 - **Which token:** for each repository, the most specific entry that covers it wins, one repository before an owner pattern. An agent that only reads takes a `read` entry's token whenever one covers the repository.
-- **The line** keeps one `domain.Repository`, taken from the default entry (`Factory.Line`). Run start, merges and base commits use it until runs start with an item's repositories.
+- **The line** keeps `Runtime.Repositories`, every entry, and one `domain.Repository` taken from the shorthand or the default entry (`Factory.Line`). Runs start with the item's repositories under the entries. A merge takes each pull request in its own repository with the token of the most specific entry that covers it (`domain.TokenEntry` with reads false), and refuses one that only a `read` entry covers, or none does (`engine.ErrNoWriteEntry`), before anything is touched. It also refuses a pull request whose head is not the item's branch, or a landing root's integration branch, in that repository (`engine.ErrNotTheItems`). Base commits and changed-since read with the reader's pick (reads true). A line without `runtime.repositories` merges through its connections or `runtime.repository.token`.
 
 `config.Check` reports these under the check `repositories`. Publish refuses the errors; `Load` skips the check, so a version published before it keeps running.
 
@@ -263,7 +263,6 @@ spec:
 | `repository-default-pattern` | error | an owner pattern has `default: true` |
 | `merge-needs-write` | error | a station has `action: merge`, or `board.flow.assemblies.integration.mode` is `branch`, and the factory has no `write` entry or no agent whose code is `write` |
 | `reader-write-token` | warning | an agent that only reads would get a `write` entry's token, because no `read` entry covers it: "reviewer only reads, but the only token for services can write." |
-| `repository-not-supported` | error | a second entry, `access: read` or `code: read`. Runs start and merge in one repository that writes until Goal supports several, and this refusal (`checker.notSupportedYet`) goes then. It also means `reader-write-token` can't show on a version that publishes yet. |
 
 Publish also refuses a repository on a host the organization doesn't list (`repository-host-unlisted`, in the secrets check below).
 
