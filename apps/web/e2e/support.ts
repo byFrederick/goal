@@ -16,9 +16,32 @@ export async function expectAccessible(page: Page) {
  * its skeleton cross-fade (MOTION.md, Loading) reads as low contrast; wait for it before expectAccessible.
  */
 export async function expectSettled(page: Page) {
-  await page.waitForFunction(() =>
-    document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity),
-  );
+  // Three frames in a row with nothing running or pending: a transition that starts a frame after the
+  // data lands (a skeleton reveal, a row entering) would otherwise slip between two checks.
+  await page.waitForFunction(() => {
+    const w = window as unknown as { __settledFrames?: number; __settledPolling?: boolean };
+    const busy = document
+      .getAnimations()
+      .some(
+        (a) => a.playState !== 'finished' && a.playState !== 'idle' && a.effect?.getTiming().iterations !== Infinity,
+      );
+    w.__settledFrames = busy ? 0 : (w.__settledFrames ?? 0);
+    if (!w.__settledPolling) {
+      w.__settledPolling = true;
+      const tick = () => {
+        const stillBusy = document
+          .getAnimations()
+          .some(
+            (a) =>
+              a.playState !== 'finished' && a.playState !== 'idle' && a.effect?.getTiming().iterations !== Infinity,
+          );
+        w.__settledFrames = stillBusy ? 0 : (w.__settledFrames ?? 0) + 1;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+    return !busy && (w.__settledFrames ?? 0) >= 3;
+  });
 }
 
 /**
