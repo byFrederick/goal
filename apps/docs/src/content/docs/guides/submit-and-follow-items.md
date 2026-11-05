@@ -68,7 +68,9 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line. An item can also wait to start; the CLI and the API set a start, as [Start an item later](#start-an-item-later) shows.
+
+Agents can leave work for later too; see [Let agents leave follow-ups](../follow-ups/).
 
 The Start control sets when the item may start:
 
@@ -122,14 +124,7 @@ goal triggers list acme-line
 goal triggers show acme-line <trigger>
 ```
 
-Webhooks feed triggers from outside Goal. A webhook belongs to the organization and reaches only the factories it is open to:
-
-```sh
-goal webhooks create github-main --sender github
-goal webhooks open github-main acme-line --repos acme/api
-```
-
-`create` makes the secret `webhook-github-main` and prints its value once, alone on stdout. Store the value in the sender at once; Goal does not show it again. To sign with a secret that exists, such as one PagerDuty or Sentry issued, pass `--secret <name>`. `open` without `--repos` lets every repository's deliveries reach the factory, and `goal webhooks close github-main acme-line` stops them.
+Webhooks feed triggers from outside Goal; see [Receive events with organization webhooks](../webhooks/). For what the Intake page and `goal intake` show, read [Review what enters a factory](../intake/). A trigger can also ask an agent what to file; see [Ask an agent what to file](../checks/).
 
 ## What comes next
 
