@@ -58,6 +58,9 @@ type reader struct {
 	docs    map[string]string
 	fetched []string
 	secret  string // the value of the secret it was given
+	// lists counts its listings; codeHost is the code_host config of the last.
+	lists    int
+	codeHost string
 	block   map[string]chan struct{}
 	down    bool // every fetch fails, as a server answering 503
 	// titles and folders, by path, list a document under another title and in a folder.
@@ -88,6 +91,9 @@ func (r *reader) List(_ context.Context, s domain.SyncSpec) iter.Seq2[domain.Sou
 	if s.Secret != nil {
 		r.secret = s.Secret.Value
 	}
+
+	r.lists++
+	r.codeHost = s.Source.Config[domain.SourceCodeHostKey]
 
 	docs, titles, folders := maps.Clone(r.docs), maps.Clone(r.titles), maps.Clone(r.folders)
 	r.mu.Unlock()
@@ -214,6 +220,11 @@ func newWorld(t *testing.T) *world {
 	w.org = o.ID
 	ctx := w.ctx()
 
+	// The repository sources' host is a GitHub Enterprise host acme lists.
+	if _, err := w.tenancy.SetCodeHosts(ctx, domain.LocalUser, []domain.CodeHost{{Host: "git.example.com", Kind: domain.CodeHostGitHub}}); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := w.secrets.Create(ctx, domain.NewSecret{Name: "docs-token", Value: "s3cret", Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +255,7 @@ func (w *world) ingestor(kb ports.Knowledge) *knowledge.Ingestor {
 // ingestorReading syncs kb's repository and Confluence sources with r.
 func (w *world) ingestorReading(kb ports.Knowledge, r ports.SourceReader) *knowledge.Ingestor {
 	return knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: r, "confluence": r},
+		Knowledge: kb, Secrets: w.secrets, Hosts: w.tenancy, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: r, "confluence": r},
 		Objects: w.objects, Clock: w.clock, TempDir: w.t.TempDir(),
 	})
 }
@@ -603,7 +614,7 @@ func TestIngestor_ATakenOverSyncRecordsNothing(t *testing.T) {
 	slow := &reader{docs: docs, block: map[string]chan struct{}{slowMD: release}}
 	kb := &stalled{Knowledge: w.kb, renewing: make(chan struct{}, 1)}
 	first := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: slow},
+		Knowledge: kb, Secrets: w.secrets, Hosts: w.tenancy, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: slow},
 		Objects: w.objects, Clock: w.clock,
 	})
 	done := make(chan struct{})
@@ -935,4 +946,113 @@ func TestUploads_DeleteSourceDeletesItsSnapshotZips(t *testing.T) {
 	if _, err := w.objects.Get(ctx, domain.KnowledgeKey(w.org, domain.HashBlob(body))); err != nil {
 		t.Errorf("the original the other source still holds: %v", err)
 	}
+}
+
+// countedSecrets counts the secrets it opens.
+type countedSecrets struct {
+	knowledge.Secrets
+
+	resolves atomic.Int32
+}
+
+func (c *countedSecrets) Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error) {
+	c.resolves.Add(1)
+
+	return c.Secrets.Resolve(ctx, names, use)
+}
+
+// listings are how many listings r made and the code_host config of the last.
+func (r *reader) listings() (int, string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.lists, r.codeHost
+}
+
+// replaceRunbooks replaces runbooks with sources, each on docs-token, reading repository.
+func (w *world) replaceRunbooks(repository string, sources ...domain.NewKnowledgeSource) {
+	w.t.Helper()
+
+	ctx := w.ctx()
+
+	if err := w.kb.DeleteSource(ctx, "runbooks", admin, nil); err != nil {
+		w.t.Fatal(err)
+	}
+
+	for _, n := range sources {
+		n.Secret, n.Config = "docs-token", maps.Clone(n.Config)
+		if n.Config == nil {
+			n.Config = map[string]string{}
+		}
+
+		n.Config[domain.SourceRepositoryKey] = repository
+
+		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
+			w.t.Fatal(err)
+		}
+	}
+}
+
+// A repository source, and a synced source gitdocs reads with a secret, on a host acme doesn't
+// list fail their sync naming the host and Code hosts, with the secret never opened and the
+// reader never called; that another organization lists the host changes nothing.
+func TestIngest_UnlistedHostOpensNoSecret(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+
+	labs, err := w.tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "labs", Name: "Example Labs"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const unlisted = "docs.example.com"
+
+	if _, err := w.tenancy.SetCodeHosts(domain.WithOrg(t.Context(), labs.ID), domain.LocalUser,
+		[]domain.CodeHost{{Host: unlisted, Kind: domain.CodeHostGitHub}}); err != nil {
+		t.Fatal(err)
+	}
+
+	w.replaceRunbooks("https://"+unlisted+"/acme/docs",
+		domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository,
+			Config: map[string]string{domain.SourceCodeHostKey: "github"}},
+		domain.NewKnowledgeSource{Name: "wiki", Title: "Wiki", Kind: domain.SourceSynced,
+			Config: map[string]string{domain.SourceReaderKey: gitdocsSync, domain.SourceCodeHostKey: "github"}},
+	)
+
+	secrets := &countedSecrets{Secrets: w.secrets}
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
+	w.syncDue(knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: w.kb, Secrets: secrets, Hosts: w.tenancy, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs},
+		Objects: w.objects, Clock: w.clock, TempDir: t.TempDir(),
+	}))
+
+	for _, name := range []string{"runbooks", "wiki"} {
+		src := w.source(name)
+		w.want(name+" on an unlisted host", src, src.Status == domain.SyncFailed,
+			strings.Contains(src.LastError, unlisted), strings.Contains(src.LastError, "Code hosts"))
+	}
+
+	lists, _ := w.docs.listings()
+	w.want("secrets opened and listings made", []int{int(secrets.resolves.Load()), lists}, secrets.resolves.Load() == 0, lists == 0)
+}
+
+// A repository source on a GitHub Enterprise host acme lists as github opens its secret and
+// syncs, read as github even where its config says gitlab: the listed kind wins.
+func TestIngest_ListedEnterpriseHostSyncs(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.replaceRunbooks("https://GIT.example.com/acme/docs",
+		domain.NewKnowledgeSource{Name: "runbooks", Title: "Runbooks", Kind: domain.SourceRepository,
+			Config: map[string]string{domain.SourceCodeHostKey: "gitlab"}})
+
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
+	w.syncDue(w.ingestor(nil))
+
+	src := w.source("runbooks")
+	w.want("runbooks on a listed host", src, src.Status == domain.SyncIdle, len(w.files("runbooks")) == 1)
+
+	lists, kind := w.docs.listings()
+	w.want("the reader's secret and code host", []any{w.docs.secret, lists, kind}, w.docs.secret == "s3cret", lists == 1, kind == "github")
 }

@@ -2,8 +2,10 @@
 // with gitdocs (spec 4 §4.8, §5.6): the documents of one repository on GitHub or GitLab, read
 // through the code host's REST API with the token of the source's secret (ADR 0037 decision 14)
 // or, until moving over gives it one, of its connection. A source on a secret reads on its
-// repository's host, github.com or gitlab.com, or another whose code host its config names
-// (code_host: github or gitlab).
+// repository's host, which must be one of the organization's code hosts (ADR 0041 decision 1):
+// the ingestor refuses any other before the secret is opened, and sets code_host to the kind the
+// host is listed as (github or gitlab). Called without code_host, gitdocs reads github.com and
+// gitlab.com only.
 //
 // A source's config names the repository (repository: its https URL on the connection's git host,
 // such as https://github.com/acme/docs), the branch (branch; the repository's default branch when
@@ -155,9 +157,9 @@ type source struct {
 	include, exclude [][]string
 }
 
-// cfgCodeHost is the config key of a source on a secret naming its code host (github or gitlab),
-// for a repository on a host other than github.com and gitlab.com.
-const cfgCodeHost = "code_host"
+// cfgCodeHost is the config key of a source on a secret naming its code host (github or gitlab):
+// the kind the organization lists the repository's host as, set by the ingestor.
+const cfgCodeHost = domain.SourceCodeHostKey
 
 // dotComHosts are the code hosts a repository's host names without code_host.
 var dotComHosts = map[string]string{githubDotCom: "github", "gitlab.com": "gitlab"}
@@ -208,7 +210,7 @@ func open(s domain.SyncSpec) (source, error) {
 
 // credential is what s reads with: the git host, the token, the code host's name and who names
 // it. A source on a secret reads on its repository's host, whose code host its config names
-// (code_host) or the host is (github.com, gitlab.com); one on a connection on the host of the
+// (code_host, the listed kind) or the host is (github.com, gitlab.com); one on a connection on the host of the
 // connection's git login, whose kind names the code host.
 func credential(s domain.SyncSpec) (login, token, host, owner string, err error) {
 	switch {
