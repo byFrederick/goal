@@ -14,7 +14,7 @@ An item carries:
 - a lane, which picks the agent at stations that route by lane (see [lanes](/docs/concepts/lanes/));
 - a priority, a number that orders items of the same class;
 - a class of service, `standard` or `expedite` (see [expedite and priority](/docs/concepts/expedite-and-priority/));
-- the file paths it is expected to change, when a station says so;
+- the file paths it is expected to change, when a station says so. A path in a repository other than the item's first starts with that repository's `owner/name:`, as in `acme/web:src/**`; a path without a prefix is in the item's first repository;
 - a rework count, which is how many times a gate or a person sent it back (see [rework](/docs/concepts/rework/)).
 
 An item can also be an [assembly](/docs/concepts/assemblies-and-parts/), which is an item split into parts.
