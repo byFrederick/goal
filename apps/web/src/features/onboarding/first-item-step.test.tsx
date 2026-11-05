@@ -158,7 +158,7 @@ afterEach(() => {
 });
 
 /** Step 8 at /o/acme/get-started/first-item with the URL's search. The queries live in `queryClient`, so a remount reads them. */
-function renderStep(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderStep(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }), query = '') {
   const root = createRootRoute({ component: Outlet });
   const step = createRoute({
     getParentRoute: () => root,
@@ -171,7 +171,7 @@ function renderStep(queryClient = new QueryClient({ defaultOptions: { queries: {
   });
   const router = createRouter({
     routeTree: root.addChildren([step]),
-    history: createMemoryHistory({ initialEntries: [`/o/acme/get-started/first-item?factory=${factoryId}`] }),
+    history: createMemoryHistory({ initialEntries: [`/o/acme/get-started/first-item?factory=${factoryId}${query}`] }),
   });
   render(
     <QueryClientProvider client={queryClient}>
@@ -203,6 +203,13 @@ describe('step 8, watch your first item', () => {
     expect(screen.getByText('$0.84')).toBeTruthy();
     expect(screen.queryByText(/Review merges it/)).toBeNull();
     expect(screen.queryByText(/repository/)).toBeNull();
+  });
+
+  it('says nothing about pull requests when the factory only reads code', async () => {
+    renderStep(undefined, '&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=acme-token');
+
+    expect(await screen.findByRole('heading', { level: 2, name: title })).toBeTruthy();
+    expect(screen.queryByText(/A change to/)).toBeNull();
   });
 
   it('does not submit again after a remount, and the panel shows the running item', async () => {
