@@ -206,6 +206,48 @@ A definition without the block is trunk, `onLand`, 0 and no `landAt`. The checks
 
 Nothing reads the settings yet: the store, the engine and the worker follow in the parts of the assembly ADR 0033 describes.
 
+## Repositories: `runtime.repositories` and an agent's code
+
+A factory's code is a list of repositories, each with its access ([ADR 0041](../adr/0041-code-and-github-without-an-app.md), decisions 2 and 3). No repositories is a factory with no code.
+
+```yaml
+spec:
+  runtime:
+    repositories:
+      - name: app                          # a slug, unique in the factory
+        url: https://github.com/acme/app   # one repository, or https://github.com/acme/* for an owner's every repository
+        token: "{{github-acme}}"           # required for write
+        access: write                      # read or write
+        default: true                      # optional
+  agents:
+    - name: engineer
+      prompt: ./agents/engineer.md
+      code: write                          # or read
+```
+
+- **Entries** have no `forge` and no `base`: the organization's code hosts give the kind, and runs use the host's default branch.
+- **The default** is the entry an item uses when it names none. At most one entry has `default: true`, and it must name one repository. The only entry is the default when it names one repository. An owner pattern alone leaves the factory with no default.
+- **The shorthand** `runtime.repository` reads as one `write` entry that is the default (`Runtime.RepositoryEntries`, `internal/config/repositories.go`). Its name is the URL's last segment in lower case without `.git`, or `repo` when that isn't a slug, so `https://github.com/acme/web-app.git` is `web-app` and `https://github.com/acme/ui` is `repo`. The shorthand keeps its `forge` and an optional token, so every published version loads.
+- **An agent's `code`** is `write` or `read`. Without it, an agent writes when the factory has a `write` entry and reads otherwise (`Factory.AgentCode`), so definitions written before `code` keep writing.
+- **Which token:** for each repository, the most specific entry that covers it wins, one repository before an owner pattern. An agent that only reads takes a `read` entry's token whenever one covers the repository.
+- **The line** keeps one `domain.Repository`, taken from the default entry (`Factory.Line`). Run start, merges and base commits use it until runs start with an item's repositories.
+
+`config.Check` reports these under the check `repositories`. Publish refuses the errors; `Load` skips the check, so a version published before it keeps running.
+
+| Code | Severity | When |
+| --- | --- | --- |
+| `repository-forms-both` | error | the definition has both `runtime.repository` and `runtime.repositories` |
+| `duplicate-name` | error | two entries have the same `name` (check `references`) |
+| `repository-url-invalid` | error | an entry's `url` is neither one repository (`https://<host>/<owner>/<name>`) nor an owner pattern ending in `/*` |
+| `repository-token-missing` | error | an entry with `access: write` has no `token` |
+| `repository-default-many` | error | a second entry has `default: true` |
+| `repository-default-pattern` | error | an owner pattern has `default: true` |
+| `merge-needs-write` | error | a station has `action: merge`, or `board.flow.assemblies.integration.mode` is `branch`, and the factory has no `write` entry or no agent whose code is `write` |
+| `reader-write-token` | warning | an agent that only reads would get a `write` entry's token, because no `read` entry covers it: "reviewer only reads, but the only token for services can write." |
+| `repository-not-supported` | error | a second entry, `access: read` or `code: read`. Runs start and merge in one repository that writes until Goal supports several, and this refusal (`checker.notSupportedYet`) goes then. It also means `reader-write-token` can't show on a version that publishes yet. |
+
+Publish also refuses a repository on a host the organization doesn't list (`repository-host-unlisted`, in the secrets check below).
+
 ## Environment files
 
 An environment file, `environments/<name>.yaml`, says what an agent's box installs and what it can reach ([ADR 0037](../adr/0037-secrets-and-environment-files.md), decisions 5 to 8). Every factory has `environments/default.yaml`. An agent names its file with `environment: <name>`, and an agent without one gets `default`. `config.Check` loads and checks the files (`internal/config/environment.go`), and the published version keeps every key on `domain.Environment`.
@@ -259,9 +301,9 @@ spec:
 
 ### Secret references
 
-`{{name}}` names one of the organization's secrets, and it is the only placeholder. It is valid in an environment file's `env`, `files`, `mcp.<server>.headers` and a stdio server's `env`, and in `runtime.repository.token`, `runtime.modelKey` and a trigger's `only.modelAgrees.key`; the last three take one whole reference. A trigger's `create.title` and `create.brief` keep their `{{field}}` event placeholders. A literal `{{` is not supported.
+`{{name}}` names one of the organization's secrets, and it is the only placeholder. It is valid in an environment file's `env`, `files`, `mcp.<server>.headers` and a stdio server's `env`, and in `runtime.repository.token`, a `runtime.repositories` entry's `token`, `runtime.modelKey` and a trigger's `only.modelAgrees.key`; the last four take one whole reference. Each counts as a use of the secret (`Factory.SecretRefs`), so the secret can't be deleted while a current version uses it, and Access lists it. A trigger's `create.title` and `create.brief` keep their `{{field}}` event placeholders. A literal `{{` is not supported.
 
-`runtime.repository` is `{url, token}`. A URL on `github.com` or `gitlab.com` picks its code host; any other host needs `forge: github` or `forge: gitlab`.
+`runtime.repository` is `{url, token}`, the shorthand described in [Repositories](#repositories-runtimerepositories-and-an-agents-code). A URL on `github.com` or `gitlab.com` picks its code host; any other host needs `forge: github` or `forge: gitlab`.
 
 ### Environment checks
 
@@ -289,7 +331,8 @@ Publish then runs the secrets check (`authoring.SecretsCheck`, `internal/authori
 | `plain-key` | error | a plain `env` value starts with `sk-`, `ghp_`, `github_pat_`, `glpat-`, `xoxb-` or `xoxp-` |
 | `plain-key` | warning | a plain `env` value's name ends with `_TOKEN`, `_KEY`, `_SECRET` or `_PASSWORD` |
 | `knowledge-source-unknown`, `knowledge-secret-not-in-scope`, `knowledge-copies-checkout` | see [Knowledge](#knowledge-knowledgesources) | a source in `knowledge.sources` |
-| `merge-needs-code-host` | error | a station has `action: merge` and `runtime.repository` has no `token` |
+| `merge-needs-code-host` | error | a station has `action: merge` and no repository that writes has a `token` |
+| `repository-host-unlisted` | error | a `runtime.repository` or `runtime.repositories` URL's host, with its port, is neither built in (`github.com`, `gitlab.com`) nor one of the organization's code hosts (`SecretsCheck.Hosts`) |
 
 `plain-key` carries the fix "Move to Secrets", which replaces the value with a reference named after the variable in kebab case (`GH_TOKEN` becomes `{{gh-token}}`). A problem in an environment file has the section `environments` and the pointer `/environments/<name>/<keys below spec>`; the Form view does not show that section yet.
 

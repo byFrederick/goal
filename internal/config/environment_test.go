@@ -285,6 +285,12 @@ func TestCheck_SecretPlacement(t *testing.T) {
 				runtimeModel, runtimeModel+`    repository: { url: "https://github.com/acme/app", token: "{{gh-token}}" }`+"\n"),
 			files: map[string]string{defaultEnvFile: fullEnvironment},
 		},
+		{name: "a repository entry's token", doc: withRepos(appEntry)},
+		{
+			name: "a repository entry's token that is not a reference",
+			doc:  withRepos(`- { name: app, url: "https://github.com/acme/app", token: ghp-plain, access: write } #here`),
+			code: codeReferenceInvalid, file: FileName,
+		},
 		{
 			name: "an agent's description", doc: edited(agentPrompt, agentPrompt+"      description: Uses {{gh-token}} #here\n"),
 			code: codeSecretPlacement, file: FileName, pointer: "/agents/agents/0/description",
@@ -365,6 +371,25 @@ func TestFactory_SecretRefs(t *testing.T) {
 		{Op: domain.PatchReplace, Path: "/default/env/SENTRY_ORG", Value: json.RawMessage(`"{{sentry-org}}"`)},
 	}}); !reflect.DeepEqual(fix, want) || !strings.HasPrefix(env.Locate("spec", "env", "SENTRY_ORG").Pointer, "/environments/default/env/") {
 		t.Errorf("fix = %+v, want %+v", fix, want)
+	}
+}
+
+// A repository entry's token is a place a {{secret}} may be, so it is one of the secret's uses.
+func TestFactory_SecretRefsOfRepositoryEntries(t *testing.T) {
+	t.Parallel()
+
+	f, problems := Check(checkTree(withRepos(appEntry), nil))
+	if len(problems) > 0 {
+		t.Fatalf("problems = %+v, want none", problems)
+	}
+
+	var got []string
+	for _, r := range f.SecretRefs() {
+		got = append(got, r.Name+" @ "+r.Where)
+	}
+
+	if want := []string{"claude-key @ runtime.modelKey", "gh-token @ runtime.repositories[0].token"}; !slices.Equal(got, want) {
+		t.Errorf("references = %q, want %q", got, want)
 	}
 }
 

@@ -27,6 +27,7 @@ func ModelPointer(path []string) (section, pointer string) {
 // Keys that appear in several of the mappings below.
 const (
 	keySpec     = "spec"
+	keyRuntime  = "runtime"
 	keyBoard    = "board"
 	keyName     = "name"
 	keyAgents   = "agents"
@@ -46,7 +47,7 @@ func modelPath(p []string) (string, []string) {
 
 func specPath(key string, rest []string) (string, []string) {
 	switch key {
-	case "runtime":
+	case keyRuntime:
 		return runtimePath(rest)
 	case keyBoard:
 		return boardPath(rest)
