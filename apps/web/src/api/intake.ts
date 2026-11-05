@@ -7,14 +7,26 @@ import { orgPath, unwrap } from '@goal/api-client';
 import { cancel, goal } from './client';
 import type { Intake, IntakeTriggerDetail, TriggerCheck, TriggerCheckList, TriggerTry } from './types';
 
+/** The days origins count over (getIntake's window). */
+export type IntakeWindow = '7d' | '30d' | '90d';
+
 /** The file a trigger lives in: the definition's root file. */
 export const definitionFile = 'factory.yaml';
 
 /** The intake of the factory; `items` is how many of its newest items the sources count (the server's default is 48). */
-export function getIntake(org: string, factory: string, items?: number, signal?: AbortSignal): Promise<Intake> {
+export function getIntake(
+  org: string,
+  factory: string,
+  items?: number,
+  signal?: AbortSignal,
+  window?: IntakeWindow,
+): Promise<Intake> {
   return unwrap(
     goal.GET(orgPath('/factories/{factory}/intake'), {
-      params: { path: { org, factory }, query: items !== undefined ? { items } : {} },
+      params: {
+        path: { org, factory },
+        query: { ...(items !== undefined ? { items } : {}), ...(window ? { window } : {}) },
+      },
       ...cancel(signal),
     }),
   );

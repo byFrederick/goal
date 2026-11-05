@@ -9,17 +9,21 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the Intake page lists where work came from, the triggers and the suggested triggers', async ({ page }) => {
+test('the Intake page lists what is coming up, where items came from, the triggers and the webhooks', async ({
+  page,
+}) => {
   await page.goto(intake);
   await expect(page).toHaveTitle('Intake · Software · Acme · Goal');
   await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'Where the last 48 items came from' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Coming up' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Where items came from' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Follow-ups to triage' })).toBeVisible();
 
   const triggers = page.getByRole('region', { name: 'Triggers' });
   await expect(triggers.getByRole('link', { name: 'flaky-test-on-main' })).toBeVisible();
   await expect(triggers.getByText('2 events refused, bad signature')).toBeVisible();
   await expect(triggers.getByRole('switch', { name: 'deploy-failed' })).toHaveAttribute('aria-checked', 'false');
-  await expect(page.getByRole('heading', { level: 2, name: 'Suggested triggers' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Webhooks open to Software' })).toBeVisible();
 
   await expect(page.getByRole('link', { name: 'Webhooks' })).toHaveAttribute('href', `${intake}/webhooks`);
   await expectAccessible(page);

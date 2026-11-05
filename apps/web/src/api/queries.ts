@@ -83,6 +83,7 @@ import {
   definitionFile,
   getIntake,
   getIntakeTrigger,
+  type IntakeWindow,
   listTriggerChecks,
   tryIntakeTrigger,
   tryTriggerCheck,
@@ -270,10 +271,11 @@ export const viewsQuery = (org: string, factory: string) =>
     queryFn: ({ signal }) => listSavedViews(org, factory, signal),
   });
 
-export const intakeQuery = (org: string, factory: string) =>
+/** The intake; `window` is the days its origins count over, the server's 30d when absent. */
+export const intakeQuery = (org: string, factory: string, window?: IntakeWindow) =>
   queryOptions({
-    queryKey: keys.intake(org, factory),
-    queryFn: ({ signal }) => getIntake(org, factory, undefined, signal),
+    queryKey: window ? [...keys.intake(org, factory), { window }] : keys.intake(org, factory),
+    queryFn: ({ signal }) => getIntake(org, factory, undefined, signal, window),
     staleTime: 10_000,
   });
 

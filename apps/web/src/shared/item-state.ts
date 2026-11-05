@@ -2,7 +2,7 @@
 // Derived only from the API's kinds and states, never from station or factory names.
 import type { ItemCard, ItemState, ItemWaiting, Station } from '../api/types';
 import type { StatusKind } from '../ui/status-icon';
-import { humanize } from './format';
+import { formatDay, humanize } from './format';
 
 export type Tone = 'run' | 'you' | 'rework' | 'muted' | 'ok';
 
@@ -26,9 +26,13 @@ export interface StateLabel {
  * the agent's name; it reads as its role ("Infra engineer working").
  */
 export function describeState(
-  item: Pick<ItemCard, 'state' | 'agent' | 'rework_count'>,
+  item: Pick<ItemCard, 'state' | 'agent' | 'rework_count'> & { start?: ItemCard['start'] },
   opts: { atConstraint?: boolean; decides?: boolean } = {},
 ): StateLabel {
+  // An item that may not start yet waits at the first station for its time: "Starts Nov 19".
+  if (item.start && (item.state === 'queued' || item.state === 'ready')) {
+    return { text: `Starts ${formatDay(item.start.at)}`, tone: 'muted' };
+  }
   switch (item.state) {
     case 'in_progress':
       return { text: item.agent ? `${humanize(item.agent)} working` : 'In progress', tone: 'run' };

@@ -89,7 +89,7 @@ const intake: Intake = {
 
 function renderSwitches(factory: Factory) {
   return renderFactoryPage({
-    page: () => <IntakePage group="software" onGroupChange={() => {}} />,
+    page: () => <IntakePage />,
     path: 'intake/',
     org,
     factory,
