@@ -203,10 +203,12 @@ type TriggerTry struct {
 	Evaluation TriggerEvaluation
 }
 
-// The audit entry of a try (ADR 0028 decision 2), whose target is the trigger by its name.
+// The audit entries of a try (ADR 0028 decision 2) and of a check's Clear (ADR 0040 decision
+// 19), whose target is the trigger by its name.
 const (
-	AuditTriggerTried  = "trigger.tried"
-	AuditTargetTrigger = "trigger"
+	AuditTriggerTried        = "trigger.tried"
+	AuditTriggerStateCleared = "trigger.state_cleared"
+	AuditTargetTrigger       = "trigger"
 )
 
 // The outcomes of a try: the item the event would create, or the step that would skip it.
