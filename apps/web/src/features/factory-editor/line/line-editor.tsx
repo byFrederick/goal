@@ -154,9 +154,10 @@ export function LineEditorProvider({ place, children }: { place: 'definition' | 
   useLayoutEffect(() => {
     const want = refocus.current;
     if (!want) return;
-    refocus.current = null;
     const row = document.querySelector(`[data-station="${CSS.escape(want.id)}"]`);
+    // A commit that comes before the new row (a menu closing) leaves the want for the commit that has it.
     if (!row) return;
+    refocus.current = null;
     const target =
       want.control === 'name'
         ? row.querySelector<HTMLElement>('[data-station-name]')

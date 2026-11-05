@@ -11,13 +11,13 @@ import { toast } from 'sonner';
 import { ApiError, revokeStandingRule } from '../../../api/client';
 import { keys, standingRulesQuery } from '../../../api/queries';
 import type { StandingRule } from '../../../api/types';
-import { useFactory } from '../../../shared/factory';
 import { formatDay } from '../../../shared/format';
 import { useOrg, useOrgHolds } from '../../../shared/org';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
 import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
 import { Tooltip } from '../../../ui/tooltip';
+import { useDraftSession } from '../draft/use-draft';
 
 /** Mirrors --duration-quick in styles.css: how long a revoked row stays while it collapses. */
 const EXIT_MS = 150;
@@ -25,10 +25,10 @@ const EXIT_MS = 150;
 /** The active rules keyed by this factory's id, this environment and this server; loading while the list waits. */
 export function useServerRules(environment: string, server: string): { rules: StandingRule[]; loading: boolean } {
   const org = useOrg();
-  const factory = useFactory();
+  const factory = useDraftSession().factory; // the draft's factory id: Definition and the wizard both open one
   const query = useQuery(standingRulesQuery(org.id));
   const rules = (query.data ?? []).filter(
-    (r) => r.revoked_at === null && r.factory_id === factory.id && r.environment === environment && r.server === server,
+    (r) => r.revoked_at === null && r.factory_id === factory && r.environment === environment && r.server === server,
   );
   return { rules, loading: query.isPending };
 }

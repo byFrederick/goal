@@ -25,8 +25,8 @@ vi.mock('../../../shared/org', () => ({
 }));
 vi.mock('../../../shared/factory', () => ({
   useFactoryParams: () => ({ org: 'acme', factory: 'goal' }),
-  useFactory: () => ({ id: 'f1', name: 'goal' }),
 }));
+vi.mock('../draft/use-draft', () => ({ useDraftSession: () => ({ factory: 'f1' }) }));
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children?: ReactNode }) => <a href="/x">{children}</a>,
 }));
