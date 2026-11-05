@@ -7,6 +7,12 @@ import { authEnv, type Env, goaldEnv, hosts, ports } from './env.js';
 /** How long a service may take from its start until its health check answers. */
 const bootMs = 120_000;
 
+/** How long one health check may take before it is sent again: a hung one must not hold a boot. */
+const healthMs = 5_000;
+
+/** How often goald's alarm wakes its Durable Object (Goald.alarm). */
+export const heartbeatMs = 10_000;
+
 /** Services sit in eastern North America, near the database (spec 4 §5.12). */
 const near: DurableObjectLocationHint = 'enam';
 
@@ -26,9 +32,15 @@ export function outbound(ctx: DurableObjectState): Outbound {
  * environment, and kept running until its Durable Object has been idle for idleMs.
  */
 abstract class Service extends DurableObject<Env> {
+  /** service names the container in the Worker's log lines. */
+  protected abstract service(): string;
   protected abstract readonly port: number;
   protected abstract readonly health: string;
-  protected abstract readonly idleMs: number;
+  /**
+   * idleMs is how long the container outlives its idle Durable Object. It and service are methods,
+   * not fields, because the constructor calls them before a subclass's fields exist.
+   */
+  protected abstract idleMs(): number;
   protected abstract environment(): Promise<Record<string, string>>;
   /** intercept registers the container's outbound handlers. */
   protected abstract intercept(container: Container): Promise<void>;
@@ -36,6 +48,26 @@ abstract class Service extends DurableObject<Env> {
   /** booting is the boot in flight, or the last one that finished (booted then says so). */
   private booting: Promise<void> | undefined;
   private booted = false;
+  /** watching says whether a monitor() call waits for the running container to stop. */
+  private watching = false;
+
+  /**
+   * A Durable Object that Cloudflare restarts, with or without a deploy, starts without the
+   * inactivity timeout, and Cloudflare stops a container that has none shortly after its object
+   * goes inactive. So a new instance that finds its container running sets the timeout again
+   * before it takes any call, and watches the container (2026-11-05 in cloudflare-operations.md).
+   */
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    const c = this.container();
+    if (!c.running) return;
+    console.log(JSON.stringify({ msg: 'container found running', service: this.service() }));
+    void ctx.blockConcurrencyWhile(async () => {
+      // A throw here would reset the object again; the next boot() sets the timeout instead.
+      await c.setInactivityTimeout(this.idleMs()).catch(() => {});
+    });
+    this.watch(c);
+  }
 
   /**
    * forward sends request to the container's port (its main port by default). A container is
@@ -102,8 +134,12 @@ abstract class Service extends DurableObject<Env> {
     const c = this.container();
     for (;;) {
       try {
-        if (!c.running) c.start({ env: await this.environment(), enableInternet: true });
-        await c.setInactivityTimeout(this.idleMs);
+        if (!c.running) {
+          c.start({ env: await this.environment(), enableInternet: true });
+          console.log(JSON.stringify({ msg: 'container started', service: this.service() }));
+        }
+        this.watch(c);
+        await c.setInactivityTimeout(this.idleMs());
         await this.intercept(c);
         break;
       } catch (error) {
@@ -113,16 +149,71 @@ abstract class Service extends DurableObject<Env> {
     }
     await healthy(c.getTcpPort(this.port), this.health, until);
   }
+
+  /**
+   * watch logs one line when the running container stops: its exit code (0 for a clean exit,
+   * null when Cloudflare gives none) and the reason. A monitor() call does not survive a restart of
+   * the Durable Object, so each new instance that finds the container running watches it again.
+   */
+  private watch(c: Container): void {
+    if (this.watching) return;
+    this.watching = true;
+    const stopped = (exitCode: number | null, reason: string) => {
+      this.watching = false;
+      console.warn(JSON.stringify({ msg: 'container stopped', service: this.service(), exitCode, reason }));
+    };
+    c.monitor().then(
+      () => stopped(0, 'exited'),
+      (error: unknown) => {
+        const code = (error as { exitCode?: unknown } | null)?.exitCode;
+        stopped(typeof code === 'number' ? code : null, error instanceof Error ? error.message : String(error));
+      },
+    );
+  }
 }
 
 /** goald: every public request, its gateway for the boxes; kept warm by the Worker's cron. */
 export class Goald extends Service {
+  protected service(): string {
+    return 'goald';
+  }
   protected readonly port = ports.goald;
   protected readonly health = '/v1/health';
-  protected readonly idleMs = 15 * 60_000;
+  protected idleMs(): number {
+    return 15 * 60_000;
+  }
 
   protected environment(): Promise<Record<string, string>> {
     return goaldEnv(this.env);
+  }
+
+  /** armed says whether this instance has made sure the alarm is set. */
+  private armed = false;
+
+  /** ensure boots goald like Service.ensure, and sets the alarm once per instance. */
+  override async ensure(): Promise<void> {
+    await super.ensure();
+    if (this.armed) return;
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + heartbeatMs);
+    this.armed = true;
+  }
+
+  /**
+   * The cron reaches goald once a minute, but on 2026-11-05 Cloudflare stopped goald's container
+   * 26 s and 57 s after it restarted this Durable Object, before the next call built a new
+   * instance. An alarm outlives the restart: within heartbeatMs it builds the new instance, whose
+   * constructor sets the inactivity timeout again, and it boots goald as the cron does.
+   */
+  override async alarm(): Promise<void> {
+    try {
+      await super.ensure();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(JSON.stringify({ msg: 'boot failed', service: this.service(), reason }));
+    } finally {
+      await this.ctx.storage.setAlarm(Date.now() + heartbeatMs);
+      this.armed = true;
+    }
   }
 
   protected async intercept(c: Container): Promise<void> {
@@ -134,9 +225,14 @@ export class Goald extends Service {
 
 /** The auth service: only goald's /api/auth proxy reaches it, as auth.internal. */
 export class Auth extends Service {
+  protected service(): string {
+    return 'auth';
+  }
   protected readonly port = ports.auth;
   protected readonly health = '/api/auth/ok';
-  protected readonly idleMs = 30 * 60_000;
+  protected idleMs(): number {
+    return 30 * 60_000;
+  }
 
   protected environment(): Promise<Record<string, string>> {
     return authEnv(this.env);
@@ -160,12 +256,15 @@ export function idempotent(request: Request): boolean {
   return request.method === 'GET' || request.method === 'HEAD';
 }
 
-/** healthy polls path on the container's port until it answers 2xx, until the time until. */
+/**
+ * healthy polls path on the container's port until it answers 2xx, until the time until. Each
+ * check gets healthMs: a check that hangs is given up and sent again, so the boot still ends by until.
+ */
 async function healthy(port: Fetcher, path: string, until: number): Promise<void> {
   let last = 'no answer';
   for (;;) {
     try {
-      const res = await port.fetch(`http://container${path}`);
+      const res = await port.fetch(`http://container${path}`, { signal: AbortSignal.timeout(healthMs) });
       await res.body?.cancel();
       if (res.ok) return;
       last = `HTTP ${res.status}`;

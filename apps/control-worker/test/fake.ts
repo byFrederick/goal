@@ -38,7 +38,12 @@ export class FakeContainer {
   port: (port: number, request: Request) => Response | Promise<Response> = () => new Response('ok');
   /** startFailures are thrown by the next starts, one each, as Cloudflare does while it has no instance. */
   startFailures: Error[] = [];
+  /** monitors counts the monitor() calls. */
+  monitors = 0;
   private readonly live = new Set<() => void>();
+  /** stop settles the running container's monitor() calls; stopped is what they wait for. */
+  private stop: (error?: unknown) => void = () => {};
+  private stopped: Promise<void> = Promise.resolve();
 
   start(options?: ContainerStartupOptions): void {
     if (this.running) throw new Error('start() cannot be called on a container that is already running.');
@@ -46,12 +51,38 @@ export class FakeContainer {
     if (failure) throw failure;
     this.started.push(options ?? { enableInternet: false });
     this.running = true;
+    this.stopped = new Promise<void>((resolve, reject) => {
+      this.stop = (error) => (error === undefined ? resolve() : reject(error));
+    });
+    // A container that stops while nobody watches it is no unhandled rejection.
+    this.stopped.catch(() => {});
   }
 
   async destroy(): Promise<void> {
+    this.end();
+  }
+
+  /**
+   * exit stops the container as Cloudflare does: monitor() resolves for code 0 and rejects with an
+   * error carrying exitCode for another code, or with error when one is given instead.
+   */
+  exit(code: number, error?: Error): void {
+    this.end(
+      error ?? (code === 0 ? undefined : Object.assign(new Error(`exited with code ${code}`), { exitCode: code })),
+    );
+  }
+
+  private end(error?: unknown): void {
+    if (!this.running) return;
     this.running = false;
     this.destroyed++;
     for (const end of this.live) end();
+    this.stop(error);
+  }
+
+  monitor(): Promise<void> {
+    this.monitors++;
+    return this.stopped;
   }
 
   async setInactivityTimeout(ms: number | bigint): Promise<void> {
@@ -70,7 +101,13 @@ export class FakeContainer {
         if (new URL(request.url).protocol !== 'http:') {
           throw new Error('Connecting to a container using HTTPS is not currently supported; use HTTP instead.');
         }
-        return this.port(port, request);
+        // As fetch does: an aborted signal ends the request, even when the container never answers.
+        const signal = init?.signal ?? request.signal;
+        signal?.throwIfAborted();
+        return new Promise<Response>((resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal?.reason), { once: true });
+          Promise.resolve(this.port(port, request)).then(resolve, reject);
+        });
       },
     } as Fetcher;
   }

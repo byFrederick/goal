@@ -10,9 +10,6 @@ import { RefLink } from '../../shared/ref-link';
 import { Button } from '../../ui/button';
 import { Panel, rowClass } from './panel';
 
-// A link inside a line of text needs more than colour to be told apart (WCAG 1.4.1).
-const refLinkClass = 'font-medium text-link underline underline-offset-2';
-
 const info =
   'Follow-ups that name no item and no time. When an item lands they join the open triage item, which the architect turns into work or closes.';
 
@@ -30,7 +27,7 @@ export function TriageCard({ triage }: { triage: IntakeTriage | null | undefined
               <Count n={triage.item.follow_ups} word="follow-ups" />
               <span className="flex min-w-0 flex-col">
                 <span className="truncate font-medium" title={triage.item.title}>
-                  <RefLink item={triage.item.ref} className={refLinkClass} /> {triage.item.title}
+                  <RefLink item={triage.item.ref} /> {triage.item.title}
                 </span>
                 <Sub>In {humanize(triage.item.station)}, for the architect</Sub>
               </span>
@@ -46,7 +43,7 @@ export function TriageCard({ triage }: { triage: IntakeTriage | null | undefined
               <Count n={source.follow_ups} word="waiting" />
               <span className="flex min-w-0 flex-col">
                 <span className="truncate font-medium" title={source.title}>
-                  <RefLink item={source.ref} className={refLinkClass} /> {source.title}
+                  <RefLink item={source.ref} /> {source.title}
                 </span>
                 <Sub>Join it when {source.ref} lands</Sub>
               </span>

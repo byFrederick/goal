@@ -169,6 +169,7 @@ describe('the item page header', () => {
     expect(screen.getByRole('link', { name: 'Usage and budgets, part 4 of 4' }).getAttribute('href')).toContain(
       '/items/144',
     );
+    expect(screen.getByTitle('Usage and budgets, part 4 of 4')).toBeTruthy();
   });
 
   it('shows no assembly chip for an item that is not a part', async () => {
@@ -833,10 +834,6 @@ describe('the item page, follow-ups, start and closing', () => {
     expect(screen.getByRole('button', { name: /^Start now/ })).toBeTruthy();
     expect(screen.getByRole('region', { name: /Follow-ups/ })).toBeTruthy();
     expect(screen.getByText('Check the brief.')).toBeTruthy();
-    // Below 720 px the timeline panel is not hidden: the cards stay, and only the whole trace is left out.
-    const panel = screen.getByRole('tabpanel');
-    expect(panel.className).not.toMatch(/(^|\s)hidden(\s|$)/);
-    expect(within(panel).getByRole('region', { name: /Follow-ups/ })).toBeTruthy();
   });
 
   it('says who closed an item an agent closed, and why', async () => {

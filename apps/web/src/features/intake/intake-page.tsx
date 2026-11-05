@@ -21,8 +21,7 @@ import { TriageCard } from './triage-card';
 import { TriggersTable } from './triggers-table';
 import { WebhooksCard } from './webhooks-card';
 
-/** `crumb` is the top bar's last crumb when a dialog is open over the page (the picker's "New trigger"). */
-export function IntakePage({ crumb }: { crumb?: string } = {}) {
+export function IntakePage() {
   const org = useOrg();
   const factory = useFactory();
   const [window, setWindow] = useState<IntakeWindow>('30d');
@@ -34,16 +33,14 @@ export function IntakePage({ crumb }: { crumb?: string } = {}) {
 
   if (query.isPending) return <IntakeSkeleton />;
   if (query.isError) return <ErrorScreen error={query.error} reset={() => void query.refetch()} />;
-  return <Ready intake={query.data} window={window} onWindowChange={setWindow} crumb={crumb} />;
+  return <Ready intake={query.data} window={window} onWindowChange={setWindow} />;
 }
 
 function Ready({
   intake,
   window,
   onWindowChange,
-  crumb,
 }: {
-  crumb: string | undefined;
   intake: Intake;
   window: IntakeWindow;
   onWindowChange: (window: IntakeWindow) => void;
@@ -51,7 +48,7 @@ function Ready({
   const comingUp = intake.coming_up ?? [];
   return (
     <>
-      <IntakeActions crumb={crumb} />
+      <IntakeActions />
       <div className="flex flex-col gap-5">
         <h1 className="m-0 text-page-title">Intake</h1>
         <ComingUp items={comingUp} total={intake.coming_up_total ?? comingUp.length} />
@@ -75,11 +72,10 @@ function Ready({
 }
 
 /** The top bar's actions: Webhooks (its page comes with the Webhooks item) and New trigger, the primary one last. A phone's bar keeps New trigger only; the webhooks card links to Webhooks. */
-function IntakeActions({ crumb }: { crumb: string | undefined }) {
+function IntakeActions() {
   const params = useFactoryParams();
   return (
     <TopBarSlot
-      crumb={crumb}
       actions={[
         <Button key="webhooks" asChild variant="secondary" data-desktop-only>
           <Link to="/o/$org/f/$factory/intake/webhooks" params={params}>

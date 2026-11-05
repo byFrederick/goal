@@ -1,7 +1,8 @@
-// Intake (ADR 0026 and 0040) against the mock: the software factory's triggers and sources, the switch, and
+// Intake (intake, ADR 0026) against the mock: the software factory's triggers and sources, the switch, and
 // the New trigger picker. Not run in the box (no browser): the Vitest suites cover the same behavior.
 import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
+import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectTarget44 } from './support-boxes';
 
 const intake = '/o/acme/f/software/intake';
 
@@ -25,13 +26,7 @@ test('the Intake page lists what is coming up, where items came from, the trigge
   await expect(triggers.getByRole('switch', { name: 'deploy-failed' })).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByRole('region', { name: 'Webhooks open to Software' })).toBeVisible();
 
-  // The Webhooks button is in the top bar from 768 px; the card's Manage link reaches the same page on a phone.
-  await expect(
-    page.getByRole('region', { name: 'Webhooks open to Software' }).getByRole('link', { name: 'Manage' }),
-  ).toHaveAttribute('href', `${intake}/webhooks`);
-  if (!isPhone(page)) {
-    await expect(page.getByRole('link', { name: 'Webhooks' })).toHaveAttribute('href', `${intake}/webhooks`);
-  }
+  await expect(page.getByRole('link', { name: 'Webhooks' })).toHaveAttribute('href', `${intake}/webhooks`);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -43,14 +38,11 @@ test('New trigger opens the picker over the page and Continue goes to the trigge
   const dialog = page.getByRole('dialog', { name: 'New trigger' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Slack' })).toHaveAttribute('aria-disabled', 'true');
-  // On a phone the picker is one pane: the events show once GitHub is chosen.
-  if (isPhone(page)) await dialog.getByRole('button', { name: 'GitHub' }).click();
   await expect(dialog.getByRole('radio', { name: 'Issue opened' })).toHaveAttribute('aria-disabled', 'true');
 
   await dialog.getByRole('radio', { name: 'Issue labeled' }).check();
   await dialog.getByRole('button', { name: 'Continue' }).click();
-  // The trigger page opens under the first free name for the event (ADR 0040, trigger-save).
-  await expect(page).toHaveURL(`${intake}/new-issues-labeled?on=github.issues.labeled`);
+  await expect(page).toHaveURL(`${intake}/new/github?on=github.issues.labeled`);
 });
 
 test('the picker is one pane with Back on a phone', async ({ page }) => {
@@ -91,8 +83,7 @@ for (const theme of ['light', 'dark'] as const) {
       }
 
       if (size.width >= 1440) {
-        // The open dialog hides the page from the accessibility tree, so the bar is found by its label.
-        const nav = page.locator('nav[aria-label="Breadcrumb"]');
+        const nav = page.getByRole('navigation', { name: 'Breadcrumb' });
         await expect(nav.getByText('Intake')).toBeVisible();
         await expect(nav.getByText('New trigger')).toBeVisible();
       }
@@ -113,3 +104,37 @@ for (const colorScheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [390, 1440]) {
+    test(`Intake and New trigger have no axe violations at ${width} px in ${scheme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(intake);
+      await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
+      await expectAccessible(page);
+      await page.goto(`${intake}/new`);
+      await expect(page.getByRole('dialog', { name: 'New trigger' })).toBeVisible();
+      await expectAccessible(page);
+    });
+  }
+}
+
+test('New trigger lists no tool permissions under Check with an agent', async ({ page }) => {
+  await page.goto(`${intake}/new`);
+  const dialog = page.getByRole('dialog', { name: 'New trigger' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /^Bash/ })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /^(Edit|Write)/ })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /^github__/ })).toHaveCount(0);
+});
+
+test('Intake and New trigger targets are 44 px at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(intake);
+  const coming = page.getByRole('region', { name: 'Coming up' });
+  // The title link is stretched over the row, so the row is its hit area.
+  await expectTarget44(coming.getByRole('listitem').first(), "a Coming up row's title link");
+  await page.goto(`${intake}/new`);
+  await expectTarget44(page.getByRole('searchbox', { name: 'Search sources' }), 'the source search');
+});

@@ -1,6 +1,6 @@
 // The Triggers table (intake): each trigger of the running definition with its source, when it fires, what
 // it creates, its last 7 days and its switch. A problem is named in red under the name. The table is a
-// table from 640 px of room; below it each row stacks its cells, with no column headings.
+// table from 768 px; below it each row stacks its cells, with no column headings.
 import { Link } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Clock, GitBranch, Webhook } from 'lucide-react';
@@ -36,9 +36,9 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
           {triggers.filter((t) => t.enabled).length} on
         </span>
       </div>
-      <div className="relative overflow-x-auto px-2 pb-2 @[640px]:px-3">
-        <table className="block w-full border-collapse text-secondary @[640px]:table">
-          <thead className="hidden @[640px]:table-header-group">
+      <div className="overflow-x-auto px-2 pb-2 md:px-3">
+        <table className="block w-full border-collapse text-secondary md:table">
+          <thead className="hidden md:table-header-group">
             <tr>
               <th scope="col" className="px-3 pb-3 text-left text-meta font-semibold text-muted">
                 Trigger
@@ -57,10 +57,10 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
               </th>
             </tr>
           </thead>
-          <tbody className="block @[640px]:table-row-group">
+          <tbody className="block md:table-row-group">
             {triggers.length === 0 ? (
-              <tr className="block px-3 py-4 text-muted @[640px]:table-row">
-                <td className="block @[640px]:table-cell @[640px]:py-4" colSpan={5}>
+              <tr className="block px-3 py-4 text-muted md:table-row">
+                <td className="block md:table-cell md:py-4" colSpan={5}>
                   No triggers yet. Add one with New trigger.
                 </td>
               </tr>
@@ -84,11 +84,11 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
   return (
     <tr
       className={cn(
-        'block border-t border-line px-3 py-3 first:border-t-0 @[640px]:table-row @[640px]:p-0',
+        'block border-t border-line px-3 py-3 first:border-t-0 md:table-row md:p-0',
         arrived && 'motion-safe:animate-item-in',
       )}
     >
-      <td className="block py-1 @[640px]:table-cell @[640px]:px-3 @[640px]:py-3 @[640px]:align-middle">
+      <td className="block py-1 md:table-cell md:px-3 md:py-3 md:align-middle">
         <div className="flex min-w-0 items-start gap-3">
           <span aria-hidden="true" className="mt-px flex size-4 flex-none items-center justify-center text-muted">
             <Icon className="size-4" />
@@ -122,10 +122,8 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
           </div>
         </div>
       </td>
-      <td className="block py-1 text-ink-soft @[640px]:table-cell @[640px]:px-3 @[640px]:py-3 @[640px]:align-middle">
-        {trigger.when}
-      </td>
-      <td className="block py-1 @[640px]:table-cell @[640px]:px-3 @[640px]:py-3 @[640px]:align-middle">
+      <td className="block py-1 text-ink-soft md:table-cell md:px-3 md:py-3 md:align-middle">{trigger.when}</td>
+      <td className="block py-1 md:table-cell md:px-3 md:py-3 md:align-middle">
         <div className="flex flex-wrap items-center gap-2">
           {trigger.check ? (
             <>
@@ -141,10 +139,10 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
           {trigger.create.expedite ? <Chip tone="expedite">expedite</Chip> : null}
         </div>
       </td>
-      <td className="hidden @[640px]:table-cell @[640px]:px-3 @[640px]:py-3 @[640px]:align-middle">
+      <td className="hidden md:table-cell md:px-3 md:py-3 md:align-middle">
         {trigger.enabled ? <LastWeek days={trigger.days} items={items} /> : <span className="text-muted">Off</span>}
       </td>
-      <td className="block pt-2 @[640px]:table-cell @[640px]:px-3 @[640px]:py-3 @[640px]:text-right @[640px]:align-middle">
+      <td className="block pt-2 md:table-cell md:px-3 md:py-3 md:text-right md:align-middle">
         <Switch
           aria-label={trigger.name}
           checked={toggle.checked}

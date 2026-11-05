@@ -229,6 +229,71 @@ describe('DetailsCard', () => {
     expect(await screen.findByRole('link', { name: 'software#150' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Details' }).textContent).toContain('Part of');
   });
+
+  it('keeps a long assembly title whole in the Came from line, wrapping and not cut', async () => {
+    const title = 'Usage and budgets for every organization, with a spend limit per factory and a monthly report';
+    const part = item({ assembly: { id: 'assembly-150', ref: 'software#150', title, part: 4, parts: 4 } });
+    renderCards(() => <DetailsCard item={part} factory={factory} events={events} trace={buildTrace([])} />);
+
+    const text = (await screen.findByText(new RegExp(title))) as HTMLElement;
+    expect(text.className).not.toMatch(/truncate/);
+    expect(screen.getByRole('link', { name: 'software#150' }).className.split(' ')).toContain('underline');
+  });
+});
+
+describe('DetailsCard, where an item came from', () => {
+  const details = async (over: Partial<Item>) => {
+    renderCards(() => <DetailsCard item={item(over)} factory={factory} events={events} trace={buildTrace([])} />);
+    return (await screen.findByRole('region', { name: 'Details' })).textContent;
+  };
+
+  it('says who filed it and through what', async () => {
+    const text = await details({
+      origin: 'person',
+      via: 'cli',
+      created_by: { kind: 'user', id: 'u1', name: 'Freddy Cruz' },
+    });
+    expect(text).toContain('Came from');
+    expect(text).toContain('Freddy Cruz, the CLI');
+  });
+
+  it('says a trigger or a follow-up filed it, and when it starts', async () => {
+    expect(await details({ origin: 'trigger' })).toContain('Filed by a trigger');
+    cleanup();
+    const text = await details({ origin: 'follow-up', start: { at: '2026-11-19T09:00:00' } });
+    expect(text).toContain('A follow-up');
+    expect(text).toContain('StartsThu, Nov 19, 09:00');
+  });
+
+  it('says which follow-up filed it, with both items linked', async () => {
+    renderCards(() => (
+      <DetailsCard
+        item={item({
+          origin: 'follow-up',
+          came_from: {
+            follow_ups: [
+              {
+                id: 'fu1',
+                from_item: 'Other#519',
+                from_item_id: 'i519',
+                agent: 'backend-engineer',
+                station: 'build',
+                landed_item: 'Software#513',
+                landed_item_id: 'i513',
+              },
+            ],
+          },
+        })}
+        factory={factory}
+        events={events}
+        trace={buildTrace([])}
+      />
+    ));
+    const card = await screen.findByRole('region', { name: 'Details' });
+    expect(card.textContent).toContain('A follow-up by backend-engineer on Other#519, filed when Software#513 landed');
+    expect(within(card).getByRole('link', { name: 'Other#519' }).getAttribute('href')).toContain('/f/Other/');
+    expect(within(card).getByRole('link', { name: 'Software#513' })).toBeTruthy();
+  });
 });
 
 describe('DetailsCard, where an item came from', () => {

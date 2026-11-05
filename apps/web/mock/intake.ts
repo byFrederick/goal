@@ -96,7 +96,7 @@ const software: Intake = {
     },
     {
       name: 'deploy-failed',
-      enabled: false,
+      enabled: true,
       source: 'webhook',
       on: 'webhook.cloudflare.deploy.failed',
       when: 'webhook.cloudflare.deploy.failed',
@@ -153,16 +153,5 @@ function triggersOf(yamlText: string): IntakeTrigger[] {
 /** The intake of the factory with this name, from its current version's factory.yaml when it has no fixture. */
 export function intakeOf(factory: string, yamlText: string): Intake {
   if (factory === 'software') return software;
-  const triggers = triggersOf(yamlText);
-  // The API's suggestions are the definition's disabled triggers, in definition order.
-  const suggestions = triggers
-    .filter((t) => !t.enabled)
-    .map((t) => ({
-      name: t.name,
-      source: t.source,
-      on: t.on,
-      when: t.when,
-      create: { ...t.create, title: '' },
-    }));
-  return { items: 0, from: null, to: null, sources: none, suggestions, triggers };
+  return { items: 0, from: null, to: null, sources: none, suggestions: [], triggers: triggersOf(yamlText) };
 }
