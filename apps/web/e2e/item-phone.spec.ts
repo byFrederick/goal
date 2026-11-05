@@ -3,6 +3,7 @@
 // Details card and the note field. Runs on the phone-375 project; checked in light and dark mode.
 import { expect, test } from '@playwright/test';
 import { expectNoHorizontalScroll, isPhone } from './support';
+import { expectTarget44 } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -74,4 +75,15 @@ test('the item tab row hides its scrollbar at 390', async ({ page }) => {
   const tabs = page.getByRole('tablist', { name: 'Item views' });
   await expect(tabs).toHaveCSS('scrollbar-width', 'none');
   await expect(tabs).toHaveCSS('overflow-x', 'auto');
+});
+
+test('the assembly link of a part is a 44 px target at 390 and its cut title carries the full text', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/goal/items/12');
+  const link = page.getByRole('link', { name: /, part \d+ of \d+$/ });
+  await expectTarget44(link.first(), 'the assembly link');
+  const label = link.first().locator('span.truncate');
+  await expect(label).toHaveAttribute('title', /, part \d+ of \d+$/);
 });

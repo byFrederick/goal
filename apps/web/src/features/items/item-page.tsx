@@ -16,6 +16,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
+import { touchLink } from '../../ui/touch-target';
 import { WorkingLine } from '../../ui/working-line';
 import { FollowUpsCard, NotesCard } from './follow-ups-card';
 import { ItemTabs, panelId, tabId } from './item-tabs';
@@ -260,11 +261,14 @@ export function ItemPage() {
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(item.assembly.ref) }}
               aria-label={`${item.assembly.title}, part ${item.assembly.part} of ${item.assembly.parts}`}
-              className="min-w-0 max-w-full no-underline hover:text-link"
+              className={cn('min-w-0 max-w-full no-underline hover:text-link', touchLink)}
             >
               <Chip tone="plain" className="max-w-full">
                 <LayoutGrid size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-                <span className="truncate">
+                <span
+                  className="truncate"
+                  title={`${item.assembly.title}, part ${item.assembly.part} of ${item.assembly.parts}`}
+                >
                   {item.assembly.title}, part {item.assembly.part} of {item.assembly.parts}
                 </span>
               </Chip>

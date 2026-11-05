@@ -229,6 +229,16 @@ describe('DetailsCard', () => {
     expect(await screen.findByRole('link', { name: 'software#150' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Details' }).textContent).toContain('Part of');
   });
+
+  it('keeps a long assembly title whole in the Came from line, wrapping and not cut', async () => {
+    const title = 'Usage and budgets for every organization, with a spend limit per factory and a monthly report';
+    const part = item({ assembly: { id: 'assembly-150', ref: 'software#150', title, part: 4, parts: 4 } });
+    renderCards(() => <DetailsCard item={part} factory={factory} events={events} trace={buildTrace([])} />);
+
+    const text = (await screen.findByText(new RegExp(title))) as HTMLElement;
+    expect(text.className).not.toMatch(/truncate/);
+    expect(screen.getByRole('link', { name: 'software#150' }).className).toMatch(/underline/);
+  });
 });
 
 describe('DetailsCard, where an item came from', () => {
