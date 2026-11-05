@@ -447,7 +447,7 @@ test('the board shows how each station is doing and who works each card', async 
   await expect(columns.getByRole('region', { name: 'Triage', exact: true })).toContainText('1 of 4');
   await expect(columns.getByRole('region', { name: 'Investigate', exact: true })).toContainText('3 of 3');
   await expect(columns.getByRole('region', { name: 'Approve', exact: true })).toContainText('3 of 5');
-  await expect(columns.getByRole('region', { name: 'Done', exact: true })).toContainText('Merged pull requests');
+  await expect(columns.getByRole('region', { name: 'Done', exact: true })).toContainText('Finished items');
 
   const investigate = page.getByRole('region', { name: 'Investigate', exact: true });
   await expect(investigate.getByRole('article').filter({ hasText: 'billing-svc' })).toContainText(
