@@ -1,6 +1,7 @@
 package intaketest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -29,6 +30,7 @@ var checkTests = []struct {
 	{"OtherOrg_ReadsNoTriggerKey", testIsolatedKeys},
 	{"Check_MemoryCountsAndClear", testCheckMemory},
 	{"OtherOrg_ClearsNoState", testIsolatedClear},
+	{"Check_ItemCheckKeyIsTheKeysLastItem", testItemCheckKey},
 }
 
 // checkFiring is a schedule firing of nightly for the instant at, which queues a check.
@@ -698,5 +700,41 @@ func testIsolatedClear(f *fixture) {
 
 	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || m.Open != 1 || !sameJSON(m.State, `{"since": "a"}`) {
 		t.Errorf("CheckMemory after labs' Clear = %+v, %v; want the item and the state kept", m, err)
+	}
+}
+
+// ItemCheckKey is the key a check filed an item under while the item is the key's last; a
+// schedule's item, an item whose key was filed again, an unknown item and another
+// organization's read have none.
+func testItemCheckKey(f *fixture) {
+	t := f.t
+
+	inc1, inc2 := f.expectFiled(f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "db-1"}]}`,
+		domain.CheckLimits{}, false))
+	f.close(inc2, domain.StateCancelled)
+
+	again := f.runCheck(t0.Add(time.Hour), `{"file": [{"key": "INC-2", "title": "Disk full", "brief": "back", "reopen": "it came back"}]}`, domain.CheckLimits{}, false)
+	if len(again.Applied.Filed) != 1 {
+		t.Fatalf("reopen applied %+v; want INC-2 filed again", again.Applied)
+	}
+
+	scheduled := f.item(domain.ItemFromSchedule, nightly, t0)
+
+	for _, c := range []struct {
+		what string
+		ctx  context.Context
+		item domain.ItemID
+		want string
+	}{
+		{"the check's item", f.ctx(), inc1.ID, "INC-1"},
+		{"the key's item filed again", f.ctx(), f.itemByRef(again.Applied.Filed[0].Ref).ID, "INC-2"},
+		{"the key's earlier item", f.ctx(), inc2.ID, ""},
+		{"a schedule's item", f.ctx(), scheduled.ID, ""},
+		{"an unknown item", f.ctx(), "not-an-item", ""},
+		{"another organization's read", domain.WithOrg(t.Context(), f.NewOrg(t)), inc1.ID, ""},
+	} {
+		if got, err := f.in.ItemCheckKey(c.ctx, c.item); err != nil || got != c.want {
+			t.Errorf("ItemCheckKey of %s = %q, %v; want %q", c.what, got, err, c.want)
+		}
 	}
 }

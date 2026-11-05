@@ -491,6 +491,25 @@ func (in *Intake) ClearCheckState(ctx context.Context, factory domain.FactoryID,
 	return nil
 }
 
+// ItemCheckKey implements ports.Intake.
+func (in *Intake) ItemCheckKey(ctx context.Context, item domain.ItemID) (string, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for k, r := range in.d.keys {
+		if k.org == org && r.item == item && item != "" {
+			return k.key, nil
+		}
+	}
+
+	return "", nil
+}
+
 // checkFiringsInput sets out's last decisions and saved state from the trigger's firings and
 // returns the key of each item they filed: its firing's dedupe value.
 func (in *Intake) checkFiringsInput(org domain.OrgID, factory domain.FactoryID, trigger string, out *domain.CheckInput) map[domain.ItemID]string {

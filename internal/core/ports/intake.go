@@ -213,6 +213,10 @@ type Intake interface {
 	// lock, as FinishCheck does; ErrConflict while the trigger's check is queued or running. Clearing
 	// no state is not an error.
 	ClearCheckState(ctx context.Context, factory domain.FactoryID, trigger string) error
+	// ItemCheckKey is the key a check filed item under (trigger_keys), or "" when no key's last
+	// item is item: an item filed without a check, one whose key a later check filed again, an
+	// unknown item, or another organization's.
+	ItemCheckKey(ctx context.Context, item domain.ItemID) (string, error)
 	// TriggerChecks are at most limit of the trigger's checked firings, tries among them, newest
 	// first (at, then id), each with what it applied once done.
 	TriggerChecks(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.TriggerFiring, error)

@@ -41,6 +41,42 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 	return out, nil
 }
 
+// FiledFrom implements ports.Store.
+func (s *Store) FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(item, org); !ok {
+		return nil, nil
+	}
+
+	var out []domain.FiledFrom
+
+	for _, f := range s.followUps {
+		src, ok := s.visible(f.ItemID, org)
+		if f.FiledItem != item || !ok {
+			continue
+		}
+
+		landed := src
+		if p, ok := s.visible(src.ParentID, org); ok && src.ParentID != "" {
+			landed = p
+		}
+
+		out = append(out, domain.FiledFrom{
+			FollowUp: f.ID, Source: src.ID, SourceFactory: src.FactoryID, SourceNumber: src.Number, Station: f.Station, Agent: f.Agent,
+			Landed: landed.ID, LandedFactory: landed.FactoryID, LandedNumber: landed.Number,
+		})
+	}
+
+	return out, nil
+}
+
 // ItemNotes implements ports.Store.
 func (s *Store) ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error) {
 	org, err := orgOf(ctx)
