@@ -134,7 +134,7 @@ func (s *server) CreateWebhook(ctx context.Context, req gen.CreateWebhookRequest
 		return nil, webhookError(err)
 	}
 
-	o := webhookOut(w, nil, webhookUse{triggers: []gen.WebhookTrigger{}, events: []string{}})
+	o := webhookOut(w, nil, webhookUse{named: []gen.WebhookTrigger{}, triggers: []gen.WebhookTrigger{}, events: []string{}})
 
 	return gen.CreateWebhook201JSONResponse{
 		Id: o.Id, Name: o.Name, Sender: o.Sender, Address: o.Address, Secret: o.Secret, Enabled: o.Enabled, Token: o.Token,
@@ -290,7 +290,7 @@ func (s *server) unused(ctx context.Context, w domain.WebhookEndpoint, p domain.
 		return err
 	}
 
-	triggers := uses(w).triggers
+	triggers := uses(w).named
 	if !renamed {
 		triggers = slices.DeleteFunc(triggers, func(t gen.WebhookTrigger) bool { return !slices.Contains(closes, domain.FactoryID(t.Factory)) })
 	}
@@ -314,7 +314,7 @@ func (s *server) deletable(ctx context.Context, w domain.WebhookEndpoint) error 
 		return err
 	}
 
-	if triggers := uses(w).triggers; len(triggers) > 0 {
+	if triggers := uses(w).named; len(triggers) > 0 {
 		return &webhookInUseError{name: w.Name, triggers: triggers}
 	}
 
@@ -322,16 +322,20 @@ func (s *server) deletable(ctx context.Context, w domain.WebhookEndpoint) error 
 }
 
 // webhookUse is what the published definitions of the factories a webhook reaches have of it:
-// the triggers whose on names it, and the events its sender must send for the enabled triggers
-// that name it or its sender (setup events), or every event (all).
+// the triggers whose on names it (named, which hold it against a rename, a close and a delete),
+// those and the enabled ones that name its sender with an event (triggers, which it lists), and
+// the events its sender must send for the enabled triggers that name it or its sender (setup
+// events), or every event (all).
 type webhookUse struct {
+	named    []gen.WebhookTrigger
 	triggers []gen.WebhookTrigger
 	events   []string
 	all      bool
 }
 
 // webhookUses reads the published definitions once and returns what of them uses a webhook: the
-// enabled or disabled triggers of the factories it reaches whose on names it, by factory name then
+// enabled or disabled triggers of the factories it reaches whose on names it, the enabled ones
+// whose on names its sender with an event (ADR 0040 decision 14), each by factory name then
 // trigger, and its setup events, sorted and distinct. Archived factories are left out, as for a
 // secret's uses.
 func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) webhookUse, error) {
@@ -343,7 +347,7 @@ func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) 
 	factories := s.factories.Factories(ctx)
 
 	return func(w domain.WebhookEndpoint) webhookUse {
-		out := webhookUse{triggers: []gen.WebhookTrigger{}, events: []string{}}
+		out := webhookUse{named: []gen.WebhookTrigger{}, triggers: []gen.WebhookTrigger{}, events: []string{}}
 
 		for _, f := range factories {
 			id := domain.FactoryID(f.Metadata.ID)
@@ -352,29 +356,46 @@ func (s *server) webhookUses(ctx context.Context) (func(domain.WebhookEndpoint) 
 			}
 
 			for _, t := range f.Spec.Board.Triggers {
-				if domain.TriggerNames(t.On, w.Name) {
-					out.triggers = append(out.triggers, gen.WebhookTrigger{Factory: string(id), FactoryName: f.Metadata.Name, Trigger: t.Name})
-				}
-
-				if t.Enabled != nil && !*t.Enabled {
-					continue
-				}
-
-				if event, all, ok := domain.SetupEvent(t.On, w); ok {
-					out.all = out.all || all
-					if event != "" {
-						out.events = append(out.events, event)
-					}
-				}
+				out.add(w, gen.WebhookTrigger{Factory: string(id), FactoryName: f.Metadata.Name, Trigger: t.Name}, t.On, t.Enabled == nil || *t.Enabled)
 			}
 		}
 
-		slices.SortStableFunc(out.triggers, func(a, b gen.WebhookTrigger) int { return cmp.Compare(a.FactoryName, b.FactoryName) })
+		slices.SortStableFunc(out.named, byFactoryThenTrigger)
+		slices.SortStableFunc(out.triggers, byFactoryThenTrigger)
 		slices.Sort(out.events)
 		out.events = slices.Compact(out.events)
 
 		return out
 	}, nil
+}
+
+// add counts the trigger use, whose on is on, in what of it uses w.
+func (u *webhookUse) add(w domain.WebhookEndpoint, use gen.WebhookTrigger, on string, enabled bool) {
+	named := domain.TriggerNames(on, w.Name)
+	if named {
+		u.named = append(u.named, use)
+		u.triggers = append(u.triggers, use)
+	}
+
+	if !enabled {
+		return
+	}
+
+	if sender, _, event := domain.ParseOn(on); !named && sender == w.Sender && event != "" {
+		u.triggers = append(u.triggers, use)
+	}
+
+	if event, all, ok := domain.SetupEvent(on, w); ok {
+		u.all = u.all || all
+		if event != "" {
+			u.events = append(u.events, event)
+		}
+	}
+}
+
+// byFactoryThenTrigger orders trigger uses by factory name, then trigger.
+func byFactoryThenTrigger(a, b gen.WebhookTrigger) int {
+	return cmp.Or(cmp.Compare(a.FactoryName, b.FactoryName), cmp.Compare(a.Trigger, b.Trigger))
 }
 
 // oneWebhookOut is w with its uses and its days.

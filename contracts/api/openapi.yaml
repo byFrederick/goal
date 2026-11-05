@@ -3012,7 +3012,7 @@ paths:
       summary: Delete a webhook endpoint and its deliveries
       description: >-
         Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to
-        the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a
+        the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a
         sign-in from the last 10 minutes.
       responses:
         "204": { description: Deleted }
@@ -3170,7 +3170,8 @@ paths:
         both opened and closed, or a repository list over 100; 404 webhook-not-found, and
         factory-not-found for a factory the organization does not have; 409 webhook-name-taken;
         409 webhook-in-use, with triggers, when a rename or a close would leave published triggers
-        that use the webhook without it: publish them without it first. Needs a sign-in from the
+        that name the webhook without it: publish them without it first. A trigger that names only
+        its sender does not hold it. Needs a sign-in from the
         last 10 minutes.
       requestBody:
         required: true
@@ -3191,8 +3192,8 @@ paths:
       summary: Delete a webhook, its openings and its deliveries
       description: >-
         Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409
-        webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the
-        last 10 minutes.
+        webhook-in-use, with triggers, while published triggers name it; a trigger that names only
+        its sender does not hold it. Needs a sign-in from the last 10 minutes.
       responses:
         "204": { description: Deleted }
         default: { $ref: "#/components/responses/Problem" }
@@ -5365,7 +5366,7 @@ components:
           items: { $ref: "#/components/schemas/SecretUse" }
         triggers:
           type: array
-          description: webhook-in-use only, the published triggers that use the webhook
+          description: webhook-in-use only, the published triggers that name the webhook
           items: { $ref: "#/components/schemas/WebhookTrigger" }
     AuthMode:
       type: string
@@ -10465,8 +10466,10 @@ components:
         triggers:
           type: array
           description: >-
-            The triggers of the published definitions of the factories it is open to that use it
-            (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger
+            The triggers of the published definitions of the factories it is open to that name it
+            (on webhook.<name>, <name> or either followed by .<event>), enabled or not, and the
+            enabled ones that name its sender with an event (<sender>.<event>), by factory name
+            then trigger. Archived factories' triggers are left out.
           items: { $ref: "#/components/schemas/WebhookTrigger" }
         created_at: { type: string, format: date-time }
         days:
@@ -10557,8 +10560,8 @@ components:
         evaluations:
           type: array
           description: >-
-            Its evaluation by each factory that names it, by factory. A factory's own routes list
-            only that factory's.
+            Its evaluation by each factory that names it, by factory name then factory id. A
+            factory's own routes list only that factory's.
           items: { $ref: "#/components/schemas/WebhookDeliveryEvaluation" }
     WebhookDeliveryEvaluation:
       type: object
