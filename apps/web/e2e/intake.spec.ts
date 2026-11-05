@@ -2,6 +2,7 @@
 // the New trigger picker. Not run in the box (no browser): the Vitest suites cover the same behavior.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectTarget44 } from './support-boxes';
 
 const intake = '/o/acme/f/software/intake';
 
@@ -103,3 +104,37 @@ for (const colorScheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+for (const scheme of ['light', 'dark'] as const) {
+  for (const width of [390, 1440]) {
+    test(`Intake and New trigger have no axe violations at ${width} px in ${scheme}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(intake);
+      await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
+      await expectAccessible(page);
+      await page.goto(`${intake}/new`);
+      await expect(page.getByRole('dialog', { name: 'New trigger' })).toBeVisible();
+      await expectAccessible(page);
+    });
+  }
+}
+
+test('New trigger lists no tool permissions under Check with an agent', async ({ page }) => {
+  await page.goto(`${intake}/new`);
+  const dialog = page.getByRole('dialog', { name: 'New trigger' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /^Bash/ })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /^(Edit|Write)/ })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /^github__/ })).toHaveCount(0);
+});
+
+test('Intake and New trigger targets are 44 px at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(intake);
+  const coming = page.getByRole('region', { name: 'Coming up' });
+  // The title link is stretched over the row, so the row is its hit area.
+  await expectTarget44(coming.getByRole('listitem').first(), "a Coming up row's title link");
+  await page.goto(`${intake}/new`);
+  await expectTarget44(page.getByRole('searchbox', { name: 'Search sources' }), 'the source search');
+});
