@@ -1,6 +1,6 @@
 // E12 and build/agent: an agent's statistics, why review sent its work back, and its tabs (?view=).
 import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -13,10 +13,12 @@ test('the agent page shows the last 7 days, its station and why work was sent ba
   await expect(page.getByText('Investigate station')).toBeVisible();
 
   const measures = page.getByRole('region', { name: 'Last 7 days' });
-  await expect(measures.getByText('31', { exact: true })).toBeVisible();
-  await expect(measures.getByText('22%', { exact: true })).toBeVisible();
-  await expect(measures.getByText('$0.94')).toBeVisible();
-  await expect(measures.getByText('24 min')).toBeVisible();
+  // NumberRoll renders each figure twice (MOTION.md, "A number changes"): an sr-only copy, then the aria-hidden digits.
+  // Read the shown one, the last.
+  await expect(measures.getByText('31', { exact: true }).last()).toBeVisible();
+  await expect(measures.getByText('22%', { exact: true }).last()).toBeVisible();
+  await expect(measures.getByText('$0.94').last()).toBeVisible();
+  await expect(measures.getByText('24 min').last()).toBeVisible();
 
   const reasons = page.getByRole('region', { name: 'Why review sent work back' });
   await expect(reasons.getByRole('listitem')).toHaveCount(3);
@@ -105,7 +107,8 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
   // Ask Jonah for a fix is not built yet (ADR 0021 runner pending): it stays disabled and sends nothing.
   const askJonah = page.getByRole('button', { name: 'Ask Jonah for a fix' });
   await expect(askJonah).toHaveAttribute('aria-disabled', 'true');
-  await askJonah.click();
+  // The button is aria-disabled, which Playwright's click waits on forever: force the click, as a person's tap would.
+  await askJonah.click({ force: true });
   await expect(page).not.toHaveURL(/definition/);
 
   await expectAccessible(page);
@@ -115,7 +118,14 @@ test('the agent page reads as pictured: the prompt, settings and the Not availab
 test('the agent page keeps its actions in the top bar, Save changes last', async ({ page }) => {
   await page.goto('/o/acme/f/software/agents/frontend-engineer');
   await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open prompt file' })).toBeVisible();
+  if (isPhone(page)) {
+    // On a phone only the last action stays in the bar; the others sit behind More actions (#602).
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Open prompt file' })).toBeVisible();
+    await page.keyboard.press('Escape');
+  } else {
+    await expect(page.getByRole('link', { name: 'Open prompt file' })).toBeVisible();
+  }
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Bake off this agent' })).toHaveCount(0);
   await expectAccessible(page);
@@ -131,7 +141,9 @@ for (const width of [1440, 390] as const) {
       await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
       await page.goto('/o/acme/f/goal/agents/frontend-engineer');
       await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer' })).toBeVisible();
-      await expect(page.getByRole('link', { name: /^Runs/ })).toBeVisible();
+      await expect(
+        page.getByRole('navigation', { name: 'Agent views' }).getByRole('link', { name: /^Runs/ }),
+      ).toBeVisible();
       await testInfo.attach(`agent-${width}-${theme}`, {
         body: await page.screenshot({ fullPage: true }),
         contentType: 'image/png',
