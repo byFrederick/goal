@@ -112,6 +112,21 @@ func CheckCodeHosts(hosts []CodeHost) ([]CodeHost, error) {
 	return out, nil
 }
 
+// CodeHostsAuditData is the data of an org.code_hosts_set entry: the hosts after the change and
+// before it (from), each {host, kind}.
+func CodeHostsAuditData(hosts, from []CodeHost) map[string]any {
+	list := func(hs []CodeHost) []any {
+		out := make([]any, 0, len(hs))
+		for _, h := range hs {
+			out = append(out, map[string]any{"host": h.Host, "kind": string(h.Kind)})
+		}
+
+		return out
+	}
+
+	return map[string]any{"hosts": list(hosts), "from": list(from)}
+}
+
 // CodeHostAPIBase is the REST API root of h, as the codehost adapters derive it: for GitHub,
 // https://api.github.com for github.com, https://api.<name>.ghe.com for GitHub Enterprise Cloud
 // and https://<host>/api/v3 for GitHub Enterprise Server; for GitLab, https://<host>/api/v4.

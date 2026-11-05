@@ -579,6 +579,20 @@ type SignupDomains interface {
 	ClearSignupDomain(ctx context.Context, by domain.Actor) error
 }
 
+// CodeHosts keep the code hosts each organization added (ADR 0041, decision 1): the GitHub
+// Enterprise and self-managed GitLab hosts its repository tokens and knowledge secrets may go to,
+// besides the built-in domain.BuiltInCodeHosts, which are never stored. Every method acts on the
+// organization in ctx (domain.WithOrg).
+type CodeHosts interface {
+	// CodeHosts returns the organization's added hosts, sorted by host.
+	CodeHosts(ctx context.Context) ([]domain.CodeHost, error)
+	// SetCodeHosts replaces the added hosts with hosts (already checked with
+	// domain.CheckCodeHosts) for by, appends org.code_hosts_set with the hosts before and after,
+	// and returns the hosts now stored, sorted by host; setting what is stored changes nothing
+	// and appends nothing.
+	SetCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) ([]domain.CodeHost, error)
+}
+
 // NewOrg is an organization to create.
 type NewOrg struct {
 	Slug, Name, Mark string
