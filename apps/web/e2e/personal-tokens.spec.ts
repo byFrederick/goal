@@ -125,7 +125,7 @@ test('a token needs a name and something to do, and a live token’s name is tak
   await expect(d.getByText('Give the token a name')).toBeVisible();
   await expect(d.getByText('Choose at least one thing it can do')).toBeVisible();
 
-  await d.getByLabel('Name').fill('Laptop');
+  await d.getByLabel('Name').fill('laptop-cli');
   await d.getByLabel('See the organization').check();
   await d.getByRole('button', { name: 'Create token' }).click();
   await expect(d.getByText('Another live token of yours has this name')).toBeVisible();
@@ -184,13 +184,17 @@ test('a member without api_key:read sees only their own tokens', async ({ page }
     await page.goto('/o/acme/api-keys');
   }
   await expect(page).toHaveURL(/\/o\/acme\/api-keys$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'API keys' })).toBeVisible();
+  // Without api_key:read the page lists no keys and no member's tokens; personal tokens live on the account page.
+  await expect(members(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'New key' })).toHaveCount(0);
+  await expect(page.getByText('Use a key from CI')).toHaveCount(0);
+
+  await page.goto('/account');
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeVisible();
   await expect(entry(own(page), 'laptop').getByText('goal_pat_b4Ty…')).toBeVisible();
   // F. Cruz's tokens are not hers.
   await expect(entry(own(page), 'old-desktop')).toHaveCount(0);
-  await expect(members(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'New key' })).toHaveCount(0);
-  await expect(page.getByText('Use a key from CI')).toHaveCount(0);
 
   // A member can give a token only what they hold: members do not create factories.
   await own(page).getByRole('button', { name: 'New token' }).click();

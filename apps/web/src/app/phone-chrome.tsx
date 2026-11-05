@@ -22,6 +22,7 @@ import {
 import { attentionQuery, factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { lastFactory } from '../shared/org';
+import { cn } from '../ui/cn';
 import { GoalMark } from '../ui/goal-mark';
 import { Menu, MenuContent, MenuItem, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '../ui/menu';
 import { NumberRoll } from '../ui/number-roll';
@@ -362,9 +363,12 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
     <Link
       to="/o/$org/needs-you"
       params={{ org: org.slug }}
-      className={tab}
-      aria-label={waiting > 0 ? `${waiting} Needs you, waiting on you` : 'Needs you'}
+      // The label comes first in the markup and the icon first on screen, so the visible text
+      // ("Needs you 10") reads in the order the name does ("Needs you, 10 waiting on you").
+      className={cn(tab, 'flex-col-reverse')}
+      aria-label={waiting > 0 ? `Needs you, ${waiting} waiting on you` : 'Needs you'}
     >
+      Needs you{' '}
       <span className="relative">
         <Inbox size={20} strokeWidth={1.5} aria-hidden="true" />
         {waiting > 0 ? (
@@ -375,8 +379,7 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
             <NumberRoll value={waiting} />
           </span>
         ) : null}
-      </span>{' '}
-      Needs you
+      </span>
     </Link>
   );
 }

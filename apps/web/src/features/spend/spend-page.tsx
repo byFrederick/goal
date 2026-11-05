@@ -10,6 +10,7 @@ import { exportFailure, saveCsv } from '../../api/download';
 import { spendQuery } from '../../api/queries';
 import { exportOrgSpend } from '../../api/spend';
 import type { OrgSpend } from '../../api/types';
+import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -37,6 +38,7 @@ export function SpendPage() {
     onSuccess: saveCsv,
   });
   const exporting = exportSpend.isPending;
+  const phone = usePhone();
 
   const windowControl = (
     <SegmentedControl
@@ -67,12 +69,14 @@ export function SpendPage() {
       <TopBarSlot
         actions={
           <>
-            {windowControl}
+            {phone ? null : windowControl}
             {exportCsv}
           </>
         }
       />
       <PageHeader title="Spend and billing" />
+      {/* A phone's top bar keeps one action (Export CSV): the window sits in the page, as on the Floor. */}
+      {phone ? <div className="flex">{windowControl}</div> : null}
       {exportSpend.isError ? (
         <div role="alert">
           <Callout tone="rework">{exportFailure(exportSpend.error, 'spend')}</Callout>
