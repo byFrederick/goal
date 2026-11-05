@@ -53,6 +53,7 @@ import {
   listStandingRules,
   type RunsFilter,
 } from './client';
+import { getCodeHosts } from './code-hosts';
 import {
   type ConnectionFilter,
   getConnection,
@@ -164,6 +165,8 @@ export const keys = {
   settings: (org: string) => ['org', org, 'settings'] as const,
   /** The organization's notification settings (the Slack secret). */
   orgNotifications: (org: string) => ['org', org, 'settings', 'notifications'] as const,
+  /** The organization's code hosts (ADR 0041). */
+  codeHosts: (org: string) => ['org', org, 'code-hosts'] as const,
   /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
   policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
@@ -1017,4 +1020,12 @@ export const draftKeptTestsQuery = (org: string, factory: string) =>
   queryOptions({
     queryKey: [...keys.jonah(org, factory), 'draft-kept-tests'] as const,
     queryFn: ({ signal }) => getDraftKeptTests(org, factory, signal),
+  });
+
+/** The organization's code hosts, built in first (org:read). */
+export const codeHostsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.codeHosts(org),
+    queryFn: ({ signal }) => getCodeHosts(org, signal),
+    staleTime: 30_000,
   });

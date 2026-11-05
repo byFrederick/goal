@@ -7,6 +7,7 @@ import type { ItemState } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { humanize } from '../../shared/format';
+import { usesSeveralRepositories } from '../../shared/item-repositories';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
@@ -105,7 +106,7 @@ function ItemsActions() {
   );
 }
 
-const columns = ['Ref', 'Title', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost'] as const;
+const columns = ['Ref', 'Title', 'Repositories', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost'] as const;
 
 export function ItemsPage() {
   const factory = useFactory();
@@ -130,6 +131,7 @@ export function ItemsPage() {
 
   // Every hook is above the early returns. The top bar gets the page's actions, whatever the state.
   const all = everything.data?.items ?? [];
+  const showRepositories = usesSeveralRepositories(all);
   const filters: ItemsFilters = { view, type, lane, assembly };
   const narrowed =
     state !== undefined || view !== undefined || type !== undefined || lane !== undefined || assembly !== undefined;
@@ -363,26 +365,29 @@ export function ItemsPage() {
                   <th scope="col" className="w-px px-3 py-2 text-left">
                     <span className="sr-only">Select</span>
                   </th>
-                  {columns.map((column) => (
-                    <th
-                      key={column}
-                      scope="col"
-                      className={cn(
-                        'px-3 py-2 text-left font-medium whitespace-nowrap',
-                        column === 'Cost' && 'text-right',
-                        (column === 'Agent' || column === 'Age') && hideBelowXl,
-                        (column === 'Lane' || column === 'Cost') && hideBelowLg,
-                      )}
-                    >
-                      {column}
-                    </th>
-                  ))}
+                  {columns
+                    .filter((column) => column !== 'Repositories' || showRepositories)
+                    .map((column) => (
+                      <th
+                        key={column}
+                        scope="col"
+                        className={cn(
+                          'px-3 py-2 text-left font-medium whitespace-nowrap',
+                          column === 'Cost' && 'text-right',
+                          (column === 'Agent' || column === 'Age') && hideBelowXl,
+                          (column === 'Lane' || column === 'Cost') && hideBelowLg,
+                        )}
+                      >
+                        {column}
+                      </th>
+                    ))}
                 </tr>
               </thead>
               <tbody>
                 {flat
                   ? shown.map((it) => (
                       <ItemTableRow
+                        showRepositories={showRepositories}
                         key={it.id}
                         item={it}
                         decides={decides}
@@ -393,6 +398,7 @@ export function ItemsPage() {
                   : rows.map((row) =>
                       row.kind === 'item' ? (
                         <ItemTableRow
+                          showRepositories={showRepositories}
                           key={row.key}
                           item={row.item}
                           decides={decides}
@@ -401,6 +407,7 @@ export function ItemsPage() {
                         />
                       ) : (
                         <AssemblyTableRow
+                          showRepositories={showRepositories}
                           key={row.key}
                           row={row}
                           decides={decides}

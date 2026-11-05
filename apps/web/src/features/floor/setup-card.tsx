@@ -7,7 +7,6 @@ import { Link } from '@tanstack/react-router';
 import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 import {
-  connectionsQuery,
   intakeQuery,
   invitationsQuery,
   itemsQuery,
@@ -57,13 +56,12 @@ export function SetupCard() {
 
   const members = useQuery(membersQuery(org.id));
   const invitations = useQuery(invitationsQuery(org.id));
-  const connections = useQuery(connectionsQuery(org.id));
   const notifications = useQuery(orgNotificationsQuery(org.id));
   const knowledge = useQuery(knowledgeSourcesQuery(org.id));
   const model = useQuery({ ...versionModelQuery(org.id, factory.id, 'current'), select: (v) => modelOf(v.model) });
   const intake = useQuery(intakeQuery(org.id, factory.id));
   const finished = useQuery(itemsQuery(org.id, factory.id, { state: 'done', limit: 1 }));
-  const queries = [members, invitations, connections, notifications, knowledge, model, intake, finished];
+  const queries = [members, invitations, notifications, knowledge, model, intake, finished];
 
   if (hidden) return null;
   if (queries.some((query) => query.isError)) {
@@ -92,7 +90,6 @@ export function SetupCard() {
   const rows = setupRows({
     members: members.data ?? [],
     invitations: invitations.data ?? [],
-    connections: connections.data ?? [],
     slackSet: Boolean(notifications.data?.slack_secret),
     knowledge: knowledge.data ?? [],
     model: model.data,
@@ -204,8 +201,6 @@ function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
       return <ActionLink to="/o/$org/members" params={{ org: orgSlug }} label="Invite" />;
     case 'slack':
       return <ActionLink to="/o/$org/settings" params={{ org: orgSlug }} hash="notifications" label="Set up" />;
-    case 'github':
-      return <ActionLink to="/o/$org/secrets" params={{ org: orgSlug }} search={{ new: true }} label="Connect" />;
     case 'knowledge':
       return <ActionLink to="/o/$org/knowledge/new" params={{ org: orgSlug }} label="Add" />;
     case 'line':
@@ -229,6 +224,7 @@ function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
     case 'first-item':
       return <NewItemButton factory={factory} trigger={<Button size="sm">New item</Button>} />;
     case 'organization':
+    case 'code':
       return null;
   }
 }
