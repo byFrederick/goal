@@ -1,6 +1,6 @@
 // The Triggers table (intake): each trigger of the running definition with its source, when it fires, what
 // it creates, its last 7 days and its switch. A problem is named in red under the name. The table is a
-// table from 768 px; below it each row stacks its cells, with no column headings.
+// table from 768 px (its Last 7 days column from 1024 px); below it each row stacks its cells, with no column headings.
 import { Link } from '@tanstack/react-router';
 import type { LucideIcon } from 'lucide-react';
 import { Clock, GitBranch, Webhook } from 'lucide-react';
@@ -36,7 +36,7 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
           {triggers.filter((t) => t.enabled).length} on
         </span>
       </div>
-      <div className="overflow-x-auto px-2 pb-2 md:px-3">
+      <div className="relative overflow-x-auto px-2 pb-2 md:px-3">
         <table className="block w-full border-collapse text-secondary md:table">
           <thead className="hidden md:table-header-group">
             <tr>
@@ -49,7 +49,7 @@ export function TriggersTable({ triggers }: { triggers: readonly IntakeTrigger[]
               <th scope="col" className="px-3 pb-3 text-left text-meta font-semibold text-muted">
                 Creates
               </th>
-              <th scope="col" className="px-3 pb-3 text-left text-meta font-semibold text-muted">
+              <th scope="col" className="hidden px-3 pb-3 text-left text-meta font-semibold text-muted lg:table-cell">
                 Last 7 days
               </th>
               <th scope="col" className="px-3 pb-3 text-right text-meta font-semibold text-muted">
@@ -139,7 +139,7 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
           {trigger.create.expedite ? <Chip tone="expedite">expedite</Chip> : null}
         </div>
       </td>
-      <td className="hidden md:table-cell md:px-3 md:py-3 md:align-middle">
+      <td className="hidden lg:table-cell lg:px-3 lg:py-3 lg:align-middle">
         {trigger.enabled ? <LastWeek days={trigger.days} items={items} /> : <span className="text-muted">Off</span>}
       </td>
       <td className="block pt-2 md:table-cell md:px-3 md:py-3 md:text-right md:align-middle">

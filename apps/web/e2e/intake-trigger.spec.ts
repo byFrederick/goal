@@ -80,6 +80,8 @@ test.describe('the trigger page', () => {
 
   test('saves a change as a new version of the definition', async ({ page }) => {
     await page.goto(url);
+    // The daily limit is an option now (off until its checkbox is on), so its count is disabled before.
+    await page.getByRole('checkbox', { name: /items a day/ }).check();
     await page.getByRole('spinbutton', { name: 'Items a day' }).fill('5');
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText("Saved. Software's definition is version 3 now.")).toBeVisible();
