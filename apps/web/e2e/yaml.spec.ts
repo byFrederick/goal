@@ -31,7 +31,7 @@ test('the YAML view: the tree marks changes, the outline lists the file, accessi
   await expect(page.getByRole('tab', { name: 'factory.yaml' })).toHaveAttribute('aria-selected', 'true');
   await showFiles(page);
   await expect(page.getByRole('button', { name: 'frontend-engineer.md, changed' })).toBeAttached();
-  await expect(page.getByRole('complementary', { name: 'Outline' })).toContainText('runtime');
+  await expect(page.getByRole('complementary', { name: 'Outline', includeHidden: true })).toContainText('runtime');
   await expect(problems(page)).toContainText('is asked as Off until tool approvals arrive');
   await expectAccessible(page);
   await expectShown(page, "# the spec's lane picks the engineer");

@@ -60,7 +60,9 @@ test('factory settings has no sideways scroll at 390 px', async ({ page }) => {
 
 test('Save changes is in the top bar, not in the page', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
-  await expect(page.getByRole('banner').first().getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  // The mock's `goal` has an open draft (mock/definition-seed.ts), and Save changes publishes an open
+  // draft (save-changes.tsx: disabled only without one), so it is enabled on load.
+  await expect(page.getByRole('banner').first().getByRole('button', { name: 'Save changes' })).toBeEnabled();
   await expect(page.getByRole('main').getByRole('button', { name: 'Save changes' })).toHaveCount(0);
 });
 
