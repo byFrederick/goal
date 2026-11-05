@@ -138,8 +138,9 @@ export function AddFooter({ apply, onAdded }: { apply: Apply; onAdded?: () => vo
       );
     },
   });
+  // Stays at the bottom of the window while the panel scrolls, so Add to draft is always in reach.
   return (
-    <div className="flex flex-col gap-3 border-t border-line pt-4">
+    <div className="sticky bottom-0 z-10 -mb-4 flex flex-col gap-3 border-t border-line bg-card pt-4 pb-4 md:-mb-7 md:pb-7">
       {mutation.isError ? (
         <div role="alert">
           <Callout tone="rework">{refusalText(mutation.error)}</Callout>
@@ -248,7 +249,7 @@ export function SlotSecret({
   factoryName: string;
 }) {
   const { options } = useSecretOptions();
-  const [typed, setTyped] = useState(slot.suggest);
+  const [typed, setTyped] = useState(pick.kind === 'new' ? pick.name : slot.suggest);
   const isNew = pick.kind === 'new';
   return (
     <div className="flex flex-col gap-2">

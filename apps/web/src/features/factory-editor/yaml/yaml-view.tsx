@@ -97,7 +97,7 @@ function useDebounced<T>(value: T, ms: number): T {
 
 /** How many lines Monaco shows before it scrolls inside: the window's height less the editor's frame. */
 function useEditorLines(): number {
-  const read = useCallback(() => Math.max(16, Math.floor((window.innerHeight - 180) / 23)), []);
+  const read = useCallback(() => Math.max(16, Math.floor((window.innerHeight - 140) / 23)), []);
   const [lines, setLines] = useState(read);
   useEffect(() => {
     const onResize = () => setLines(read());
