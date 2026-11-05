@@ -223,12 +223,13 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 }
 
 // partOf is part p of the assembly it, filed by the actor given at at, as the PostgreSQL store's
-// insertPart makes it.
+// insertPart makes it: its branch names the factory its assembly's does.
 func partOf(it *domain.Item, p domain.NewPart, by domain.Actor, at time.Time) domain.NewItem {
 	return domain.NewItem{
 		FactoryID: it.FactoryID, ParentID: it.ID, Type: it.Type, Lane: p.Lane, Title: p.Title, Body: p.Brief,
 		Priority: it.Priority, Station: it.Station, State: domain.StateQueued, Class: it.Class, CreatedAt: at,
 		Origin: domain.OriginPlan, CreatedBy: by, Generation: it.Generation, Untrusted: it.Untrusted,
+		FactoryName: domain.BranchFactory(it.StoredBranch),
 	}
 }
 

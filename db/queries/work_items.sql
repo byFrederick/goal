@@ -11,10 +11,11 @@ UPDATE factories SET last_item_number = last_item_number + 1 WHERE id = $1 RETUR
 -- name: InsertItem :one
 -- Every filed item (fileItem): a person's, a trigger's, a follow-up's and a plan's part, which
 -- sets part_key and part_paths (its paths too). source is still written for old instances (00113).
+-- branch is domain.ItemBranch, set once here (00129).
 INSERT INTO work_items (
   id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
   state, class_of_service, priority, base_commit, created_at, updated_at, source, trigger, origin, via,
-  created_by, generation, untrusted, start_at, started_at
+  created_by, generation, untrusted, start_at, started_at, branch
 ) VALUES (
   sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.narg(parent_id), sqlc.narg(part_key),
   sqlc.arg(part_paths)::text[], sqlc.arg(part_paths)::text[], sqlc.arg(type), sqlc.narg(lane),
@@ -22,7 +23,7 @@ INSERT INTO work_items (
   sqlc.arg(priority)::bigint, sqlc.narg(base_commit)::text, sqlc.arg(created_at), sqlc.arg(created_at),
   sqlc.narg(source), sqlc.narg(trigger), sqlc.arg(origin), sqlc.narg(via), sqlc.narg(created_by),
   sqlc.arg(generation)::int, sqlc.arg(untrusted)::bool, sqlc.narg(start_at)::timestamptz,
-  sqlc.narg(started_at)::timestamptz
+  sqlc.narg(started_at)::timestamptz, sqlc.arg(branch)::text
 )
 RETURNING *;
 
