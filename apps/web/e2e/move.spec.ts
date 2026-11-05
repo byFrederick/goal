@@ -78,26 +78,31 @@ test('drag a card to another column, then confirm the move', async ({ page }) =>
   const card = page.getByRole('link', { name: serveUI });
   const build = page.getByRole('region', { name: 'Build', exact: true });
 
-  // Narrow boards scroll sideways: bring the target column in, then grab what shows of the card.
-  await card.scrollIntoViewIfNeeded();
-  await build.evaluate((column) => {
-    const columns = column.closest<HTMLElement>('section[aria-label="Stations"]');
-    if (!columns) return;
-    const offset = column.getBoundingClientRect().left - columns.getBoundingClientRect().left;
-    columns.scrollLeft += offset - columns.clientWidth / 2;
-  });
-  const from = await card.boundingBox();
-  const to = await build.boundingBox();
-  if (!from || !to) throw new Error('the card or the column has no box');
-  const grab = { x: Math.max(from.x, 0) + 8, y: from.y + 5 };
-  await page.mouse.move(grab.x, grab.y);
-  await page.mouse.down();
-  await page.mouse.move(grab.x + 20, grab.y + 10, { steps: 4 });
-  await page.mouse.move(to.x + 30, to.y + 60, { steps: 8 });
-  await page.mouse.up();
-
   const dialog = page.getByRole('dialog', { name: 'Move goal#12' });
-  await expect(dialog.getByRole('radio', { name: /Build/ })).toBeChecked();
+  // Fonts and late data move the columns by a few pixels; measure again on every try, so a drag
+  // that started on a board that was still settling is repeated and not a failure of the board.
+  await page.evaluate(() => document.fonts.ready);
+  await expect(async () => {
+    if (await dialog.isVisible()) await page.keyboard.press('Escape');
+    // Narrow boards scroll sideways: bring the target column in, then grab what shows of the card.
+    await card.scrollIntoViewIfNeeded();
+    await build.evaluate((column) => {
+      const columns = column.closest<HTMLElement>('section[aria-label="Stations"]');
+      if (!columns) return;
+      const offset = column.getBoundingClientRect().left - columns.getBoundingClientRect().left;
+      columns.scrollLeft += offset - columns.clientWidth / 2;
+    });
+    const from = await card.boundingBox();
+    const to = await build.boundingBox();
+    if (!from || !to) throw new Error('the card or the column has no box');
+    const grab = { x: Math.max(from.x, 0) + 8, y: from.y + 5 };
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move(grab.x + 20, grab.y + 10, { steps: 4 });
+    await page.mouse.move(to.x + 30, to.y + 60, { steps: 8 });
+    await page.mouse.up();
+    await expect(dialog.getByRole('radio', { name: /Build/ })).toBeChecked({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
   await dialog.getByRole('button', { name: 'Move to Build' }).click();
   await expect(build.getByRole('link', { name: serveUI })).toBeVisible();
 });
