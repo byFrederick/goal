@@ -129,26 +129,43 @@ func fileRepositories(l Line, named, inherited []string) ([]ItemRepository, erro
 // MaxItemRepositories. The rest are left out without an error.
 func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time) []ItemRepository {
 	entries := l.repositoryEntries()
+	out, _ := joinKeys(have, keys, at, func(key string) bool { return coveredBy(entries, key) })
+
+	return out
+}
+
+// JoinIntegration are the rows an assembly that has have gains for its integration branch from
+// keys, its parts' repositories (ADR 0041 decision 5): each key have lacks, once and in order,
+// joined filing at time at with the next ordinal, until the assembly has MaxItemRepositories.
+// The parts' repositories were covered when they joined, so no entry is asked again. left are the
+// keys past the cap, which get no integration branch.
+func JoinIntegration(have []ItemRepository, keys []string, at time.Time) (joins []ItemRepository, left []string) {
+	return joinKeys(have, keys, at, func(string) bool { return true })
+}
+
+// joinKeys are the rows of keep's keys have lacks, once and in order, joined filing at at with
+// the next ordinal while the item has room, and the keys left for want of it.
+func joinKeys(have []ItemRepository, keys []string, at time.Time, keep func(key string) bool) (out []ItemRepository, left []string) {
 	next := len(have)
 
 	for _, r := range have {
 		next = max(next, r.Ordinal+1)
 	}
 
-	var out []ItemRepository
-
 	for _, raw := range keys {
-		if len(have)+len(out) >= MaxItemRepositories || next >= MaxItemRepositories {
-			break
-		}
-
 		key, ok := RepositoryKey(raw)
-		if !ok || !coveredBy(entries, key) {
+		if !ok || !keep(key) {
 			continue
 		}
 
 		has := func(r ItemRepository) bool { return r.Repo == key }
-		if slices.ContainsFunc(have, has) || slices.ContainsFunc(out, has) {
+		if slices.ContainsFunc(have, has) || slices.ContainsFunc(out, has) || slices.Contains(left, key) {
+			continue
+		}
+
+		if len(have)+len(out) >= MaxItemRepositories || next >= MaxItemRepositories {
+			left = append(left, key)
+
 			continue
 		}
 
@@ -156,7 +173,7 @@ func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time
 		next++
 	}
 
-	return out
+	return out, left
 }
 
 // ItemRepositoryKeys are the keys of rs, in order.

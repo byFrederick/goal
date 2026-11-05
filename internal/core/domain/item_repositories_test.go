@@ -388,3 +388,30 @@ func TestJoinRepositories_SkipsWhatTheItemHasUpToTheCap(t *testing.T) {
 		t.Errorf("a full item gains %+v; want none", got)
 	}
 }
+
+// An assembly gains, for its integration branch, each of its parts' repositories it lacks, once
+// and in order with the next ordinals, whatever entries cover them; those past the cap are left.
+func TestJoinIntegration_JoinsWhatTheAssemblyLacksUpToTheCap(t *testing.T) {
+	t.Parallel()
+
+	have := []ItemRepository{{Repo: keyAPI, Joined: JoinedDefault}}
+	joins, left := JoinIntegration(have, []string{keyAPI, "github.com/other/x", keyLabsWeb, "github.com/other/x"}, fileAt)
+
+	want := []ItemRepository{
+		{Repo: "github.com/other/x", Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 1},
+		{Repo: keyLabsWeb, Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 2},
+	}
+	if !reflect.DeepEqual(joins, want) || len(left) != 0 {
+		t.Errorf("JoinIntegration = %+v, left %v; want %+v, none left", joins, left, want)
+	}
+
+	full := make([]ItemRepository, MaxItemRepositories-1)
+	for i := range full {
+		full[i] = ItemRepository{Repo: "github.com/acme-labs/r" + string(rune('a'+i)), Ordinal: i}
+	}
+
+	joins, left = JoinIntegration(full, []string{keyAPI, keyLabsWeb, full[0].Repo}, fileAt)
+	if len(joins) != 1 || joins[0].Repo != keyAPI || joins[0].Ordinal != MaxItemRepositories-1 || !reflect.DeepEqual(left, []string{keyLabsWeb}) {
+		t.Errorf("an assembly with room for one gains %+v, left %v; want %s, %s left", joins, left, keyAPI, keyLabsWeb)
+	}
+}

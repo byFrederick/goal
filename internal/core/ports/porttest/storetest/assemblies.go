@@ -2,6 +2,7 @@ package storetest
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -218,4 +219,113 @@ func testIntegrationBranchNoDonePartOrCancelClosesAsToday(f *fixture) {
 		FactoryID: f.factory, ItemID: it.ID, At: t2, Kind: domain.EventAssemblyDone, Station: stWork, Actor: domain.ActorEngine,
 		Data: map[string]any{dataState: string(domain.StateCancelled), dataPartsDone: 1, dataParts: 3},
 	}})
+}
+
+// integrationRows are id's repositories as key, how they joined, ordinal and integration branch.
+func (f *fixture) integrationRows(t *testing.T, id domain.ItemID) []string {
+	t.Helper()
+
+	var out []string
+	for _, r := range f.itemRepositories(t, id) {
+		out = append(out, fmt.Sprintf("%s %s #%d %s", r.Repo, r.Joined, r.Ordinal, r.IntegrationBranch))
+	}
+
+	return out
+}
+
+// An assembly's integration branch is kept per repository (ADR 0041 decision 5): a repository it
+// lacks joins filing with the next ordinal and the branch, one it has gets the branch, and a
+// second call with another branch changes no row that has one. Repositories past the cap are left
+// out and returned. An empty branch is invalid and an unknown item not found.
+func testIntegrationBranchPerRepositorySetOnce(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Repositories: filed(repoAPI)})
+	asm, _ := f.assemble(t, assembly(it, l, plan()[:1]))
+
+	if left, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, []string{repoAPI, repoWeb}, branchIntg, t1); err != nil || len(left) != 0 {
+		t.Fatalf("JoinIntegrationRepositories = %v, %v; want none left", left, err)
+	}
+
+	want := []string{repoAPI + " filing #0 " + branchIntg, repoWeb + " filing #1 " + branchIntg}
+	if got := f.integrationRows(t, asm.ID); !reflect.DeepEqual(got, want) {
+		t.Errorf("after the first call rows = %v; want %v", got, want)
+	}
+
+	if rows := f.itemRepositories(t, asm.ID); !rows[1].JoinedAt.Equal(t1) {
+		t.Errorf("%s joined at %v; want %v", repoWeb, rows[1].JoinedAt, t1)
+	}
+
+	t2 := t1.Add(time.Minute)
+	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, []string{repoWeb, repoAPI}, "goal/other", t2); err != nil {
+		t.Fatalf("second JoinIntegrationRepositories: %v", err)
+	}
+
+	if got := f.integrationRows(t, asm.ID); !reflect.DeepEqual(got, want) {
+		t.Errorf("after a second call with another branch rows = %v; want %v", got, want)
+	}
+
+	more := []string{repoOps}
+	for i := range domain.MaxItemRepositories - 2 {
+		more = append(more, fmt.Sprintf("github.com/acme/r%d", i))
+	}
+
+	left, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, more, branchIntg, t2)
+	if err != nil {
+		t.Fatalf("JoinIntegrationRepositories past the cap: %v", err)
+	}
+
+	if last := more[len(more)-1]; !reflect.DeepEqual(left, []string{last}) {
+		t.Errorf("left out %v; want [%s]", left, last)
+	}
+
+	got := f.integrationRows(t, asm.ID)
+	if len(got) != domain.MaxItemRepositories || got[2] != repoOps+" filing #2 "+branchIntg {
+		t.Errorf("rows past the cap = %v; want %d, %s third", got, domain.MaxItemRepositories, repoOps)
+	}
+
+	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), asm.ID, []string{repoAPI}, "", t2); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("JoinIntegrationRepositories without a branch: %v; want ErrInvalid", err)
+	}
+
+	if _, err := f.Store.JoinIntegrationRepositories(f.ctx(t), missingItem, []string{repoAPI}, branchIntg, t2); !errors.Is(err, ports.ErrNotFound) {
+		t.Errorf("JoinIntegrationRepositories of an unknown item: %v; want ErrNotFound", err)
+	}
+}
+
+// When an assembly with an integration branch lands, it has a row with that branch for every
+// repository of its done parts, in plan order, and none for a repository only a cancelled part
+// had; one it already had gets the branch.
+func testIntegrationBranchLandingTakesThePartsRepositories(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Repositories: filed(repoAPI)})
+
+	ps := plan()
+	ps[0].Filed = filed(repoWeb)
+	ps[1].Filed = filed(repoOps)
+	ps[2].Filed = filed(repoAPI, repoWeb)
+
+	_, parts := f.assemble(t, assembly(it, l, ps))
+	f.setBranch(t, it.ID)
+
+	t2, t3 := t1.Add(time.Minute), t1.Add(2*time.Minute)
+	for i, st := range []domain.ItemState{domain.StateDone, domain.StateCancelled, domain.StateDone} {
+		if err := f.finishPart(t, parts.Items[i], st, []time.Time{t1, t2, t3}[i]); err != nil {
+			t.Fatalf("finish part %d: %v", i, err)
+		}
+	}
+
+	if got := f.item(t, it.ID); got.State != domain.StateQueued || got.Station != stLand {
+		t.Fatalf("assembly after its last part = %s at %s; want queued at %s", got.State, got.Station, stLand)
+	}
+
+	want := []string{repoAPI + " filing #0 " + branchIntg, repoWeb + " filing #1 " + branchIntg}
+	if got := f.integrationRows(t, it.ID); !reflect.DeepEqual(got, want) {
+		t.Errorf("landing assembly's rows = %v; want %v", got, want)
+	}
+
+	if rows := f.itemRepositories(t, it.ID); !rows[1].JoinedAt.Equal(t3) {
+		t.Errorf("%s joined at %v; want the landing's %v", repoWeb, rows[1].JoinedAt, t3)
+	}
 }
