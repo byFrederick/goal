@@ -425,9 +425,11 @@ function Ready({
         </div>
       </section>
 
-      <p className="m-0 text-secondary text-muted">
-        Review merges it when it passes. Nothing else in the repository changes.
-      </p>
+      {repo ? (
+        <p className="m-0 text-secondary text-muted">
+          A change to {repo} arrives as a pull request. Nothing else in the repository changes.
+        </p>
+      ) : null}
     </OnboardingLayout>
   );
 }

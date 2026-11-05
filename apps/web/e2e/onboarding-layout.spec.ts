@@ -12,7 +12,7 @@ const sizes = [
   { width: 390, height: 844 },
 ];
 
-const path = '/o/goal/get-started/code';
+const path = '/o/goal/get-started/factory';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
