@@ -182,10 +182,10 @@ func principalOf(ctx context.Context) domain.Principal {
 // sign-in page).
 func (s *server) GetAuthConfig(context.Context, gen.GetAuthConfigRequestObject) (gen.GetAuthConfigResponseObject, error) {
 	if s.auth.Mode == AuthNone {
-		return gen.GetAuthConfig200JSONResponse{Mode: gen.None, Methods: []gen.SignInMethod{}}, nil
+		return gen.GetAuthConfig200JSONResponse{Mode: gen.AuthModeNone, Methods: []gen.SignInMethod{}}, nil
 	}
 
-	out := gen.GetAuthConfig200JSONResponse{Mode: gen.Session, Methods: []gen.SignInMethod{}}
+	out := gen.GetAuthConfig200JSONResponse{Mode: gen.AuthModeSession, Methods: []gen.SignInMethod{}}
 	if s.auth.EmailCodes {
 		out.Methods = append(out.Methods, gen.EmailCode)
 	}
@@ -207,11 +207,11 @@ func (s *server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMe
 
 	switch {
 	case s.auth.Mode == AuthNone:
-		return gen.GetMe200JSONResponse{Kind: gen.MeKindUser, Mode: gen.None}, nil
+		return gen.GetMe200JSONResponse{Kind: gen.MeKindUser, Mode: gen.AuthModeNone}, nil
 	case p.Kind == domain.PrincipalUser:
 		me := gen.GetMe200JSONResponse{
 			Kind:          gen.MeKindUser,
-			Mode:          gen.Session,
+			Mode:          gen.AuthModeSession,
 			User:          &gen.User{Id: string(p.User), Name: p.Name, Email: p.Email},
 			PlatformAdmin: p.PlatformAdmin,
 		}
@@ -234,7 +234,7 @@ func (s *server) GetMe(ctx context.Context, _ gen.GetMeRequestObject) (gen.GetMe
 	case p.Kind == domain.PrincipalService:
 		return gen.GetMe200JSONResponse{
 			Kind: gen.MeKindService,
-			Mode: gen.Session,
+			Mode: gen.AuthModeSession,
 			Key:  &gen.MeKey{Id: string(p.Key), Name: p.Name, OrgId: string(p.Org)},
 		}, nil
 	default:

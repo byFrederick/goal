@@ -8030,7 +8030,13 @@ export interface components {
             connectors: string[];
             /** @description The day the version was made, as in 2026-10-09 */
             changed: string;
+            code: components["schemas"]["TemplateCode"];
         };
+        /**
+         * @description The code access a template needs; write when its line has a station that merges.
+         * @enum {string}
+         */
+        TemplateCode: "none" | "read" | "write";
         Template: components["schemas"]["TemplateSummary"] & {
             description: string;
             model: components["schemas"]["FactoryModel"];

@@ -3,6 +3,7 @@ package authoring_test
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -16,10 +17,10 @@ func TestTemplates_LatestVersionPerNameAndRefresh(t *testing.T) {
 
 	h := newHarness(t)
 	meta := "title: Acme review\nsummary: Build and review\ndescription: One engineer, one review.\n" +
-		"connectors: [github]\nchanged: \"2026-10-09\"\n"
+		"connectors: [github]\nchanged: \"2026-10-09\"\ncode: read\n"
 	h.putTemplate(t, reviewTemplate, "1", meta, acmeFiles(acmeYAML))
 	h.putTemplate(t, reviewTemplate, "2", meta, acmeFiles(acmeYAML))
-	h.putTemplate(t, "acme-source", "1", "title: Source\n", acmeFiles(credentialYAML))
+	h.putTemplate(t, "acme-source", "1", "title: Source\ncode: none\n", acmeFiles(credentialYAML))
 
 	list, err := h.svc.Templates(h.ctx)
 	if err != nil {
@@ -28,7 +29,7 @@ func TestTemplates_LatestVersionPerNameAndRefresh(t *testing.T) {
 
 	want := authoring.TemplateSummary{
 		Name: reviewTemplate, Version: 2, Title: "Acme review", Summary: "Build and review",
-		Stations: 4, Agents: 1, Connectors: []string{"github"}, Changed: "2026-10-09",
+		Stations: 4, Agents: 1, Connectors: []string{"github"}, Changed: "2026-10-09", Code: "read",
 	}
 	if len(list) != 2 || !equalSummary(list[0], want) || list[1].Name != "acme-source" ||
 		!slices.Equal(list[1].Connectors, []string{"github"}) {
@@ -58,6 +59,37 @@ func TestTemplates_LatestVersionPerNameAndRefresh(t *testing.T) {
 	}
 }
 
+func TestTemplates_CodeIsWriteWhenTheLineMerges(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.putTemplate(t, "acme-none", "1", "title: None\ncode: none\n", acmeFiles(acmeYAML))
+	h.putTemplate(t, "acme-read", "1", "title: Read\ncode: read\n", acmeFiles(acmeYAML))
+	// A line that merges needs write, whatever template.yaml says.
+	h.putTemplate(t, "acme-merge", "1", "title: Merge\ncode: read\n", acmeFiles(mergeYAML))
+	// A version pushed before template.yaml had code reads as none, or write when its line merges.
+	h.putTemplate(t, "acme-old", "1", "title: Old\n", acmeFiles(acmeYAML))
+	h.putTemplate(t, "acme-old-merge", "1", "title: Old merge\n", acmeFiles(mergeYAML))
+
+	list, err := h.svc.Templates(h.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	codes := map[string]string{}
+	for _, s := range list {
+		codes[s.Name] = s.Code
+	}
+
+	want := map[string]string{
+		"acme-none": authoring.CodeNone, "acme-read": authoring.CodeRead, "acme-merge": authoring.CodeWrite,
+		"acme-old": authoring.CodeNone, "acme-old-merge": authoring.CodeWrite,
+	}
+	if !maps.Equal(codes, want) {
+		t.Errorf("code = %v, want %v", codes, want)
+	}
+}
+
 func TestTemplates_VersionWithoutMetaIsNotListed(t *testing.T) {
 	t.Parallel()
 
@@ -73,6 +105,9 @@ func TestTemplates_VersionWithoutMetaIsNotListed(t *testing.T) {
 	}
 }
 
+// metaInvalid is the problem of a template.yaml Push refuses.
+const metaInvalid = "template-meta-invalid@template.yaml:0"
+
 // reviewTemplate is the template the tests read and push.
 const reviewTemplate = "acme-review"
 
@@ -82,7 +117,7 @@ var nilIDYAML = strings.Replace(acmeYAML, "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 func TestTemplateCatalog_Push(t *testing.T) {
 	t.Parallel()
 
-	meta := []byte("title: Acme review\nsummary: Build and review\n")
+	meta := []byte("title: Acme review\nsummary: Build and review\ncode: read\n")
 	h := newHarness(t)
 	catalog := authoring.NewTemplateCatalog(h.objects, h.clock)
 
@@ -110,7 +145,7 @@ func TestTemplateCatalog_Push(t *testing.T) {
 func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 	t.Parallel()
 
-	meta := "title: Acme review\n"
+	meta := "title: Acme review\ncode: none\n"
 
 	tests := []struct {
 		name  string
@@ -119,8 +154,11 @@ func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 		want  []string // code@file:line
 	}{
 		{name: "real-id", meta: meta, files: acmeFiles(acmeYAML), want: []string{"template-id@factory/factory.yaml:5"}},
-		{name: "no-title", meta: "summary: x\n", files: acmeFiles(nilIDYAML), want: []string{"template-meta-invalid@template.yaml:0"}},
-		{name: "unknown-key", meta: "title: x\nauthor: y\n", files: acmeFiles(nilIDYAML), want: []string{"template-meta-invalid@template.yaml:0"}},
+		{name: "no-title", meta: "summary: x\ncode: none\n", files: acmeFiles(nilIDYAML), want: []string{metaInvalid}},
+		{name: "unknown-key", meta: "title: x\ncode: none\nauthor: y\n", files: acmeFiles(nilIDYAML), want: []string{metaInvalid}},
+		{name: "no-code", meta: "title: x\n", files: acmeFiles(nilIDYAML), want: []string{metaInvalid}},
+		{name: "code-write", meta: "title: x\ncode: write\n", files: acmeFiles(nilIDYAML), want: []string{metaInvalid}},
+		{name: "code-yes", meta: "title: x\ncode: yes\n", files: acmeFiles(nilIDYAML), want: []string{metaInvalid}},
 		{name: "broken", meta: meta, files: map[string][]byte{yamlFile: []byte(nilIDYAML)}, want: []string{
 			"prompt-not-found@factory/factory.yaml:15", "environment-default-missing@factory/environments/default.yaml:0",
 		}},
@@ -157,5 +195,6 @@ func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 
 func equalSummary(a, b authoring.TemplateSummary) bool {
 	return a.Name == b.Name && a.Version == b.Version && a.Title == b.Title && a.Summary == b.Summary &&
-		a.Stations == b.Stations && a.Agents == b.Agents && slices.Equal(a.Connectors, b.Connectors) && a.Changed == b.Changed
+		a.Stations == b.Stations && a.Agents == b.Agents && slices.Equal(a.Connectors, b.Connectors) && a.Changed == b.Changed &&
+		a.Code == b.Code
 }
