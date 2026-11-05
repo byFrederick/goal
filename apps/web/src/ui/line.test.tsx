@@ -76,7 +76,7 @@ describe('Line', () => {
     expect(strip.className).toContain('motion-andon');
     for (const li of stationItems()) {
       expect(li.getAttribute('data-dimmed')).toBe('true');
-      expect(li.className).toContain('data-[dimmed=true]:opacity-40');
+      expect(li.className).toContain('data-[dimmed=true]:text-muted');
     }
   });
 
