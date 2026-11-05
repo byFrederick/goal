@@ -4,7 +4,17 @@
 // with its quick fix, a runtime size of xlarge is applied by its fix ("Use large"), and a
 // factory.yaml that stops parsing holds Form until it parses again. Monaco on desktop and tablet, the textarea on phones.
 import { expect, test } from '@playwright/test';
-import { definition, editorReady, expectShown, monacoTimeout, openYaml, problems, replaceLine, status } from './editor';
+import {
+  definition,
+  editorReady,
+  expectShown,
+  monacoTimeout,
+  openYaml,
+  problems,
+  replaceLine,
+  showFiles,
+  status,
+} from './editor';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 test.beforeEach(async ({ request }) => {
@@ -19,8 +29,9 @@ test('the YAML view: the tree marks changes, the outline lists the file, accessi
   await openYaml(page);
   await expect(editorView(page).getByRole('radio', { name: 'YAML' })).toBeChecked();
   await expect(page.getByRole('tab', { name: 'factory.yaml' })).toHaveAttribute('aria-selected', 'true');
+  await showFiles(page);
   await expect(page.getByRole('button', { name: 'frontend-engineer.md, changed' })).toBeAttached();
-  await expect(page.getByRole('complementary', { name: 'Outline' })).toContainText('runtime');
+  await expect(page.getByRole('complementary', { name: 'Outline', includeHidden: true })).toContainText('runtime');
   await expect(problems(page)).toContainText('is asked as Off until tool approvals arrive');
   await expectAccessible(page);
   await expectShown(page, "# the spec's lane picks the engineer");
@@ -51,9 +62,11 @@ test('Form ↔ YAML: one draft, comments kept, the place kept (flow 2)', async (
     '- { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2 }',
     '- { id: spec, name: Spec, kind: agent, agent: spec-writer, wip: 2, checks: [go vet] }',
   );
+  await showFiles(page);
   await expect(page.getByRole('button', { name: /^factory\.yaml.*changed/ })).toBeAttached();
 
-  // Form opens at the station under the cursor.
+  // The cursor's line is written to the URL once it settles (400 ms); Form opens at the station under it.
+  await expect(page).toHaveURL(/[?&]line=\d+/);
   const form = editorView(page).getByRole('radio', { name: 'Form' });
   await form.click();
   await expect(page).toHaveURL(/\/definition\/line\?station=spec$/);

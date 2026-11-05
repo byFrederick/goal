@@ -294,6 +294,20 @@ export default function MonacoEditor({
     };
   }, [editor, zoneKey]);
 
+  // Monaco marks its view-zones layer aria-hidden, but a quick fix inside a zone is a button a person
+  // reaches and reads (axe aria-hidden-focus): the attribute comes off whenever Monaco sets it.
+  useEffect(() => {
+    const el = host.current;
+    if (!editor || !el) return;
+    const clear = () => {
+      for (const layer of el.querySelectorAll('.view-zones[aria-hidden]')) layer.removeAttribute('aria-hidden');
+    };
+    clear();
+    const watch = new MutationObserver(clear);
+    watch.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-hidden'] });
+    return () => watch.disconnect();
+  }, [editor]);
+
   /** A zone's content measured itself: Monaco reads the new height from the zone it was given. */
   const sized = (z: Zone, height: number) => {
     if (!editor || z.zone.heightInPx === height) return;
