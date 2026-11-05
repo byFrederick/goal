@@ -23,7 +23,8 @@ async function typePrompt(page: Page, agent: string, text: string) {
   await editor.focus();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.press('Delete');
-  await page.keyboard.type(text);
+  // insertText, not key presses: Monaco's suggest widget takes Enter after a word and eats the line break.
+  await page.keyboard.insertText(text);
 }
 
 async function openAgent(page: Page, agent: string) {
@@ -58,7 +59,7 @@ test('the agents list says where each agent works and opens its detail', async (
     await list.getByRole('link', { name: /reviewer/ }).click();
   }
   await page.getByRole('link', { name: 'Open agent page' }).click();
-  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/reviewer$/);
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/reviewer(\?view=overview)?$/);
   await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
 });
 
@@ -97,7 +98,7 @@ test('model, prompt, a skills.sh skill and built-in tools save with the draft', 
   await expect(agent.getByText('Asked as Off until tool approvals arrive')).toBeHidden();
 
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Agents, \d+ changes$/)).toBeAttached();
+  await expect(tile(page, /^Agents, \d+ changes?$/)).toBeAttached();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -172,11 +173,11 @@ test('removing an agent reads its prompt first: undo puts back one not loaded ye
   await page.getByRole('button', { name: 'Remove…' }).click();
   await confirm.getByRole('button', { name: 'Remove agent' }).click();
   const list = page.getByRole('navigation', { name: 'Agents' });
-  await expect(list.getByRole('heading', { name: '4 agents' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
   await expect(status(page)).toContainText('Autosaved');
 
   await page.keyboard.press('ControlOrMeta+Z');
-  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: '6 agents' })).toBeVisible();
   await expect(status(page)).toContainText('Saving');
   await expect(status(page)).toContainText('Autosaved');
   await openAgent(page, 'docs-writer');
@@ -288,7 +289,13 @@ test.describe('Agents page', () => {
 
   test('View as files opens the definition', async ({ page }) => {
     await page.goto(index);
-    await page.getByRole('link', { name: 'View as files' }).click();
+    if (isPhone(page)) {
+      // On a phone only the last action stays in the bar; the others sit behind More actions (#602).
+      await page.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'View as files' }).click();
+    } else {
+      await page.getByRole('link', { name: 'View as files' }).click();
+    }
 
     await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/definition\/agents$/);
   });
