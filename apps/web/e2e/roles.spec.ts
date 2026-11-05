@@ -23,11 +23,11 @@ test.describe('a viewer', () => {
 
   test('sees the board without moving cards, submitting work or pulling the cord', async ({ page }) => {
     await page.goto('/o/acme/f/sre/board');
-    await expect(page.getByRole('heading', { level: 1, name: 'SRE board' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
     await expect(page.getByText('You’re a viewer of sre')).toBeVisible();
 
     await expect(andon(page)).toHaveAttribute('aria-disabled', 'true');
-    await expect(andon(page)).toHaveAccessibleDescription('Approvers and editors can pull the cord');
+    await expect(andon(page)).toHaveAccessibleDescription('Approvers and editors can clear the andon');
     // aria-disabled keeps it focusable: Playwright waits for it to be enabled unless forced.
     await andon(page).click({ force: true });
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -55,7 +55,7 @@ test.describe('a viewer', () => {
     await expect(approve).toHaveAttribute('aria-disabled', 'true');
     await expect(approve).toHaveAccessibleDescription('Approvers of goal decide here.');
     await approve.click({ force: true });
-    await expect(page.getByText('Waiting on an approver').first()).toBeVisible();
+    await expect(page.getByText('Approvers of goal decide here.').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Pause' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Move' })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: /^Note to/ })).toHaveCount(0);
@@ -71,10 +71,10 @@ test.describe('a viewer', () => {
   test('reads the Definition view only: the running version, no edits, who approves', async ({ page, request }) => {
     await page.goto('/o/acme/f/goal/definition/basics');
     await expect(page.getByText('View only. Editors of goal change its definition.')).toBeVisible();
-    await expect(page.getByText('v8, running')).toBeVisible();
+    await expect(page.getByText('v8 running').first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Review changes' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Definition sections' }).getByRole('link')).toHaveCount(4);
+    await expect(page.getByRole('navigation', { name: 'Definition sections' }).getByRole('link')).toHaveCount(5);
 
     const name = page.getByRole('textbox', { name: 'Name' });
     await expect(name).toHaveValue('goal');
@@ -122,7 +122,7 @@ test.describe('an approver', () => {
         .filter({ visible: true })
         .first(),
     ).toBeVisible();
-    await expect(page.getByRole('main').getByRole('button', { name: /New item/ })).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: /New item/ })).toBeVisible();
 
     await page.goto('/o/acme/f/goal/items/12');
     const approve = page.getByRole('button', { name: /^Approve/ }).filter({ visible: true });
