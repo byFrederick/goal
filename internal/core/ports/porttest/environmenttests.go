@@ -91,25 +91,38 @@ func (e *EnvironmentTests) List(ctx context.Context, factory domain.FactoryID) (
 }
 
 // ToolLister answers tools/list from a table by URL, and records the endpoints it was asked
-// about. A URL in neither Tools nor Errors answers an error.
+// about. A URL neither served nor failed answers an error.
 type ToolLister struct {
 	mu     sync.Mutex
-	tools  map[string][]string
+	tools  map[string][]ports.Tool
 	errs   map[string]error
 	called []ports.MCPEndpoint
 }
 
 // NewToolLister returns a lister that knows no server.
 func NewToolLister() *ToolLister {
-	return &ToolLister{tools: map[string][]string{}, errs: map[string]error{}}
+	return &ToolLister{tools: map[string][]ports.Tool{}, errs: map[string]error{}}
 }
 
-// Serve makes url answer tools.
+// Serve makes url answer tools, none of them read-only, in place of what it answered before.
 func (l *ToolLister) Serve(url string, tools ...string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.tools[url] = slices.Clone(tools)
+	l.tools[url] = nil
+	for _, name := range tools {
+		l.tools[url] = append(l.tools[url], ports.Tool{Name: name})
+	}
+}
+
+// ServeReadOnly adds tools to what url answers, each marked read-only.
+func (l *ToolLister) ServeReadOnly(url string, tools ...string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, name := range tools {
+		l.tools[url] = append(l.tools[url], ports.Tool{Name: name, ReadOnly: true})
+	}
 }
 
 // Fail makes url answer err.
@@ -129,7 +142,7 @@ func (l *ToolLister) Called() []ports.MCPEndpoint {
 }
 
 // ListTools implements ports.ToolLister.
-func (l *ToolLister) ListTools(_ context.Context, e ports.MCPEndpoint) ([]string, error) {
+func (l *ToolLister) ListTools(_ context.Context, e ports.MCPEndpoint) ([]ports.Tool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -144,5 +157,8 @@ func (l *ToolLister) ListTools(_ context.Context, e ports.MCPEndpoint) ([]string
 		return nil, fmt.Errorf("%s: no MCP server answers", e.URL)
 	}
 
-	return slices.Sorted(slices.Values(tools)), nil
+	out := slices.Clone(tools)
+	slices.SortFunc(out, func(a, b ports.Tool) int { return cmp.Compare(a.Name, b.Name) })
+
+	return out, nil
 }

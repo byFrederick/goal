@@ -108,14 +108,15 @@ type DraftRequest struct {
 }
 
 type EnvironmentTest struct {
-	OrgID       uuid.UUID
-	FactoryID   uuid.UUID
-	Environment string
-	Server      string
-	At          time.Time
-	Ok          bool
-	Error       string
-	Tools       []string
+	OrgID         uuid.UUID
+	FactoryID     uuid.UUID
+	Environment   string
+	Server        string
+	At            time.Time
+	Ok            bool
+	Error         string
+	Tools         []string
+	ReadOnlyTools []string
 }
 
 type FactoryConversion struct {

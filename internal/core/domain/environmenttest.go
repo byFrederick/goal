@@ -16,7 +16,9 @@ const (
 
 // EnvironmentTest is the latest test of one remote MCP server of a factory's environment (ADR
 // 0037 decision 9): when it ran, whether tools/list answered and the tool names it listed, or why
-// not. Error is scrubbed of every secret value the test opened before it is kept.
+// not. ReadOnly are the names of the tools whose annotations.readOnlyHint was true (ADR 0041
+// decision 15); MCP's default for a missing hint is false, so every other tool is not read-only.
+// Error is scrubbed of every secret value the test opened before it is kept.
 type EnvironmentTest struct {
 	Factory     FactoryID
 	Environment string
@@ -25,11 +27,13 @@ type EnvironmentTest struct {
 	OK          bool
 	Error       string
 	Tools       []string
+	ReadOnly    []string
 }
 
 // Check refuses a test without a factory, an environment or server name, or a time, one that
-// failed without an error or passed with one, an error over MaxEnvironmentTestError characters
-// and more than MaxEnvironmentTestTools tools. The error wraps ErrInvalid.
+// failed without an error or passed with one, an error over MaxEnvironmentTestError characters,
+// more than MaxEnvironmentTestTools tools and a read-only name that is not one of its tools. The
+// error wraps ErrInvalid.
 func (t EnvironmentTest) Check() error {
 	switch {
 	case t.Factory == "" || !namePattern.MatchString(t.Environment) || !namePattern.MatchString(t.Server) || t.At.IsZero():
@@ -40,14 +44,21 @@ func (t EnvironmentTest) Check() error {
 		return fmt.Errorf("an environment test's error has at most %d characters: %w", MaxEnvironmentTestError, ErrInvalid)
 	case len(t.Tools) > MaxEnvironmentTestTools:
 		return fmt.Errorf("an environment test keeps at most %d tools: %w", MaxEnvironmentTestTools, ErrInvalid)
-	default:
-		return nil
 	}
+
+	for _, name := range t.ReadOnly {
+		if !slices.Contains(t.Tools, name) {
+			return fmt.Errorf("an environment test's read-only tool %q is not one of its tools: %w", name, ErrInvalid)
+		}
+	}
+
+	return nil
 }
 
-// Clone is t with its own tools.
+// Clone is t with its own tools and read-only tools.
 func (t EnvironmentTest) Clone() EnvironmentTest {
 	t.Tools = slices.Clone(t.Tools)
+	t.ReadOnly = slices.Clone(t.ReadOnly)
 
 	return t
 }

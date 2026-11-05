@@ -52,8 +52,37 @@ func TestListTools_NamesSorted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := []string{"create_issue", "delete_issue", "list_issues"}; !slices.Equal(got, want) {
+	if want := []ports.Tool{{Name: "create_issue"}, {Name: "delete_issue"}, {Name: "list_issues"}}; !slices.Equal(got, want) {
 		t.Errorf("tools = %v; want %v", got, want)
+	}
+}
+
+// Each tool's annotations.readOnlyHint comes back; a tool without annotations is not read-only.
+func TestListTools_ReadOnlyHints(t *testing.T) {
+	t.Parallel()
+
+	s := sdk.NewServer(&sdk.Implementation{Name: "acme", Version: "1"}, nil)
+	for _, tool := range []*sdk.Tool{
+		{Name: "get_issue", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}},
+		{Name: "merge_pull_request", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: false}},
+		{Name: "create_issue"},
+	} {
+		sdk.AddTool(s, tool, func(context.Context, *sdk.CallToolRequest, struct{}) (*sdk.CallToolResult, any, error) {
+			return &sdk.CallToolResult{}, nil, nil
+		})
+	}
+
+	srv := httptest.NewServer(sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return s }, nil))
+	t.Cleanup(srv.Close)
+
+	got, err := mcp.New(http.DefaultTransport).ListTools(t.Context(), ports.MCPEndpoint{URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []ports.Tool{{Name: "create_issue"}, {Name: "get_issue", ReadOnly: true}, {Name: "merge_pull_request"}}
+	if !slices.Equal(got, want) {
+		t.Errorf("tools = %+v; want %+v", got, want)
 	}
 }
 
