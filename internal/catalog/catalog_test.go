@@ -2,6 +2,7 @@ package catalog_test
 
 import (
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func TestTemplates_LoadAll(t *testing.T) {
 	}
 
 	want := []string{
-		"anthropic", "claude-subscription", "confluence", "datadog", "github", "gitlab", "http-api-key", "jira",
+		"anthropic", "claude-subscription", "confluence", "datadog", "github", "github-read", "gitlab", "http-api-key", "jira",
 		"mcp-server", "pagerduty", "slack",
 	}
 	if !slices.Equal(names, want) {
@@ -64,7 +65,8 @@ func TestTemplates_GitHub(t *testing.T) {
 	}
 
 	gh := got[i]
-	if gh.Env["GH_TOKEN"] != "{{token}}" || gh.MCP["github"].URL == "" || gh.MCP["github"].Tools["merge_pull_request"] != "ask" {
+	if gh.Env["GH_TOKEN"] != "{{token}}" || gh.MCP["github"].URL == "" || gh.MCP["github"].Tools["merge_pull_request"] != "ask" ||
+		gh.MCP["github"].Tools["delete_*"] != "ask" {
 		t.Errorf("github = %+v", gh)
 	}
 
@@ -75,6 +77,122 @@ func TestTemplates_GitHub(t *testing.T) {
 
 	if r.URL != "https://api.github.com/user" || r.Headers["Authorization"] != "Bearer test-token" || r.Expect != 200 {
 		t.Errorf("rendered = %#v", r)
+	}
+}
+
+// templateNamed is the catalog's template name.
+func templateNamed(t *testing.T, name string) domain.ToolTemplate {
+	t.Helper()
+
+	got, err := catalog.Templates()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i := slices.IndexFunc(got, func(tpl domain.ToolTemplate) bool { return tpl.Name == name })
+	if i < 0 {
+		t.Fatalf("no %s template", name)
+	}
+
+	return got[i]
+}
+
+// github-read adds gh, GH_TOKEN with a read-only token, the remote MCP server in its read-only
+// mode and the api.github.com test.
+func TestTemplates_GitHubRead(t *testing.T) {
+	t.Parallel()
+
+	gh := templateNamed(t, "github-read")
+
+	if len(gh.Secrets) != 1 || gh.Secrets[0].Slot != "token" || gh.Secrets[0].Suggest != "github-read-token" ||
+		!strings.Contains(strings.ToLower(gh.Secrets[0].Description), "a read-only fine-grained token") {
+		t.Errorf("secrets = %+v", gh.Secrets)
+	}
+
+	m := gh.MCP["github"]
+	if !slices.Equal(gh.Tools, []string{"gh"}) || gh.Env["GH_TOKEN"] != "{{token}}" || len(gh.Env) != 1 ||
+		m.URL != "https://api.githubcopilot.com/mcp/" || m.Headers["Authorization"] != "Bearer {{token}}" || m.Headers["X-MCP-Readonly"] != "true" {
+		t.Errorf("github-read = %+v", gh)
+	}
+
+	r, err := gh.RenderTest(map[string]string{"token": "test-token"}, nil)
+	if err != nil || r.URL != "https://api.github.com/user" || r.Headers["Authorization"] != "Bearer test-token" {
+		t.Errorf("rendered = %#v, %v", r, err)
+	}
+}
+
+// With an Enterprise host, both GitHub templates set GH_HOST and GH_ENTERPRISE_TOKEN, run the
+// local github-mcp-server against the host and test its API; github.com, or no value, keeps the
+// default lines.
+func TestTemplates_GitHubEnterprise(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		command []string
+	}{
+		{"github", []string{"github-mcp-server", "stdio"}},
+		{"github-read", []string{"github-mcp-server", "stdio", "--read-only"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tpl := templateNamed(t, tc.name)
+
+			got, err := tpl.Resolve(map[string]string{"host": "ghe.example.com"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got.Env["GH_HOST"] != "ghe.example.com" || got.Env["GH_ENTERPRISE_TOKEN"] != "{{token}}" {
+				t.Errorf("env = %v", got.Env)
+			}
+
+			if _, ok := got.Env["GH_TOKEN"]; ok {
+				t.Errorf("env = %v; want no GH_TOKEN", got.Env)
+			}
+
+			m := got.MCP["github"]
+			if m.URL != "" || !slices.Equal(m.Command, tc.command) || m.Env["GITHUB_PERSONAL_ACCESS_TOKEN"] != "{{token}}" ||
+				m.Env["GITHUB_HOST"] != "https://ghe.example.com" {
+				t.Errorf("mcp = %+v", m)
+			}
+
+			r, err := got.RenderTest(map[string]string{"token": "test-token"}, nil)
+			if err != nil || r.Method != "GET" || r.URL != "https://ghe.example.com/api/v3/user" {
+				t.Errorf("rendered = %#v, %v", r, err)
+			}
+
+			for _, params := range []map[string]string{nil, {"host": "github.com"}} {
+				same, err := tpl.Resolve(params)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if !reflect.DeepEqual(same, tpl) {
+					t.Errorf("Resolve(%v) = %+v; want the default lines", params, same)
+				}
+			}
+		})
+	}
+}
+
+// Resolve refuses a value that is not a host, an unknown parameter, and names neither's value.
+func TestResolve_RefusesValue(t *testing.T) {
+	t.Parallel()
+
+	tpl := templateNamed(t, "github")
+
+	for _, params := range []map[string]string{
+		{"host": "evil.example.com/x"}, {"host": "https://x"}, {"host": ""}, {"host": "a b"}, {"region": "eu"},
+	} {
+		if _, err := tpl.Resolve(params); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("Resolve(%v) = %v; want ErrInvalid", params, err)
+		}
+	}
+
+	if _, err := tpl.Resolve(map[string]string{"host": "ghe.example.com:8443"}); err != nil {
+		t.Errorf("Resolve with a port = %v", err)
 	}
 }
 
@@ -123,6 +241,13 @@ func TestParse_Refuses(t *testing.T) {
 		{"an unknown key", "  connections: [acme]\n", "connections"},
 		{"a reserved env name", "  env: {GOAL_KEY: \"{{key}}\"}\n", "GOAL_KEY"},
 		{"a test of an unknown env", "  test: {method: GET, url: \"${ACME_URL}/me\", expect: 200}\n", "ACME_URL"},
+		{"a parameter named like a slot", "  parameters:\n    - {name: key, title: Key, default: example.com}\n", "parameter key"},
+		{"a parameter declared twice", "  parameters:\n    - {name: host, title: Host, default: example.com}\n    - {name: host, title: Host, default: example.com}\n", "twice"},
+		{"a parameter without a default", "  parameters:\n    - {name: host, title: Host}\n", "default"},
+		{"two parameters with otherwise", "  parameters:\n    - {name: host, title: Host, default: example.com, otherwise: {env: {ACME_HOST: \"{{host}}\"}}}\n" +
+			"    - {name: region, title: Region, default: eu, otherwise: {env: {ACME_REGION: \"{{region}}\"}}}\n", "otherwise"},
+		{"a reference to neither", "  parameters:\n    - {name: host, title: Host, default: example.com, otherwise: {env: {ACME_HOST: \"{{site}}\"}}}\n", "{{site}}"},
+		{"a default line that refers to a parameter", "  parameters:\n    - {name: host, title: Host, default: example.com}\n  env: {ACME_HOST: \"{{host}}\"}\n", "{{host}}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
