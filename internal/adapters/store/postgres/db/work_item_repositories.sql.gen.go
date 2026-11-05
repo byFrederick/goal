@@ -109,6 +109,41 @@ func (q *Queries) ItemRepositories(ctx context.Context, itemID uuid.UUID) ([]Wor
 	return items, nil
 }
 
+const itemsRepositories = `-- name: ItemsRepositories :many
+SELECT org_id, item_id, repo, joined, joined_at, ordinal, base_commit, integration_branch FROM work_item_repositories WHERE item_id = ANY($1::uuid[])
+ORDER BY item_id, (joined <> 'filing'), joined_at, ordinal
+`
+
+// The repositories of a page of items, by item, each item's in ItemRepositories' order.
+func (q *Queries) ItemsRepositories(ctx context.Context, itemIds []uuid.UUID) ([]WorkItemRepository, error) {
+	rows, err := q.db.Query(ctx, itemsRepositories, itemIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkItemRepository
+	for rows.Next() {
+		var i WorkItemRepository
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ItemID,
+			&i.Repo,
+			&i.Joined,
+			&i.JoinedAt,
+			&i.Ordinal,
+			&i.BaseCommit,
+			&i.IntegrationBranch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const joinItemRepository = `-- name: JoinItemRepository :exec
 INSERT INTO work_item_repositories (item_id, repo, joined, joined_at, ordinal)
 VALUES ($1, $2, $3, $4, $5::int)

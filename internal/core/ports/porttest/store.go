@@ -297,6 +297,31 @@ func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]dom
 	return s.orderedRepos(item), nil
 }
 
+// ItemsRepositories implements ports.Store: ItemRepositories of each visible item that has any.
+func (s *Store) ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make(map[domain.ItemID][]domain.ItemRepository)
+
+	for _, id := range items {
+		if _, ok := s.visible(id, org); !ok {
+			continue
+		}
+
+		if rows := s.orderedRepos(id); len(rows) > 0 {
+			out[id] = rows
+		}
+	}
+
+	return out, nil
+}
+
 // orderedRepos are item's repositories in first-joined order, as ItemRepositories reads them.
 // s.mu is held.
 func (s *Store) orderedRepos(item domain.ItemID) []domain.ItemRepository {
