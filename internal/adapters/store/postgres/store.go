@@ -524,14 +524,71 @@ func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]doma
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AgentRun, error) {
-		return q.ItemRuns(ctx, db.ItemRunsParams{ItemID: &uid, MaxRuns: int64(limit)})
+	var runs []domain.Run
+
+	err = s.read(ctx, func(q *db.Queries) error {
+		rows, err := q.ItemRuns(ctx, db.ItemRunsParams{ItemID: &uid, MaxRuns: int64(limit)})
+		if err != nil {
+			return err
+		}
+
+		runs = make([]domain.Run, len(rows))
+		for i, r := range rows {
+			runs[i] = runFrom(r)
+		}
+
+		return withRepositories(ctx, q, runs)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("runs of item %s: %w", item, err)
 	}
 
-	return convertAll(rows, func(r db.AgentRun) (domain.Run, error) { return runFrom(r), nil })
+	return runs, nil
+}
+
+// withRepositories reads the runs' repositories (agent_run_repositories, 00131) into each run in
+// one query: every row whole in its Input, and the rows it pushed or wrote in its Result.
+func withRepositories(ctx context.Context, q *db.Queries, runs []domain.Run) error {
+	if len(runs) == 0 {
+		return nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(runs))
+	for _, r := range runs {
+		id, err := uuid.Parse(string(r.ID))
+		if err != nil {
+			return fmt.Errorf("run id %q: %w", r.ID, err)
+		}
+
+		ids = append(ids, id)
+	}
+
+	rows, err := q.RunRepositories(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("run repositories: %w", err)
+	}
+
+	byRun := make(map[domain.RunID][]domain.RunRepository, len(runs))
+	for _, r := range rows {
+		id := domain.RunID(r.RunID.String())
+		byRun[id] = append(byRun[id], domain.RunRepository{
+			Repo: deref(r.Repo), BaseCommit: deref(r.BaseCommit), BranchHead: deref(r.BranchHead),
+			PushedHead: deref(r.PushedHead), Wrote: r.Wrote,
+		})
+	}
+
+	for i := range runs {
+		repos := byRun[runs[i].ID]
+		runs[i].Input.Repositories = repos
+
+		for _, r := range repos {
+			if r.PushedHead != "" || r.Wrote {
+				runs[i].Result.Repositories = append(runs[i].Result.Repositories, r)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Run implements ports.Store.
@@ -541,7 +598,18 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 		return domain.Run{}, err
 	}
 
-	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.AgentRun, error) { return q.GetRun(ctx, uid) })
+	runs := make([]domain.Run, 1)
+
+	err = s.read(ctx, func(q *db.Queries) error {
+		row, err := q.GetRun(ctx, uid)
+		if err != nil {
+			return err
+		}
+
+		runs[0] = runFrom(row)
+
+		return withRepositories(ctx, q, runs)
+	})
 	if notFound(err) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
@@ -550,7 +618,7 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, err)
 	}
 
-	return runFrom(row), nil
+	return runs[0], nil
 }
 
 // OrgRuns implements ports.Store: the page and the summary in one read-only transaction. Ids
@@ -715,7 +783,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		row, err := q.FinishRun(ctx, db.FinishRunParams{
 			ID: run, Status: string(res.Status), SessionID: optional(res.SessionID), Turns: int64(res.Turns),
 			InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUsd: res.CostUSD,
-			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output), PushedHead: optional(res.PushedHead),
+			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output),
 		})
 		if notFound(err) {
 			return nil // already finished
@@ -723,6 +791,14 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 
 		if err != nil {
 			return err
+		}
+
+		for _, r := range res.Repositories {
+			if err := q.RecordRunRepositoryPushed(ctx, db.RecordRunRepositoryPushedParams{
+				RunID: run, Repo: optional(r.Repo), PushedHead: optional(r.PushedHead), Wrote: r.Wrote,
+			}); err != nil {
+				return fmt.Errorf("record repository %s: %w", r.Repo, err)
+			}
 		}
 
 		if item == nil {
@@ -754,14 +830,24 @@ func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.R
 	}
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		n, err := q.RecordRunInput(ctx, db.RecordRunInputParams{
-			ID: run, Brief: optional(in.Brief), BranchHead: optional(in.BranchHead), BaseHead: optional(in.BaseHead),
-		})
+		n, err := q.RecordRunInput(ctx, db.RecordRunInputParams{ID: run, Brief: optional(in.Brief)})
 		if err == nil && n == 0 {
 			return ports.ErrNotFound
 		}
 
-		return err
+		if err != nil {
+			return err
+		}
+
+		for _, r := range in.Repositories {
+			if err := q.RecordRunRepositoryInput(ctx, db.RecordRunRepositoryInputParams{
+				RunID: run, Repo: optional(r.Repo), BaseCommit: optional(r.BaseCommit), BranchHead: optional(r.BranchHead),
+			}); err != nil {
+				return fmt.Errorf("record repository %s: %w", r.Repo, err)
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("record run %s input: %w", id, err)

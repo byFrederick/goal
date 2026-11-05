@@ -261,7 +261,7 @@ func (w *tryWorld) pastItemCost(org domain.OrgID, at time.Time, first bool, usd 
 
 	in := domain.RunInput{Brief: "the brief"}
 	if first {
-		in.BranchHead = tryHead
+		in.Repositories = []domain.RunRepository{{BranchHead: tryHead}}
 	}
 
 	if err := w.store.RecordRunInput(ctx, id, in); err != nil {
@@ -964,7 +964,7 @@ func (w *tryWorld) unacceptedItem(org domain.OrgID) domain.Item {
 		w.t.Fatal(err)
 	}
 
-	if err := w.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", BranchHead: tryHead}); err != nil {
+	if err := w.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", Repositories: []domain.RunRepository{{BranchHead: tryHead}}}); err != nil {
 		w.t.Fatal(err)
 	}
 

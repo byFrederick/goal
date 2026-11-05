@@ -30,6 +30,13 @@ var (
 func (h *harness) pastTry(t *testing.T) (domain.Item, domain.PastTry) {
 	t.Helper()
 
+	return h.pastTryOn(t, []domain.RunRepository{{Repo: "github.com/acme/api", BranchHead: tryHead, BaseCommit: tryBase}})
+}
+
+// pastTryOn is pastTry with the original run's recorded repositories.
+func (h *harness) pastTryOn(t *testing.T, repos []domain.RunRepository) (domain.Item, domain.PastTry) {
+	t.Helper()
+
 	ctx := domain.WithOrg(t.Context(), h.org)
 	it := h.submit(t, factoryID, "Add a health endpoint", "")
 	now := h.clock.Now()
@@ -52,7 +59,7 @@ func (h *harness) pastTry(t *testing.T) (domain.Item, domain.PastTry) {
 	}
 
 	run(tryEarlier, now.Add(-3*time.Hour), domain.RunInput{}, `{"spec":"add /health"}`)
-	orig := run(tryStation, now.Add(-2*time.Hour), domain.RunInput{Brief: "the recorded brief", BranchHead: tryHead, BaseHead: tryBase}, `{"pr":1}`)
+	orig := run(tryStation, now.Add(-2*time.Hour), domain.RunInput{Brief: "the recorded brief", Repositories: repos}, `{"pr":1}`)
 
 	_, err := h.store.QueueJonahReview(ctx, domain.NewJonahReview{
 		FactoryID: factoryID, VersionID: version, Trigger: domain.JonahManual, WindowStart: now.Add(-time.Hour), WindowEnd: now,
@@ -142,6 +149,54 @@ spec:
 
 	if n := len(h.store.Events(it.ID)); n != before {
 		t.Errorf("%d events of the past item, want %d: a try records nothing on it", n, before)
+	}
+}
+
+// A try clones the run's first recorded repository with a branch head at its commits (ADR 0041
+// decision 17); a row recorded without a repository (before 00131) is the version's. A run with
+// no branch head, or whose repository the version has not, is refused.
+func TestBundle_TryRecordedRepositories(t *testing.T) {
+	t.Parallel()
+
+	for name, c := range map[string]struct {
+		repos []domain.RunRepository
+		ok    bool
+	}{
+		"backfilled row":     {[]domain.RunRepository{{BranchHead: tryHead, BaseCommit: tryBase}}, true},
+		"first with a head":  {[]domain.RunRepository{{Repo: "github.com/acme/api", PushedHead: tryBase}, {BranchHead: tryHead, BaseCommit: tryBase}}, true},
+		"no branch head":     {[]domain.RunRepository{{Repo: "github.com/acme/api", BaseCommit: tryBase}}, false},
+		"another repository": {[]domain.RunRepository{{Repo: "github.com/acme/web", BranchHead: tryHead, BaseCommit: tryBase}}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: secretsBundleYAML("https://github.com/acme/api.git", ""), files: secretsBundleFiles})
+			_, try := h.pastTryOn(t, c.repos)
+
+			status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, h.tryClaims(try)))
+			if !c.ok {
+				if status != http.StatusForbidden {
+					t.Errorf("status = %d, want 403 (%s)", status, body)
+				}
+
+				return
+			}
+
+			if status != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (%s)", status, body)
+			}
+
+			var b runBundle
+			if err := json.Unmarshal(body, &b); err != nil {
+				t.Fatal(err)
+			}
+
+			if b.Repository == nil || b.Repository.URL != "https://github.com/acme/api.git" {
+				t.Errorf("repository %+v; want the version's", b.Repository)
+			}
+
+			expectTryRepository(t, b)
+		})
 	}
 }
 

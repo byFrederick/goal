@@ -89,10 +89,11 @@ RETURNING id;
 
 -- name: TryTarget :one
 -- The item's newest finished station run at station that was a claim's first run: its branch
--- head is recorded (agent_runs_try_target_idx).
+-- head is recorded in one of its repositories (agent_runs_try_target_idx, 00131).
 SELECT * FROM agent_runs
 WHERE item_id = sqlc.arg(item_id) AND station = sqlc.arg(station) AND kind = 'station'
-  AND branch_head IS NOT NULL AND status <> 'running'
+  AND status <> 'running'
+  AND EXISTS (SELECT 1 FROM agent_run_repositories rr WHERE rr.run_id = agent_runs.id AND rr.branch_head IS NOT NULL)
 ORDER BY started_at DESC, id DESC
 LIMIT 1;
 
@@ -117,8 +118,8 @@ SELECT sqlc.embed(r), w.number AS item_number, w.title AS item_title, w.cost_usd
 FROM work_items w
 JOIN LATERAL (
   SELECT a.id FROM agent_runs a
-  WHERE a.item_id = w.id AND a.agent = sqlc.arg(agent) AND a.kind = 'station' AND a.branch_head IS NOT NULL
-    AND a.status <> 'running'
+  WHERE a.item_id = w.id AND a.agent = sqlc.arg(agent) AND a.kind = 'station' AND a.status <> 'running'
+    AND EXISTS (SELECT 1 FROM agent_run_repositories rr WHERE rr.run_id = a.id AND rr.branch_head IS NOT NULL)
   ORDER BY a.started_at DESC, a.id DESC
   LIMIT 1
 ) pick ON true

@@ -15,7 +15,7 @@ import (
 const cancelLostRuns = `-- name: CancelLostRuns :many
 UPDATE agent_runs SET status = 'cancelled', error = $1, ended_at = $2
 WHERE id = ANY ($3::uuid[]) AND status = 'running'
-RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head
+RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output
 `
 
 type CancelLostRunsParams struct {
@@ -54,9 +54,6 @@ func (q *Queries) CancelLostRuns(ctx context.Context, arg CancelLostRunsParams) 
 			&i.Kind,
 			&i.Brief,
 			&i.Output,
-			&i.BranchHead,
-			&i.BaseHead,
-			&i.PushedHead,
 		); err != nil {
 			return nil, err
 		}
@@ -157,8 +154,8 @@ UPDATE agent_runs SET
   status = $1, session_id = $2, turns = $3::bigint,
   input_tokens = $4, output_tokens = $5,
   cost_usd = $6, error = $7, ended_at = $8,
-  output = $9, pushed_head = $10
-WHERE id = $11 AND status = 'running'
+  output = $9
+WHERE id = $10 AND status = 'running'
 RETURNING factory_id, item_id, station, agent
 `
 
@@ -172,7 +169,6 @@ type FinishRunParams struct {
 	Error        *string
 	EndedAt      *time.Time
 	Output       []byte
-	PushedHead   *string
 	ID           uuid.UUID
 }
 
@@ -195,7 +191,6 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 		arg.Error,
 		arg.EndedAt,
 		arg.Output,
-		arg.PushedHead,
 		arg.ID,
 	)
 	var i FinishRunRow
@@ -209,7 +204,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs WHERE id = $1
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
@@ -236,9 +231,6 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 		&i.Kind,
 		&i.Brief,
 		&i.Output,
-		&i.BranchHead,
-		&i.BaseHead,
-		&i.PushedHead,
 	)
 	return i, err
 }
@@ -280,7 +272,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 }
 
 const itemRuns = `-- name: ItemRuns :many
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, branch_head, base_head, pushed_head FROM agent_runs
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs
 WHERE item_id = $1
 ORDER BY started_at, id
 LIMIT $2::bigint
@@ -323,9 +315,6 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 			&i.Kind,
 			&i.Brief,
 			&i.Output,
-			&i.BranchHead,
-			&i.BaseHead,
-			&i.PushedHead,
 		); err != nil {
 			return nil, err
 		}
@@ -338,7 +327,7 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 }
 
 const listOrgRuns = `-- name: ListOrgRuns :many
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.branch_head, r.base_head, r.pushed_head, w.number AS item_number, w.title AS item_title
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, w.number AS item_number, w.title AS item_title
 FROM agent_runs r
 JOIN work_items w ON w.id = r.item_id
 WHERE r.factory_id = ANY ($1::uuid[])
@@ -424,9 +413,6 @@ func (q *Queries) ListOrgRuns(ctx context.Context, arg ListOrgRunsParams) ([]Lis
 			&i.AgentRun.Kind,
 			&i.AgentRun.Brief,
 			&i.AgentRun.Output,
-			&i.AgentRun.BranchHead,
-			&i.AgentRun.BaseHead,
-			&i.AgentRun.PushedHead,
 			&i.ItemNumber,
 			&i.ItemTitle,
 		); err != nil {
@@ -550,31 +536,79 @@ func (q *Queries) OrgRunsSummary(ctx context.Context, arg OrgRunsSummaryParams) 
 }
 
 const recordRunInput = `-- name: RecordRunInput :execrows
-UPDATE agent_runs SET
-  brief = $1, branch_head = $2, base_head = $3
-WHERE id = $4
+UPDATE agent_runs SET brief = $1 WHERE id = $2
 `
 
 type RecordRunInputParams struct {
-	Brief      *string
-	BranchHead *string
-	BaseHead   *string
-	ID         uuid.UUID
+	Brief *string
+	ID    uuid.UUID
 }
 
-// What a run was given (00085): its brief and, for a claim's first run, the heads before
-// prepare's rebase. Looked up by primary key; row-level security scopes it to the organization.
+// What a run was given (00085): its brief. Looked up by primary key; row-level security scopes it
+// to the organization.
 func (q *Queries) RecordRunInput(ctx context.Context, arg RecordRunInputParams) (int64, error) {
-	result, err := q.db.Exec(ctx, recordRunInput,
-		arg.Brief,
-		arg.BranchHead,
-		arg.BaseHead,
-		arg.ID,
-	)
+	result, err := q.db.Exec(ctx, recordRunInput, arg.Brief, arg.ID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordRunRepositoryInput = `-- name: RecordRunRepositoryInput :exec
+INSERT INTO agent_run_repositories (run_id, repo, base_commit, branch_head)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (run_id, repo) DO UPDATE SET
+  base_commit = coalesce(EXCLUDED.base_commit, agent_run_repositories.base_commit),
+  branch_head = coalesce(EXCLUDED.branch_head, agent_run_repositories.branch_head)
+`
+
+type RecordRunRepositoryInputParams struct {
+	RunID      uuid.UUID
+	Repo       *string
+	BaseCommit *string
+	BranchHead *string
+}
+
+// A repository the run's prepare checked out, with its base commit and branch head before the
+// rebase (00131). Recording it again keeps the commits already known.
+func (q *Queries) RecordRunRepositoryInput(ctx context.Context, arg RecordRunRepositoryInputParams) error {
+	_, err := q.db.Exec(ctx, recordRunRepositoryInput,
+		arg.RunID,
+		arg.Repo,
+		arg.BaseCommit,
+		arg.BranchHead,
+	)
+	return err
+}
+
+const recordRunRepositoryPushed = `-- name: RecordRunRepositoryPushed :exec
+INSERT INTO agent_run_repositories (run_id, repo, pushed_head, wrote)
+VALUES ($1, $2, $3::text,
+        $4::boolean OR $3::text IS NOT NULL)
+ON CONFLICT (run_id, repo) DO UPDATE SET
+  pushed_head = coalesce(EXCLUDED.pushed_head, agent_run_repositories.pushed_head),
+  wrote = agent_run_repositories.wrote OR $4::boolean
+    OR (EXCLUDED.pushed_head IS NOT NULL AND EXCLUDED.pushed_head IS DISTINCT FROM agent_run_repositories.branch_head)
+`
+
+type RecordRunRepositoryPushedParams struct {
+	RunID      uuid.UUID
+	Repo       *string
+	PushedHead *string
+	Wrote      bool
+}
+
+// A repository's head on the remote when the run's agent ended (00131). The run wrote when it
+// said so or pushed a commit other than the branch head it started from; a repository it did not
+// check out (a retry's) wrote when it pushed at all.
+func (q *Queries) RecordRunRepositoryPushed(ctx context.Context, arg RecordRunRepositoryPushedParams) error {
+	_, err := q.db.Exec(ctx, recordRunRepositoryPushed,
+		arg.RunID,
+		arg.Repo,
+		arg.PushedHead,
+		arg.Wrote,
+	)
+	return err
 }
 
 const runItem = `-- name: RunItem :one
@@ -586,6 +620,50 @@ func (q *Queries) RunItem(ctx context.Context, id uuid.UUID) (*uuid.UUID, error)
 	var item_id *uuid.UUID
 	err := row.Scan(&item_id)
 	return item_id, err
+}
+
+const runRepositories = `-- name: RunRepositories :many
+SELECT run_id, repo, base_commit, branch_head, pushed_head, wrote FROM agent_run_repositories
+WHERE run_id = ANY ($1::uuid[])
+ORDER BY run_id, seq
+`
+
+type RunRepositoriesRow struct {
+	RunID      uuid.UUID
+	Repo       *string
+	BaseCommit *string
+	BranchHead *string
+	PushedHead *string
+	Wrote      bool
+}
+
+// The repositories of the runs, each run's in the order they were recorded. Row-level security
+// scopes it to the organization.
+func (q *Queries) RunRepositories(ctx context.Context, runIds []uuid.UUID) ([]RunRepositoriesRow, error) {
+	rows, err := q.db.Query(ctx, runRepositories, runIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RunRepositoriesRow
+	for rows.Next() {
+		var i RunRepositoriesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.Repo,
+			&i.BaseCommit,
+			&i.BranchHead,
+			&i.PushedHead,
+			&i.Wrote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const runsOver = `-- name: RunsOver :many

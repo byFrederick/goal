@@ -727,7 +727,9 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		return nil
 	}
 
+	rows := recordRunRepositories(r.Input.Repositories, res.Repositories, true)
 	r.Result, r.EndedAt = res, endedAt
+	r.Input.Repositories, r.Result.Repositories = rows, pushedRepositories(rows)
 
 	if r.ItemID == "" { // a Jonah run or a try: no item cost, no run_finished item event
 		return nil
@@ -760,9 +762,51 @@ func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.R
 		return fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
 
+	rows := recordRunRepositories(r.Input.Repositories, in.Repositories, false)
 	r.Input = in
+	r.Input.Repositories, r.Result.Repositories = rows, pushedRepositories(rows)
 
 	return nil
+}
+
+// recordRunRepositories are a run's repository rows with add recorded, as agent_run_repositories
+// keeps them (00131): one row per repository in the order first recorded, a known commit kept
+// when add has none. A finish (pushed) records pushed heads; a row wrote when add says so or
+// pushed a commit other than its branch head, a row without a branch head when it pushed at all.
+func recordRunRepositories(rows, add []domain.RunRepository, pushed bool) []domain.RunRepository {
+	out := slices.Clone(rows)
+
+	for _, a := range add {
+		i := slices.IndexFunc(out, func(r domain.RunRepository) bool { return r.Repo == a.Repo })
+		if i < 0 {
+			out = append(out, domain.RunRepository{Repo: a.Repo})
+			i = len(out) - 1
+		}
+
+		r := &out[i]
+		if !pushed {
+			r.BaseCommit, r.BranchHead = cmp.Or(a.BaseCommit, r.BaseCommit), cmp.Or(a.BranchHead, r.BranchHead)
+			continue
+		}
+
+		r.PushedHead = cmp.Or(a.PushedHead, r.PushedHead)
+		r.Wrote = r.Wrote || a.Wrote || (a.PushedHead != "" && a.PushedHead != r.BranchHead)
+	}
+
+	return out
+}
+
+// pushedRepositories are the rows a run pushed or wrote, as a run's result reads them back.
+func pushedRepositories(rows []domain.RunRepository) []domain.RunRepository {
+	var out []domain.RunRepository
+
+	for _, r := range rows {
+		if r.PushedHead != "" || r.Wrote {
+			out = append(out, r)
+		}
+	}
+
+	return out
 }
 
 // Runs implements ports.Store.

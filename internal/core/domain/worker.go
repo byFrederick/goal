@@ -46,8 +46,12 @@ type WorkerFinished struct {
 	InputTokens  int64           `json:"input_tokens"`
 	OutputTokens int64           `json:"output_tokens"`
 	SessionID    string          `json:"session_id"`
+	// Repositories are the repositories the run fetched or pushed, each with its pushed head and
+	// whether it wrote (ADR 0041 decision 5).
+	Repositories []WorkerRepository `json:"repositories"`
 	// PushedHead is the item branch's commit on the remote when the agent ended (ADR 0039,
-	// decision 8); empty without a repository or when the worker could not read it.
+	// decision 8), as a worker without Repositories reports it; empty without a repository or
+	// when the worker could not read it. Accepted for one deploy, so an older worker image works.
 	PushedHead string `json:"pushed_head"`
 	// At is when the worker wrote the line.
 	At string `json:"at"`
@@ -112,13 +116,61 @@ func (f *WorkerFinished) Denials(now time.Time) []Event {
 	return out
 }
 
+// WorkerRepository is one repository of a worker line's repositories list (ADR 0041 decision 5):
+// prepare's line reports its base commit and branch head, the finished line its pushed head and
+// whether the run wrote.
+type WorkerRepository struct {
+	Repo       string `json:"repo"`
+	BaseCommit string `json:"base_commit"`
+	BranchHead string `json:"branch_head"`
+	PushedHead string `json:"pushed_head"`
+	Wrote      bool   `json:"wrote"`
+}
+
+// RunRepositories are a worker line's repositories as a run records them: each by its
+// RepositoryKey, with only the commits GitHead accepts, once (the first report of a repository
+// wins). A line without a list, from a worker image before it, reports single, one repository's
+// commits, which become one row on repo, the task's repository URL, when it has a commit. A
+// repository that is no RepositoryKey is dropped.
+func RunRepositories(reported []WorkerRepository, repo string, single WorkerRepository) []RunRepository {
+	if len(reported) == 0 {
+		single.Repo = repo
+		reported = []WorkerRepository{single}
+	}
+
+	var out []RunRepository
+
+	seen := make(map[string]bool, len(reported))
+
+	for _, r := range reported {
+		key, ok := RepositoryKey(r.Repo)
+		if !ok || seen[key] {
+			continue
+		}
+
+		row := RunRepository{
+			Repo: key, BaseCommit: GitHead(r.BaseCommit), BranchHead: GitHead(r.BranchHead), PushedHead: GitHead(r.PushedHead),
+			Wrote: r.Wrote,
+		}
+		if row == (RunRepository{Repo: key}) {
+			continue
+		}
+
+		seen[key] = true
+		out = append(out, row)
+	}
+
+	return out
+}
+
 // Result is the run's result as the worker reported it: succeeded only with an output, failed
-// with the worker's reason otherwise. How the process ended (killed, timed out, crashed) is the
+// with the worker's reason otherwise. repo is the task's repository URL, which a report with only
+// today's single pushed head is on. How the process ended (killed, timed out, crashed) is the
 // caller's to apply on top.
-func (f *WorkerFinished) Result() RunResult {
+func (f *WorkerFinished) Result(repo string) RunResult {
 	res := RunResult{
 		CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
-		PushedHead: GitHead(f.PushedHead),
+		Repositories: RunRepositories(f.Repositories, repo, WorkerRepository{PushedHead: f.PushedHead}),
 	}
 
 	switch {
