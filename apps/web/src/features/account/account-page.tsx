@@ -211,15 +211,7 @@ function ProfileSection({
         {role ? <Chip tone={org.role === 'owner' ? 'ok' : org.role === 'admin' ? 'you' : 'plain'}>{role}</Chip> : null}
       </div>
       {person ? (
-        // Keyed by whether the saved email has loaded, so the email field starts from it.
-        <NameForm
-          key={saved ? 'saved' : 'loading'}
-          name={person.name}
-          signInEmail={person.email}
-          saved={saved}
-          update={update}
-          save={save}
-        />
+        <NameForm name={person.name} signInEmail={person.email} saved={saved} update={update} save={save} />
       ) : null}
     </section>
   );
@@ -267,7 +259,10 @@ function NameForm({
 }) {
   const [value, setValue] = useState(name);
   const [invalid, setInvalid] = useState<string>();
-  const [email, setEmail] = useState(saved?.email ?? '');
+  // The email field shows the saved address once it loads, until the person types: the form is not
+  // remounted by the load, so what they typed in the name field is kept.
+  const [typedEmail, setEmail] = useState<string>();
+  const email = typedEmail ?? saved?.email ?? '';
   const [emailInvalid, setEmailInvalid] = useState<string>();
 
   const onSubmit = (e: FormEvent) => {
