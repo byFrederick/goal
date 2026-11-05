@@ -123,6 +123,13 @@ const toMarker = (p: DefinitionProblem): EditorMarker => ({
   message: p.message,
 });
 
+/** The first line of the last run of consecutive changed lines (ascending), or undefined. */
+function lastChangeStart(changed: number[]): number | undefined {
+  let at = changed.length - 1;
+  while (at > 0 && changed[at - 1] === (changed[at] as number) - 1) at--;
+  return changed[at];
+}
+
 export function YamlView({ search }: SectionViewProps) {
   const session = useDraftSession();
   const viewOnly = useViewOnly();
@@ -198,12 +205,13 @@ export function YamlView({ search }: SectionViewProps) {
   }, [problems]);
 
   // The change gutter: this file against the version the draft is based on.
-  const comparison = useQuery({
+  const comparisonQuery = useQuery({
     queryKey: defKeys.compare(org, f, 'base', 'draft', revision),
     queryFn: ({ signal }) => compareVersions(org, f, 'base', 'draft', signal),
     enabled: hasDraft,
     placeholderData: keepPreviousData,
-  }).data;
+  });
+  const comparison = comparisonQuery.data;
   const changedFiles = useMemo(
     () => new Set((hasDraft ? (comparison?.files ?? []) : []).filter((x) => x.op !== 'unchanged').map((x) => x.path)),
     [comparison, hasDraft],
@@ -234,8 +242,18 @@ export function YamlView({ search }: SectionViewProps) {
   const written = useRef<number | undefined>(undefined);
   const revealed = useRef('');
   const { mode: _m, file: _f, line: _l, compare: _c, add: _a, ...entity } = search;
+  // A file opens where it changed last, so a tool just added is on screen (a tool written back in block
+  // style also rewrites the lines above it, so the first change is not where the tool is); factory.yaml
+  // opens at its place.
+  const changesPending =
+    hasDraft &&
+    path !== factoryFile &&
+    (comparison === undefined ||
+      comparisonQuery.isPlaceholderData ||
+      (fileChange?.op === 'modified' && baseText === undefined));
   const entryLine =
-    search.line ?? (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : undefined);
+    search.line ??
+    (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : lastChangeStart(changed));
   // biome-ignore lint/correctness/useExhaustiveDependencies: revealed once per file and asked-for line
   useEffect(() => {
     if (!editor || text === undefined) return;
@@ -245,8 +263,9 @@ export function YamlView({ search }: SectionViewProps) {
       revealed.current = key;
       return;
     }
+    if (entryLine === undefined && changesPending) return;
     if (entryLine === undefined || editor.reveal(entryLine)) revealed.current = key;
-  }, [editor, path, search.line, entryLine, text === undefined]);
+  }, [editor, path, search.line, entryLine, text === undefined, changesPending]);
 
   const cursorLine = cursor?.line;
   // The file the cursor last moved in, and the latest search, so a pending write never lands on another file.
@@ -378,7 +397,7 @@ export function YamlView({ search }: SectionViewProps) {
                 aria-expanded={filesOpen}
                 aria-controls={treeId}
                 onClick={() => setFilesOpen((v) => !v)}
-                className="inline-flex items-center px-3 text-secondary font-control text-ink @[640px]:hidden"
+                className="inline-flex min-h-10 items-center px-3 text-secondary font-control text-ink max-md:min-h-11 @[640px]:hidden"
               >
                 Files
               </button>
@@ -389,7 +408,7 @@ export function YamlView({ search }: SectionViewProps) {
                   aria-selected="true"
                   aria-controls={panelId}
                   tabIndex={0}
-                  className="inline-flex h-10 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
+                  className="inline-flex h-10 max-md:h-11 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
                 >
                   <span className="truncate">{path}</span>
                 </button>
