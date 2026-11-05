@@ -1,8 +1,9 @@
 // A factory's line on Home (MASTER.md, Components: The line; screens/daily-work/home.jpg): one compact row of its
 // stations from intake to done, each the count over its name with its agent slots under, joined to the next by a
 // 1 px rule. Done shows what finished today with a green dot. Its board comes from boardQuery, so the Floor's
-// invalidations keep it fresh. A stopped line mutes its counts (never opacity: MASTER.md). On a phone the line scrolls sideways inside its card. A failed
-// board leaves only a note; a loading one shows its skeleton in the line's place.
+// invalidations keep it fresh. A stopped line mutes its counts (never opacity: MASTER.md).
+// On a phone the line scrolls sideways inside its card. A failed board leaves only a note; a loading one shows its
+// skeleton in the line's place.
 import { useQuery } from '@tanstack/react-query';
 import { Fragment } from 'react';
 import { boardQuery } from '../../api/queries';

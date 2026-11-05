@@ -5,13 +5,19 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
 export async function expectAccessible(page: Page) {
-  // Axe reads the colour a frame paints: wait out the finite entrance fades first, or it measures text mid-fade.
+  // Axe reads the colour a frame paints. Wait until no route still shows its skeleton (rows mount and fade in
+  // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
   // Looping animations (the skeleton pulse) never finish and are left alone.
-  await page.waitForFunction(() =>
-    document
-      .getAnimations()
-      .every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity),
-  );
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  const settled = () =>
+    page.evaluate(() =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity),
+    );
+  await expect
+    .poll(async () => (await settled()) && (await page.waitForTimeout(100), await settled()), { timeout: 10_000 })
+    .toBe(true);
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
