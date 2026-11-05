@@ -113,8 +113,9 @@ export function Line({
   );
 }
 
+// A stopped line mutes its ink; opacity would fail text contrast (MASTER.md, the board's dimmed cards).
 const DIM =
-  'transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none data-[dimmed=true]:opacity-40';
+  'transition-colors duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none data-[dimmed=true]:text-muted';
 
 /** One station, and the connector before it from the second station on. */
 function StationItem({
@@ -149,7 +150,7 @@ function StationItem({
       <li
         data-dimmed={dim}
         className={cn(
-          'grid min-h-16 min-w-0 flex-1 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-rule py-3 md:flex md:min-h-0 md:flex-col md:items-stretch md:gap-2 md:border-b-0 md:py-0',
+          'group/station grid min-h-16 min-w-0 flex-1 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-rule py-3 md:flex md:min-h-0 md:flex-col md:items-stretch md:gap-2 md:border-b-0 md:py-0',
           DIM,
         )}
       >
@@ -173,7 +174,9 @@ function StationColumn({ station: s, compact }: { station: LineStation; compact:
         )}
       />
       <span className="col-start-2 flex flex-wrap items-center gap-2 md:order-1">
-        <span className="text-secondary font-medium text-ink">{s.name}</span>
+        <span className="text-secondary font-medium text-ink transition-colors duration-(--duration-fast) ease-(--ease-out) group-data-[dimmed=true]/station:text-muted motion-reduce:transition-none">
+          {s.name}
+        </span>
         {s.constraint ? (
           <span className="flex items-center gap-1 text-meta text-amber-ink">
             <span aria-hidden="true" className="size-1.5 rounded-full bg-amber" />

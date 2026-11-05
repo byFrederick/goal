@@ -1,4 +1,4 @@
-// Definition › Agents (D8) against the mock: goal's draft of v9 has four agents; frontend-engineer
+// Definition › Agents (D8) against the mock: goal's draft of v9 has five agents; frontend-engineer
 // asks before fetching web pages (B's builtin-ask-unavailable warning).
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
@@ -18,10 +18,13 @@ const prompt = (page: Page, agent: string) => page.getByRole('textbox', { name: 
 /** Replaces the prompt's text: Monaco on a desktop, the textarea on a phone. */
 async function typePrompt(page: Page, agent: string, text: string) {
   const editor = prompt(page, agent);
+  // Monaco shows its lines before it takes keys; the textarea on a phone needs no wait.
+  if (!isPhone(page)) await expect(page.locator('.monaco-editor .view-line').first()).toBeVisible({ timeout: 20_000 });
   await editor.focus();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.press('Delete');
-  await page.keyboard.type(text);
+  // insertText, not key presses: Monaco's suggest widget takes Enter after a word and eats the line break.
+  await page.keyboard.insertText(text);
 }
 
 async function openAgent(page: Page, agent: string) {
@@ -33,7 +36,7 @@ test('the agents list says where each agent works and opens its detail', async (
   await page.goto(agents);
   await expect(page).toHaveTitle('Agents · Definition · goal · Acme · Goal');
   const list = page.getByRole('navigation', { name: 'Agents' });
-  await expect(list.getByRole('heading', { name: '4 agents' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
   await expect(list.getByRole('link', { name: /backend-engineer/ })).toContainText('Build, backend lane');
   await expect(list.getByRole('link', { name: /reviewer/ })).toContainText('Review, gate');
   if (isPhone(page)) {
@@ -56,7 +59,7 @@ test('the agents list says where each agent works and opens its detail', async (
     await list.getByRole('link', { name: /reviewer/ }).click();
   }
   await page.getByRole('link', { name: 'Open agent page' }).click();
-  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/reviewer$/);
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/reviewer(\?view=overview)?$/);
   await expect(page.getByRole('heading', { level: 1, name: 'reviewer' })).toBeVisible();
 });
 
@@ -95,7 +98,7 @@ test('model, prompt, a skills.sh skill and built-in tools save with the draft', 
   await expect(agent.getByText('Asked as Off until tool approvals arrive')).toBeHidden();
 
   await expect(status(page)).toContainText('Autosaved');
-  await expect(tile(page, /^Agents, \d+ changes$/)).toBeAttached();
+  await expect(tile(page, /^Agents, \d+ changes?, \d+ agents? on \d+ models?$/)).toBeAttached();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -170,11 +173,11 @@ test('removing an agent reads its prompt first: undo puts back one not loaded ye
   await page.getByRole('button', { name: 'Remove…' }).click();
   await confirm.getByRole('button', { name: 'Remove agent' }).click();
   const list = page.getByRole('navigation', { name: 'Agents' });
-  await expect(list.getByRole('heading', { name: '4 agents' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
   await expect(status(page)).toContainText('Autosaved');
 
   await page.keyboard.press('ControlOrMeta+Z');
-  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: '6 agents' })).toBeVisible();
   await expect(status(page)).toContainText('Saving');
   await expect(status(page)).toContainText('Autosaved');
   await openAgent(page, 'docs-writer');
@@ -215,7 +218,7 @@ test('add, rename and remove an agent; a station keeps its agent from being remo
   const remove = page.getByRole('dialog', { name: 'Remove writer?' });
   await remove.getByRole('button', { name: 'Remove agent' }).click();
   const list = page.getByRole('navigation', { name: 'Agents' });
-  await expect(list.getByRole('heading', { name: '4 agents' })).toBeVisible();
+  await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
   await expect(list.getByRole('link', { name: /^writer / })).toHaveCount(0);
 
   await page.goto(`${agents}?agent=reviewer`);
@@ -244,14 +247,15 @@ test.describe('Agents page', () => {
     await expectNoHorizontalScroll(page);
   });
 
-  test('renders with an agent on no station, which the stats answer with no stations', async ({ page }) => {
-    // goal's definition declares infra-engineer, and no station staffs it: goald answers its stats with 200 and none.
+  test('renders with an agent that has run nothing, which the stats answer with no stations', async ({ page }) => {
+    // goal's Build station routes the infra lane to infra-engineer, so it is on the line under Build; it has run
+    // nothing, and goald answers its stats with 200 and no stations.
     const stats = page.waitForResponse((r) => r.url().endsWith('/agents/infra-engineer/stats'));
     await page.goto(index);
     expect((await stats).status()).toBe(200);
     await expect(page.getByRole('heading', { level: 2, name: 'Review' })).toBeVisible();
     await expect(page.getByRole('link', { name: /reviewer/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /infra-engineer/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /infra-engineer/ })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
   });
 
@@ -272,19 +276,26 @@ test.describe('Agents page', () => {
 
     await expect(create).toHaveAttribute('aria-disabled', 'true');
     await create.hover();
-    await expect(page.getByRole('tooltip', { name: 'Not available yet' })).toBeVisible();
+    // The tip is aria-hidden by design (ui/tooltip.tsx: the trigger's name says it), so it is not a tooltip role.
+    await expect(page.getByText('Not available yet').first()).toBeVisible();
   });
 
   test('an agent card opens the agent page', async ({ page }) => {
     await page.goto(index);
     await page.getByRole('link', { name: /backend-engineer/ }).click();
 
-    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/backend-engineer$/);
+    await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/agents\/backend-engineer(\?view=overview)?$/);
   });
 
   test('View as files opens the definition', async ({ page }) => {
     await page.goto(index);
-    await page.getByRole('link', { name: 'View as files' }).click();
+    if (isPhone(page)) {
+      // On a phone only the last action stays in the bar; the others sit behind More actions (#602).
+      await page.getByRole('button', { name: 'More actions' }).click();
+      await page.getByRole('menuitem', { name: 'View as files' }).click();
+    } else {
+      await page.getByRole('link', { name: 'View as files' }).click();
+    }
 
     await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/definition\/agents$/);
   });

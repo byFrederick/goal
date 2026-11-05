@@ -153,9 +153,8 @@ function Decision({
         </Link>
       </Button>
       <Button
-        variant="primary"
+        variant="approve"
         size="sm"
-        className="border-you bg-you hover:bg-you/90"
         disabled={!canDecide || pending}
         aria-describedby={canDecide ? undefined : reasonId}
         title={canDecide ? undefined : reasons.decide(factory.name)}
@@ -190,9 +189,8 @@ function ToolApproval({ entry, canDecide }: { entry: InboxEntry & { item: ItemCa
         Deny
       </Button>
       <Button
-        variant="primary"
+        variant="approve"
         size="sm"
-        className="border-you bg-you hover:bg-you/90"
         disabled={!canDecide || pending}
         aria-describedby={canDecide ? undefined : reasonId}
         title={canDecide ? undefined : reason}

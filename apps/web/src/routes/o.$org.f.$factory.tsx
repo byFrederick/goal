@@ -4,7 +4,7 @@ import { archivedFactoriesQuery, ensureFound, factoriesQuery } from '../api/quer
 import { ShellFrame } from '../app/app-shell';
 import { ArchivedBanner } from '../app/archived-banner';
 import { ShellPending } from '../app/shell-pending';
-import { NotFoundScreen } from '../app/states';
+import { NotFoundScreen, unknownFactory } from '../app/states';
 import { findFactory, useFactory } from '../shared/factory';
 import { rememberFactory } from '../shared/org';
 
@@ -22,7 +22,8 @@ export const Route = createFileRoute('/o/$org/f/$factory')({
       (await ensureFound(context.queryClient, archivedFactoriesQuery(context.org.id), (factories) =>
         findFactory(factories, params.factory),
       ));
-    if (!factory) throw notFound();
+    // Thrown here, the not-found is drawn by the organization's boundary, which reads this marker.
+    if (!factory) throw notFound({ data: unknownFactory });
     return { factory };
   },
   pendingComponent: ShellPending,
