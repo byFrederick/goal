@@ -44,6 +44,9 @@ export function CodeHostsSection() {
   const [kind, setKind] = useState<CodeHostKind>('github');
   const [problem, setProblem] = useState<string | null>(null);
   // Hosts added in this visit: only these rise in; the rest are there with the section.
+  // True from a Remove's answer until its row has left: another save would be built from a list that still
+  // holds the removed host.
+  const [leavingNow, setLeavingNow] = useState(false);
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
 
   const save = useMutation({
@@ -61,7 +64,7 @@ export function CodeHostsSection() {
   const add = (e: FormEvent) => {
     e.preventDefault();
     const name = host.trim().toLowerCase();
-    if (!name || save.isPending) return;
+    if (!name || save.isPending || leavingNow) return;
     setProblem(null);
     save.mutate([...added.map(asInput), { host: name, kind }], {
       onSuccess: (next: CodeHosts) => {
@@ -76,7 +79,11 @@ export function CodeHostsSection() {
   };
 
   const remove = (name: string): Promise<CodeHosts> =>
-    save.mutateAsync(added.filter((h) => h.host !== name).map(asInput));
+    save.mutateAsync(added.filter((h) => h.host !== name).map(asInput)).catch((err) => {
+      // The mutation's own handler leaves a 400 to the Add form, which has a field to show it under.
+      if (err instanceof ApiError && err.status === 400) toast.error(`Not saved: ${refusal(err)}`);
+      throw err;
+    });
 
   const builtIn = (hosts.data?.hosts ?? []).filter((h) => h.built_in);
 
@@ -111,7 +118,15 @@ export function CodeHostsSection() {
             <HostLine key={h.host} host={h} />
           ))}
           {added.map((h) => (
-            <AddedHost key={h.host} host={h} fresh={fresh.has(h.host)} mayEdit={mayEdit} remove={remove} />
+            <AddedHost
+              key={h.host}
+              host={h}
+              fresh={fresh.has(h.host)}
+              mayEdit={mayEdit}
+              busy={save.isPending || leavingNow}
+              onLeaving={setLeavingNow}
+              remove={remove}
+            />
           ))}
           {hosts.isError ? (
             <p className="m-0 border-t border-rule px-5 py-3 text-secondary text-rework-ink">
@@ -148,7 +163,7 @@ export function CodeHostsSection() {
                 className="w-32"
                 onValueChange={(v) => setKind(v as CodeHostKind)}
               />
-              <Button type="submit" variant="action" size="md" disabled={!host.trim() || save.isPending}>
+              <Button type="submit" variant="action" size="md" disabled={!host.trim() || save.isPending || leavingNow}>
                 Add
               </Button>
             </div>
@@ -187,11 +202,15 @@ function AddedHost({
   host,
   fresh,
   mayEdit,
+  busy,
+  onLeaving,
   remove,
 }: {
   host: CodeHost;
   fresh: boolean;
   mayEdit: boolean;
+  busy: boolean;
+  onLeaving: (leaving: boolean) => void;
   remove: (name: string) => Promise<CodeHosts>;
 }) {
   const client = useQueryClient();
@@ -199,6 +218,7 @@ function AddedHost({
   const answer = useRef<CodeHosts | null>(null);
   const { leaving, leave } = useLeaving(() => {
     if (answer.current) client.setQueryData(keys.codeHosts(org.id), answer.current);
+    onLeaving(false);
   });
   return (
     <Leaving leaving={leaving}>
@@ -207,12 +227,13 @@ function AddedHost({
           <Button
             type="button"
             size="sm"
-            disabled={leaving}
+            disabled={leaving || busy}
             aria-label={`Remove ${host.host}`}
             onClick={() =>
               remove(host.host).then(
                 (next) => {
                   answer.current = next;
+                  onLeaving(true);
                   leave();
                 },
                 () => undefined,

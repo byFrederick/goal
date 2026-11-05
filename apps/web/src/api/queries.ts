@@ -164,9 +164,9 @@ export const keys = {
   attention: (org: string) => ['org', org, 'attention'] as const,
   settings: (org: string) => ['org', org, 'settings'] as const,
   /** The organization's notification settings (the Slack secret). */
+  orgNotifications: (org: string) => ['org', org, 'settings', 'notifications'] as const,
   /** The organization's code hosts (ADR 0041). */
   codeHosts: (org: string) => ['org', org, 'code-hosts'] as const,
-  orgNotifications: (org: string) => ['org', org, 'settings', 'notifications'] as const,
   /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
   policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,

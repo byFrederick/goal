@@ -97,6 +97,29 @@ describe('the code hosts section', () => {
     expect(api.setCodeHosts).toHaveBeenCalledWith('org-acme', []);
   });
 
+  it('blocks a second Remove until the first save and its exit are done', async () => {
+    const other = {
+      host: 'git.example.com',
+      kind: 'gitlab',
+      api_base: 'https://git.example.com/api/v4',
+      built_in: false,
+    };
+    renderSection({ added: [ghe, other] as never });
+    await screen.findByText('ghe.example.com');
+    let answer: (v: unknown) => void = () => undefined;
+    api.setCodeHosts.mockReturnValue(new Promise((r) => (answer = r)));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove ghe.example.com' }));
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Remove git.example.com' }) as HTMLButtonElement).disabled).toBe(true),
+    );
+    api.setCodeHosts.mockResolvedValue({ hosts: [...builtIn, other] });
+    answer({ hosts: [...builtIn, other] });
+    await waitFor(() => expect(screen.queryByText('ghe.example.com')).toBeNull());
+    api.setCodeHosts.mockResolvedValue({ hosts: builtIn });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove git.example.com' }));
+    await waitFor(() => expect(api.setCodeHosts).toHaveBeenLastCalledWith('org-acme', []));
+  });
+
   it('shows why a host is refused', async () => {
     renderSection({ added: [ghe] });
     await screen.findByText('ghe.example.com');
