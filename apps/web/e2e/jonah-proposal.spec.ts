@@ -13,7 +13,7 @@ test('the page shows proposal 7 as pictured: the estimate, the two diffs, the fo
 }) => {
   await page.goto('/o/acme/f/software/jonah/proposals/7');
   await expect(page.getByRole('heading', { level: 1, name: /Ask frontend-engineer for a screenshot/ })).toBeVisible();
-  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+  await expect(page.getByText('Waiting for your review', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('2 files, v21 to v22')).toBeVisible();
   await expect(page.getByRole('region', { name: /Why/ })).toBeVisible();
   await expect(page.getByText('v22; running items keep v21')).toBeVisible();
@@ -23,11 +23,11 @@ test('the page shows proposal 7 as pictured: the estimate, the two diffs, the fo
 });
 
 test('the memory proposal shows its facts, the people it quotes and that no try ran', async ({ page }) => {
-  await page.goto('/o/acme/f/software/jonah/proposals/10');
+  await page.goto('/o/acme/f/software/jonah/proposals/9');
   await expect(
     page.getByRole('heading', { level: 1, name: /Add 3 facts from answers, notes and send-backs/ }),
   ).toBeVisible();
-  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+  await expect(page.getByText('Waiting for your review', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Changes to factory memory')).toBeVisible();
   await expect(page.getByText('Each quotes a person')).toBeVisible();
   await expect(page.getByText('Memory changes run no try')).toBeVisible();
@@ -39,7 +39,7 @@ test('the memory proposal shows its facts, the people it quotes and that no try 
 test('the model proposal shows its tries, the line result and the tried items', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah/proposals/10');
   await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer on claude-haiku-5-5' })).toBeVisible();
-  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+  await expect(page.getByText('Waiting for your review', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Tries passed', { exact: true })).toBeVisible();
   await expect(page.getByText('11 of 21', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('On the line', { exact: true }).first()).toBeVisible();
@@ -67,7 +67,14 @@ test('Approve shows the draft-open message on the flagged proposal 8', async ({ 
 
 test('Reject needs a reason, then records it and shows the rejected state', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah/proposals/7');
-  await page.getByRole('button', { name: 'Reject with a reason' }).click();
+  // Below 768 px the top bar keeps only the primary action; Reject sits behind More actions (phone-chrome.tsx).
+  const more = page.getByRole('button', { name: 'More actions' });
+  if (await more.isVisible()) {
+    await more.click();
+    await page.getByRole('menuitem', { name: 'Reject with a reason' }).click();
+  } else {
+    await page.getByRole('button', { name: 'Reject with a reason' }).click();
+  }
   const dialog = page.getByRole('dialog', { name: 'Reject with a reason' });
   const submit = dialog.getByRole('button', { name: 'Reject proposal' });
   await expect(submit).toBeDisabled();
@@ -119,14 +126,14 @@ test('the page fits 375 and 768 px and renders in dark mode', async ({ page }) =
   for (const width of [375, 768]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/o/acme/f/software/jonah/proposals/7');
-    await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+    await expect(page.getByText('Waiting for your review', { exact: true }).first()).toBeVisible();
     await expectNoHorizontalScroll(page);
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await page.goto('/o/acme/f/software/jonah/proposals/7');
-  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+  await expect(page.getByText('Waiting for your review', { exact: true }).first()).toBeVisible();
   await expectAccessible(page);
 });
 

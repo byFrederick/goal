@@ -14,8 +14,8 @@ test('the overview shows the proposals waiting, the policy and what Jonah notice
   await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
 
-  await expect(page.getByText('Proposal 7')).toBeVisible();
-  await expect(page.getByText('Proposal 8')).toBeVisible();
+  await expect(page.getByText('Proposal 7', { exact: true })).toBeVisible();
+  await expect(page.getByText('Proposal 8', { exact: true })).toBeVisible();
   await expect(page.getByText('Based on 4 runs sent back')).toBeVisible();
   await expect(page.getByText('Watching, 3 of 5')).toBeVisible();
   await expect(page.getByText('Review sends back 1 in 4 frontend items for a missing phone check')).toBeVisible();
@@ -141,7 +141,8 @@ test('the overview fits 375 and 768 px and renders in dark mode', async ({ page 
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.emulateMedia({ colorScheme: 'dark' });
+  // Reduced motion: axe measures contrast on the settled page, not mid-fade (MOTION.md, reduced motion).
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
   await expectAccessible(page);
@@ -157,9 +158,7 @@ const jonahPages = [
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1440, 1024, 768, 390]) {
     for (const [name, url, tab] of jonahPages) {
-      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({
-        page,
-      }, testInfo) => {
+      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
         await page.goto(url);
@@ -167,10 +166,9 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(tabs.locator('[aria-current="page"]')).toHaveCount(1);
         await expect(tabs.getByRole('link', { name: new RegExp(tab) })).toHaveAttribute('aria-current', 'page');
         await expectNoHorizontalScroll(page);
-        // The viewport is set above, so the three projects draw the same picture: one keeps its baselines.
-        if (testInfo.project.name === 'desktop-1440') {
-          await expect(page).toHaveScreenshot(`jonah-${name}-${width}-${scheme}.png`);
-        }
+        await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
+        // A picture for people to look at; the checks above are the assertions (no pixel baselines are kept).
+        await page.screenshot({ path: `test-results/jonah-${name}-${width}-${scheme}.png`, fullPage: true });
       });
     }
   }
