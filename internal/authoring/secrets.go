@@ -72,7 +72,9 @@ type KnowledgeSources interface {
 // to the factory (knowledge-secret-not-in-scope) and, a warning, does not copy the factory's own
 // repository (knowledge-copies-checkout); a merge station has a repository token to merge
 // with (merge-needs-code-host); and every repository is on a code host the organization lists
-// (repository-host-unlisted). It reads secrets' names and scopes, never a value.
+// (repository-host-unlisted). It warns when an agent that only reads code, or a check, may call
+// GitHub MCP tools that write (github-tools-not-read-only) or whose access is untested
+// (github-tools-unknown). It reads secrets' names and scopes, never a value.
 type SecretsCheck struct {
 	Secrets ports.OrgSecrets
 	// Knowledge lists the organization's knowledge sources (goald wires the knowledge store); nil
@@ -84,6 +86,9 @@ type SecretsCheck struct {
 	// Hosts lists the code hosts the organization added (goald wires the store's ports.CodeHosts);
 	// nil is an organization with the built-in hosts only.
 	Hosts OrgCodeHosts
+	// Tests lists the factory's kept environment tests (goald wires the store's
+	// ports.EnvironmentTests), which the GitHub tools warnings read; nil skips those warnings.
+	Tests EnvironmentTestList
 }
 
 // OrgCodeHosts lists the code hosts the organization of ctx added (ports.CodeHosts' CodeHosts).
@@ -139,6 +144,15 @@ func (c SecretsCheck) Check(ctx context.Context, f *config.Factory) ([]domain.De
 	r.knowledge(sources)
 	r.merge()
 	r.repositoryHosts(hosts)
+
+	if c.Tests != nil {
+		tests, err := c.Tests.List(ctx, domain.FactoryID(f.Metadata.ID))
+		if err != nil {
+			return nil, fmt.Errorf("list environment tests: %w", err)
+		}
+
+		r.gitHubTools(tests)
+	}
 
 	return r.out, nil
 }

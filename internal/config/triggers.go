@@ -144,7 +144,8 @@ var writeRules = []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", 
 // notReadOnly names what of a's tools may not be read-only: the built-in edit, run or subagents
 // groups it allows, its allow rules for those tools, and each MCP server of its environment with a
 // tool it allows (a server whose tools name no mode allows them all). It judges by the definition
-// alone: MCP tool annotations are not kept.
+// alone, so it leaves GitHub's MCP servers out: the secrets check judges those by the readOnlyHint
+// their kept environment tests list (authoring's github-tools-not-read-only).
 func (c *checker) notReadOnly(a Agent) []string {
 	var why []string
 
@@ -164,10 +165,13 @@ func (c *checker) notReadOnly(a Agent) []string {
 		}
 	}
 
-	env := a.Environment
-	if env == "" {
-		env = domain.DefaultEnvironment
-	}
+	return append(why, c.serversNotReadOnly(a.EnvironmentName())...)
+}
+
+// serversNotReadOnly names each MCP server of environment env, but GitHub's, with a tool its file
+// allows.
+func (c *checker) serversNotReadOnly(env string) []string {
+	var why []string
 
 	for _, e := range c.f.environments {
 		if e.Name != env {
@@ -175,6 +179,10 @@ func (c *checker) notReadOnly(a Agent) []string {
 		}
 
 		for _, name := range slices.Sorted(maps.Keys(e.Spec.MCP)) {
+			if e.Spec.MCP[name].GitHub() {
+				continue
+			}
+
 			tools := e.Spec.MCP[name].Tools
 			if len(tools) == 0 || slices.Contains(slices.Collect(maps.Values(tools)), string(domain.ToolModeAllow)) {
 				why = append(why, "mcp "+name)
