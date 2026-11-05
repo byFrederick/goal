@@ -10032,7 +10032,7 @@ components:
           items: { $ref: "#/components/schemas/TemplateSummary" }
     TemplateSummary:
       type: object
-      required: [name, version, title, summary, stations, agents, connectors, changed]
+      required: [name, version, title, summary, stations, agents, connectors, changed, code]
       properties:
         name: { type: string }
         version: { type: integer }
@@ -10044,6 +10044,11 @@ components:
           type: array
           items: { type: string }
         changed: { type: string, description: 'The day the version was made, as in 2026-10-09' }
+        code: { $ref: "#/components/schemas/TemplateCode" }
+    TemplateCode:
+      type: string
+      enum: [none, read, write]
+      description: The code access a template needs; write when its line has a station that merges.
     Template:
       allOf:
         - $ref: "#/components/schemas/TemplateSummary"

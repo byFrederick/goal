@@ -290,7 +290,7 @@ func (h *harness) putTemplate(t *testing.T, name string, version int, files map[
 	t.Helper()
 
 	base := fmt.Sprintf("%s%s/%d/", authoring.TemplatesPrefix, name, version)
-	meta := fmt.Sprintf("title: Acme review v%d\nsummary: Build and review\nchanged: \"2026-10-09\"\n", version)
+	meta := fmt.Sprintf("title: Acme review v%d\nsummary: Build and review\nchanged: \"2026-10-09\"\ncode: read\n", version)
 
 	if _, err := h.objects.Put(t.Context(), base+"template.yaml", []byte(meta)); err != nil {
 		t.Fatal(err)
@@ -325,14 +325,15 @@ func TestDefinitions_Templates(t *testing.T) {
 	h.putTemplate(t, "acme-review", 2, acmeFiles)
 
 	list := decode[gen.TemplateList](t, h.request(t, http.MethodGet, "/v1/orgs/acme/templates", "", nil), http.StatusOK)
-	if len(list.Templates) != 1 || list.Templates[0].Version != 2 || list.Templates[0].Stations != 3 || list.Templates[0].Connectors == nil {
-		t.Errorf("templates %s, want acme-review v2 with 3 stations", body(t, list))
+	if len(list.Templates) != 1 || list.Templates[0].Version != 2 || list.Templates[0].Stations != 3 || list.Templates[0].Connectors == nil ||
+		list.Templates[0].Code != gen.TemplateCodeRead {
+		t.Errorf("templates %s, want acme-review v2 with 3 stations and code read", body(t, list))
 	}
 
 	v1 := decode[gen.Template](t, h.request(t, http.MethodGet, "/v1/orgs/acme/templates/acme-review?version=1", "", nil), http.StatusOK)
 
 	var model sections
-	if err := json.Unmarshal(v1.Model, &model); err != nil || v1.Version != 1 || model.Line["stations"] == nil {
+	if err := json.Unmarshal(v1.Model, &model); err != nil || v1.Version != 1 || v1.Code != gen.TemplateCodeRead || model.Line["stations"] == nil {
 		t.Errorf("template v1 %s (%v), want its model's stations", body(t, v1), err)
 	}
 

@@ -172,6 +172,7 @@ export type Comparison = Schemas["Comparison"];
 export type FileChange = Schemas["FileChange"];
 export type Change = Schemas["Change"];
 export type TemplateSummary = Schemas["TemplateSummary"];
+export type TemplateCode = Schemas["TemplateCode"];
 export type Template = Schemas["Template"];
 export type DefinitionEvent = Schemas["DefinitionEvent"];
 // Builder (D §8): editor metadata and the skills.sh skills catalog.

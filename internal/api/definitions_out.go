@@ -262,7 +262,7 @@ func templateSummaryOut(t authoring.TemplateSummary) gen.TemplateSummary {
 
 	return gen.TemplateSummary{
 		Name: t.Name, Version: t.Version, Title: t.Title, Summary: t.Summary, Stations: t.Stations, Agents: t.Agents,
-		Connectors: connectors, Changed: t.Changed,
+		Connectors: connectors, Changed: t.Changed, Code: gen.TemplateCode(t.Code),
 	}
 }
 
@@ -276,6 +276,6 @@ func templateOut(t authoring.Template) (gen.Template, error) {
 
 	return gen.Template{
 		Name: s.Name, Version: s.Version, Title: s.Title, Summary: s.Summary, Stations: s.Stations, Agents: s.Agents,
-		Connectors: s.Connectors, Changed: s.Changed, Description: t.Description, Model: model,
+		Connectors: s.Connectors, Changed: s.Changed, Code: s.Code, Description: t.Description, Model: model,
 	}, nil
 }

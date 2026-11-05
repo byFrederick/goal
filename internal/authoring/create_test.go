@@ -34,8 +34,8 @@ func TestCreateFactory_TemplateRewritesIdentityAndKeepsComments(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	h.putTemplate(t, "acme-review", "1", "title: Acme review\n", acmeFiles(acmeYAML))
-	h.putTemplate(t, "acme-review", "2", "title: Acme review\nsummary: Build and review\nchanged: \"2026-10-09\"\n",
+	h.putTemplate(t, "acme-review", "1", "title: Acme review\ncode: none\n", acmeFiles(acmeYAML))
+	h.putTemplate(t, "acme-review", "2", "title: Acme review\nsummary: Build and review\nchanged: \"2026-10-09\"\ncode: none\n",
 		acmeFiles(strings.Replace(acmeYAML, "wip: 1", "wip: 2", 1)))
 
 	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{
@@ -194,7 +194,7 @@ func TestCreateFactory_BlankUsesTheBlankTemplate(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	h.putTemplate(t, authoring.BlankTemplate, "1", "title: Blank\n", acmeFiles(acmeYAML))
+	h.putTemplate(t, authoring.BlankTemplate, "1", "title: Blank\ncode: none\n", acmeFiles(acmeYAML))
 
 	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: blankName, Start: authoring.Start{Kind: authoring.StartBlank}})
 	if err != nil {
