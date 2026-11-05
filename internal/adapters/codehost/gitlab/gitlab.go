@@ -2,9 +2,10 @@
 // from the goald host for one project on a GitLab host of the organization's list
 // (domain.CodeRepository) and the access token that signs in to it (ADR 0041, decision 7).
 //
-// It reads merge requests, merges them, rebases them on their target, deletes branches and
-// checks what a token can do in one project or in all of a group's or user's, nothing else. A
-// project on a host of another kind, and a merge request URL that is not the project's
+// It reads merge requests, merges them, rebases them on their target, deletes branches, reads a
+// branch's head and the commits between two commits with their files, and checks what a token can
+// do in one project or in all of a group's or user's, nothing else. A project on a host of another
+// kind, and a merge request URL that is not the project's
 // (https://<host>/<namespace>/<project>/-/merge_requests/<iid>), are refused before anything is
 // sent. The API is the host's domain.CodeHostAPIBase, https://<host>/api/v4. A merge
 // names the head SHA it was asked for, so GitLab refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
@@ -51,6 +52,11 @@ type Config struct {
 
 const (
 	maxBodyBytes = 1 << 20
+	// maxDiffBytes bounds the answers of the compare and commit diff APIs, which carry every
+	// changed file's diff.
+	maxDiffBytes = 32 << 20
+	// maxDiffFiles is the files of one commit Compare reads: GitLab's largest page.
+	maxDiffFiles = 100
 	methodSquash = "squash"
 	methodMerge  = "merge"
 )
@@ -321,14 +327,15 @@ func (cl *Client) DeleteBranch(ctx context.Context, repo domain.CodeRepository, 
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
 func (cl *Client) call(ctx context.Context, m mergeRequest, method, path string, body, out any) (int, string, error) {
-	status, msg, _, err := cl.exchange(ctx, m, method, path, body, out)
+	status, msg, _, err := cl.exchange(ctx, m, method, path, body, out, maxBodyBytes)
 
 	return status, msg, err
 }
 
-// exchange is call that also returns the answer's headers.
-func (cl *Client) exchange(ctx context.Context, m mergeRequest, method, path string, body, out any) (int, string, http.Header, error) {
-	status, msg, header, err := cl.send(ctx, m, method, path, body, out)
+// exchange is call that also returns the answer's headers, with its answer bounded by limit
+// bytes; a longer answer is an error.
+func (cl *Client) exchange(ctx context.Context, m mergeRequest, method, path string, body, out any, limit int64) (int, string, http.Header, error) {
+	status, msg, header, err := cl.send(ctx, m, method, path, body, out, limit)
 
 	scrub := func(s string) string { return strings.ReplaceAll(s, m.token, "[redacted]") }
 
@@ -339,7 +346,7 @@ func (cl *Client) exchange(ctx context.Context, m mergeRequest, method, path str
 	return status, scrub(msg), header, err
 }
 
-func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string, body, out any) (int, string, http.Header, error) {
+func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string, body, out any, limit int64) (int, string, http.Header, error) {
 	var reader io.Reader
 
 	if body != nil {
@@ -370,9 +377,13 @@ func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string,
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBodyBytes))
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
 	if err != nil {
 		return 0, "", nil, fmt.Errorf("read answer: %w", err)
+	}
+
+	if int64(len(raw)) > limit {
+		return 0, "", nil, fmt.Errorf("read answer (%d): longer than %d bytes", res.StatusCode, limit)
 	}
 
 	if len(bytes.TrimSpace(raw)) == 0 || !strings.Contains(res.Header.Get("Content-Type"), "json") {
@@ -416,14 +427,128 @@ func problem(raw []byte) string {
 	return p.Error
 }
 
-// BranchHead implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) BranchHead(context.Context, domain.CodeRepository, string, string) (string, error) {
-	return "", fmt.Errorf("gitlab: branch head: %w", errors.ErrUnsupported)
+// get reads path into out, its answer bounded by limit: a 404 is ports.ErrNotFound.
+func (cl *Client) get(ctx context.Context, m mergeRequest, path string, out any, limit int64) error {
+	status, msg, _, err := cl.exchange(ctx, m, http.MethodGet, path, nil, out, limit)
+
+	switch {
+	case err != nil:
+		return err
+	case status == http.StatusNotFound:
+		return fmt.Errorf("GitLab answered 404: %s: %w", msg, ports.ErrNotFound)
+	case status != http.StatusOK:
+		return fmt.Errorf("GitLab answered %d: %s", status, msg)
+	}
+
+	return nil
 }
 
-// Compare implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
-func (cl *Client) Compare(context.Context, domain.CodeRepository, string, string, string) (ports.Comparison, error) {
-	return ports.Comparison{}, fmt.Errorf("gitlab: compare: %w", errors.ErrUnsupported)
+// BranchHead implements ports.CodeHost with GET /projects/:id/repository/branches/:branch, the
+// branch escaped as one path segment. An empty branch is the project's default_branch, read
+// first with GET /projects/:id.
+func (cl *Client) BranchHead(ctx context.Context, repo domain.CodeRepository, token, branch string) (string, error) {
+	m, err := cl.check(repo, token)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.Contains(branch, "..") {
+		return "", fmt.Errorf("branch head %q: not a branch name", branch)
+	}
+
+	if branch == "" {
+		var p struct {
+			DefaultBranch string `json:"default_branch"`
+		}
+
+		if err := cl.get(ctx, m, m.path(""), &p, maxBodyBytes); err != nil {
+			return "", fmt.Errorf("default branch of %s: %w", repo, err)
+		}
+
+		if p.DefaultBranch == "" {
+			return "", fmt.Errorf("default branch of %s: GitLab named none", repo)
+		}
+
+		branch = p.DefaultBranch
+	}
+
+	var b struct {
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+
+	if err := cl.get(ctx, m, m.path("/repository/branches/"+url.PathEscape(branch)), &b, maxBodyBytes); err != nil {
+		return "", fmt.Errorf("head of %s in %s: %w", branch, repo, err)
+	}
+
+	if b.Commit.ID == "" {
+		return "", fmt.Errorf("head of %s in %s: GitLab named no commit", branch, repo)
+	}
+
+	return b.Commit.ID, nil
+}
+
+// Compare implements ports.CodeHost with GET /projects/:id/repository/compare (from base to
+// head, from their merge base: straight=false), which lists every commit in one answer. GitLab
+// lists them oldest first (it walks the range in reverse), though its API docs do not say so;
+// Compare keeps that order and the first ports.MaxCompareCommits of them. The compare answer
+// carries the diffs of all commits together, so each kept commit's diff is read once more
+// (GET /projects/:id/repository/commits/:sha/diff, its first 100 files, not paged past): up to
+// ports.MaxCompareCommits+1 requests in all, and any failure fails the whole call.
+func (cl *Client) Compare(ctx context.Context, repo domain.CodeRepository, token, base, head string) (ports.Comparison, error) {
+	m, err := cl.check(repo, token)
+	if err != nil {
+		return ports.Comparison{}, err
+	}
+
+	for _, ref := range []string{base, head} {
+		if ref == "" || strings.Contains(ref, "..") {
+			return ports.Comparison{}, fmt.Errorf("compare %q...%q in %s: not a commit", base, head, repo)
+		}
+	}
+
+	var cmp struct {
+		Commits []struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+		} `json:"commits"`
+	}
+
+	query := url.Values{"from": {base}, "to": {head}, "straight": {"false"}}
+	if err := cl.get(ctx, m, m.path("/repository/compare?"+query.Encode()), &cmp, maxDiffBytes); err != nil {
+		return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: %w", base, head, repo, err)
+	}
+
+	commits := cmp.Commits[:min(len(cmp.Commits), ports.MaxCompareCommits)]
+	out := ports.Comparison{Commits: make([]ports.Commit, 0, len(commits)), Truncated: len(cmp.Commits) > len(commits)}
+
+	for _, cj := range commits {
+		var diffs []struct {
+			OldPath string `json:"old_path"`
+			NewPath string `json:"new_path"`
+		}
+
+		path := m.path("/repository/commits/" + url.PathEscape(cj.ID) + "/diff?per_page=" + strconv.Itoa(maxDiffFiles))
+		if err := cl.get(ctx, m, path, &diffs, maxDiffBytes); err != nil {
+			return ports.Comparison{}, fmt.Errorf("compare %s...%s in %s: files of %s: %w", base, head, repo, cj.ID, err)
+		}
+
+		// A rename or a delete changed its old path too.
+		files := make([]string, 0, len(diffs))
+		for _, d := range diffs {
+			for _, f := range []string{d.NewPath, d.OldPath} {
+				if f != "" && !slices.Contains(files, f) {
+					files = append(files, f)
+				}
+			}
+		}
+
+		subject, _, _ := strings.Cut(cj.Message, "\n")
+		out.Commits = append(out.Commits, ports.Commit{SHA: cj.ID, Subject: strings.TrimSpace(subject), Files: files})
+	}
+
+	return out, nil
 }
 
 // Repositories implements ports.CodeHost: GitLab does not support it yet, and nothing is sent.
@@ -600,7 +725,7 @@ func (cl *Client) countProjects(ctx context.Context, m mergeRequest, listing, qu
 			ID int64 `json:"id"`
 		}
 
-		status, msg, header, err := cl.exchange(ctx, m, http.MethodGet, listing+"?simple=true&per_page=100&page="+strconv.Itoa(page)+query, nil, &projects)
+		status, msg, header, err := cl.exchange(ctx, m, http.MethodGet, listing+"?simple=true&per_page=100&page="+strconv.Itoa(page)+query, nil, &projects, maxBodyBytes)
 
 		switch {
 		case err != nil:
