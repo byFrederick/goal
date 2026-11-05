@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -13,8 +14,11 @@ const (
 	repoDeep = "https://gitlab.example.com/acme/platform/*"
 
 	// entryAPI is the repoAPI entry's name and keyAPI its key.
-	entryAPI = "api"
-	keyAPI   = "github.com/acme/api"
+	entryAPI  = "api"
+	entryLabs = "labs"
+	keyAPI    = "github.com/acme/api"
+	// keyLabsWeb is a repository under the repoAll pattern.
+	keyLabsWeb = "github.com/acme-labs/web"
 )
 
 // repoLine is fileLine with runtime.repositories; def names the default entry ("" for none).
@@ -22,7 +26,7 @@ func repoLine(def string) Line {
 	l := fileLine()
 	l.Runtime.Repositories = []RepositoryEntry{
 		{Name: entryAPI, URL: repoAPI, Access: "write", Default: def == entryAPI},
-		{Name: "labs", URL: repoAll, Access: "read"},
+		{Name: entryLabs, URL: repoAll, Access: "read"},
 		{Name: "platform", URL: repoDeep, Access: "write"},
 	}
 
@@ -50,12 +54,61 @@ func TestFile_RepositoriesMatchEntries(t *testing.T) {
 		"https://gitlab.example.com/acme/platform/infra/deploy.git", "github.com/acme-labs/web/")
 
 	want := []ItemRepository{
-		{Repo: "github.com/acme-labs/web", Joined: JoinedFiling},
+		{Repo: keyLabsWeb, Joined: JoinedFiling},
 		{Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1},
 		{Repo: "gitlab.example.com/acme/platform/infra/deploy", Joined: JoinedFiling, Ordinal: 2},
 	}
 	if !reflect.DeepEqual(n.Repositories, want) {
 		t.Errorf("Repositories = %+v\nwant %+v", n.Repositories, want)
+	}
+
+	// An entry's name gives its repository, and owner/name or group/sub/name without a host is
+	// matched under each entry's host; values that resolve to the same key count once.
+	n = fileRepos(t, repoLine(""), "Acme-Labs/web", entryAPI, "acme/platform/infra/deploy", "acme/api", "github.com/acme/api")
+
+	want = []ItemRepository{
+		{Repo: keyLabsWeb, Joined: JoinedFiling},
+		{Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1},
+		{Repo: "gitlab.example.com/acme/platform/infra/deploy", Joined: JoinedFiling, Ordinal: 2},
+	}
+	if !reflect.DeepEqual(n.Repositories, want) {
+		t.Errorf("names and owner/name: Repositories = %+v\nwant %+v", n.Repositories, want)
+	}
+}
+
+// Every refusal quotes the value as the person gave it; naming an owner pattern's entry says to
+// name owner/name, and an owner/name more than one host covers lists the hosts.
+func TestFile_RepositoriesRefusalNamesTheValue(t *testing.T) {
+	t.Parallel()
+
+	ambiguous := repoLine("")
+	ambiguous.Runtime.Repositories = append(ambiguous.Runtime.Repositories,
+		RepositoryEntry{Name: "mirror", URL: "https://git.example.com/acme/*", Access: "read"})
+
+	for name, tc := range map[string]struct {
+		line Line
+		repo string
+		want []string
+	}{
+		"unknown name":  {repoLine(""), "Web", []string{`"Web"`}},
+		"pattern entry": {repoLine(""), entryLabs, []string{`"labs"`, "owner/name"}},
+		"unknown owner": {repoLine(""), "Acme/Web", []string{`"Acme/Web"`}},
+		"unknown host":  {repoLine(""), "GitHub.com/acme/web", []string{`"GitHub.com/acme/web"`}},
+		"two hosts":     {ambiguous, "acme/api", []string{`"acme/api"`, gitHubDotCom, hostGitAcme}},
+		"owner only":    {repoLine(""), "acme-labs", []string{`"acme-labs"`}},
+		"malformed":     {repoLine(""), "https://x:y@github.com/acme/api", []string{`"https://x:y@github.com/acme/api"`}},
+	} {
+		_, err := File(tc.line, FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: []string{tc.repo}})
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: File(%q) = %v; want ErrInvalid", name, tc.repo, err)
+			continue
+		}
+
+		for _, w := range tc.want {
+			if !strings.Contains(err.Error(), w) {
+				t.Errorf("%s: error %q does not name %s", name, err, w)
+			}
+		}
 	}
 }
 
@@ -70,14 +123,17 @@ func TestFile_RepositoriesRefused(t *testing.T) {
 	}
 
 	for name, repos := range map[string][]string{
-		"not covered":       {"github.com/acme/web"},
-		"other host":        {"gitlab.com/acme/api"},
-		"owner only":        {"github.com/acme-labs"},
-		"a pattern":         {"github.com/acme-labs/*"},
-		"credentials":       {"https://x:y@github.com/acme/api"},
-		"not https":         {"http://github.com/acme/api"},
-		"blank":             {" "},
-		"more than the cap": eleven,
+		"not covered":        {"github.com/acme/web"},
+		"other host":         {"gitlab.com/acme/api"},
+		"owner only":         {"github.com/acme-labs"},
+		"a pattern":          {"github.com/acme-labs/*"},
+		"credentials":        {"https://x:y@github.com/acme/api"},
+		"not https":          {"http://github.com/acme/api"},
+		"blank":              {" "},
+		"owner/name nowhere": {"acme/web"},
+		"a pattern's name":   {entryLabs},
+		"an unknown name":    {"mobile-app"},
+		"more than the cap":  eleven,
 	} {
 		_, err := File(repoLine(entryAPI), FileRequest{Origin: OriginPerson, Title: "t", At: fileAt, Repositories: repos})
 		if !errors.Is(err, ErrInvalid) {
@@ -137,7 +193,7 @@ func TestResolveItemRepositories_OldItemUsesDefault(t *testing.T) {
 		t.Error("First of none = ok; want none")
 	}
 
-	rows := []ItemRepository{{Repo: "github.com/acme-labs/web", Joined: JoinedFiling}}
+	rows := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling}}
 	if got := ResolveItemRepositories(rows, repoLine(entryAPI)); !reflect.DeepEqual(got, ItemRepositories(rows)) {
 		t.Errorf("own rows = %+v; want %+v", got, rows)
 	}
@@ -168,11 +224,8 @@ func TestResolveItemRepositories_FirstIsFirstNamed(t *testing.T) {
 	}
 }
 
-// keyLabsWeb is a repository the labs owner pattern covers, and ownerAPI keyAPI's owner/name.
-const (
-	keyLabsWeb = "github.com/acme-labs/web"
-	ownerAPI   = "acme/api"
-)
+// ownerAPI is keyAPI's owner/name.
+const ownerAPI = "acme/api"
 
 // A trigger's or a check's repository value resolves against the line's entries, owner
 // patterns included and in any case: an entry's name, host/owner/name, an https URL or
@@ -196,7 +249,7 @@ func TestTriggerRepositories_Resolve(t *testing.T) {
 	}{
 		{"an entry's name", repoLine(""), entryAPI, "", keyAPI},
 		{"an entry's name in any case", repoLine(""), "API", "", keyAPI},
-		{"an owner pattern's name", repoLine(""), "labs", "", ""},
+		{"an owner pattern's name", repoLine(""), entryLabs, "", ""},
 		{"host/owner/name", repoLine(""), "GitHub.com/acme/api", "", keyAPI},
 		{"an https URL with .git", repoLine(""), "https://github.com/acme/API.git", "", keyAPI},
 		{"owner/name", repoLine(""), ownerAPI, SenderGitHub, keyAPI},

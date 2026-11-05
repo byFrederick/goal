@@ -89,10 +89,10 @@ func defaultRepository(l Line) []ItemRepository {
 	return []ItemRepository{{Repo: key, Joined: JoinedDefault}}
 }
 
-// fileRepositories are the repositories a filed item starts with: each of named, matched
-// against l's entries and joined filing, once and in the order named, or the default entry's
-// when none is named. A repository no entry covers, one that is not host/owner/name and more
-// than MaxItemRepositories are ErrInvalid.
+// fileRepositories are the repositories a filed item starts with: each of named, resolved
+// against l's entries (resolveRepository) and joined filing, once and in the order named, or the
+// default entry's when none is named. A value that resolves to no repository, or to more than
+// one, and more than MaxItemRepositories are ErrInvalid.
 func fileRepositories(l Line, named []string) ([]ItemRepository, error) {
 	if len(named) == 0 {
 		return defaultRepository(l), nil
@@ -101,13 +101,9 @@ func fileRepositories(l Line, named []string) ([]ItemRepository, error) {
 	var out []ItemRepository
 
 	for _, raw := range named {
-		key, ok := RepositoryKey(raw)
-		if !ok {
-			return nil, fmt.Errorf("repository %q is not https://host/owner/name or host/owner/name: %w", raw, ErrInvalid)
-		}
-
-		if !slices.ContainsFunc(l.Runtime.Repositories, func(e RepositoryEntry) bool { return e.Covers(key) }) {
-			return nil, fmt.Errorf("repository %s is not one of the factory's runtime.repositories: %w", key, ErrInvalid)
+		key, err := resolveRepository(l.Runtime.Repositories, raw)
+		if err != nil {
+			return nil, err
 		}
 
 		if !slices.ContainsFunc(out, func(r ItemRepository) bool { return r.Repo == key }) {
@@ -120,6 +116,71 @@ func fileRepositories(l Line, named []string) ([]ItemRepository, error) {
 	}
 
 	return out, nil
+}
+
+// resolveRepository is the key (RepositoryKey) of the repository raw names among entries, in
+// this order: an entry's name, which must be an entry of one repository; an https URL or
+// host/owner/name an entry covers; or owner/name (group/sub/name) without a host, matched under
+// each entry's host, which must give exactly one key. Every refusal is ErrInvalid and quotes raw.
+func resolveRepository(entries []RepositoryEntry, raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if !strings.Contains(name, "/") {
+		i := slices.IndexFunc(entries, func(e RepositoryEntry) bool { return e.Name == name })
+		if i < 0 {
+			return "", fmt.Errorf("repository %q is not an entry of the factory's runtime.repositories: %w", raw, ErrInvalid)
+		}
+
+		key, ok := RepositoryKey(entries[i].URL)
+		if !ok {
+			return "", fmt.Errorf("repository %q is an entry for an owner's repositories; name owner/name instead: %w", raw, ErrInvalid)
+		}
+
+		return key, nil
+	}
+
+	if key, ok := RepositoryKey(name); ok && coveredBy(entries, key) {
+		return key, nil
+	}
+
+	if strings.Contains(name, "://") {
+		return "", fmt.Errorf("repository %q is not an https://host/owner/name one of the factory's runtime.repositories covers: %w", raw, ErrInvalid)
+	}
+
+	return resolveWithoutHost(entries, raw, name)
+}
+
+// resolveWithoutHost is the one key that owner/name (name, without a host) has under the hosts
+// of entries; ErrInvalid quoting raw when none covers it, or listing the hosts when several do.
+func resolveWithoutHost(entries []RepositoryEntry, raw, name string) (string, error) {
+	var keys, hosts []string
+
+	for _, e := range entries {
+		segs, ok := repositorySegments(e.URL)
+		if !ok {
+			continue
+		}
+
+		key, ok := RepositoryKey(segs[0] + "/" + name)
+		if !ok || !e.Covers(key) || slices.Contains(keys, key) {
+			continue
+		}
+
+		keys, hosts = append(keys, key), append(hosts, segs[0])
+	}
+
+	switch len(keys) {
+	case 1:
+		return keys[0], nil
+	case 0:
+		return "", fmt.Errorf("repository %q is not one of the factory's runtime.repositories: %w", raw, ErrInvalid)
+	default:
+		return "", fmt.Errorf("repository %q is on more than one of the factory's hosts (%s); name host/owner/name: %w", raw, strings.Join(hosts, ", "), ErrInvalid)
+	}
+}
+
+// coveredBy reports whether one of entries covers key.
+func coveredBy(entries []RepositoryEntry, key string) bool {
+	return slices.ContainsFunc(entries, func(e RepositoryEntry) bool { return e.Covers(key) })
 }
 
 // RepositoryKey is one repository's normalized host/owner/name in lower case, without .git:
