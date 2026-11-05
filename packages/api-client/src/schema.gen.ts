@@ -2382,6 +2382,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/factories/{factory}/repositories/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a token against a repository or an owner's repositories, for a factory
+         * @description Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+         */
+        post: operations["testFactoryRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/repositories/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a factory's kept repository tests
+         * @description The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+         */
+        get: operations["listFactoryRepositoryTests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/factories/{factory}/webhooks": {
         parameters: {
             query?: never;
@@ -8781,6 +8831,49 @@ export interface components {
             read: components["schemas"]["RepositoryCheck"];
             push: components["schemas"]["RepositoryCheck"];
         };
+        FactoryRepositoryTestRequest: {
+            /** @description One repository's https URL, such as https://github.com/acme/app, or an owner pattern, such as https://github.com/acme/* */
+            url: string;
+            secret: components["schemas"]["SecretName"];
+            /**
+             * @description The access the factory's entry asks for, which picks the summary and the warning
+             * @enum {string}
+             */
+            access: "read" | "write";
+        };
+        FactoryRepositoryTestList: {
+            tests: components["schemas"]["FactoryRepositoryTest"][];
+        };
+        FactoryRepositoryTest: {
+            /** @description The repository tested, as its lower-case host/owner/name, or host/owner/* for an owner pattern */
+            url: string;
+            /** @enum {string} */
+            access: "read" | "write";
+            secret: components["schemas"]["SecretName"];
+            /**
+             * Format: date-time
+             * @description When it was tested
+             */
+            at: string;
+            /** @description false when the host gave no answer: summary then starts with couldn't test */
+            tested: boolean;
+            /** @description Whether the token can do what access asks: read, or read and push */
+            ok: boolean;
+            /** @description One line, such as Can read, Can read 48 repositories in acme or Can read and push */
+            summary: string;
+            /** @description For a read entry whose token can also push: Goal won't push, but agents could. Use a read-only token. */
+            warning?: string;
+            /** @description For a write entry: the host reports no pull-request permission, so Goal can't check it */
+            note?: string;
+            read: components["schemas"]["RepositoryCheck"];
+            push: components["schemas"]["RepositoryCheck"];
+            /** @description For an owner pattern: how many of the owner's repositories the token can read */
+            readable?: number;
+            /** @description For an owner pattern: how many of them it can push to */
+            pushable?: number;
+            /** @description For an owner pattern: the count stopped at 1000, so there may be more */
+            truncated?: boolean;
+        };
         NotificationSettings: {
             /** @description The name of the secret holding the Slack bot token that sends the organization's Slack notifications, slack-bot by convention; null while Slack is off */
             slack_secret: string | null;
@@ -12707,6 +12800,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepositoryTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testFactoryRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactoryRepositoryTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The result, as kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryRepositoryTest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listFactoryRepositoryTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryRepositoryTestList"];
                 };
             };
             default: components["responses"]["Problem"];

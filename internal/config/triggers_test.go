@@ -411,6 +411,7 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 
 	readOnlyEnv := baseEnvironment + "  mcp:\n    pager: { url: \"https://pager.example.com/mcp\", tools: { \"*\": off, \"get_*\": ask } }\n"
 	openEnv := baseEnvironment + "  mcp:\n    pager: { url: \"https://pager.example.com/mcp\", tools: { \"get_*\": allow } }\n"
+	gitHubEnv := baseEnvironment + "  mcp:\n    github: { url: \"https://api.githubcopilot.com/mcp/\" }\n"
 
 	for _, tt := range []struct {
 		name, doc string
@@ -421,6 +422,7 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 		{"edit allowed", replaced(withCheck("*/5 * * * *", checkAgent, ""), agentPrompt, agentPrompt+"      builtins: { read: allowed, edit: allowed }\n"), "", "builtins.edit"},
 		{"run allowed", replaced(withCheck("*/5 * * * *", checkAgent, ""), agentPrompt, agentPrompt+"      builtins: { run: allowed }\n"), "", "builtins.run"},
 		{"an MCP tool allowed", withCheck("*/5 * * * *", checkAgent, ""), openEnv, "mcp pager"},
+		{"a GitHub server, judged by the secrets check", withCheck("*/5 * * * *", checkAgent, ""), gitHubEnv, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

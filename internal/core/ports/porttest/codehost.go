@@ -38,6 +38,7 @@ type CodeHost struct {
 	access   map[string]ports.RepositoryAccess // repo + " " + token → what RepositoryAccess answers
 	stall    bool                              // RepositoryAccess waits for its context to end
 	tokens   []string                          // the tokens RepositoryAccess was given, in order
+	owners   map[string]ports.OwnerAccess      // host/owner + " " + token → what OwnerAccess answers
 	logins   []string                          // the tokens of the other calls, in order
 }
 
@@ -52,6 +53,20 @@ func (c *CodeHost) SetAccess(repo, token string, a ports.RepositoryAccess) {
 	}
 
 	c.access[repoKey(repo)+" "+token] = a
+}
+
+// SetOwnerAccess makes a what OwnerAccess answers for token in the repositories of owner on the
+// host named host (ignoring case). Any other host, owner or token reads as one the host shows no
+// repositories of.
+func (c *CodeHost) SetOwnerAccess(host, owner, token string, a ports.OwnerAccess) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.owners == nil {
+		c.owners = map[string]ports.OwnerAccess{}
+	}
+
+	c.owners[ownerKey(host, owner)+" "+token] = a
 }
 
 // StallAccess makes RepositoryAccess give no answer until its context ends, as a host that does
@@ -468,6 +483,28 @@ func (c *CodeHost) RepositoryAccess(ctx context.Context, repo domain.CodeReposit
 	}
 
 	return a, nil
+}
+
+// OwnerAccess implements ports.CodeHost from SetOwnerAccess.
+func (c *CodeHost) OwnerAccess(_ context.Context, host domain.CodeHost, token, owner string) (ports.OwnerAccess, error) {
+	if host.Host == "" || token == "" || owner == "" {
+		return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: no host, token or owner: %w", owner, domain.ErrInvalid)
+	}
+
+	c.mu.Lock()
+	a, ok := c.owners[ownerKey(host.Host, owner)+" "+token]
+	c.mu.Unlock()
+
+	if !ok {
+		return ports.OwnerAccess{Reason: "the host shows the token no repositories of " + owner}, nil
+	}
+
+	return a, nil
+}
+
+// ownerKey is the lower-case host/owner of an owner's repositories.
+func ownerKey(host, owner string) string {
+	return strings.ToLower(host + "/" + owner)
 }
 
 // LoginTokens are the tokens the pull request and repository calls were made with, in order,

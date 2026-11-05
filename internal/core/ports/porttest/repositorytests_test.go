@@ -1,0 +1,38 @@
+package porttest_test
+
+import (
+	"fmt"
+	"sync/atomic"
+	"testing"
+
+	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
+	"github.com/byFrederick/goal/internal/core/ports/porttest/repositorytesttest"
+)
+
+// The fake runs the repository tests suite.
+func TestRepositoryTests_Conformance(t *testing.T) {
+	t.Parallel()
+
+	var ids atomic.Int64
+
+	next := func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) }
+
+	repositorytesttest.Run(t, func(t *testing.T) repositorytesttest.Harness {
+		t.Helper()
+
+		tests := porttest.NewRepositoryTests()
+
+		return repositorytesttest.Harness{
+			Tests:  tests,
+			NewOrg: func(*testing.T) domain.OrgID { return domain.OrgID(next()) },
+			NewFactory: func(_ *testing.T, org domain.OrgID) domain.FactoryID {
+				f := domain.FactoryID(next())
+				tests.AddFactory(org, f)
+
+				return f
+			},
+			DeleteFactory: func(_ *testing.T, _ domain.OrgID, f domain.FactoryID) { tests.RemoveFactory(f) },
+		}
+	})
+}

@@ -30,7 +30,7 @@ The factory's name, its purpose from the definition, and its Badge: the colour a
 
 ### Repository
 
-The page shows the repository URL, a chip that says whether the token works, the name of the secret that holds the token, and a Change button. The chip comes from Goal trying to clone and push with the token: "Token works", or "Token fails" with the host's reason. It shows only to people who may create factories, and "Token not tested" says the test could not run, for example because the secret is limited to some factories. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
+The page shows the repository URL, a chip that says whether the token works, the name of the secret that holds the token, and a Change button. The chip comes from Goal asking the host's API whether the token can read the repository and push to it, without running git: "Token works", or "Token fails" with the host's reason. It shows only to people who may create factories, and "Token not tested" says the test could not run, for example because the secret is limited to some factories. Change opens the two fields below in place; edits still save into the draft. With no repository set, the fields show directly.
 
 | Field | Sets | Notes |
 |---|---|---|
