@@ -147,7 +147,7 @@ describe('API keys page', () => {
 
     expect(screen.getByRole('heading', { name: 'From your terminal' })).toBeTruthy();
     expect(screen.getByText('goal login', { exact: false })).toBeTruthy();
-    expect(screen.getByText('goal item create --factory Software', { exact: false })).toBeTruthy();
+    expect(screen.getByText('goal run Software "Fix the flaky test" --detach', { exact: false })).toBeTruthy();
 
     expect(screen.getByRole('heading', { name: 'Goal for other agents' })).toBeTruthy();
     expect(screen.getByText(`${window.location.origin}/mcp`)).toBeTruthy();
