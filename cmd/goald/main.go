@@ -426,7 +426,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	return knowledgeBase{
 		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
-			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
+			Knowledge: kb, Connections: connections, Secrets: secrets, Hosts: store, Uploads: uploads,
 			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers, Keep: keep,
 		}),
 	}

@@ -708,6 +708,12 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 		t.Fatal(err)
 	}
 
+	// The stand-in's host is listed as kind: the fake trusts the list, which CheckCodeHosts would
+	// refuse for an IP address.
+	if _, err := tenancy.SetCodeHosts(ctx, domain.LocalUser, []domain.CodeHost{{Host: h.host(), Kind: domain.CodeHostKind(kind)}}); err != nil {
+		t.Fatal(err)
+	}
+
 	cfg := maps.Clone(config)
 	cfg["code_host"] = kind
 
@@ -717,7 +723,7 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 
 	objects := porttest.NewObjectStore()
 	in := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: kb, Secrets: secrets, Objects: objects, Clock: clock,
+		Knowledge: kb, Secrets: secrets, Hosts: tenancy, Objects: objects, Clock: clock,
 		Readers: map[string]ports.SourceReader{"gitdocs": gitdocs.New(gitdocs.Config{Transport: h.transport(true)})},
 	})
 
