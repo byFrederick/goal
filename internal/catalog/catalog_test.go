@@ -2,6 +2,8 @@ package catalog_test
 
 import (
 	"errors"
+	"maps"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -70,7 +72,7 @@ func TestTemplates_GitHub(t *testing.T) {
 		t.Errorf("github = %+v", gh)
 	}
 
-	r, err := gh.RenderTest(map[string]string{"token": "test-token"}, nil)
+	r, err := gh.RenderTest(map[string]string{tokenSlot: "test-token"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +99,14 @@ func templateNamed(t *testing.T, name string) domain.ToolTemplate {
 	return got[i]
 }
 
+// The GitHub templates' token slot, the value a test puts in it and their host parameter.
+const (
+	tokenSlot = "token"
+	tokenRef  = "{{" + tokenSlot + "}}"
+	testToken = "test-token"
+	hostParam = "host"
+)
+
 // github-read adds gh, GH_TOKEN with a read-only token, the remote MCP server in its read-only
 // mode and the api.github.com test.
 func TestTemplates_GitHubRead(t *testing.T) {
@@ -104,19 +114,23 @@ func TestTemplates_GitHubRead(t *testing.T) {
 
 	gh := templateNamed(t, "github-read")
 
-	if len(gh.Secrets) != 1 || gh.Secrets[0].Slot != "token" || gh.Secrets[0].Suggest != "github-read-token" ||
+	if len(gh.Secrets) != 1 || gh.Secrets[0].Slot != tokenSlot || gh.Secrets[0].Suggest != "github-read-token" ||
 		!strings.Contains(strings.ToLower(gh.Secrets[0].Description), "a read-only fine-grained token") {
 		t.Errorf("secrets = %+v", gh.Secrets)
 	}
 
-	m := gh.MCP["github"]
-	if !slices.Equal(gh.Tools, []string{"gh"}) || gh.Env["GH_TOKEN"] != "{{token}}" || len(gh.Env) != 1 ||
-		m.URL != "https://api.githubcopilot.com/mcp/" || m.Headers["Authorization"] != "Bearer {{token}}" || m.Headers["X-MCP-Readonly"] != "true" {
-		t.Errorf("github-read = %+v", gh)
+	if !slices.Equal(gh.Tools, []string{"gh"}) || !maps.Equal(gh.Env, map[string]string{"GH_TOKEN": tokenRef}) {
+		t.Errorf("tools = %v, env = %v", gh.Tools, gh.Env)
 	}
 
-	r, err := gh.RenderTest(map[string]string{"token": "test-token"}, nil)
-	if err != nil || r.URL != "https://api.github.com/user" || r.Headers["Authorization"] != "Bearer test-token" {
+	m := gh.MCP["github"]
+	if m.URL != "https://api.githubcopilot.com/mcp/" ||
+		!maps.Equal(m.Headers, map[string]string{"Authorization": "Bearer " + tokenRef, "X-MCP-Readonly": "true"}) {
+		t.Errorf("mcp = %+v", m)
+	}
+
+	r, err := gh.RenderTest(map[string]string{tokenSlot: testToken}, nil)
+	if err != nil || r.URL != "https://api.github.com/user" || r.Headers["Authorization"] != "Bearer "+testToken {
 		t.Errorf("rendered = %#v, %v", r, err)
 	}
 }
@@ -139,38 +153,29 @@ func TestTemplates_GitHubEnterprise(t *testing.T) {
 
 			tpl := templateNamed(t, tc.name)
 
-			got, err := tpl.Resolve(map[string]string{"host": "ghe.example.com"})
+			got, err := tpl.Resolve(map[string]string{hostParam: "ghe.example.com"})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if got.Env["GH_HOST"] != "ghe.example.com" || got.Env["GH_ENTERPRISE_TOKEN"] != "{{token}}" {
-				t.Errorf("env = %v", got.Env)
-			}
-
-			if _, ok := got.Env["GH_TOKEN"]; ok {
-				t.Errorf("env = %v; want no GH_TOKEN", got.Env)
+			if !maps.Equal(got.Env, map[string]string{"GH_HOST": "ghe.example.com", "GH_ENTERPRISE_TOKEN": tokenRef}) {
+				t.Errorf("env = %v; want GH_HOST and GH_ENTERPRISE_TOKEN, no GH_TOKEN", got.Env)
 			}
 
 			m := got.MCP["github"]
-			if m.URL != "" || !slices.Equal(m.Command, tc.command) || m.Env["GITHUB_PERSONAL_ACCESS_TOKEN"] != "{{token}}" ||
-				m.Env["GITHUB_HOST"] != "https://ghe.example.com" {
+			if m.URL != "" || !slices.Equal(m.Command, tc.command) ||
+				!maps.Equal(m.Env, map[string]string{"GITHUB_PERSONAL_ACCESS_TOKEN": tokenRef, "GITHUB_HOST": "https://ghe.example.com"}) {
 				t.Errorf("mcp = %+v", m)
 			}
 
-			r, err := got.RenderTest(map[string]string{"token": "test-token"}, nil)
-			if err != nil || r.Method != "GET" || r.URL != "https://ghe.example.com/api/v3/user" {
+			r, err := got.RenderTest(map[string]string{tokenSlot: testToken}, nil)
+			if err != nil || r.Method != http.MethodGet || r.URL != "https://ghe.example.com/api/v3/user" {
 				t.Errorf("rendered = %#v, %v", r, err)
 			}
 
-			for _, params := range []map[string]string{nil, {"host": "github.com"}} {
-				same, err := tpl.Resolve(params)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				if !reflect.DeepEqual(same, tpl) {
-					t.Errorf("Resolve(%v) = %+v; want the default lines", params, same)
+			for _, params := range []map[string]string{nil, {hostParam: "github.com"}} {
+				if same, err := tpl.Resolve(params); err != nil || !reflect.DeepEqual(same, tpl) {
+					t.Errorf("Resolve(%v) = %+v, %v; want the default lines", params, same, err)
 				}
 			}
 		})
@@ -184,14 +189,14 @@ func TestResolve_RefusesValue(t *testing.T) {
 	tpl := templateNamed(t, "github")
 
 	for _, params := range []map[string]string{
-		{"host": "evil.example.com/x"}, {"host": "https://x"}, {"host": ""}, {"host": "a b"}, {"region": "eu"},
+		{hostParam: "evil.example.com/x"}, {hostParam: "https://x"}, {hostParam: ""}, {hostParam: "a b"}, {"region": "eu"},
 	} {
 		if _, err := tpl.Resolve(params); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("Resolve(%v) = %v; want ErrInvalid", params, err)
 		}
 	}
 
-	if _, err := tpl.Resolve(map[string]string{"host": "ghe.example.com:8443"}); err != nil {
+	if _, err := tpl.Resolve(map[string]string{hostParam: "ghe.example.com:8443"}); err != nil {
 		t.Errorf("Resolve with a port = %v", err)
 	}
 }
@@ -207,7 +212,7 @@ func TestTemplates_RenderTestWithEnv(t *testing.T) {
 
 	jira := got[slices.IndexFunc(got, func(tpl domain.ToolTemplate) bool { return tpl.Name == "jira" })]
 
-	r, err := jira.RenderTest(map[string]string{"token": "test-token"}, map[string]string{"JIRA_URL": "https://example.atlassian.net"})
+	r, err := jira.RenderTest(map[string]string{tokenSlot: "test-token"}, map[string]string{"JIRA_URL": "https://example.atlassian.net"})
 	if err != nil {
 		t.Fatal(err)
 	}

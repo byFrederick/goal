@@ -8649,8 +8649,32 @@ export interface components {
             description: string;
             /** @description Its secret slots, in order */
             secrets: components["schemas"]["TemplateSecret"][];
+            /** @description Its non-secret parameters, in order. adds and test are the lines for every parameter's default; they never refer to a parameter */
+            parameters?: components["schemas"]["TemplateParameter"][];
             adds: components["schemas"]["TemplateAdds"];
             test: components["schemas"]["TemplateTest"] | null;
+        };
+        /** @description A non-secret value a template takes, such as a host; otherwise's lines may refer to it as {{name}} */
+        TemplateParameter: {
+            name: string;
+            title: string;
+            description: string;
+            default: string;
+            otherwise?: components["schemas"]["TemplateOtherwise"];
+        };
+        /** @description The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field */
+        TemplateOtherwise: {
+            tools?: string[];
+            env?: {
+                [key: string]: string;
+            };
+            files?: {
+                [key: string]: string;
+            };
+            mcp?: {
+                [key: string]: components["schemas"]["TemplateMCP"];
+            };
+            test?: components["schemas"]["TemplateTest"];
         };
         TemplateSecret: {
             /** @description The {{slot}} its values refer to */
@@ -8718,6 +8742,10 @@ export interface components {
             };
             /** @description The template's plain env values to use instead of its own, by name */
             env?: {
+                [key: string]: string;
+            };
+            /** @description The template's parameters' values, by name: a host name with an optional :port. A parameter without one takes its default */
+            parameters?: {
                 [key: string]: string;
             };
         };

@@ -50,6 +50,15 @@ An environment can set `image` to run its box from an image of your own. A box o
 
 In the Definition, the **Environments** section has a tab per environment, and **Add a tool** adds an MCP server, a command-line tool or an API from a catalog, or a custom one, to the draft. You pick a secret or create one in place, and the page shows the lines it adds before you add them. The same file is under `environments/` in the YAML view. Remote MCP servers are tested with the draft's secrets, and the result is shown, never required to publish.
 
+The catalog has two GitHub templates. Each adds `gh`, the token as `GH_TOKEN`, GitHub's MCP server as `github` and a test of the token against `https://api.github.com/user`:
+
+- **`github-read`** is for agents that only read. It runs the MCP server in its read-only mode (the `X-MCP-Readonly: true` header) and suggests a read-only fine-grained token, `github-read-token`.
+- **`github`** keeps every tool of the MCP server, with `merge_pull_request` and `delete_*` set to `ask`, so a merge asks first. It suggests `github-token`.
+
+Both take a `host` parameter, `github.com` by default. A GitHub Enterprise Server host, such as `ghe.example.com`, swaps the lines: `GH_HOST` is the host and the token is `GH_ENTERPRISE_TOKEN` instead of `GH_TOKEN`; the MCP server is the local `github-mcp-server stdio` (with `--read-only` for `github-read`) with `GITHUB_HOST=https://ghe.example.com`; and the test asks `https://ghe.example.com/api/v3/user`. A host takes only letters, digits, dots, hyphens and a `:port`. `GET /v1/catalog` lists each template's parameters, and an environment test of a template takes their values as `parameters`. Add a tool writes the `github.com` lines for now. The environment test doesn't run stdio servers yet, so it reports the local server as untested.
+
+A token an environment file names, such as `GH_TOKEN`, is the environment's: every run of an agent in that environment gets it, and Goal can't narrow what the token may do. The repository token is separate. It reaches git's credential store only, and never the agent's environment unless an environment file names it.
+
 ## The repository and the model
 
 Two kinds of secret are named in the factory's runtime, not in an environment file:

@@ -10882,10 +10882,33 @@ components:
           type: array
           description: Its secret slots, in order
           items: { $ref: "#/components/schemas/TemplateSecret" }
+        parameters:
+          type: array
+          description: "Its non-secret parameters, in order. adds and test are the lines for every parameter's default; they never refer to a parameter"
+          items: { $ref: "#/components/schemas/TemplateParameter" }
         adds: { $ref: "#/components/schemas/TemplateAdds" }
         test:
           allOf: [{ $ref: "#/components/schemas/TemplateTest" }]
           nullable: true
+    TemplateParameter:
+      type: object
+      description: "A non-secret value a template takes, such as a host; otherwise's lines may refer to it as {{name}}"
+      required: [name, title, description, default]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        description: { type: string }
+        default: { type: string }
+        otherwise: { $ref: "#/components/schemas/TemplateOtherwise" }
+    TemplateOtherwise:
+      type: object
+      description: "The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field"
+      properties:
+        tools: { type: array, items: { type: string } }
+        env: { type: object, additionalProperties: { type: string } }
+        files: { type: object, additionalProperties: { type: string } }
+        mcp: { type: object, additionalProperties: { $ref: "#/components/schemas/TemplateMCP" } }
+        test: { $ref: "#/components/schemas/TemplateTest" }
     TemplateSecret:
       type: object
       required: [slot, title, description, suggest]
@@ -10946,6 +10969,10 @@ components:
         env:
           type: object
           description: The template's plain env values to use instead of its own, by name
+          additionalProperties: { type: string }
+        parameters:
+          type: object
+          description: "The template's parameters' values, by name: a host name with an optional :port. A parameter without one takes its default"
           additionalProperties: { type: string }
     RepositoryTestRequest:
       type: object

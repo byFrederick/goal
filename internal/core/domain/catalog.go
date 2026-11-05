@@ -111,7 +111,7 @@ var (
 	// parameterValue is a parameter's value: a host name of letters, digits, dots and hyphens,
 	// with an optional :port, so it can't change a URL's scheme or path.
 	parameterValue = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?$`)
-	testMethods  = []string{"GET", "HEAD", "POST"}
+	testMethods    = []string{"GET", "HEAD", "POST"}
 )
 
 // Slots are the slots value refers to, in order, each once.
