@@ -170,56 +170,6 @@ func plainHTTPS(raw string) (*url.URL, bool) {
 	return u, true
 }
 
-// covers reports whether entry e covers every repository t names: one repository covers itself,
-// an owner pattern every repository and pattern below its owner.
-func (e repoURL) covers(t repoURL) bool {
-	if !e.pattern {
-		return !t.pattern && e == t
-	}
-
-	return t.owner == e.owner || strings.HasPrefix(t.owner, e.owner+"/")
-}
-
-// specificity orders the entries that match: one repository before an owner pattern, and a
-// deeper owner before the one it is in.
-func (e repoURL) specificity() int {
-	n := strings.Count(e.owner, "/")
-	if !e.pattern {
-		n += 1000
-	}
-
-	return n
-}
-
-// tokenEntry is the entry whose token a run uses for the repositories t names: the most specific
-// that covers them, and, for an agent that only reads, the most specific read entry when one
-// does (ADR 0041 decision 3); false when no entry covers them.
-func tokenEntry(entries []RepositoryEntry, t repoURL, reads bool) (RepositoryEntry, bool) {
-	var (
-		best  RepositoryEntry
-		score = -1
-		found bool
-	)
-
-	for _, e := range entries {
-		u, ok := parseRepoURL(e.URL)
-		if !ok || !u.covers(t) {
-			continue
-		}
-
-		s := u.specificity()
-		if reads && e.Access == AccessRead {
-			s += 10000 // a read entry before any write entry
-		}
-
-		if s > score {
-			best, score, found = e, s, true
-		}
-	}
-
-	return best, found
-}
-
 // repositories checks runtime.repositories, agents' code and what a line that merges needs.
 func (c *checker) repositories() {
 	rt := c.f.Spec.Runtime
@@ -299,6 +249,7 @@ func (c *checker) mergesNeedWrite() {
 // matches: the agent would get that entry's token, which can push.
 func (c *checker) readerTokens() {
 	entries := c.f.Spec.Runtime.RepositoryEntries()
+	picks := lineEntries(entries)
 
 	for i, a := range c.f.Spec.Agents {
 		if c.f.AgentCode(a) != CodeRead {
@@ -306,12 +257,11 @@ func (c *checker) readerTokens() {
 		}
 
 		for _, e := range entries {
-			u, ok := parseRepoURL(e.URL)
-			if !ok || e.Access != AccessWrite {
+			if _, ok := parseRepoURL(e.URL); !ok || e.Access != AccessWrite {
 				continue
 			}
 
-			if got, ok := tokenEntry(entries, u, true); ok && got.Access == AccessWrite {
+			if got, ok := domain.TokenEntry(picks, e.URL, true); ok && got.Access == AccessWrite {
 				c.warnf(checkRepositories, codeReaderWriteToken, at("spec", keyAgents, i, "code"),
 					"%s only reads, but the only token for %s can write.", a.Name, e.Name)
 			}

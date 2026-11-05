@@ -63,7 +63,9 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	for _, a := range s.Agents {
-		l.Agents = append(l.Agents, agent(a, sources))
+		ag := agent(a, sources)
+		ag.Code = f.AgentCode(a)
+		l.Agents = append(l.Agents, ag)
 	}
 
 	var fl Flow
@@ -480,12 +482,17 @@ func (r Runtime) lineRepositories() (domain.Repository, []domain.RepositoryEntry
 		}
 	}
 
-	var entries []domain.RepositoryEntry
-	for _, e := range r.RepositoryEntries() {
-		entries = append(entries, domain.RepositoryEntry{
+	return repo, lineEntries(r.RepositoryEntries())
+}
+
+// lineEntries are entries as the line has them.
+func lineEntries(entries []RepositoryEntry) []domain.RepositoryEntry {
+	var out []domain.RepositoryEntry
+	for _, e := range entries {
+		out = append(out, domain.RepositoryEntry{
 			Name: e.Name, URL: e.URL, Token: e.Token, Access: e.Access, Default: e.Default,
 		})
 	}
 
-	return repo, entries
+	return out
 }

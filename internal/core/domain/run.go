@@ -216,6 +216,9 @@ type RunRequest struct {
 	Repository Repository
 	// Branch and Base are the run's branch and the branch it is cut from (TaskClaims).
 	Branch, Base string
+	// Code is a station run's repositories, logins and read-only prefixes (Line.RunCode), whose
+	// picked entry tokens prepare gets on a version on secrets; zero for every other run.
+	Code RunCode
 	// ModelConnection is the connection that gives a run on connections its model access.
 	ModelConnection string
 	// Connections are the organization connections the agent gets besides the model's.

@@ -182,6 +182,89 @@ func TestRun_AgentHearsWhatItsWorkspaceHolds(t *testing.T) {
 	}
 }
 
+// The workspace note lists the item's repositories with where each is and whether this agent may
+// push to it, names the item's branch, and says how to open any other repository the factory's
+// entries cover; an item with no repositories hears how to open one alone.
+func TestRun_AgentHearsWhatItsWorkspaceHolds_Repositories(t *testing.T) {
+	t.Parallel()
+
+	const branch = "`goal/acme-api/1-add-a-version-command`"
+
+	open := "To open another repository the factory's entries cover (" + repoURL + ", " + repoAcmeOwners + "), clone it with plain git into /repos/<owner>/<name>"
+
+	tests := []struct {
+		name  string
+		code  string
+		repos []string
+		want  []string
+		not   []string
+	}{
+		{
+			name: "two repositories", code: domain.CodeWrite, repos: []string{entryApp, "acme/lib"},
+			want: []string{
+				"The item's repositories, each on branch " + branch,
+				"- https://" + gitHost + "/acme/app at /workspace: you may push",
+				"- " + repoAcmeLib + " at /repos/acme/lib: read only",
+				open,
+			},
+		},
+		{
+			name: "an agent that only reads", code: domain.CodeRead, repos: []string{entryApp, "acme/lib"},
+			want: []string{
+				"- https://" + gitHost + "/acme/app at /workspace: read only",
+				"- " + repoAcmeLib + " at /repos/acme/lib: read only",
+				open,
+			},
+			not: []string{"you may push"},
+		},
+		{
+			name: "no repositories", code: domain.CodeWrite,
+			want: []string{"## Workspace", open},
+			not:  []string{"The item's repositories", "Your working directory is a clone"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			line := entriesLine(tt.code)
+			if tt.repos == nil {
+				// No default entry and no shorthand: the item starts with none.
+				line.Runtime.Repository = domain.Repository{}
+				line.Runtime.Repositories[0].Default = false
+			}
+
+			h := newHarness(t, line, porttest.Succeed(`{}`))
+			h.addSecrets(t)
+			h.addSecret(t, secTickets, ticketsKeyValue)
+			h.addSecret(t, secAcmeRead, acmeReadValue)
+			it := h.submitWith(t, "Add a version command", tt.repos...)
+
+			h.step(t)
+
+			feedback := h.oneAgentRun(t, it).Env["GOAL_FEEDBACK"]
+			for _, s := range tt.want {
+				if !strings.Contains(feedback, s) {
+					t.Errorf("feedback %q does not say %q", feedback, s)
+				}
+			}
+
+			for _, s := range tt.not {
+				if strings.Contains(feedback, s) {
+					t.Errorf("feedback %q says %q", feedback, s)
+				}
+			}
+
+			for _, s := range []string{githubTokenValue, acmeReadValue, "GOAL_REPOSITORY_TOKEN"} {
+				if strings.Contains(feedback, s) {
+					t.Errorf("feedback %q names a repository credential", feedback)
+				}
+			}
+		})
+	}
+}
+
 // Without a repository, notes or a rejection goald adds nothing to the brief.
 func TestRun_NoFeedbackWhenThereIsNothingToAdd(t *testing.T) {
 	t.Parallel()

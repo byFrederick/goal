@@ -71,6 +71,9 @@ type claimed struct {
 	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
 	// default branch, as for every item that is not a part on an integration branch.
 	branch, base string
+	// code is what the runs get of the item's repositories and the factory's entries, decided at
+	// the claim's start (Line.RunCode).
+	code domain.RunCode
 }
 
 // webTools are the Claude Code tools of the builtins.web group, which the organization policy's
@@ -229,7 +232,7 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 }
 
 // admitted finds the claim's agent (agentFor), applies the organization policy to it
-// (applyPolicy), decides its runs' branch and base (integrate) and reports whether it may run;
+// (applyPolicy), decides its runs' branch and base (integrate) and code (runCode) and reports whether it may run;
 // when not, the item is blocked (no agent, the policy could not be read, or the base could not
 // be decided) or waits for a person (the policy refuses its model).
 func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
@@ -252,6 +255,10 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 
 	if err == nil && refusal == "" {
 		err = e.integrate(ctx, log, c)
+	}
+
+	if err == nil && refusal == "" {
+		c.code, err = e.runCode(ctx, c.line, c.agent, c.item.ID)
 	}
 
 	switch {
@@ -550,7 +557,7 @@ func (c claimed) request(brief string) domain.RunRequest {
 	r := domain.RunRequest{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
-		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
+		Repository: rt.Repository, Branch: c.branch, Base: c.base, Code: c.code, ModelConnection: rt.ModelConnection,
 		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
 
@@ -682,11 +689,18 @@ func joinParts(parts ...string) string {
 }
 
 // workspaceNote tells the agent what its working directory holds, as the sandbox's prepare left
-// it, and whether git can push from it; nothing without a repository.
+// it, and whether git can push from it, then the item's repositories and how to open another
+// (codeNote); nothing for a factory with no code.
 func workspaceNote(c claimed, b *box, env runEnv) string {
 	r := c.line.Runtime.Repository
+	code := codeNote(c)
+
 	if r.URL == "" {
-		return ""
+		if code == "" {
+			return ""
+		}
+
+		return "## Workspace\n\n" + code
 	}
 
 	state := "a new branch from the default branch"
@@ -703,8 +717,8 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 		host = u.Host
 	}
 
-	note := fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
-		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host))
+	note := joinParts(fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
+		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host)), code)
 	// A landing root lands only at its landing station; anywhere else (build, after the landing
 	// was rejected) it is reworked on the integration branch, so a landing note there would have
 	// the agent check the landing instead of fixing what the rejection asks for.
@@ -732,6 +746,53 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 	return note + fmt.Sprintf("\n\nThis part builds on its assembly's integration branch `%s`, not the default branch: "+
 		"open your pull request into `%s`. The integration branch takes in the default branch %s (refresh: %s).",
 		c.base, c.base, refreshWhen[refresh], refresh)
+}
+
+// codeNote lists the item's repositories, each with where it is and whether this agent may push
+// to it, on the item's branch, and says how to open any other repository the factory's entries
+// cover (ADR 0041 decisions 3 and 5); the list is left out for an item with none, and both for a
+// line with no entries.
+func codeNote(c claimed) string {
+	entries := c.line.Runtime.Repositories
+	if len(entries) == 0 {
+		return ""
+	}
+
+	var list string
+
+	if len(c.code.Clones) > 0 {
+		var sb strings.Builder
+
+		fmt.Fprintf(&sb, "The item's repositories, each on branch `%s` where a run already pushed it, else on the default branch:",
+			cmp.Or(c.branch, c.item.Branch()))
+
+		for _, r := range c.code.Clones {
+			access := "read only"
+			if r.Write {
+				access = "you may push"
+			}
+
+			fmt.Fprintf(&sb, "\n- %s at %s: %s", r.URL, r.Path, access)
+		}
+
+		list = sb.String()
+	}
+
+	urls := make([]string, len(entries))
+	for i, e := range entries {
+		urls[i] = e.URL
+	}
+
+	push := "Push only to a repository whose entry writes."
+	if c.agent.Code == domain.CodeRead {
+		push = "You only read code: never push to any repository."
+	}
+
+	open := fmt.Sprintf("To open another repository the factory's entries cover (%s), clone it with plain git into "+
+		"%s/<owner>/<name>, such as `git clone https://<host>/<owner>/<name> %s/<owner>/<name>`. %s",
+		strings.Join(urls, ", "), domain.ReposPath, domain.ReposPath, push)
+
+	return joinParts(list, open)
 }
 
 // refreshWhen says when an integration branch takes in the default branch, by its refresh.

@@ -114,6 +114,17 @@ func (e *Engine) repositoryKeys(ctx context.Context, item domain.ItemID) ([]stri
 	return domain.ItemRepositoryKeys(rows), nil
 }
 
+// runCode is what agent's runs on item get of its repositories, resolved at run start (an item
+// with no rows uses the default entry) under l's entries.
+func (e *Engine) runCode(ctx context.Context, l domain.Line, agent domain.AgentSpec, item domain.ItemID) (domain.RunCode, error) {
+	rows, err := e.store.ItemRepositories(ctx, item)
+	if err != nil {
+		return domain.RunCode{}, fmt.Errorf("repositories of %s: %w", item, err)
+	}
+
+	return l.RunCode(agent, domain.ResolveItemRepositories(rows, l)), nil
+}
+
 // trimPart is p with the space around its title, lane, brief and each need trimmed.
 func trimPart(p domain.NewPart) domain.NewPart {
 	p.Title, p.Lane, p.Brief = strings.TrimSpace(p.Title), strings.TrimSpace(p.Lane), strings.TrimSpace(p.Brief)
