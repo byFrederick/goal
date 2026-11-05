@@ -86,6 +86,8 @@ type Engine interface {
 	TryTrigger(ctx context.Context, f domain.FactoryID, trigger, firing string, by domain.Actor) (domain.TriggerTry, error)
 	// TryCheck queues a try check of the trigger (ADR 0040 decision 19).
 	TryCheck(ctx context.Context, f domain.FactoryID, trigger string, by domain.Actor) (domain.TriggerFiring, error)
+	// ClearCheckState deletes the trigger's saved check state (ADR 0040 decision 19).
+	ClearCheckState(ctx context.Context, f domain.FactoryID, trigger string, by domain.Actor) error
 }
 
 // Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its

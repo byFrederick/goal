@@ -664,7 +664,8 @@ func (h *harness) check(t *testing.T, at time.Time, answer, reason string) {
 		}
 
 		res = domain.CheckResult{
-			State: domain.CheckDone, CostUSD: 0.03, Decisions: a.Decisions(), Items: items, Limits: domain.CheckLimits{PerCheck: 2}, At: at.Add(time.Minute),
+			State: domain.CheckDone, CostUSD: 0.03, Decisions: a.Decisions(), Saved: a.State, Items: items, Limits: domain.CheckLimits{PerCheck: 2},
+			At: at.Add(time.Minute),
 		}
 	}
 
@@ -1016,5 +1017,111 @@ func TestIntakeTrigger_CheckedEvent(t *testing.T) {
 
 	if got := d.Events[0].Outcome; got != gen.IntakeEventOutcomeChecked {
 		t.Errorf("event outcome = %s; want checked", got)
+	}
+}
+
+// The trigger's read serves a check trigger's memory: empty lists and a null state before any
+// check, then its open items, closed keys and saved state with when it was saved; a trigger
+// without a check has none.
+func TestIntakeTrigger_Memory(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	path := intakePath + "/triggers/" + incidentsName
+
+	var raw map[string]json.RawMessage
+	if code := h.call(t, http.MethodGet, path, "", &raw); code != http.StatusOK {
+		t.Fatalf("trigger = %d; want 200", code)
+	}
+
+	if want := `{"open":0,"open_items":[],"closed":0,"closed_keys":[],"state":null,"checked_up_to":null}`; !sameJSON(t, raw["memory"], want) {
+		t.Errorf("memory before a check = %s; want %s", raw["memory"], want)
+	}
+
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "INC-1"}}`, "")
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, path, "", &d); code != http.StatusOK || d.Memory == nil {
+		t.Fatalf("trigger = %d %+v; want 200 with its memory", code, d)
+	}
+
+	m := d.Memory
+	if m.Open != 1 || len(m.OpenItems) != 1 || m.OpenItems[0].Key != "INC-1" || m.OpenItems[0].Title != "API down" || m.Closed != 0 || len(m.ClosedKeys) != 0 {
+		t.Errorf("memory = %+v; want INC-1 open and no closed key", m)
+	}
+
+	if m.State == nil || (*m.State)["since"] != "INC-1" || m.CheckedUpTo == nil || !m.CheckedUpTo.Equal(oct(22, 4).Add(time.Minute)) {
+		t.Errorf("state = %v, checked up to %v; want the check's, at %s", m.State, m.CheckedUpTo, oct(22, 4).Add(time.Minute))
+	}
+
+	var plain map[string]json.RawMessage
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+nightlyName, "", &plain); code != http.StatusOK || plain["memory"] != nil {
+		t.Errorf("trigger without a check = %d, memory %s; want 200 without memory", code, plain["memory"])
+	}
+}
+
+// sameJSON reports whether got holds the same JSON value as want.
+func sameJSON(t *testing.T, got json.RawMessage, want string) bool {
+	t.Helper()
+
+	var a, b any
+	if json.Unmarshal(got, &a) != nil || json.Unmarshal([]byte(want), &b) != nil {
+		return false
+	}
+
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+
+	return string(x) == string(y)
+}
+
+// Clear answers 204, empties the saved state and writes a trigger.state_cleared entry; it answers
+// 409 while a check is queued, 422 for a trigger without a check, 404 for an unknown one and 403
+// to a viewer.
+func TestTriggerChecks_ClearState(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	statePath := intakePath + "/triggers/" + incidentsName + "/state"
+
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "INC-1"}}`, "")
+
+	if code := h.call(t, http.MethodDelete, statePath, "", nil); code != http.StatusNoContent {
+		t.Fatalf("clear = %d; want 204", code)
+	}
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+incidentsName, "", &d); code != http.StatusOK || d.Memory == nil ||
+		d.Memory.State != nil || d.Memory.CheckedUpTo != nil || d.Memory.Open != 1 {
+		t.Errorf("trigger after Clear = %d %+v; want no state and the open item kept", code, d.Memory)
+	}
+
+	cleared, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerStateCleared})
+	if err != nil || len(cleared) != 1 || cleared[0].TargetID != incidentsName {
+		t.Errorf("trigger.state_cleared = %+v, %v; want one naming %s", cleared, err, incidentsName)
+	}
+
+	if code := h.call(t, http.MethodPost, incidentsPath, "", nil); code != http.StatusAccepted {
+		t.Fatalf("try = %d; want 202", code)
+	}
+
+	for _, c := range []struct {
+		what, path string
+		status     int
+		code       string
+	}{
+		{"a clear while a check is queued", statePath, http.StatusConflict, "still-checking"},
+		{"a trigger without a check", intakePath + "/triggers/" + nightlyName + "/state", http.StatusUnprocessableEntity, "no-check"},
+		{"an unknown trigger", unknownTrigger + "/state", http.StatusNotFound, codeTriggerNotFound},
+	} {
+		if code, p := problemOfCall(t, h, http.MethodDelete, c.path, ""); code != c.status || deref(p.Code) != c.code {
+			t.Errorf("%s: %d %s, want %d %s", c.what, code, deref(p.Code), c.status, c.code)
+		}
+	}
+
+	h.as(acmeMember(domain.FactoryViewer))
+
+	if code, p := problemOfCall(t, h, http.MethodDelete, statePath, ""); code != http.StatusForbidden || deref(p.Code) != "forbidden" {
+		t.Errorf("a viewer's clear = %d %s, want 403 forbidden", code, deref(p.Code))
 	}
 }

@@ -1764,7 +1764,7 @@ export interface paths {
         };
         /**
          * One trigger with this week's results and its recent events
-         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+         * @description The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its memory: the open items and closed keys its checks are given and the state they saved (ADR 0040 decision 19). Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
          */
         get: operations["getIntakeTrigger"];
         put?: never;
@@ -1828,6 +1828,33 @@ export interface paths {
          */
         post: operations["tryTriggerCheck"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear the state a check trigger saved, so its next check starts with none
+         * @description Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done check saved (getIntakeTrigger's memory.state), so its next check is given none. The trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running, because it would save its state again when it finishes; 422 no-check for a trigger without check.
+         */
+        delete: operations["clearTriggerState"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6464,6 +6491,7 @@ export interface components {
             };
             /** @description Its 20 newest events, newest first */
             events: components["schemas"]["IntakeEvent"][];
+            memory?: components["schemas"]["TriggerCheckMemory"];
         };
         IntakeEvent: {
             /** @description The firing's id */
@@ -6491,6 +6519,49 @@ export interface components {
             reason: string | null;
             /** @description How many schedule instants a missed event covers; 0 for any other outcome */
             missed: number;
+        };
+        /** @description What a check trigger carries from one check to the next (ADR 0040 decision 19, the Remembers row of its page); present only for a trigger with a check. Every key, title and reason comes from the check's agent or the source it read: text to show as text, never markup. */
+        TriggerCheckMemory: {
+            /** @description How many of the items it filed are open (neither done nor cancelled) */
+            open: number;
+            /** @description Its newest open items, at most 50, newest first */
+            open_items: components["schemas"]["TriggerCheckOpenItem"][];
+            /** @description How many of its keys' items closed in the last 7×24 hours */
+            closed: number;
+            /** @description The keys whose items closed in the last 7×24 hours, at most 50, newest first; the next check does not file them again */
+            closed_keys: components["schemas"]["TriggerCheckClosedKey"][];
+            /** @description The JSON object its last done check saved for the next one (at most 4 KiB); null when none is saved */
+            state: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Format: date-time
+             * @description When the check that saved the state finished; null without a saved state
+             */
+            checked_up_to: string | null;
+        };
+        TriggerCheckOpenItem: {
+            /** @description The source's own id it was filed for */
+            key: string;
+            /** @description The item's ref, #<number> */
+            ref: string;
+            title: string;
+            /** @description The item's state */
+            state: string;
+        };
+        TriggerCheckClosedKey: {
+            key: string;
+            /** @description The closed item's ref, #<number> */
+            ref: string;
+            /** @enum {string} */
+            how: "done" | "cancelled";
+            /** @description The reason given when it closed; empty for none */
+            why: string;
+            /**
+             * Format: date-time
+             * @description When it closed
+             */
+            at: string;
         };
         TriggerCheckList: {
             checks: components["schemas"]["TriggerCheck"][];
@@ -11723,6 +11794,32 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TriggerCheck"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearTriggerState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+                /** @description The trigger's name in the current definition */
+                trigger: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

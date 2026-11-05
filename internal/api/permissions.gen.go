@@ -62,6 +62,7 @@ var operationScopes = map[string]string{
 	"clearAndon":                 "andon:manage",
 	"clearItemStart":             "item:create",
 	"clearSignupDomain":          "org:signup_domain",
+	"clearTriggerState":          "definition:edit",
 	"compareVersions":            "factory:read",
 	"createAPIKey":               "api_key:manage",
 	"createConnection":           "connection:manage",

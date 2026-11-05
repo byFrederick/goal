@@ -3,6 +3,7 @@ package api
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -298,7 +299,68 @@ func (s *server) GetIntakeTrigger(ctx context.Context, req gen.GetIntakeTriggerR
 		out.Events = append(out.Events, intakeEvent(e))
 	}
 
+	if t.Check != nil {
+		m, err := s.intake.CheckMemory(ctx, l.FactoryID, t.Name, s.clock.Now())
+		if err != nil {
+			return nil, err
+		}
+
+		if out.Memory, err = checkMemory(m); err != nil {
+			return nil, err
+		}
+	}
+
 	return out, nil
+}
+
+// checkMemory is a check trigger's memory as the API answers it: lists never null, and a null
+// state and time without a saved state.
+func checkMemory(m domain.CheckMemory) (*gen.TriggerCheckMemory, error) {
+	out := &gen.TriggerCheckMemory{
+		Open: m.Open, Closed: m.Closed,
+		OpenItems: make([]gen.TriggerCheckOpenItem, 0, len(m.OpenItems)), ClosedKeys: make([]gen.TriggerCheckClosedKey, 0, len(m.ClosedKeys)),
+	}
+
+	for _, o := range m.OpenItems {
+		out.OpenItems = append(out.OpenItems, gen.TriggerCheckOpenItem{Key: o.Key, Ref: o.Ref, Title: o.Title, State: o.State})
+	}
+
+	for _, c := range m.ClosedKeys {
+		out.ClosedKeys = append(out.ClosedKeys, gen.TriggerCheckClosedKey{Key: c.Key, Ref: c.Ref, How: gen.TriggerCheckClosedKeyHow(c.How), Why: c.Why, At: c.At})
+	}
+
+	if len(m.State) > 0 && string(m.State) != "null" {
+		var state map[string]any
+		if err := json.Unmarshal(m.State, &state); err != nil {
+			return nil, fmt.Errorf("saved state: %w", err)
+		}
+
+		out.State = &state
+	}
+
+	if !m.CheckedUpTo.IsZero() {
+		out.CheckedUpTo = new(m.CheckedUpTo)
+	}
+
+	return out, nil
+}
+
+func (s *server) ClearTriggerState(ctx context.Context, req gen.ClearTriggerStateRequestObject) (gen.ClearTriggerStateResponseObject, error) {
+	f, err := s.factory(ctx, req.Factory)
+	if err != nil {
+		return nil, err
+	}
+
+	by, err := actorOf(ctx, "clear a check's state")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.engine.ClearCheckState(ctx, f.Line().FactoryID, req.Trigger, by); err != nil {
+		return nil, err
+	}
+
+	return gen.ClearTriggerState204Response{}, nil
 }
 
 func (s *server) TryIntakeTrigger(ctx context.Context, req gen.TryIntakeTriggerRequestObject) (gen.TryIntakeTriggerResponseObject, error) {
