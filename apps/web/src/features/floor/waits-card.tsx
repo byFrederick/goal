@@ -148,8 +148,8 @@ function WhatIf({
   const article = /^[aeiou]/.test(name) ? 'an' : 'a';
 
   return (
-    <div className="flex flex-col gap-3 rounded-cell bg-panel p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-cell bg-panel p-4">
+      <div className="flex min-w-40 flex-1 flex-col gap-1">
         <p className="m-0 text-body font-semibold text-ink">
           With a {ordinal(candidate.slots + 1)} {name} agent
         </p>

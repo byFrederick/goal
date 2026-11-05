@@ -15,7 +15,7 @@ interface ContentProps {
   /** What takes focus on open (a field, the safe choice); otherwise Radix's first focusable, the close button. */
   initialFocus?: RefObject<HTMLElement | null>;
   /** Called as the dialog closes; preventDefault keeps focus from returning to what opened it. */
-  onCloseAutoFocus?: (e: Event) => void;
+  onCloseAutoFocus?: ((e: Event) => void) | undefined;
   /**
    * false: only the dialog's own buttons close it (no close button, Escape or click outside), for
    * a dialog whose content is lost on closing, such as a secret shown once.

@@ -39,6 +39,9 @@ vi.mock('sonner', () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // phoneWidth() sets a matchMedia that must not narrow the next test: jsdom has none.
+  // @ts-expect-error restoring the jsdom default
+  delete window.matchMedia;
 });
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 2, role: null };
@@ -704,6 +707,27 @@ describe('Needs you on a phone', () => {
 
     expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /Alerts/ })).toBeTruthy();
+  });
+
+  it('shows only the list, with no entry beside it and no Approve button', async () => {
+    phoneWidth();
+    renderPage();
+
+    expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+  });
+
+  it('leaves J, K and A alone while only the list shows, so a key never acts on an entry out of sight', async () => {
+    phoneWidth();
+    const { router } = renderPage();
+    await screen.findByRole('list', { name: /Waiting on you/ });
+
+    for (const key of ['j', 'k', 'a', 'd']) fireEvent.keyDown(document.body, { key });
+
+    expect(router.state.location.href).not.toContain('entry=');
+    expect(approveItem).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 

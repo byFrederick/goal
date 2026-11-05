@@ -19,6 +19,20 @@ const versionRow = (page: Page, n: number) =>
     .getByRole('listitem')
     .filter({ has: page.getByText(`v${n}`, { exact: true }) });
 
+/**
+ * Waits for what loads or fades in to settle. The kept tests cross-fade in from their skeleton, and axe reads
+ * text that is half faded as low contrast; a scan of the settled page is the one a person sees.
+ */
+async function settled(page: Page) {
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await page.evaluate(() =>
+    Promise.race([
+      Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null))),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]),
+  );
+}
+
 async function openReview(page: Page, search = '') {
   await page.goto(`${definition}/review${search}`);
   await expect(page.getByRole('region', { name: 'Checks' })).toBeVisible();
@@ -26,7 +40,7 @@ async function openReview(page: Page, search = '') {
 
 test('Review is accessible and fits the screen; the copy says runs finish on v8', async ({ page }) => {
   await openReview(page);
-  await expect(page.getByRole('region', { name: 'Checks' })).toContainText('passed, 1 problem');
+  await expect(page.getByRole('region', { name: 'Checks' })).toContainText('passed, 2 problems');
   await expect(page.getByRole('heading', { name: 'Publish v9' })).toBeVisible();
   await expect(page.getByText('3 changes', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Changes to factory.yaml' })).toContainText('@@ Line: build station');
@@ -36,6 +50,7 @@ test('Review is accessible and fits the screen; the copy says runs finish on v8'
   );
   await expect(page.getByText('What happens to work in progress')).toBeVisible();
   await expect(versionRow(page, 8)).toContainText('Live');
+  await settled(page);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -54,12 +69,17 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await expect(alert).toContainText('Line: station spec: unknown agent "ghost"');
   await expect(publishButton(page)).toHaveAttribute('aria-disabled', 'true');
   await expect(publishButton(page)).toHaveAccessibleDescription('Fix 1 problem first. Your draft stays saved.');
+  await settled(page);
   await expectAccessible(page);
 
-  // The fix button in YAML puts the agent back.
-  await page.getByRole('group', { name: 'Editor view' }).getByRole('radio', { name: 'YAML' }).click();
-  await problems(page).getByRole('button', { name: 'Set agent to spec-writer' }).click();
-  await expect(problems(page)).not.toContainText('ghost');
+  // The fix button in the Line section puts the agent back. (The YAML editor offers it too, under the line;
+  // yaml.spec.ts covers that.)
+  await page
+    .getByRole('link', { name: /^Line, / })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Set agent to spec-writer' }).first().click();
+  await expect(page.getByRole('combobox', { name: 'Who works at Spec' })).toHaveText(/spec-writer/);
 
   await reviewLink(page).click();
   await expect(alert).toHaveCount(0);
@@ -68,7 +88,8 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await publishButton(page).click();
 
   await expectToast(page, 'goal v9 published');
-  await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v9 is running.');
+  // The card keeps the publish's check until the page is left: "v9 is published and running" (MOTION.md, publish succeeds).
+  await expect(page.getByRole('region', { name: 'Publish' })).toContainText('v9 is published and running.');
   await expect(versionRow(page, 9)).toContainText('Build also runs pnpm test');
   await expect(versionRow(page, 9)).toContainText('Live');
   await expect(status(page)).toContainText('v9 runs now.');
@@ -86,7 +107,7 @@ test('after a publish the editor reads no draft that is gone', async ({ page }) 
 
   await publishButton(page).click();
   await expectToast(page, 'goal v9 published');
-  await expect(page.getByRole('region', { name: 'Publish' })).toContainText('No draft. v9 is running.');
+  await expect(page.getByRole('region', { name: 'Publish' })).toContainText('v9 is published and running.');
   await page
     .getByRole('link', { name: /^Line, / })
     .first()
@@ -109,6 +130,7 @@ test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page })
   await versionRow(page, 7).getByRole('button', { name: 'Restore v7…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Make v7 the running version?' });
   await expect(dialog).toContainText('v8 stops taking new runs; your draft stays open.');
+  await settled(page);
   await expectAccessible(page);
   await dialog.getByRole('button', { name: 'Restore v7' }).click();
   await expect(dialog).toBeHidden();
@@ -128,6 +150,7 @@ test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page })
   await page.getByRole('button', { name: 'Compare v8' }).click();
   const v8Changes = page.getByRole('region', { name: 'Changes from v7 to v8' });
   await expect(v8Changes.getByRole('listitem').first()).toBeVisible();
+  await settled(page);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -135,10 +158,12 @@ test('Compare v7, Restore v7, then discard the draft (flow 5)', async ({ page })
 test('items waiting at a station the draft removes ask where they go', async ({ page }) => {
   await openYaml(page);
   await replaceLine(page, '- { id: inbox, name: Inbox, kind: queue }', '');
+  // The check runs on the saved draft: leave only once it has read the removal.
+  await expect(problems(page)).toContainText('removes station inbox');
   await reviewLink(page).click();
 
   await expect(page.getByRole('alert').filter({ hasText: 'removes station inbox' })).toContainText(
-    'removes station inbox, where 2 items are waiting',
+    'removes station inbox, where 3 items are waiting',
   );
   await expect(publishButton(page)).toHaveAttribute('aria-disabled', 'true');
   await page.getByRole('combobox', { name: 'Items waiting at inbox, which v9 removes' }).selectOption('spec');
@@ -157,7 +182,11 @@ test('Review lists the draft’s kept tests with their results, and Versions sho
   const build = kept.getByRole('listitem').filter({ hasText: 'Build' });
   await expect(build.getByText('Passed')).toBeVisible();
   await expect(build.getByText('Failed')).toBeVisible();
-  for (const chip of ['Helped', 'Worse', 'No change', 'Watching']) {
+  // Review lists the last four versions: v8 is watched, v6 helped and v5 changed nothing. The one that got worse
+  // (v4, mock/jonah.ts goalWatches) is on the full list.
+  for (const chip of ['Helped', 'No change', 'Watching']) {
     await expect(history(page).getByText(chip, { exact: true }).first()).toBeVisible();
   }
+  await page.getByRole('link', { name: /^All \d+ versions$/ }).click();
+  await expect(page.getByText('Worse', { exact: true }).first()).toBeVisible();
 });

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoClippedElements, expectNoHorizontalScroll, orgNav } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll, openNavigation, orgNav } from './support';
 import { boxOf } from './support-boxes';
 
 // Needs you (/o/acme/needs-you): the list, the split detail and the phone's approve view, against the
@@ -17,16 +17,19 @@ test('the page lists what waits on you, with the count in the top bar', async ({
 
 test('the Alerts tab opens the failing source and the conversion that waits on the factory', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Alerts/ }).check({ force: true });
+  await page.getByRole('radio', { name: /^Alerts/ }).click({ force: true });
   await expect(page).toHaveURL(/type=alert/);
   const list = page.getByRole('list', { name: /Waiting on you/ });
 
+  await expect(list.getByText(/ \d+ times$/).first()).toBeVisible();
   await list.getByRole('link', { name: /dashboards, which .* reads, does not sync/ }).click();
   const detail = page.getByRole('article');
   await expect(detail.getByRole('heading', { name: /^dashboards, which .* reads, does not sync$/ })).toBeVisible();
-  await expect(list.getByText(/ \d+ times$/).first()).toBeVisible();
   await expect(detail.getByRole('link', { name: 'Open dashboards' })).toBeVisible();
 
+  // Below 1024 px the entry replaces the list; Back returns to it.
+  const back = page.getByRole('link', { name: 'Back to Needs you' });
+  if (await back.isVisible()) await back.click();
   await list.getByRole('link', { name: /could not move to secrets/ }).click();
   await expect(detail.getByRole('heading', { name: /could not move to secrets$/ })).toBeVisible();
   await expect(detail.getByText(/connection aws-prod uses the aws kind/)).toBeVisible();
@@ -37,7 +40,7 @@ test('the Alerts tab opens the failing source and the conversion that waits on t
 
 test('the Decisions tab writes its type to the URL and hides the alerts', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Decisions/ }).check({ force: true });
+  await page.getByRole('radio', { name: /^Decisions/ }).click({ force: true });
   await expect(page).toHaveURL(/type=decision/);
   await expect(page.getByRole('radio', { name: /^Decisions/ })).toBeChecked();
 });
@@ -45,11 +48,13 @@ test('the Decisions tab writes its type to the URL and hides the alerts', async 
 test('Approvals lists the waiting tool call, and Approve with Always allow removes it', async ({ page }) => {
   // The mock seeds the architect's add_issue_comment call on software#151 (mock/fixtures.ts).
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Approvals/ }).check({ force: true });
+  await page.getByRole('radio', { name: /^Approvals/ }).click({ force: true });
   await expect(page).toHaveURL(/type=approval/);
 
   const list = page.getByRole('list', { name: /Waiting on you/ });
-  await expect(list.getByRole('link', { name: /architect wants to call add_issue_comment/ })).toBeVisible();
+  const waiting = list.getByRole('link', { name: /architect wants to call add_issue_comment/ });
+  await expect(waiting).toBeVisible();
+  await waiting.click(); // below 1024 px an entry opens as its own view
 
   await page.getByRole('checkbox', { name: 'Always allow architect to add_issue_comment' }).check();
   await page.getByRole('button', { name: /^Approve/ }).click();
@@ -60,11 +65,12 @@ test('Approvals lists the waiting tool call, and Approve with Always allow remov
 test('the Questions filter shows the agent question and answering it removes the row', async ({ page }) => {
   // Item 14 of the goal factory holds the pictured question (see question.spec.ts); the caller decides there.
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Questions/ }).check({ force: true });
+  await page.getByRole('radio', { name: /^Questions/ }).click({ force: true });
   await expect(page).toHaveURL(/type=question/);
 
   const list = page.getByRole('list', { name: /Waiting on you/ });
   await expect(list.getByRole('link', { name: /frontend-engineer: / })).toBeVisible();
+  await list.getByRole('link', { name: /frontend-engineer: / }).click(); // below 1024 px an entry opens as its own view
 
   const card = page.getByRole('region', { name: 'frontend-engineer asks you' });
   await card.getByRole('button', { name: 'Only this factory' }).click();
@@ -73,11 +79,14 @@ test('the Questions filter shows the agent question and answering it removes the
 });
 
 test('J and K move the selection, and the URL names the selected entry', async ({ page }) => {
+  // Below 1024 px the list stands alone and an entry opens as its own view, so there is no selection to move.
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, 'the split with a selection starts at 1024 px');
   await page.goto('/o/acme/needs-you');
+  await expect(page.getByRole('list', { name: /Waiting on you/ })).toBeVisible();
   await page.keyboard.press('j');
   await expect(page).toHaveURL(/entry=/);
   await page.keyboard.press('k');
-  await expect(page.locator('a[aria-current="page"]')).toHaveCount(1);
+  await expect(page.getByRole('list', { name: /Waiting on you/ }).locator('a[aria-current="page"]')).toHaveCount(1);
 });
 
 test.describe('the phone approve view at 375 px', () => {
@@ -123,7 +132,7 @@ test.describe('Needs you at 390 px', () => {
 
     const tops = await page
       .getByRole('group', { name: 'Show' })
-      .getByRole('button')
+      .getByRole('radio')
       .evaluateAll((buttons) => buttons.map((b) => Math.round(b.getBoundingClientRect().top)));
     expect(new Set(tops).size).toBe(1);
 
@@ -135,13 +144,14 @@ test.describe('Needs you at 390 px', () => {
     await page.getByRole('link', { name: 'Back to Needs you' }).click();
     await expect(list).toBeVisible();
     await expect(page).not.toHaveURL(/entry=/);
-    expect(await page.evaluate(() => window.scrollY)).toBe(before);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before); // the router restores it after it renders
     await expectNoHorizontalScroll(page);
   });
 });
 
 test('the sidebar Needs you link shows the page', async ({ page }) => {
   await page.goto('/o/acme');
+  await openNavigation(page);
   await orgNav(page)
     .getByRole('link', { name: /^Needs you/ })
     .click();
@@ -196,7 +206,7 @@ test('at 390 px the tabs scroll sideways and Alerts can be selected', async ({ p
   await page.goto('/o/acme/needs-you');
   const alerts = page.getByRole('radio', { name: /Alerts/ });
   await alerts.evaluate((el) => el.parentElement?.scrollIntoView({ inline: 'center', block: 'nearest' }));
-  await alerts.check({ force: true });
+  await alerts.click({ force: true });
   await expect(page).toHaveURL(/type=alert/);
   const inView = await alerts.evaluate((el) => {
     const box = (el.parentElement as HTMLElement).getBoundingClientRect();
