@@ -28,7 +28,10 @@ test('the Intake page lists what is coming up, where items came from, the trigge
   await expect(page.getByRole('region', { name: 'Webhooks open to Software' })).toBeVisible();
 
   // A phone's bar keeps New trigger only; the webhooks card carries the link there.
-  await expect(page.locator('a:visible[href$="/intake/webhooks"]').first()).toHaveAttribute('href', `${intake}/webhooks`);
+  await expect(page.locator('a:visible[href$="/intake/webhooks"]').first()).toHaveAttribute(
+    'href',
+    `${intake}/webhooks`,
+  );
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });

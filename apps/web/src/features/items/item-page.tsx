@@ -311,9 +311,9 @@ export function ItemPage() {
               id={panelId}
               role="tabpanel"
               aria-labelledby={tabId('timeline')}
-              className="order-6 hidden animate-fade-in flex-col gap-4 @[720px]:order-none @[720px]:flex"
+              className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none"
             >
-              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-link">
+              <p aria-live="polite" className="m-0 hidden items-center gap-2 text-sm text-link @[720px]:inline-flex">
                 {run ? (
                   <>
                     <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
@@ -326,7 +326,10 @@ export function ItemPage() {
               </p>
               <FollowUpsCard item={item} />
               <NotesCard notes={item.notes ?? []} />
-              <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+              {/* A narrow page shows the latest steps in its own card; the full list needs the width. */}
+              <div className="hidden flex-col gap-4 @[720px]:flex">
+                <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+              </div>
             </section>
           ) : null}
           {tab === 'trace' ? (

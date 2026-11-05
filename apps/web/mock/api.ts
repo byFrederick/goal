@@ -2337,6 +2337,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (!action && method === 'GET')
       return json(res, 200, {
         ...full(it),
+        ...partOfOf(it),
         flow: flowOf(it),
         touches: itemTouchesOf(it),
         ...(waitingOf(it) ? { waiting: waitingOf(it) } : {}),
