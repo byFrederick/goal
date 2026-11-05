@@ -1,4 +1,4 @@
--- Delivery evaluations (00120, ADR 0040 decision 13). Row-level security scopes every query to
+-- Delivery evaluations (00121, ADR 0040 decision 13). Row-level security scopes every query to
 -- the organization.
 
 -- name: InsertDeliveryEvaluation :exec

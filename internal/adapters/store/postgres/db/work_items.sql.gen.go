@@ -228,7 +228,7 @@ type InsertItemParams struct {
 }
 
 // Every filed item (fileItem): a person's, a trigger's, a follow-up's and a plan's part, which
-// sets part_key and part_paths (its paths too). source is still written for old instances (00112).
+// sets part_key and part_paths (its paths too). source is still written for old instances (00113).
 func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (WorkItem, error) {
 	row := q.db.QueryRow(ctx, insertItem,
 		arg.ID,

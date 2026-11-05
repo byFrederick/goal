@@ -443,7 +443,7 @@ type KeepFollowUpParams struct {
 	CreatedAt  time.Time
 }
 
-// Follow-ups (00114, ADR 0040 decisions 5 and 6). Row-level security scopes every query to the
+// Follow-ups (00115, ADR 0040 decisions 5 and 6). Row-level security scopes every query to the
 // organization.
 // A text already kept for the item (follow_ups_text_key) is skipped, so a rerun or a retried
 // transaction keeps it once.

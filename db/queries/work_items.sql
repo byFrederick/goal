@@ -10,7 +10,7 @@ UPDATE factories SET last_item_number = last_item_number + 1 WHERE id = $1 RETUR
 
 -- name: InsertItem :one
 -- Every filed item (fileItem): a person's, a trigger's, a follow-up's and a plan's part, which
--- sets part_key and part_paths (its paths too). source is still written for old instances (00112).
+-- sets part_key and part_paths (its paths too). source is still written for old instances (00113).
 INSERT INTO work_items (
   id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
   state, class_of_service, priority, base_commit, created_at, updated_at, source, trigger, origin, via,

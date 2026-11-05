@@ -305,7 +305,7 @@ type InsertDeliveryEvaluationParams struct {
 	Reason      string
 }
 
-// Delivery evaluations (00120, ADR 0040 decision 13). Row-level security scopes every query to
+// Delivery evaluations (00121, ADR 0040 decision 13). Row-level security scopes every query to
 // the organization.
 // A pending row has no outcome; one skipped at once is done with its reason.
 func (q *Queries) InsertDeliveryEvaluation(ctx context.Context, arg InsertDeliveryEvaluationParams) error {

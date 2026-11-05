@@ -1,4 +1,4 @@
--- Follow-ups (00114, ADR 0040 decisions 5 and 6). Row-level security scopes every query to the
+-- Follow-ups (00115, ADR 0040 decisions 5 and 6). Row-level security scopes every query to the
 -- organization.
 
 -- name: KeepFollowUp :exec
