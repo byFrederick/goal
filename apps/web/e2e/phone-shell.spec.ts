@@ -36,9 +36,11 @@ test.describe('the phone shell at 375 px', () => {
   });
 
   test('Floor, Board and Items follow the last factory visited outside a factory', async ({ page }) => {
-    await page.goto('/o/acme/f/sre/board');
-    await page.goto('/o/acme');
     const tabs = page.getByRole('navigation', { name: 'Tabs' });
+    await page.goto('/o/acme/f/sre/board');
+    // The factory is remembered once its page has rendered; leave before that and nothing is remembered.
+    await expect(tabs.getByRole('link', { name: 'Board' })).toHaveAttribute('href', '/o/acme/f/sre/board');
+    await page.goto('/o/acme');
     await expect(tabs.getByRole('link', { name: 'Board' })).toHaveAttribute('href', '/o/acme/f/sre/board');
   });
 
@@ -79,6 +81,8 @@ test.describe('the phone shell at 390 px', () => {
     for (const path of ['/o/acme', '/o/acme/f/goal/board']) {
       await page.goto(path);
       const bar = page.getByRole('banner');
+      // The page's action arrives with its data; until then the bar holds the mark alone.
+      await expect(bar.getByRole('button').nth(1)).toBeVisible();
       const mark = await bar.getByRole('button', { name: 'Open menu' }).boundingBox();
       expect(mark?.x ?? 0).toBeCloseTo(16, 0);
       const last = bar.getByRole('button').last();
@@ -150,21 +154,16 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
   });
 
   const samples: [string, string, (page: Page) => Locator][] = [
-    [
-      'Definition Form',
-      '/o/acme/f/goal/definition/basics',
-      (p) => p.getByRole('button', { name: 'Form', exact: true }),
-    ],
-    ['Definition YAML', '/o/acme/f/goal/definition/basics', (p) => p.getByRole('button', { name: 'YAML' })],
+    ['Definition Form', '/o/acme/f/goal/definition/basics', (p) => p.getByRole('radio', { name: 'Form', exact: true })],
+    ['Definition YAML', '/o/acme/f/goal/definition/basics', (p) => p.getByRole('radio', { name: 'YAML' })],
     ['Items Board', '/o/acme/f/goal/items', (p) => p.getByRole('link', { name: 'Board', exact: true }).first()],
     ['Items List', '/o/acme/f/goal/items', (p) => p.getByRole('button', { name: 'List', exact: true })],
     ['Runs filter', '/o/acme/runs', (p) => p.getByRole('button', { name: /^Failed/ }).first()],
     ['Access row title', '/o/acme/access', (p) => p.locator('a[href*="/definition/basics"]:visible').first()],
-    ['Knowledge document title', '/o/acme/knowledge/goal-docs', (p) => p.locator('a[href*="document="]').first()],
     [
-      'Knowledge document open at source',
+      'Knowledge files filter',
       '/o/acme/knowledge/goal-docs',
-      (p) => p.getByRole('link', { name: /^Open .* at its source$/ }).first(),
+      (p) => p.getByRole('searchbox', { name: 'Filter by path' }),
     ],
     ['Secret Show the value', '/o/acme/secrets?new=true', (p) => p.getByRole('button', { name: 'Show the value' })],
     ['Secrets New', '/o/acme/secrets', (p) => p.getByRole('banner').getByRole('button', { name: /New/ })],
@@ -184,22 +183,18 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       '/o/acme/f/software/intake/new',
       (p) => p.getByRole('button', { name: 'Schedule', exact: true }),
     ],
-    ['Knowledge source title', '/o/acme/knowledge', (p) => p.locator('a:visible', { hasText: 'goal docs' }).first()],
+    ['Knowledge source title', '/o/acme/knowledge', (p) => p.locator('a:visible', { hasText: 'goal-docs' }).first()],
     [
       'Knowledge new kind',
       '/o/acme/knowledge/new',
-      (p) => p.locator('label', { has: p.getByRole('radio', { name: /Synced/ }) }),
+      (p) => p.locator('label', { has: p.getByRole('radio', { name: /Repository/ }) }),
     ],
     ['Home New item', '/o/acme', (p) => p.getByRole('banner').getByRole('button', { name: 'New item' })],
-    [
-      'Floor Pull andon',
-      '/o/acme/f/goal',
-      (p) => p.getByRole('banner').getByRole('button', { name: 'Pull the andon cord' }),
-    ],
+    ['Floor Pull andon', '/o/acme/f/goal', (p) => p.getByRole('banner').getByRole('button', { name: 'Pull andon' })],
     [
       'Agent Reset to default',
       '/o/acme/f/goal/agents/frontend-engineer',
-      (p) => p.getByRole('button', { name: /^Reset to default/ }),
+      (p) => p.getByRole('button', { name: /^Reset to default, / }),
     ],
     [
       'Agent more skills',
@@ -216,12 +211,7 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
       await page.goto(path);
       const area = await hitArea(find(page));
       expect(area.height).toBeGreaterThanOrEqual(43.5);
-      if (
-        name.endsWith('switch') ||
-        name.includes('New item') ||
-        name.endsWith('Send') ||
-        name.includes('open at source')
-      )
+      if (name.endsWith('switch') || name.includes('New item') || name.endsWith('Send'))
         expect(area.width).toBeGreaterThanOrEqual(43.5);
     });
   }
@@ -232,12 +222,8 @@ test.describe('phone fixes on the Assembly, Agent and Definition line pages at 3
 
   test('the assembly brief stays inside its box', async ({ page }) => {
     await page.goto('/o/acme/f/goal/items');
-    await page
-      .locator('a[href*="/items/"]')
-      .filter({ hasText: /assembly/i })
-      .first()
-      .click();
-    const brief = page.locator('p', { hasText: 'A check of main' }).first();
+    await page.locator('a[href*="/items/"]').filter({ hasText: 'Usage and budgets' }).first().click();
+    const brief = page.locator('p', { hasText: 'Show the week' }).first();
     const fit = await brief.evaluate((el) => ({
       scroll: el.scrollWidth,
       client: el.clientWidth,
@@ -251,7 +237,8 @@ test.describe('phone fixes on the Assembly, Agent and Definition line pages at 3
   test('a rejection reason carries its full text in a title', async ({ page }) => {
     await page.goto('/o/acme/f/goal/agents/frontend-engineer');
     const reasons = page.getByRole('region', { name: 'Why review sent work back' });
-    const first = reasons.getByRole('button').first();
+    // The reasons are the list's rows; the card's Ask Jonah button sits beside the heading, not in a row.
+    const first = reasons.getByRole('listitem').first().getByRole('button');
     const title = await first.getAttribute('title');
     expect(title).toBeTruthy();
     const shown = (await first.textContent())?.trim() ?? '';
@@ -279,16 +266,17 @@ test.describe('phone dialogs and rows at 390 px', () => {
     expect(area.height).toBeGreaterThanOrEqual(43.5);
   });
 
-  test('a document row title link ends before its open-at-source control', async ({ page }) => {
+  test('a file row path ends before its size', async ({ page }) => {
     await page.goto('/o/acme/knowledge/goal-docs');
     const row = page
-      .getByRole('listitem')
-      .filter({ has: page.getByRole('link', { name: /^Open .* at its source$/ }) })
+      .getByRole('table', { name: 'Files of goal-docs' })
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell') })
       .first();
-    const title = await row.locator('a[href*="document="]').first().boundingBox();
-    const control = await row.getByRole('link', { name: /^Open .* at its source$/ }).boundingBox();
-    expect(title).not.toBeNull();
-    expect(control).not.toBeNull();
-    expect((title?.x ?? 0) + (title?.width ?? 0)).toBeLessThanOrEqual((control?.x ?? 0) + 0.5);
+    const path = await row.getByRole('cell').nth(0).locator('span').first().boundingBox();
+    const size = await row.getByRole('cell').nth(1).boundingBox();
+    expect(path).not.toBeNull();
+    expect(size).not.toBeNull();
+    expect((path?.x ?? 0) + (path?.width ?? 0)).toBeLessThanOrEqual((size?.x ?? 0) + 0.5);
   });
 });

@@ -88,7 +88,7 @@ export function Sidebar({ org }: { org: OrgSummary }) {
       {/* The column's width changes at once; the wrapper inside it scales from the old width and the labels fade (styles.css). */}
       <div
         ref={column}
-        className="shell-sidebar sticky top-0 hidden h-dvh shrink-0 md:flex"
+        className="shell-sidebar sticky top-0 z-30 hidden h-dvh shrink-0 md:flex"
         style={{ width: `var(${sidebarWidthVar})`, [sidebarWidthVar]: `${shownWidth(size)}px` } as CSSProperties}
       >
         {/* Keyed by what it holds, so each swap mounts a new wrapper that starts scaled (styles.css, .motion-sidebar-resize). */}
