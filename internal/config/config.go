@@ -435,6 +435,9 @@ type TriggerCreate struct {
 	Expedite bool   `json:"expedite,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Brief    string `json:"brief,omitempty"`
+	// Repositories are the item's repositories, each a template like Title or an entry's name
+	// (ADR 0041 decision 13).
+	Repositories []string `json:"repositories,omitempty"`
 	// Trusted files a delivery's item trusted (ADR 0040 decision 21).
 	Trusted bool `json:"trusted,omitempty"`
 }

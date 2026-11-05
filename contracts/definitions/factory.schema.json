@@ -476,6 +476,12 @@
             "expedite": { "type": "boolean", "description": "Put the item in the expedite flow." },
             "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.<path>}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters." },
             "brief": { "type": "string", "description": "The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/<name>.md), as an agent's prompt is; {{field}} and {{payload.<path>}} placeholders take the event's values, which reach agents only as untrusted data." },
+            "repositories": {
+              "type": "array",
+              "maxItems": 10,
+              "description": "The item's repositories, each matched against runtime.repositories, owner patterns included and in any case: an entry's name, host/owner/name, an https URL, or a template such as {{repo}} (owner/name, on the host of the entry that covers it). A value that renders empty adds none; an item that names none gets the default entry. An event whose value no entry matches is skipped at Create.",
+              "items": { "type": "string" }
+            },
             "trusted": { "type": "boolean", "description": "File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set." }
           }
         },
