@@ -91,7 +91,7 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line. An item can also wait to start; the CLI and the API set a start, as [Start an item later](#start-an-item-later) shows.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. When the factory's running version has `runtime.repositories` entries, New item also has a Repositories field. It starts with the default entry's repository; choose Add to pick another, or to type `owner/name` under an entry that covers all of an owner's repositories, and Remove to drop one. An item takes up to 10. A repository no entry covers is refused on the field. The new item opens on the Board in the station where it entered the line. An item can also wait to start; the CLI and the API set a start, as [Start an item later](#start-an-item-later) shows.
 
 Agents can leave work for later too; see [Let agents leave follow-ups](../follow-ups/).
 
