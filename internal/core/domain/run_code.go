@@ -37,10 +37,11 @@ type RunCode struct {
 }
 
 // RunClone is one of the item's repositories: its key (RepositoryKey), the https URL prepare
-// clones, where, and whether the run's agent may push to it.
+// clones, where, the {{secret}} reference of the token the agent's access picks for it
+// (TokenEntry; "" when no entry with a token covers it), and whether the agent may push to it.
 type RunClone struct {
-	Repo, URL, Path string
-	Write           bool
+	Repo, URL, Path, Token string
+	Write                  bool
 }
 
 // RunLogin is the git login of one entry: its URL prefix, the entry's name, the entry whose token
@@ -66,8 +67,13 @@ func (l Line) RunCode(agent AgentSpec, repos ItemRepositories) RunCode {
 			c.Path = ReposPath + "/" + ownerName(r.Repo)
 		}
 
-		e, ok := TokenEntry(entries, r.Repo, false)
-		c.Write = !reads && ok && e.Access == AccessWrite
+		if e, ok := TokenEntry(entries, r.Repo, false); ok {
+			c.Write = !reads && e.Access == AccessWrite
+		}
+
+		if e, ok := TokenEntry(entries, r.Repo, reads); ok {
+			c.Token = e.Token
+		}
 		out.Clones = append(out.Clones, c)
 	}
 

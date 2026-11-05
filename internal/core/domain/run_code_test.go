@@ -52,21 +52,21 @@ func TestRunCode_ClonesInJoinedOrderWithEachAccess(t *testing.T) {
 		{
 			name: "the first at /workspace, each other under /repos", code: CodeWrite, repos: joined(keyApp, keyLib, keyDeepUI),
 			want: []RunClone{
-				{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Write: true},
-				{Repo: keyLib, URL: "https://" + keyLib, Path: "/repos/acme/lib"},
-				{Repo: keyDeepUI, URL: "https://" + keyDeepUI, Path: "/repos/acme/platform/ui", Write: true},
+				{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: "{{app-write}}", Write: true},
+				{Repo: keyLib, URL: "https://" + keyLib, Path: "/repos/acme/lib", Token: "{{acme-read}}"},
+				{Repo: keyDeepUI, URL: "https://" + keyDeepUI, Path: "/repos/acme/platform/ui", Token: "{{platform}}", Write: true},
 			},
 		},
 		{
 			name: "an agent that only reads writes none", code: CodeRead, repos: joined(keyLib, keyApp),
 			want: []RunClone{
-				{Repo: keyLib, URL: "https://" + keyLib, Path: WorkspacePath},
-				{Repo: keyApp, URL: "https://" + keyApp, Path: "/repos/acme/app"},
+				{Repo: keyLib, URL: "https://" + keyLib, Path: WorkspacePath, Token: "{{acme-read}}"},
+				{Repo: keyApp, URL: "https://" + keyApp, Path: "/repos/acme/app", Token: "{{acme-read}}"},
 			},
 		},
 		{
 			name: "an agent without code writes, as before code", repos: joined(keyApp),
-			want: []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Write: true}},
+			want: []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: "{{app-write}}", Write: true}},
 		},
 		{name: "an item with none clones none", code: CodeWrite},
 	}
@@ -89,7 +89,7 @@ func TestRunCode_NoRowsUseTheDefaultEntry(t *testing.T) {
 	l := codeLine(codeEntries()...)
 
 	got := l.RunCode(AgentSpec{Code: CodeWrite}, ResolveItemRepositories(nil, l)).Clones
-	want := []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Write: true}}
+	want := []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: "{{app-write}}", Write: true}}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("clones = %+v, want %+v", got, want)
