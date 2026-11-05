@@ -24,6 +24,31 @@ The CLI's help text for `goal org create` says platform admins only. That text i
 
 An organization's roles are owner, admin and member. The person who creates an organization becomes its owner. To join, a person needs an invitation, which can name the factories and the roles they get. An invitation arrives by email and expires after 72 hours. The person accepts it on the invitation page after they [sign in](/docs/getting-started/sign-in/).
 
+## Code hosts
+
+An organization lists the code hosts its repositories live on. github.com (GitHub) and gitlab.com (GitLab) are built in: every organization lists them, and nobody adds or removes them. An owner adds a GitHub Enterprise or self-managed GitLab host, with its kind: `github` or `gitlab`.
+
+Any member, and any API key or personal token with `org:read`, can read the list with `GET /v1/orgs/{org}/code-hosts`. The built-in hosts come first, then the added ones sorted by name.
+
+An owner sets the added hosts with `PUT /v1/orgs/{org}/code-hosts`, in a session signed in within the last 10 minutes. API keys and personal tokens can't set them. The body lists every added host, so a host left out is removed and an empty list removes them all:
+
+```json
+{ "hosts": [{ "host": "ghe.example.com", "kind": "github" }, { "host": "gitlab.example.com", "kind": "gitlab" }] }
+```
+
+A host is a name such as `ghe.example.com`, with no `https://`, port or path. It must be reachable from the internet, because goald connects only to public addresses. goald refuses an IP address, `localhost`, a name with no dot, and a name ending in `.local`, `.internal` or `.localhost`. It also refuses github.com and gitlab.com (`code-host-built-in`), an unknown kind, a host listed twice and more than 20 hosts (`code-host-invalid`). Each change is in the audit log as `org.code_hosts_set`.
+
+Each host in the answer has the API base goald derives for it:
+
+| Host | Kind | API base |
+| --- | --- | --- |
+| `github.com` | `github` | `https://api.github.com` |
+| `<name>.ghe.com` (GitHub Enterprise Cloud) | `github` | `https://api.<name>.ghe.com` |
+| any other GitHub host (GitHub Enterprise Server) | `github` | `https://<host>/api/v3` |
+| any GitLab host | `gitlab` | `https://<host>/api/v4` |
+
+The list doesn't yet change where goald sends tokens. The repository test and knowledge repository sources still accept only github.com and gitlab.com.
+
 ## Pick the organization the CLI acts in
 
 The CLI picks an organization in this order, and the first one it finds wins:
