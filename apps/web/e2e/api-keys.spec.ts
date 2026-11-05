@@ -24,9 +24,14 @@ test('the keys are listed with what each can do, and the page fits the screen', 
   await page.goto('/o/acme/api-keys');
   await expect(heading(page)).toBeVisible();
   await expect(page).toHaveTitle('API keys · Acme · Goal');
-  const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
-  await expect(crumbs.getByRole('link', { name: 'Acme' })).toBeVisible();
-  await expect(crumbs.getByText('API keys')).toHaveAttribute('aria-current', 'page');
+  if (isPhone(page)) {
+    // The phone's top bar shows the page's title in place of the breadcrumb.
+    await expect(page.getByRole('banner').getByText('API keys')).toBeVisible();
+  } else {
+    const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(crumbs.getByRole('link', { name: 'Acme' })).toBeVisible();
+    await expect(crumbs.getByText('API keys')).toHaveAttribute('aria-current', 'page');
+  }
   await expect(keysHeading(page)).toBeVisible();
 
   const ci = keyEntry(page, 'ci-items');
@@ -97,7 +102,7 @@ test('a key needs a name and something to do, and a live key’s name is taken',
   await expect(d.getByText('Give the key a name')).toBeVisible();
   await expect(d.getByText('Choose at least one thing it can do')).toBeVisible();
 
-  await d.getByLabel('Name').fill('CI-Deploy');
+  await d.getByLabel('Name').fill('Deploy-Bot');
   await d.getByLabel('See the organization').check();
   await d.getByRole('button', { name: 'Create key' }).click();
   await expect(d.getByText('Another live key has this name')).toBeVisible();
