@@ -23,8 +23,8 @@ async function setLaneOfTwo(page: Page, request: APIRequestContext) {
   const ids = [await newItem(request, 'Set lane first'), await newItem(request, 'Set lane second')];
   await page.goto('/o/acme/f/goal/items');
   const bar = page.getByRole('region', { name: 'Bulk actions' });
-  // The bar opens above the table on the first check and pushes the rows down, so each check waits for
-  // the bar's count before the next one: a click made during the shift lands on the wrong row.
+  // The bar opens after the table and sticks to the bottom edge, so it never moves a row; each check still
+  // waits for the bar's count, because the selection lives in the URL.
   const titles = ['Set lane first', 'Set lane second'];
   for (const [at, title] of titles.entries()) {
     // click, not check: the selection lives in the URL, so the box changes after the router's navigation,

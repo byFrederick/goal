@@ -335,15 +335,6 @@ export function ItemsPage() {
         <SaveViewDialog org={org} factory={factory} filters={urlFilters} onClose={() => setSaving(false)} />
       ) : null}
 
-      {checked.length > 0 ? (
-        <BulkActions
-          items={checked}
-          factory={factory}
-          canOperate={canOperate}
-          onClear={() => setSearch({ sel: undefined })}
-        />
-      ) : null}
-
       {all.length === 0 ? (
         <div className="flex flex-col items-start gap-3">
           <p className="m-0 text-body text-muted">No items here. Create one with New item.</p>
@@ -417,6 +408,16 @@ export function ItemsPage() {
           </p>
         </>
       )}
+
+      {/* After the list and sticky to the bottom edge, so opening it never moves a row (MOTION.md: an entrance never shifts layout). */}
+      {checked.length > 0 ? (
+        <BulkActions
+          items={checked}
+          factory={factory}
+          canOperate={canOperate}
+          onClear={() => setSearch({ sel: undefined })}
+        />
+      ) : null}
     </div>
   );
 }
