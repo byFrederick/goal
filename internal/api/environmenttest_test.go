@@ -1,7 +1,10 @@
 package api_test
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -309,5 +312,53 @@ func TestEnvironmentTest_Template(t *testing.T) {
 	}
 
 	refused(t, "a slot without a secret", h.request(t, http.MethodPost, envTestPath, `{"template":{"name":"acme-api","secrets":{}}}`, nil),
+		http.StatusBadRequest, "environment-test-invalid")
+}
+
+// A template test resolves the template with the request's parameters: github with an Enterprise
+// host sends GET /api/v3/user to that host with the token, its local MCP server stays untested,
+// and a value that is not a host is 400.
+func TestEnvironmentTest_TemplateParameters(t *testing.T) {
+	t.Parallel()
+
+	var got struct{ host, path, auth string }
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		got.host, got.path, got.auth = r.Host, r.URL.Path, r.Header.Get(authorization)
+	}))
+	t.Cleanup(srv.Close)
+
+	// The connection client dials srv for every host and trusts its certificate as ghe.example.com's.
+	h := newHarnessLogged(t, nil, nil, func(h *harness, _ *api.Deps) {
+		tr, _ := srv.Client().Transport.(*http.Transport)
+		h.connTransport.TLSClientConfig = &tls.Config{RootCAs: tr.TLSClientConfig.RootCAs, ServerName: "example.com", MinVersion: tls.VersionTLS12}
+		h.connTransport.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, srv.Listener.Addr().String())
+		}
+	})
+	h.createSecret(t)
+	h.openDraft(t)
+
+	req := func(host string) string {
+		return `{"template":{"name":"github","secrets":{"token":"acme-token"},"parameters":{"host":"` + host + `"}}}`
+	}
+
+	r := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, req("ghe.example.com"), nil), http.StatusOK)
+	if sum := templateSummary(r.Template); sum != (templateSum{Ok: true, Status: http.StatusOK}) {
+		t.Errorf("template = %+v; want it passed", sum)
+	}
+
+	if got.host != "ghe.example.com" || got.path != "/api/v3/user" || got.auth != "Bearer "+secretValue {
+		t.Errorf("sent %s %s with %q; want ghe.example.com /api/v3/user with the token", got.host, got.path, got.auth)
+	}
+
+	if sums := summaries(r.Servers); !slices.Equal(sums, []serverSum{{Server: kindGitHub}}) || len(h.tools.Called()) != 0 {
+		t.Errorf("servers = %+v, called %v; want the local server untested", sums, h.tools.Called())
+	}
+
+	refused(t, "a host with a path", h.request(t, http.MethodPost, envTestPath, req("evil.example.com/x"), nil),
+		http.StatusBadRequest, "environment-test-invalid")
+	refused(t, "an unknown parameter", h.request(t, http.MethodPost, envTestPath,
+		`{"template":{"name":"github","secrets":{"token":"acme-token"},"parameters":{"region":"eu"}}}`, nil),
 		http.StatusBadRequest, "environment-test-invalid")
 }

@@ -4175,6 +4175,9 @@ type EnvironmentTestTemplate struct {
 	Env  *map[string]string `json:"env,omitempty"`
 	Name string             `json:"name"`
 
+	// Parameters The template's parameters' values, by name: a host name with an optional :port. A parameter without one takes its default
+	Parameters *map[string]string `json:"parameters,omitempty"`
+
 	// Secrets The secret each slot takes, by slot
 	Secrets map[string]SecretName `json:"secrets"`
 }
@@ -7784,6 +7787,28 @@ type TemplateMCP struct {
 // TemplateMCPTools defines model for TemplateMCP.Tools.
 type TemplateMCPTools string
 
+// TemplateOtherwise The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field
+type TemplateOtherwise struct {
+	Env   *map[string]string      `json:"env,omitempty"`
+	Files *map[string]string      `json:"files,omitempty"`
+	Mcp   *map[string]TemplateMCP `json:"mcp,omitempty"`
+
+	// Test An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values
+	Test  *TemplateTest `json:"test,omitempty"`
+	Tools *[]string     `json:"tools,omitempty"`
+}
+
+// TemplateParameter A non-secret value a template takes, such as a host; otherwise's lines may refer to it as {{name}}
+type TemplateParameter struct {
+	Default     string `json:"default"`
+	Description string `json:"description"`
+	Name        string `json:"name"`
+
+	// Otherwise The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field
+	Otherwise *TemplateOtherwise `json:"otherwise,omitempty"`
+	Title     string             `json:"title"`
+}
+
 // TemplateSecret defines model for TemplateSecret.
 type TemplateSecret struct {
 	Description string `json:"description"`
@@ -7946,6 +7971,9 @@ type ToolTemplate struct {
 	// Description One line
 	Description string `json:"description"`
 	Name        string `json:"name"`
+
+	// Parameters Its non-secret parameters, in order. adds and test are the lines for every parameter's default; they never refer to a parameter
+	Parameters *[]TemplateParameter `json:"parameters,omitempty"`
 
 	// Secrets Its secret slots, in order
 	Secrets []TemplateSecret `json:"secrets"`

@@ -13,13 +13,16 @@ import (
 // ToolTemplate is one entry of the catalog goald ships (ADR 0037 decision 15): what Add a tool
 // writes into an environment file of the draft for one MCP server, command-line tool or API.
 // Its values are plain text or {{slot}} references to its Secrets, which the person fills with a
-// secret of the organization; applying a template changes nothing in the organization.
+// secret of the organization; applying a template changes nothing in the organization. Its
+// Parameters' otherwise lines may also refer to a {{parameter}}, which Resolve replaces.
 type ToolTemplate struct {
 	Name        string
 	Title       string
 	Description string
 	// Secrets are the template's secret slots, in order.
 	Secrets []TemplateSecret
+	// Parameters are the template's non-secret parameters, in order.
+	Parameters []TemplateParameter
 	// Tools are mise tool specs, Env variables, Files paths (absolute or ~/) and MCP servers by
 	// name, as an environment file has them.
 	Tools []string
@@ -37,6 +40,27 @@ type TemplateSecret struct {
 	Title       string
 	Description string
 	Suggest     string
+}
+
+// TemplateParameter is a non-secret value a template takes, such as a host: the {{name}} its
+// otherwise lines refer to, how to ask for it, its default, and the lines used instead of the
+// template's own when its value is not the default.
+type TemplateParameter struct {
+	Name        string
+	Title       string
+	Description string
+	Default     string
+	Otherwise   *TemplateLines
+}
+
+// TemplateLines are the lines a parameter's otherwise puts in place of the template's own: each
+// field that is set replaces the template's whole field.
+type TemplateLines struct {
+	Tools []string
+	Env   map[string]string
+	Files map[string]string
+	MCP   map[string]TemplateMCP
+	Test  *TemplateTest
 }
 
 // TemplateMCP is an MCP server a template adds: remote (URL and Headers) or stdio (Command and
@@ -84,7 +108,10 @@ var (
 	// envReference is one ${VAR} in a template's test.
 	envReference = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 	slotPattern  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
-	testMethods  = []string{"GET", "HEAD", "POST"}
+	// parameterValue is a parameter's value: a host name of letters, digits, dots and hyphens,
+	// with an optional :port, so it can't change a URL's scheme or path.
+	parameterValue = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?$`)
+	testMethods    = []string{"GET", "HEAD", "POST"}
 )
 
 // Slots are the slots value refers to, in order, each once.
@@ -105,8 +132,10 @@ func Slots(value string) []string {
 // {{slot}} in env, files, MCP headers and env, and the test naming one of them; env names that a
 // run may set; file paths that are absolute or start with ~/; MCP servers that are remote or
 // stdio, never both, with modes allow, ask or off; and a test of GET, HEAD or POST to an https URL
-// whose ${VAR} references name the template's plain env values. The error wraps ErrInvalid and
-// lists every broken rule.
+// whose ${VAR} references name the template's plain env values. Parameters are named like slots,
+// never like one of them, each once with a title and a default; at most one has otherwise lines,
+// which follow the same rules and may refer to a {{parameter}}, while the template's own lines
+// never do. The error wraps ErrInvalid and lists every broken rule.
 func (t ToolTemplate) Check() error {
 	var errs []error
 
@@ -127,10 +156,14 @@ func (t ToolTemplate) Check() error {
 	}
 
 	slots := t.checkSlots(add)
+	params := t.checkParameters(add, slots)
 
 	refs := func(where, value string) {
 		for _, slot := range Slots(value) {
-			if !slots[slot] {
+			switch {
+			case params[slot]:
+				add("template %s: %s refers to the parameter {{%s}}, which only otherwise lines may", t.Name, where, slot)
+			case !slots[slot]:
 				add("template %s: %s refers to {{%s}}, which is none of its secrets", t.Name, where, slot)
 			}
 		}
@@ -146,7 +179,205 @@ func (t ToolTemplate) Check() error {
 		errs = append(errs, t.checkTest(refs)...)
 	}
 
+	for _, p := range t.Parameters {
+		if p.Otherwise != nil {
+			errs = append(errs, t.checkOtherwise(p, slots, params)...)
+		}
+	}
+
 	return errors.Join(errs...)
+}
+
+// checkParameters reports each broken parameter through add and returns the parameters declared.
+func (t ToolTemplate) checkParameters(add func(format string, a ...any), slots map[string]bool) map[string]bool {
+	params := map[string]bool{}
+	otherwise := 0
+
+	for _, p := range t.Parameters {
+		switch {
+		case !slotPattern.MatchString(p.Name):
+			add("template %s: parameter %q must be lowercase letters, digits or underscores", t.Name, p.Name)
+		case slots[p.Name]:
+			add("template %s: parameter %s is also a secret slot", t.Name, p.Name)
+		case params[p.Name]:
+			add("template %s: parameter %s is declared twice", t.Name, p.Name)
+		case strings.TrimSpace(p.Title) == "":
+			add("template %s: parameter %s needs a title", t.Name, p.Name)
+		case !parameterValue.MatchString(p.Default):
+			add("template %s: parameter %s needs a default of letters, digits, dots and hyphens, with an optional :port", t.Name, p.Name)
+		}
+
+		params[p.Name] = true
+
+		if p.Otherwise != nil {
+			otherwise++
+		}
+	}
+
+	if otherwise > 1 {
+		add("template %s: only one parameter may have otherwise lines", t.Name)
+	}
+
+	return params
+}
+
+// checkOtherwise checks the lines p's otherwise replaces, as the template has them with those
+// lines; they may refer to a slot or a parameter.
+func (t ToolTemplate) checkOtherwise(p TemplateParameter, slots, params map[string]bool) []error {
+	var errs []error
+
+	add := func(format string, a ...any) {
+		errs = append(errs, fmt.Errorf(format+": %w", append(a, ErrInvalid)...))
+	}
+
+	refs := func(where, value string) {
+		for _, ref := range Slots(value) {
+			if !slots[ref] && !params[ref] {
+				add("template %s: otherwise of %s: %s refers to {{%s}}, which is neither a secret nor a parameter", t.Name, p.Name, where, ref)
+			}
+		}
+	}
+
+	o := *p.Otherwise
+	alt := t.with(o)
+
+	ToolTemplate{Name: t.Name, Tools: o.Tools, Env: o.Env, Files: o.Files}.checkAdds(add, refs)
+
+	for _, name := range slices.Sorted(maps.Keys(o.MCP)) {
+		errs = append(errs, alt.checkMCP(name, refs)...)
+	}
+
+	// A test is checked against the env it reads, so a new env checks the test again.
+	if alt.Test != nil && (o.Test != nil || o.Env != nil) {
+		errs = append(errs, alt.checkTest(refs)...)
+	}
+
+	return errs
+}
+
+// Resolve is the template with its parameters applied: each takes its value from params, or its
+// default; one whose value is not its default (ignoring case) puts its otherwise lines in place of
+// the template's own, and every {{parameter}} becomes its value. A parameter the template does not
+// have, or a value that is not a host name with an optional :port, is an error wrapping
+// ErrInvalid. With every value the default, the template is unchanged.
+func (t ToolTemplate) Resolve(params map[string]string) (ToolTemplate, error) {
+	for _, name := range slices.Sorted(maps.Keys(params)) {
+		if !slices.ContainsFunc(t.Parameters, func(p TemplateParameter) bool { return p.Name == name }) {
+			return ToolTemplate{}, fmt.Errorf("template %s has no parameter %q: %w", t.Name, name, ErrInvalid)
+		}
+	}
+
+	out := t
+	values := map[string]string{}
+
+	for _, p := range t.Parameters {
+		v, ok := params[p.Name]
+		if !ok {
+			v = p.Default
+		}
+
+		if !parameterValue.MatchString(v) {
+			return ToolTemplate{}, fmt.Errorf("template %s: parameter %s takes letters, digits, dots and hyphens, with an optional :port: %w",
+				t.Name, p.Name, ErrInvalid)
+		}
+
+		values[p.Name] = v
+
+		if p.Otherwise != nil && !strings.EqualFold(v, p.Default) {
+			out = out.with(*p.Otherwise)
+		}
+	}
+
+	return out.substitute(values), nil
+}
+
+// with is t with each field o sets in place of its own.
+func (t ToolTemplate) with(o TemplateLines) ToolTemplate {
+	if o.Tools != nil {
+		t.Tools = o.Tools
+	}
+
+	if o.Env != nil {
+		t.Env = o.Env
+	}
+
+	if o.Files != nil {
+		t.Files = o.Files
+	}
+
+	if o.MCP != nil {
+		t.MCP = o.MCP
+	}
+
+	if o.Test != nil {
+		t.Test = o.Test
+	}
+
+	return t
+}
+
+// substitute is t with each {{name}} of values replaced by its value, in copies of its lines.
+func (t ToolTemplate) substitute(values map[string]string) ToolTemplate {
+	sub := func(v string) string {
+		return slotReference.ReplaceAllStringFunc(v, func(ref string) string {
+			if value, ok := values[slotReference.FindStringSubmatch(ref)[1]]; ok {
+				return value
+			}
+
+			return ref
+		})
+	}
+
+	subAll := func(vs []string) []string {
+		if vs == nil {
+			return nil
+		}
+
+		out := make([]string, len(vs))
+		for i, v := range vs {
+			out[i] = sub(v)
+		}
+
+		return out
+	}
+
+	subMap := func(m map[string]string) map[string]string {
+		if m == nil {
+			return nil
+		}
+
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			out[k] = sub(v)
+		}
+
+		return out
+	}
+
+	out := t
+	out.Tools, out.Env, out.Files = subAll(t.Tools), subMap(t.Env), subMap(t.Files)
+
+	if t.MCP != nil {
+		out.MCP = make(map[string]TemplateMCP, len(t.MCP))
+		for name, m := range t.MCP {
+			out.MCP[name] = TemplateMCP{
+				URL: sub(m.URL), Headers: subMap(m.Headers), Command: subAll(m.Command), Env: subMap(m.Env), Tools: maps.Clone(m.Tools),
+			}
+		}
+	}
+
+	if t.Test != nil {
+		tt := *t.Test
+		tt.URL, tt.Headers = sub(tt.URL), subMap(tt.Headers)
+
+		if b := tt.Basic; b != nil {
+			tt.Basic = &TemplateBasicAuth{Username: sub(b.Username), Password: sub(b.Password)}
+		}
+
+		out.Test = &tt
+	}
+
+	return out
 }
 
 // checkSlots reports each broken slot through add and returns the slots declared.
