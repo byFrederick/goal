@@ -59,7 +59,7 @@ export function StartBanner({ item }: { item: Item }) {
         <span className="text-ink-soft">Waiting in the inbox.</span>
       </span>
       {canOperate ? (
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 max-md:w-full max-md:pl-7">
           <StartNowButton itemId={item.id} factoryId={factory.id} label={item.title} />
           <ChangeStart item={item} />
         </span>

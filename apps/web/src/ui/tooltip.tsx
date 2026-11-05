@@ -27,6 +27,9 @@ interface TooltipProps {
   side?: 'right' | 'top' | 'bottom' | 'left';
   /** Wraps a long explanation in a tip at most 18rem wide instead of one line. */
   wrap?: boolean;
+  /** Controls the tip (the ⓘ opens on a tap); leave both out and hover and focus decide. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -34,9 +37,9 @@ interface TooltipProps {
  * Escape). It repeats the trigger's name visually and never carries anything the name lacks. It
  * fades in and grows from its trigger; it closes at once (MOTION.md, Tooltip).
  */
-export function Tooltip({ children, label, detail, side = 'right', wrap = false }: TooltipProps) {
+export function Tooltip({ children, label, detail, side = 'right', wrap = false, open, onOpenChange }: TooltipProps) {
   return (
-    <T.Root>
+    <T.Root {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
       {/* The trigger's name already says what the tip shows: no duplicate description. */}
       <T.Trigger asChild aria-describedby={undefined}>
         {children}

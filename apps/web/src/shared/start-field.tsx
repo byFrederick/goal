@@ -85,7 +85,7 @@ export function StartField({
         describedBy={invalid ? `${id}-start-error` : undefined}
       />
       {value.mode === 'later' ? (
-        <div className="grid grid-cols-2 gap-3 motion-safe:animate-fade-in">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 motion-safe:animate-fade-in">
           <label className="flex flex-col gap-1 text-sm text-muted" htmlFor={`${id}-date`}>
             Date
             <input

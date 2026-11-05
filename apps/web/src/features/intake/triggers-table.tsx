@@ -139,7 +139,7 @@ function TriggerRow({ trigger, arrived }: { trigger: IntakeTrigger; arrived: boo
           {trigger.create.expedite ? <Chip tone="expedite">expedite</Chip> : null}
         </div>
       </td>
-      <td className="block py-1 md:table-cell md:px-3 md:py-3 md:align-middle">
+      <td className="hidden md:table-cell md:px-3 md:py-3 md:align-middle">
         {trigger.enabled ? <LastWeek days={trigger.days} items={items} /> : <span className="text-muted">Off</span>}
       </td>
       <td className="block pt-2 md:table-cell md:px-3 md:py-3 md:text-right md:align-middle">

@@ -3,17 +3,19 @@
 // (MOTION.md, A rule leaves a list); a new one fades in (A new item appears in a list).
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { CornerDownRight } from 'lucide-react';
+import { CornerDownRight, Ellipsis } from 'lucide-react';
 import { intakeKeys } from '../../api/queries';
 import type { IntakeComingUp } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatStart, plural } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { CameFrom } from '../../shared/origin';
-import { StartNowButton } from '../../shared/start-now';
+import { StartNowButton, useStartNow } from '../../shared/start-now';
 import { useArrivals } from '../../ui/arrivals';
+import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { Leaving, useLeaving } from '../../ui/leaving';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '../../ui/menu';
 import { Panel, rowClass } from './panel';
 
 const info =
@@ -50,8 +52,8 @@ function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean
   return (
     <li className={cn('border-t border-line first:border-t-0', arrived && 'motion-safe:animate-item-in')}>
       <Leaving leaving={leaving}>
-        <div className={cn(rowClass, 'border-t-0')}>
-          <span className="col-span-2 flex flex-col text-body font-medium tabular-nums md:col-span-1">
+        <div className={cn(rowClass, 'border-t-0 max-md:items-start')}>
+          <span className="flex flex-col text-body font-medium tabular-nums md:col-span-1">
             {when ? (
               <>
                 {when.day}
@@ -66,7 +68,7 @@ function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean
               </>
             )}
           </span>
-          <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 flex-col max-md:col-start-1">
             <Link
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(item.ref) }}
@@ -83,13 +85,51 @@ function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean
               </span>
             </span>
           </span>
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2 max-md:col-start-2 max-md:row-span-2 max-md:row-start-1">
             {item.start ? (
-              <StartNowButton itemId={item.id} factoryId={factory.id} label={item.title} onStarted={leave} />
+              <>
+                <StartNowButton
+                  itemId={item.id}
+                  factoryId={factory.id}
+                  label={item.title}
+                  onStarted={leave}
+                  className="max-md:hidden"
+                />
+                <StartNowMenu itemId={item.id} factoryId={factory.id} title={item.title} onStarted={leave} />
+              </>
             ) : null}
           </span>
         </div>
       </Leaving>
     </li>
+  );
+}
+
+/** On phones Start now sits in a 44 px ⋯ menu instead of beside the row (MOTION.md, Menu, select, popover). */
+function StartNowMenu({
+  itemId,
+  factoryId,
+  title,
+  onStarted,
+}: {
+  itemId: string;
+  factoryId: string;
+  title: string;
+  onStarted: () => void;
+}) {
+  const { done, pending, start } = useStartNow(itemId, factoryId, onStarted);
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={`More actions: ${title}`} className="max-md:size-11 md:hidden">
+          <Ellipsis size={18} strokeWidth={1.75} aria-hidden="true" />
+        </Button>
+      </MenuTrigger>
+      <MenuContent align="end" side="bottom" className="w-48">
+        <MenuItem disabled={pending || done} onSelect={start}>
+          Start now
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }

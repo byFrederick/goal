@@ -11,18 +11,8 @@ import { SuccessLabel, successHoldMs } from '../ui/success-label';
 import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
 
-export function StartNowButton({
-  itemId,
-  factoryId,
-  label,
-  onStarted,
-}: {
-  itemId: string;
-  factoryId: string;
-  /** What the button's name says about the item it starts. */
-  label: string;
-  onStarted?: () => void;
-}) {
+/** The mutation behind Start now: `done` once goald answered, and `onStarted` after the hold. */
+export function useStartNow(itemId: string, factoryId: string, onStarted?: () => void) {
   const org = useOrg();
   const client = useQueryClient();
   const [done, setDone] = useState(false);
@@ -39,13 +29,32 @@ export function StartNowButton({
     onError: (err) =>
       toast.error('Could not start the item', { description: err instanceof ApiError ? err.message : '' }),
   });
+  return { done, pending: start.isPending, start: () => start.mutate() };
+}
+
+export function StartNowButton({
+  itemId,
+  factoryId,
+  label,
+  onStarted,
+  className,
+}: {
+  itemId: string;
+  factoryId: string;
+  /** What the button's name says about the item it starts. */
+  label: string;
+  onStarted?: () => void;
+  className?: string;
+}) {
+  const { done, pending, start } = useStartNow(itemId, factoryId, onStarted);
   return (
     <Button
       variant="secondary"
       size="sm"
+      className={className}
       aria-label={done ? undefined : `Start now: ${label}`}
-      disabled={start.isPending || done}
-      onClick={() => start.mutate()}
+      disabled={pending || done}
+      onClick={start}
     >
       <SuccessLabel done={done} doneLabel="Started">
         Start now
