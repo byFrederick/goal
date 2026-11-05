@@ -165,6 +165,117 @@ func expectAskOff(t *testing.T, b runBundle) {
 	}
 }
 
+// checkEntriesYAML is a factory on secrets with the repository entries entries, a YAML flow list
+// (none when ""), whose new-incidents trigger runs a check by the engineer, whose code is code.
+func checkEntriesYAML(entries, code string) string {
+	if entries != "" {
+		entries = "\n    repositories: " + entries
+	}
+
+	return `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-bundle }
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    modelKey: "{{claude-key}}"` + entries + `
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md, code: ` + code + ` }
+  board:
+    workTypes: [fix]
+    triggers:
+      - name: new-incidents
+        on: schedule
+        cron: "*/5 * * * *"
+        check: { agent: engineer, brief: Look for new incidents., maxUsd: 0.2 }
+        create: { type: fix, station: build }
+    stations:
+      - { id: spec, kind: human }
+      - { id: build, kind: agent, agent: engineer }
+      - { id: done, kind: done }
+`
+}
+
+// A check's bundle reads whatever its agent's code (ADR 0041 decision 3): it clones nothing, has
+// a login per entry with the variable of the token a reader picks, a read entry's wherever one
+// matches, none that writes, and every entry's prefix read only.
+func TestBundle_CheckCode(t *testing.T) {
+	t.Parallel()
+
+	const (
+		api = "https://github.com/acme/api"
+		all = "https://github.com/acme/"
+
+		apiWrite = `{ name: api, url: "https://github.com/acme/api", token: "{{github-token}}", access: write, default: true }`
+		acmeRead = `{ name: acme, url: "https://github.com/acme/*", token: "{{acme-read}}", access: read }`
+	)
+
+	user := forgeUsers["github"]
+
+	tests := []struct {
+		name, entries, code string
+		logins              []bundleLogin
+		readOnly            []string
+	}{
+		{
+			name: "read entry", entries: "[" + apiWrite + ", " + acmeRead + "]", code: "read",
+			logins: []bundleLogin{
+				{Prefix: api, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: all, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+			},
+			readOnly: []string{api, all},
+		},
+		{
+			name: "only write entries", entries: "[" + apiWrite + "]", code: "read",
+			logins:   []bundleLogin{{Prefix: api, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_API"}},
+			readOnly: []string{api},
+		},
+		{
+			name: "agent writes", entries: "[" + apiWrite + ", " + acmeRead + "]", code: "write",
+			logins: []bundleLogin{
+				{Prefix: api, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: all, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+			},
+			readOnly: []string{api, all},
+		},
+		{name: "no entries", code: "write", logins: []bundleLogin{}, readOnly: []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: checkEntriesYAML(tt.entries, tt.code), files: map[string]string{"environments/default.yaml": checkEnvironment}})
+
+			status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, h.checkClaims()))
+			if status != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (%s)", status, body)
+			}
+
+			var b runBundle
+			if err := json.Unmarshal(body, &b); err != nil {
+				t.Fatal(err)
+			}
+
+			if g := mustJSON(t, b.Repositories); g != "[]" {
+				t.Errorf("repositories = %s; want [], a check clones nothing", g)
+			}
+
+			if g, w := mustJSON(t, b.RepositoryLogins), mustJSON(t, tt.logins); g != w {
+				t.Errorf("repository logins\n got %s\nwant %s", g, w)
+			}
+
+			if g, w := mustJSON(t, b.ReadOnly), mustJSON(t, tt.readOnly); g != w {
+				t.Errorf("read only\n got %s\nwant %s", g, w)
+			}
+
+			if b.Repository != nil || len(b.Git) != 0 {
+				t.Errorf("repository %+v, git %+v; want none", b.Repository, b.Git)
+			}
+		})
+	}
+}
+
 // A check's bundle is 503 without Deps.Checks, and 403 for a trigger without a check or a check
 // of another agent.
 func TestBundle_CheckRefused(t *testing.T) {

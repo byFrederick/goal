@@ -250,3 +250,68 @@ func TestRunCode_RepositoryTokenEnvNamesTheEntry(t *testing.T) {
 		}
 	}
 }
+
+// A check reads whatever its agent's code: it clones nothing, signs in to every entry with a
+// token, with a read entry's token wherever one matches, and may write under no prefix.
+func TestLine_CheckCode(t *testing.T) {
+	t.Parallel()
+
+	writes := []RepositoryEntry{
+		{Name: appName, URL: codeApp, Token: tokApp, Access: AccessWrite, Default: true},
+		{Name: namePlatform, URL: codeDeep, Token: tokPlatform, Access: AccessWrite},
+	}
+
+	tests := []struct {
+		name    string
+		entries []RepositoryEntry
+		agent   string
+		want    RunCode
+	}{
+		{
+			name: "a read entry's token comes first", entries: codeEntries(), agent: CodeRead,
+			want: RunCode{
+				Logins: []RunLogin{
+					{Prefix: codeApp, Entry: appName, TokenEntry: acmeOwner, Token: tokAcme},
+					{Prefix: prefixAcme, Entry: acmeOwner, TokenEntry: acmeOwner, Token: tokAcme},
+					{Prefix: prefixDeep, Entry: namePlatform, TokenEntry: namePlatform, Token: tokPlatform},
+				},
+				ReadOnly: []string{codeApp, prefixAcme, prefixDeep},
+			},
+		},
+		{
+			name: "only write entries keep their tokens and write nothing", entries: writes, agent: CodeRead,
+			want: RunCode{
+				Logins: []RunLogin{
+					{Prefix: codeApp, Entry: appName, TokenEntry: appName, Token: tokApp},
+					{Prefix: prefixDeep, Entry: namePlatform, TokenEntry: namePlatform, Token: tokPlatform},
+				},
+				ReadOnly: []string{codeApp, prefixDeep},
+			},
+		},
+		{
+			name: "an agent that writes still reads", entries: codeEntries(), agent: CodeWrite,
+			want: RunCode{
+				Logins: []RunLogin{
+					{Prefix: codeApp, Entry: appName, TokenEntry: acmeOwner, Token: tokAcme},
+					{Prefix: prefixAcme, Entry: acmeOwner, TokenEntry: acmeOwner, Token: tokAcme},
+					{Prefix: prefixDeep, Entry: namePlatform, TokenEntry: namePlatform, Token: tokPlatform},
+				},
+				ReadOnly: []string{codeApp, prefixAcme, prefixDeep},
+			},
+		},
+		{name: "no entries, no code", agent: CodeWrite},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := codeLine(tt.entries...)
+			l.Agents = []AgentSpec{{Name: "checker", Code: tt.agent}}
+
+			if got := l.CheckCode(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CheckCode = %+v\nwant %+v", got, tt.want)
+			}
+		})
+	}
+}

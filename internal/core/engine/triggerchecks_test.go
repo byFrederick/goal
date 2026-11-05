@@ -321,7 +321,8 @@ func (h *harness) expectCheckToken(t *testing.T, token string) {
 	}
 }
 
-// A check run with an item, a repository or knowledge, or without its trigger, is refused.
+// A check run with an item, a repository, knowledge or code that clones, or without its trigger,
+// is refused.
 func TestRunTask_CheckRefused(t *testing.T) {
 	t.Parallel()
 
@@ -332,6 +333,9 @@ func TestRunTask_CheckRefused(t *testing.T) {
 		"a repository": func(r *domain.RunRequest) { r.Repository = domain.Repository{URL: repoURL} },
 		"knowledge":    func(r *domain.RunRequest) { r.Knowledge = []domain.KnowledgePin{{Source: "handbook"}} },
 		"no trigger":   func(r *domain.RunRequest) { r.Trigger = "" },
+		"clones": func(r *domain.RunRequest) {
+			r.Code = domain.RunCode{Clones: []domain.RunClone{{Repo: keyAcmeLib, URL: repoAcmeLib, Path: domain.WorkspacePath}}}
+		},
 	} {
 		req := checkRequest()
 		edit(&req)
@@ -558,4 +562,89 @@ func TestCheckItems_Repositories(t *testing.T) {
 	if len(got) != len(want) || got["API down"] != want["API down"] || got["Disk full"] != want["Disk full"] {
 		t.Errorf("item repositories = %v, want %v", got, want)
 	}
+}
+
+// A check's run reads whatever its agent's code (ADR 0041 decision 3): prepare gets the token
+// each entry's login picks, a read entry's wherever one matches, and no repository token, since
+// it clones nothing; its brief ends with the workspace note naming every entry, saying how to
+// open one with git and that it never pushes.
+func TestRunTask_CheckCode(t *testing.T) {
+	t.Parallel()
+
+	appOnly := func(code string) domain.Line {
+		l := entriesLine(code)
+		l.Runtime.Repositories = l.Runtime.Repositories[:1]
+
+		return l
+	}
+
+	tests := []struct {
+		name        string
+		line        domain.Line
+		wantPrepare map[string]string
+		noPrepare   []string
+		wantURLs    []string
+	}{
+		{
+			name: "read entry", line: entriesLine(domain.CodeRead),
+			wantPrepare: map[string]string{envEntryAcme: acmeReadValue}, noPrepare: []string{envEntryApp},
+			wantURLs: []string{repoURL, repoAcmeOwners},
+		},
+		{
+			name: "only write entries", line: appOnly(domain.CodeRead),
+			wantPrepare: map[string]string{envEntryApp: githubTokenValue}, noPrepare: []string{envEntryAcme},
+			wantURLs: []string{repoURL},
+		},
+		{
+			name: "agent writes", line: entriesLine(domain.CodeWrite),
+			wantPrepare: map[string]string{envEntryAcme: acmeReadValue}, noPrepare: []string{envEntryApp},
+			wantURLs: []string{repoURL, repoAcmeOwners},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := checkHarness(t, tt.line, porttest.Succeed(`{}`), checkTrigger(incidents))
+			h.addSecrets(t)
+			h.addSecret(t, secTickets, ticketsKeyValue)
+			h.addSecret(t, secAcmeRead, acmeReadValue)
+
+			h.fireAt(t, t0.Add(2*time.Minute))
+			h.tick(t)
+			h.wait(t, h.e)
+
+			if f := h.firing(t, incidents, at0900); f.CheckState != domain.CheckDone {
+				t.Fatalf("check = %+v; want done", f)
+			}
+
+			h.preparedTokens(t, tt.wantPrepare, append(tt.noPrepare, domain.RepositoryTokenEnv))
+
+			feedback := h.worker.Runs()[0].Env["GOAL_FEEDBACK"]
+			for _, want := range append(tt.wantURLs, "## Workspace", domain.ReposPath+"/<owner>/<name>", "never push to any repository") {
+				if !strings.Contains(feedback, want) {
+					t.Errorf("feedback = %q; want it to say %q", feedback, want)
+				}
+			}
+
+			if strings.Contains(feedback, "item's repositories") {
+				t.Errorf("feedback = %q; a check has no item's repositories to list", feedback)
+			}
+		})
+	}
+
+	t.Run("no entries", func(t *testing.T) {
+		t.Parallel()
+
+		h := checkHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{}`), checkTrigger(incidents))
+
+		h.fireAt(t, t0.Add(2*time.Minute))
+		h.tick(t)
+		h.wait(t, h.e)
+
+		if feedback := h.worker.Runs()[0].Env["GOAL_FEEDBACK"]; strings.Contains(feedback, "## Workspace") {
+			t.Errorf("feedback = %q; a factory with no entries gets no workspace note", feedback)
+		}
+	})
 }
