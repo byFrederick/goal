@@ -15,6 +15,7 @@ import { NeedsYouLink } from '../../shared/needs-you-link';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
 import { factoryRoleNote, holds, reasons } from '../../shared/permissions';
+import { useStreamStatus } from '../../shared/stream';
 import { useArrivals } from '../../ui/arrivals';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -356,6 +357,9 @@ export function BoardPage() {
   const role = factoryRoleNote(factory.role, factory.name);
   // A phone keeps its filters row behind the top bar's Filter button; from 768 px the top bar holds Pull andon and New item.
   const phone = usePhone();
+  // Until the live stream connects the status may be behind: say so to a screen reader, without moving the filters.
+  const stream = useStreamStatus();
+  const staleStream = { connecting: ', connecting…', live: '', reconnecting: ', reconnecting…' }[stream];
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
   const actions = useMemo(
@@ -401,6 +405,7 @@ export function BoardPage() {
             <span role="status">
               <Chip tone={board.line.andon ? 'rework' : 'ok'} dot size="lg">
                 {board.line.andon ? `Line stopped: ${board.line.andon.reason}` : 'Line running'}
+                {staleStream ? <span className="sr-only">{staleStream}</span> : null}
               </Chip>
             </span>
           </div>
