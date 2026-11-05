@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { versionFileQuery } from '../../../api/queries';
 import type { Change, Comparison, FileChange } from '../../../api/types';
+import { plural } from '../../../shared/format';
 import { Chip } from '../../../ui/chip';
 import { cn } from '../../../ui/cn';
 import { Skeleton, SkeletonRows } from '../../../ui/skeleton';
@@ -55,6 +56,12 @@ export function ChangesCard({
         <p className="m-0 text-secondary text-muted">No changes</p>
       ) : (
         <>
+          {changes.length > 0 ? (
+            <p className="m-0 text-secondary text-muted">
+              {plural(comparison.counts.changes, 'change')} in{' '}
+              {plural(Math.max(1, comparison.counts.sections), 'section')}
+            </p>
+          ) : null}
           {bySection(changes).map(([section, list]) => (
             <div key={section} className="flex min-w-0 flex-col rounded-card border border-line bg-card">
               <div className="border-b border-line px-4 py-3">

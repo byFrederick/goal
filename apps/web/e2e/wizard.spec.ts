@@ -94,6 +94,8 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
     .focus();
   await page.getByRole('button', { name: 'Add station' }).click();
   await page.getByRole('menuitem', { name: 'Agent station' }).click();
+  // The new row's name takes focus once the menu has closed (line.spec.ts waits for it too); typing waits for it.
+  await expect(row('New station').getByRole('textbox', { name: /^Name of station/ })).toBeFocused();
   await page.keyboard.type('Security review');
   await expect(row('Security review')).toHaveAccessibleName('6. Security review, agent station');
   await page.keyboard.press('Alt+ArrowUp');
