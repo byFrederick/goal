@@ -33,6 +33,16 @@ export type WorkerEvent =
   | { type: 'note_delivered'; at: string; note_id: number }
   | Finished;
 
+/** One repository of the finished line; a head prepare or the lookup could not name is absent. */
+export interface FinishedRepository {
+  repo: string;
+  base_commit?: string;
+  branch_head?: string;
+  pushed_head?: string;
+  /** Whether the pushed head exists and differs from the branch head prepare saw. */
+  wrote: boolean;
+}
+
 export interface Finished {
   type: 'finished';
   at: string;
@@ -52,6 +62,12 @@ export interface Finished {
    * repository, when the remote has no such branch or the lookup failed.
    */
   pushed_head?: string;
+  /**
+   * Each repository the run cloned or the credential helper answered for (ADR 0041 decision 5),
+   * once: the commits prepare saw, the item branch's commit on the remote once the agent ended,
+   * and whether that is a new head. Absent for a run whose bundle had no repositories.
+   */
+  repositories?: FinishedRepository[];
   /** The tool calls the agent's policy refused, by tool and call id (never their input); absent when none. */
   permission_denials?: { tool: string; id: string }[];
 }

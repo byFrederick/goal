@@ -38,6 +38,7 @@ beforeEach(async () => {
   dirs = {
     goal: join(root, 'goal'),
     workspace: join(root, 'workspace'),
+    repos: join(root, 'repos'),
     claude: join(home, '.claude'),
     home,
     knowledge: join(root, 'knowledge'),
@@ -367,13 +368,16 @@ describe('prepare', () => {
       ...served.spec,
       gateway_url: gateway,
       branch: 'goal/1-add-a-health-endpoint',
+      repositories: served.repositories,
     });
     expect(await readFile(join(dirs.goal, 'agent/prompt.md'), 'utf8')).toBe('# engineer\n');
     expect(await readFile(join(dirs.goal, 'agent/output.schema.json'), 'utf8')).toBe('{"type":"object"}');
+    // The bundle's repositories: the first clones into /workspace with the repository's fresh_base.
     expect(calls.map((c) => `${c.command} ${c.args.join(' ')}`)).toEqual([
+      'git config --global credential.useHttpPath true',
       `git config --global --add credential.https://github.com.helper ${credentialHelper(served.git_credentials[0])}`,
       'git check-ref-format --branch goal/1-add-a-health-endpoint',
-      `git clone --quiet --filter=blob:none -- https://github.com/acme/api.git ${dirs.workspace}`,
+      `git clone --quiet --filter=blob:none -- https://github.com/acme/api ${dirs.workspace}`,
       'git rev-parse --verify --quiet refs/remotes/origin/goal/1-add-a-health-endpoint',
       'git checkout --quiet -b goal/1-add-a-health-endpoint',
       'mise install --yes',

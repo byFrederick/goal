@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { gitWithRetry } from './retry.js';
-import { Bundle, type GitCredential, type Knowledge } from './spec.js';
+import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, paths } from './spec.js';
 
 /**
  * One command prepare runs; the result is its exit code. Its output goes to stderr, never stdout.
@@ -28,10 +29,16 @@ export interface PrepareDeps {
   env: NodeJS.ProcessEnv;
   now: () => Date;
   /**
-   * Where the bundle's files go (/goal), the repository is cloned (/workspace), Claude Code's config
-   * dir (claude) the box's home, where git's credential store goes, and the run's knowledge is unpacked (/knowledge).
+   * Where the bundle's files go (/goal), the repository is cloned (/workspace), the item's other
+   * repositories are (/repos), Claude Code's config dir (claude) the box's home, where git's
+   * credential store and the helper's files go, and the run's knowledge is unpacked (/knowledge).
    */
-  dirs: { goal: string; workspace: string; claude: string; home: string; knowledge: string };
+  dirs: { goal: string; workspace: string; repos: string; claude: string; home: string; knowledge: string };
+  /**
+   * How git runs the credential helper (src/credential.ts): node and the script. The worker's own
+   * node and dist/credential.js beside this file when absent.
+   */
+  credentialHelper?: { node: string; script: string };
   /** The wait between attempts of a network git step; setTimeout when absent. */
   sleep?: (ms: number) => Promise<void>;
   /** Where a retry is logged; stderr when absent. */
@@ -70,7 +77,15 @@ export interface Prepared {
   definition_files?: number;
   /** How many knowledge snapshots were unpacked under /knowledge; absent for none. */
   knowledge?: number;
+  /**
+   * Each repository prepare cloned from the bundle's repositories (ADR 0041 decision 5): its URL,
+   * the base's commit and the branch's head after checkout; absent for a bundle without them.
+   */
+  repositories?: { repo: string; base_commit?: string; branch_head?: string }[];
 }
+
+/** The transport of the address pushes to a read-only prefix go to (bin/git-remote-goal-refuse). */
+export const refusingTransport = 'goal-refuse';
 
 type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
 
@@ -90,6 +105,10 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * While the repository clones, prepare downloads the run's knowledge snapshots (spec.knowledge,
  * ADR 0038) in parallel and unpacks each into /knowledge/<source>/, files 0444 and folders 0555,
  * replacing an earlier unpack; a snapshot that does not download or unpack fails the run.
+ * A station run's bundle with repositories (ADR 0041 decision 5) clones each instead, by path: the
+ * first at /workspace as above, base and fresh_base from repository, and each other under /repos
+ * (cloneOther). Its git signs in with the per-path credential helper and refuses pushes where the
+ * run may not write (configureCode), and the stored login is not kept. An empty list clones nothing.
  * The clone is partial (--filter=blob:none: history without file contents, fetched when checked
  * out). The network git steps (the clone, and the base branch's push and fetch) run with a time limit
  * per attempt (GOAL_GIT_ATTEMPT_TIMEOUT seconds, 300 by default); an attempt cut off at it or failed
@@ -114,11 +133,17 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   }
   // Definition mode has no repository: nothing signs git in.
   const credentials = bundle.definition ? [] : bundle.git_credentials;
-  const store = await storeCredentials(
-    deps,
-    credentials.filter((c) => c.store),
-  );
-  for (const c of credentials) {
+  // A station run's code (ADR 0041): its repositories by path, a try and older bundles excepted.
+  const code = !bundle.definition && !bundle.repository?.commit ? bundle.repositories : undefined;
+  if (code) await configureCode(deps, bundle);
+  const store = code
+    ? ''
+    : await storeCredentials(
+        deps,
+        credentials.filter((c) => c.store),
+      );
+  // The per-path helper replaces the stored login; connection helpers stay, after it.
+  for (const c of code ? credentials.filter((c) => !c.store) : credentials) {
     // --add: two connections may sign git in to one host; git asks each helper until one answers.
     await must(deps, 'git', [
       'config',
@@ -142,38 +167,29 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   }
   const repo = bundle.repository;
   let baseBranch: string | undefined;
-  if (repo?.commit) {
+  const cloned: ClonedRepository[] = [];
+  if (code) {
+    out.repositories = [];
+    for (const c of code) {
+      const entry: ClonedRepository = { ...c };
+      if (c.path === paths.workspace) {
+        baseBranch = await cloneWorkspace(deps, { ...c, base: repo?.base, fresh_base: repo?.fresh_base }, out);
+        if (out.base_head) entry.base_commit = out.base_head;
+        if (out.branch_head) entry.branch_head = out.branch_head;
+      } else {
+        Object.assign(entry, await cloneOther(deps, c));
+      }
+      cloned.push(entry);
+      out.repositories.push({
+        repo: c.url,
+        ...(entry.base_commit ? { base_commit: entry.base_commit } : {}),
+        ...(entry.branch_head ? { branch_head: entry.branch_head } : {}),
+      });
+    }
+  } else if (repo?.commit) {
     await checkoutCommit(deps, repo, out);
   } else if (repo) {
-    const ws = deps.dirs.workspace;
-    // An empty base is the default branch, as an absent one.
-    const base = repo.base || undefined;
-    await must(deps, 'git', ['check-ref-format', '--branch', repo.branch]);
-    if (base) await must(deps, 'git', ['check-ref-format', '--branch', base]);
-    const clone = await network(deps, ['clone', '--quiet', '--filter=blob:none', '--', repo.url, ws], { clean: ws });
-    if (clone !== 0) throw new Error(`git clone exited ${clone}`);
-    const existed = await hasRemote(deps, ws, repo.branch);
-    if (base) await ensureBase(deps, ws, base);
-    const start = base ? [`origin/${base}`] : [];
-    const branch = existed ? ['-B', repo.branch, `origin/${repo.branch}`] : ['-b', repo.branch, ...start];
-    await must(deps, 'git', ['checkout', '--quiet', ...branch], ws);
-    // The heads before the rebase or merge, for a later try to start where this run did (ADR 0039).
-    const branchHead = await commitOf(deps, ws, 'HEAD');
-    const baseHead = await commitOf(deps, ws, start[0] ?? 'origin/HEAD');
-    if (branchHead) out.branch_head = branchHead;
-    if (baseHead) out.base_head = baseHead;
-    if (existed) {
-      out.fresh_base = repo.fresh_base ?? 'rebase';
-      const conflicts = await freshen(deps, ws, out.fresh_base, base);
-      if (conflicts.length > 0) {
-        out.conflicts = conflicts;
-        baseBranch = base;
-      }
-    }
-    // The repository's own tools; mise trusts configs under /workspace (MISE_TRUSTED_CONFIG_PATHS).
-    await must(deps, 'mise', ['install', '--yes'], ws);
-    out.branch = repo.branch;
-    out.branch_existed = existed;
+    baseBranch = await cloneWorkspace(deps, repo, out);
   }
   // A try's agent gets no git login (ADR 0039 decision 9): the clone was the logins' only use.
   if (repo?.commit) await dropLogins(deps, credentials);
@@ -186,6 +202,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     ...(out.conflicts ? { base_conflicts: out.conflicts } : {}),
     ...(baseBranch ? { base_branch: baseBranch } : {}),
     ...(out.branch ? { branch: out.branch } : {}),
+    ...(code ? { repositories: cloned } : {}),
   };
   await put(join(deps.dirs.goal, 'spec.json'), JSON.stringify(spec));
 
@@ -198,6 +215,122 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   out.at = done.toISOString();
   out.seconds = Math.round((done.getTime() - started.getTime()) / 100) / 10;
   return out;
+}
+
+/**
+ * Clones the first repository into /workspace on the item's branch: the remote one when it exists,
+ * otherwise new from its base (created from the default branch when missing), brings an existing
+ * branch up to date with that base and installs the repository's own tools. It sets out's branch,
+ * heads, fresh_base and conflicts, and returns the base the conflicts are with.
+ */
+async function cloneWorkspace(
+  deps: PrepareDeps,
+  repo: { url: string; branch: string; base?: string | undefined; fresh_base?: FreshBase | undefined },
+  out: Prepared,
+): Promise<string | undefined> {
+  const ws = deps.dirs.workspace;
+  // An empty base is the default branch, as an absent one.
+  const base = repo.base || undefined;
+  await must(deps, 'git', ['check-ref-format', '--branch', repo.branch]);
+  if (base) await must(deps, 'git', ['check-ref-format', '--branch', base]);
+  const clone = await network(deps, ['clone', '--quiet', '--filter=blob:none', '--', repo.url, ws], { clean: ws });
+  if (clone !== 0) throw new Error(`git clone exited ${clone}`);
+  const existed = await hasRemote(deps, ws, repo.branch);
+  if (base) await ensureBase(deps, ws, base);
+  const start = base ? [`origin/${base}`] : [];
+  const branch = existed ? ['-B', repo.branch, `origin/${repo.branch}`] : ['-b', repo.branch, ...start];
+  await must(deps, 'git', ['checkout', '--quiet', ...branch], ws);
+  // The heads before the rebase or merge, for a later try to start where this run did (ADR 0039).
+  const branchHead = await commitOf(deps, ws, 'HEAD');
+  const baseHead = await commitOf(deps, ws, start[0] ?? 'origin/HEAD');
+  if (branchHead) out.branch_head = branchHead;
+  if (baseHead) out.base_head = baseHead;
+  let conflictsWith: string | undefined;
+  if (existed) {
+    out.fresh_base = repo.fresh_base ?? 'rebase';
+    const conflicts = await freshen(deps, ws, out.fresh_base, base);
+    if (conflicts.length > 0) {
+      out.conflicts = conflicts;
+      conflictsWith = base;
+    }
+  }
+  // The repository's own tools; mise trusts configs under /workspace (MISE_TRUSTED_CONFIG_PATHS).
+  await must(deps, 'mise', ['install', '--yes'], ws);
+  out.branch = repo.branch;
+  out.branch_existed = existed;
+  return conflictsWith;
+}
+
+/**
+ * Clones one of the item's other repositories, partially, at its path under /repos: on the item's
+ * branch where the remote has it (checked out with -B from origin/<branch>), otherwise on the
+ * default branch. It returns the default branch's commit and the head checked out.
+ */
+async function cloneOther(
+  deps: PrepareDeps,
+  c: { url: string; path: string; branch: string },
+): Promise<{ base_commit?: string; branch_head?: string }> {
+  const dir = join(deps.dirs.repos, c.path.slice(paths.repos.length + 1));
+  await must(deps, 'git', ['check-ref-format', '--branch', c.branch]);
+  const clone = await network(deps, ['clone', '--quiet', '--filter=blob:none', '--', c.url, dir], { clean: dir });
+  if (clone !== 0) throw new Error(`git clone of ${c.url} exited ${clone}`);
+  if (await hasRemote(deps, dir, c.branch)) {
+    await must(deps, 'git', ['checkout', '--quiet', '-B', c.branch, `origin/${c.branch}`], dir);
+  }
+  const base = await commitOf(deps, dir, 'origin/HEAD');
+  const head = await commitOf(deps, dir, 'HEAD');
+  return { ...(base ? { base_commit: base } : {}), ...(head ? { branch_head: head } : {}) };
+}
+
+/**
+ * Sets git up for a station run's code (ADR 0041 decision 5). credential.useHttpPath on, so git
+ * asks for each repository's path; the logins, with the tokens read from their variables (one
+ * whose variable is unset is left out), in a 0600 file under the box's home; and the credential
+ * helper (src/credential.ts) first for each login's host. For each prefix the run may not write,
+ * pushes go to goal-refuse::<prefix>, which refuses them (bin/git-remote-goal-refuse); a write
+ * login under such a prefix gets an identity rewrite, since git takes the longest pushInsteadOf.
+ * Fetches are never rewritten, so they keep the token.
+ */
+async function configureCode(deps: PrepareDeps, bundle: Bundle): Promise<void> {
+  const logins = bundle.repository_logins ?? [];
+  const readOnly = bundle.read_only ?? [];
+  const dir = join(deps.dirs.home, '.goal');
+  const loginsFile = join(dir, 'repository-logins.json');
+  const recordFile = join(dir, 'repositories');
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const answers = logins.flatMap((l) => {
+    const password = deps.env[l.password_env];
+    return password ? [{ prefix: l.prefix, username: l.username, password }] : [];
+  });
+  await writeFile(loginsFile, JSON.stringify(answers), { mode: 0o600 });
+  await chmod(loginsFile, 0o600);
+
+  const helper = deps.credentialHelper ?? {
+    node: process.execPath,
+    script: fileURLToPath(new URL('./credential.js', import.meta.url)),
+  };
+  await must(deps, 'git', ['config', '--global', 'credential.useHttpPath', 'true']);
+  const command = `!${[helper.node, helper.script, loginsFile, recordFile].map(shellQuote).join(' ')}`;
+  for (const host of new Set(logins.map((l) => new URL(l.prefix).host))) {
+    await must(deps, 'git', ['config', '--global', '--add', `credential.https://${host}.helper`, command]);
+  }
+
+  if (readOnly.length > 0) {
+    await must(deps, 'git', ['config', '--global', `protocol.${refusingTransport}.allow`, 'always']);
+  }
+  for (const prefix of readOnly) {
+    await must(deps, 'git', ['config', '--global', '--add', `url.${refusingTransport}::${prefix}.pushInsteadOf`, prefix]);
+  }
+  for (const l of logins) {
+    if (l.write && readOnly.some((p) => l.prefix.startsWith(p) && l.prefix !== p)) {
+      await must(deps, 'git', ['config', '--global', '--add', `url.${l.prefix}.pushInsteadOf`, l.prefix]);
+    }
+  }
+}
+
+/** s as one sh word. */
+function shellQuote(s: string): string {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
 /**

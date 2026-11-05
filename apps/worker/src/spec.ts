@@ -11,13 +11,45 @@ export const paths = {
   factorySchema: '/goal/definition/factory.schema.json',
   agent: '/goal/agent',
   workspace: '/workspace',
+  /** Each of the item's repositories after the first, at /repos/<owner>/<name> (ADR 0041 decision 5). */
+  repos: '/repos',
   /** The run's knowledge: each pinned snapshot unpacked, read-only, into /knowledge/<source>/ (ADR 0038). */
   knowledge: '/knowledge',
   /** Claude Code's config dir for this run, in the sandbox's throwaway home; never the host's. */
   claudeConfig: '/home/node/.claude',
   /** The sandbox's throwaway home, where git's global config and credential store go. */
   home: '/home/node',
+  /** The logins the credential helper answers with (0600), written by prepare. */
+  repositoryLogins: '/home/node/.goal/repository-logins.json',
+  /** The repositories the credential helper answered for, one URL per line. */
+  repositoryRecord: '/home/node/.goal/repositories',
 } as const;
+
+/** An https URL or URL prefix without spaces or quotes: a clone's URL or a login's prefix. */
+const httpsUrl = z.string().regex(/^https:\/\/[^\s'"\\]+$/);
+
+/** Where prepare cloned a repository: /workspace, or /repos/ and a relative path. */
+const clonePath = z
+  .string()
+  .refine(
+    (p) => p === paths.workspace || (p.startsWith(`${paths.repos}/`) && relativePath.safeParse(p.slice(7)).success),
+    'a clone path is /workspace or /repos/<owner>/<name>',
+  );
+
+/**
+ * One of the item's repositories as prepare cloned it, in spec.json: where, the item's branch,
+ * whether the run may push to it, and the commits prepare saw (the base's and the branch's, before
+ * any rebase or merge), which goal-agent run reports at finish.
+ */
+export const ClonedRepository = z.object({
+  url: httpsUrl,
+  path: clonePath,
+  branch: z.string().min(1),
+  write: z.boolean(),
+  base_commit: z.string().optional(),
+  branch_head: z.string().optional(),
+});
+export type ClonedRepository = z.infer<typeof ClonedRepository>;
 
 /** A variable name; never an option or a shell word. */
 const envName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
@@ -216,6 +248,11 @@ const taskFields = z.object({
   base_branch: z.string().optional(),
   /** The item's branch prepare checked out in /workspace; absent without a repository. */
   branch: z.string().optional(),
+  /**
+   * The item's repositories prepare cloned (ADR 0041 decision 5), the first at /workspace; absent
+   * for a run whose bundle had no repositories, which reports one pushed head as before.
+   */
+  repositories: z.array(ClonedRepository).optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
   draft_request: DraftRequest.optional(),
   /** Jonah mode (ADR 0039 decision 4): the run reads its box with Read, Grep and Glob and returns observations and proposals. */
@@ -294,6 +331,19 @@ export const GitCredential = z.object({
 });
 export type GitCredential = z.infer<typeof GitCredential>;
 
+/**
+ * The git login of one repository entry: the credential helper answers with it for every URL under
+ * prefix (one repository, or an owner's every repository ending in /), with username and the
+ * value of password_env, which prepare reads. write is whether the run may push under prefix.
+ */
+export const RepositoryLogin = z.object({
+  prefix: httpsUrl,
+  username: z.string().regex(/^[A-Za-z0-9._@+-]+$/),
+  password_env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/),
+  write: z.boolean(),
+});
+export type RepositoryLogin = z.infer<typeof RepositoryLogin>;
+
 /** A mise tool spec such as go@1.26.10 or npm:pnpm@12.15.0; never an option. */
 const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
 
@@ -304,7 +354,7 @@ const toolSpec = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9@:/._+-]*$/);
 export const Bundle = z
   .object({
     spec: taskFields
-      .omit({ gateway_url: true, base_conflicts: true, base_branch: true, branch: true })
+      .omit({ gateway_url: true, base_conflicts: true, base_branch: true, branch: true, repositories: true })
       .refine(itemNamed, itemMessage)
       .refine(oneMode, modeMessage),
     /** Files under /goal by path, base64. */
@@ -338,6 +388,16 @@ export const Bundle = z
       })
       .optional(),
     git_credentials: z.array(GitCredential).default([]),
+    /**
+     * A station run's code (ADR 0041 decisions 3 and 5), null or absent for every other run: the
+     * item's repositories to clone (the first at /workspace), a login per entry with a token for
+     * the credential helper, and the URL prefixes the run may not push to.
+     */
+    repositories: z
+      .array(z.object({ url: httpsUrl, path: clonePath, branch: z.string().min(1), write: z.boolean() }))
+      .nullish(),
+    repository_logins: z.array(RepositoryLogin).nullish(),
+    read_only: z.array(httpsUrl).nullish(),
     /** The definition's runtime.tools, installed after the repository's own. */
     tools: z.array(toolSpec).default([]),
     /**

@@ -1,0 +1,6 @@
+#!/bin/sh
+# git's remote helper for goal-refuse::<url> (ADR 0041 decision 5): prepare points
+# url.goal-refuse::<prefix>.pushInsteadOf at every prefix the run may not write, so a push there
+# reaches this helper, which refuses it. git calls it with the remote's name and the address.
+echo "fatal: this run may not push to ${2:-$1}: it has read access only there" >&2
+exit 1

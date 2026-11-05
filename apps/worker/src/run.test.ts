@@ -95,7 +95,8 @@ async function run(
     files?: AgentFiles;
     env?: NodeJS.ProcessEnv;
     fetch?: typeof globalThis.fetch;
-    remoteHead?: (branch: string) => Promise<string | undefined>;
+    remoteHead?: RunDeps['remoteHead'];
+    recorded?: RunDeps['recorded'];
     environment?: RunDeps['environment'];
   } = {},
 ) {
@@ -110,6 +111,7 @@ async function run(
     fetch: opts.fetch ?? gateway().fetch,
     notePollMs: 0,
     ...(opts.remoteHead ? { remoteHead: opts.remoteHead } : {}),
+    ...(opts.recorded ? { recorded: opts.recorded } : {}),
     ...(opts.environment ? { environment: opts.environment } : {}),
   });
   for (const call of calls) await call.read;
@@ -446,6 +448,92 @@ describe('runTask pushed head', () => {
 
     expect(asked).toEqual([]);
     expect(events.at(-1)).not.toHaveProperty('pushed_head');
+  });
+});
+
+describe('runTask repositories', () => {
+  const branch = 'goal/1-add-a-health-endpoint';
+  const [base, before, pushed, other] = ['a', 'b', 'c', 'd'].map((c) => c.repeat(40));
+  const withRepos = parseSpec(
+    JSON.stringify({
+      ...spec,
+      branch,
+      repositories: [
+        { url: 'https://github.com/acme/app', path: '/workspace', branch, write: true, base_commit: base, branch_head: before },
+        { url: 'https://github.com/acme/lib', path: '/repos/acme/lib', branch, write: false, base_commit: base, branch_head: base },
+      ],
+    }),
+  );
+  type At = { cwd: string } | { url: string } | undefined;
+
+  it('reports one entry per repository cloned or recorded, once, with its heads and whether it wrote', async () => {
+    const asked: { branch: string; at: At }[] = [];
+    const heads: Record<string, string> = {
+      '/workspace': pushed,
+      '/repos/acme/lib': base,
+      'https://github.com/acme/web': other,
+    };
+    const remoteHead = async (b: string, at?: At) => {
+      asked.push({ branch: b, at });
+      return at ? heads['cwd' in at ? at.cwd : at.url] : undefined;
+    };
+    // The helper records the clones too, and a repository once per request.
+    const recorded = async () => [
+      'https://github.com/acme/app',
+      'https://github.com/acme/web',
+      'https://github.com/acme/web',
+      'https://github.com/acme/docs',
+    ];
+
+    const { code, events } = await run([success], { spec: withRepos, remoteHead, recorded });
+
+    expect(code).toBe(0);
+    expect(asked).toEqual([
+      { branch, at: { cwd: '/workspace' } },
+      { branch, at: { cwd: '/repos/acme/lib' } },
+      { branch, at: { url: 'https://github.com/acme/web' } },
+      { branch, at: { url: 'https://github.com/acme/docs' } },
+    ]);
+    const finished = events.at(-1);
+    expect(finished).toMatchObject({ type: 'finished', status: 'succeeded', pushed_head: pushed });
+    expect(finished).toHaveProperty('repositories', [
+      { repo: 'https://github.com/acme/app', base_commit: base, branch_head: before, pushed_head: pushed, wrote: true },
+      // The remote's branch is the head prepare saw: nothing new was pushed.
+      { repo: 'https://github.com/acme/lib', base_commit: base, branch_head: base, pushed_head: base, wrote: false },
+      // Opened by the agent: no starting head, so a branch there counts as written.
+      { repo: 'https://github.com/acme/web', pushed_head: other, wrote: true },
+      { repo: 'https://github.com/acme/docs', wrote: false },
+    ]);
+  });
+
+  it("leaves a failed lookup's pushed head out and ends the run as it would", async () => {
+    const remoteHead = async (_b: string, at?: At) => {
+      if (at && 'cwd' in at && at.cwd === '/workspace') throw new Error('git ls-remote exited 128');
+      return base;
+    };
+
+    const { code, events } = await run([success], { spec: withRepos, remoteHead });
+
+    expect(code).toBe(0);
+    const finished = events.at(-1);
+    expect(finished).toMatchObject({ type: 'finished', status: 'succeeded' });
+    expect(finished).not.toHaveProperty('pushed_head');
+    expect(finished).toHaveProperty('repositories', [
+      { repo: 'https://github.com/acme/app', base_commit: base, branch_head: before, wrote: false },
+      { repo: 'https://github.com/acme/lib', base_commit: base, branch_head: base, pushed_head: base, wrote: false },
+    ]);
+  });
+
+  it('reports them after a crash too', async () => {
+    const { code, events } = await run([], {
+      spec: withRepos,
+      remoteHead: async () => pushed,
+      throws: new Error('boom'),
+    });
+
+    expect(code).toBe(1);
+    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom', pushed_head: pushed });
+    expect((events.at(-1) as { repositories: unknown[] }).repositories).toHaveLength(2);
   });
 });
 

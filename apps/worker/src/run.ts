@@ -1,7 +1,8 @@
 import type { SDKMessage, query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { agentQuery } from './agent.js';
 import { applyEnvironment, type EnvironmentDeps } from './environment.js';
-import { EventMapper, type Finished, type WorkerEvent } from './events.js';
+import { repositoryUrl } from './credential.js';
+import { EventMapper, type Finished, type FinishedRepository, type WorkerEvent } from './events.js';
 import { NotePoller, notePollMs, PromptQueue } from './notes.js';
 import { isCommitId } from './prepare.js';
 import type { AgentFiles, TaskSpec } from './spec.js';
@@ -16,10 +17,13 @@ export interface RunDeps {
   /** How often notes are polled between turns; 15 s when unset. */
   notePollMs?: number;
   /**
-   * The item branch's commit on the remote, read after the agent ends; undefined when the remote
-   * has no such branch. Absent, the finished event names no pushed head.
+   * The item branch's commit on the remote, read after the agent ends: origin's in the clone at
+   * cwd (the workspace when absent), or the repository at url; undefined when the remote has no
+   * such branch. Absent, the finished event names no pushed head.
    */
-  remoteHead?: (branch: string) => Promise<string | undefined>;
+  remoteHead?: (branch: string, at?: { cwd: string } | { url: string }) => Promise<string | undefined>;
+  /** The repositories the credential helper answered for, read after the agent ends; none when absent. */
+  recorded?: () => Promise<string[]>;
   /** Where and how the spec's environment is applied before the agent starts; needed when the spec has one. */
   environment?: Omit<EnvironmentDeps, 'env'>;
 }
@@ -80,28 +84,65 @@ export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps):
       }
     }
   } catch (err) {
-    deps.emit(await withPushedHead(spec, deps, failed(deps.now, err instanceof Error ? err.message : String(err))));
+    deps.emit(await withPushes(spec, deps, failed(deps.now, err instanceof Error ? err.message : String(err))));
     return 1;
   } finally {
     inbox.close();
   }
 
-  deps.emit(await withPushedHead(spec, deps, result ?? failed(deps.now, 'the agent ended without a result')));
+  deps.emit(await withPushes(spec, deps, result ?? failed(deps.now, 'the agent ended without a result')));
   return result ? 0 : 1;
 }
 
 /**
- * The finished event with the head the run pushed (ADR 0039, decision 8): the agent pushes with
- * its own git, so this is the item branch's commit on the remote once it ended. Without a
- * repository, or when the lookup finds nothing or fails, the event is as it was.
+ * The finished event with what the run pushed (ADR 0039 decision 8, ADR 0041 decision 5): the
+ * agent pushes with its own git, so each head is the item branch's commit on the remote once it
+ * ended. With spec.repositories, one entry per repository prepare cloned or the credential helper
+ * answered for, by its URL, once; a repository the agent opened itself is looked up by URL and has
+ * no starting head. Without them, the first repository's head alone, as before. A lookup that
+ * finds nothing or fails leaves that head out.
  */
-async function withPushedHead(spec: TaskSpec, deps: RunDeps, f: Finished): Promise<Finished> {
-  if (!spec.branch || !deps.remoteHead) return f;
-  const head = await deps.remoteHead(spec.branch).catch((err: unknown) => {
-    process.stderr.write(`goal-agent run: the pushed head: ${err instanceof Error ? err.message : String(err)}\n`);
-    return undefined;
-  });
-  return head ? { ...f, pushed_head: head } : f;
+async function withPushes(spec: TaskSpec, deps: RunDeps, f: Finished): Promise<Finished> {
+  const { remoteHead } = deps;
+  if (!remoteHead) return f;
+  const lookup = (branch: string, at?: { cwd: string } | { url: string }) =>
+    remoteHead(branch, at).catch((err: unknown) => {
+      process.stderr.write(`goal-agent run: the pushed head: ${err instanceof Error ? err.message : String(err)}\n`);
+      return undefined;
+    });
+  if (!spec.repositories) {
+    if (!spec.branch) return f;
+    const head = await lookup(spec.branch);
+    return head ? { ...f, pushed_head: head } : f;
+  }
+
+  const repositories: FinishedRepository[] = [];
+  const seen = new Set<string>();
+  let first: string | undefined;
+  for (const c of spec.repositories) {
+    const key = repositoryUrl(c.url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const pushed = await lookup(c.branch, { cwd: c.path });
+    if (repositories.length === 0) first = pushed;
+    repositories.push({
+      repo: c.url,
+      ...(c.base_commit ? { base_commit: c.base_commit } : {}),
+      ...(c.branch_head ? { branch_head: c.branch_head } : {}),
+      ...(pushed ? { pushed_head: pushed } : {}),
+      wrote: pushed !== undefined && pushed !== c.branch_head,
+    });
+  }
+  const branch = spec.repositories[0]?.branch ?? spec.branch;
+  const recorded = await (deps.recorded?.() ?? Promise.resolve([])).catch(() => [] as string[]);
+  for (const url of recorded) {
+    const key = repositoryUrl(url);
+    if (key === '' || seen.has(key)) continue;
+    seen.add(key);
+    const pushed = branch ? await lookup(branch, { url }) : undefined;
+    repositories.push({ repo: url, ...(pushed ? { pushed_head: pushed } : {}), wrote: pushed !== undefined });
+  }
+  return { ...f, repositories, ...(first ? { pushed_head: first } : {}) };
 }
 
 /** The commit `git ls-remote origin refs/heads/<branch>` printed for branch, if it printed one. */
