@@ -2350,7 +2350,7 @@ export interface paths {
         put?: never;
         /**
          * Test an environment's MCP servers or a template
-         * @description Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+         * @description Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
          */
         post: operations["testEnvironment"];
         delete?: never;
@@ -8790,7 +8790,7 @@ export interface components {
         };
         ServerTest: {
             server: string;
-            /** @description False for a stdio server, which goald does not start */
+            /** @description False for a stdio server goald does not start: its command is not one the tool catalog ships, or a URL in its env is not on a listed code host; error says which */
             tested: boolean;
             ok: boolean;
             /** @description The tool names tools/list answered */
