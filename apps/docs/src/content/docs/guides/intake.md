@@ -59,7 +59,11 @@ An item made from a webhook delivery is untrusted: its brief carries the event's
 
 The API and `goal intake` return a definition's disabled triggers as `suggestions`.
 
-On the web, a trigger that is off in the definition appears in the Triggers table as a suggestion; turning it on publishes a new version. A trigger that runs a check shows **Check** and the agent that runs it. The Webhooks section shows each open webhook as Receiving, No trigger yet or Closed, with **Manage** opening the organization's webhooks page. The New trigger dialog still offers a fixed set of suggestions under "Or start from a suggestion".
+On the web, a trigger that is off in the definition appears in the Triggers table as a suggestion; turning it on publishes a new version. A trigger that runs a check shows **Check** and the agent that runs it. The Webhooks section shows each open webhook as Receiving, No trigger yet or Closed, with **Manage** opening the organization's webhooks page.
+
+The New trigger dialog lists the same suggestions under "Or turn on a suggestion from the factory's definition", each with the station it creates items at. **Turn on** publishes a new version with the trigger on, and the row leaves the list. The block is absent when the definition has no disabled triggers. The onboarding Intake step offers the same suggestions as its starter triggers.
+
+New trigger's **Built in** group lists Schedule and **Check with an agent**. A second group, also called Check with an agent, lists each tool the factory's agents have on. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the factory's first agent that has the tool. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
 
 ## Try a trigger on a past event
 
