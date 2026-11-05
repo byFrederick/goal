@@ -19,7 +19,7 @@ func TestAPI_SignInIsOffUnderNone(t *testing.T) {
 		t.Fatalf("auth config = %d", code)
 	}
 
-	if config.Mode != gen.None || len(config.Methods) != 0 {
+	if config.Mode != gen.AuthModeNone || len(config.Methods) != 0 {
 		t.Errorf("auth config = %+v, want mode none and no methods", config)
 	}
 
@@ -28,7 +28,7 @@ func TestAPI_SignInIsOffUnderNone(t *testing.T) {
 		t.Fatalf("me = %d", code)
 	}
 
-	if me.Kind != gen.MeKindUser || me.Mode != gen.None || me.User != nil || me.Session != nil || me.PlatformAdmin {
+	if me.Kind != gen.MeKindUser || me.Mode != gen.AuthModeNone || me.User != nil || me.Session != nil || me.PlatformAdmin {
 		t.Errorf("me = %+v, want the local user of mode none", me)
 	}
 }

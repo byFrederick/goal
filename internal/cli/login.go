@@ -184,7 +184,7 @@ func signInOff(ctx context.Context, tg target) (bool, error) {
 		return false, problem(res.HTTPResponse, nil)
 	}
 
-	return res.JSON200.Mode == gen.None, nil
+	return res.JSON200.Mode == gen.AuthModeNone, nil
 }
 
 // replaceCredential stores cred for the target's origin in the store named storeName and
@@ -512,7 +512,7 @@ func credentialNoun(c credential) string {
 // have no name), an API key by name.
 func describeMe(me *gen.Me) string {
 	switch {
-	case me.Mode == gen.None:
+	case me.Mode == gen.AuthModeNone:
 		return "the local user"
 	case me.User != nil && strings.TrimSpace(me.User.Name) == "":
 		return me.User.Email
@@ -628,7 +628,7 @@ func whoami(ctx context.Context, out *printer, getenv func(string) string, args 
 		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
 	}
 
-	if res.JSON200.Mode == gen.None {
+	if res.JSON200.Mode == gen.AuthModeNone {
 		out.printf("The local user on %s: sign-in is off there (GOAL_AUTH=none).\n", tg.origin)
 
 		return nil

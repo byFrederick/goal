@@ -1311,6 +1311,7 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       agents: list((read.model.agents as Json).agents).length,
       connectors: t.connectors,
       changed: t.changed,
+      code: t.code,
     };
   };
 

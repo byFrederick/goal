@@ -50,20 +50,20 @@ func newAuthGoald(t *testing.T) *authGoald {
 	t.Helper()
 
 	g := &authGoald{
-		mode: gen.Session, polls: []string{"ok"}, signOut: http.StatusOK,
+		mode: gen.AuthModeSession, polls: []string{"ok"}, signOut: http.StatusOK,
 		me: map[string]gen.Me{
 			testSession: {
-				Kind: gen.MeKindUser, Mode: gen.Session, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"},
+				Kind: gen.MeKindUser, Mode: gen.AuthModeSession, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"},
 				PlatformAdmin: true, Session: &gen.MeSession{ExpiresAt: time.Date(2026, 10, 31, 14, 2, 0, 0, time.Local)},
 			},
 			testPAT: {
-				Kind: gen.MeKindUser, Mode: gen.Session, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"},
+				Kind: gen.MeKindUser, Mode: gen.AuthModeSession, User: &gen.User{Id: "u1", Name: "F. Cruz", Email: "f.cruz@example.com"},
 				Token: &gen.MeToken{
 					Id: "t1", Name: "laptop", OrgId: "o1", Scopes: []string{"org:read", "item:create"},
 					ExpiresAt: time.Date(2026, 11, 23, 12, 0, 0, 0, time.Local),
 				},
 			},
-			testKey: {Kind: gen.MeKindService, Mode: gen.Session, Key: &gen.MeKey{Id: "k1", Name: "ci", OrgId: "o1"}},
+			testKey: {Kind: gen.MeKindService, Mode: gen.AuthModeSession, Key: &gen.MeKey{Id: "k1", Name: "ci", OrgId: "o1"}},
 		},
 	}
 
@@ -450,7 +450,7 @@ func TestLogin_SignInOff(t *testing.T) {
 	t.Parallel()
 
 	g := newAuthGoald(t)
-	g.set(func(g *authGoald) { g.mode = gen.None })
+	g.set(func(g *authGoald) { g.mode = gen.AuthModeNone })
 	getenv := testEnv(t, g.srv.URL, nil)
 
 	var buf bytes.Buffer
@@ -550,9 +550,9 @@ func TestSayWho_NamesAPersonWithoutANameByEmail(t *testing.T) {
 		me   gen.Me
 		want string
 	}{
-		{gen.Me{Mode: gen.Session, Kind: gen.MeKindUser, User: &gen.User{Email: "owner@example.com"}}, "owner@example.com on " + testOrigin},
-		{gen.Me{Mode: gen.Session, Kind: gen.MeKindUser, User: &gen.User{Name: "F. Cruz", Email: "f.cruz@example.com"}}, "F. Cruz (f.cruz@example.com) on " + testOrigin},
-		{gen.Me{Mode: gen.Session, Kind: gen.MeKindService, Key: &gen.MeKey{Name: "ci"}}, "The API key ci on " + testOrigin},
+		{gen.Me{Mode: gen.AuthModeSession, Kind: gen.MeKindUser, User: &gen.User{Email: "owner@example.com"}}, "owner@example.com on " + testOrigin},
+		{gen.Me{Mode: gen.AuthModeSession, Kind: gen.MeKindUser, User: &gen.User{Name: "F. Cruz", Email: "f.cruz@example.com"}}, "F. Cruz (f.cruz@example.com) on " + testOrigin},
+		{gen.Me{Mode: gen.AuthModeSession, Kind: gen.MeKindService, Key: &gen.MeKey{Name: "ci"}}, "The API key ci on " + testOrigin},
 	} {
 		var buf bytes.Buffer
 		sayWho(&printer{w: &buf}, testOrigin, &c.me, nil)

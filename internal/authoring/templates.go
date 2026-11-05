@@ -47,7 +47,17 @@ type TemplateSummary struct {
 	Connectors []string
 	// Changed is the date the version was made ("2026-10-09"), as template.yaml says.
 	Changed string
+	// Code is the code access the template needs (ADR 0041): CodeNone or CodeRead, as
+	// template.yaml says, and CodeWrite when its line has a station that merges.
+	Code string
 }
+
+// The code access a template needs.
+const (
+	CodeNone  = "none"
+	CodeRead  = "read"
+	CodeWrite = "write"
+)
 
 // Template is one version of a template with what its detail shows.
 type Template struct {
@@ -65,6 +75,7 @@ type templateMetaFile struct {
 	Description string   `yaml:"description"`
 	Connectors  []string `yaml:"connectors"`
 	Changed     string   `yaml:"changed"`
+	Code        string   `yaml:"code"`
 }
 
 // TemplateCatalog is the bucket's template catalog. goald reads it (Service.Templates, Template
@@ -205,6 +216,7 @@ func (x *TemplateCatalog) template(ctx context.Context, name string, version int
 	t := Template{
 		TemplateSummary: TemplateSummary{
 			Name: name, Version: v, Title: meta.Title, Summary: meta.Summary, Connectors: meta.Connectors, Changed: meta.Changed,
+			Code: templateCode(meta.Code, files),
 		},
 		Description: meta.Description,
 		Model:       Model{Connections: []any{}},
@@ -224,6 +236,21 @@ func (x *TemplateCatalog) template(ctx context.Context, name string, version int
 	x.read[k], x.files[k] = t, files
 
 	return t, files, nil
+}
+
+// templateCode is the code access a template needs: write when its line merges, else what
+// template.yaml says. A version pushed before template.yaml had code reads as none.
+func templateCode(code string, files map[string][]byte) string {
+	f, _ := config.Check((&tree{manifest: domain.Manifest{}, data: map[string][]byte{}}).with(files, nil))
+	if f != nil && slices.ContainsFunc(f.Spec.Board.Stations, func(s config.Station) bool { return s.Action == config.ActionMerge }) {
+		return CodeWrite
+	}
+
+	if code == CodeRead {
+		return CodeRead
+	}
+
+	return CodeNone
 }
 
 // connectorNames lists what a model's connections connect to.
@@ -291,7 +318,8 @@ func (s *Service) Template(ctx context.Context, name string, version int) (Templ
 type TemplateUpload struct {
 	Name    string
 	Version int
-	// Meta is template.yaml: title (required), summary, description, connectors, changed.
+	// Meta is template.yaml: title and code (none or read; required), summary, description,
+	// connectors, changed.
 	Meta []byte
 	// Files is the definition by path, factory.yaml at its root.
 	Files map[string][]byte
@@ -324,8 +352,8 @@ const maxTemplateName = 63
 
 // Push adds one version of a template to the catalog (B §7, goal catalog templates push). It
 // refuses a name that is not lowercase words joined by dashes, a version below 1
-// (ErrInvalidRequest), files outside the path rules or limits, a template.yaml without a title,
-// a definition with error problems, a metadata.id other than the nil UUID and any credential:
+// (ErrInvalidRequest), files outside the path rules or limits, a template.yaml without a title
+// or without code none or read (write follows from a line that merges), a definition with error problems, a metadata.id other than the nil UUID and any credential:
 // reference (*TemplateInvalidError: templates never include credentials), and a version the
 // catalog has (ErrTemplateExists). Files are written once each, template.yaml last, so the
 // version is listed only when it is complete.
@@ -394,6 +422,10 @@ func templateProblems(t TemplateUpload) []domain.DefinitionProblem {
 		out = append(out, metaProblem(fmt.Sprintf("%s: %v", templateMeta, err)))
 	case strings.TrimSpace(meta.Title) == "":
 		out = append(out, metaProblem(templateMeta+" has no title"))
+	case meta.Code != CodeNone && meta.Code != CodeRead:
+		out = append(out, metaProblem(fmt.Sprintf(
+			"%s: code is none or read, the code access the template needs, not %q; a line that merges needs write and says so itself",
+			templateMeta, meta.Code)))
 	}
 
 	f, problems := config.Check((&tree{manifest: domain.Manifest{}, data: map[string][]byte{}}).with(t.Files, nil))
