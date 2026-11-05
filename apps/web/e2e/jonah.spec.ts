@@ -1,9 +1,16 @@
 // Jonah's three tabs (jonah/jonah.jpg, jonah/tests.jpg, mobile/jonah.jpg): the Overview with the proposals waiting,
 // the policy and what Jonah noticed; the Proposals tab's state filter; the Tests tab's kept tests by station.
 // Not run in the box: Playwright needs a browser, which the box does not have.
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
 import { expectNoOverlap, expectTarget44 } from './support-boxes';
+
+// Reduced motion still runs short opacity fades, and tablet-768 adds mock latency. Axe reads colour mid-fade,
+// so wait until the page has no skeleton and no running animation (MOTION.md, reduced motion).
+async function settle(page: Page) {
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
+}
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -24,6 +31,7 @@ test('the overview shows the proposals waiting, the policy and what Jonah notice
   await expect(page.getByText(/Plain-language judge/)).toHaveCount(0);
   await expect(page.getByRole('region', { name: /After publish/ })).toBeVisible();
 
+  await settle(page);
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -101,6 +109,7 @@ test('the Tests tab lists kept tests by station, and Remove takes one away', asy
   await page.getByRole('button', { name: 'Actions for test #418' }).click();
   await page.getByRole('menuitem', { name: 'Remove' }).click();
   await expect(page.getByText('Needs you header in the top bar')).toHaveCount(0);
+  await settle(page);
   await expectAccessible(page);
 });
 
@@ -147,6 +156,7 @@ test('the overview fits 375 and 768 px and renders in dark mode', async ({ page 
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
+  await settle(page);
   await expectAccessible(page);
 });
 
