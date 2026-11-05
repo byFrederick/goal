@@ -52,15 +52,12 @@ export function StartField({
   value,
   onChange,
   error,
-  hideAfter = false,
 }: {
   id: string;
   value: StartChoice;
   onChange: (next: StartChoice) => void;
   /** The problem with the start, said on the field. */
   error?: string | undefined;
-  /** Change's dialog sets a time only. */
-  hideAfter?: boolean;
 }) {
   const set = (patch: Partial<StartChoice>) => onChange({ ...value, ...patch });
   const invalid = Boolean(error);
@@ -74,7 +71,7 @@ export function StartField({
       </div>
       <SegmentedControl
         label="Start"
-        options={hideAfter ? modes.filter((m) => m.value !== 'after') : modes}
+        options={modes}
         value={value.mode}
         onChange={(mode) => set({ mode })}
         describedBy={invalid ? `${id}-start-error` : undefined}
