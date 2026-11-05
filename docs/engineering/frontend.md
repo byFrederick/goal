@@ -414,14 +414,32 @@ every other line and comment stays byte for byte. A file with no `triggers` key,
 trigger written in place (and `board` under `spec` when that is missing too). The draft-model API cannot carry `board.triggers`
 yet (`internal/factorymodel/model.go`), which is why the page does not use it.
 
-Try with a past event (ADR 0028, `trigger-try.tsx`) opens a dialog that runs `POST …/intake/triggers/{trigger}/try`
-(`tryIntakeTrigger`, through the `intakeTryMutation` key) against one of the trigger's events. It tries the
-saved trigger, not the open edits: Try is disabled with its reason while the form has unsaved edits, for a
-trigger that is not saved yet, for a trigger that is not a schedule (its events are not stored, the API's
-`event-not-stored`) and for a schedule with no past events. The result says whether the event matched, each step,
-the item it would create and, when the Only if has the model check, the model's answer and its cost; it also says
-nothing was created. The model check's question is the Only if's `modelAgrees.question`, written with the other
-keys; a blank question blocks Save. The connection and model of `modelAgrees` are kept as the file has them.
+The When block picks the sender or one webhook and any GitHub event. The event table (which filters each event
+supplies) is `github-events.ts`, mirrored by hand from `internal/catalog/senders/github.yaml` because no API serves
+it. The form offers only the filters the chosen event supplies (action, conclusion, branch, repo as a list, label,
+paths, authors, skipBots), then payload matches (`filter.match`) and `perHour` next to `perDay`. Legacy `on` keys
+(`github.check_run.failed`) read in the schema's current words through `normalizeTrigger` and `readRawTrigger`, and
+keep their lines until `on` or `filter` is edited. The model check is not on the page: the form never asks about it,
+and a file's `only.modelAgrees` is kept as it is on save (the draft shows its `field-ignored` warning).
+
+A trigger with `check` shows the check layout (`trigger-check-section.tsx`, `trigger-check-log.tsx`). `TriggerForm`
+and `CheckSection` take `value` and `onChange` and never fetch, so the New trigger page can mount them. The Check
+block has the agent, its tools as chips and the Brief (it shows the `check.brief` value; a `./triggers/<name>.md`
+path shows as the path). Remembers shows the open and closed counts and how far the check has read, with Clear
+(`clearTriggerState`; a 409 means a check is still running and shows that reason). Limits are `perCheck`, `perDay`,
+`maxUsd` and `perHour`. `RecentChecks` reads `triggerChecksQuery` (`listTriggerChecks`): each row has the time, the
+status (Filed, Noted, Nothing new, Failed), every filed, noted and skipped key with its reason and item link, and
+the cost. The Today line counts the newest 100 checks, since the API has no day total.
+
+Try with a past delivery (ADR 0028, `trigger-try.tsx`) opens a dialog that runs `POST …/intake/triggers/{trigger}/try`
+(`tryIntakeTrigger`, through the `intakeTryMutation` key) against one of the trigger's stored deliveries. It tries
+the saved trigger, not the open edits: Try is disabled with its reason while the form has unsaved edits and for a
+trigger that is not saved yet. A delivery older than 30 days answers `event-not-stored`, and the dialog shows
+`notStoredReason`. The result says whether the delivery matched, each step and the item it would create, and that
+nothing was created.
+
+Try a check (`TryCheck`, `tryTriggerCheck`) queues one check for the saved trigger and shows it as a row marked as a
+try. A 409 (a check is still running) holds the button off with that reason; a 422 (`no-check`) shows its problem.
 
 Rules the page follows:
 - A draft with edits of its own blocks the save, with a link to the definition editor: the page never
@@ -434,11 +452,12 @@ Rules the page follows:
   shows under that block, any other problem above the form. Save stays off while an error stands.
 - A name the definition does not have opens a blank trigger when the URL has `?on=<event key>` (the New
   trigger picker's choice). The picker itself is not on this page.
-- "Try with a past event", "A model agrees it is worth an item" and "+ Add another event" render disabled
-  with "Not available yet" (ADR 0016, decision 4; ADR 0028 for the model check).
+- "+ Add another event" renders disabled with "Not available yet" (ADR 0016, decision 4).
 
 Stream events: a `definition` event and an `item` event both invalidate `intakeKeys.root`, so the
-trigger's results and its YAML re-read.
+trigger's results and its YAML re-read. The stream has no check event and no query polls, so a queued try shows
+Queued until an item event, a definition event or a window-focus refetch. A check event in goald is the backend
+follow-up that would fix this.
 
 ### Intake
 
