@@ -362,6 +362,13 @@ describe('BoardPage', () => {
     expect(h1s[0]?.classList).toContain('sr-only');
   });
 
+  it('tells a phone its role on the factory, as the desktop heading row does', async () => {
+    stubPhone();
+    renderBoardPage({ page: ShellBoard, org, factory, board: board() });
+
+    expect(await screen.findByText(/^You’re an approver of /)).toBeTruthy();
+  });
+
   it('keeps exactly one visible h1, Board, on desktop', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
