@@ -6599,7 +6599,8 @@ components:
           type: array
           description: >-
             The repositories the item works on, in the order they joined, the first being its
-            first repository (ADR 0041 decision 4); submitItem and getItem only. An item filed
+            first repository (ADR 0041 decision 4); submitItem and getItem only (ItemCard has
+            them too). An item filed
             before repositories shows the factory's default entry's, and an item of a factory
             without code none
           items: { $ref: "#/components/schemas/ItemRepository" }
@@ -7177,7 +7178,7 @@ components:
     ItemCard:
       type: object
       description: An item as boards and lists show it
-      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, pull_requests, slot, turn, summary, in_buffer, rope_held, touch_count]
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, pull_requests, slot, turn, summary, in_buffer, rope_held, touch_count, repositories]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
@@ -7243,6 +7244,14 @@ components:
         touch_count:
           type: integer
           description: The item's human touches so far
+        repositories:
+          type: array
+          description: >-
+            As Item's repositories: the repositories the item works on, in the order they joined,
+            the first being its first repository (ADR 0041 decision 4). An item filed before
+            repositories shows the factory's default entry's, and an item of a factory without
+            code an empty array
+          items: { $ref: "#/components/schemas/ItemRepository" }
         board_lane:
           type: string
           nullable: true

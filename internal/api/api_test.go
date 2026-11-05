@@ -373,6 +373,11 @@ func (r reads) Assemblies(ctx context.Context, f domain.FactoryID, ids []domain.
 	return r.Store.Assemblies(ctx, f, ids)
 }
 
+func (r reads) ItemsRepositories(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error) {
+	r.seam.record("ItemsRepositories")
+	return r.Store.ItemsRepositories(ctx, ids)
+}
+
 func (r reads) OpenNeeds(ctx context.Context, f domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error) {
 	r.seam.record("OpenNeeds")
 	return r.Store.OpenNeeds(ctx, f, ids)
