@@ -364,6 +364,8 @@ func TestWatchIdentity_AnAnsweringServiceIsOneLine(t *testing.T) {
 }
 
 func TestStopped_LogsSignalAndUptime(t *testing.T) {
+	t.Parallel()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer stop()
 
@@ -378,6 +380,7 @@ func TestStopped_LogsSignalAndUptime(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+
 	log := slog.New(slog.NewJSONHandler(&out, nil))
 	log.Info("goald stopped", stoppedAttrs(ctx, time.Now().Add(-90*time.Minute))...)
 
@@ -400,8 +403,10 @@ func TestStopped_LogsSignalAndUptime(t *testing.T) {
 }
 
 func TestStopped_NoSignalIsNone(t *testing.T) {
+	t.Parallel()
+
 	attrs := stoppedAttrs(context.Background(), time.Now())
-	if got := attrs[0].(slog.Attr).Value.String(); got != "none" {
-		t.Errorf("signal %q, want none", got)
+	if sig, ok := attrs[0].(slog.Attr); !ok || sig.Value.String() != "none" {
+		t.Errorf("signal %v, want none", attrs[0])
 	}
 }
