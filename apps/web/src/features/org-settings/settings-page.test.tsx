@@ -263,7 +263,13 @@ describe('Organization settings v3 details', () => {
     expect(current().map((a) => a.textContent)).toEqual(['General']);
     fireEvent.click(within(toc).getByRole('link', { name: 'Data' }));
     expect(current().map((a) => a.textContent)).toEqual(['Data']);
+    // A short page cannot scroll the clicked section to the top: what the observer reports meanwhile
+    // does not take the mark back from the click.
     const sec = document.getElementById('signin');
+    act(() => notify([{ isIntersecting: true, target: sec as Element }]));
+    expect(current().map((a) => a.textContent)).toEqual(['Data']);
+    // Once the person scrolls, the section in view marks itself again.
+    fireEvent.wheel(document);
     act(() => notify([{ isIntersecting: true, target: sec as Element }]));
     expect(current().map((a) => a.textContent)).toEqual(['Sign-in']);
   });

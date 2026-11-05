@@ -7,8 +7,8 @@ import {
   expectNoHorizontalScroll,
   expectToast,
   isPhone,
-  orgMarkOf,
   openNavigation,
+  orgMarkOf,
   orgNav,
   recordToasts,
 } from './support';
