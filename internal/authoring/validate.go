@@ -234,12 +234,7 @@ func (s *Service) ownChecks(ctx context.Context, c candidate, f *config.Factory,
 			return ownResult{}, err
 		}
 
-		r, err := s.repositoryProblems(ctx, c, f)
-		if err != nil {
-			return ownResult{}, err
-		}
-
-		out.problems, out.ran = append(append(out.problems, p...), r...), append(out.ran, CheckItems)
+		out.problems, out.ran = append(out.problems, p...), append(out.ran, CheckItems)
 	}
 
 	if s.credentials != nil {
@@ -304,10 +299,26 @@ func (s *Service) nameProblems(ctx context.Context, factory domain.FactoryID, f 
 	return out, nil
 }
 
-// itemProblems reports the open items at stations of the running version that the draft
+// itemProblems reports the open items the draft would strand: at a station it removes, or on a
+// repository it drops.
+func (s *Service) itemProblems(ctx context.Context, c candidate, f *config.Factory, m Model) ([]domain.DefinitionProblem, error) {
+	out, err := s.stationProblems(ctx, c, f, m)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := s.repositoryProblems(ctx, c, f)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(out, r...), nil
+}
+
+// stationProblems reports the open items at stations of the running version that the draft
 // removes. The loads count items waiting in a queue and in progress; publish itself refuses
 // any other open item a move does not map.
-func (s *Service) itemProblems(ctx context.Context, c candidate, f *config.Factory, m Model) ([]domain.DefinitionProblem, error) {
+func (s *Service) stationProblems(ctx context.Context, c candidate, f *config.Factory, m Model) ([]domain.DefinitionProblem, error) {
 	removed, err := removedStations(c.current, m)
 	if err != nil || len(removed) == 0 {
 		return nil, err

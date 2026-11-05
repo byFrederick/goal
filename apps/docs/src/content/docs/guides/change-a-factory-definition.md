@@ -77,6 +77,8 @@ Publishing runs the validation again, and the new version runs from then on. If 
 goal factory push ./acme-line --publish --move build-old=build
 ```
 
+Publish also refuses a version that drops the `runtime.repositories` entry for a repository open items still use, and the error names those items by number, such as `#12`. Keep an entry that covers the repository, or finish or cancel the items first. Items that are done or cancelled don't count. Entries are matched by URL, so renaming an entry that keeps its URL removes nothing, and neither does replacing it with an owner pattern that covers the repository, such as `https://github.com/acme/*`.
+
 ## Review in the editor
 
 In the Definition editor, Review and publish shows, beside the changes of the open draft, the checks of the draft, or of the version that runs when no draft is open, and the four newest versions with a link to all of them. Before you publish, the Publish card lists the kept tests of the stations the draft reaches and shows each result as it arrives. A failing test, or one that could not run, warns with its reason and never blocks Publish. Each version in the list shows the watch on its change: the metric, its number before and after, and the verdict, or Watching while the watch is open. Budgets are not part of this page; set them in Factory settings under Budgets and targets.
