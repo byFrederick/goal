@@ -171,6 +171,79 @@ func (q *Queries) DeliveryEvaluations(ctx context.Context, deliveryRow uuid.UUID
 	return items, nil
 }
 
+const deliveryEvaluationsOf = `-- name: DeliveryEvaluationsOf :many
+SELECT e.id, e.org_id, e.delivery_row, e.factory_id, e.triggers, e.state, e.attempts, e.next_attempt_at, e.lease_holder, e.lease_until, e.outcome, e.reason, e.item_id, e.created_at, e.updated_at, d.endpoint_id, coalesce(d.delivery_id, '')::text AS delivery_id, d.event, w.number AS item_number
+FROM delivery_evaluations e
+JOIN webhook_deliveries d ON d.id = e.delivery_row
+LEFT JOIN work_items w ON w.id = e.item_id
+WHERE e.delivery_row = ANY ($1::uuid[])
+ORDER BY e.delivery_row, e.factory_id
+`
+
+type DeliveryEvaluationsOfRow struct {
+	ID            uuid.UUID
+	OrgID         uuid.UUID
+	DeliveryRow   uuid.UUID
+	FactoryID     uuid.UUID
+	Triggers      []string
+	State         string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LeaseHolder   *string
+	LeaseUntil    *time.Time
+	Outcome       *string
+	Reason        string
+	ItemID        *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	EndpointID    uuid.UUID
+	DeliveryID    string
+	Event         string
+	ItemNumber    *int64
+}
+
+// The evaluations of a page of deliveries, by delivery then factory, with the number of the item
+// each created while that item exists.
+func (q *Queries) DeliveryEvaluationsOf(ctx context.Context, deliveryRows []uuid.UUID) ([]DeliveryEvaluationsOfRow, error) {
+	rows, err := q.db.Query(ctx, deliveryEvaluationsOf, deliveryRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeliveryEvaluationsOfRow
+	for rows.Next() {
+		var i DeliveryEvaluationsOfRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.DeliveryRow,
+			&i.FactoryID,
+			&i.Triggers,
+			&i.State,
+			&i.Attempts,
+			&i.NextAttemptAt,
+			&i.LeaseHolder,
+			&i.LeaseUntil,
+			&i.Outcome,
+			&i.Reason,
+			&i.ItemID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.EndpointID,
+			&i.DeliveryID,
+			&i.Event,
+			&i.ItemNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishDeliveryEvaluation = `-- name: FinishDeliveryEvaluation :execrows
 UPDATE delivery_evaluations
 SET state = $1::text, outcome = $2::text, reason = $3::text,

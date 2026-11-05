@@ -76,6 +76,53 @@ func (in *Intake) DeliveryEvaluations(ctx context.Context, delivery domain.Webho
 	return out, nil
 }
 
+// DeliveryEvaluationsOf implements ports.Intake.
+func (in *Intake) DeliveryEvaluationsOf(ctx context.Context, deliveries []domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error) {
+	if len(deliveries) == 0 {
+		return []domain.DeliveryEvaluation{}, nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(deliveries))
+
+	for _, d := range deliveries {
+		id, err := parseID("delivery", string(d))
+		if err != nil {
+			return nil, err
+		}
+
+		ids = append(ids, id)
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.DeliveryEvaluationsOfRow, error) {
+		return q.DeliveryEvaluationsOf(ctx, ids)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("evaluations of %d deliveries: %w", len(deliveries), err)
+	}
+
+	out := make([]domain.DeliveryEvaluation, 0, len(rows))
+
+	for _, r := range rows {
+		e := domain.DeliveryEvaluation{
+			ID: r.ID.String(), FactoryID: domain.FactoryID(r.FactoryID.String()), Delivery: domain.WebhookDeliveryID(r.DeliveryRow.String()),
+			WebhookID: domain.WebhookEndpointID(r.EndpointID.String()), DeliveryID: r.DeliveryID, Event: r.Event, Triggers: r.Triggers,
+			State: domain.EvaluationState(r.State), Attempts: int(r.Attempts), NextAt: r.NextAttemptAt.UTC(), LeaseHolder: deref(r.LeaseHolder),
+			LeaseUntil: utcPtr(r.LeaseUntil), Outcome: domain.EvaluationOutcome(deref(r.Outcome)), Reason: r.Reason, CreatedAt: r.CreatedAt.UTC(),
+		}
+		if r.ItemID != nil {
+			e.ItemID = domain.ItemID(r.ItemID.String())
+		}
+
+		if r.ItemNumber != nil {
+			e.ItemNumber = *r.ItemNumber
+		}
+
+		out = append(out, e)
+	}
+
+	return out, nil
+}
+
 // ClaimEvaluations implements ports.Intake.
 func (in *Intake) ClaimEvaluations(ctx context.Context, holder string, now time.Time, lease time.Duration, limit int,
 ) ([]domain.ClaimedEvaluation, error) {

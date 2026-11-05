@@ -116,6 +116,10 @@ const refused: WebhookDelivery = {
   outcome: 'refused',
   reason: 'signature did not match',
   item: null,
+  event: '',
+  receipt: 'refused',
+  duplicates: 0,
+  evaluations: [],
 };
 const accepted: WebhookDelivery = {
   id: 'd-accepted',
@@ -123,6 +127,10 @@ const accepted: WebhookDelivery = {
   outcome: 'accepted',
   reason: '',
   item: null,
+  event: 'deploy',
+  receipt: 'accepted',
+  duplicates: 0,
+  evaluations: [],
 };
 const created: WebhookDelivery = {
   id: 'd-created',
@@ -130,6 +138,10 @@ const created: WebhookDelivery = {
   outcome: 'created',
   reason: '',
   item: { id: 'item-131', number: 131 },
+  event: 'deploy',
+  receipt: 'accepted',
+  duplicates: 0,
+  evaluations: [],
 };
 
 const page = (deliveries: WebhookDelivery[]): WebhookDeliveryPage => ({ deliveries, next_after: null });

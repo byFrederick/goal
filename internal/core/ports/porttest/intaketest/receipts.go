@@ -27,6 +27,7 @@ var receiptTests = []struct {
 	{"Receive_LedgerPrunedAfterAYear", testReceivePrune},
 	{"Receive_RulesRefused", testReceiveRules},
 	{"Receive_OtherOrgHasItsOwnLedger", testReceiveIsolation},
+	{"Receive_PingSetsPingedAt", testReceivePing},
 }
 
 // receive records an accepted delivery id to webhook w at at, named or not.
@@ -244,5 +245,92 @@ func testReceiveIsolation(f *fixture) {
 
 	if r := f.receive(w.ID, "d-2", t0, true); r.Receipt != domain.ReceiptAccepted {
 		t.Errorf("acme Receive d-2 = %+v; want accepted, labs took nothing", r)
+	}
+}
+
+// pinged is webhook w's PingedAt, as Endpoint, WebhookByName and Webhooks read it.
+func (f *fixture) pinged(w domain.WebhookEndpoint) *time.Time {
+	f.t.Helper()
+
+	byID, err := f.in.Endpoint(f.ctx(), w.ID)
+	if err != nil {
+		f.t.Fatalf("Endpoint: %v", err)
+	}
+
+	byName, err := f.in.WebhookByName(f.ctx(), w.Name)
+	if err != nil {
+		f.t.Fatalf("WebhookByName: %v", err)
+	}
+
+	all, err := f.in.Webhooks(f.ctx())
+	if err != nil || len(all) != 1 {
+		f.t.Fatalf("Webhooks = %+v, %v; want one", all, err)
+	}
+
+	for _, other := range []*time.Time{byName.PingedAt, all[0].PingedAt} {
+		if (other == nil) != (byID.PingedAt == nil) || (other != nil && !other.Equal(*byID.PingedAt)) {
+			f.t.Errorf("PingedAt = %v by id, %v by another read; want the same", byID.PingedAt, other)
+		}
+	}
+
+	return byID.PingedAt
+}
+
+// ping receives GitHub's ping id to webhook w at at.
+func (f *fixture) ping(w domain.WebhookEndpointID, id string, at time.Time) domain.Received {
+	f.t.Helper()
+
+	r, err := f.in.Receive(f.ctx(), domain.NewReceipt{
+		WebhookID: w, ReceivedAt: at, Receipt: domain.ReceiptAccepted, DeliveryID: id, Event: "ping", Ping: true,
+		Body: []byte(`{"zen":"Keep it logically awesome."}`),
+	})
+	if err != nil {
+		f.t.Fatalf("Receive ping %s: %v", id, err)
+	}
+
+	return r
+}
+
+// expectPinged checks webhook w's PingedAt is want.
+func (f *fixture) expectPinged(w domain.WebhookEndpoint, want time.Time, when string) {
+	f.t.Helper()
+
+	if got := f.pinged(w); got == nil || !got.Equal(want) {
+		f.t.Errorf("PingedAt %s = %v; want %v", when, got, want)
+	}
+}
+
+// An accepted ping sets its webhook's PingedAt and, named by no trigger, keeps no row: its ledger
+// id and daily count. A duplicate ping leaves the time; a new one moves it. A webhook never
+// pinged reads none.
+func testReceivePing(f *fixture) {
+	t := f.t
+	w := f.webhook(orgHook)
+
+	if got := f.pinged(w); got != nil {
+		t.Fatalf("PingedAt of a webhook never pinged = %v; want nil", got)
+	}
+
+	if r := f.ping(w.ID, "p-1", t0); r.Receipt != domain.ReceiptAccepted || r.Row != "" {
+		t.Errorf("Receive ping = %+v; want accepted without a row", r)
+	}
+
+	f.expectPinged(w, t0, "after a ping")
+
+	if r := f.ping(w.ID, "p-1", t0.Add(time.Hour)); r.Receipt != domain.ReceiptDuplicate {
+		t.Errorf("Receive ping again = %+v; want a duplicate", r)
+	}
+
+	f.expectPinged(w, t0, "after a duplicate")
+
+	f.ping(w.ID, "p-2", t0.Add(2*time.Hour))
+	f.expectPinged(w, t0.Add(2*time.Hour), "after another ping")
+
+	if got := f.deliveries(w.ID); len(got) != 0 {
+		t.Errorf("deliveries = %+v; want none", got)
+	}
+
+	if got, err := f.in.UnnamedDays(f.ctx(), w.ID, t0); err != nil || len(got) != 1 || got[0].Count != 2 {
+		t.Errorf("UnnamedDays = %+v, %v; want the two pings counted", got, err)
 	}
 }

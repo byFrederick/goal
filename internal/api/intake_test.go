@@ -305,7 +305,7 @@ func TestIntake_TriggerProblems(t *testing.T) {
 
 	for _, at := range []time.Time{oct(10, 0), oct(20, 0), oct(23, 8)} { // the first is older than 7 days
 		if _, err := h.intake.RecordDelivery(inOrg(t), domain.NewWebhookDelivery{
-			EndpointID: gh, ReceivedAt: at, Outcome: domain.DeliveryRefused, Reason: "signature did not match",
+			EndpointID: gh, ReceivedAt: at, Outcome: domain.DeliveryRefused, Reason: signatureMismatch,
 		}); err != nil {
 			t.Fatal(err)
 		}

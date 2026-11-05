@@ -82,7 +82,10 @@ type DeliveryEvaluation struct {
 	Outcome     EvaluationOutcome
 	Reason      string
 	ItemID      ItemID
-	CreatedAt   time.Time
+	// ItemNumber is ItemID's number while that item exists, read by DeliveryEvaluationsOf; 0
+	// otherwise.
+	ItemNumber int64
+	CreatedAt  time.Time
 }
 
 // ClaimedEvaluation is an evaluation a loop claimed, with the delivery's body.

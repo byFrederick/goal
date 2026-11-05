@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -179,12 +180,12 @@ func (s *server) DeleteWebhookEndpoint(ctx context.Context, req gen.DeleteWebhoo
 }
 
 func (s *server) ListWebhookDeliveries(ctx context.Context, req gen.ListWebhookDeliveriesRequestObject) (gen.ListWebhookDeliveriesResponseObject, error) {
-	_, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
+	f, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	page, err := s.deliveryPage(ctx, e.ID, req.Params.Limit, req.Params.After)
+	page, err := s.deliveryPage(ctx, e.ID, domain.FactoryID(f.Metadata.ID), req.Params.Limit, req.Params.After)
 	if err != nil {
 		return nil, err
 	}
@@ -192,8 +193,10 @@ func (s *server) ListWebhookDeliveries(ctx context.Context, req gen.ListWebhookD
 	return gen.ListWebhookDeliveries200JSONResponse(page), nil
 }
 
-// deliveryPage is one page of endpoint id's deliveries, newest first, after the cursor after.
-func (s *server) deliveryPage(ctx context.Context, id domain.WebhookEndpointID, limitIn *int, afterIn *string) (gen.WebhookDeliveryPage, error) {
+// deliveryPage is one page of endpoint id's deliveries, newest first, after the cursor after, with
+// the evaluations of factory, or of every factory for "".
+func (s *server) deliveryPage(ctx context.Context, id domain.WebhookEndpointID, factory domain.FactoryID, limitIn *int, afterIn *string,
+) (gen.WebhookDeliveryPage, error) {
 	limit := defaultDeliveryLimit
 	if limitIn != nil {
 		limit = *limitIn
@@ -228,8 +231,18 @@ func (s *server) deliveryPage(ctx context.Context, id domain.WebhookEndpointID, 
 		out.NextAfter = optional(cursorOut(domain.DeliveryCursor{ReceivedAt: last.ReceivedAt, ID: last.ID}))
 	}
 
+	rows := make([]domain.WebhookDeliveryID, 0, len(ds))
 	for _, d := range ds {
-		o, err := s.deliveryOut(ctx, d)
+		rows = append(rows, d.ID)
+	}
+
+	evals, err := s.deliveryEvaluations(ctx, factory, rows)
+	if err != nil {
+		return gen.WebhookDeliveryPage{}, err
+	}
+
+	for _, d := range ds {
+		o, err := s.deliveryOut(ctx, d, evals[d.ID])
 		if err != nil {
 			return gen.WebhookDeliveryPage{}, err
 		}
@@ -241,12 +254,12 @@ func (s *server) deliveryPage(ctx context.Context, id domain.WebhookEndpointID, 
 }
 
 func (s *server) GetWebhookDelivery(ctx context.Context, req gen.GetWebhookDeliveryRequestObject) (gen.GetWebhookDeliveryResponseObject, error) {
-	_, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
+	f, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	out, err := s.deliveryRequest(ctx, e.ID, req.Delivery)
+	out, err := s.deliveryRequest(ctx, e.ID, domain.FactoryID(f.Metadata.ID), req.Delivery)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +268,8 @@ func (s *server) GetWebhookDelivery(ctx context.Context, req gen.GetWebhookDeliv
 }
 
 // deliveryRequest is endpoint id's delivery with its headers and body.
-func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointID, delivery string) (gen.WebhookDeliveryRequest, error) {
+func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointID, factory domain.FactoryID, delivery string,
+) (gen.WebhookDeliveryRequest, error) {
 	d, err := s.intake.Delivery(ctx, id, domain.WebhookDeliveryID(delivery))
 	if errors.Is(err, ports.ErrNotFound) {
 		return gen.WebhookDeliveryRequest{}, fmt.Errorf("%w: %w", errWebhookDeliveryNotFound, err)
@@ -265,7 +279,12 @@ func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointI
 		return gen.WebhookDeliveryRequest{}, err
 	}
 
-	o, err := s.deliveryOut(ctx, d)
+	evals, err := s.deliveryEvaluations(ctx, factory, []domain.WebhookDeliveryID{d.ID})
+	if err != nil {
+		return gen.WebhookDeliveryRequest{}, err
+	}
+
+	o, err := s.deliveryOut(ctx, d, evals[d.ID])
 	if err != nil {
 		return gen.WebhookDeliveryRequest{}, err
 	}
@@ -273,6 +292,7 @@ func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointI
 	// Signature headers were never kept; dropping them again keeps that true whatever a store holds.
 	out := gen.WebhookDeliveryRequest{
 		Id: o.Id, ReceivedAt: o.ReceivedAt, Outcome: o.Outcome, Reason: o.Reason, Item: o.Item,
+		Event: o.Event, Receipt: (*gen.WebhookDeliveryRequestReceipt)(o.Receipt), Duplicates: o.Duplicates, Evaluations: o.Evaluations,
 		Headers: domain.StoredHeaders(d.Headers), Body: string(d.Body), BodyEncoding: gen.BodyText,
 	}
 
@@ -303,10 +323,62 @@ func (s *server) webhookEndpoint(ctx context.Context, factoryRef, id string) (*c
 	return f, e, nil
 }
 
+// deliveryEvaluations are the evaluations of the delivery rows by factory, or by every factory
+// for "", as the log lists them, by delivery. A factory's name is the organization's record of
+// it, as a webhook reaches factories the caller may not see; its id once the factory is gone.
+func (s *server) deliveryEvaluations(ctx context.Context, factory domain.FactoryID, rows []domain.WebhookDeliveryID,
+) (map[domain.WebhookDeliveryID][]gen.WebhookDeliveryEvaluation, error) {
+	es, err := s.intake.DeliveryEvaluationsOf(ctx, rows)
+	if err != nil || len(es) == 0 {
+		return nil, err
+	}
+
+	recs, err := s.records(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := map[domain.WebhookDeliveryID][]gen.WebhookDeliveryEvaluation{}
+
+	for _, e := range es {
+		if factory != "" && e.FactoryID != factory {
+			continue
+		}
+
+		name := cmp.Or(recs[e.FactoryID].Name, string(e.FactoryID))
+		g := gen.WebhookDeliveryEvaluation{
+			Factory: string(e.FactoryID), FactoryName: name, State: gen.WebhookDeliveryEvaluationState(e.State), Reason: e.Reason,
+		}
+
+		if e.Outcome != "" {
+			g.Outcome = new(gen.WebhookDeliveryEvaluationOutcome(e.Outcome))
+		}
+
+		if e.ItemID != "" && e.ItemNumber > 0 {
+			g.Item = &gen.WebhookEvaluationItem{Id: string(e.ItemID), Number: e.ItemNumber, Ref: fmt.Sprintf("%s#%d", name, e.ItemNumber)}
+		}
+
+		out[e.Delivery] = append(out[e.Delivery], g)
+	}
+
+	return out, nil
+}
+
 // deliveryOut is a delivery as the log lists it, with the number of the item it created while
-// that item exists.
-func (s *server) deliveryOut(ctx context.Context, d domain.WebhookDelivery) (gen.WebhookDelivery, error) {
-	out := gen.WebhookDelivery{Id: string(d.ID), ReceivedAt: d.ReceivedAt, Outcome: gen.WebhookDeliveryOutcome(d.Outcome), Reason: d.Reason}
+// that item exists, and evals, its evaluations.
+func (s *server) deliveryOut(ctx context.Context, d domain.WebhookDelivery, evals []gen.WebhookDeliveryEvaluation) (gen.WebhookDelivery, error) {
+	if evals == nil {
+		evals = []gen.WebhookDeliveryEvaluation{}
+	}
+
+	out := gen.WebhookDelivery{
+		Id: string(d.ID), ReceivedAt: d.ReceivedAt, Outcome: gen.WebhookDeliveryOutcome(d.Outcome), Reason: d.Reason,
+		Event: d.Event, Duplicates: d.Duplicates, Evaluations: evals,
+	}
+
+	if d.Receipt != "" {
+		out.Receipt = new(gen.WebhookDeliveryReceipt(d.Receipt))
+	}
 
 	if d.ItemID == "" {
 		return out, nil

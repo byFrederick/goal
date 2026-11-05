@@ -214,11 +214,8 @@ func (rc *receiver) check(ctx context.Context, w http.ResponseWriter, r *http.Re
 	n := domain.NewReceipt{
 		WebhookID: hook.ID, ReceivedAt: now, Receipt: domain.ReceiptAccepted, DeliveryID: checked.ID, Event: checked.Event,
 		Headers: headers, Body: body, Named: len(evals) > 0, Evaluations: evals,
-	}
-
-	// GitHub's ping, sent when the webhook is added there, keeps its row to show on the webhook.
-	if hook.Sender == domain.SenderGitHub && checked.Event == "ping" {
-		n.Reason, n.Named = domain.GitHubPingReason, true
+		// GitHub's ping, sent when the webhook is added there, sets the time the webhook shows.
+		Ping: hook.Sender == domain.SenderGitHub && checked.Event == "ping",
 	}
 
 	got, err := rc.d.Intake.Receive(ctx, n)
