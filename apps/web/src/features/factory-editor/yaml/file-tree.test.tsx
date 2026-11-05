@@ -60,6 +60,11 @@ describe('FileTree', () => {
     expect(screen.getByRole('button', { name: /factory\.yaml, 1 error/ }).getAttribute('aria-current')).toBe('true');
   });
 
+  it('names a file that is changed and has a problem with both', () => {
+    renderTree({ changed: new Set(['factory.yaml']) });
+    expect(screen.getByRole('button', { name: 'factory.yaml, 1 error, changed' })).toBeTruthy();
+  });
+
   it('starts a file in a folder from the folder row, and offers no add in evals/', () => {
     const { onNew } = renderTree();
     fireEvent.click(screen.getByRole('button', { name: 'New file in agents' }));

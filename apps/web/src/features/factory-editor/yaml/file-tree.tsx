@@ -68,7 +68,6 @@ function ErrorCount({ count }: { count: number }) {
       >
         {count}
       </span>
-      <span className="sr-only">, {plural(count, 'error')}</span>
     </>
   ) : null;
 }
@@ -100,7 +99,11 @@ export function FileTree({
           type="button"
           aria-current={selected ? 'true' : undefined}
           // An sr-only span would be read with a space before the comma, so the name is set whole.
-          aria-label={changed.has(file.path) && errors === 0 ? `${file.name}, changed` : undefined}
+          aria-label={
+            changed.has(file.path) || errors > 0
+              ? `${file.name}${errors > 0 ? `, ${plural(errors, 'error')}` : ''}${changed.has(file.path) ? ', changed' : ''}`
+              : undefined
+          }
           onClick={() => onOpen(file.path)}
           className={cn(rowBase, selected && 'bg-hover font-control text-ink')}
         >
