@@ -62,9 +62,20 @@ export function pickedNames(
   return out;
 }
 
-/** The names a slot's pick would show before anything is chosen: the template's suggestion. */
-export const suggested = (template: ToolTemplate): Record<string, SlotPick> =>
-  Object.fromEntries(template.secrets.map((s) => [s.slot, { kind: 'new', name: s.suggest, value: '' } as SlotPick]));
+/** `name`, or the first of name-2, name-3… that is not taken. */
+export function freeName(name: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(name)) return name;
+  for (let n = 2; ; n++) if (!taken.has(`${name}-${n}`)) return `${name}-${n}`;
+}
+
+/**
+ * The picks a panel starts with: a new secret per slot, named by the template's suggestion unless the
+ * organization already has a secret of that name (goald refuses a second one, so the suggestion is made free).
+ */
+export const suggested = (template: ToolTemplate, taken: ReadonlySet<string> = new Set()): Record<string, SlotPick> =>
+  Object.fromEntries(
+    template.secrets.map((s) => [s.slot, { kind: 'new', name: freeName(s.suggest, taken), value: '' } as SlotPick]),
+  );
 
 export interface CustomRow {
   key: string;

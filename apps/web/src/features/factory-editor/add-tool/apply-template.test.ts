@@ -5,6 +5,7 @@ import {
   blankCustom,
   customAdds,
   customProblem,
+  freeName,
   groupTemplates,
   inEnvironment,
   kindOf,
@@ -105,5 +106,23 @@ describe('a custom tool', () => {
     expect(customProblem(tool)).toBeUndefined();
     expect(customAdds(tool).env).toEqual({ API_BASE: 'https://api.example.com' });
     expect(customProblem({ ...tool, variables: [] })).toMatch(/variables/);
+  });
+});
+
+describe('a new secret’s suggested name', () => {
+  it('is the name as it is while the organization has no secret of it', () => {
+    expect(freeName('sentry-token', new Set(['other']))).toBe('sentry-token');
+  });
+
+  it('becomes the first free name-2, name-3… when goald would refuse it', () => {
+    expect(freeName('sentry-token', new Set(['sentry-token']))).toBe('sentry-token-2');
+    expect(freeName('sentry-token', new Set(['sentry-token', 'sentry-token-2']))).toBe('sentry-token-3');
+  });
+
+  it('is applied to every slot of a template', () => {
+    const sentry = t('sentry', {}, ['token']);
+    expect(suggested(sentry, new Set(['sentry-token']))).toEqual({
+      token: { kind: 'new', name: 'sentry-token-2', value: '' },
+    });
   });
 });
