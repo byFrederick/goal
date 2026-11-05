@@ -471,15 +471,17 @@ func TestWebhooks_OrgOpenCloseAndInUse(t *testing.T) {
 }
 
 // openToAcmeAndLine opens the webhook at path to acme, limited to acme/api, and to line, and
-// checks acme's trigger use is its one use.
+// checks its triggers are acme's use, which names it, and flaky-test-on-main, which names its
+// sender.
 func (h *harness) openToAcmeAndLine(t *testing.T, path string, use gen.WebhookTrigger) {
 	t.Helper()
 
 	opened := decode[gen.Webhook](t, h.request(t, http.MethodPatch, path,
 		`{"open":[{"factory":"`+acmeID+`","repositories":["acme/api"]},{"factory":"`+lineID+`"}]}`, nil), http.StatusOK)
 
-	if len(opened.Openings) != 2 || !slices.Equal(opened.Triggers, []gen.WebhookTrigger{use}) {
-		t.Fatalf("opened = %+v; want open to acme and line, used by acme's deploy-failed", opened)
+	flaky := gen.WebhookTrigger{Factory: acmeID, FactoryName: acmeName, Trigger: "flaky-test-on-main"}
+	if len(opened.Openings) != 2 || !slices.Equal(opened.Triggers, []gen.WebhookTrigger{use, flaky}) {
+		t.Fatalf("opened = %+v; want open to acme and line, used by acme's deploy-failed and flaky-test-on-main", opened)
 	}
 
 	for _, o := range opened.Openings {
@@ -604,6 +606,74 @@ func TestWebhooks_SetupEventsAndPing(t *testing.T) {
 	}
 }
 
+// A webhook's triggers are those that name it, enabled or not, and the enabled ones that name its
+// sender with an event (ADR 0040 decision 14), by factory name then trigger. Sender triggers do
+// not hold the webhook: one only they use is renamed, closed and deleted. An archived factory's
+// triggers are left out, as [].
+func TestWebhooks_TriggersNameSender(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	w := h.createOrgHook(t, `{"name":"ci-hooks","sender":"github"}`)
+	h.createOrgHook(t, `{"name":"builds","sender":"github"}`)
+
+	h.openDraft(t)
+	h.saveYAML(t, strings.Replace(acme, "      - name: new-incidents\n",
+		"      - name: a-push-off\n        enabled: false\n        on: github.push\n        create: { type: fix, station: inbox }\n"+
+			"      - name: gitlab-push\n        on: gitlab.push\n        create: { type: fix, station: inbox }\n"+
+			"      - name: a-pull-request\n        on: github.pull_request\n        create: { type: fix, station: inbox }\n"+
+			"      - name: new-incidents\n", 1))
+	h.publish(t, "sender triggers")
+
+	if _, err := h.versions.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"ci-hooks", "builds"} {
+		h.request(t, http.MethodPatch, orgHooksPath+"/"+name, `{"open":[{"factory":"`+acmeID+`"},{"factory":"`+lineID+`"}]}`, nil)
+	}
+
+	use := func(trigger string) gen.WebhookTrigger {
+		return gen.WebhookTrigger{Factory: acmeID, FactoryName: acmeName, Trigger: trigger}
+	}
+
+	h.expectTriggers(t, "ci-hooks", []gen.WebhookTrigger{use("a-pull-request"), use("deploy-failed"), use("flaky-test-on-main")})
+	h.expectTriggers(t, "builds", []gen.WebhookTrigger{use("a-pull-request"), use("flaky-test-on-main")})
+
+	renamed := decode[gen.Webhook](t, h.request(t, http.MethodPatch, orgHooksPath+"/builds", `{"name":"github-builds","close":["`+acmeID+`"]}`, nil), http.StatusOK)
+	if renamed.Name != "github-builds" || len(renamed.Openings) != 1 || len(renamed.Triggers) != 0 {
+		t.Errorf("renamed and closed = %+v; want github-builds, open to line, with no triggers", renamed)
+	}
+
+	if r := h.request(t, http.MethodDelete, orgHooksPath+"/github-builds", "", nil); r.status != http.StatusNoContent {
+		t.Errorf("delete of a webhook only sender triggers match = %d %s; want 204", r.status, r.body)
+	}
+
+	h.expectInUse(t, w.Id, use("deploy-failed"))
+
+	h.archive(t, acmeID)
+
+	if got, raw := h.getOrgHook(t, "ci-hooks"); len(got.Triggers) != 0 || !strings.Contains(raw, `"triggers":[]`) {
+		t.Errorf("ci-hooks once acme is archived = %s; want no triggers, as []", raw)
+	}
+}
+
+// expectTriggers checks the organization's webhook name has triggers, as read and as listed.
+func (h *harness) expectTriggers(t *testing.T, name string, triggers []gen.WebhookTrigger) {
+	t.Helper()
+
+	if got, _ := h.getOrgHook(t, name); !slices.Equal(got.Triggers, triggers) {
+		t.Errorf("%s: triggers = %+v; want %+v", name, got.Triggers, triggers)
+	}
+
+	list := decode[gen.WebhookList](t, h.request(t, http.MethodGet, orgHooksPath, "", nil), http.StatusOK)
+	for _, w := range list.Webhooks {
+		if w.Name == name && !slices.Equal(w.Triggers, triggers) {
+			t.Errorf("%s listed: triggers = %+v; want %+v", name, w.Triggers, triggers)
+		}
+	}
+}
+
 // expectSetup checks webhook id's setup events are events, and all, as read and as listed.
 func (h *harness) expectSetup(t *testing.T, id string, events []string, all bool) {
 	t.Helper()
@@ -629,7 +699,7 @@ func (h *harness) logPage(t *testing.T, path string) (gen.WebhookDeliveryPage, s
 }
 
 // The organization's delivery log shows each delivery's event, receipt and duplicates, and its
-// evaluation by each factory, by factory id: created with the item's ref, skipped with its
+// evaluation by each factory, by factory name: created with the item's ref, skipped with its
 // reason. A factory's log shows only its own evaluation. Neither log holds a body or headers.
 func TestWebhooks_DeliveryLogReceiptsAndEvaluations(t *testing.T) {
 	t.Parallel()
@@ -657,11 +727,12 @@ func TestWebhooks_DeliveryLogReceiptsAndEvaluations(t *testing.T) {
 		Outcome: new(gen.WebhookDeliveryEvaluationOutcomeSkipped), Reason: lineSkip,
 	}
 
-	h.expectLog(t, orgHooksPath+"/ci-hooks/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{skipped, created})
+	// line's id sorts before acme's, so this order is by name.
+	h.expectLog(t, orgHooksPath+"/ci-hooks/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{created, skipped})
 	h.expectLog(t, webhooksPath+"/"+w.Id+"/deliveries", string(accepted), []gen.WebhookDeliveryEvaluation{created})
 
 	one := decode[gen.WebhookDeliveryRequest](t, h.request(t, http.MethodGet, orgHooksPath+"/ci-hooks/deliveries/"+string(accepted), "", nil), http.StatusOK)
-	if one.Duplicates != 2 || !reflect.DeepEqual(one.Evaluations, []gen.WebhookDeliveryEvaluation{skipped, created}) {
+	if one.Duplicates != 2 || !reflect.DeepEqual(one.Evaluations, []gen.WebhookDeliveryEvaluation{created, skipped}) {
 		t.Errorf("one delivery = %+v; want its duplicates and both evaluations", one)
 	}
 }
