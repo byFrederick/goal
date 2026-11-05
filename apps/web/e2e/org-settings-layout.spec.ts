@@ -11,6 +11,8 @@ const sizes = [
 ];
 
 const path = '/o/acme/settings';
+// The mock's added host (mock/code-hosts.ts): a name long enough to have to wrap or truncate.
+const longHost = 'git.a-very-long-subdomain.example.com';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -24,7 +26,8 @@ for (const size of sizes) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(path);
       const hosts = page.getByRole('region', { name: 'Code hosts' });
-      await expect(hosts.getByText('github.com')).toBeVisible();
+      await expect(hosts.getByText('github.com', { exact: true })).toBeVisible();
+      await expect(hosts.getByText(longHost)).toBeVisible();
 
       await expectNoHorizontalScroll(page);
       await expectNoClippedElements(page);
@@ -43,6 +46,7 @@ test('the Code hosts ⓘ is 44 px on a phone and its tip stays inside the viewpo
   const hosts = page.getByRole('region', { name: 'Code hosts' });
   const tip = hosts.getByRole('button', { name: 'About Code hosts' });
   await expectTarget44(tip, 'About Code hosts');
+  await expectTarget44(hosts.getByRole('button', { name: `Remove ${longHost}` }), 'Remove the added host');
   await tip.click();
   const box = await page.getByRole('tooltip').first().boundingBox();
   expect(box).not.toBeNull();
