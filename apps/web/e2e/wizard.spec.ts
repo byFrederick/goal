@@ -40,7 +40,11 @@ async function openAgent(page: Page, agent: string) {
 
 test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await page.goto('/o/acme');
-  await page.getByRole('banner').getByRole('link', { name: 'New factory' }).first().click();
+  if (isPhone(page)) {
+    // The phone's top bar keeps New item and puts New factory behind More actions.
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('menuitem', { name: 'New factory' }).click();
+  } else await page.getByRole('banner').getByRole('link', { name: 'New factory' }).first().click();
   await expect(page).toHaveURL(/\/o\/acme\/new\/start$/);
   await expect(page).toHaveTitle('Start · New factory · Acme · Goal');
   await expect(page.getByRole('heading', { level: 1, name: 'New factory' })).toBeVisible();
@@ -76,8 +80,6 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await addType.press('Enter');
   await page.getByRole('textbox', { name: 'Repository URL' }).fill('https://github.com/acme/infra');
   await page.getByRole('textbox', { name: 'Repository URL' }).blur();
-  // The template names no model connection, which an agent's runs need: publish waits for one.
-  await page.getByRole('combobox', { name: 'Model connection' }).selectOption('claude');
   await expect(saved(page)).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'cloud-costs' })).toBeVisible();
   await checkPage(page);
@@ -177,8 +179,8 @@ spec:
       .setInputFiles({ name: 'factory.yaml', mimeType: 'text/yaml', buffer: Buffer.from(text) });
 
   await page.goto('/o/acme');
-  if (!isPhone(page)) await page.getByRole('main').getByRole('link', { name: 'Import YAML' }).first().click();
-  else await page.goto('/o/acme/new/start?from=yaml');
+  // The Factories home offers Import YAML only while there is no factory (its empty state); with factories, the wizard's Start step does.
+  await page.goto('/o/acme/new/start?from=yaml');
   await expect(page.getByRole('radio', { name: /^Import YAML/ })).toBeChecked();
 
   // A station kind the schema does not know: listed by line, and Continue stays disabled.
@@ -295,7 +297,7 @@ test('Cancel on Start creates nothing; a clone starts from the running version',
   await page.goto('/o/acme/new/start?from=clone');
   await page.getByRole('link', { name: 'Cancel' }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
-  await expect(page.getByRole('article')).toHaveCount(3);
+  await expect(page.getByRole('article')).toHaveCount(4);
 
   await page.goto('/o/acme/new/start?from=clone');
   await expect(continueTo(page, 'Basics')).toHaveAttribute('aria-disabled', 'true');

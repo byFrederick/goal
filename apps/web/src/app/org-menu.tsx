@@ -31,7 +31,7 @@ interface OrgMenuModel {
   canMembers: boolean;
   /** API keys is offered to whoever may read keys (api_key:read or personal_token:read). */
   canApiKeys: boolean;
-  /** Create organization is offered: to platform admins, or to the local user with sign-in off. */
+  /** Create organization is offered to anyone signed in, and to the local user with sign-in off. */
   canCreate: boolean;
   /**
    * Whether going to `path` leaves the current page. Only then does the new page's heading take
@@ -47,8 +47,8 @@ function useOrgMenuModel(current: OrgSummary): OrgMenuModel {
   // Already cached: the /o/$org layout resolved the organization from this list.
   const { data } = useSuspenseQuery(orgsQuery);
   const pathname = useLocation({ select: (l) => l.pathname });
-  // Hidden until goald says who this is: only platform admins create organizations.
-  const { data: canCreate = false } = useQuery({ ...meQuery, select: (me) => me.mode === 'none' || me.platform_admin });
+  // Hidden until goald says who this is: anyone signed in creates an organization (ADR 0032 decision 1).
+  const { data: canCreate = false } = useQuery({ ...meQuery, select: () => true });
   const can = useOrgGrants()?.can;
   return {
     orgs: data.map((org) => ({

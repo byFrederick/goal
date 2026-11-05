@@ -9,7 +9,7 @@ export type Tone = 'run' | 'you' | 'rework' | 'muted' | 'ok';
 /** Text colour for a tone. */
 export const toneText: Record<Tone, string> = {
   run: 'text-link',
-  you: 'text-you',
+  you: 'text-you-ink',
   rework: 'text-rework-ink',
   muted: 'text-muted',
   ok: 'text-ok-ink',

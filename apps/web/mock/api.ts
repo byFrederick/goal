@@ -1812,6 +1812,20 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         can: orgCan,
       };
       state.orgs.push(org);
+      // Whoever creates an organization owns it (ADR 0032 decision 1), so it is listed for them.
+      const who = auth.who(req);
+      if (who) {
+        state.people.members[org.id] = [
+          {
+            memberId: crypto.randomUUID(),
+            userId: who.person.id,
+            role: 'owner',
+            joinedAt: clock(),
+            lastActiveAt: clock(),
+            factoryRoles: {},
+          },
+        ];
+      }
       return json(res, 201, org);
     }
 

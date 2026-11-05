@@ -246,7 +246,14 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
   };
   reset(clock());
 
-  const list = (org: string) => stored.get(org) ?? [];
+  // An organization without seeded secrets gets its list on first use, so a secret added to it stays.
+  const list = (org: string) => {
+    const found = stored.get(org);
+    if (found) return found;
+    const created: Stored[] = [];
+    stored.set(org, created);
+    return created;
+  };
   const named = (org: string, name: string) => list(org).find((s) => s.secret.name === name);
 
   /** The secret as the contract has it: its scope as factory ids. */
