@@ -212,6 +212,7 @@ export type FollowUpStart = Schemas["FollowUpStart"];
 export type ItemNoteFrom = Schemas["ItemNoteFrom"];
 export type FileFollowUpRequest = Schemas["FileFollowUpRequest"];
 export type ItemEvent = Schemas["Event"];
+export type ItemCameFrom = Schemas["ItemCameFrom"];
 export type EventPage = Schemas["EventPage"];
 export type Run = Schemas["Run"];
 export type RunList = Schemas["RunList"];

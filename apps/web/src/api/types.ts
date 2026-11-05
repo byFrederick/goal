@@ -92,6 +92,7 @@ export type {
   Item,
   ItemAnswer,
   ItemAt,
+  ItemCameFrom,
   ItemCard,
   ItemEvent,
   ItemFlow,

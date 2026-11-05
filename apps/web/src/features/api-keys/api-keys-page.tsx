@@ -245,7 +245,7 @@ export function ApiKeysPage() {
                 <span aria-hidden="true" className="text-muted">
                   ${' '}
                 </span>
-                goal item create --factory {sample}
+                goal run {sample} "Fix the flaky test" --detach
               </pre>
             </section>
             <section
