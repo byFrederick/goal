@@ -2337,6 +2337,69 @@ func (e WatchVerdict) Valid() bool {
 	}
 }
 
+// Defines values for WebhookDeliveryReceipt.
+const (
+	WebhookDeliveryReceiptAccepted  WebhookDeliveryReceipt = "accepted"
+	WebhookDeliveryReceiptDuplicate WebhookDeliveryReceipt = "duplicate"
+	WebhookDeliveryReceiptRefused   WebhookDeliveryReceipt = "refused"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryReceipt enum.
+func (e WebhookDeliveryReceipt) Valid() bool {
+	switch e {
+	case WebhookDeliveryReceiptAccepted:
+		return true
+	case WebhookDeliveryReceiptDuplicate:
+		return true
+	case WebhookDeliveryReceiptRefused:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookDeliveryEvaluationOutcome.
+const (
+	WebhookDeliveryEvaluationOutcomeCreated WebhookDeliveryEvaluationOutcome = "created"
+	WebhookDeliveryEvaluationOutcomeFailed  WebhookDeliveryEvaluationOutcome = "failed"
+	WebhookDeliveryEvaluationOutcomeSkipped WebhookDeliveryEvaluationOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryEvaluationOutcome enum.
+func (e WebhookDeliveryEvaluationOutcome) Valid() bool {
+	switch e {
+	case WebhookDeliveryEvaluationOutcomeCreated:
+		return true
+	case WebhookDeliveryEvaluationOutcomeFailed:
+		return true
+	case WebhookDeliveryEvaluationOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookDeliveryEvaluationState.
+const (
+	WebhookDeliveryEvaluationStateDone    WebhookDeliveryEvaluationState = "done"
+	WebhookDeliveryEvaluationStateFailed  WebhookDeliveryEvaluationState = "failed"
+	WebhookDeliveryEvaluationStatePending WebhookDeliveryEvaluationState = "pending"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryEvaluationState enum.
+func (e WebhookDeliveryEvaluationState) Valid() bool {
+	switch e {
+	case WebhookDeliveryEvaluationStateDone:
+		return true
+	case WebhookDeliveryEvaluationStateFailed:
+		return true
+	case WebhookDeliveryEvaluationStatePending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WebhookDeliveryOutcome.
 const (
 	WebhookDeliveryOutcomeAccepted WebhookDeliveryOutcome = "accepted"
@@ -2370,6 +2433,27 @@ func (e WebhookDeliveryRequestBodyEncoding) Valid() bool {
 	case BodyBase64:
 		return true
 	case BodyText:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WebhookDeliveryRequestReceipt.
+const (
+	WebhookDeliveryRequestReceiptAccepted  WebhookDeliveryRequestReceipt = "accepted"
+	WebhookDeliveryRequestReceiptDuplicate WebhookDeliveryRequestReceipt = "duplicate"
+	WebhookDeliveryRequestReceiptRefused   WebhookDeliveryRequestReceipt = "refused"
+)
+
+// Valid indicates whether the value is a known member of the WebhookDeliveryRequestReceipt enum.
+func (e WebhookDeliveryRequestReceipt) Valid() bool {
+	switch e {
+	case WebhookDeliveryRequestReceiptAccepted:
+		return true
+	case WebhookDeliveryRequestReceiptDuplicate:
+		return true
+	case WebhookDeliveryRequestReceiptRefused:
 		return true
 	default:
 		return false
@@ -3443,6 +3527,9 @@ type CreatedWebhook struct {
 	// Openings The factories it is open to, by factory id
 	Openings []WebhookOpening `json:"openings"`
 
+	// PingedAt When the receiver last accepted GitHub's ping to it; null when it never did
+	PingedAt *time.Time `json:"pinged_at"`
+
 	// Secret The name of the organization secret that signs it
 	Secret string `json:"secret"`
 
@@ -3451,6 +3538,12 @@ type CreatedWebhook struct {
 
 	// Sender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
 	Sender WebhookSender `json:"sender"`
+
+	// SetupAllEvents true when such a trigger names it with no event, so the sender should send every event
+	SetupAllEvents bool `json:"setup_all_events"`
+
+	// SetupEvents The events to choose in the sender's settings: the sorted, distinct events of the enabled triggers of the published definitions of the factories it is open to that name it (<name>.<event>, webhook.<name>.<event>) or its sender (<sender>.<event>). Archived factories are left out.
+	SetupEvents []string `json:"setup_events"`
 
 	// Token The token sender's settings; null for another sender
 	Token *WebhookTokenSettings `json:"token"`
@@ -8330,11 +8423,20 @@ type Webhook struct {
 	// Openings The factories it is open to, by factory id
 	Openings []WebhookOpening `json:"openings"`
 
+	// PingedAt When the receiver last accepted GitHub's ping to it; null when it never did
+	PingedAt *time.Time `json:"pinged_at"`
+
 	// Secret The name of the organization secret that signs it
 	Secret string `json:"secret"`
 
 	// Sender How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
 	Sender WebhookSender `json:"sender"`
+
+	// SetupAllEvents true when such a trigger names it with no event, so the sender should send every event
+	SetupAllEvents bool `json:"setup_all_events"`
+
+	// SetupEvents The events to choose in the sender's settings: the sorted, distinct events of the enabled triggers of the published definitions of the factories it is open to that name it (<name>.<event>, webhook.<name>.<event>) or its sender (<sender>.<event>). Archived factories are left out.
+	SetupEvents []string `json:"setup_events"`
 
 	// Token The token sender's settings; null for another sender
 	Token *WebhookTokenSettings `json:"token"`
@@ -8345,7 +8447,15 @@ type Webhook struct {
 
 // WebhookDelivery defines model for WebhookDelivery.
 type WebhookDelivery struct {
-	Id string `json:"id"`
+	// Duplicates How many later deliveries had its delivery id and created nothing
+	Duplicates int `json:"duplicates"`
+
+	// Evaluations Its evaluation by each factory that names it, by factory. A factory's own routes list only that factory's.
+	Evaluations []WebhookDeliveryEvaluation `json:"evaluations"`
+
+	// Event The sender's event, such as check_run; empty when it names none or it was refused
+	Event string `json:"event"`
+	Id    string `json:"id"`
 
 	// Item The item it created; null for another outcome or once that item is gone
 	Item *WebhookDeliveryItem `json:"item"`
@@ -8354,9 +8464,15 @@ type WebhookDelivery struct {
 	Outcome WebhookDeliveryOutcome `json:"outcome"`
 
 	// Reason Why it was refused, such as signature did not match; empty otherwise
-	Reason     string    `json:"reason"`
-	ReceivedAt time.Time `json:"received_at"`
+	Reason string `json:"reason"`
+
+	// Receipt What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
+	Receipt    *WebhookDeliveryReceipt `json:"receipt"`
+	ReceivedAt time.Time               `json:"received_at"`
 }
+
+// WebhookDeliveryReceipt What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
+type WebhookDeliveryReceipt string
 
 // WebhookDeliveryDay defines model for WebhookDeliveryDay.
 type WebhookDeliveryDay struct {
@@ -8367,6 +8483,33 @@ type WebhookDeliveryDay struct {
 	Delivered int `json:"delivered"`
 	Refused   int `json:"refused"`
 }
+
+// WebhookDeliveryEvaluation defines model for WebhookDeliveryEvaluation.
+type WebhookDeliveryEvaluation struct {
+	// Factory The factory's metadata.id
+	Factory string `json:"factory"`
+
+	// FactoryName The factory's name; its metadata.id once the factory is gone
+	FactoryName string `json:"factory_name"`
+
+	// Item The item it created; null for another outcome or once that item is gone
+	Item *WebhookEvaluationItem `json:"item"`
+
+	// Outcome created, an item; skipped, with the reason; failed, with the error; null while pending
+	Outcome *WebhookDeliveryEvaluationOutcome `json:"outcome"`
+
+	// Reason Why it was skipped or failed, or the last attempt's error while pending; empty otherwise
+	Reason string `json:"reason"`
+
+	// State pending, waiting to be evaluated or tried again; done, with its outcome; failed after five attempts
+	State WebhookDeliveryEvaluationState `json:"state"`
+}
+
+// WebhookDeliveryEvaluationOutcome created, an item; skipped, with the reason; failed, with the error; null while pending
+type WebhookDeliveryEvaluationOutcome string
+
+// WebhookDeliveryEvaluationState pending, waiting to be evaluated or tried again; done, with its outcome; failed after five attempts
+type WebhookDeliveryEvaluationState string
 
 // WebhookDeliveryItem defines model for WebhookDeliveryItem.
 type WebhookDeliveryItem struct {
@@ -8393,6 +8536,15 @@ type WebhookDeliveryRequest struct {
 	// BodyEncoding text: the body is valid UTF-8 and given as is; base64: it is not, and is given in standard base64
 	BodyEncoding WebhookDeliveryRequestBodyEncoding `json:"body_encoding"`
 
+	// Duplicates How many later deliveries had its delivery id and created nothing
+	Duplicates int `json:"duplicates"`
+
+	// Evaluations Its evaluation by each factory that names it, by factory. A factory's own routes list only that factory's.
+	Evaluations []WebhookDeliveryEvaluation `json:"evaluations"`
+
+	// Event The sender's event, such as check_run; empty when it names none or it was refused
+	Event string `json:"event"`
+
 	// Headers The request's headers, names lower-cased, without X-Goal-Signature, X-Hub-Signature-256 or X-Hub-Signature
 	Headers map[string]string `json:"headers"`
 	Id      string            `json:"id"`
@@ -8404,12 +8556,18 @@ type WebhookDeliveryRequest struct {
 	Outcome WebhookDeliveryOutcome `json:"outcome"`
 
 	// Reason Why it was refused, such as signature did not match; empty otherwise
-	Reason     string    `json:"reason"`
-	ReceivedAt time.Time `json:"received_at"`
+	Reason string `json:"reason"`
+
+	// Receipt What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
+	Receipt    *WebhookDeliveryRequestReceipt `json:"receipt"`
+	ReceivedAt time.Time                      `json:"received_at"`
 }
 
 // WebhookDeliveryRequestBodyEncoding text: the body is valid UTF-8 and given as is; base64: it is not, and is given in standard base64
 type WebhookDeliveryRequestBodyEncoding string
+
+// WebhookDeliveryRequestReceipt What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
+type WebhookDeliveryRequestReceipt string
 
 // WebhookEndpoint A webhook endpoint open to the factory, never its signing secret
 type WebhookEndpoint struct {
@@ -8441,6 +8599,15 @@ type WebhookEndpoint struct {
 // WebhookEndpointList defines model for WebhookEndpointList.
 type WebhookEndpointList struct {
 	Endpoints []WebhookEndpoint `json:"endpoints"`
+}
+
+// WebhookEvaluationItem defines model for WebhookEvaluationItem.
+type WebhookEvaluationItem struct {
+	Id     string `json:"id"`
+	Number int64  `json:"number"`
+
+	// Ref <factory name>#<number>, such as sre#88
+	Ref string `json:"ref"`
 }
 
 // WebhookKind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.

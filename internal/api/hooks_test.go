@@ -269,8 +269,37 @@ func TestHooks_GitHubPing(t *testing.T) {
 		t.Fatalf("POST ping = %d %s; want 202", rec.Code, rec.Body)
 	}
 
-	if ds := r.deliveries(t); len(ds) != 1 || ds[0].Reason != "Received GitHub's ping" || ds[0].Receipt != domain.ReceiptAccepted {
-		t.Errorf("deliveries = %+v; want the ping", ds)
+	at := r.clock.Now()
+	r.clock.Advance(time.Hour)
+
+	if rec := r.github(t, `{"zen":"Design for failure."}`, "ping", "p-1", hookSecret); rec.Code != http.StatusOK {
+		t.Fatalf("POST ping again = %d %s; want 200, a duplicate", rec.Code, rec.Body)
+	}
+
+	if ds := r.deliveries(t); len(ds) != 0 {
+		t.Errorf("deliveries = %+v; want none, as no trigger names the ping", ds)
+	}
+
+	got, err := r.intake.Endpoint(r.ctx(t), r.hook.ID)
+	if err != nil || got.PingedAt == nil || !got.PingedAt.Equal(at) {
+		t.Errorf("PingedAt = %v, %v; want %v, the first ping's, as a duplicate leaves it", got.PingedAt, err, at)
+	}
+}
+
+// A delivery named ping from another sender is no GitHub ping and leaves PingedAt unset.
+func TestHooks_PingFromAnotherSenderIsNotGitHubs(t *testing.T) {
+	t.Parallel()
+
+	r := newHookRig(t, domain.SenderToken, domain.TokenSettings{Header: "X-Acme-Token", EventPath: "type", IDPath: "id"})
+	r.names.named = false
+
+	rec := r.post(t, api.HooksPath+string(r.hook.ID), `{"type":"ping","id":"p-1"}`, map[string]string{"X-Acme-Token": hookSecret}, "")
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("POST = %d %s; want 202", rec.Code, rec.Body)
+	}
+
+	if got, err := r.intake.Endpoint(r.ctx(t), r.hook.ID); err != nil || got.PingedAt != nil {
+		t.Errorf("PingedAt = %v, %v; want nil", got.PingedAt, err)
 	}
 }
 

@@ -751,7 +751,8 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 	in.d.mu.Lock()
 	defer in.d.mu.Unlock()
 
-	if _, err := in.endpointLocked(org, n.WebhookID); err != nil {
+	hook, err := in.endpointLocked(org, n.WebhookID)
+	if err != nil {
 		return domain.Received{}, err
 	}
 
@@ -772,13 +773,19 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 		}
 
 		return out, nil
-	case !n.Named:
+	default:
 		in.d.ledger[key] = n.ReceivedAt.UTC()
+	}
+
+	if n.Ping && n.Receipt == domain.ReceiptAccepted {
+		at := n.ReceivedAt.UTC()
+		hook.e.PingedAt = &at
+	}
+
+	if n.Receipt == domain.ReceiptAccepted && !n.Named {
 		in.d.counts[countKey{org: org, webhook: n.WebhookID, day: utcDay(n.ReceivedAt)}]++
 
 		return out, nil
-	default:
-		in.d.ledger[key] = n.ReceivedAt.UTC()
 	}
 
 	row, err := in.keepReceivedLocked(org, n)
@@ -836,6 +843,41 @@ func (in *Intake) DeliveryEvaluations(ctx context.Context, delivery domain.Webho
 	}
 
 	slices.SortFunc(out, func(a, b domain.DeliveryEvaluation) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
+
+	return out, nil
+}
+
+// DeliveryEvaluationsOf implements ports.Intake.
+func (in *Intake) DeliveryEvaluationsOf(ctx context.Context, deliveries []domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	out := []domain.DeliveryEvaluation{}
+
+	for _, r := range in.d.evaluations {
+		if r.org != org || !slices.Contains(deliveries, r.e.Delivery) {
+			continue
+		}
+
+		e := cloneEvaluation(r.e)
+		if it, ok := in.store.visible(e.ItemID, org); ok && e.ItemID != "" {
+			e.ItemNumber = it.Number
+		}
+
+		out = append(out, e)
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryEvaluation) int {
+		return cmp.Or(cmp.Compare(a.Delivery, b.Delivery), cmp.Compare(a.FactoryID, b.FactoryID))
+	})
 
 	return out, nil
 }
@@ -1713,6 +1755,11 @@ func cloneEndpoint(e domain.WebhookEndpoint) domain.WebhookEndpoint {
 	if e.RotatedAt != nil {
 		at := *e.RotatedAt
 		e.RotatedAt = &at
+	}
+
+	if e.PingedAt != nil {
+		at := *e.PingedAt
+		e.PingedAt = &at
 	}
 
 	if e.Openings != nil {

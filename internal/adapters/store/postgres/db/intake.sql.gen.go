@@ -600,7 +600,7 @@ func (q *Queries) OpenItemByDedupe(ctx context.Context, arg OpenItemByDedupePara
 }
 
 const orgWebhookByName = `-- name: OrgWebhookByName :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.factory_id IS NULL AND e.name = $1
@@ -620,6 +620,7 @@ type OrgWebhookByNameRow struct {
 	TokenIDPath    *string
 	CreatedAt      time.Time
 	RotatedAt      *time.Time
+	PingedAt       *time.Time
 }
 
 func (q *Queries) OrgWebhookByName(ctx context.Context, name string) (OrgWebhookByNameRow, error) {
@@ -639,12 +640,13 @@ func (q *Queries) OrgWebhookByName(ctx context.Context, name string) (OrgWebhook
 		&i.TokenIDPath,
 		&i.CreatedAt,
 		&i.RotatedAt,
+		&i.PingedAt,
 	)
 	return i, err
 }
 
 const orgWebhooks = `-- name: OrgWebhooks :many
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.factory_id IS NULL
@@ -665,6 +667,7 @@ type OrgWebhooksRow struct {
 	TokenIDPath    *string
 	CreatedAt      time.Time
 	RotatedAt      *time.Time
+	PingedAt       *time.Time
 }
 
 // The organization's webhooks (no factory), by name.
@@ -691,6 +694,7 @@ func (q *Queries) OrgWebhooks(ctx context.Context) ([]OrgWebhooksRow, error) {
 			&i.TokenIDPath,
 			&i.CreatedAt,
 			&i.RotatedAt,
+			&i.PingedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -739,6 +743,21 @@ func (q *Queries) OriginTally(ctx context.Context, arg OriginTallyParams) ([]Ori
 		return nil, err
 	}
 	return items, nil
+}
+
+const pingWebhook = `-- name: PingWebhook :exec
+UPDATE webhook_endpoints SET pinged_at = $1::timestamptz WHERE id = $2
+`
+
+type PingWebhookParams struct {
+	At time.Time
+	ID uuid.UUID
+}
+
+// The webhook accepted GitHub's ping at the instant (00124).
+func (q *Queries) PingWebhook(ctx context.Context, arg PingWebhookParams) error {
+	_, err := q.db.Exec(ctx, pingWebhook, arg.At, arg.ID)
+	return err
 }
 
 const pruneTriggerFirings = `-- name: PruneTriggerFirings :execrows
@@ -1463,7 +1482,7 @@ func (q *Queries) WebhookDeliveryDays(ctx context.Context, arg WebhookDeliveryDa
 }
 
 const webhookEndpoint = `-- name: WebhookEndpoint :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.id = $1
@@ -1483,6 +1502,7 @@ type WebhookEndpointRow struct {
 	TokenIDPath    *string
 	CreatedAt      time.Time
 	RotatedAt      *time.Time
+	PingedAt       *time.Time
 }
 
 func (q *Queries) WebhookEndpoint(ctx context.Context, id uuid.UUID) (WebhookEndpointRow, error) {
@@ -1502,6 +1522,7 @@ func (q *Queries) WebhookEndpoint(ctx context.Context, id uuid.UUID) (WebhookEnd
 		&i.TokenIDPath,
 		&i.CreatedAt,
 		&i.RotatedAt,
+		&i.PingedAt,
 	)
 	return i, err
 }
@@ -1519,7 +1540,7 @@ func (q *Queries) WebhookEndpointOrg(ctx context.Context, id uuid.UUID) (uuid.UU
 }
 
 const webhookEndpoints = `-- name: WebhookEndpoints :many
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.factory_id = $1
@@ -1541,6 +1562,7 @@ type WebhookEndpointsRow struct {
 	TokenIDPath    *string
 	CreatedAt      time.Time
 	RotatedAt      *time.Time
+	PingedAt       *time.Time
 }
 
 // The endpoints open to the factory: its own, and the organization's webhooks with an opening.
@@ -1567,6 +1589,7 @@ func (q *Queries) WebhookEndpoints(ctx context.Context, factoryID *uuid.UUID) ([
 			&i.TokenIDPath,
 			&i.CreatedAt,
 			&i.RotatedAt,
+			&i.PingedAt,
 		); err != nil {
 			return nil, err
 		}

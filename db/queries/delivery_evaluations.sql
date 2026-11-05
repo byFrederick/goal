@@ -52,6 +52,16 @@ JOIN webhook_deliveries d ON d.id = e.delivery_row
 WHERE e.delivery_row = sqlc.arg(delivery_row)
 ORDER BY e.factory_id;
 
+-- name: DeliveryEvaluationsOf :many
+-- The evaluations of a page of deliveries, by delivery then factory, with the number of the item
+-- each created while that item exists.
+SELECT e.*, d.endpoint_id, coalesce(d.delivery_id, '')::text AS delivery_id, d.event, w.number AS item_number
+FROM delivery_evaluations e
+JOIN webhook_deliveries d ON d.id = e.delivery_row
+LEFT JOIN work_items w ON w.id = e.item_id
+WHERE e.delivery_row = ANY (sqlc.arg(delivery_rows)::uuid[])
+ORDER BY e.delivery_row, e.factory_id;
+
 -- name: LockTriggerFiring :exec
 -- Serializes the firings of one trigger of a factory (ADR 0040 decision 16), so perDay, perHour
 -- and dedupe hold across goald instances: taken first in the firing's transaction, per schema as

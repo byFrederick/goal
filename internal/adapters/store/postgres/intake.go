@@ -463,7 +463,15 @@ func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Rece
 				return err
 			case err != nil:
 				return err
-			case !n.Named:
+			}
+
+			if n.Ping {
+				if err := q.PingWebhook(ctx, db.PingWebhookParams{ID: webhook, At: at}); err != nil {
+					return err
+				}
+			}
+
+			if !n.Named {
 				return q.CountUnnamedDelivery(ctx, db.CountUnnamedDeliveryParams{WebhookID: webhook, ReceivedAt: at})
 			}
 		}
@@ -995,7 +1003,7 @@ func endpointFrom(r db.WebhookEndpointRow) domain.WebhookEndpoint {
 		ID: domain.WebhookEndpointID(r.ID.String()), Name: r.Name, Kind: domain.WebhookKind(deref(r.Kind)),
 		Sender: domain.WebhookSender(deref(r.Sender)), Secret: r.SecretName, Enabled: r.Enabled,
 		Token:     domain.TokenSettings{Header: deref(r.TokenHeader), EventPath: deref(r.TokenEventPath), IDPath: deref(r.TokenIDPath)},
-		CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt),
+		CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt), PingedAt: utc(r.PingedAt),
 	}
 
 	if r.FactoryID != nil {

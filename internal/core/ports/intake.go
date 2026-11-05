@@ -96,6 +96,9 @@ type Intake interface {
 	Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error)
 	// DeliveryEvaluations are the evaluations of the delivery row, by factory.
 	DeliveryEvaluations(ctx context.Context, delivery domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error)
+	// DeliveryEvaluationsOf are the evaluations of the delivery rows, by delivery then factory,
+	// each with its item's number while that item exists: a page of the delivery log at once.
+	DeliveryEvaluationsOf(ctx context.Context, deliveries []domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error)
 	// ClaimEvaluations claims at most limit of the organization's pending evaluations due at now
 	// (next attempt at or before now, no lease live at now), soonest first, with FOR UPDATE SKIP
 	// LOCKED as the notification outbox does: each is leased to holder until now+lease with one
