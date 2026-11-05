@@ -169,6 +169,13 @@ describe('TraceTab', () => {
     expect(await screen.findByText('No tool calls yet.')).toBeTruthy();
   });
 
+  it('says there are no tool calls when only the created event is there, with no run', async () => {
+    renderTab(trace([{ ...touch, text: 'Created in Inbox' }]));
+
+    expect(await screen.findByText('No tool calls yet.')).toBeTruthy();
+    expect(screen.queryByRole('complementary')).toBeNull();
+  });
+
   it('shows the skeleton as busy while the runs load', async () => {
     renderTab(trace([]), { status: 'loading' });
 
