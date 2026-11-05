@@ -22,11 +22,14 @@ async function newItem(request: APIRequestContext, title: string): Promise<strin
 async function setLaneOfTwo(page: Page, request: APIRequestContext) {
   const ids = [await newItem(request, 'Set lane first'), await newItem(request, 'Set lane second')];
   await page.goto('/o/acme/f/goal/items');
-  for (const title of ['Set lane first', 'Set lane second']) {
-    await page.getByRole('row').filter({ hasText: title }).getByRole('checkbox').check();
-  }
-
   const bar = page.getByRole('region', { name: 'Bulk actions' });
+  // The bar opens above the table on the first check and pushes the rows down, so each check waits for
+  // the bar's count before the next one: a click made during the shift lands on the wrong row.
+  const titles = ['Set lane first', 'Set lane second'];
+  for (const [at, title] of titles.entries()) {
+    await page.getByRole('row').filter({ hasText: title }).getByRole('checkbox').check();
+    await expect(bar.getByText(`${at + 1} selected`)).toBeVisible();
+  }
   await expect(bar.getByText('2 selected')).toBeVisible();
   await bar.getByRole('button', { name: 'Set lane' }).click();
 
