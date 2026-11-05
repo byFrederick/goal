@@ -508,8 +508,7 @@ func (s *server) ListConnectionRepositories(ctx context.Context, req gen.ListCon
 		return nil, err
 	}
 
-	ch, ok := s.codehosts[kind.Spec.CodeHost]
-	if kind.Spec.CodeHost == "" || !ok {
+	if _, ok := s.codehosts[kind.Spec.CodeHost]; kind.Spec.CodeHost == "" || !ok {
 		return nil, fmt.Errorf("%w: connection %s is of kind %s, which names no code host goald reaches", errNotCodeHost, c.Name, kind.Name)
 	}
 
@@ -520,15 +519,20 @@ func (s *server) ListConnectionRepositories(ctx context.Context, req gen.ListCon
 
 	rc := resolved[0]
 
-	login, err := rc.CodeHostLogin()
+	gitHost, token, err := rc.GitLogin()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errCodeHost, scrub(err.Error(), rc))
+	}
+
+	host, ch, err := s.listedCodeHost(ctx, gitHost)
+	if err != nil {
+		return nil, fmt.Errorf("connection %s: %w", c.Name, err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, repositoriesTimeout)
 	defer cancel()
 
-	list, err := ch.Repositories(ctx, login, deref(req.Params.Owner))
+	list, err := ch.Repositories(ctx, host, token, deref(req.Params.Owner))
 
 	switch {
 	case errors.Is(err, errors.ErrUnsupported):
@@ -540,6 +544,29 @@ func (s *server) ListConnectionRepositories(ctx context.Context, req gen.ListCon
 	}
 
 	return gen.ListConnectionRepositories200JSONResponse(repositoriesOut(list)), nil
+}
+
+// listedCodeHost is the organization's code host named host (ADR 0041 decision 1) and the adapter
+// of its kind; a host the organization doesn't list, or whose kind this goald has no adapter for,
+// wraps errNotCodeHost, and nothing is sent to it.
+func (s *server) listedCodeHost(ctx context.Context, host string) (domain.CodeHost, ports.CodeHost, error) {
+	added, err := s.orgs.CodeHosts(ctx)
+	if err != nil {
+		return domain.CodeHost{}, nil, fmt.Errorf("list code hosts: %w", err)
+	}
+
+	listed, ok := domain.ListedCodeHost(domain.ListedCodeHosts(added), host)
+	if !ok {
+		return domain.CodeHost{}, nil, fmt.Errorf("%w: %s is not one of the organization's code hosts, so goald sends it no token; "+
+			"an owner can add it under Code hosts in the organization's settings", errNotCodeHost, strings.ToLower(host))
+	}
+
+	ch, ok := s.codehosts[string(listed.Kind)]
+	if !ok {
+		return domain.CodeHost{}, nil, fmt.Errorf("%w: %s is a %s host, and this goald has no %s code host", errNotCodeHost, listed.Host, listed.Kind, listed.Kind)
+	}
+
+	return listed, ch, nil
 }
 
 // repositoriesOut is list as the contract has it.

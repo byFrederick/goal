@@ -242,7 +242,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {

@@ -124,9 +124,25 @@ func openPR(url string) ports.PullRequest {
 	}
 }
 
-// squashOf is the merge of the pull request at url, at the head its branch update moved it to.
+// squashOf is the merge of the pull request at url with the token of conn (loginToken), at the
+// head its branch update moved it to.
 func squashOf(url, conn string) porttest.MergeCall {
-	return porttest.MergeCall{URL: url, Connection: conn, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
+	return porttest.MergeCall{URL: url, Token: loginToken(conn), Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
+}
+
+// loginToken is the token the code host calls of conn are made with: its connection's token
+// (newConnections), or the repository token's value for repositoryLogin.
+func loginToken(conn string) string {
+	return map[string]string{connGitHub: "github-token", connGitLab: "gitlab-token", repositoryLogin: githubTokenValue}[conn]
+}
+
+// listHost adds host, of kind, to the organization's code hosts.
+func (h *harness) listHost(t *testing.T, host string, kind domain.CodeHostKind) {
+	t.Helper()
+
+	if _, err := h.tenancy.SetCodeHosts(inOrg(t), human, []domain.CodeHost{{Host: host, Kind: kind}}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // atMerge submits an item whose work station outputs output and steps it to the merge station.
@@ -561,6 +577,44 @@ func expectConflictEvent(t *testing.T, events []domain.Event, station string) {
 	}
 }
 
+// A pull request on a host the organization doesn't list is refused before any connection is
+// opened or the code host is called, though a connection of the factory signs git in to that host;
+// once an owner lists the host, the same merge goes through with that connection's token.
+func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
+	t.Parallel()
+
+	const ghePR = "https://ghe.example.com/acme/app/pull/4"
+
+	line := mergeLine(domain.ActionMerge)
+	line.Connections = []string{connGHE}
+
+	h := newHarness(t, line, porttest.Succeed(`{"pull_request":"`+ghePR+`"}`))
+	h.codehost.Add(openPR(ghePR))
+
+	it := h.atMerge(t)
+
+	_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if !errors.Is(err, engine.ErrNoCodeHost) || !errors.Is(err, domain.ErrCodeHostUnlisted) || !strings.Contains(err.Error(), "ghe.example.com") {
+		t.Fatalf("Merge = %v; want ErrNoCodeHost and ErrCodeHostUnlisted naming ghe.example.com", err)
+	}
+
+	if calls := h.codehost.LoginTokens(); len(calls) != 0 {
+		t.Errorf("the code host got %d calls; want none", len(calls))
+	}
+
+	h.expectRefusedMerge(t, it.ID, err, false)
+
+	h.listHost(t, "ghe.example.com", domain.CodeHostGitHub)
+
+	if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatalf("Merge once the host is listed = %v", err)
+	}
+
+	if merges := h.codehost.Merges(); len(merges) != 1 || merges[0].URL != ghePR || merges[0].Token != "ghe-token" {
+		t.Errorf("merges %+v; want %s with the ghe connection's token", merges, ghePR)
+	}
+}
+
 // repositoryLogin is the name the code host login of a version on secrets goes by, and
 // repositoryToken the token its tests' repositories are cloned and merged with.
 const (
@@ -661,7 +715,8 @@ func TestMerge_OnSecretsUsesTheRepositoryToken(t *testing.T) {
 	h.expectRepositoryLogin(t, it.ID, h.codehost)
 }
 
-// On secrets, runtime.repository.forge picks the adapter on a host whose name says none.
+// On secrets, the kind the organization lists a host as picks the adapter on a host whose name
+// says none; runtime.repository.forge agrees with it.
 func TestMerge_OnSecretsForgePicksTheAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -670,6 +725,7 @@ func TestMerge_OnSecretsForgePicksTheAdapter(t *testing.T) {
 	repo := domain.Repository{URL: "https://" + gitHost + "/acme/web.git", Token: repositoryToken, Forge: codeHostGitLab}
 	h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), repo), porttest.Succeed(`{"pull_request":"`+selfHosted+`"}`))
 	h.addSecrets(t)
+	h.listHost(t, gitHost, domain.CodeHostGitLab)
 	h.gitlab.Add(openPR(selfHosted))
 
 	it := h.atMerge(t)
@@ -724,8 +780,9 @@ func TestMerge_OnSecretsRefusesAnotherHost(t *testing.T) {
 	}
 }
 
-// On secrets, a repository on a host whose name says no adapter needs forge, and a repository
-// with no token cannot merge; each refusal names the key to set and opens nothing.
+// On secrets, a repository on a host the organization doesn't list, one whose forge disagrees with
+// the kind the organization lists its host as, and a repository with no token cannot merge; each
+// refusal names what to fix and opens nothing.
 func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 	t.Parallel()
 
@@ -735,10 +792,11 @@ func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 		name string
 		repo domain.Repository
 		pr   string
+		list bool // the organization lists gitHost as a GitLab host
 		want string
 	}{
-		{name: "unknown host, no forge", repo: domain.Repository{URL: repoURL, Token: repositoryToken}, pr: selfHosted, want: "runtime.repository.forge"},
-		{name: "forge goald has no adapter for", repo: domain.Repository{URL: repoURL, Token: repositoryToken, Forge: "gitea"}, pr: selfHosted, want: "gitea"},
+		{name: "a host the organization doesn't list", repo: domain.Repository{URL: repoURL, Token: repositoryToken}, pr: selfHosted, want: "Code hosts"},
+		{name: "forge goald has no adapter for", repo: domain.Repository{URL: repoURL, Token: repositoryToken, Forge: "gitea"}, pr: selfHosted, list: true, want: "gitea"},
 		{name: "public repository", repo: domain.Repository{URL: appRepo}, pr: prURL, want: "runtime.repository.token"},
 	}
 
@@ -749,6 +807,10 @@ func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 			h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), tt.repo), porttest.Succeed(`{"pull_request":"`+tt.pr+`"}`))
 			h.addSecrets(t)
 			h.codehost.Add(openPR(tt.pr))
+
+			if tt.list {
+				h.listHost(t, gitHost, domain.CodeHostGitLab)
+			}
 
 			it := h.atMerge(t)
 

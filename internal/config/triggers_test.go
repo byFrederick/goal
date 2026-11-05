@@ -443,3 +443,50 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 		})
 	}
 }
+
+// create.repositories is a template place: {{repo}} and an entry's name pass, a fixed value no
+// entry matches is an error naming the trigger, and a malformed placeholder is
+// placeholder-invalid.
+func TestCheck_TriggerRepositories(t *testing.T) {
+	t.Parallel()
+
+	const (
+		alert       = "        create: { type: fix, station: inbox }\n"
+		deployAlert = "trigger deploy-alert"
+	)
+
+	// doc is withTriggers whose deploy-alert names repos, on a factory with one entry (publish
+	// refuses a second until software#720).
+	doc := func(entry, repos string) string {
+		return replaced(withTriggers(alert, "        create: { type: fix, station: inbox, repositories: "+repos+" } #here\n"),
+			runtimeModel, runtimeModel+"    repositories:\n      "+entry+"\n")
+	}
+
+	rows := []struct {
+		name, doc, code string
+		message         []string
+	}{
+		{name: "the event's repository and an entry's name", doc: doc(appEntry, `["{{repo}}", App]`)},
+		{name: "repositories an owner pattern covers", doc: doc(ownerEntry, `["{{repo}}", "acme/web", "https://github.com/acme/api.git"]`)},
+		{
+			name: "an owner pattern's name", doc: doc(ownerEntry, `[acme]`),
+			code: codeTriggerRepository, message: []string{deployAlert, `"acme"`},
+		},
+		{
+			name: "a fixed value no entry matches", doc: doc(appEntry, `["{{repo}}", legacy]`),
+			code: codeTriggerRepository, message: []string{deployAlert, `"legacy"`, "runtime.repositories"},
+		},
+		{
+			name: "a malformed placeholder", doc: doc(appEntry, `["{{repo name}}"]`),
+			code: codePlaceholderInvalid, message: []string{deployAlert, "create.repositories"},
+		},
+	}
+
+	for _, tt := range rows {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			checkOneProblem(t, tt.doc, tt.code, tt.message)
+		})
+	}
+}

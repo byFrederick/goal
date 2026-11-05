@@ -505,7 +505,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
-		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
+		CodeHosts: map[string]ports.CodeHost{"github": h.codehost}, Hosts: tenancy,
 		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})

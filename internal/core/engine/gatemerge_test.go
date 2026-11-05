@@ -276,7 +276,7 @@ func TestGateMerge_UpToDateBranchMergesOnFirstApproval(t *testing.T) {
 		t.Fatalf("item at %+v, want done (events %v)", got.Position(), h.kinds(it.ID))
 	}
 
-	want := porttest.MergeCall{URL: prURL, Connection: connGitHub, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: headSHA}}
+	want := porttest.MergeCall{URL: prURL, Token: loginToken(connGitHub), Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: headSHA}}
 	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{want}) {
 		t.Errorf("merges %+v, want app#7 once at its original head", merges)
 	}

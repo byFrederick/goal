@@ -164,6 +164,39 @@ func TestEngine_BaseCommitCodeHostErrorStillFinishes(t *testing.T) {
 	}
 }
 
+// A repository on a host the organization doesn't list gets no base commit, and the code host no
+// call, though a connection of the factory signs git in to that host; listed, it gets one.
+func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
+	t.Parallel()
+
+	const gheRepo = "https://ghe.example.com/acme/app"
+
+	for _, listed := range []bool{false, true} {
+		line := changedSinceLine()
+		line.Runtime.Repository = domain.Repository{URL: gheRepo, Connection: connGHE}
+		line.Connections = []string{connGHE}
+
+		h := newHarness(t, line, porttest.Succeed(touchesStore))
+		h.codehost.SetBranchHead(gheRepo, "", base)
+
+		if listed {
+			h.listHost(t, "ghe.example.com", domain.CodeHostGitHub)
+		}
+
+		it := h.submit(t, domain.NewItem{})
+		h.step(t) // spec
+
+		got, calls := h.item(t, it.ID).BaseCommit, h.codehost.LoginTokens()
+
+		switch {
+		case !listed && (got != "" || len(calls) != 0 || !strings.Contains(h.logs.String(), "base commit not recorded")):
+			t.Errorf("unlisted: base commit %q after %d code host calls; want no base commit, no call and the log saying why", got, len(calls))
+		case listed && (got != base || !slices.Equal(calls, []string{"ghe-token"})):
+			t.Errorf("listed: base commit %q with tokens %d; want %s read once with the ghe connection's token", got, len(calls), base)
+		}
+	}
+}
+
 // A plan's parts inherit the base commit their assembly was planned against.
 func TestEngine_PartsInheritBaseCommit(t *testing.T) {
 	t.Parallel()

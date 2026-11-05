@@ -14,7 +14,14 @@ func TestEvaluationFor(t *testing.T) {
 
 	line := domain.Line{
 		FactoryID: "f1", Name: "shop",
-		Runtime: domain.Runtime{Repository: domain.Repository{URL: "https://github.com/acme/shop.git"}},
+		Runtime: domain.Runtime{
+			Repository: domain.Repository{URL: "https://github.com/acme/shop.git"},
+			Repositories: []domain.RepositoryEntry{
+				{Name: "shop", URL: "https://github.com/acme/shop.git", Default: true},
+				{Name: "tools", URL: "https://github.com/acme/tools"},
+				{Name: "labs", URL: "https://github.com/acme-labs/*"},
+			},
+		},
 		Triggers: []domain.Trigger{
 			{Name: "ci", Enabled: true, On: "github.check_run"},
 			{Name: "issues", Enabled: true, On: "github.issues"},
@@ -39,6 +46,9 @@ func TestEvaluationFor(t *testing.T) {
 	}{
 		{"the factory's repository", open, ev("check_run", "acme/shop"), true, []string{"ci"}, ""},
 		{"in any case", open, ev("check_run", "Acme/Shop"), true, []string{"ci"}, ""},
+		{"a second entry's repository", open, ev("check_run", "acme/tools"), true, []string{"ci"}, ""},
+		{"a repository an owner pattern covers", open, ev("check_run", "Acme-Labs/web"), true, []string{"ci"}, ""},
+		{"an event without a repository", open, ev("check_run", ""), true, []string{"ci"}, ""},
 		{"an event no enabled trigger names", open, ev("push", "acme/shop"), false, nil, ""},
 		{
 			"a repository the factory doesn't have", open, ev("check_run", "acme/legacy"), true,
