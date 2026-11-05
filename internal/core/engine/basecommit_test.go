@@ -459,6 +459,8 @@ func TestEngine_ChangedSinceOnSecrets(t *testing.T) {
 const (
 	// webRepo is the second repository of the per-repository tests' items.
 	webRepo = "https://github.com/acme/web"
+	// entryWeb is webRepo's entry.
+	entryWeb = "web-repo"
 	// webBase is webRepo's default branch's head when the tests' items are planned.
 	webBase = "beef00000001"
 )
@@ -468,8 +470,8 @@ const (
 func twoRepositoryLine() domain.Line {
 	l := changedSinceLine()
 	l.Runtime.Repositories = []domain.RepositoryEntry{
-		{Name: "app", URL: appRepo, Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: true},
-		{Name: "web", URL: webRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessWrite},
+		{Name: entryApp, URL: appRepo, Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: true},
+		{Name: entryWeb, URL: webRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessWrite},
 	}
 
 	return l

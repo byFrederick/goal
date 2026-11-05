@@ -816,8 +816,8 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
-		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths),
-		Output: output, At: e.clock.Now(), FollowUps: followUps(c, run, output),
+		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), Output: output, At: e.clock.Now(),
+		FollowUps: followUps(c, run, output),
 	}
 	t.BaseCommit, t.BaseCommits = e.baseCommits(ctx, log, c)
 	t.Events = e.violations(ctx, log, c, output, t.At)

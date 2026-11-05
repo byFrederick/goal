@@ -8,6 +8,25 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
+// baseCommitTests are the cases of base commits, on the item and per repository, and of the
+// items that merged a commit.
+var baseCommitTests = []struct {
+	name string
+	test func(f *fixture)
+}{
+	{"BaseCommit_SetByTransitionKeptOtherwise", testBaseCommitSetByTransition},
+	{"BaseCommit_CopiedToEveryPart", testBaseCommitCopiedToParts},
+	{"BaseCommit_SetPerRepository", testBaseCommitSetPerRepository},
+	{"BaseCommit_CopiedToEveryPartPerRepository", testBaseCommitCopiedToEveryPartPerRepository},
+	{"MergedItems_ByTheSHAOfTheirMergedEvent", testMergedItems},
+}
+
+// The base commits the per-repository cases record.
+const (
+	webBase, apiBase, apiLater = "c0ffee10", "c0ffee11", "c0ffee13"
+	webPlan, apiPlan           = "c0ffee20", "c0ffee21"
+)
+
 // A transition with a BaseCommit replaces the item's base commit and an empty one keeps it; the
 // item and the store's reads agree.
 func testBaseCommitSetByTransition(f *fixture) {
@@ -75,24 +94,24 @@ func testBaseCommitSetPerRepository(f *fixture) {
 	_, l := f.claim(t, work, 0, t1)
 
 	tr := next(it, l, t1.Add(time.Minute))
-	tr.BaseCommit = "c0ffee10"
-	tr.BaseCommits = map[string]string{repoWeb: "c0ffee10", repoAPI: "c0ffee11", repoOps: "c0ffee12"}
+	tr.BaseCommit = webBase
+	tr.BaseCommits = map[string]string{repoWeb: webBase, repoAPI: apiBase, repoOps: "c0ffee12"}
 
 	if _, err := f.Store.Transition(f.ctx(t), tr); err != nil {
 		t.Fatal(err)
 	}
 
-	sameRepoBaseCommits(t, "after BaseCommits set", f.itemRepositories(t, it.ID), map[string]string{repoWeb: "c0ffee10", repoAPI: "c0ffee11"})
+	sameRepoBaseCommits(t, "after BaseCommits set", f.itemRepositories(t, it.ID), map[string]string{repoWeb: webBase, repoAPI: apiBase})
 
 	queued := domain.Position{Station: stNext, State: domain.StateQueued}
 
 	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
-		ItemID: it.ID, From: queued, To: queued, At: t1.Add(2 * time.Minute), BaseCommits: map[string]string{repoWeb: "", repoAPI: "c0ffee13"},
+		ItemID: it.ID, From: queued, To: queued, At: t1.Add(2 * time.Minute), BaseCommits: map[string]string{repoWeb: "", repoAPI: apiLater},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	sameRepoBaseCommits(t, "after an empty sha", f.itemRepositories(t, it.ID), map[string]string{repoWeb: "c0ffee10", repoAPI: "c0ffee13"})
+	sameRepoBaseCommits(t, "after an empty sha", f.itemRepositories(t, it.ID), map[string]string{repoWeb: webBase, repoAPI: apiLater})
 }
 
 // Assemble gives each part's repository row the assembly's base commit for the same repository,
@@ -105,15 +124,15 @@ func testBaseCommitCopiedToEveryPartPerRepository(f *fixture) {
 	ps[0].Filed = filed(repoWeb, repoAPI)
 	ps[1].Filed = filed(repoOps)
 	a := assembly(it, l, ps)
-	a.Transition.BaseCommit = "c0ffee20"
-	a.Transition.BaseCommits = map[string]string{repoWeb: "c0ffee20", repoAPI: "c0ffee21"}
+	a.Transition.BaseCommit = webPlan
+	a.Transition.BaseCommits = map[string]string{repoWeb: webPlan, repoAPI: apiPlan}
 
 	assembled, parts := f.assemble(t, a)
 
-	sameRepoBaseCommits(t, "assembly", f.itemRepositories(t, it.ID), map[string]string{repoWeb: "c0ffee20", repoAPI: "c0ffee21", repoOps: ""})
+	sameRepoBaseCommits(t, "assembly", f.itemRepositories(t, it.ID), map[string]string{repoWeb: webPlan, repoAPI: apiPlan, repoOps: ""})
 
 	want := map[string]map[string]string{
-		keyAPI:   {repoWeb: "c0ffee20", repoAPI: "c0ffee21"},
+		keyAPI:   {repoWeb: webPlan, repoAPI: apiPlan},
 		keyStore: {repoOps: ""},
 	}
 
@@ -131,7 +150,7 @@ func testBaseCommitCopiedToEveryPartPerRepository(f *fixture) {
 		t.Fatalf("AddPart: %v", err)
 	}
 
-	sameRepoBaseCommits(t, "added part", f.itemRepositories(t, added.ID), map[string]string{repoAPI: "c0ffee21"})
+	sameRepoBaseCommits(t, "added part", f.itemRepositories(t, added.ID), map[string]string{repoAPI: apiPlan})
 }
 
 // sameRepoBaseCommits checks that rows are exactly want's repositories, each with its base commit.

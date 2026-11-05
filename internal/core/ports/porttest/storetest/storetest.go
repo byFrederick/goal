@@ -86,11 +86,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Transition_MovesAndReleases", testTransition},
 		{"Transition_ConflictChangesNothing", testTransitionConflict},
 		{"Paths_SetByTransitionKeptOtherwise", testPathsSetByTransition},
-		{"BaseCommit_SetByTransitionKeptOtherwise", testBaseCommitSetByTransition},
-		{"BaseCommit_CopiedToEveryPart", testBaseCommitCopiedToParts},
-		{"BaseCommit_SetPerRepository", testBaseCommitSetPerRepository},
-		{"BaseCommit_CopiedToEveryPartPerRepository", testBaseCommitCopiedToEveryPartPerRepository},
-		{"MergedItems_ByTheSHAOfTheirMergedEvent", testMergedItems},
 		{"Transition_LeaseLostChangesNothing", testTransitionLeaseLost},
 		{"RequeueExpiredLeases_RequeuesAndFailsRuns", testRequeue},
 		{"RequeueExpiredLeases_FencesTheOldHolder", testRequeueFences},
@@ -169,6 +164,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
+	tests = append(tests, baseCommitTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
