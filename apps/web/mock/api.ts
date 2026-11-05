@@ -91,7 +91,7 @@ import { type SearchSource, search } from './search.ts';
 import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
 import { createStandingRules } from './standing-rules.ts';
-import { starterItem } from './starter.ts';
+import { starterTitles } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
@@ -2263,7 +2263,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           spans: [],
         };
         state.items.push(it);
-        if (title === starterItem.title) {
+        if (starterTitles.includes(title)) {
           // The mock runs no agent, so the starter item runs its whole course at once: created nine minutes ago,
           // its spec accepted, moved to Build and merged at Done, with $0.84 spent. Seconds from its creation. The
           // Floor's checklist then counts "First item merged" (the setup flow ends at 6 of 9, frontend.md).

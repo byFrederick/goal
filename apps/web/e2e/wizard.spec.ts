@@ -139,12 +139,16 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(changes).toContainText(/\d+ changes in \d+ sections/);
   await expect(changes).toContainText('factory.yaml');
   await expect(page.getByRole('button', { name: 'Back' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Back' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back', exact: true })).toBeVisible();
   await checkPage(page);
   await page.getByRole('checkbox', { name: /^Start the line right away/ }).check();
   await page.getByRole('button', { name: 'Publish v1' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/[^/]+$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Cost review|cloud-costs/);
+  // The Floor's title is "Floor" (floor-header.tsx, floor.spec.ts); the factory's name is in the breadcrumb.
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  if (!isPhone(page)) {
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(/Cost review|cloud-costs/);
+  }
   // The Floor has the published line at once, not the factory as it was before its first version
   // (New item is in the Floor's header from 768 px).
   if (isPhone(page)) return;

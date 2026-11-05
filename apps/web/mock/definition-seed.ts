@@ -5,7 +5,7 @@
 
 import type { Actor, VersionSource } from '@goal/api-client';
 import { environmentFiles } from './environments.ts';
-import { starterItem } from './starter.ts';
+import { reviewStarterItem, starterItem } from './starter.ts';
 
 /** A definition's files by path. */
 export type Tree = Map<string, Uint8Array>;
@@ -729,6 +729,7 @@ const templateSpecs: TemplateSpec[] = [
       { id: 'approve', name: 'Approve', kind: 'human' },
       { id: 'done', name: 'Done', kind: 'done' },
     ],
+    starter: reviewStarterItem,
   },
   {
     name: 'docs',
