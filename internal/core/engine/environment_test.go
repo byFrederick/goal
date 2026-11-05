@@ -773,7 +773,7 @@ func TestSecretEnv_EntryTokensGoToPrepareOnly(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarness(t, entriesLine(tt.code), func(_ context.Context, run porttest.ExecCall, stdout io.Writer) domain.RunResult {
+			h := newHarness(t, entriesLine(tt.code), func(_ context.Context, _ porttest.ExecCall, stdout io.Writer) domain.RunResult {
 				_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"read `+acmeReadValue+`"}`+"\n")
 				return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`)}
 			})
@@ -784,24 +784,8 @@ func TestSecretEnv_EntryTokensGoToPrepareOnly(t *testing.T) {
 
 			h.step(t)
 
-			prepare := h.worker.Prepares()[0].Env
-			for name, want := range tt.wantPrepare {
-				if prepare[name] != want {
-					t.Errorf("prepare's %s is not the token %s picks", name, name)
-				}
-			}
-
-			for _, name := range tt.noPrepare {
-				if _, ok := prepare[name]; ok {
-					t.Errorf("prepare got %s, a token the agent's code does not pick", name)
-				}
-			}
-
-			for name, v := range h.oneAgentRun(t, it).Env {
-				if strings.HasPrefix(name, domain.RepositoryTokenEnv) || strings.Contains(v, githubTokenValue) || strings.Contains(v, acmeReadValue) {
-					t.Errorf("the agent's %s holds a repository token", name)
-				}
-			}
+			h.preparedTokens(t, tt.wantPrepare, tt.noPrepare)
+			h.agentHasNoRepositoryToken(t, it)
 
 			want := []string{secAcmeRead, secClaude, secGitHub, secTickets}
 			if tt.code == domain.CodeRead {
@@ -812,16 +796,54 @@ func TestSecretEnv_EntryTokensGoToPrepareOnly(t *testing.T) {
 				t.Errorf("secret.used of %v; want one each of %v", got, want)
 			}
 
-			reported := []string{h.logs.String()}
-			for _, e := range h.store.Events(it.ID) {
-				reported = append(reported, mustJSON(t, e.Data))
-			}
-
-			for _, r := range reported {
-				if strings.Contains(r, acmeReadValue) {
-					t.Errorf("an entry token reached what the run reports:\n%s", r)
-				}
-			}
+			h.notReported(t, it, acmeReadValue)
 		})
+	}
+}
+
+// preparedTokens fails the test unless prepare got each of want's variables with its value, and
+// none of not.
+func (h *harness) preparedTokens(t *testing.T, want map[string]string, not []string) {
+	t.Helper()
+
+	prepare := h.worker.Prepares()[0].Env
+	for name, v := range want {
+		if prepare[name] != v {
+			t.Errorf("prepare's %s is not the token its entry's pick names", name)
+		}
+	}
+
+	for _, name := range not {
+		if _, ok := prepare[name]; ok {
+			t.Errorf("prepare got %s, a token the agent's code does not pick", name)
+		}
+	}
+}
+
+// agentHasNoRepositoryToken fails the test when the agent's env has a repository token variable or
+// value.
+func (h *harness) agentHasNoRepositoryToken(t *testing.T, it domain.Item) {
+	t.Helper()
+
+	for name, v := range h.oneAgentRun(t, it).Env {
+		if strings.HasPrefix(name, domain.RepositoryTokenEnv) || strings.Contains(v, githubTokenValue) || strings.Contains(v, acmeReadValue) {
+			t.Errorf("the agent's %s holds a repository token", name)
+		}
+	}
+}
+
+// notReported fails the test when value reached goald's logs or the item's events.
+func (h *harness) notReported(t *testing.T, it domain.Item, value string) {
+	t.Helper()
+
+	reported := []string{h.logs.String()}
+	for _, e := range h.store.Events(it.ID) {
+		reported = append(reported, mustJSON(t, e.Data))
+	}
+
+	for _, r := range reported {
+		if strings.Contains(r, value) {
+			t.Errorf("a secret's value reached what the run reports:\n%s", r)
+		}
 	}
 }

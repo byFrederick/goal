@@ -14,14 +14,26 @@ const (
 	keyApp    = "github.com/acme/app"
 	keyLib    = "github.com/acme/lib"
 	keyDeepUI = "gitlab.example.com/acme/platform/ui"
+
+	// prefixAcme and prefixDeep are the owner patterns' prefixes.
+	prefixAcme = "https://github.com/acme/"
+	prefixDeep = "https://gitlab.example.com/acme/platform/"
+
+	namePlatform = "platform"
+	nameAll      = "all"
+
+	// The entries' tokens, {{secret}} references.
+	tokApp      = "{{app-write}}"
+	tokAcme     = "{{acme-read}}"
+	tokPlatform = "{{platform}}"
 )
 
 // codeEntries: app writes with its token, acme reads with its own, platform writes.
 func codeEntries() []RepositoryEntry {
 	return []RepositoryEntry{
-		{Name: "app", URL: codeApp, Token: "{{app-write}}", Access: AccessWrite, Default: true},
-		{Name: "acme", URL: codeAcme, Token: "{{acme-read}}", Access: AccessRead},
-		{Name: "platform", URL: codeDeep, Token: "{{platform}}", Access: AccessWrite},
+		{Name: appName, URL: codeApp, Token: tokApp, Access: AccessWrite, Default: true},
+		{Name: acmeOwner, URL: codeAcme, Token: tokAcme, Access: AccessRead},
+		{Name: namePlatform, URL: codeDeep, Token: tokPlatform, Access: AccessWrite},
 	}
 }
 
@@ -52,21 +64,21 @@ func TestRunCode_ClonesInJoinedOrderWithEachAccess(t *testing.T) {
 		{
 			name: "the first at /workspace, each other under /repos", code: CodeWrite, repos: joined(keyApp, keyLib, keyDeepUI),
 			want: []RunClone{
-				{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: "{{app-write}}", Write: true},
-				{Repo: keyLib, URL: "https://" + keyLib, Path: "/repos/acme/lib", Token: "{{acme-read}}"},
-				{Repo: keyDeepUI, URL: "https://" + keyDeepUI, Path: "/repos/acme/platform/ui", Token: "{{platform}}", Write: true},
+				{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: tokApp, Write: true},
+				{Repo: keyLib, URL: "https://" + keyLib, Path: "/repos/acme/lib", Token: tokAcme},
+				{Repo: keyDeepUI, URL: "https://" + keyDeepUI, Path: "/repos/acme/platform/ui", Token: tokPlatform, Write: true},
 			},
 		},
 		{
 			name: "an agent that only reads writes none", code: CodeRead, repos: joined(keyLib, keyApp),
 			want: []RunClone{
-				{Repo: keyLib, URL: "https://" + keyLib, Path: WorkspacePath, Token: "{{acme-read}}"},
-				{Repo: keyApp, URL: "https://" + keyApp, Path: "/repos/acme/app", Token: "{{acme-read}}"},
+				{Repo: keyLib, URL: "https://" + keyLib, Path: WorkspacePath, Token: tokAcme},
+				{Repo: keyApp, URL: "https://" + keyApp, Path: "/repos/acme/app", Token: tokAcme},
 			},
 		},
 		{
 			name: "an agent without code writes, as before code", repos: joined(keyApp),
-			want: []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: "{{app-write}}", Write: true}},
+			want: []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: tokApp, Write: true}},
 		},
 		{name: "an item with none clones none", code: CodeWrite},
 	}
@@ -89,7 +101,7 @@ func TestRunCode_NoRowsUseTheDefaultEntry(t *testing.T) {
 	l := codeLine(codeEntries()...)
 
 	got := l.RunCode(AgentSpec{Code: CodeWrite}, ResolveItemRepositories(nil, l)).Clones
-	want := []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: "{{app-write}}", Write: true}}
+	want := []RunClone{{Repo: keyApp, URL: "https://" + keyApp, Path: WorkspacePath, Token: tokApp, Write: true}}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("clones = %+v, want %+v", got, want)
@@ -125,36 +137,36 @@ func TestRunCode_LoginsPickEachEntrysToken(t *testing.T) {
 		{
 			name: "a writer gets each entry's own token", entries: codeEntries(), code: CodeWrite,
 			want: []RunLogin{
-				{Prefix: codeApp, Entry: "app", TokenEntry: "app", Token: "{{app-write}}", Write: true},
-				{Prefix: "https://github.com/acme/", Entry: "acme", TokenEntry: "acme", Token: "{{acme-read}}"},
-				{Prefix: "https://gitlab.example.com/acme/platform/", Entry: "platform", TokenEntry: "platform", Token: "{{platform}}", Write: true},
+				{Prefix: codeApp, Entry: appName, TokenEntry: appName, Token: tokApp, Write: true},
+				{Prefix: prefixAcme, Entry: acmeOwner, TokenEntry: acmeOwner, Token: tokAcme},
+				{Prefix: prefixDeep, Entry: namePlatform, TokenEntry: namePlatform, Token: tokPlatform, Write: true},
 			},
 		},
 		{
 			name: "a reader takes a matching read entry's token", entries: codeEntries(), code: CodeRead,
 			want: []RunLogin{
-				{Prefix: codeApp, Entry: "app", TokenEntry: "acme", Token: "{{acme-read}}"},
-				{Prefix: "https://github.com/acme/", Entry: "acme", TokenEntry: "acme", Token: "{{acme-read}}"},
-				{Prefix: "https://gitlab.example.com/acme/platform/", Entry: "platform", TokenEntry: "platform", Token: "{{platform}}"},
+				{Prefix: codeApp, Entry: appName, TokenEntry: acmeOwner, Token: tokAcme},
+				{Prefix: prefixAcme, Entry: acmeOwner, TokenEntry: acmeOwner, Token: tokAcme},
+				{Prefix: prefixDeep, Entry: namePlatform, TokenEntry: namePlatform, Token: tokPlatform},
 			},
 		},
 		{
 			name: "one repository before an owner pattern, and a deeper owner before its parent",
 			entries: []RepositoryEntry{
-				{Name: "all", URL: "https://gitlab.example.com/acme/*", Token: "{{all}}", Access: AccessWrite},
-				{Name: "platform", URL: codeDeep, Token: "{{platform}}", Access: AccessWrite},
+				{Name: nameAll, URL: "https://gitlab.example.com/acme/*", Token: "{{all}}", Access: AccessWrite},
+				{Name: namePlatform, URL: codeDeep, Token: tokPlatform, Access: AccessWrite},
 				{Name: "ui", URL: "https://gitlab.example.com/acme/platform/ui.git", Token: "{{ui}}", Access: AccessWrite},
 			},
 			code: CodeWrite,
 			want: []RunLogin{
-				{Prefix: "https://gitlab.example.com/acme/", Entry: "all", TokenEntry: "all", Token: "{{all}}", Write: true},
-				{Prefix: "https://gitlab.example.com/acme/platform/", Entry: "platform", TokenEntry: "platform", Token: "{{platform}}", Write: true},
+				{Prefix: "https://gitlab.example.com/acme/", Entry: nameAll, TokenEntry: nameAll, Token: "{{all}}", Write: true},
+				{Prefix: prefixDeep, Entry: namePlatform, TokenEntry: namePlatform, Token: tokPlatform, Write: true},
 				{Prefix: "https://gitlab.example.com/acme/platform/ui", Entry: "ui", TokenEntry: "ui", Token: "{{ui}}", Write: true},
 			},
 		},
 		{
 			name:    "an entry without a token signs in nowhere",
-			entries: []RepositoryEntry{{Name: "docs", URL: "https://github.com/acme/docs", Access: AccessRead}},
+			entries: []RepositoryEntry{{Name: docsName, URL: "https://github.com/acme/docs", Access: AccessRead}},
 			code:    CodeWrite,
 		},
 	}
@@ -181,10 +193,10 @@ func TestRunCode_ReadOnlyPrefixes(t *testing.T) {
 		code string
 		want []string
 	}{
-		{name: "a writer may not write a read entry", code: CodeWrite, want: []string{"https://github.com/acme/"}},
+		{name: "a writer may not write a read entry", code: CodeWrite, want: []string{prefixAcme}},
 		{
 			name: "a reader may write none", code: CodeRead,
-			want: []string{codeApp, "https://github.com/acme/", "https://gitlab.example.com/acme/platform/"},
+			want: []string{codeApp, prefixAcme, prefixDeep},
 		},
 	}
 
@@ -211,12 +223,12 @@ func TestRunCode_TokenEntryPicksTheMostSpecific(t *testing.T) {
 		want   string
 		found  bool
 	}{
-		{target: keyApp, want: "app", found: true},
-		{target: codeApp + ".git", want: "app", found: true},
-		{target: keyApp, reads: true, want: "acme", found: true},
-		{target: keyLib, want: "acme", found: true},
-		{target: codeAcme, want: "acme", found: true},
-		{target: keyDeepUI, reads: true, want: "platform", found: true},
+		{target: keyApp, want: appName, found: true},
+		{target: codeApp + ".git", want: appName, found: true},
+		{target: keyApp, reads: true, want: acmeOwner, found: true},
+		{target: keyLib, want: acmeOwner, found: true},
+		{target: codeAcme, want: acmeOwner, found: true},
+		{target: keyDeepUI, reads: true, want: namePlatform, found: true},
 		{target: "github.com/other/app"},
 		{target: "not a url"},
 	}
@@ -232,7 +244,7 @@ func TestRunCode_TokenEntryPicksTheMostSpecific(t *testing.T) {
 func TestRunCode_RepositoryTokenEnvNamesTheEntry(t *testing.T) {
 	t.Parallel()
 
-	for name, want := range map[string]string{"app": "GOAL_REPOSITORY_TOKEN_APP", "acme-labs": "GOAL_REPOSITORY_TOKEN_ACME_LABS"} {
+	for name, want := range map[string]string{appName: "GOAL_REPOSITORY_TOKEN_APP", "acme-labs": "GOAL_REPOSITORY_TOKEN_ACME_LABS"} {
 		if got := RepositoryEntryTokenEnv(name); got != want {
 			t.Errorf("RepositoryEntryTokenEnv(%q) = %q, want %q", name, got, want)
 		}

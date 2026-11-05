@@ -74,6 +74,7 @@ func (l Line) RunCode(agent AgentSpec, repos ItemRepositories) RunCode {
 		if e, ok := TokenEntry(entries, r.Repo, reads); ok {
 			c.Token = e.Token
 		}
+
 		out.Clones = append(out.Clones, c)
 	}
 

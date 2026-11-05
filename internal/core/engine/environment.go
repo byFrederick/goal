@@ -42,15 +42,7 @@ func (e *Engine) secretEnv(
 	vars := slices.Sorted(maps.Keys(env.Env))
 	files := domain.FileEnv(env.Files)
 
-	var token string
-	if repo.URL != "" {
-		token = repo.Token
-		if len(code.Clones) > 0 && code.Clones[0].Token != "" {
-			token = code.Clones[0].Token
-		}
-	}
-
-	entryTokens := pickedTokens(code)
+	token, entryTokens := repositoryToken(repo, code), pickedTokens(code)
 	tokenNames := domain.SecretNames(token)
 	names, mcpSecrets := secretNames(modelKey, append([]string{token}, slices.Collect(maps.Values(entryTokens))...), env)
 
@@ -99,16 +91,36 @@ func (e *Engine) secretEnv(
 
 	out.agent[keyEnv] = key
 
-	if len(tokenNames) > 0 {
-		out.prepare[domain.RepositoryTokenEnv] = domain.FillSecrets(token, values)
-		out.repositoryLogin = true
-	}
-
-	for name, t := range entryTokens {
-		out.prepare[domain.RepositoryEntryTokenEnv(name)] = domain.FillSecrets(t, values)
-	}
+	out.repositoryLogin = len(tokenNames) > 0
+	prepareTokens(out.prepare, token, entryTokens, values)
 
 	return out, nil
+}
+
+// repositoryToken is the token prepare's stored login signs git in with: repo's, when it has a
+// URL, or the one code picks for the item's first repository when it has one.
+func repositoryToken(repo domain.Repository, code domain.RunCode) string {
+	if repo.URL == "" {
+		return ""
+	}
+
+	if len(code.Clones) > 0 && code.Clones[0].Token != "" {
+		return code.Clones[0].Token
+	}
+
+	return repo.Token
+}
+
+// prepareTokens puts token, when it names a secret, in prepare as domain.RepositoryTokenEnv, and
+// each of entries in its entry's domain.RepositoryEntryTokenEnv, filled from values.
+func prepareTokens(prepare map[string]string, token string, entries, values map[string]string) {
+	if len(domain.SecretNames(token)) > 0 {
+		prepare[domain.RepositoryTokenEnv] = domain.FillSecrets(token, values)
+	}
+
+	for name, t := range entries {
+		prepare[domain.RepositoryEntryTokenEnv(name)] = domain.FillSecrets(t, values)
+	}
 }
 
 // pickedTokens are the {{secret}} references of the entry tokens code's logins pick, by the

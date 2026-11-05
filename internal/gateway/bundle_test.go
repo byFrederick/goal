@@ -2013,8 +2013,8 @@ func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
 			name: "an agent that writes", code: "write",
 			repos: []bundleClone{{URL: api, Path: "/workspace", Write: true}, {URL: lib, Path: "/repos/acme/lib"}},
 			logins: []bundleLogin{
-				{Prefix: api, Username: "x-access-token", PasswordEnv: "GOAL_REPOSITORY_TOKEN_API", Write: true},
-				{Prefix: all, Username: "x-access-token", PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_API", Write: true},
+				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
 			},
 			readOnly: []string{all},
 		},
@@ -2022,8 +2022,8 @@ func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
 			name: "an agent that only reads", code: "read",
 			repos: []bundleClone{{URL: api, Path: "/workspace"}, {URL: lib, Path: "/repos/acme/lib"}},
 			logins: []bundleLogin{
-				{Prefix: api, Username: "x-access-token", PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
-				{Prefix: all, Username: "x-access-token", PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
 			},
 			readOnly: []string{api, all},
 		},
@@ -2037,10 +2037,10 @@ func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
 			ctx := domain.WithOrg(t.Context(), h.claims().OrgID)
 
 			it, err := h.store.CreateItem(ctx, domain.NewItem{
-				FactoryID: factoryID, Title: "Add a health endpoint", Station: "build", State: domain.StateQueued, CreatedAt: h.clock.Now(),
+				FactoryID: factoryID, Title: "Add a health endpoint", Station: h.claims().Station, State: domain.StateQueued, CreatedAt: h.clock.Now(),
 				Repositories: []domain.ItemRepository{
-					{Repo: "github.com/acme/api", Joined: domain.JoinedFiling, Ordinal: 0},
-					{Repo: "github.com/acme/lib", Joined: domain.JoinedFiling, Ordinal: 1},
+					{Repo: strings.TrimPrefix(api, "https://"), Joined: domain.JoinedFiling, Ordinal: 0},
+					{Repo: strings.TrimPrefix(lib, "https://"), Joined: domain.JoinedFiling, Ordinal: 1},
 				},
 			})
 			if err != nil {
@@ -2077,7 +2077,7 @@ func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
 			}
 
 			wantRepo := &bundleRepository{URL: api, Branch: it.Branch(), FreshBase: domain.FreshBaseRebase}
-			wantGit := []gitCredential{{Host: "github.com", Username: "x-access-token", PasswordEnv: domain.RepositoryTokenEnv, Store: true}}
+			wantGit := []gitCredential{{Host: strings.Split(strings.TrimPrefix(api, "https://"), "/")[0], Username: forgeUsers["github"], PasswordEnv: domain.RepositoryTokenEnv, Store: true}}
 
 			if g, w := mustJSON(t, got.Repository), mustJSON(t, wantRepo); g != w {
 				t.Errorf("repository %s, want %s as before", g, w)

@@ -63,6 +63,28 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 }
 ```
 
+A station run's bundle also carries its code ([ADR 0041](../../docs/adr/0041-code-and-github-without-an-app.md) decisions 3 and 5), which goald works out at run start with `domain.Line.RunCode`. Prepare does not use these fields yet; it still clones `repository` with the stored login (software#718). Every other run's bundle has them `null`.
+
+```json
+{
+  "repositories": [
+    { "url": "https://github.com/acme/api", "path": "/workspace", "branch": "goal/acme-api/7-add-a-health-endpoint", "write": true },
+    { "url": "https://github.com/acme/lib", "path": "/repos/acme/lib", "branch": "goal/acme-api/7-add-a-health-endpoint", "write": false }
+  ],
+  "repository_logins": [
+    { "prefix": "https://github.com/acme/api", "username": "x-access-token", "password_env": "GOAL_REPOSITORY_TOKEN_API", "write": true },
+    { "prefix": "https://github.com/acme/", "username": "x-access-token", "password_env": "GOAL_REPOSITORY_TOKEN_ACME", "write": false }
+  ],
+  "read_only": ["https://github.com/acme/"]
+}
+```
+
+- `repositories` are the item's repositories in the order they joined; an item with none gets the default entry's. The first goes to `/workspace` and each other to `/repos/<owner>/<name>`. `branch` is the run's branch, checked out where a run already pushed it. `write` says whether this agent may push there: the most specific entry that covers the repository writes, and the agent's `code` is `write`.
+- `repository_logins` has one login per `runtime.repositories` entry that has a token, in definition order. `prefix` is the entry's URL, or for an owner pattern the owner's URL ending in `/`. `password_env` names the variable that holds the token the agent's `code` picks: the most specific entry that matches, one repository before an owner pattern, and for an agent that only reads, a matching `read` entry first. `username` is the one the host's forge takes with a token (`oauth2` on a host whose forge goald cannot tell).
+- `read_only` are the URL prefixes the run may not push to: every `read` entry's, and every entry's for an agent whose `code` is `read`.
+
+On a version on secrets, the engine opens each picked token once with the run's other secrets. It gives each one to prepare alone, in `GOAL_REPOSITORY_TOKEN_<NAME>`: the entry's name in upper case, with each character other than a letter or digit turned into `_`. `GOAL_REPOSITORY_TOKEN` keeps the token picked for the first repository, so the stored login works as before. The agent's own environment gets none of these variables, and every value is scrubbed from what the run reports.
+
 `git_credentials` are the git logins of the repository's connection and of the agent's own connections (one per host, user and variable); `tools` are the definition's `runtime.tools`, then the CLI tools of the agent's connections; on a version on secrets they are the agent's environment file's `tools`, in file order. `internal/gateway/testdata/run-bundle.json` is a real one; the Go and the Vitest tests both read it. Then, in order:
 
 1. Each file under `/goal` at its path (relative, no `.` or `..`).
