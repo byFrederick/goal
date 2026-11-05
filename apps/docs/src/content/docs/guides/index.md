@@ -8,6 +8,10 @@ Each guide starts with the result you get and lists the steps to reach it. Comma
 - [Change a factory definition](./change-a-factory-definition/): pull a version into a folder, edit it, validate it and publish it.
 - [Add an agent, skill or rule](./add-an-agent-skill-or-rule/): add the files and the entries in `factory.yaml` that make an agent, a skill or a rule take effect.
 - [Submit and follow items](./submit-and-follow-items/): start work from the CLI or the web app, and follow it until a person has to act.
+- [Review what enters a factory](./intake/): see where items came from, what has not started, which triggers create work, and try a trigger on a past event.
+- [Let agents leave follow-ups](./follow-ups/): let an agent note another item or schedule later work, and file or drop what it left.
+- [Receive events with organization webhooks](./webhooks/): connect a sender once, open it to factories and read the delivery log.
+- [Ask an agent what to file](./checks/): add a check to a schedule trigger so an agent reads a source and files what is new.
 - [Act on an item](./act-on-an-item/): answer a question, approve, deny, send back, merge, retry, move, note, pause, cancel or re-lane an item.
 - [Navigate and use shortcuts](./navigate-and-shortcuts/): find your way around the sidebar, the rail, the menus, search and the phone drawer, and see every keyboard shortcut.
 - [Read the Board, the item Timeline and Runs](./read-the-board-timeline-and-runs/): find what is moving, what is waiting and what each agent run did.

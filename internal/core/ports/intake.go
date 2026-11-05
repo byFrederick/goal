@@ -206,6 +206,16 @@ type Intake interface {
 	// out; and the state saved for it. An item's key is its trigger_keys key, else the dedupe
 	// value of the firing that filed it.
 	CheckInput(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckInput, error)
+	// CheckMemory is what the trigger carries from one check to the next (domain.CheckMemory), in
+	// one read: its open items and the keys whose items closed since now-domain.CheckClosedWindow,
+	// each counted in full and listed as CheckInput reads them up to domain.MaxCheckMemoryItems,
+	// and its saved state with when it was saved. Lists are empty, never nil.
+	CheckMemory(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckMemory, error)
+	// ClearCheckState deletes the trigger's saved state, so its next check starts with none, and
+	// keeps its keys, which still stop a closed key from being filed again. It holds the trigger's
+	// lock, as FinishCheck does; ErrConflict while the trigger's check is queued or running. Clearing
+	// no state is not an error.
+	ClearCheckState(ctx context.Context, factory domain.FactoryID, trigger string) error
 	// TriggerChecks are at most limit of the trigger's checked firings, tries among them, newest
 	// first (at, then id), each with what it applied once done.
 	TriggerChecks(ctx context.Context, factory domain.FactoryID, trigger string, limit int) ([]domain.TriggerFiring, error)

@@ -2142,6 +2142,24 @@ func (e TriggerCheckState) Valid() bool {
 	}
 }
 
+// Defines values for TriggerCheckClosedKeyHow.
+const (
+	TriggerCheckClosedKeyHowCancelled TriggerCheckClosedKeyHow = "cancelled"
+	TriggerCheckClosedKeyHowDone      TriggerCheckClosedKeyHow = "done"
+)
+
+// Valid indicates whether the value is a known member of the TriggerCheckClosedKeyHow enum.
+func (e TriggerCheckClosedKeyHow) Valid() bool {
+	switch e {
+	case TriggerCheckClosedKeyHowCancelled:
+		return true
+	case TriggerCheckClosedKeyHowDone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TriggerSuggestionSource.
 const (
 	TriggerSuggestionSourceGithub   TriggerSuggestionSource = "github"
@@ -4674,8 +4692,11 @@ type IntakeTriggerSource string
 // IntakeTriggerDetail defines model for IntakeTriggerDetail.
 type IntakeTriggerDetail struct {
 	// Events Its 20 newest events, newest first
-	Events  []IntakeEvent `json:"events"`
-	Trigger IntakeTrigger `json:"trigger"`
+	Events []IntakeEvent `json:"events"`
+
+	// Memory What a check trigger carries from one check to the next (ADR 0040 decision 19, the Remembers row of its page); present only for a trigger with a check. Every key, title and reason comes from the check's agent or the source it read: text to show as text, never markup.
+	Memory  *TriggerCheckMemory `json:"memory,omitempty"`
+	Trigger IntakeTrigger       `json:"trigger"`
 
 	// Week The items it created in the weekly budget's window (the last 7×24 hours)
 	Week struct {
@@ -8034,6 +8055,23 @@ type TriggerCheck struct {
 // TriggerCheckState defines model for TriggerCheck.State.
 type TriggerCheckState string
 
+// TriggerCheckClosedKey defines model for TriggerCheckClosedKey.
+type TriggerCheckClosedKey struct {
+	// At When it closed
+	At  time.Time                `json:"at"`
+	How TriggerCheckClosedKeyHow `json:"how"`
+	Key string                   `json:"key"`
+
+	// Ref The closed item's ref, #<number>
+	Ref string `json:"ref"`
+
+	// Why The reason given when it closed; empty for none
+	Why string `json:"why"`
+}
+
+// TriggerCheckClosedKeyHow defines model for TriggerCheckClosedKey.How.
+type TriggerCheckClosedKeyHow string
+
 // TriggerCheckFiled defines model for TriggerCheckFiled.
 type TriggerCheckFiled struct {
 	// Key The source's own id for it
@@ -8052,6 +8090,27 @@ type TriggerCheckList struct {
 	Checks []TriggerCheck `json:"checks"`
 }
 
+// TriggerCheckMemory What a check trigger carries from one check to the next (ADR 0040 decision 19, the Remembers row of its page); present only for a trigger with a check. Every key, title and reason comes from the check's agent or the source it read: text to show as text, never markup.
+type TriggerCheckMemory struct {
+	// CheckedUpTo When the check that saved the state finished; null without a saved state
+	CheckedUpTo *time.Time `json:"checked_up_to"`
+
+	// Closed How many of its keys' items closed in the last 7×24 hours
+	Closed int `json:"closed"`
+
+	// ClosedKeys The keys whose items closed in the last 7×24 hours, at most 50, newest first; the next check does not file them again
+	ClosedKeys []TriggerCheckClosedKey `json:"closed_keys"`
+
+	// Open How many of the items it filed are open (neither done nor cancelled)
+	Open int `json:"open"`
+
+	// OpenItems Its newest open items, at most 50, newest first
+	OpenItems []TriggerCheckOpenItem `json:"open_items"`
+
+	// State The JSON object its last done check saved for the next one (at most 4 KiB); null when none is saved
+	State *map[string]interface{} `json:"state"`
+}
+
 // TriggerCheckNoted defines model for TriggerCheckNoted.
 type TriggerCheckNoted struct {
 	Key string `json:"key"`
@@ -8059,6 +8118,19 @@ type TriggerCheckNoted struct {
 	// Ref The open item's ref, #<number>
 	Ref  string `json:"ref"`
 	Text string `json:"text"`
+}
+
+// TriggerCheckOpenItem defines model for TriggerCheckOpenItem.
+type TriggerCheckOpenItem struct {
+	// Key The source's own id it was filed for
+	Key string `json:"key"`
+
+	// Ref The item's ref, #<number>
+	Ref string `json:"ref"`
+
+	// State The item's state
+	State string `json:"state"`
+	Title string `json:"title"`
 }
 
 // TriggerCheckSkip defines model for TriggerCheckSkip.
@@ -10500,7 +10572,7 @@ type ClientInterface interface {
 
 	// GetIntakeTrigger One trigger with this week's results and its recent events
 	//
-	// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+	// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its memory: the open items and closed keys its checks are given and the state they saved (ADR 0040 decision 19). Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 	GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -10518,6 +10590,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks (the `TryTriggerCheck` operationId).
 	TryTriggerCheck(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ClearTriggerState Clear the state a check trigger saved, so its next check starts with none
+	//
+	// Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done check saved (getIntakeTrigger's memory.state), so its next check is given none. The trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running, because it would save its state again when it finishes; 422 no-check for a trigger without check.
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state (the `ClearTriggerState` operationId).
+	ClearTriggerState(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TryIntakeTriggerWithBody Try the trigger with one of its past events, creating nothing
 	//
@@ -13572,7 +13651,7 @@ func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, 
 
 // GetIntakeTrigger One trigger with this week's results and its recent events
 //
-// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its memory: the open items and closed keys its checks are given and the state they saved (ADR 0040 decision 19). Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger} (the `GetIntakeTrigger` operationId).
 func (c *Client) GetIntakeTrigger(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -13611,6 +13690,23 @@ func (c *Client) ListTriggerChecks(ctx context.Context, org OrgRef, factory Fact
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks (the `TryTriggerCheck` operationId).
 func (c *Client) TryTriggerCheck(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTryTriggerCheckRequest(c.Server, org, factory, trigger)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ClearTriggerState Clear the state a check trigger saved, so its next check starts with none
+//
+// Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done check saved (getIntakeTrigger's memory.state), so its next check is given none. The trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running, because it would save its state again when it finishes; 422 no-check for a trigger without check.
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state (the `ClearTriggerState` operationId).
+func (c *Client) ClearTriggerState(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewClearTriggerStateRequest(c.Server, org, factory, trigger)
 	if err != nil {
 		return nil, err
 	}
@@ -20604,6 +20700,54 @@ func NewTryTriggerCheckRequest(server string, org OrgRef, factory FactoryRef, tr
 	}
 
 	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewClearTriggerStateRequest constructs an http.Request for the ClearTriggerState method
+func NewClearTriggerStateRequest(server string, org OrgRef, factory FactoryRef, trigger string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "trigger", trigger, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/intake/triggers/%s/state", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -28378,7 +28522,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetIntakeTriggerWithResponse One trigger with this week's results and its recent events
 	//
-	// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+	// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its memory: the open items and closed keys its checks are given and the state they saved (ADR 0040 decision 19). Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -28402,6 +28546,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks (the `TryTriggerCheck` operationId).
 	TryTriggerCheckWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*TryTriggerCheckResponse, error)
+
+	// ClearTriggerStateWithResponse Clear the state a check trigger saved, so its next check starts with none
+	//
+	// Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done check saved (getIntakeTrigger's memory.state), so its next check is given none. The trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running, because it would save its state again when it finishes; 422 no-check for a trigger without check.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state (the `ClearTriggerState` operationId).
+	ClearTriggerStateWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*ClearTriggerStateResponse, error)
 
 	// TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
 	//
@@ -33536,6 +33689,47 @@ func (r TryTriggerCheckResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r TryTriggerCheckResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ClearTriggerStateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ClearTriggerStateResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ClearTriggerStateResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ClearTriggerStateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ClearTriggerStateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ClearTriggerStateResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -41136,7 +41330,7 @@ func (c *ClientWithResponses) GetIntakeWithResponse(ctx context.Context, org Org
 
 // GetIntakeTriggerWithResponse One trigger with this week's results and its recent events
 //
-// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
+// The trigger as getIntake shows it, what the items it created in the weekly budget's window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its memory: the open items and closed keys its checks are given and the state they saved (ADR 0040 decision 19). Clients re-read it on `item` and `definition` stream events. 404 trigger-not-found for a name the current definition does not have.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -41177,6 +41371,21 @@ func (c *ClientWithResponses) TryTriggerCheckWithResponse(ctx context.Context, o
 		return nil, err
 	}
 	return ParseTryTriggerCheckResponse(rsp)
+}
+
+// ClearTriggerStateWithResponse Clear the state a check trigger saved, so its next check starts with none
+//
+// Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done check saved (getIntakeTrigger's memory.state), so its next check is given none. The trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404 trigger-not-found for a name the current definition does not have; 409 still-checking while the trigger's check is queued or running, because it would save its state again when it finishes; 422 no-check for a trigger without check.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state (the `ClearTriggerState` operationId).
+func (c *ClientWithResponses) ClearTriggerStateWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, trigger string, reqEditors ...RequestEditorFn) (*ClearTriggerStateResponse, error) {
+	rsp, err := c.ClearTriggerState(ctx, org, factory, trigger, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseClearTriggerStateResponse(rsp)
 }
 
 // TryIntakeTriggerWithBodyWithResponse Try the trigger with one of its past events, creating nothing
@@ -46233,6 +46442,35 @@ func ParseTryTriggerCheckResponse(rsp *http.Response) (*TryTriggerCheckResponse,
 	return response, nil
 }
 
+// ParseClearTriggerStateResponse parses an HTTP response from a ClearTriggerStateWithResponse call
+func ParseClearTriggerStateResponse(rsp *http.Response) (*ClearTriggerStateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ClearTriggerStateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseTryIntakeTriggerResponse parses an HTTP response from a TryIntakeTriggerWithResponse call
 func ParseTryIntakeTriggerResponse(rsp *http.Response) (*TryIntakeTriggerResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -50813,6 +51051,9 @@ type ServerInterface interface {
 	// TryTriggerCheck Try the trigger's check now, filing, noting and saving nothing
 	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks)
 	TryTriggerCheck(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
+	// ClearTriggerState Clear the state a check trigger saved, so its next check starts with none
+	// (DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state)
+	ClearTriggerState(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
 	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
 	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try)
 	TryIntakeTrigger(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string)
@@ -54237,6 +54478,50 @@ func (siw *ServerInterfaceWrapper) TryTriggerCheck(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.TryTriggerCheck(w, r, org, factory, trigger)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ClearTriggerState operation middleware
+func (siw *ServerInterfaceWrapper) ClearTriggerState(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "trigger" -------------
+	var trigger string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "trigger", r.PathValue("trigger"), &trigger, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trigger", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ClearTriggerState(w, r, org, factory, trigger)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -59732,6 +60017,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try", wrapper.TryIntakeTrigger)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks", wrapper.ListTriggerChecks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks", wrapper.TryTriggerCheck)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state", wrapper.ClearTriggerState)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/lead-time", wrapper.GetLeadTimeBridge)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/metrics/touches", wrapper.GetTouchMetrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/agents/{agent}/stats", wrapper.GetAgentStats)
@@ -62933,6 +63219,41 @@ type TryTriggerCheckdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response TryTriggerCheckdefaultApplicationProblemPlusJSONResponse) VisitTryTriggerCheckResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ClearTriggerStateRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Trigger string     `json:"trigger"`
+}
+
+type ClearTriggerStateResponseObject interface {
+	VisitClearTriggerStateResponse(w http.ResponseWriter) error
+}
+
+type ClearTriggerState204Response struct {
+}
+
+func (response ClearTriggerState204Response) VisitClearTriggerStateResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ClearTriggerStatedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ClearTriggerStatedefaultApplicationProblemPlusJSONResponse) VisitClearTriggerStateResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -68687,6 +69008,9 @@ type StrictServerInterface interface {
 	// TryTriggerCheck Try the trigger's check now, filing, noting and saving nothing
 	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks)
 	TryTriggerCheck(ctx context.Context, request TryTriggerCheckRequestObject) (TryTriggerCheckResponseObject, error)
+	// ClearTriggerState Clear the state a check trigger saved, so its next check starts with none
+	// (DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state)
+	ClearTriggerState(ctx context.Context, request ClearTriggerStateRequestObject) (ClearTriggerStateResponseObject, error)
 	// TryIntakeTrigger Try the trigger with one of its past events, creating nothing
 	// (POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/try)
 	TryIntakeTrigger(ctx context.Context, request TryIntakeTriggerRequestObject) (TryIntakeTriggerResponseObject, error)
@@ -71322,6 +71646,34 @@ func (sh *strictHandler) TryTriggerCheck(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TryTriggerCheckResponseObject); ok {
 		if err := validResponse.VisitTryTriggerCheckResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ClearTriggerState operation middleware
+func (sh *strictHandler) ClearTriggerState(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, trigger string) {
+	var request ClearTriggerStateRequestObject
+
+	request.Org = org
+	request.Factory = factory
+	request.Trigger = trigger
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ClearTriggerState(ctx, request.(ClearTriggerStateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ClearTriggerState")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ClearTriggerStateResponseObject); ok {
+		if err := validResponse.VisitClearTriggerStateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

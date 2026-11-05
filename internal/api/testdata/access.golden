@@ -286,6 +286,32 @@ clearSignupDomain    pat-demoted      403 forbidden            404 org-not-found
 clearSignupDomain    pat-removed      401 unauthenticated      401 unauthenticated
 clearSignupDomain    pat-platform     403 forbidden            404 org-not-found
 clearSignupDomain    pat-deleted-org  401 unauthenticated      401 unauthenticated
+clearTriggerState    anonymous        401 unauthenticated      401 unauthenticated
+clearTriggerState    owner            200                      404 org-not-found
+clearTriggerState    admin            200                      404 org-not-found
+clearTriggerState    viewer           403 forbidden            404 org-not-found
+clearTriggerState    approver         403 forbidden            404 org-not-found
+clearTriggerState    editor           200                      404 org-not-found
+clearTriggerState    member-no-roles  404 factory-not-found    404 org-not-found
+clearTriggerState    other-org-owner  404 org-not-found        200
+clearTriggerState    platform-admin   404 org-not-found        404 org-not-found
+clearTriggerState    stale-owner      200                      404 org-not-found
+clearTriggerState    key-scoped       403 forbidden            404 org-not-found
+clearTriggerState    key-restricted   404 factory-not-found    404 org-not-found
+clearTriggerState    key-other-org    404 org-not-found        200
+clearTriggerState    key-expired      401 unauthenticated      401 unauthenticated
+clearTriggerState    key-revoked      401 unauthenticated      401 unauthenticated
+clearTriggerState    bearer-owner     200                      404 org-not-found
+clearTriggerState    pat-approver     403 forbidden            404 org-not-found
+clearTriggerState    pat-owner        200                      404 org-not-found
+clearTriggerState    pat-viewer       403 forbidden            404 org-not-found
+clearTriggerState    pat-other-org    404 org-not-found        200
+clearTriggerState    pat-expired      401 unauthenticated      401 unauthenticated
+clearTriggerState    pat-revoked      401 unauthenticated      401 unauthenticated
+clearTriggerState    pat-demoted      404 factory-not-found    404 org-not-found
+clearTriggerState    pat-removed      401 unauthenticated      401 unauthenticated
+clearTriggerState    pat-platform     200                      404 org-not-found
+clearTriggerState    pat-deleted-org  401 unauthenticated      401 unauthenticated
 compareVersions      anonymous        401 unauthenticated      401 unauthenticated
 compareVersions      owner            200                      404 org-not-found
 compareVersions      admin            200                      404 org-not-found

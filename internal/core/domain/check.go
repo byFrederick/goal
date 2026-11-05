@@ -73,6 +73,8 @@ const (
 	// MaxCheckClosed the most of them.
 	CheckClosedWindow = 7 * 24 * time.Hour
 	MaxCheckClosed    = 200
+	// MaxCheckMemoryItems is the most open items and closed keys a trigger's memory lists.
+	MaxCheckMemoryItems = 50
 )
 
 // CheckLease is a running check's lease: its firing, the instance holding it, the token that
@@ -153,6 +155,20 @@ type CheckClosed struct {
 	How string    `json:"how"`
 	Why string    `json:"why"`
 	At  time.Time `json:"at"`
+}
+
+// CheckMemory is what a check trigger carries from one check to the next, as its page's Remembers
+// row shows it (ADR 0040 decision 19): how many of its items are open and the newest
+// MaxCheckMemoryItems of them; how many keys' items closed in the last CheckClosedWindow and the
+// newest MaxCheckMemoryItems of them; the state saved for the next check (JSON null for none) and
+// when the check that saved it finished (zero for none).
+type CheckMemory struct {
+	Open        int
+	OpenItems   []CheckOpenItem
+	Closed      int
+	ClosedKeys  []CheckClosed
+	State       json.RawMessage
+	CheckedUpTo time.Time
 }
 
 // CheckAnswer is a check's answer, in a fixed contract like a plan's (CheckAnswerSchema): the
