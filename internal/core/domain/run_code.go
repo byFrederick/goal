@@ -54,7 +54,7 @@ type RunLogin struct {
 
 // RunCode is what a run of agent gets of repos, the item's repositories as
 // ResolveItemRepositories gives them, under l's entries. An agent whose Code is empty writes, as
-// every agent did before code; a check's caller reads alone (software#746).
+// every agent did before code; a check reads whatever its agent's code (CheckCode).
 func (l Line) RunCode(agent AgentSpec, repos ItemRepositories) RunCode {
 	entries := l.Runtime.Repositories
 	reads := agent.Code == CodeRead
@@ -98,6 +98,14 @@ func (l Line) RunCode(agent AgentSpec, repos ItemRepositories) RunCode {
 	}
 
 	return out
+}
+
+// CheckCode is what a check's run gets of l's entries (ADR 0041 decision 3, ADR 0040 decision
+// 19): a reader's code with no item, so it clones nothing, signs in to every entry with a token
+// with a read entry's token wherever one matches, and may write under no prefix, whatever its
+// agent's code.
+func (l Line) CheckCode() RunCode {
+	return l.RunCode(AgentSpec{Code: CodeRead}, nil)
 }
 
 // RepositoryEntryTokenEnv is the variable goal-agent prepare gets the token of the entry named

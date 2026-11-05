@@ -65,7 +65,7 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 }
 ```
 
-A station run's bundle also carries its code ([ADR 0041](../../docs/adr/0041-code-and-github-without-an-app.md) decisions 3 and 5), which goald works out at run start with `domain.Line.RunCode`. When `repositories` is a list, prepare clones it by path, signs git in per repository path and refuses pushes under `read_only` (step 4, below). Every other run's bundle has them `null`, and prepare clones `repository` with the stored login as before; so does a try (`repository.commit`).
+A station run's bundle also carries its code ([ADR 0041](../../docs/adr/0041-code-and-github-without-an-app.md) decisions 3 and 5), which goald works out at run start with `domain.Line.RunCode`. When `repositories` is a list, prepare clones it by path, signs git in per repository path and refuses pushes under `read_only` (step 4, below). Every other run's bundle has them `null`, and prepare clones `repository` with the stored login as before; so does a try (`repository.commit`). A check's bundle carries them too ([Check mode](#check-mode)).
 
 ```json
 {
@@ -267,7 +267,7 @@ The spec's `knowledge` is the line's knowledge sources that apply to every run (
 
 ### Check mode
 
-A check (ADR 0040 decision 19) is a schedule trigger's agent run that looks at a source with its agent's environment and answers what to file. goald queues one per firing, leases it on any instance, and checks and records the answer; goal-agent runs the agent. The gateway serves the check bundle for a task token of kind `check`, which names the trigger and no item or station (`internal/gateway/check.go`). The spec carries a `check` block, and the bundle has no `repository` and no `definition` (refused otherwise). A spec with `check` and another mode block is refused. `item_id` and `station` are empty.
+A check (ADR 0040 decision 19) is a schedule trigger's agent run that looks at a source with its agent's environment and answers what to file. goald queues one per firing, leases it on any instance, and checks and records the answer; goal-agent runs the agent. The gateway serves the check bundle for a task token of kind `check`, which names the trigger and no item or station (`internal/gateway/check.go`). The spec carries a `check` block, and the bundle has no `repository` and no `definition` (refused otherwise). Its `repositories` is always `[]`: a check clones nothing. Its `repository_logins` has one login per entry of `runtime.repositories` with a token, each naming the variable of the token a reader picks (a `read` entry's wherever one matches) with `write: false`, and its `read_only` lists every entry's prefix, whatever the agent's `code` (`domain.Line.CheckCode`). A spec with `check` and another mode block is refused. `item_id` and `station` are empty.
 
 ```json
 {

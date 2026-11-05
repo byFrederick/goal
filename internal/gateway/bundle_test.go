@@ -1608,7 +1608,7 @@ spec:
 }
 
 // secretsBundleFiles are the files secretsBundleYAML needs besides factory.yaml.
-var secretsBundleFiles = map[string]string{"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
+var secretsBundleFiles = map[string]string{defaultEnvFile: "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
 
 // serveRunBundle serves the bundle of a run of a new item of the factory yaml describes.
 func serveRunBundle(t *testing.T, yaml string, files map[string]string) (runBundle, []byte) {
@@ -2013,8 +2013,8 @@ func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
 			name: "an agent that writes", code: "write",
 			repos: []bundleClone{{URL: api, Path: "/workspace", Write: true}, {URL: lib, Path: "/repos/acme/lib"}},
 			logins: []bundleLogin{
-				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_API", Write: true},
-				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: envAPIToken, Write: true},
+				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: envAcmeToken},
 			},
 			readOnly: []string{all},
 		},
@@ -2022,8 +2022,8 @@ func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
 			name: "an agent that only reads", code: "read",
 			repos: []bundleClone{{URL: api, Path: "/workspace"}, {URL: lib, Path: "/repos/acme/lib"}},
 			logins: []bundleLogin{
-				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
-				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: envAcmeToken},
+				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: envAcmeToken},
 			},
 			readOnly: []string{api, all},
 		},

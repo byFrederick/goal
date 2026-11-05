@@ -42,7 +42,8 @@ type runBundle struct {
 	// 0041 decisions 3 and 5): the item's repositories to clone, a login per entry with a token,
 	// and the URL prefixes the run may not write, each [] when it has none. Prepare clones them by
 	// path, signs git in per repository path with the logins and refuses pushes under ReadOnly
-	// (apps/worker/README.md); every other run's bundle has them null.
+	// (apps/worker/README.md). A check's are its code (domain.Line.CheckCode): no clone, and every
+	// prefix read only. Every other run's bundle has them null.
 	Repositories     []bundleClone `json:"repositories"`
 	RepositoryLogins []bundleLogin `json:"repository_logins"`
 	ReadOnly         []string      `json:"read_only"`
@@ -811,7 +812,15 @@ func (g *Gateway) addCode(ctx context.Context, line domain.Line, agent domain.Ag
 		return fmt.Errorf("repositories of item %s: %w", item, err)
 	}
 
-	code := line.RunCode(agent, domain.ResolveItemRepositories(rows, line))
+	putCode(line, line.RunCode(agent, domain.ResolveItemRepositories(rows, line)), branch, b)
+
+	return nil
+}
+
+// putCode puts code, a run's under line's entries, in b: its clones, each on branch, a login per
+// entry with a token naming the variable of the token it picks, and the prefixes the run may not
+// write, each [] when it has none.
+func putCode(line domain.Line, code domain.RunCode, branch string, b *runBundle) {
 	b.Repositories, b.RepositoryLogins, b.ReadOnly = []bundleClone{}, []bundleLogin{}, nonNil(code.ReadOnly)
 
 	for _, r := range code.Clones {
@@ -824,8 +833,6 @@ func (g *Gateway) addCode(ctx context.Context, line domain.Line, agent domain.Ag
 			PasswordEnv: domain.RepositoryEntryTokenEnv(l.TokenEntry), Write: l.Write,
 		})
 	}
-
-	return nil
 }
 
 // fallbackUser is the user name of a token on a host whose forge neither its name nor
