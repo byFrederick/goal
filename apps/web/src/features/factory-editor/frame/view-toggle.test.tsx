@@ -29,6 +29,15 @@ describe('the Form | YAML switch', () => {
     expect(screen.getAllByRole('radio', { name: 'YAML' })).toHaveLength(1);
   });
 
+  it('checks the pressed radio at once, before the navigation commits', () => {
+    search.value = {};
+    navigate.mockReturnValue(new Promise(() => {}));
+    render(<ViewToggle section="basics" yaml={false} />);
+    fireEvent.click(screen.getByRole('radio', { name: 'YAML' }));
+    expect((screen.getByRole('radio', { name: 'YAML' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getAllByRole('radio', { name: 'YAML' })).toHaveLength(1);
+  });
+
   it('opens Form at the cursor’s line, not the line the URL has caught up to', () => {
     search.value = { mode: 'yaml', line: 5 };
     placeAtLine.mockReturnValue({ section: 'line', station: 'spec' });

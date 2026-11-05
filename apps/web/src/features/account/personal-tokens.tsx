@@ -27,7 +27,8 @@ export function PersonalTokensSection({
   org,
   settled = true,
 }: {
-  org: OrgSummary /** The sections above have their data, so the page has its height. */;
+  org: OrgSummary;
+  /** The sections above have their data, so the page has its height. */
   settled?: boolean;
 }) {
   const client = useQueryClient();
