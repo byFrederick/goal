@@ -159,7 +159,7 @@ WHERE endpoint_id = sqlc.arg(endpoint_id) AND delivery_id = sqlc.arg(delivery_id
 RETURNING id;
 
 -- name: PingWebhook :exec
--- The webhook accepted GitHub's ping at the instant (00124).
+-- The webhook accepted GitHub's ping at the instant (00125).
 UPDATE webhook_endpoints SET pinged_at = sqlc.arg(at)::timestamptz WHERE id = sqlc.arg(id);
 
 -- name: CountUnnamedDelivery :exec

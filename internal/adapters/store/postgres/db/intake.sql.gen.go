@@ -754,7 +754,7 @@ type PingWebhookParams struct {
 	ID uuid.UUID
 }
 
-// The webhook accepted GitHub's ping at the instant (00124).
+// The webhook accepted GitHub's ping at the instant (00125).
 func (q *Queries) PingWebhook(ctx context.Context, arg PingWebhookParams) error {
 	_, err := q.db.Exec(ctx, pingWebhook, arg.At, arg.ID)
 	return err

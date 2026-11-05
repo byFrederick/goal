@@ -43,10 +43,12 @@ goal webhooks list
 goal webhooks deliveries github-acme --limit 20
 ```
 
-`list` shows each webhook's sender, address, signing secret's name, open factories, the triggers that use it and its deliveries in 7 days; never a secret's value. `deliveries` lists what it received, newest first, in one vocabulary:
+`list` shows each webhook's sender, address, signing secret's name, open factories, the triggers that use it and its deliveries in 7 days; never a secret's value. `deliveries` lists what it received, newest first, with when it arrived, its outcome, the reason and the item. With `--json` it prints the API's answer, where each delivery has its `event` and these fields:
 
-- **Receipt:** Accepted, Duplicate (the webhook already took this delivery id; nothing is created) or Refused, with the reason.
-- **Per factory:** Created item N, Skipped with the reason, or Failed.
+- **`receipt`:** `accepted`, `duplicate` or `refused`, with the `reason` when refused. A duplicate keeps no row of its own: the webhook already took this delivery id, nothing is created, and the first delivery's `duplicates` counts it.
+- **`evaluations`, per factory:** `created` with the item and its ref (`acme#88`), `skipped` with the reason, or `failed` with the error. A factory's own delivery list shows only that factory's evaluation.
+
+`goal webhooks list --json` also gives each webhook's `pinged_at`, when goald last accepted GitHub's ping, and its `setup_events`: the events its enabled triggers use, the ones to choose in GitHub. `setup_all_events` is true when a trigger names the webhook with no event.
 
 Goald keeps a delivery's headers and body for 30 days when an enabled trigger names it, and its metadata only when refused. Every accepted id stays in the webhook's ledger for a year, so a replay is a duplicate even after its row is gone. A signature header is never stored. A delivery's body and headers can be read only with `webhook:manage`, because an organization webhook carries every repository's events; a factory's Intake shows only its own evaluations.
 

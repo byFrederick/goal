@@ -107,7 +107,8 @@ The answers:
 Each delivery gets a receipt: Accepted, Duplicate or Refused. What goald keeps:
 
 - **The ledger.** Every accepted delivery id goes into the webhook's ledger, without its body, for a year. A delivery replayed with the same id within that year is a duplicate, even after its row is gone.
-- **Deliveries a trigger names** keep their row, headers and body for 30 days. A trigger names a delivery when it is enabled, in a factory the webhook is open to, and its `on` names the webhook or the sender and event, such as `github.check_run`. GitHub's ping, sent when you add the webhook in GitHub, is kept too, with the reason "Received GitHub's ping".
+- **Deliveries a trigger names** keep their row, headers and body for 30 days. A trigger names a delivery when it is enabled, in a factory the webhook is open to, and its `on` names the webhook or the sender and event, such as `github.check_run`.
+- **GitHub's ping**, sent when you add the webhook in GitHub, keeps no row of its own: only its ledger id and its daily count. Goald records when it accepted the ping on the webhook (`pinged_at`), which the webhook shows as "Received GitHub's ping". A duplicate ping leaves that time as it is.
 - **Deliveries no trigger names** keep only their ledger id and a count per day.
 - **Refused deliveries** keep their headers and the reason, with no body, for 30 days.
 
