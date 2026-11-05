@@ -26,6 +26,8 @@ export type OrgPermission =
   | 'secret:manage'
   | 'knowledge:read'
   | 'knowledge:manage'
+  | 'webhook:read'
+  | 'webhook:manage'
   | 'audit:read';
 /** The permissions that change a factory. An archived factory takes none of them (spec 2.2-b). */
 export const factoryPermissions = [
