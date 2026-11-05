@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { cp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { runCheck } from './check.js';
 import { runDefinition } from './definition.js';
 import type { Shell } from './environment.js';
 import type { WorkerEvent } from './events.js';
@@ -176,7 +177,9 @@ async function runAgent(): Promise<number> {
     if (spec.jonah) return await runJonah(spec, { query, emit, now, env: process.env, abortController });
     const files = await readAgentFiles();
     await installSkills();
-    return await runTask(spec, files, {
+    // A check (ADR 0040 decision 19) runs its agent as a task that only reads (src/check.ts).
+    const run = spec.check ? runCheck : runTask;
+    return await run(spec, files, {
       query,
       emit,
       now,

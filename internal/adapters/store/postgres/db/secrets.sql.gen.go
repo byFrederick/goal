@@ -12,6 +12,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearLapsedPreviousSecrets = `-- name: ClearLapsedPreviousSecrets :exec
+UPDATE secrets SET previous_key_id = NULL, previous_nonce = NULL, previous_ciphertext = NULL, previous_until = NULL
+WHERE previous_until <= now()
+`
+
+// goal db rekey, as goal_owner: previous values past their 24 hours go, in every organization.
+func (q *Queries) ClearLapsedPreviousSecrets(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, clearLapsedPreviousSecrets)
+	return err
+}
+
 const deleteSecret = `-- name: DeleteSecret :one
 DELETE FROM secrets WHERE name = $1 RETURNING id
 `
@@ -68,6 +79,20 @@ func (q *Queries) InsertSecret(ctx context.Context, arg InsertSecretParams) (tim
 	return created_at, err
 }
 
+const keepPreviousSecret = `-- name: KeepPreviousSecret :exec
+UPDATE secrets AS t SET previous_key_id = t.key_id, previous_nonce = t.nonce, previous_ciphertext = t.ciphertext,
+                        previous_until = now() + interval '24 hours'
+WHERE t.id = $1
+  AND EXISTS (SELECT 1 FROM webhook_endpoints w WHERE w.org_id = t.org_id AND w.secret_id = t.id)
+`
+
+// Before a replace: a secret an organization webhook is signed by keeps its value as the previous
+// one for 24 hours (ADR 0040 decision 15), so deliveries signed with either pass.
+func (q *Queries) KeepPreviousSecret(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, keepPreviousSecret, id)
+	return err
+}
+
 const lockSecret = `-- name: LockSecret :one
 SELECT id FROM secrets WHERE name = $1 FOR UPDATE
 `
@@ -104,6 +129,28 @@ func (q *Queries) MarkSecretsUsed(ctx context.Context, ids []uuid.UUID) ([]*time
 		return nil, err
 	}
 	return items, nil
+}
+
+const resealPreviousSecret = `-- name: ResealPreviousSecret :exec
+UPDATE secrets SET previous_key_id = $1, previous_nonce = $2, previous_ciphertext = $3
+WHERE id = $4
+`
+
+type ResealPreviousSecretParams struct {
+	KeyID      *string
+	Nonce      []byte
+	Ciphertext []byte
+	ID         uuid.UUID
+}
+
+func (q *Queries) ResealPreviousSecret(ctx context.Context, arg ResealPreviousSecretParams) error {
+	_, err := q.db.Exec(ctx, resealPreviousSecret,
+		arg.KeyID,
+		arg.Nonce,
+		arg.Ciphertext,
+		arg.ID,
+	)
+	return err
 }
 
 const resealSecret = `-- name: ResealSecret :exec
@@ -291,6 +338,33 @@ func (q *Queries) SecretNames(ctx context.Context, names []string) ([]string, er
 	return items, nil
 }
 
+const secretWebhooks = `-- name: SecretWebhooks :many
+SELECT w.name FROM webhook_endpoints w JOIN secrets s ON s.org_id = w.org_id AND s.id = w.secret_id
+WHERE s.name = $1
+ORDER BY w.name
+`
+
+// The organization webhooks secret name signs, by name: it cannot be deleted while one does.
+func (q *Queries) SecretWebhooks(ctx context.Context, name string) ([]string, error) {
+	rows, err := q.db.Query(ctx, secretWebhooks, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const secrets = `-- name: Secrets :many
 
 SELECT s.id, s.name, s.source, s.description, s.all_factories, s.factory_ids, s.expires_at, s.remind_days,
@@ -357,6 +431,91 @@ func (q *Queries) Secrets(ctx context.Context) ([]SecretsRow, error) {
 			&i.UpdatedAt,
 			&i.CreatedByName,
 			&i.UpdatedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const signingSecret = `-- name: SigningSecret :one
+SELECT key_id, nonce, ciphertext, previous_key_id, previous_nonce, previous_ciphertext, previous_until,
+       coalesce(previous_until > now(), false)::bool AS previous_live
+FROM secrets WHERE id = $1
+`
+
+type SigningSecretRow struct {
+	KeyID              string
+	Nonce              []byte
+	Ciphertext         []byte
+	PreviousKeyID      *string
+	PreviousNonce      []byte
+	PreviousCiphertext []byte
+	PreviousUntil      *time.Time
+	PreviousLive       bool
+}
+
+// A webhook's secret, sealed, with its previous value while it has not lapsed.
+func (q *Queries) SigningSecret(ctx context.Context, id uuid.UUID) (SigningSecretRow, error) {
+	row := q.db.QueryRow(ctx, signingSecret, id)
+	var i SigningSecretRow
+	err := row.Scan(
+		&i.KeyID,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.PreviousKeyID,
+		&i.PreviousNonce,
+		&i.PreviousCiphertext,
+		&i.PreviousUntil,
+		&i.PreviousLive,
+	)
+	return i, err
+}
+
+const stalePreviousSecrets = `-- name: StalePreviousSecrets :many
+SELECT id, org_id, coalesce(previous_key_id, '')::text AS key_id, coalesce(previous_nonce, ''::bytea)::bytea AS nonce,
+       coalesce(previous_ciphertext, ''::bytea)::bytea AS ciphertext
+FROM secrets
+WHERE previous_key_id <> $1::text
+ORDER BY id
+LIMIT $2
+FOR NO KEY UPDATE
+`
+
+type StalePreviousSecretsParams struct {
+	Active string
+	Batch  int32
+}
+
+type StalePreviousSecretsRow struct {
+	ID         uuid.UUID
+	OrgID      uuid.UUID
+	KeyID      string
+	Nonce      []byte
+	Ciphertext []byte
+}
+
+// goal db rekey, as goal_owner: a batch of previous values sealed under another key than the
+// active one, in every organization, locked.
+func (q *Queries) StalePreviousSecrets(ctx context.Context, arg StalePreviousSecretsParams) ([]StalePreviousSecretsRow, error) {
+	rows, err := q.db.Query(ctx, stalePreviousSecrets, arg.Active, arg.Batch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StalePreviousSecretsRow
+	for rows.Next() {
+		var i StalePreviousSecretsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.KeyID,
+			&i.Nonce,
+			&i.Ciphertext,
 		); err != nil {
 			return nil, err
 		}

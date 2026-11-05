@@ -61,12 +61,16 @@ import (
 
 // Engine moves items; *engine.Engine satisfies it.
 type Engine interface {
-	Submit(ctx context.Context, n domain.NewItem) (domain.Item, error)
+	Submit(ctx context.Context, r domain.FileRequest) (domain.Item, error)
 	Approve(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Reject(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Retry(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
 	Move(ctx context.Context, id domain.ItemID, to string, by domain.Actor, reason string) (domain.Item, error)
 	SetLane(ctx context.Context, id domain.ItemID, lane string, by domain.Actor) (domain.Item, error)
+	SetStart(ctx context.Context, id domain.ItemID, r domain.StartRequest, by domain.Actor) (domain.Item, error)
+	StartNow(ctx context.Context, id domain.ItemID, by domain.Actor) (domain.Item, error)
+	DropFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, by domain.Actor) (domain.FollowUp, error)
+	FileFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, r domain.FileRequest) (domain.Item, error)
 	Pause(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Cancel(ctx context.Context, id domain.ItemID, by domain.Actor, reason string) (domain.Item, error)
 	Merge(ctx context.Context, id domain.ItemID, by domain.Actor, method string) (domain.Item, error)
@@ -80,6 +84,10 @@ type Engine interface {
 	PullAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, reason string) (domain.AndonPull, error)
 	ClearAndon(ctx context.Context, f domain.FactoryID, by domain.Actor, note string) (domain.AndonPull, error)
 	TryTrigger(ctx context.Context, f domain.FactoryID, trigger, firing string, by domain.Actor) (domain.TriggerTry, error)
+	// TryCheck queues a try check of the trigger (ADR 0040 decision 19).
+	TryCheck(ctx context.Context, f domain.FactoryID, trigger string, by domain.Actor) (domain.TriggerFiring, error)
+	// ClearCheckState deletes the trigger's saved check state (ADR 0040 decision 19).
+	ClearCheckState(ctx context.Context, f domain.FactoryID, trigger string, by domain.Actor) error
 }
 
 // Items reads items, their history and runs, a factory's latest milestone events, the leases on them, a factory's flow and its
@@ -89,6 +97,9 @@ type Engine interface {
 // satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
+	FollowUps(ctx context.Context, item domain.ItemID) ([]domain.FollowUp, error)
+	FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error)
+	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
@@ -490,25 +501,29 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	if strings.TrimSpace(b.Title) == "" {
-		return nil, fmt.Errorf("%w: an item needs a title", errInvalid)
-	}
+	source, via := submittedFrom(ctx)
+	p, _ := domain.PrincipalFrom(ctx)
 
-	typ := deref(b.Type)
-	if types := f.Spec.Board.WorkTypes; len(types) > 0 {
-		if typ == "" {
-			typ = types[0]
+	var start *domain.StartRequest
+
+	if b.Start != nil {
+		r, err := s.startOf(ctx, *b.Start)
+		if err != nil {
+			return nil, err
 		}
 
-		if !slices.Contains(types, typ) {
-			return nil, fmt.Errorf("%w: type %q is not one of factory %s's work types %v", errInvalid, typ, f.Metadata.Name, types)
-		}
+		start = &r
 	}
 
-	it, err := s.engine.Submit(ctx, domain.NewItem{
-		FactoryID: domain.FactoryID(f.Metadata.ID), Type: typ, Title: strings.TrimSpace(b.Title),
-		Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: submittedFrom(ctx),
+	it, err := s.engine.Submit(ctx, domain.FileRequest{
+		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
+		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
+		Start: start,
 	})
+	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
+		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -516,24 +531,24 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 	return gen.SubmitItem201JSONResponse(s.itemOf(ctx, it)), nil
 }
 
-// submittedFrom is where an item the request submits comes from, for Intake: an API key is the
-// API; a user acting through a personal token or a session that is not a browser one (goal
-// login's) is the CLI; a browser session, and GOAL_AUTH=none's one person, who has neither, are
-// people. "" when the request carries no principal.
-func submittedFrom(ctx context.Context) domain.ItemSource {
+// submittedFrom is where an item the request submits comes from, for Intake, and how its person
+// filed it: an API key is the API; a user acting through a personal token or a session that is
+// not a browser one (goal login's) is the CLI; a browser session, and GOAL_AUTH=none's one
+// person, who has neither, are people on the web. "" when the request carries no principal.
+func submittedFrom(ctx context.Context) (domain.ItemSource, domain.Via) {
 	p, ok := domain.PrincipalFrom(ctx)
 
 	switch {
 	case !ok:
-		return ""
+		return "", ""
 	case p.Kind == domain.PrincipalService:
-		return domain.ItemFromAPI
+		return domain.ItemFromAPI, domain.ViaAPI
 	case p.Kind != domain.PrincipalUser:
-		return ""
+		return "", ""
 	case p.Token != nil, p.Session != nil && !p.Session.Browser:
-		return domain.ItemFromCLI
+		return domain.ItemFromCLI, domain.ViaCLI
 	default:
-		return domain.ItemFromPeople
+		return domain.ItemFromPeople, domain.ViaWeb
 	}
 }
 
@@ -574,6 +589,14 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	out.Waiting = waiting[it.ID]
 
 	if out.Question, out.ToolApproval, err = s.openAsks(ctx, it.ID); err != nil {
+		return nil, err
+	}
+
+	if out.FollowUps, out.Notes, err = s.followUpsAndNotes(ctx, it.ID); err != nil {
+		return nil, err
+	}
+
+	if out.CameFrom, err = s.cameFrom(ctx, it); err != nil {
 		return nil, err
 	}
 
@@ -714,7 +737,7 @@ func problemOf(err error) gen.Problem {
 	// definitions' (all wrap ports.ErrNameTaken); the secrets' and the credentials' before the
 	// connections' (all wrap ports.ErrNoMasterKey).
 	for _, answer := range []func(error) (gen.Problem, bool){
-		fixedProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, watchProblem, keptTestProblem, jonahProblem, definitionProblem,
+		fixedProblem, followUpProblem, exportProblem, policyProblem, notificationProblem, signupDomainProblem, edgeProblem, partProblem, secretProblem, environmentTestProblem, repositoryTestProblem, credentialProblem, webhookProblem, viewProblem, connectionProblem, knowledgeProblem, watchProblem, keptTestProblem, jonahProblem, definitionProblem,
 		controlProblem, questionProblem, toolApprovalProblem, agentProblem, draftRequestProblem, triggerProblem, apiKeyProblem, personalTokenProblem,
 	} {
 		if p, ok := answer(err); ok {
@@ -859,7 +882,30 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 		out.DoneAt = &it.DoneAt
 	}
 
+	if it.Origin != "" {
+		out.Origin = new(gen.ItemOrigin(it.Origin))
+	}
+
+	if it.Via != "" {
+		out.Via = new(gen.ItemVia(it.Via))
+	}
+
+	out.Start, out.CreatedBy, out.Untrusted = itemStartOf(it), s.createdBy(it), new(it.Untrusted)
+
 	return out
+}
+
+// createdBy is who filed it as the API shows them; nil for items filed before ADR 0040 and for the
+// engine's filings.
+func (s *server) createdBy(it domain.Item) *gen.Actor {
+	a, err := domain.ActorFromRef(it.CreatedBy)
+	if err != nil || a.Kind == domain.ActorSystem {
+		return nil
+	}
+
+	out := s.actorOut(a)
+
+	return &out
 }
 
 func (s *server) eventOf(e domain.Event) gen.Event {

@@ -186,7 +186,7 @@ export interface ReviewSection {
 export interface Trigger {
   name: string;
   enabled?: boolean | undefined;
-  /** The event key: github.check_run.failed, github.issues.labeled, schedule or webhook.<endpoint>[.<event>]. */
+  /** The event key: schedule, github.<event> (github.check_run), <webhook>[.<event>] (an organization webhook). */
   on: string;
   /** Five cron fields; only when `on` is schedule. */
   cron?: string | undefined;
@@ -195,12 +195,30 @@ export interface Trigger {
   only?: TriggerOnly | undefined;
   create: TriggerCreate;
   limits?: TriggerLimits | undefined;
+  /** An agent that looks at the source each time the schedule fires, instead of filing an item (ADR 0040 decision 19). */
+  check?: TriggerCheckConfig | undefined;
 }
+
+export interface TriggerCheckConfig {
+  agent: string;
+  /** What to look for, or the path of a Markdown file in the definition (./triggers/<name>.md). */
+  brief: string;
+  maxUsd?: number | undefined;
+  /** Kept as the file has it; the page does not choose it. */
+  timeout?: string | undefined;
+}
+
+/** One value, or a list one of which must match. */
+export type TriggerValues = string | string[];
 
 export interface TriggerFilter {
   branch?: string | undefined;
-  repo?: string | undefined;
+  repo?: TriggerValues | undefined;
   label?: string | undefined;
+  action?: TriggerValues | undefined;
+  conclusion?: TriggerValues | undefined;
+  /** Payload fields by dot path, each matched against a value or a list of values; all must match. */
+  match?: Record<string, TriggerValues> | undefined;
   paths?: string[] | undefined;
   authors?: string[] | undefined;
   skipBots?: boolean | undefined;
@@ -210,7 +228,7 @@ export interface TriggerOnly {
   failuresInARow?: number | undefined;
   /** A dotted event field, such as check.name. */
   dedupe?: string | undefined;
-  /** The model check, run last: a model answers the question about the event; its cost is about $0.01 each time. */
+  /** Removed (ADR 0040 decision 18): the page never writes it; a file that has it keeps it and the draft warns. */
   modelAgrees?: TriggerModelCheck | undefined;
 }
 
@@ -231,10 +249,15 @@ export interface TriggerCreate {
   title?: string | undefined;
   /** Text with {{field}} placeholders; the event's values reach agents as untrusted data only. */
   brief?: string | undefined;
+  /** File the item as trusted, so a person need not merge its work. */
+  trusted?: boolean | undefined;
 }
 
 export interface TriggerLimits {
   perDay?: number | undefined;
+  perHour?: number | undefined;
+  /** Only with a check: at most this many items one check files. */
+  perCheck?: number | undefined;
   pauseOnBudget?: boolean | undefined;
 }
 

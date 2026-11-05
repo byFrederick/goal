@@ -1,22 +1,28 @@
 // New trigger, step 1 of 2: what starts it (intake-new, MASTER.md's two-pane picker). The left pane lists the
 // sources; the right pane has the chosen source's events. Continue goes to the trigger page with the choice in
 // the address. On phones the panes take turns, with Back from the details.
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
-import { connectionsQuery } from '../../api/queries';
+import { connectionsQuery, definitionTextQuery, defKeys, intakeKeys, intakeQuery } from '../../api/queries';
+import type { TriggerSuggestion } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
-import { useFactoryParams } from '../../shared/factory';
+import { useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Dialog, DialogClose, DialogContent } from '../../ui/dialog';
+import { InfoTip } from '../../ui/info-tip';
+import { Leaving, useLeaving } from '../../ui/leaving';
 import { NotAvailable } from '../../ui/not-available';
+import { Skeleton } from '../../ui/skeleton';
 import { Stepper } from '../../ui/stepper';
+import { OpenDraftError, setTriggerEnabled } from './set-trigger-enabled';
 import {
   defaultEvent,
+  freeTriggerName,
   githubEventGroups,
   newTriggerHref,
   type PickerEvent,
@@ -26,12 +32,20 @@ import {
   type SourceKey,
   sourceByKey,
 } from './sources';
-import { isChoosable, type Suggestion, suggestionHref, suggestions } from './suggestions';
+import { titleOf } from './trigger-page';
+import { draftOpenNotice } from './trigger-toggle';
+import { readBoard, readTrigger } from './trigger-yaml';
 
 export function NewTriggerDialog() {
   const navigate = useNavigate();
   const params = useFactoryParams();
   const org = useOrg();
+  const factory = useFactory();
+  // The definition says which agents have which tools, and which trigger names are taken.
+  const definition = useQuery(definitionTextQuery(org.id, factory));
+  const text = definition.data?.text ?? '';
+  const board = readBoard(text);
+  const tools = checkTools(board.agents);
   // The organization's own connections decide the Connected and Not connected groups; until they load, none is.
   const { data: connections } = useQuery(connectionsQuery(org.id));
   const connectedKinds = new Set((connections ?? []).map((c) => c.kind));
@@ -39,14 +53,29 @@ export function NewTriggerDialog() {
   const [source, setSource] = useState<SourceKey>('github');
   const [event, setEvent] = useState<string>(defaultEvent);
   const [filter, setFilter] = useState('');
+  /** The tool a check was chosen from; null for Check with an agent itself. */
+  const [tool, setTool] = useState<string | null>(null);
   /** Phones show one pane at a time: the sources, then the chosen source's details. */
   const [detailsShown, setDetailsShown] = useState(false);
 
   const panel = useRef<HTMLDivElement>(null);
   const leave = () => navigate({ to: '/o/$org/f/$factory/intake', params });
   const chosen = sourceByKey[source];
-  const target = continueTo(chosen, event);
-  const href = newTriggerHref(params.org, params.factory, target.route, target.on);
+  const on = eventOf(chosen, event);
+  const agent =
+    tool === null
+      ? board.agents[0]?.name
+      : (board.agents.find((a) => a.tools.includes(tool))?.name ?? board.agents[0]?.name);
+  const href =
+    on === null
+      ? null
+      : newTriggerHref(
+          params.org,
+          params.factory,
+          freeTriggerName(nameBase(chosen, on), (name) => readTrigger(text, name) !== undefined),
+          on,
+          chosen.key === 'check' ? (agent ?? '') : undefined,
+        );
 
   return (
     <Dialog open onOpenChange={(open) => !open && void leave()}>
@@ -102,9 +131,10 @@ export function NewTriggerDialog() {
                         source={s}
                         connectHref={`/o/${params.org}/access`}
                         showConnect={group.title === 'Not connected' && s.available}
-                        pressed={source === s.key}
+                        pressed={source === s.key && tool === null}
                         onPick={() => {
                           setSource(s.key);
+                          setTool(null);
                           setEvent(defaultEvent);
                           setDetailsShown(true);
                         }}
@@ -113,6 +143,31 @@ export function NewTriggerDialog() {
                   </div>
                 );
               })}
+              {tools.filter((t) => t.toLowerCase().includes(filter.trim().toLowerCase())).length > 0 ? (
+                <div className="flex flex-col gap-1">
+                  <h3 className="m-0 px-2 pt-2 pb-1 text-meta font-semibold text-muted">Check with an agent</h3>
+                  {tools
+                    .filter((t) => t.toLowerCase().includes(filter.trim().toLowerCase()))
+                    .map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        aria-pressed={source === 'check' && tool === t}
+                        onClick={() => {
+                          setSource('check');
+                          setTool(t);
+                          setDetailsShown(true);
+                        }}
+                        className="press flex h-11 min-w-0 shrink-0 grow items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink transition-colors duration-(--duration-fast) ease-out hover:bg-hover aria-pressed:bg-hover md:h-10"
+                      >
+                        <span title={t} className="min-w-0 flex-1 truncate">
+                          {t}
+                        </span>
+                        <Chip>its tool</Chip>
+                      </button>
+                    ))}
+                </div>
+              ) : null}
             </fieldset>
 
             <div className={cn('flex min-w-0 flex-1 flex-col gap-4 p-5', !detailsShown && 'max-md:hidden')}>
@@ -125,12 +180,20 @@ export function NewTriggerDialog() {
                 Back
               </Button>
               <div className="flex items-center gap-3">
-                <h3 className="m-0 text-heading">{chosen.key === 'github' ? 'GitHub events' : chosen.label}</h3>
+                <h3 className="m-0 text-heading">
+                  {chosen.key === 'github' ? 'GitHub events' : tool !== null ? tool : chosen.label}
+                </h3>
+                {chosen.key === 'check' ? (
+                  <InfoTip about="Check with an agent">
+                    An agent looks at the source on a schedule, with the tools it has, and files the items it finds. Any
+                    source its tools reach.
+                  </InfoTip>
+                ) : null}
               </div>
               {chosen.key === 'github' ? (
                 <GithubEvents event={event} onChange={setEvent} />
               ) : (
-                <p className="m-0 text-body text-ink-soft">{sourceNote(chosen)}</p>
+                <p className="m-0 text-body text-ink-soft">{sourceNote(chosen, agent)}</p>
               )}
             </div>
           </div>
@@ -138,14 +201,16 @@ export function NewTriggerDialog() {
           <SuggestionsBlock />
 
           <div className="flex flex-wrap items-center gap-3 border-t border-line p-4">
-            <span className="text-secondary text-muted">Next: filters, what it creates and its limits</span>
+            <span className="text-secondary text-muted">Next: filters, what it creates and its limits, as a draft</span>
             <div className="ml-auto flex items-center gap-2">
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button variant="primary" onClick={() => navigate({ href })}>
-                Continue
-              </Button>
+              {href ? (
+                <Button variant="primary" onClick={() => navigate({ href })}>
+                  Continue
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -154,60 +219,136 @@ export function NewTriggerDialog() {
   );
 }
 
+/** The tools the factory's agents have on, each once, in the order the definition lists them. */
+function checkTools(agents: readonly { tools: readonly string[] }[]): string[] {
+  return [...new Set(agents.flatMap((a) => a.tools))];
+}
+
+/** The trigger's event key for a choice; null when the source has none to choose here (a webhook is chosen later). */
+function eventOf(source: PickerSource, event: string): string | null {
+  if (source.key === 'github') return event;
+  if (source.key === 'schedule' || source.key === 'check') return 'schedule';
+  return null;
+}
+
+/** The start of a name for the new trigger: new-check, new-schedule, new-check-run-failed. */
+function nameBase(source: PickerSource, on: string): string {
+  if (source.key === 'check') return 'new-check';
+  return `new-${on.replace(/^github\./, '').replace(/[._]/g, '-')}`;
+}
+
 /**
- * The suggested triggers for this factory, as starting points for the picker. Use goes to the trigger
- * page with the suggestion in the address, which closes this dialog (the dialog is the route).
+ * The factory's disabled triggers, from the API, as starting points. Turn on enables one through the same
+ * write as Intake's switch; the row collapses away once the write is answered and intake is read again.
  */
 function SuggestionsBlock() {
-  const navigate = useNavigate();
-  const params = useFactoryParams();
-  const shown = suggestions.filter((s) => s.group === 'software');
-  if (shown.length === 0) return null;
+  const org = useOrg();
+  const factory = useFactory();
+  const intake = useQuery(intakeQuery(org.id, factory.id));
+  if (intake.isError) return null;
+  const shown = intake.data?.suggestions ?? [];
+  if (intake.data && shown.length === 0) return null;
 
   return (
     <section aria-labelledby="suggestions-heading" className="flex flex-col gap-2 border-t border-line p-4">
-      <h3 id="suggestions-heading" className="m-0 text-meta font-semibold text-muted">
-        Or start from a suggestion
-      </h3>
-      <ul className="m-0 flex list-none flex-col p-0">
-        {shown.map((suggestion) => (
-          <li key={suggestion.id}>
-            <SuggestionRow
-              suggestion={suggestion}
-              onUse={() => navigate({ href: suggestionHref(params.org, params.factory, suggestion) })}
-            />
-          </li>
-        ))}
-      </ul>
+      <div className="flex items-center gap-1">
+        <h3 id="suggestions-heading" className="m-0 text-meta font-semibold text-muted">
+          Or turn on a suggestion from {factory.title}&apos;s definition
+        </h3>
+        <InfoTip about="Suggestions">
+          Suggestions are the triggers in the definition that are off. Turning one on publishes a new version.
+        </InfoTip>
+      </div>
+      <Skeleton ready={intake.data !== undefined} placeholder={<SuggestionsPlaceholder />}>
+        <ul className="m-0 flex list-none flex-col p-0">
+          {shown.map((suggestion) => (
+            <SuggestionRow key={suggestion.name} suggestion={suggestion} />
+          ))}
+        </ul>
+      </Skeleton>
     </section>
   );
 }
 
-function SuggestionRow({ suggestion, onUse }: { suggestion: Suggestion; onUse: () => void }) {
-  const choosable = isChoosable(suggestion);
+function SuggestionsPlaceholder() {
   return (
-    <div className="flex min-h-10 items-center gap-3 border-t border-line py-2">
-      <Chip>{suggestion.station}</Chip>
-      <span className="min-w-0 flex-1 text-secondary text-ink">{suggestion.title}</span>
-      <Button size="sm" disabled={!choosable} onClick={onUse}>
-        Use
-      </Button>
+    <div className="flex flex-col">
+      {[0, 1].map((n) => (
+        <div key={n} className="flex min-h-10 items-center gap-3 border-t border-line py-2">
+          <span className="h-5 w-16 rounded-chip bg-hover" />
+          <span className="h-4 flex-1 rounded-chip bg-hover" />
+          <span className="h-8 w-20 rounded-control bg-hover" />
+        </div>
+      ))}
     </div>
   );
 }
 
-/** The trigger page's source and event key for a choice (the schedule's key is `schedule`). */
-function continueTo(source: PickerSource, event: string): { route: PickerSource['route']; on?: string } {
-  if (source.key === 'github') return { route: 'github', on: event };
-  if (source.key === 'schedule') return { route: 'schedule', on: 'schedule' };
-  return { route: source.route };
+function SuggestionRow({ suggestion }: { suggestion: TriggerSuggestion }) {
+  const org = useOrg();
+  const factory = useFactory();
+  const client = useQueryClient();
+  const [notice, setNotice] = useState<string | null>(null);
+  const { leaving, leave } = useLeaving(() => {
+    void client.invalidateQueries({ queryKey: intakeKeys.root(org.id, factory.id) });
+    void client.invalidateQueries({ queryKey: defKeys.factories(org.id) });
+  });
+  const turnOn = useMutation({
+    mutationFn: () =>
+      setTriggerEnabled({
+        org: org.id,
+        factory: factory.id,
+        currentVersionId: factory.current?.id ?? null,
+        trigger: suggestion.name,
+        enabled: true,
+      }),
+    onSuccess: leave,
+    onError: (error) =>
+      setNotice(
+        error instanceof OpenDraftError
+          ? draftOpenNotice
+          : `Not turned on. ${error instanceof Error ? error.message : 'Try again.'}`,
+      ),
+  });
+  const blocked = factory.draft !== null;
+  return (
+    <li className="border-t border-line">
+      <Leaving leaving={leaving}>
+        <div className="flex min-h-10 items-center gap-3 py-2">
+          <Chip>{suggestion.create.station}</Chip>
+          <span className="min-w-0 flex-1 text-secondary text-ink">{titleOf(suggestion.name)}</span>
+          <Button
+            size="sm"
+            disabled={turnOn.isPending || leaving}
+            onClick={() => {
+              if (blocked) {
+                setNotice(draftOpenNotice);
+                return;
+              }
+              setNotice(null);
+              turnOn.mutate();
+            }}
+          >
+            Turn on
+          </Button>
+        </div>
+        {notice ? (
+          <p role="alert" className="m-0 pb-2 text-meta text-rework-ink">
+            {notice}
+          </p>
+        ) : null}
+      </Leaving>
+    </li>
+  );
 }
 
-function sourceNote(source: PickerSource): string {
+function sourceNote(source: PickerSource, agent: string | undefined): string {
   if (source.key === 'schedule') return 'Starts on a schedule. The time and its time zone are set on the next step.';
-  if (source.key === 'cloudflare')
-    return 'Starts when Cloudflare posts an event to a webhook endpoint. The endpoint is chosen on the next step.';
-  return 'Starts when a webhook endpoint receives a delivery. The endpoint is chosen on the next step.';
+  if (source.key === 'check')
+    return agent
+      ? `Starts on a schedule. ${agent} looks at the source each time and files what it finds. The brief is written on the next step.`
+      : 'Starts on a schedule. An agent looks at the source each time. The factory has no agent yet.';
+  return 'Not available yet. Webhook triggers are set up from the organization’s webhooks.';
 }
 
 function SourceButton({

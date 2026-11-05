@@ -97,6 +97,15 @@
 // definition, file, connection, knowledge, rule or tool. Its MCP session lists no tool, refuses
 // every call, and its notes are none.
 //
+// # Checks
+//
+// A token of kind domain.TaskKindCheck is a trigger's check (ADR 0040 decision 19, check.go). It
+// names the trigger and no item or station. Its bundle is the check's agent with the built-ins
+// that edit or run denied, its environment or connections with every ask tool off, the check's
+// brief, the fixed answer contract as its output schema, check.maxUsd as max_usd, and spec.check:
+// the input read through Deps.Checks (503 when nil). It has no repository, rule or knowledge. Its
+// MCP session lists no tool, so question__ask and the knowledge tools are not offered.
+//
 // # State
 //
 // None: every HTTP request is verified and served on its own (the SDK's stateless mode), so any
@@ -208,6 +217,8 @@ type Deps struct {
 	// Grades give a grade its reason and the result it grades (grade.go). Without it, or without
 	// Jonah, a grade token's bundle is 503.
 	Grades Grades
+	// Checks give a check its input (check.go); without it a check token's bundle is 503.
+	Checks Checks
 }
 
 // DraftRequests reads a draft request of the organization in ctx; ports.DraftRequests satisfies
@@ -268,6 +279,7 @@ type Gateway struct {
 	tries    Tries
 	proposed ProposedDefinitions
 	grades   Grades // nil without Deps.Grades
+	checks   Checks // nil without Deps.Checks
 	cfg      Config
 	mcp      http.Handler
 }
@@ -288,7 +300,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
 		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
-		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, cfg: cfg,
+		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, checks: d.Checks, cfg: cfg,
 	}
 	if g.log == nil {
 		g.log = slog.New(slog.DiscardHandler)
@@ -380,8 +392,9 @@ func (g *Gateway) session(ctx context.Context, c domain.TaskClaims) (*session, e
 	}
 
 	// A Jonah review's agent is not one of the factory's, and it is served no tool; nor is a try
-	// of a past item, which has no person to ask and no connection, or a grade, which calls none.
-	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry || c.Kind == domain.TaskKindGrade {
+	// of a past item, which has no person to ask and no connection, a grade, which calls none, or
+	// a check, which has no person to ask and no knowledge (ADR 0040 decision 19).
+	if c.Kind == domain.TaskKindJonah || c.Kind == domain.TaskKindTry || c.Kind == domain.TaskKindGrade || c.Kind == domain.TaskKindCheck {
 		return &session{g: g, claims: c, noTools: true}, nil
 	}
 

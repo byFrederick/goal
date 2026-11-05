@@ -9,14 +9,20 @@
 UPDATE factories SET last_item_number = last_item_number + 1 WHERE id = $1 RETURNING last_item_number;
 
 -- name: InsertItem :one
+-- Every filed item (fileItem): a person's, a trigger's, a follow-up's and a plan's part, which
+-- sets part_key and part_paths (its paths too). source is still written for old instances (00113).
 INSERT INTO work_items (
-  id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service,
-  priority, created_at, updated_at, source, trigger
+  id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
+  state, class_of_service, priority, base_commit, created_at, updated_at, source, trigger, origin, via,
+  created_by, generation, untrusted, start_at, started_at
 ) VALUES (
-  sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.narg(parent_id), sqlc.arg(type),
-  sqlc.narg(lane), sqlc.arg(title), sqlc.arg(body), sqlc.arg(station), sqlc.arg(state),
-  sqlc.arg(class_of_service), sqlc.arg(priority)::bigint, sqlc.arg(created_at), sqlc.arg(created_at),
-  sqlc.narg(source), sqlc.narg(trigger)
+  sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.narg(parent_id), sqlc.narg(part_key),
+  sqlc.arg(part_paths)::text[], sqlc.arg(part_paths)::text[], sqlc.arg(type), sqlc.narg(lane),
+  sqlc.arg(title), sqlc.arg(body), sqlc.arg(station), sqlc.arg(state), sqlc.arg(class_of_service),
+  sqlc.arg(priority)::bigint, sqlc.narg(base_commit)::text, sqlc.arg(created_at), sqlc.arg(created_at),
+  sqlc.narg(source), sqlc.narg(trigger), sqlc.arg(origin), sqlc.narg(via), sqlc.narg(created_by),
+  sqlc.arg(generation)::int, sqlc.arg(untrusted)::bool, sqlc.narg(start_at)::timestamptz,
+  sqlc.narg(started_at)::timestamptz
 )
 RETURNING *;
 
@@ -33,13 +39,30 @@ WHERE factory_id = $1 AND station = $2 AND state IN ('queued', 'ready')
 ORDER BY (class_of_service = 'expedite') DESC, priority DESC, created_at, number
 LIMIT sqlc.arg(max_items)::bigint;
 
+-- name: ReleasableItems :many
+-- What a queue station releases now, in pull order (ADR 0040 decision 4): the waiting items with
+-- no open need (item_edges, by its primary key) and no start_at after now, filtered before the
+-- limit so held items never crowd out the rest. WaitingItems stays unfiltered: the overlap hold
+-- reads it to find stale edges.
+SELECT * FROM work_items w
+WHERE w.factory_id = sqlc.arg(factory_id) AND w.station = sqlc.arg(station) AND w.state IN ('queued', 'ready')
+  AND (w.start_at IS NULL OR w.start_at <= sqlc.arg(now)::timestamptz)
+  AND NOT EXISTS (
+    SELECT 1 FROM item_edges e JOIN work_items n ON n.id = e.needs_id
+    WHERE e.item_id = w.id AND n.state NOT IN ('done', 'cancelled')
+  )
+ORDER BY (w.class_of_service = 'expedite') DESC, w.priority DESC, w.created_at, w.number
+LIMIT sqlc.arg(max_items)::bigint;
+
 -- name: LockNextWaitingItem :one
 -- Pull, never push: one agent slot takes the next item at its station. SKIP LOCKED lets many
 -- slots claim concurrently without blocking each other or taking the same item. An item is
--- skipped while any item it needs is neither done nor cancelled (item_edges, by its primary key).
--- WaitingItems lists it all the same: only queue stations read that, and they hold nothing.
+-- skipped while any item it needs is neither done nor cancelled (item_edges, by its primary key),
+-- and while its start_at is after the claim's now (an item a trigger placed past the first
+-- station). WaitingItems lists it all the same.
 SELECT * FROM work_items w
-WHERE w.factory_id = $1 AND w.station = $2 AND w.state IN ('queued', 'ready')
+WHERE w.factory_id = sqlc.arg(factory_id) AND w.station = sqlc.arg(station) AND w.state IN ('queued', 'ready')
+  AND (w.start_at IS NULL OR w.start_at <= sqlc.arg(now)::timestamptz)
   AND NOT EXISTS (
     SELECT 1 FROM item_edges e JOIN work_items n ON n.id = e.needs_id
     WHERE e.item_id = w.id AND n.state NOT IN ('done', 'cancelled')
@@ -64,8 +87,17 @@ UPDATE work_items SET
     ELSE outputs || jsonb_build_object(sqlc.arg(output_station)::text, sqlc.narg(output)::jsonb)
   END,
   rework_count = rework_count + sqlc.arg(rework)::integer,
-  done_at = CASE WHEN sqlc.arg(set_done_at)::boolean THEN sqlc.narg(done_at) ELSE done_at END
+  done_at = CASE WHEN sqlc.arg(set_done_at)::boolean THEN sqlc.narg(done_at) ELSE done_at END,
+  -- The first move off a station is the item leaving its line's first one: it has started.
+  started_at = CASE WHEN started_at IS NULL AND station <> sqlc.arg(station) THEN sqlc.arg(updated_at) ELSE started_at END
 WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: SetItemStart :one
+-- Changes or clears (a null start_at: Start now) when an item may start, guarded by its
+-- position: an item that moved meanwhile changes nothing (no row).
+UPDATE work_items SET start_at = sqlc.narg(start_at)::timestamptz, updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND station = sqlc.arg(station) AND state = sqlc.arg(state)
 RETURNING *;
 
 -- name: AddItemCost :exec

@@ -2,7 +2,7 @@
 // time comes from the item's flow (its spans), its outcome from the decisions made at that station
 // (the events), and the lead-time target from the flow's target_seconds.
 import type { Item, ItemEvent, ItemFlow, ItemSpan, Station } from '../../api/types';
-import { formatDuration, humanize } from '../../shared/format';
+import { formatDay, formatDuration, humanize } from '../../shared/format';
 import type { Step } from '../../ui/stepper';
 import { formatTarget } from './time';
 
@@ -72,6 +72,7 @@ export function stepsOf({ item, stations, events, flow, now }: StepsInput): Step
       const state = item.state === 'done' ? 'done' : current ? 'current' : 'todo';
       return step(name, state, detail);
     }
+    if (current && item.start && visits === 0) return step(name, 'current', `Starts ${formatDay(item.start.at)}`);
     if (current) {
       const parts = [visits > 0 ? formatDuration(spent) : null, waits ? 'waiting on you' : null].filter(Boolean);
       return step(name, 'current', parts.join(', '));

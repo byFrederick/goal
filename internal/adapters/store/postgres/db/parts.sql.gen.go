@@ -12,99 +12,16 @@ import (
 	"github.com/google/uuid"
 )
 
-const insertPart = `-- name: InsertPart :one
+const itemParts = `-- name: ItemParts :many
 
-INSERT INTO work_items (
-  id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
-  state, class_of_service, priority, base_commit, created_at, updated_at
-) VALUES (
-  $1, $2, $3, $4::uuid, $5::text,
-  $6::text[], $6::text[], $7, $8,
-  $9, $10, $11, 'queued', $12,
-  $13::bigint, $14::text, $15, $15
-)
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
 `
-
-type InsertPartParams struct {
-	ID             uuid.UUID
-	FactoryID      uuid.UUID
-	Number         int64
-	ParentID       uuid.UUID
-	PartKey        string
-	PartPaths      []string
-	Type           string
-	Lane           *string
-	Title          string
-	Body           string
-	Station        string
-	ClassOfService string
-	Priority       int64
-	BaseCommit     *string
-	CreatedAt      time.Time
-}
 
 // Assemblies and their parts (ports.Store Assemble, Parts; migration 00059). Lock order: the
 // assembly's row before its parts' inserts in Assemble; a part's row before its assembly's when
 // a part closes (Transition), and parts are created only under their assembly's lock, so the two
 // never wait on each other's rows in opposite orders. AddPart locks the factory's row, then the
 // assembly's, the order of AddEdge (item_edges.sql).
-func (q *Queries) InsertPart(ctx context.Context, arg InsertPartParams) (WorkItem, error) {
-	row := q.db.QueryRow(ctx, insertPart,
-		arg.ID,
-		arg.FactoryID,
-		arg.Number,
-		arg.ParentID,
-		arg.PartKey,
-		arg.PartPaths,
-		arg.Type,
-		arg.Lane,
-		arg.Title,
-		arg.Body,
-		arg.Station,
-		arg.ClassOfService,
-		arg.Priority,
-		arg.BaseCommit,
-		arg.CreatedAt,
-	)
-	var i WorkItem
-	err := row.Scan(
-		&i.ID,
-		&i.FactoryID,
-		&i.Number,
-		&i.ParentID,
-		&i.Type,
-		&i.Lane,
-		&i.Title,
-		&i.Body,
-		&i.Station,
-		&i.State,
-		&i.ClassOfService,
-		&i.Priority,
-		&i.Size,
-		&i.ReworkCount,
-		&i.CostUsd,
-		&i.Outputs,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DoneAt,
-		&i.OrgID,
-		&i.PartKey,
-		&i.PartPaths,
-		&i.Paths,
-		&i.BaseCommit,
-		&i.Trigger,
-		&i.Source,
-		&i.IntegrationBranch,
-		&i.IntegrationLandAt,
-	)
-	return i, err
-}
-
-const itemParts = `-- name: ItemParts :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
-`
-
 // An assembly's parts in plan order: they are numbered in that order (work_items_parent_part_key_idx).
 func (q *Queries) ItemParts(ctx context.Context, parentID uuid.UUID) ([]WorkItem, error) {
 	rows, err := q.db.Query(ctx, itemParts, parentID)
@@ -144,6 +61,14 @@ func (q *Queries) ItemParts(ctx context.Context, parentID uuid.UUID) ([]WorkItem
 			&i.Source,
 			&i.IntegrationBranch,
 			&i.IntegrationLandAt,
+			&i.Origin,
+			&i.Via,
+			&i.CreatedBy,
+			&i.Generation,
+			&i.Untrusted,
+			&i.StartAt,
+			&i.StartedAt,
+			&i.Triage,
 		); err != nil {
 			return nil, err
 		}

@@ -31,7 +31,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0025](0025-judges-and-evals-as-the-screens-show-them.md): Judges and evals as the screens show them. Status: superseded by ADR 0039 (judges go; eval cases become past items kept as tests, which warn and never block).
 - [ADR 0026](0026-intake-triggers.md): Intake triggers. Status: accepted.
 - [ADR 0027](0027-knowledge-use-and-verdicts.md): Knowledge use and verdicts. Status: superseded by ADR 0038 (knowledge uses become reads counted from the trace; verdicts and `knowledge__verdict` go).
-- [ADR 0028](0028-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: proposed.
+- [ADR 0028](0028-trigger-try-and-model-check.md): Trying a trigger with a past event, and the model check in Only if. Status: superseded in part by ADR 0040 (the model check, decisions 3–7, goes, and a check asks an agent instead; decisions 1 and 2 stay, and Try covers webhook deliveries and checks).
 - [ADR 0029](0029-bake-offs-are-eval-runs-of-one-agent-across-models.md): Bake-offs are eval runs of one agent across models. Status: superseded by ADR 0039 (bake-offs become model proposals tried on past items).
 - [ADR 0031](0031-tool-calls-ask-first-and-standing-rules.md): Tool calls that ask first: the run ends until a person approves, and Always allow records a standing rule. Status: accepted.
 - [ADR 0032](0032-self-serve-onboarding.md): Self-serve onboarding: anyone signed in creates an organization, and progress comes from existing data. Status: accepted.
@@ -40,5 +40,7 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0035](0035-docs-site-from-the-control-workers-static-assets.md): The docs site is served from the control Worker's static assets on Cloudflare. Status: accepted.
 - [ADR 0036](0036-design-system-v3-plain-and-motion-binding.md): Design system v3 "Plain" and MOTION.md are binding. Status: accepted.
 - [ADR 0037](0037-secrets-and-environment-files.md): Secrets hold the keys, environment files say what agents reach. Status: accepted.
-- [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: proposed.
+- [ADR 0038](0038-knowledge-is-files.md): Knowledge is files: synced folders, factory memory, an index in every prompt. Status: accepted.
 - [ADR 0039](0039-jonah-learns-from-the-line.md): Jonah learns from the line: evidence from every item, tries on past items, a watch on every change. Status: accepted.
+- [ADR 0040](0040-one-door-for-every-source.md): One door for every source: start times, follow-ups that say where they go, checks that ask an agent what to file, webhooks that work. Status: accepted.
+- [ADR 0041](0041-code-and-github-without-an-app.md): Code and GitHub without an App: optional code access, the repositories an item opens, write access per agent, webhooks the organization connects once. Status: accepted.

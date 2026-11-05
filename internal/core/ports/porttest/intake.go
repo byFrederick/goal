@@ -4,6 +4,9 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -31,12 +34,47 @@ type Intake struct {
 }
 
 type intakeData struct {
-	// schedules is the schedule lock (WithScheduleLock).
-	schedules  sync.Mutex
-	mu         sync.Mutex
-	endpoints  map[domain.WebhookEndpointID]*endpointRow
-	deliveries []deliveryRow
-	firings    []firingRow
+	// schedules is the schedule lock (WithScheduleLock), fires every trigger's lock (Fire).
+	schedules   sync.Mutex
+	fires       sync.Mutex
+	mu          sync.Mutex
+	endpoints   map[domain.WebhookEndpointID]*endpointRow
+	deliveries  []deliveryRow
+	firings     []firingRow
+	evaluations []evaluationRow
+	// ledger holds each webhook's accepted delivery ids with when they came, and counts the
+	// deliveries no trigger named per webhook and UTC day.
+	ledger map[ledgerKey]time.Time
+	counts map[countKey]int
+	// secrets are the organization secrets webhooks are signed by (UseSecrets); nil has none.
+	secrets *OrgSecrets
+	// states are the triggers' saved check states (trigger_state).
+	states map[stateKey]savedState
+	// keys are the triggers' keys (trigger_keys): each key's last item and last note.
+	keys map[triggerKey]keyRow
+}
+
+type triggerKey struct {
+	stateKey
+	key string
+}
+
+type keyRow struct {
+	item     domain.ItemID
+	noteAt   time.Time
+	noteText string
+}
+
+// savedState is a trigger's saved check state and when the check that saved it finished.
+type savedState struct {
+	state json.RawMessage
+	at    time.Time
+}
+
+type stateKey struct {
+	org     domain.OrgID
+	factory domain.FactoryID
+	trigger string
 }
 
 type endpointRow struct {
@@ -51,14 +89,46 @@ type deliveryRow struct {
 	d   domain.WebhookDelivery
 }
 
+type ledgerKey struct {
+	org      domain.OrgID
+	webhook  domain.WebhookEndpointID
+	delivery string
+}
+
+type countKey struct {
+	org     domain.OrgID
+	webhook domain.WebhookEndpointID
+	day     time.Time
+}
+
+type evaluationRow struct {
+	org domain.OrgID
+	e   domain.DeliveryEvaluation
+}
+
 type firingRow struct {
 	org domain.OrgID
 	f   domain.TriggerFiring
+	// lease is a running check's (ClaimCheck); zero otherwise.
+	lease domain.CheckLease
 }
 
 // NewIntake returns intake state sealed with key, over store's factories and items.
 func NewIntake(key ports.MasterKey, store *Store) *Intake {
-	return &Intake{key: key, store: store, d: &intakeData{endpoints: map[domain.WebhookEndpointID]*endpointRow{}}}
+	return &Intake{key: key, store: store, d: &intakeData{
+		endpoints: map[domain.WebhookEndpointID]*endpointRow{}, ledger: map[ledgerKey]time.Time{}, counts: map[countKey]int{},
+		states: map[stateKey]savedState{}, keys: map[triggerKey]keyRow{},
+	}}
+}
+
+// UseSecrets makes s the secrets the organization's webhooks are signed by, as the secrets table
+// is beside webhook_endpoints: CreateWebhook names one of them, and s refuses to delete one a
+// webhook uses and keeps its previous value on a replace.
+func (in *Intake) UseSecrets(s *OrgSecrets) {
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	in.d.secrets = s
 }
 
 // WithKey returns a view of in's data sealed with key.
@@ -96,8 +166,8 @@ func (in *Intake) CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoin
 	}
 
 	r := &endpointRow{org: org, e: domain.WebhookEndpoint{
-		ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind,
-		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+		ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind, Sender: n.Kind.Sender(),
+		Enabled: true, CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
 	}}
 
 	secret, err := in.sealLocked(r)
@@ -123,8 +193,8 @@ func (in *Intake) ListEndpoints(ctx context.Context, factory domain.FactoryID) (
 	out := []domain.WebhookEndpoint{}
 
 	for _, r := range in.d.endpoints {
-		if r.org == org && r.e.FactoryID == factory {
-			out = append(out, cloneEndpoint(r.e))
+		if r.org == org && r.e.OpenTo(factory) {
+			out = append(out, in.outLocked(r))
 		}
 	}
 
@@ -148,7 +218,253 @@ func (in *Intake) Endpoint(ctx context.Context, id domain.WebhookEndpointID) (do
 		return domain.WebhookEndpoint{}, err
 	}
 
-	return cloneEndpoint(r.e), nil
+	return in.outLocked(r), nil
+}
+
+// CreateWebhook implements ports.Intake.
+func (in *Intake) CreateWebhook(ctx context.Context, n domain.NewWebhook) (domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	if in.nameTakenLocked(org, n.Name, "") {
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %q: %w", n.Name, ports.ErrNameTaken)
+	}
+
+	var secret domain.SecretID
+	if in.d.secrets != nil {
+		secret, _ = in.d.secrets.webhookSecret(org, n.Secret)
+	}
+
+	if secret == "" {
+		return domain.WebhookEndpoint{}, fmt.Errorf("secret %q: %w", n.Secret, ports.ErrNotFound)
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	r := &endpointRow{org: org, e: domain.WebhookEndpoint{
+		ID: domain.WebhookEndpointID(id.String()), Name: n.Name, Sender: n.Sender, SecretID: secret, Enabled: true, Token: n.Token,
+		Openings: []domain.WebhookOpening{}, CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}}
+	in.d.endpoints[r.e.ID] = r
+	in.d.secrets.sign(org, secret, n.Name, true)
+
+	return in.outLocked(r), nil
+}
+
+// Webhooks implements ports.Intake.
+func (in *Intake) Webhooks(ctx context.Context) ([]domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.WebhookEndpoint{}
+
+	for _, r := range in.d.endpoints {
+		if r.org == org && r.e.OrgLevel() {
+			out = append(out, in.outLocked(r))
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.WebhookEndpoint) int { return cmp.Compare(a.Name, b.Name) })
+
+	return out, nil
+}
+
+// WebhookByName implements ports.Intake.
+func (in *Intake) WebhookByName(ctx context.Context, name string) (domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.endpoints {
+		if r.org == org && r.e.OrgLevel() && r.e.Name == name {
+			return in.outLocked(r), nil
+		}
+	}
+
+	return domain.WebhookEndpoint{}, fmt.Errorf("webhook %q: %w", name, ports.ErrNotFound)
+}
+
+// PatchWebhook implements ports.Intake.
+func (in *Intake) PatchWebhook(ctx context.Context, id domain.WebhookEndpointID, p domain.WebhookPatch) (domain.WebhookEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	if err := p.Check(); err != nil {
+		return domain.WebhookEndpoint{}, err
+	}
+
+	for _, o := range p.Open {
+		if !in.ownsFactory(org, o.FactoryID) {
+			return domain.WebhookEndpoint{}, fmt.Errorf("factory %s: %w", o.FactoryID, ports.ErrNotFound)
+		}
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	r, err := in.endpointLocked(org, id)
+	if err != nil || !r.e.OrgLevel() {
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %s: %w", id, ports.ErrNotFound)
+	}
+
+	next := p.Apply(cloneEndpoint(r.e))
+	if next.Name != r.e.Name && in.nameTakenLocked(org, next.Name, id) {
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %q: %w", next.Name, ports.ErrNameTaken)
+	}
+
+	if next.Name != r.e.Name {
+		in.d.secrets.sign(org, r.e.SecretID, r.e.Name, false)
+		in.d.secrets.sign(org, r.e.SecretID, next.Name, true)
+	}
+
+	r.e = next
+
+	return in.outLocked(r), nil
+}
+
+// WebhookSecretUses implements ports.Intake.
+func (in *Intake) WebhookSecretUses(ctx context.Context) ([]domain.WebhookSecretUse, error) {
+	hooks, err := in.Webhooks(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.WebhookSecretUse, 0, len(hooks))
+	for _, h := range hooks {
+		out = append(out, domain.WebhookSecretUse{Secret: h.Secret, Webhook: h.Name})
+	}
+
+	slices.SortFunc(out, func(a, b domain.WebhookSecretUse) int {
+		return cmp.Or(cmp.Compare(a.Secret, b.Secret), cmp.Compare(a.Webhook, b.Webhook))
+	})
+
+	return out, nil
+}
+
+// ConvertEndpoints implements ports.Intake.
+func (in *Intake) ConvertEndpoints(ctx context.Context, by domain.Actor) ([]domain.ConvertedEndpoint, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	var rows []*endpointRow
+
+	for _, r := range in.d.endpoints {
+		if r.org == org && !r.e.OrgLevel() {
+			rows = append(rows, r)
+		}
+	}
+
+	slices.SortFunc(rows, func(a, b *endpointRow) int { return cmp.Compare(a.e.ID, b.e.ID) })
+
+	out := []domain.ConvertedEndpoint{}
+
+	for _, r := range rows {
+		c, err := in.convertLocked(ctx, r, by)
+		if err != nil {
+			return out, fmt.Errorf("convert endpoint %s: %w", r.e.ID, err)
+		}
+
+		out = append(out, c)
+	}
+
+	return out, nil
+}
+
+// convertLocked moves the factory endpoint r to the organization, signed by a new secret holding
+// its sealed value. Callers hold in.d.mu.
+func (in *Intake) convertLocked(ctx context.Context, r *endpointRow, by domain.Actor) (domain.ConvertedEndpoint, error) {
+	if in.key.Active() == "" {
+		return domain.ConvertedEndpoint{}, ports.ErrNoMasterKey
+	}
+
+	if in.d.secrets == nil {
+		return domain.ConvertedEndpoint{}, errors.New("the fake intake has no secrets (UseSecrets)")
+	}
+
+	value, err := in.key.Open(r.keyID, r.nonce, r.ciphertext, domain.WebhookSecretAAD(r.org, r.e.ID, r.keyID))
+	if err != nil {
+		return domain.ConvertedEndpoint{}, err
+	}
+
+	// The secrets seal with this view's key, as one goald's adapters share its master key.
+	secrets := in.d.secrets.WithKey(in.key)
+
+	name := domain.ConvertedWebhookName(r.e.Name, func(n string) bool {
+		for _, o := range in.d.endpoints {
+			if o.org == r.org && o.e.ID != r.e.ID && o.e.Name == n && (o.e.OrgLevel() || o.e.ID < r.e.ID) {
+				return true
+			}
+		}
+
+		return false
+	})
+
+	secret := domain.ConvertedSecretName(name, func(n string) bool {
+		_, err := secrets.Get(ctx, n)
+
+		return err == nil
+	})
+
+	sec, err := secrets.Create(ctx, domain.NewSecret{Name: secret, Description: "Signs the webhook " + name, Value: hex.EncodeToString(value)}, by)
+	if err != nil {
+		return domain.ConvertedEndpoint{}, err
+	}
+
+	c := domain.ConvertedEndpoint{ID: r.e.ID, FactoryID: r.e.FactoryID, From: r.e.Name, Name: name, Secret: secret}
+	r.e.Name, r.e.Sender, r.e.SecretID, r.e.FactoryID = name, r.e.Kind.Sender(), sec.ID, ""
+	r.e.Openings = []domain.WebhookOpening{{FactoryID: c.FactoryID}}
+	in.d.secrets.sign(r.org, sec.ID, name, true)
+
+	return c, nil
+}
+
+// nameTakenLocked reports whether an endpoint of org other than except has name.
+func (in *Intake) nameTakenLocked(org domain.OrgID, name string, except domain.WebhookEndpointID) bool {
+	for _, r := range in.d.endpoints {
+		if r.org == org && r.e.Name == name && r.e.ID != except {
+			return true
+		}
+	}
+
+	return false
+}
+
+// outLocked is r's endpoint as the port answers it, with its secret's name now.
+func (in *Intake) outLocked(r *endpointRow) domain.WebhookEndpoint {
+	e := cloneEndpoint(r.e)
+	if e.SecretID != "" && in.d.secrets != nil {
+		e.Secret = in.d.secrets.secretName(r.org, e.SecretID)
+	}
+
+	return e
 }
 
 // RotateSecret implements ports.Intake.
@@ -164,6 +480,10 @@ func (in *Intake) RotateSecret(ctx context.Context, id domain.WebhookEndpointID)
 	r, err := in.endpointLocked(org, id)
 	if err != nil {
 		return domain.WebhookSecret{}, err
+	}
+
+	if r.e.OrgLevel() {
+		return domain.WebhookSecret{}, fmt.Errorf("webhook %s is signed by an organization secret; replace its value: %w", id, domain.ErrInvalid)
 	}
 
 	next := *r
@@ -190,12 +510,19 @@ func (in *Intake) DeleteEndpoint(ctx context.Context, id domain.WebhookEndpointI
 	in.d.mu.Lock()
 	defer in.d.mu.Unlock()
 
-	if _, err := in.endpointLocked(org, id); err != nil {
+	r, err := in.endpointLocked(org, id)
+	if err != nil {
 		return err
+	}
+
+	if r.e.OrgLevel() && in.d.secrets != nil {
+		in.d.secrets.sign(org, r.e.SecretID, r.e.Name, false)
 	}
 
 	delete(in.d.endpoints, id)
 	in.d.deliveries = slices.DeleteFunc(in.d.deliveries, func(r deliveryRow) bool { return r.d.EndpointID == id })
+	maps.DeleteFunc(in.d.ledger, func(k ledgerKey, _ time.Time) bool { return k.webhook == id })
+	maps.DeleteFunc(in.d.counts, func(k countKey, _ int) bool { return k.webhook == id })
 
 	return nil
 }
@@ -226,6 +553,10 @@ func (in *Intake) OpenSecret(ctx context.Context, id domain.WebhookEndpointID) (
 	r, err := in.endpointLocked(org, id)
 	if err != nil {
 		return nil, err
+	}
+
+	if r.keyID == "" {
+		return nil, fmt.Errorf("webhook %s has no sealed secret: %w", id, ports.ErrNotFound)
 	}
 
 	if in.key.Active() == "" {
@@ -327,6 +658,25 @@ func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointI
 	return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of endpoint %s: %w", id, endpoint, ports.ErrNotFound)
 }
 
+// DeliveryBySender implements ports.Intake.
+func (in *Intake) DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for _, r := range in.d.deliveries {
+		if r.org == org && r.d.EndpointID == webhook && deliveryID != "" && r.d.DeliveryID == deliveryID {
+			return cloneDelivery(r.d), nil
+		}
+	}
+
+	return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of webhook %s: %w", deliveryID, webhook, ports.ErrNotFound)
+}
+
 // DeliveryDays implements ports.Intake.
 func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
 	org, err := orgOf(ctx)
@@ -346,7 +696,7 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 
 	for _, r := range in.d.deliveries {
 		e, ok := in.d.endpoints[r.d.EndpointID]
-		if r.org != org || !ok || e.e.FactoryID != factory || r.d.ReceivedAt.Before(since) {
+		if r.org != org || !ok || !reaches(e.e, factory) || r.d.ReceivedAt.Before(since) {
 			continue
 		}
 
@@ -379,14 +729,377 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 }
 
 // PruneDeliveries implements ports.Intake.
-func (in *Intake) PruneDeliveries(_ context.Context, before time.Time) (int, error) {
+func (in *Intake) PruneDeliveries(_ context.Context, now time.Time) (int, error) {
 	in.d.mu.Lock()
 	defer in.d.mu.Unlock()
 
-	n := len(in.d.deliveries)
-	in.d.deliveries = slices.DeleteFunc(in.d.deliveries, func(r deliveryRow) bool { return r.d.ReceivedAt.Before(before) })
+	before, ledgerBefore := now.Add(-domain.DeliveryRetention), now.Add(-domain.LedgerRetention)
+	n := len(in.d.deliveries) + len(in.d.ledger) + len(in.d.counts)
 
-	return n - len(in.d.deliveries), nil
+	in.d.deliveries = slices.DeleteFunc(in.d.deliveries, func(r deliveryRow) bool { return r.d.ReceivedAt.Before(before) })
+	maps.DeleteFunc(in.d.ledger, func(_ ledgerKey, at time.Time) bool { return at.Before(ledgerBefore) })
+	maps.DeleteFunc(in.d.counts, func(k countKey, _ int) bool { return k.day.Before(utcDay(ledgerBefore)) })
+
+	return n - len(in.d.deliveries) - len(in.d.ledger) - len(in.d.counts), nil
+}
+
+// Receive implements ports.Intake.
+func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.Received{}, err
+	}
+
+	if err := n.Check(); err != nil {
+		return domain.Received{}, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	hook, err := in.endpointLocked(org, n.WebhookID)
+	if err != nil {
+		return domain.Received{}, err
+	}
+
+	out := domain.Received{Receipt: n.Receipt, DeliveryID: n.DeliveryID}
+	key := ledgerKey{org: org, webhook: n.WebhookID, delivery: n.DeliveryID}
+	_, taken := in.d.ledger[key]
+
+	switch {
+	case n.Receipt == domain.ReceiptRefused:
+	case taken:
+		out.Receipt = domain.ReceiptDuplicate
+
+		for i, r := range in.d.deliveries {
+			if r.org == org && r.d.EndpointID == n.WebhookID && r.d.DeliveryID == n.DeliveryID {
+				in.d.deliveries[i].d.Duplicates++
+				out.Row = r.d.ID
+			}
+		}
+
+		return out, nil
+	default:
+		in.d.ledger[key] = n.ReceivedAt.UTC()
+	}
+
+	if n.Receipt == domain.ReceiptAccepted && !in.ledgerLocked(org, hook, n) {
+		return out, nil
+	}
+
+	row, err := in.keepReceivedLocked(org, n)
+	out.Row = row
+
+	if err != nil {
+		return out, err
+	}
+
+	return out, in.addEvaluationsLocked(org, row, n)
+}
+
+// ledgerLocked is what accepted delivery n, new to its webhook hook's ledger, does there: a ping
+// sets the webhook's time, and one no trigger named is counted on its UTC day. It reports whether
+// n keeps a row.
+func (in *Intake) ledgerLocked(org domain.OrgID, hook *endpointRow, n domain.NewReceipt) bool {
+	if n.Ping {
+		at := n.ReceivedAt.UTC()
+		hook.e.PingedAt = &at
+	}
+
+	if !n.Named {
+		in.d.counts[countKey{org: org, webhook: n.WebhookID, day: utcDay(n.ReceivedAt)}]++
+	}
+
+	return n.Named
+}
+
+// addEvaluationsLocked adds n's evaluations of the delivery row.
+func (in *Intake) addEvaluationsLocked(org domain.OrgID, row domain.WebhookDeliveryID, n domain.NewReceipt) error {
+	for _, e := range n.Evaluations {
+		if !in.ownsFactory(org, e.FactoryID) {
+			return fmt.Errorf("factory %s: %w", e.FactoryID, ports.ErrNotFound)
+		}
+
+		id, err := uuid.NewV7()
+		if err != nil {
+			return err
+		}
+
+		ev := domain.DeliveryEvaluation{
+			ID: id.String(), FactoryID: e.FactoryID, Delivery: row, WebhookID: n.WebhookID, DeliveryID: n.DeliveryID, Event: n.Event,
+			Triggers: slices.Clone(e.Triggers), State: domain.EvaluationPending, NextAt: n.ReceivedAt.UTC(), CreatedAt: n.ReceivedAt.UTC(),
+		}
+		if e.Skip != "" {
+			ev.State, ev.Outcome, ev.Reason = domain.EvaluationDone, domain.EvaluationSkipped, e.Skip
+		}
+
+		in.d.evaluations = append(in.d.evaluations, evaluationRow{org: org, e: ev})
+	}
+
+	return nil
+}
+
+// DeliveryEvaluations implements ports.Intake.
+func (in *Intake) DeliveryEvaluations(ctx context.Context, delivery domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.DeliveryEvaluation{}
+
+	for _, r := range in.d.evaluations {
+		if r.org == org && r.e.Delivery == delivery {
+			out = append(out, cloneEvaluation(r.e))
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryEvaluation) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
+
+	return out, nil
+}
+
+// DeliveryEvaluationsOf implements ports.Intake.
+func (in *Intake) DeliveryEvaluationsOf(ctx context.Context, deliveries []domain.WebhookDeliveryID) ([]domain.DeliveryEvaluation, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	out := []domain.DeliveryEvaluation{}
+
+	for _, r := range in.d.evaluations {
+		if r.org != org || !slices.Contains(deliveries, r.e.Delivery) {
+			continue
+		}
+
+		e := cloneEvaluation(r.e)
+		if it, ok := in.store.visible(e.ItemID, org); ok && e.ItemID != "" {
+			e.ItemNumber = it.Number
+		}
+
+		out = append(out, e)
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryEvaluation) int {
+		return cmp.Or(cmp.Compare(a.Delivery, b.Delivery), cmp.Compare(a.FactoryID, b.FactoryID))
+	})
+
+	return out, nil
+}
+
+// ClaimEvaluations implements ports.Intake. Views made with WithKey share the rows, as goalds
+// share one database.
+func (in *Intake) ClaimEvaluations(ctx context.Context, holder string, now time.Time, lease time.Duration, limit int) ([]domain.ClaimedEvaluation, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	var due []int
+
+	for i, r := range in.d.evaluations {
+		e := r.e
+		if r.org == org && e.State == domain.EvaluationPending && !e.NextAt.After(now) && (e.LeaseUntil == nil || !e.LeaseUntil.After(now)) {
+			due = append(due, i)
+		}
+	}
+
+	slices.SortFunc(due, func(a, b int) int {
+		x, y := in.d.evaluations[a].e, in.d.evaluations[b].e
+
+		return cmp.Or(x.NextAt.Compare(y.NextAt), cmp.Compare(x.ID, y.ID))
+	})
+
+	out := []domain.ClaimedEvaluation{}
+
+	for _, i := range due[:min(len(due), limit)] {
+		e := &in.d.evaluations[i].e
+		until := now.Add(lease).UTC()
+		e.LeaseHolder, e.LeaseUntil, e.Attempts = holder, &until, e.Attempts+1
+
+		c := domain.ClaimedEvaluation{DeliveryEvaluation: cloneEvaluation(*e)}
+
+		for _, d := range in.d.deliveries {
+			if d.org == org && d.d.ID == e.Delivery {
+				c.Body = append([]byte{}, d.d.Body...)
+			}
+		}
+
+		out = append(out, c)
+	}
+
+	return out, nil
+}
+
+// FinishEvaluation implements ports.Intake.
+func (in *Intake) FinishEvaluation(ctx context.Context, f domain.EvaluationFinish) (bool, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	for i := range in.d.evaluations {
+		e := &in.d.evaluations[i].e
+		if in.d.evaluations[i].org != org || e.ID != f.ID {
+			continue
+		}
+
+		if e.State != domain.EvaluationPending || e.LeaseHolder != f.Holder || e.Attempts != f.Attempts {
+			return false, nil
+		}
+
+		e.State, e.Outcome, e.Reason, e.ItemID, e.LeaseHolder, e.LeaseUntil = f.State, f.Outcome, f.Reason, f.ItemID, "", nil
+		if !f.NextAt.IsZero() {
+			e.NextAt = f.NextAt.UTC()
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func cloneEvaluation(e domain.DeliveryEvaluation) domain.DeliveryEvaluation {
+	e.Triggers = slices.Clone(e.Triggers)
+	if e.LeaseUntil != nil {
+		until := *e.LeaseUntil
+		e.LeaseUntil = &until
+	}
+
+	return e
+}
+
+// Fire implements ports.Intake: fires is the trigger lock, which views made with WithKey share,
+// as goalds share one database.
+func (in *Intake) Fire(ctx context.Context, f domain.TriggerFiring, item *domain.NewItem, limits domain.FireLimits) (domain.TriggerFiring, bool, error) {
+	if err := f.Check(); err != nil {
+		return domain.TriggerFiring{}, false, err
+	}
+
+	in.d.fires.Lock()
+	defer in.d.fires.Unlock()
+
+	if got, ok, err := in.Firing(ctx, f.FactoryID, f.Trigger, f.IdempotencyKey); err != nil || ok {
+		return got, false, err
+	}
+
+	if item != nil && f.Outcome == domain.FiringCreated {
+		if err := in.fileFiring(ctx, &f, *item, limits); err != nil {
+			return domain.TriggerFiring{}, false, err
+		}
+	}
+
+	if f.Outcome == domain.FiringChecked {
+		live, err := in.liveCheck(ctx, f.FactoryID, f.Trigger)
+		if err != nil {
+			return domain.TriggerFiring{}, false, err
+		}
+
+		switch {
+		case live && f.Try:
+			return domain.TriggerFiring{}, false, fmt.Errorf("try %s: %s: %w", f.Trigger, domain.StillChecking, ports.ErrConflict)
+		case live:
+			f.Outcome, f.CheckState, f.Reason = domain.FiringSkipped, "", domain.StillChecking
+		}
+	}
+
+	return in.RecordFiring(ctx, f)
+}
+
+// fileFiring reads the trigger's counts and files item for f, or makes f skipped by limits.
+func (in *Intake) fileFiring(ctx context.Context, f *domain.TriggerFiring, item domain.NewItem, limits domain.FireLimits) error {
+	{
+		var c domain.FireCounts
+
+		open, _, err := in.OpenItemByDedupe(ctx, f.FactoryID, f.Trigger, f.Dedupe)
+		if err != nil {
+			return err
+		}
+
+		c.OpenDedupe = open
+
+		if c.Today, err = in.CreatedSince(ctx, f.FactoryID, f.Trigger, f.At.UTC().Truncate(24*time.Hour)); err != nil {
+			return err
+		}
+
+		if c.LastHour, err = in.CreatedSince(ctx, f.FactoryID, f.Trigger, f.At.Add(-time.Hour)); err != nil {
+			return err
+		}
+
+		if why := limits.Skip(c); why != "" {
+			f.Outcome, f.Reason = domain.FiringSkipped, why
+		} else {
+			it, err := in.store.CreateItem(ctx, item)
+			if err != nil {
+				return err
+			}
+
+			f.ItemID = it.ID
+		}
+	}
+
+	return nil
+}
+
+// keepReceivedLocked keeps the row of a delivery the receiver accepted or refused.
+func (in *Intake) keepReceivedLocked(org domain.OrgID, n domain.NewReceipt) (domain.WebhookDeliveryID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+
+	outcome := domain.DeliveryAccepted
+	if n.Receipt == domain.ReceiptRefused {
+		outcome = domain.DeliveryRefused
+	}
+
+	d := domain.WebhookDelivery{
+		ID: domain.WebhookDeliveryID(id.String()), EndpointID: n.WebhookID, ReceivedAt: n.ReceivedAt.UTC(),
+		Headers: domain.StoredHeaders(n.Headers), Body: append([]byte{}, n.Body...), Outcome: outcome, Reason: n.Reason,
+		DeliveryID: n.DeliveryID, Event: n.Event, Receipt: n.Receipt,
+	}
+	in.d.deliveries = append(in.d.deliveries, deliveryRow{org: org, d: d})
+
+	return d.ID, nil
+}
+
+// UnnamedDays implements ports.Intake.
+func (in *Intake) UnnamedDays(ctx context.Context, webhook domain.WebhookEndpointID, since time.Time) ([]domain.DeliveryCount, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	out := []domain.DeliveryCount{}
+
+	for k, n := range in.d.counts {
+		if k.org == org && k.webhook == webhook && !k.day.Before(utcDay(since)) {
+			out = append(out, domain.DeliveryCount{WebhookID: webhook, Day: k.day, Count: n})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryCount) int { return a.Day.Compare(b.Day) })
+
+	return out, nil
 }
 
 // RecordFiring implements ports.Intake.
@@ -649,6 +1362,214 @@ func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, las
 	return w, nil
 }
 
+// OriginTally implements ports.Intake.
+func (in *Intake) OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := map[domain.Origin]int{}
+	for _, it := range in.items(org, factory, since) {
+		counts[cmp.Or(it.Origin, domain.OriginPerson)]++
+	}
+
+	out := []domain.OriginCount{}
+	for _, o := range slices.Sorted(maps.Keys(counts)) {
+		out = append(out, domain.OriginCount{Origin: o, Items: counts[o]})
+	}
+
+	return out, nil
+}
+
+// ComingUp implements ports.Intake.
+func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	var all []domain.ComingUp
+
+	for _, it := range in.store.items {
+		if it.OrgID != org || it.FactoryID != factory {
+			continue
+		}
+
+		if c, ok := in.comingUpLocked(org, it); ok {
+			all = append(all, c)
+		}
+	}
+
+	slices.SortFunc(all, comingUpOrder)
+
+	return all[:min(len(all), max(limit, 0))], len(all), nil
+}
+
+// comingUpLocked is it as coming up, when it is open, hasn't started and has a start or an open
+// planned or linked need. Callers hold in.store.mu.
+func (in *Intake) comingUpLocked(org domain.OrgID, it *domain.Item) (domain.ComingUp, bool) {
+	if !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		return domain.ComingUp{}, false
+	}
+
+	c := domain.ComingUp{Item: clone(it), Needs: []int64{}}
+
+	for _, e := range in.store.edges {
+		if e.Item == it.ID && e.Kind != domain.EdgeOverlap && in.openLocked(org, e.Needs) {
+			c.Needs = append(c.Needs, in.store.items[e.Needs].Number)
+		}
+	}
+
+	if it.StartAt.IsZero() && len(c.Needs) == 0 {
+		return domain.ComingUp{}, false
+	}
+
+	if !it.Triage {
+		c.FromFactory, c.FromNumber = in.filedFromLocked(org, it.ID)
+	}
+
+	return c, true
+}
+
+// comingUpOrder puts items with a start first, soonest first, then the rest oldest first.
+func comingUpOrder(a, b domain.ComingUp) int {
+	x, y := a.Item, b.Item
+	if x.StartAt.IsZero() != y.StartAt.IsZero() {
+		if x.StartAt.IsZero() {
+			return 1
+		}
+
+		return -1
+	}
+
+	return cmp.Or(x.StartAt.Compare(y.StartAt), x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
+}
+
+// filedFromLocked is the factory and number of the source item of the oldest follow-up filed as
+// or onto item; "" and 0 for none. Callers hold in.store.mu.
+func (in *Intake) filedFromLocked(org domain.OrgID, item domain.ItemID) (domain.FactoryID, int64) {
+	var found *domain.FollowUp
+
+	for i, f := range in.store.followUps {
+		if f.FiledItem == item && f.State == domain.FollowUpFiled &&
+			(found == nil || cmp.Or(f.CreatedAt.Compare(found.CreatedAt), cmp.Compare(f.ID, found.ID)) < 0) {
+			found = &in.store.followUps[i]
+		}
+	}
+
+	if found == nil {
+		return "", 0
+	}
+
+	src, ok := in.store.visible(found.ItemID, org)
+	if !ok {
+		return "", 0
+	}
+
+	return src.FactoryID, src.Number
+}
+
+// TriageQueue implements ports.Intake.
+func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, limit int) (domain.TriageQueue, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.TriageQueue{}, err
+	}
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	q := domain.TriageQueue{Item: in.collectingLocked(org, factory)}
+
+	if q.Item != nil {
+		for _, f := range in.store.followUps {
+			if f.FiledItem == q.Item.ID && f.State == domain.FollowUpFiled && f.Target == domain.FollowUpTriage {
+				q.FollowUps++
+			}
+		}
+	}
+
+	q.Waiting = in.triageSourcesLocked(org, factory, limit)
+
+	return q, nil
+}
+
+// collectingLocked is the factory's oldest open, trusted triage item without a run; nil for none.
+// Callers hold in.store.mu.
+func (in *Intake) collectingLocked(org domain.OrgID, factory domain.FactoryID) *domain.Item {
+	var found *domain.Item
+
+	for _, it := range in.store.items {
+		if it.OrgID != org || it.FactoryID != factory || !it.Triage || it.Untrusted || !in.openLocked(org, it.ID) || in.hasRunLocked(it.ID) {
+			continue
+		}
+
+		if found == nil || cmp.Or(it.CreatedAt.Compare(found.CreatedAt), cmp.Compare(it.ID, found.ID)) < 0 {
+			c := clone(it)
+			found = &c
+		}
+	}
+
+	return found
+}
+
+// triageSourcesLocked are at most limit of the factory's trusted items with waiting triage
+// follow-ups, oldest first by their first one. Callers hold in.store.mu.
+func (in *Intake) triageSourcesLocked(org domain.OrgID, factory domain.FactoryID, limit int) []domain.TriageSource {
+	type source struct {
+		ts    domain.TriageSource
+		first domain.FollowUp
+	}
+
+	sources := map[domain.ItemID]*source{}
+
+	for _, f := range in.store.followUps {
+		if f.FactoryID != factory || f.State != domain.FollowUpWaiting || f.Target != domain.FollowUpTriage {
+			continue
+		}
+
+		src, ok := in.store.visible(f.ItemID, org)
+		if !ok || src.Untrusted {
+			continue
+		}
+
+		s, ok := sources[src.ID]
+		if !ok {
+			s = &source{ts: domain.TriageSource{ID: src.ID, Number: src.Number, Title: src.Title}, first: f}
+			sources[src.ID] = s
+		}
+
+		s.ts.FollowUps++
+	}
+
+	all := slices.Collect(maps.Values(sources))
+	slices.SortFunc(all, func(a, b *source) int {
+		return cmp.Or(a.first.CreatedAt.Compare(b.first.CreatedAt), cmp.Compare(a.ts.ID, b.ts.ID))
+	})
+
+	out := []domain.TriageSource{}
+	for _, s := range all[:min(len(all), max(limit, 0))] {
+		out = append(out, s.ts)
+	}
+
+	return out
+}
+
+// hasRunLocked reports whether item has a run. Callers hold in.store.mu.
+func (in *Intake) hasRunLocked(item domain.ItemID) bool {
+	for _, r := range in.store.runs {
+		if r.ItemID == item {
+			return true
+		}
+	}
+
+	return false
+}
+
 // TriggerDays implements ports.Intake.
 func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
 	org, err := orgOf(ctx)
@@ -730,6 +1651,38 @@ func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger
 	return out, nil
 }
 
+// PruneFirings implements ports.Intake.
+func (in *Intake) PruneFirings(ctx context.Context, factory domain.FactoryID, before time.Time) (int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	in.d.mu.Lock()
+	old := slices.Clone(in.d.firings)
+	in.d.mu.Unlock()
+
+	open := map[domain.ItemID]bool{}
+
+	in.store.mu.Lock()
+	for _, r := range old {
+		if r.f.ItemID != "" {
+			open[r.f.ItemID] = in.openLocked(r.org, r.f.ItemID)
+		}
+	}
+	in.store.mu.Unlock()
+
+	in.d.mu.Lock()
+	defer in.d.mu.Unlock()
+
+	n := len(in.d.firings)
+	in.d.firings = slices.DeleteFunc(in.d.firings, func(r firingRow) bool {
+		return r.org == org && r.f.FactoryID == factory && r.f.At.Before(before) && !open[r.f.ItemID] && !r.f.CheckState.Live()
+	})
+
+	return n - len(in.d.firings), nil
+}
+
 // items are copies of org's items of factory created at or after since.
 func (in *Intake) items(org domain.OrgID, factory domain.FactoryID, since time.Time) []domain.Item {
 	in.store.mu.Lock()
@@ -803,10 +1756,34 @@ func (in *Intake) sealLocked(r *endpointRow) ([]byte, error) {
 	return secret, nil
 }
 
+// reaches reports whether DeliveryDays of factory counts e's deliveries: those open to it, or the
+// organization's webhooks for "".
+func reaches(e domain.WebhookEndpoint, factory domain.FactoryID) bool {
+	if factory == "" {
+		return e.OrgLevel()
+	}
+
+	return e.OpenTo(factory)
+}
+
 func cloneEndpoint(e domain.WebhookEndpoint) domain.WebhookEndpoint {
 	if e.RotatedAt != nil {
 		at := *e.RotatedAt
 		e.RotatedAt = &at
+	}
+
+	if e.PingedAt != nil {
+		at := *e.PingedAt
+		e.PingedAt = &at
+	}
+
+	if e.Openings != nil {
+		openings := make([]domain.WebhookOpening, 0, len(e.Openings))
+		for _, o := range e.Openings {
+			openings = append(openings, domain.WebhookOpening{FactoryID: o.FactoryID, Repositories: slices.Clone(o.Repositories)})
+		}
+
+		e.Openings = openings
 	}
 
 	return e

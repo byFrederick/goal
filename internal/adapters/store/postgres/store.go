@@ -18,14 +18,24 @@ import (
 // leaseExpiredError is what a run that lost its lease records as its error.
 const leaseExpiredError = "lease expired"
 
-// CreateItem implements ports.Store.
+// CreateItem implements ports.Store: fileItem writes the item, its created event, its item.filed
+// audit entry and a linked edge by its filer to each item it starts after, in one transaction.
 func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error) {
 	factory, err := parseID("factory", string(n.FactoryID))
 	if err != nil {
 		return domain.Item{}, err
 	}
 
-	var parent *uuid.UUID
+	f := filing{n: n, factory: factory, afterBy: n.FiledBy()}
+
+	for _, need := range n.After {
+		id, err := parseID("after item", string(need))
+		if err != nil {
+			return domain.Item{}, err
+		}
+
+		f.after = append(f.after, id)
+	}
 
 	if n.ParentID != "" {
 		id, err := parseID("parent item", string(n.ParentID))
@@ -33,43 +43,20 @@ func (s *Store) CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, 
 			return domain.Item{}, err
 		}
 
-		parent = &id
-	}
-
-	id, err := newID()
-	if err != nil {
-		return domain.Item{}, err
+		f.parent = &id
 	}
 
 	var it domain.Item
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		number, err := q.NextItemNumber(ctx, factory)
-		if notFound(err) {
-			return fmt.Errorf("factory %s: %w", n.FactoryID, ports.ErrNotFound)
-		}
-
+		row, err := fileItem(ctx, q, f)
 		if err != nil {
-			return fmt.Errorf("next item number: %w", err)
-		}
-
-		row, err := q.InsertItem(ctx, db.InsertItemParams{
-			ID: id, FactoryID: factory, Number: number, ParentID: parent, Type: n.Type, Lane: optional(n.Lane),
-			Title: n.Title, Body: n.Body, Station: n.Station, State: string(n.State), ClassOfService: string(n.Class),
-			Priority: int64(n.Priority), CreatedAt: n.CreatedAt, Source: optional(string(n.Source)), Trigger: optional(n.Trigger),
-		})
-		if err != nil {
-			return fmt.Errorf("insert item: %w", err)
-		}
-
-		if it, err = itemFrom(row); err != nil {
 			return err
 		}
 
-		return appendEvents(ctx, q, []domain.Event{{
-			FactoryID: it.FactoryID, ItemID: it.ID, At: n.CreatedAt, Kind: domain.EventCreated,
-			Station: it.Station, Actor: domain.ActorEngine,
-		}})
+		it, err = itemFrom(row)
+
+		return err
 	})
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("create item: %w", err)
@@ -119,6 +106,78 @@ func (s *Store) Waiting(ctx context.Context, factory domain.FactoryID, station s
 	}
 
 	return items, nil
+}
+
+// Releasable implements ports.Store.
+func (s *Store) Releasable(ctx context.Context, factory domain.FactoryID, station string, now time.Time, limit int) ([]domain.Item, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := fetch(ctx, s.read, func(q *db.Queries) ([]domain.Item, error) {
+		rows, err := q.ReleasableItems(ctx, db.ReleasableItemsParams{FactoryID: fid, Station: station, Now: now, MaxItems: int64(limit)})
+		if err != nil {
+			return nil, err
+		}
+
+		return convertAll(rows, itemFrom)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("station %s: releasable items: %w", station, err)
+	}
+
+	return items, nil
+}
+
+// SetStart implements ports.Store: the guarded change and its start_changed event in one
+// transaction.
+func (s *Store) SetStart(ctx context.Context, id domain.ItemID, from domain.Position, at time.Time, by domain.Actor, now time.Time) (domain.Item, error) {
+	uid, err := parseID("item", string(id))
+	if err != nil {
+		return domain.Item{}, err
+	}
+
+	var it domain.Item
+
+	err = s.inTx(ctx, func(q *db.Queries) error {
+		row, err := q.SetItemStart(ctx, db.SetItemStartParams{
+			StartAt: optionalTime(at), UpdatedAt: now, ID: uid, Station: from.Station, State: string(from.State),
+		})
+		if notFound(err) {
+			return movedOrMissing(ctx, q, uid, from)
+		}
+
+		if err != nil {
+			return fmt.Errorf("set start: %w", err)
+		}
+
+		if it, err = itemFrom(row); err != nil {
+			return err
+		}
+
+		return appendEvents(ctx, q, []domain.Event{domain.StartChangedEvent(it, by, now)})
+	})
+	if err != nil {
+		return domain.Item{}, fmt.Errorf("item %s: start: %w", id, err)
+	}
+
+	return it, nil
+}
+
+// movedOrMissing is why a guarded change of item id at from wrote no row: ErrNotFound when
+// there is no such item, ErrConflict when it is no longer at from.
+func movedOrMissing(ctx context.Context, q *db.Queries, id uuid.UUID, from domain.Position) error {
+	row, err := q.GetItem(ctx, id)
+	if notFound(err) {
+		return ports.ErrNotFound
+	}
+
+	if err != nil {
+		return fmt.Errorf("read item: %w", err)
+	}
+
+	return fmt.Errorf("item is %s at %s, not %s at %s: %w", row.State, row.Station, from.State, from.Station, ports.ErrConflict)
 }
 
 // Leases implements ports.Store.
@@ -174,7 +233,7 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 			return slotTaken
 		}
 
-		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID})
+		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID, Now: c.Now})
 		if notFound(err) {
 			return fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 		}
@@ -398,11 +457,11 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	kind := cmp.Or(r.Kind, domain.RunKindStation)
 
-	// Only Jonah's runs, a review or a try, may work no item (00079, 00102); they write no
+	// Only Jonah's runs, a review or a try, and checks may work no item (00079, 00102, 00122); they write no
 	// run_started item event.
 	var item *uuid.UUID
 
-	if r.ItemID != "" || !kind.Jonahs() {
+	if r.ItemID != "" || !kind.Itemless() {
 		id, err := parseID("item", string(r.ItemID))
 		if err != nil {
 			return "", err
@@ -764,8 +823,8 @@ func lockItem(ctx context.Context, q *db.Queries, item uuid.UUID, id domain.Item
 	return cur, nil
 }
 
-// transition applies t to the locked item cur: the lease, the guard, the move, its events and
-// audit entry.
+// transition applies t to the locked item cur: the lease, the guard, the move, its events, its
+// follow-ups and audit entry.
 func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Transition) (db.WorkItem, error) {
 	// Releasing first is safe: a failed guard below rolls the release back, its lease span too.
 	if err := releaseOrTake(ctx, q, cur.ID, t); err != nil {
@@ -783,6 +842,10 @@ func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Tra
 	}
 
 	if err := appendEvents(ctx, q, t.Events); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	if err := keepFollowUps(ctx, q, cur, t.FollowUps, t.At); err != nil {
 		return db.WorkItem{}, err
 	}
 

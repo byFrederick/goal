@@ -13,6 +13,8 @@ import (
 const (
 	stReview = "review"
 	stDone   = "done"
+	// stInbox is a line's first station, before work: lead time starts when an item leaves it.
+	stInbox = "inbox"
 )
 
 // at is t0 plus n minutes.
