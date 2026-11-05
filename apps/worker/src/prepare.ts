@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
+import { fileURLToPath } from 'node:url';
 import { gitWithRetry } from './retry.js';
 import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, paths } from './spec.js';
 
@@ -319,7 +319,13 @@ async function configureCode(deps: PrepareDeps, bundle: Bundle): Promise<void> {
     await must(deps, 'git', ['config', '--global', `protocol.${refusingTransport}.allow`, 'always']);
   }
   for (const prefix of readOnly) {
-    await must(deps, 'git', ['config', '--global', '--add', `url.${refusingTransport}::${prefix}.pushInsteadOf`, prefix]);
+    await must(deps, 'git', [
+      'config',
+      '--global',
+      '--add',
+      `url.${refusingTransport}::${prefix}.pushInsteadOf`,
+      prefix,
+    ]);
   }
   for (const l of logins) {
     if (l.write && readOnly.some((p) => l.prefix.startsWith(p) && l.prefix !== p)) {

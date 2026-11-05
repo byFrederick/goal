@@ -1,9 +1,10 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { crc32 } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { credentialHelper, type Exec, type Output, type PrepareDeps, prepare } from './prepare.js';
@@ -82,10 +83,11 @@ function git(cwd: string, ...args: string[]): string {
  */
 async function origin(
   branch?: string,
-  opts: { changed?: Record<string, string>; moved?: Record<string, string>; base?: string } = {},
+  opts: { changed?: Record<string, string>; moved?: Record<string, string>; base?: string; name?: string } = {},
 ): Promise<string> {
-  const bare = join(root, 'origin.git');
-  const work = join(root, 'seed');
+  const name = opts.name ?? 'origin';
+  const bare = join(root, `${name}.git`);
+  const work = join(root, name === 'origin' ? 'seed' : `${name}-seed`);
   execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', bare], { env: gitEnv() });
   execFileSync('git', ['init', '--quiet', '--initial-branch=main', work], { env: gitEnv() });
   git(work, 'remote', 'add', 'origin', bare);
@@ -1072,4 +1074,223 @@ describe('prepare: a try of a past item', () => {
       `commit ${gone} is gone from the remote`,
     );
   });
+});
+
+describe("prepare: the item's repositories", () => {
+  const branch = 'goal/acme-app/7-add-a-health-endpoint';
+  const app = 'https://github.com/acme/app';
+  const lib = 'https://github.com/acme/lib';
+  const helper = { node: process.execPath, script: fileURLToPath(new URL('./credential.ts', import.meta.url)) };
+  const bin = fileURLToPath(new URL('../bin', import.meta.url));
+
+  /** Points app and lib's https URLs at local origins in the test's git config, as a host would serve them. */
+  async function hosted(opts: { appBranch?: boolean; libBranch?: boolean } = {}) {
+    const appOrigin = await origin(opts.appBranch ? branch : undefined, { name: 'app' });
+    const libOrigin = await origin(opts.libBranch ? branch : undefined, {
+      name: 'lib',
+      changed: { 'lib.txt': 'lib\n' },
+    });
+    git(root, 'config', '--global', `url.${appOrigin}.insteadOf`, app);
+    git(root, 'config', '--global', `url.${libOrigin}.insteadOf`, lib);
+  }
+
+  function codeBundle(code: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    return {
+      spec,
+      files: {},
+      repository: { url: `${app}.git`, branch, fresh_base: 'merge' },
+      repositories: [
+        { url: app, path: '/workspace', branch, write: true },
+        { url: lib, path: '/repos/acme/lib', branch, write: false },
+      ],
+      repository_logins: [],
+      read_only: [],
+      ...code,
+      ...extra,
+    };
+  }
+
+  function deps(bundle: unknown, exec: Exec, env: NodeJS.ProcessEnv = {}): PrepareDeps {
+    return { ...depsWith(gatewayServing(bundle).fake, exec, env), credentialHelper: helper };
+  }
+
+  const line = (c: { command: string; args: string[] }) => `${c.command} ${c.args.join(' ')}`;
+
+  it('clones the first into /workspace and each other under /repos, on the item branch where the remote has it', async () => {
+    await hosted({ appBranch: true, libBranch: true });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(deps(codeBundle({}), exec));
+
+    const libDir = join(dirs.repos, 'acme/lib');
+    expect(calls.map(line)).toEqual(
+      expect.arrayContaining([
+        `git clone --quiet --filter=blob:none -- ${app} ${dirs.workspace}`,
+        `git checkout --quiet -B ${branch} origin/${branch}`,
+        // The first keeps today's flow: the repository's fresh_base and the repository's own tools.
+        `git merge --quiet --no-edit origin/main`,
+        'mise install --yes',
+        `git clone --quiet --filter=blob:none -- ${lib} ${libDir}`,
+      ]),
+    );
+    expect(calls.filter((c) => c.command === 'mise' && c.args[0] === 'install').map((c) => c.cwd)).toEqual([
+      dirs.workspace,
+    ]);
+    expect(git(libDir, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe(branch);
+    expect(await readFile(join(libDir, 'lib.txt'), 'utf8')).toBe('lib\n');
+    const libHead = git(libDir, 'rev-parse', 'HEAD');
+    const libBase = git(libDir, 'rev-parse', 'origin/HEAD');
+    expect(prepared).toMatchObject({ branch, branch_existed: true, fresh_base: 'merge' });
+    expect(prepared.repositories).toEqual([
+      { repo: app, base_commit: prepared.base_head, branch_head: prepared.branch_head },
+      { repo: lib, base_commit: libBase, branch_head: libHead },
+    ]);
+    const written = JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'));
+    expect(written.branch).toBe(branch);
+    expect(written.repositories).toEqual([
+      {
+        url: app,
+        path: '/workspace',
+        branch,
+        write: true,
+        base_commit: prepared.base_head,
+        branch_head: prepared.branch_head,
+      },
+      { url: lib, path: '/repos/acme/lib', branch, write: false, base_commit: libBase, branch_head: libHead },
+    ]);
+  });
+
+  it('leaves another repository on its default branch when the remote has no item branch', async () => {
+    await hosted();
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(deps(codeBundle({}), exec));
+
+    const libDir = join(dirs.repos, 'acme/lib');
+    expect(git(libDir, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
+    expect(calls.filter((c) => c.cwd === libDir && c.args[0] === 'checkout')).toEqual([]);
+    expect(prepared.repositories?.[1]?.branch_head).toBe(git(libDir, 'rev-parse', 'origin/HEAD'));
+  });
+
+  it('clones nothing for an item with no repositories, and leaves /workspace empty', async () => {
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(deps(codeBundle({ repositories: [] }), exec));
+
+    expect(calls.filter((c) => c.args[0] === 'clone' || c.args[0] === 'checkout')).toEqual([]);
+    expect(existsSync(dirs.workspace) ? readdirSync(dirs.workspace) : []).toEqual([]);
+    expect(prepared).not.toHaveProperty('branch');
+    expect(prepared.repositories).toEqual([]);
+  });
+
+  it('signs git in per repository path with the token its entry picks, instead of the stored login', async () => {
+    await hosted();
+    const stored = {
+      host: 'github.com',
+      username: 'x-access-token',
+      password_env: 'GOAL_REPOSITORY_TOKEN',
+      store: true,
+    };
+    const connection = { host: 'github.com', username: 'x-access-token', password_env: 'GH_TOKEN' };
+    const logins = [
+      { prefix: app, username: 'x-access-token', password_env: 'GOAL_REPOSITORY_TOKEN_APP', write: true },
+      {
+        prefix: 'https://github.com/acme/',
+        username: 'x-access-token',
+        password_env: 'GOAL_REPOSITORY_TOKEN_ACME',
+        write: false,
+      },
+      {
+        prefix: 'https://gitlab.example.com/acme/',
+        username: 'oauth2',
+        password_env: 'GOAL_REPOSITORY_TOKEN_UNSET',
+        write: false,
+      },
+    ];
+    const env = {
+      GOAL_REPOSITORY_TOKEN: 'stored-s3cr3t',
+      GOAL_REPOSITORY_TOKEN_APP: 'app-s3cr3t',
+      GOAL_REPOSITORY_TOKEN_ACME: 'acme-s3cr3t',
+    };
+    const bundle = codeBundle({ repository_logins: logins }, { git_credentials: [stored, connection] });
+    const { exec, calls } = recorder();
+
+    const prepared = await prepare(deps(bundle, exec, env));
+
+    const helpers = git(root, 'config', '--global', '--get-all', 'credential.https://github.com.helper').split('\n');
+    expect(helpers).toHaveLength(2);
+    expect(helpers[0]).toContain(helper.script);
+    expect(helpers[1]).toBe(credentialHelper(connection));
+    expect(git(root, 'config', '--global', '--get', 'credential.useHttpPath')).toBe('true');
+    expect(git(root, 'config', '--global', '--get-all', 'credential.https://gitlab.example.com.helper')).toContain(
+      helper.script,
+    );
+    // The stored login is gone; the logins file is the helper's, 0600 under the home.
+    expect(existsSync(join(home, '.git-credentials'))).toBe(false);
+    const loginsFile = join(home, '.goal/repository-logins.json');
+    expect((await stat(loginsFile)).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await readFile(loginsFile, 'utf8'))).toEqual([
+      { prefix: app, username: 'x-access-token', password: 'app-s3cr3t' },
+      { prefix: 'https://github.com/acme/', username: 'x-access-token', password: 'acme-s3cr3t' },
+    ]);
+    for (const c of calls) expect(c.args.join(' ')).not.toContain('s3cr3t');
+    expect(JSON.stringify(prepared)).not.toContain('s3cr3t');
+    for (const dir of [dirs.workspace, dirs.goal, dirs.repos]) {
+      // grep exits 1 when no file matches.
+      expect(spawnSync('grep', ['-rl', 's3cr3t', dir], { encoding: 'utf8' })).toMatchObject({ status: 1, stdout: '' });
+    }
+
+    // A later git command, the agent's, runs without the variables and still signs in per path.
+    const fillPath = (path: string) =>
+      execFileSync('git', ['credential', 'fill'], {
+        env: gitEnv(),
+        input: `protocol=https\nhost=github.com\npath=${path}\n\n`,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
+      });
+    expect(fillPath('acme/app.git')).toContain('password=app-s3cr3t');
+    expect(fillPath('acme/web.git')).toContain('password=acme-s3cr3t');
+    expect(() => fillPath('other/app.git')).toThrow();
+    expect((await readFile(join(home, '.goal/repositories'), 'utf8')).split('\n')).toEqual(
+      expect.arrayContaining(['https://github.com/acme/app', 'https://github.com/acme/web']),
+    );
+  }, 20_000);
+
+  it('refuses pushes under a read-only prefix and puts a write entry under it back, for pushes alone', async () => {
+    await hosted();
+    const logins = [
+      { prefix: app, username: 'x-access-token', password_env: 'GOAL_REPOSITORY_TOKEN_APP', write: true },
+      {
+        prefix: 'https://github.com/acme/',
+        username: 'x-access-token',
+        password_env: 'GOAL_REPOSITORY_TOKEN_ACME',
+        write: false,
+      },
+    ];
+    const bundle = codeBundle({ repository_logins: logins, read_only: ['https://github.com/acme/'] });
+    const { exec, calls } = recorder();
+
+    await prepare(deps(bundle, exec));
+
+    const config = calls.map(line).filter((l) => l.includes('InsteadOf') || l.includes('protocol.'));
+    expect(config).toEqual([
+      'git config --global protocol.goal-refuse.allow always',
+      'git config --global --add url.goal-refuse::https://github.com/acme/.pushInsteadOf https://github.com/acme/',
+      `git config --global --add url.${app}.pushInsteadOf ${app}`,
+    ]);
+    expect(calls.map(line).some((l) => /\.insteadOf/i.test(l))).toBe(false);
+
+    // A push to the read-only repository reaches the refusing helper; a fetch still works.
+    const libDir = join(dirs.repos, 'acme/lib');
+    const pushEnv = { ...gitEnv(), PATH: `${bin}:${process.env.PATH}` };
+    const push = spawn('git', ['push', 'origin', `HEAD:refs/heads/${branch}`], { cwd: libDir, env: pushEnv });
+    let stderr = '';
+    push.stderr.on('data', (c: Buffer) => {
+      stderr += c.toString('utf8');
+    });
+    const code = await new Promise<number | null>((resolve) => push.once('close', resolve));
+    expect(code).not.toBe(0);
+    expect(stderr).toContain('this run may not push to https://github.com/acme/lib');
+    expect(() => git(libDir, 'fetch', '--quiet', 'origin')).not.toThrow();
+  }, 20_000);
 });

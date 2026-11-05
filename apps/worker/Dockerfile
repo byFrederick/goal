@@ -4,7 +4,7 @@
 #   docker build -f apps/worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.2.0 .
 # A sandbox idles in it until goald execs `goal-agent prepare`, `goal-agent run` and the station's
 # checks; apps/worker/README.md has the contract. It carries the worker (Claude Code through the Agent
-# SDK), git, gh, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries with pgvector;
+# SDK), git, gh, glab, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries with pgvector;
 # a repository's other tools come from its mise config at prepare. Every version is pinned and
 # every download checked against the checksums its project publishes. The production deploy builds
 # and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh): the slow stages (apt, mise,
@@ -18,6 +18,7 @@ FROM ${DEBIAN_IMAGE} AS downloads
 ARG TARGETARCH
 ARG MISE_VERSION=2026.10.3
 ARG GH_VERSION=2.102.0
+ARG GLAB_VERSION=1.128.0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
  && apt-get install --yes --no-install-recommends ca-certificates curl \
@@ -32,9 +33,14 @@ RUN mise="mise-v${MISE_VERSION}-linux-$([ "${TARGETARCH}" = amd64 ] && echo x64 
  && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" | grep " ${gh}.tar.gz$" | sha256sum -c - \
  && tar -xzf "${gh}.tar.gz" \
  && install -D -m 0755 "${gh}/bin/gh" /out/usr/local/bin/gh \
+ && glab="glab_${GLAB_VERSION}_linux_${TARGETARCH}" \
+ && curl -fsSLO "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/${glab}.tar.gz" \
+ && curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/checksums.txt" | grep " ${glab}.tar.gz$" | sha256sum -c - \
+ && mkdir "${glab}" && tar -xzf "${glab}.tar.gz" -C "${glab}" \
+ && install -D -m 0755 "${glab}/bin/glab" /out/usr/local/bin/glab \
  && curl -fsSL --create-dirs https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /out/usr/share/keyrings/pgdg.asc
 
-# base: Debian with the system packages, PostgreSQL's server binaries and pgvector, gh and mise with the
+# base: Debian with the system packages, PostgreSQL's server binaries and pgvector, gh, glab and mise with the
 # image's Go, Node and Python, installed as the sandbox's user into /opt/mise.
 FROM ${DEBIAN_IMAGE} AS base
 ARG PG_MAJOR=18
@@ -58,7 +64,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
       /var/cache/debconf/*-old /var/cache/ldconfig/aux-cache \
  && useradd --uid 1000 --user-group --create-home --home-dir /home/node --shell /bin/bash node \
- && install -d -o 1000 -g 1000 /opt/mise /workspace /goal /knowledge \
+ && install -d -o 1000 -g 1000 /opt/mise /workspace /repos /goal /knowledge \
  && printf '%s\n' '[user]' '	name = Goal agent' '	email = goal-agent@example.com' '[init]' '	defaultBranch = main' \
       > /etc/gitconfig \
  && mkdir -p /etc/mise \
@@ -95,10 +101,12 @@ RUN pnpm --filter @goal/worker build \
  && pnpm --filter @goal/worker deploy --prod /home/node/out \
  && rm -f /home/node/out/node_modules/.modules.yaml
 
-# runtime: base plus the worker, nothing of its build.
+# runtime: base plus the worker, nothing of its build, and git's remote helper that refuses
+# pushes where a run may not write (goal-refuse::<url>, apps/worker/README.md).
 FROM base AS runtime
 ARG NODE_VERSION=22.23.3
 COPY --from=worker /home/node/out /opt/goal-worker
+COPY --chmod=0755 apps/worker/bin/git-remote-goal-refuse /usr/local/bin/git-remote-goal-refuse
 USER root
 # The worker runs on the image's Node whatever Node a repository pins for the agent.
 RUN printf '%s\n' '#!/bin/sh' \

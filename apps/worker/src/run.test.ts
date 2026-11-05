@@ -453,14 +453,28 @@ describe('runTask pushed head', () => {
 
 describe('runTask repositories', () => {
   const branch = 'goal/1-add-a-health-endpoint';
-  const [base, before, pushed, other] = ['a', 'b', 'c', 'd'].map((c) => c.repeat(40));
+  const [base, before, pushed, other] = ['a'.repeat(40), 'b'.repeat(40), 'c'.repeat(40), 'd'.repeat(40)] as const;
   const withRepos = parseSpec(
     JSON.stringify({
       ...spec,
       branch,
       repositories: [
-        { url: 'https://github.com/acme/app', path: '/workspace', branch, write: true, base_commit: base, branch_head: before },
-        { url: 'https://github.com/acme/lib', path: '/repos/acme/lib', branch, write: false, base_commit: base, branch_head: base },
+        {
+          url: 'https://github.com/acme/app',
+          path: '/workspace',
+          branch,
+          write: true,
+          base_commit: base,
+          branch_head: before,
+        },
+        {
+          url: 'https://github.com/acme/lib',
+          path: '/repos/acme/lib',
+          branch,
+          write: false,
+          base_commit: base,
+          branch_head: base,
+        },
       ],
     }),
   );

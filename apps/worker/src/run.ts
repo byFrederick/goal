@@ -1,7 +1,7 @@
 import type { SDKMessage, query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { agentQuery } from './agent.js';
-import { applyEnvironment, type EnvironmentDeps } from './environment.js';
 import { repositoryUrl } from './credential.js';
+import { applyEnvironment, type EnvironmentDeps } from './environment.js';
 import { EventMapper, type Finished, type FinishedRepository, type WorkerEvent } from './events.js';
 import { NotePoller, notePollMs, PromptQueue } from './notes.js';
 import { isCommitId } from './prepare.js';
