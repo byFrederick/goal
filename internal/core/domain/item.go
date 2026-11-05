@@ -219,7 +219,7 @@ func RunBase(it, root Item, prBase string) (branch, base string) {
 
 // branchName is prefix, number and, when title has one, a dash and title's slug: lowercase
 // ASCII letters and digits, each other run of characters one dash, cut near maxSlug. Migration
-// 00129 computes the same in SQL for the items it backfills.
+// 00130 computes the same in SQL for the items it backfills.
 func branchName(prefix string, number int64, title string) string {
 	var b strings.Builder
 

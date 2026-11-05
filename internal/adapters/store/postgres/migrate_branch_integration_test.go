@@ -14,7 +14,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// Migration 00129 backfills every existing item's branch with the one it has today,
+// Migration 00130 backfills every existing item's branch with the one it has today,
 // goal/<number>-<slug>, exactly as Item.Branch computes it: punctuation, non-ASCII letters (the
 // two Go lowercases to ASCII included), an empty slug and a slug cut at 40 or 41 characters.
 func TestMigrate_BackfillsItemBranch(t *testing.T) {
@@ -38,7 +38,7 @@ func TestMigrate_BackfillsItemBranch(t *testing.T) {
 
 	db := newTestDB(t, OwnerRole)
 	owner := openPool(t, db.owner)
-	migrateTo(t, owner, 128)
+	migrateTo(t, owner, 129)
 
 	at := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
 	factory := uuid.NewString()
@@ -91,7 +91,7 @@ func TestMigrate_BackfillsItemBranch(t *testing.T) {
 			}
 		}
 
-		t.Errorf("branches after 00129 differ from Item.Branch:%s", b.String())
+		t.Errorf("branches after 00130 differ from Item.Branch:%s", b.String())
 	}
 }
 
