@@ -71,7 +71,8 @@ test('factory settings has Save changes in the top bar and flat sections', async
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
-  await expect(page.locator('main [aria-expanded]')).toHaveCount(0);
+  // Flat sections have no accordion; a Select's combobox (Jonah's model) carries aria-expanded of its own.
+  await expect(page.locator('main [aria-expanded]:not([role=combobox])')).toHaveCount(0);
   await expect(page.getByText('Badge', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'General' })).toHaveAttribute('aria-current', 'true');
 });
