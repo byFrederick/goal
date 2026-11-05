@@ -11,6 +11,14 @@ WHERE item_id = $1 AND id > sqlc.arg(after)::bigint
 ORDER BY id
 LIMIT sqlc.arg(max_events)::bigint;
 
+-- name: ItemNotes :many
+-- The notes other items' agents and triggers' checks left on an item (item_note), oldest first,
+-- on item_events_item_idx.
+SELECT * FROM item_events
+WHERE item_id = sqlc.arg(item_id) AND kind = 'item_note'
+ORDER BY id
+LIMIT sqlc.arg(max_notes)::bigint;
+
 -- name: InsertNote :one
 -- A person's note, returned with its id.
 INSERT INTO item_events (factory_id, item_id, run_id, at, kind, station, actor, data)

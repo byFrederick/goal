@@ -256,6 +256,42 @@ WHERE factory_id = sqlc.arg(factory_id) AND created_at >= sqlc.arg(since)
 GROUP BY 1
 ORDER BY 1;
 
+-- name: OriginTally :many
+-- The factory's items created at or after the instant, by origin: Intake's day counts, which read
+-- no delivery.
+SELECT origin::text AS origin, count(*)::bigint AS items FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND created_at >= sqlc.arg(since)
+GROUP BY 1
+ORDER BY 1;
+
+-- name: ComingUpItems :many
+-- The factory's open items that haven't started (started_at IS NULL, the claim filters' rule) and
+-- have a start or an open planned or linked need: those with a start first, soonest first, then
+-- the rest oldest first. Each comes with the numbers of those needs, oldest edge first, the
+-- factory and number of the item whose follow-up filed it (empty and 0 for none; any factory of the
+-- organization, under row-level security) and how many rows the query has before its limit.
+SELECT sqlc.embed(w), n.needs::bigint[] AS needs,
+  coalesce(src.factory_id::text, '')::text AS from_factory_id, coalesce(src.number, 0)::bigint AS from_number,
+  count(*) OVER ()::bigint AS total
+FROM work_items w
+CROSS JOIN LATERAL (
+  SELECT array(
+    SELECT d.number FROM item_edges e JOIN work_items d ON d.id = e.needs_id
+    WHERE e.item_id = w.id AND e.kind <> 'overlap' AND d.state NOT IN ('done', 'cancelled')
+    ORDER BY e.created_at, e.needs_id
+  ) AS needs
+) n
+LEFT JOIN LATERAL (
+  SELECT s.factory_id, s.number FROM follow_ups f JOIN work_items s ON s.id = f.item_id
+  WHERE f.filed_item_id = w.id AND f.state = 'filed'
+  ORDER BY f.created_at, f.id
+  LIMIT 1
+) src ON NOT w.triage
+WHERE w.factory_id = sqlc.arg(factory_id) AND w.started_at IS NULL AND w.state NOT IN ('done', 'cancelled')
+  AND (w.start_at IS NOT NULL OR cardinality(n.needs) > 0)
+ORDER BY w.start_at NULLS LAST, w.created_at, w.id
+LIMIT sqlc.arg(max_items);
+
 -- name: TriggerStats :many
 SELECT w.trigger::text AS trigger, count(*) AS created,
        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM item_events e WHERE e.item_id = w.id AND e.kind = 'merged')) AS merged,

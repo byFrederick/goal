@@ -795,6 +795,108 @@ func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, las
 	return w, nil
 }
 
+// OriginTally implements ports.Intake.
+func (in *Intake) OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.OriginTallyRow, error) {
+		return q.OriginTally(ctx, db.OriginTallyParams{FactoryID: fid, Since: since})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("item origins of factory %s: %w", factory, err)
+	}
+
+	out := make([]domain.OriginCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.OriginCount{Origin: domain.Origin(r.Origin), Items: int(r.Items)})
+	}
+
+	return out, nil
+}
+
+// ComingUp implements ports.Intake.
+func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.ComingUpItemsRow, error) {
+		return q.ComingUpItems(ctx, db.ComingUpItemsParams{FactoryID: fid, MaxItems: int32(min(max(limit, 0), math.MaxInt32))})
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("items coming up in factory %s: %w", factory, err)
+	}
+
+	out := make([]domain.ComingUp, 0, len(rows))
+	total := 0
+
+	for _, r := range rows {
+		it, err := itemFrom(r.WorkItem)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		needs := r.Needs
+		if needs == nil {
+			needs = []int64{}
+		}
+
+		out = append(out, domain.ComingUp{Item: it, Needs: needs, FromFactory: domain.FactoryID(r.FromFactoryID), FromNumber: r.FromNumber})
+		total = int(r.Total)
+	}
+
+	return out, total, nil
+}
+
+// TriageQueue implements ports.Intake.
+func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, limit int) (domain.TriageQueue, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.TriageQueue{}, err
+	}
+
+	q := domain.TriageQueue{Waiting: []domain.TriageSource{}}
+
+	err = in.s.read(ctx, func(dq *db.Queries) error {
+		row, err := dq.TriageQueueItem(ctx, fid)
+
+		switch {
+		case notFound(err):
+		case err != nil:
+			return fmt.Errorf("triage item: %w", err)
+		default:
+			it, err := itemFrom(row.WorkItem)
+			if err != nil {
+				return err
+			}
+
+			q.Item, q.FollowUps = &it, int(row.FollowUps)
+		}
+
+		rows, err := dq.WaitingTriageSources(ctx, db.WaitingTriageSourcesParams{FactoryID: fid, MaxItems: int32(min(max(limit, 0), math.MaxInt32))})
+		if err != nil {
+			return fmt.Errorf("waiting triage sources: %w", err)
+		}
+
+		for _, r := range rows {
+			q.Waiting = append(q.Waiting, domain.TriageSource{
+				ID: domain.ItemID(r.ID.String()), Number: r.Number, Title: r.Title, FollowUps: int(r.FollowUps),
+			})
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.TriageQueue{}, fmt.Errorf("triage queue of factory %s: %w", factory, err)
+	}
+
+	return q, nil
+}
+
 // TriggerDays implements ports.Intake.
 func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
 	fid, err := parseID("factory", string(factory))

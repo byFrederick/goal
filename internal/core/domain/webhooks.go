@@ -508,6 +508,22 @@ type CheckedDelivery struct {
 // that wraps it says which, never a value.
 var ErrSignature = errors.New("the signature is missing or does not match")
 
+// NamesWebhook reports whether t is enabled and its on names deliveries to the webhook named
+// webhook from sender, whatever their event (ADR 0040 decision 14): <sender>.<event> names every
+// webhook of the sender, <webhook>[.<event>] the one webhook.
+func (t Trigger) NamesWebhook(webhook string, sender WebhookSender) bool {
+	if !t.Enabled || t.On == OnSchedule {
+		return false
+	}
+
+	s, w, e := ParseOn(t.On)
+	if s != "" {
+		return s == sender && e != ""
+	}
+
+	return w == webhook
+}
+
 // NamesDelivery reports whether t is enabled and its on names a delivery of event from sender to
 // the webhook named webhook (ADR 0040 decision 14, ParseOn): <sender>.<event> names the event
 // from every webhook of the sender, <webhook>.<event> that event to the webhook and <webhook>

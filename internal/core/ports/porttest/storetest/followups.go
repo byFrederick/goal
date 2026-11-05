@@ -325,6 +325,32 @@ func testDeliverNotesAcrossFactories(f *fixture) {
 	if len(notes) != 2 || notes[0].FactoryID != ops || notes[0].Data[domain.KeyNoteFromFactory] != string(f.factory) {
 		t.Errorf("item_note events on the other factory's item = %+v; want two from %s", notes, f.factory)
 	}
+
+	f.expectItemNotesRead(t, dst, notes)
+}
+
+// expectItemNotesRead checks that ItemNotes reads want, dst's item_note events, oldest first, and
+// limits them; another organization reads none.
+func (f *fixture) expectItemNotesRead(t *testing.T, dst domain.Item, want []domain.Event) {
+	t.Helper()
+
+	got, err := f.Store.ItemNotes(f.ctx(t), dst.ID, 10)
+	if err != nil {
+		t.Fatalf("ItemNotes: %v", err)
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ItemNotes = %+v\nwant %+v", got, want)
+	}
+
+	if one, err := f.Store.ItemNotes(f.ctx(t), dst.ID, 1); err != nil || len(one) != 1 || one[0].ID != want[0].ID {
+		t.Errorf("ItemNotes limit 1 = %+v, %v; want the oldest", one, err)
+	}
+
+	o := f.otherOrg(t)
+	if other, err := o.Store.ItemNotes(o.ctx(t), dst.ID, 10); err != nil || len(other) != 0 {
+		t.Errorf("another organization's ItemNotes = %+v, %v; want none", other, err)
+	}
 }
 
 // A note that cannot go where it says goes to triage, still waiting, with the reason and the ref

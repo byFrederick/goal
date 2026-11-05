@@ -1305,6 +1305,174 @@ func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, las
 	return w, nil
 }
 
+// OriginTally implements ports.Intake.
+func (in *Intake) OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	counts := map[domain.Origin]int{}
+	for _, it := range in.items(org, factory, since) {
+		counts[cmp.Or(it.Origin, domain.OriginPerson)]++
+	}
+
+	out := []domain.OriginCount{}
+	for _, o := range slices.Sorted(maps.Keys(counts)) {
+		out = append(out, domain.OriginCount{Origin: o, Items: counts[o]})
+	}
+
+	return out, nil
+}
+
+// ComingUp implements ports.Intake.
+func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	var all []domain.ComingUp
+
+	for _, it := range in.store.items {
+		if it.OrgID != org || it.FactoryID != factory || !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
+			continue
+		}
+
+		c := domain.ComingUp{Item: clone(it), Needs: []int64{}}
+
+		for _, e := range in.store.edges {
+			if e.Item == it.ID && e.Kind != domain.EdgeOverlap && in.openLocked(org, e.Needs) {
+				c.Needs = append(c.Needs, in.store.items[e.Needs].Number)
+			}
+		}
+
+		if it.StartAt.IsZero() && len(c.Needs) == 0 {
+			continue
+		}
+
+		if !it.Triage {
+			c.FromFactory, c.FromNumber = in.filedFromLocked(org, it.ID)
+		}
+
+		all = append(all, c)
+	}
+
+	slices.SortFunc(all, func(a, b domain.ComingUp) int {
+		x, y := a.Item, b.Item
+		if x.StartAt.IsZero() != y.StartAt.IsZero() {
+			if x.StartAt.IsZero() {
+				return 1
+			}
+
+			return -1
+		}
+
+		return cmp.Or(x.StartAt.Compare(y.StartAt), x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
+	})
+
+	return all[:min(len(all), max(limit, 0))], len(all), nil
+}
+
+// filedFromLocked is the factory and number of the source item of the oldest follow-up filed as
+// or onto item; "" and 0 for none. Callers hold in.store.mu.
+func (in *Intake) filedFromLocked(org domain.OrgID, item domain.ItemID) (domain.FactoryID, int64) {
+	var found *domain.FollowUp
+
+	for i, f := range in.store.followUps {
+		if f.FiledItem == item && f.State == domain.FollowUpFiled &&
+			(found == nil || cmp.Or(f.CreatedAt.Compare(found.CreatedAt), cmp.Compare(f.ID, found.ID)) < 0) {
+			found = &in.store.followUps[i]
+		}
+	}
+
+	if found == nil {
+		return "", 0
+	}
+
+	src, ok := in.store.visible(found.ItemID, org)
+	if !ok {
+		return "", 0
+	}
+
+	return src.FactoryID, src.Number
+}
+
+// TriageQueue implements ports.Intake.
+func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, limit int) (domain.TriageQueue, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.TriageQueue{}, err
+	}
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	q := domain.TriageQueue{Waiting: []domain.TriageSource{}}
+
+	for _, it := range in.store.items {
+		if it.OrgID != org || it.FactoryID != factory || !it.Triage || it.Untrusted || !in.openLocked(org, it.ID) || in.hasRunLocked(it.ID) {
+			continue
+		}
+
+		if q.Item == nil || cmp.Or(it.CreatedAt.Compare(q.Item.CreatedAt), cmp.Compare(it.ID, q.Item.ID)) < 0 {
+			c := clone(it)
+			q.Item = &c
+		}
+	}
+
+	type source struct {
+		ts    domain.TriageSource
+		first domain.FollowUp
+	}
+
+	sources := map[domain.ItemID]*source{}
+
+	for _, f := range in.store.followUps {
+		if q.Item != nil && f.FiledItem == q.Item.ID && f.State == domain.FollowUpFiled && f.Target == domain.FollowUpTriage {
+			q.FollowUps++
+		}
+
+		src, ok := in.store.visible(f.ItemID, org)
+		if !ok || f.FactoryID != factory || f.State != domain.FollowUpWaiting || f.Target != domain.FollowUpTriage || src.Untrusted {
+			continue
+		}
+
+		s, ok := sources[src.ID]
+		if !ok {
+			s = &source{ts: domain.TriageSource{ID: src.ID, Number: src.Number, Title: src.Title}, first: f}
+			sources[src.ID] = s
+		}
+
+		s.ts.FollowUps++
+	}
+
+	all := slices.Collect(maps.Values(sources))
+	slices.SortFunc(all, func(a, b *source) int {
+		return cmp.Or(a.first.CreatedAt.Compare(b.first.CreatedAt), cmp.Compare(a.ts.ID, b.ts.ID))
+	})
+
+	for _, s := range all[:min(len(all), max(limit, 0))] {
+		q.Waiting = append(q.Waiting, s.ts)
+	}
+
+	return q, nil
+}
+
+// hasRunLocked reports whether item has a run. Callers hold in.store.mu.
+func (in *Intake) hasRunLocked(item domain.ItemID) bool {
+	for _, r := range in.store.runs {
+		if r.ItemID == item {
+			return true
+		}
+	}
+
+	return false
+}
+
 // TriggerDays implements ports.Intake.
 func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
 	org, err := orgOf(ctx)

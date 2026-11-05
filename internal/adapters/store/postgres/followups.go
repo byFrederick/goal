@@ -21,7 +21,7 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 
 	uid := uuid.MustParse(string(item))
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.FollowUp, error) { return q.ItemFollowUps(ctx, uid) })
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemFollowUpsRow, error) { return q.ItemFollowUps(ctx, uid) })
 	if err != nil {
 		return nil, fmt.Errorf("follow-ups of item %s: %w", item, err)
 	}
@@ -29,15 +29,32 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 	out := make([]domain.FollowUp, 0, len(rows))
 
 	for _, r := range rows {
-		f, err := followUpFrom(r)
+		f, err := followUpFrom(r.FollowUp)
 		if err != nil {
 			return nil, err
 		}
 
+		f.FiledFactory, f.FiledNumber = domain.FactoryID(r.FiledFactoryID), r.FiledNumber
 		out = append(out, f)
 	}
 
 	return out, nil
+}
+
+// ItemNotes implements ports.Store.
+func (s *Store) ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error) {
+	if !isUUID(string(item)) {
+		return nil, nil // an id that is not a UUID names no item, which has none
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) {
+		return q.ItemNotes(ctx, db.ItemNotesParams{ItemID: uuid.MustParse(string(item)), MaxNotes: int64(limit)})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("notes of item %s: %w", item, err)
+	}
+
+	return convertAll(rows, eventFrom)
 }
 
 // DeliverNotes implements ports.Store: one transaction per note, which locks its follow_ups row

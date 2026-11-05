@@ -298,38 +298,53 @@ func (q *Queries) FollowUpItemsSince(ctx context.Context, arg FollowUpItemsSince
 }
 
 const itemFollowUps = `-- name: ItemFollowUps :many
-SELECT id, org_id, factory_id, item_id, run_id, station, agent, text, text_key, target, for_factory, for_number, start, state, reason, filed_item_id, created_at, updated_at FROM follow_ups WHERE item_id = $1 ORDER BY created_at, id
+SELECT f.id, f.org_id, f.factory_id, f.item_id, f.run_id, f.station, f.agent, f.text, f.text_key, f.target, f.for_factory, f.for_number, f.start, f.state, f.reason, f.filed_item_id, f.created_at, f.updated_at, coalesce(w.factory_id::text, '')::text AS filed_factory_id, coalesce(w.number, 0)::bigint AS filed_number
+FROM follow_ups f
+LEFT JOIN work_items w ON w.id = f.filed_item_id
+WHERE f.item_id = $1
+ORDER BY f.created_at, f.id
 `
 
-// An item's follow-ups, oldest first and in output order within a run (UUIDv7 ids).
-func (q *Queries) ItemFollowUps(ctx context.Context, itemID uuid.UUID) ([]FollowUp, error) {
+type ItemFollowUpsRow struct {
+	FollowUp       FollowUp
+	FiledFactoryID string
+	FiledNumber    int64
+}
+
+// An item's follow-ups, oldest first and in output order within a run (UUIDv7 ids), each with the
+// factory and number of the item it was filed as or onto, another factory's included (empty and 0
+// when it is not filed or that item is gone). The join is under row-level security, so another
+// organization's item never resolves.
+func (q *Queries) ItemFollowUps(ctx context.Context, itemID uuid.UUID) ([]ItemFollowUpsRow, error) {
 	rows, err := q.db.Query(ctx, itemFollowUps, itemID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FollowUp
+	var items []ItemFollowUpsRow
 	for rows.Next() {
-		var i FollowUp
+		var i ItemFollowUpsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrgID,
-			&i.FactoryID,
-			&i.ItemID,
-			&i.RunID,
-			&i.Station,
-			&i.Agent,
-			&i.Text,
-			&i.TextKey,
-			&i.Target,
-			&i.ForFactory,
-			&i.ForNumber,
-			&i.Start,
-			&i.State,
-			&i.Reason,
-			&i.FiledItemID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.FollowUp.ID,
+			&i.FollowUp.OrgID,
+			&i.FollowUp.FactoryID,
+			&i.FollowUp.ItemID,
+			&i.FollowUp.RunID,
+			&i.FollowUp.Station,
+			&i.FollowUp.Agent,
+			&i.FollowUp.Text,
+			&i.FollowUp.TextKey,
+			&i.FollowUp.Target,
+			&i.FollowUp.ForFactory,
+			&i.FollowUp.ForNumber,
+			&i.FollowUp.Start,
+			&i.FollowUp.State,
+			&i.FollowUp.Reason,
+			&i.FollowUp.FiledItemID,
+			&i.FollowUp.CreatedAt,
+			&i.FollowUp.UpdatedAt,
+			&i.FiledFactoryID,
+			&i.FiledNumber,
 		); err != nil {
 			return nil, err
 		}
@@ -853,6 +868,117 @@ func (q *Queries) TriageFollowUps(ctx context.Context, itemID *uuid.UUID) ([]Tri
 			&i.SourceType,
 			&i.SourcePriority,
 			&i.SourceGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const triageQueueItem = `-- name: TriageQueueItem :one
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage,
+  (SELECT count(*) FROM follow_ups f WHERE f.filed_item_id = w.id AND f.state = 'filed' AND f.target = 'triage')::bigint AS follow_ups
+FROM work_items w
+WHERE w.factory_id = $1 AND w.triage AND NOT w.untrusted AND w.state NOT IN ('done', 'cancelled')
+  AND NOT EXISTS (SELECT 1 FROM agent_runs r WHERE r.item_id = w.id)
+ORDER BY w.created_at
+LIMIT 1
+`
+
+type TriageQueueItemRow struct {
+	WorkItem  WorkItem
+	FollowUps int64
+}
+
+// The factory's collecting triage item, as CollectingTriageItem finds it but unlocked, for
+// Intake, with how many follow-ups have joined it (follow_ups_filed_item_idx).
+func (q *Queries) TriageQueueItem(ctx context.Context, factoryID uuid.UUID) (TriageQueueItemRow, error) {
+	row := q.db.QueryRow(ctx, triageQueueItem, factoryID)
+	var i TriageQueueItemRow
+	err := row.Scan(
+		&i.WorkItem.ID,
+		&i.WorkItem.FactoryID,
+		&i.WorkItem.Number,
+		&i.WorkItem.ParentID,
+		&i.WorkItem.Type,
+		&i.WorkItem.Lane,
+		&i.WorkItem.Title,
+		&i.WorkItem.Body,
+		&i.WorkItem.Station,
+		&i.WorkItem.State,
+		&i.WorkItem.ClassOfService,
+		&i.WorkItem.Priority,
+		&i.WorkItem.Size,
+		&i.WorkItem.ReworkCount,
+		&i.WorkItem.CostUsd,
+		&i.WorkItem.Outputs,
+		&i.WorkItem.CreatedAt,
+		&i.WorkItem.UpdatedAt,
+		&i.WorkItem.DoneAt,
+		&i.WorkItem.OrgID,
+		&i.WorkItem.PartKey,
+		&i.WorkItem.PartPaths,
+		&i.WorkItem.Paths,
+		&i.WorkItem.BaseCommit,
+		&i.WorkItem.Trigger,
+		&i.WorkItem.Source,
+		&i.WorkItem.IntegrationBranch,
+		&i.WorkItem.IntegrationLandAt,
+		&i.WorkItem.Origin,
+		&i.WorkItem.Via,
+		&i.WorkItem.CreatedBy,
+		&i.WorkItem.Generation,
+		&i.WorkItem.Untrusted,
+		&i.WorkItem.StartAt,
+		&i.WorkItem.StartedAt,
+		&i.WorkItem.Triage,
+		&i.FollowUps,
+	)
+	return i, err
+}
+
+const waitingTriageSources = `-- name: WaitingTriageSources :many
+SELECT s.id, s.number, s.title, count(*)::bigint AS follow_ups
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+WHERE f.factory_id = $1 AND f.state = 'waiting' AND f.target = 'triage' AND NOT s.untrusted
+GROUP BY s.id, s.number, s.title
+ORDER BY min(f.created_at), s.id
+LIMIT $2
+`
+
+type WaitingTriageSourcesParams struct {
+	FactoryID uuid.UUID
+	MaxItems  int32
+}
+
+type WaitingTriageSourcesRow struct {
+	ID        uuid.UUID
+	Number    int64
+	Title     string
+	FollowUps int64
+}
+
+// The factory's items with waiting triage follow-ups (follow_ups_factory_idx), trusted ones only:
+// an untrusted item's go to a triage item of their own. Oldest first by their first follow-up.
+func (q *Queries) WaitingTriageSources(ctx context.Context, arg WaitingTriageSourcesParams) ([]WaitingTriageSourcesRow, error) {
+	rows, err := q.db.Query(ctx, waitingTriageSources, arg.FactoryID, arg.MaxItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WaitingTriageSourcesRow
+	for rows.Next() {
+		var i WaitingTriageSourcesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Number,
+			&i.Title,
+			&i.FollowUps,
 		); err != nil {
 			return nil, err
 		}

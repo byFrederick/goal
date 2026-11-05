@@ -82,6 +82,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	tests = append(tests, evaluationTests...)
 	tests = append(tests, trimTests...)
 	tests = append(tests, checkTests...)
+	tests = append(tests, readsTests...)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1106,6 +1107,9 @@ func testNoOrg(f *fixture) {
 		"TriggerStats":     func() error { _, err := f.in.TriggerStats(ctx, f.factory, t0); return err },
 		"ItemSources":      func() error { _, err := f.in.ItemSources(ctx, f.factory, 48); return err },
 		"TriggerDays":      func() error { _, err := f.in.TriggerDays(ctx, f.factory, t0); return err },
+		"OriginTally":      func() error { _, err := f.in.OriginTally(ctx, f.factory, t0); return err },
+		"ComingUp":         func() error { _, _, err := f.in.ComingUp(ctx, f.factory, 10); return err },
+		"TriageQueue":      func() error { _, err := f.in.TriageQueue(ctx, f.factory, 10); return err },
 		"Firings":          func() error { _, err := f.in.Firings(ctx, f.factory, flaky, 10); return err },
 		"CreateWebhook": func() error {
 			_, err := f.in.CreateWebhook(ctx, domain.NewWebhook{Name: orgHook, Sender: domain.SenderGitHub, Secret: hookToken})

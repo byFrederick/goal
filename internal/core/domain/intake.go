@@ -209,6 +209,43 @@ type DeliveryDay struct {
 	Refused   int
 }
 
+// OriginCount is how many of a factory's items came from an origin, for Intake (ADR 0040 decision
+// 20).
+type OriginCount struct {
+	Origin Origin
+	Items  int
+}
+
+// ComingUp is an open item of a factory that hasn't started (ADR 0040 decision 20): it has a start
+// (Item.StartAt) or waits for open needs.
+type ComingUp struct {
+	Item Item
+	// Needs are the numbers of its open planned and linked needs, of its factory, oldest edge
+	// first.
+	Needs []int64
+	// FromFactory and FromNumber are the item whose follow-up filed it, of any factory of the
+	// organization; "" and 0 otherwise.
+	FromFactory FactoryID
+	FromNumber  int64
+}
+
+// TriageQueue is what a factory's Intake shows of its follow-ups for the architect (ADR 0040
+// decision 9): its collecting triage item, if it has one, with how many follow-ups joined it, and
+// the trusted items whose waiting triage follow-ups join it when they land.
+type TriageQueue struct {
+	Item      *Item
+	FollowUps int
+	Waiting   []TriageSource
+}
+
+// TriageSource is an item with waiting triage follow-ups.
+type TriageSource struct {
+	ID        ItemID
+	Number    int64
+	Title     string
+	FollowUps int
+}
+
 // ItemSource is where a work item came from, for Intake.
 type ItemSource string
 

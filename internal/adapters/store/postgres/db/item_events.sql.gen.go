@@ -158,6 +158,51 @@ func (q *Queries) ItemEvents(ctx context.Context, arg ItemEventsParams) ([]ItemE
 	return items, nil
 }
 
+const itemNotes = `-- name: ItemNotes :many
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
+WHERE item_id = $1 AND kind = 'item_note'
+ORDER BY id
+LIMIT $2::bigint
+`
+
+type ItemNotesParams struct {
+	ItemID   uuid.UUID
+	MaxNotes int64
+}
+
+// The notes other items' agents and triggers' checks left on an item (item_note), oldest first,
+// on item_events_item_idx.
+func (q *Queries) ItemNotes(ctx context.Context, arg ItemNotesParams) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, itemNotes, arg.ItemID, arg.MaxNotes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockNoteCap = `-- name: LockNoteCap :exec
 SELECT pg_advisory_xact_lock(hashtextextended('goal.notes:' || $1::uuid::text, 0))
 `

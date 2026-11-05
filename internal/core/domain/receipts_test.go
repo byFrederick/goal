@@ -101,3 +101,33 @@ func TestTrigger_NamesDelivery(t *testing.T) {
 		}
 	}
 }
+
+// A trigger names a webhook, whatever the event, by the webhook's sender or by its name; Intake
+// shows the webhook receiving then.
+func TestTrigger_NamesWebhook(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		on      string
+		enabled bool
+		want    bool
+	}{
+		{"github-acme", true, true},
+		{"github-acme.check_run", true, true},
+		{"webhook.github-acme.push", true, true},
+		{"github.check_run", true, true},
+		{"github.check_run.failed", true, true},
+		{"github.check_run", false, false},
+		{"gitlab.push", true, false},
+		{string(SenderGitHub), true, false},
+		{OnSchedule, true, false},
+		{"other-hook", true, false},
+	}
+
+	for _, tc := range tests {
+		tr := Trigger{Name: "t", Enabled: tc.enabled, On: tc.on}
+		if got := tr.NamesWebhook("github-acme", SenderGitHub); got != tc.want {
+			t.Errorf("on %q enabled %v: NamesWebhook = %v; want %v", tc.on, tc.enabled, got, tc.want)
+		}
+	}
+}
