@@ -146,16 +146,16 @@ func (e AndonKind) Valid() bool {
 
 // Defines values for AuthMode.
 const (
-	None    AuthMode = "none"
-	Session AuthMode = "session"
+	AuthModeNone    AuthMode = "none"
+	AuthModeSession AuthMode = "session"
 )
 
 // Valid indicates whether the value is a known member of the AuthMode enum.
 func (e AuthMode) Valid() bool {
 	switch e {
-	case None:
+	case AuthModeNone:
 		return true
-	case Session:
+	case AuthModeSession:
 		return true
 	default:
 		return false
@@ -1929,6 +1929,27 @@ func (e TeardownRunOutcome) Valid() bool {
 	case TeardownRunOutcomeRunning:
 		return true
 	case TeardownRunOutcomeSentBack:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TemplateCode.
+const (
+	TemplateCodeNone  TemplateCode = "none"
+	TemplateCodeRead  TemplateCode = "read"
+	TemplateCodeWrite TemplateCode = "write"
+)
+
+// Valid indicates whether the value is a known member of the TemplateCode enum.
+func (e TemplateCode) Valid() bool {
+	switch e {
+	case TemplateCodeNone:
+		return true
+	case TemplateCodeRead:
+		return true
+	case TemplateCodeWrite:
 		return true
 	default:
 		return false
@@ -7658,9 +7679,12 @@ type Template struct {
 	Agents int `json:"agents"`
 
 	// Changed The day the version was made, as in 2026-10-09
-	Changed     string   `json:"changed"`
-	Connectors  []string `json:"connectors"`
-	Description string   `json:"description"`
+	Changed string `json:"changed"`
+
+	// Code The code access a template needs; write when its line has a station that merges.
+	Code        TemplateCode `json:"code"`
+	Connectors  []string     `json:"connectors"`
+	Description string       `json:"description"`
 
 	// Model The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem.
 	Model    FactoryModel `json:"model"`
@@ -7682,6 +7706,9 @@ type TemplateAdds struct {
 	// Tools mise tool specs
 	Tools []string `json:"tools"`
 }
+
+// TemplateCode The code access a template needs; write when its line has a station that merges.
+type TemplateCode string
 
 // TemplateList defines model for TemplateList.
 type TemplateList struct {
@@ -7731,13 +7758,16 @@ type TemplateSummary struct {
 	Agents int `json:"agents"`
 
 	// Changed The day the version was made, as in 2026-10-09
-	Changed    string   `json:"changed"`
-	Connectors []string `json:"connectors"`
-	Name       string   `json:"name"`
-	Stations   int      `json:"stations"`
-	Summary    string   `json:"summary"`
-	Title      string   `json:"title"`
-	Version    int      `json:"version"`
+	Changed string `json:"changed"`
+
+	// Code The code access a template needs; write when its line has a station that merges.
+	Code       TemplateCode `json:"code"`
+	Connectors []string     `json:"connectors"`
+	Name       string       `json:"name"`
+	Stations   int          `json:"stations"`
+	Summary    string       `json:"summary"`
+	Title      string       `json:"title"`
+	Version    int          `json:"version"`
 }
 
 // TemplateTest An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values

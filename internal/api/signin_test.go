@@ -166,7 +166,7 @@ func TestAPI_SignIn_CredentialFirstThenOrganization(t *testing.T) {
 	}
 
 	config := decode[gen.AuthConfig](t, h.as(t, "", http.MethodGet, "/v1/auth/config", ""), http.StatusOK)
-	if config.Mode != gen.Session || !slices.Equal(config.Methods, []gen.SignInMethod{gen.EmailCode, gen.Google}) {
+	if config.Mode != gen.AuthModeSession || !slices.Equal(config.Methods, []gen.SignInMethod{gen.EmailCode, gen.Google}) {
 		t.Errorf("auth config = %+v, want session by email code and Google", config)
 	}
 }
@@ -180,7 +180,7 @@ func TestAPI_SignIn_GoogleOnly(t *testing.T) {
 	h := newHarnessWith(t, in)
 
 	config := decode[gen.AuthConfig](t, h.request(t, http.MethodGet, "/v1/auth/config", "", nil), http.StatusOK)
-	if config.Mode != gen.Session || !slices.Equal(config.Methods, []gen.SignInMethod{gen.Google}) {
+	if config.Mode != gen.AuthModeSession || !slices.Equal(config.Methods, []gen.SignInMethod{gen.Google}) {
 		t.Errorf("auth config = %+v, want session by Google only", config)
 	}
 }
@@ -216,7 +216,7 @@ func TestAPI_SignIn_Me(t *testing.T) {
 	h := newSignedIn(t)
 
 	me := decode[gen.Me](t, h.as(t, viewerToken, http.MethodGet, "/v1/me", ""), http.StatusOK)
-	if me.Mode != gen.Session || me.User == nil || me.User.Id != string(viewerID) || me.Session == nil || me.PlatformAdmin ||
+	if me.Mode != gen.AuthModeSession || me.User == nil || me.User.Id != string(viewerID) || me.Session == nil || me.PlatformAdmin ||
 		!me.Session.FreshUntil.Equal(t0.Add(-time.Hour).Add(domain.FreshFor)) {
 		t.Errorf("me = %+v, want the viewer with their session", me)
 	}
