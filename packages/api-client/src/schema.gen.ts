@@ -1616,7 +1616,7 @@ export interface paths {
         put?: never;
         /**
          * Submit a work item to a factory's first station
-         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
          */
         post: operations["submitItem"];
         delete?: never;
@@ -2376,6 +2376,56 @@ export interface paths {
          * @description Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (GitHub: GET /repos/{owner}/{repo} and its permissions.push; GitLab: GET /projects/:id and its access level, Developer or more pushes), never git. The url's host must be one of the organization's code hosts (getCodeHosts), and the kind it is listed as picks the API. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host the organization doesn't list, before the secret is opened (an owner adds the host under Code hosts), repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
          */
         post: operations["testRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/repositories/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a token against a repository or an owner's repositories, for a factory
+         * @description Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+         */
+        post: operations["testFactoryRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/repositories/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a factory's kept repository tests
+         * @description The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+         */
+        get: operations["listFactoryRepositoryTests"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4727,6 +4777,23 @@ export interface components {
             priority?: number;
             /** @description When the item may start; absent, as soon as it can */
             start?: components["schemas"]["Start"];
+            /** @description The repositories the item works on, in order, the first being its first repository (ADR 0041 decision 4). Each is a runtime.repositories entry's name, owner/name (or group/sub/name) under one of the entries' hosts, host/owner/name or an https URL, that an entry covers. Values naming the same repository count once. Absent or empty, the factory's default entry's, or none without a default entry */
+            repositories?: string[];
+        };
+        /** @description One repository of an item and how it joined it (ADR 0041 decision 4) */
+        ItemRepository: {
+            /** @description The repository's normalized host/owner/name in lower case, as in github.com/acme/api */
+            repo: string;
+            /**
+             * @description How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+             * @enum {string}
+             */
+            joined: "filing" | "default" | "push" | "output";
+            /**
+             * Format: date-time
+             * @description When it joined; absent for an older item's default entry, resolved when it is read
+             */
+            joined_at?: string;
         };
         /** @description When an item may start (ADR 0040): at a time, after a wait, after other items, or a time and items. at and in cannot both be set. The start is at most 365 days ahead. */
         Start: {
@@ -4947,6 +5014,10 @@ export interface components {
             question?: components["schemas"]["ItemQuestion"] | null;
             /** @description The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none */
             tool_approval?: components["schemas"]["ToolApproval"] | null;
+            /** @description The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it */
+            branch?: string;
+            /** @description The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only. An item filed before repositories shows the factory's default entry's, and an item of a factory without code none */
+            repositories?: components["schemas"]["ItemRepository"][];
         };
         /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
         ToolApproval: {
@@ -8759,6 +8830,49 @@ export interface components {
             tested: boolean;
             read: components["schemas"]["RepositoryCheck"];
             push: components["schemas"]["RepositoryCheck"];
+        };
+        FactoryRepositoryTestRequest: {
+            /** @description One repository's https URL, such as https://github.com/acme/app, or an owner pattern, such as https://github.com/acme/* */
+            url: string;
+            secret: components["schemas"]["SecretName"];
+            /**
+             * @description The access the factory's entry asks for, which picks the summary and the warning
+             * @enum {string}
+             */
+            access: "read" | "write";
+        };
+        FactoryRepositoryTestList: {
+            tests: components["schemas"]["FactoryRepositoryTest"][];
+        };
+        FactoryRepositoryTest: {
+            /** @description The repository tested, as its lower-case host/owner/name, or host/owner/* for an owner pattern */
+            url: string;
+            /** @enum {string} */
+            access: "read" | "write";
+            secret: components["schemas"]["SecretName"];
+            /**
+             * Format: date-time
+             * @description When it was tested
+             */
+            at: string;
+            /** @description false when the host gave no answer: summary then starts with couldn't test */
+            tested: boolean;
+            /** @description Whether the token can do what access asks: read, or read and push */
+            ok: boolean;
+            /** @description One line, such as Can read, Can read 48 repositories in acme or Can read and push */
+            summary: string;
+            /** @description For a read entry whose token can also push: Goal won't push, but agents could. Use a read-only token. */
+            warning?: string;
+            /** @description For a write entry: the host reports no pull-request permission, so Goal can't check it */
+            note?: string;
+            read: components["schemas"]["RepositoryCheck"];
+            push: components["schemas"]["RepositoryCheck"];
+            /** @description For an owner pattern: how many of the owner's repositories the token can read */
+            readable?: number;
+            /** @description For an owner pattern: how many of them it can push to */
+            pushable?: number;
+            /** @description For an owner pattern: the count stopped at 1000, so there may be more */
+            truncated?: boolean;
         };
         NotificationSettings: {
             /** @description The name of the secret holding the Slack bot token that sends the organization's Slack notifications, slack-bot by convention; null while Slack is off */
@@ -12686,6 +12800,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepositoryTestResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testFactoryRepository: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactoryRepositoryTestRequest"];
+            };
+        };
+        responses: {
+            /** @description The result, as kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryRepositoryTest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listFactoryRepositoryTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryRepositoryTestList"];
                 };
             };
             default: components["responses"]["Problem"];

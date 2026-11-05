@@ -101,6 +101,7 @@ type Items interface {
 	FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error)
 	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
+	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
@@ -213,6 +214,9 @@ type Deps struct {
 	Catalog          []domain.ToolTemplate
 	EnvironmentTests ports.EnvironmentTests
 	ToolLister       ports.ToolLister
+	// RepositoryTests keep the latest repository test of each factory and url (ADR 0041
+	// decision 8).
+	RepositoryTests ports.RepositoryTests
 	// Conversions are the factories' conversions to secrets (ADR 0037 decision 19): the inbox
 	// lists each refused one as a conversion entry. Nil lists none.
 	Conversions ports.FactoryConversions
@@ -261,7 +265,7 @@ func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
-		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
+		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.RepositoryTests == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
@@ -306,7 +310,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
+			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, RepositoryTests, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, and Jonah, when set, needs Store and Decisions")
 	}
 
@@ -322,7 +326,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, repoTests: d.RepositoryTests, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
@@ -459,6 +463,8 @@ type server struct {
 	catalog  []domain.ToolTemplate
 	envTests ports.EnvironmentTests
 	tools    ports.ToolLister
+	// repoTests keep the factories' repository tests.
+	repoTests ports.RepositoryTests
 	// conversions are the refused conversions the inbox lists; nil lists none.
 	conversions ports.FactoryConversions
 	// intake serves the webhook routes and Intake's reads.
@@ -518,7 +524,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 	it, err := s.engine.Submit(ctx, domain.FileRequest{
 		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
 		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
-		Start: start,
+		Start: start, Repositories: deref(b.Repositories),
 	})
 	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
 		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
@@ -528,7 +534,36 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	return gen.SubmitItem201JSONResponse(s.itemOf(ctx, it)), nil
+	out := s.itemOf(ctx, it)
+	if out.Repositories, err = s.itemRepositories(ctx, it, f.Line()); err != nil {
+		return nil, err
+	}
+
+	return gen.SubmitItem201JSONResponse(out), nil
+}
+
+// itemRepositories are the repositories an item works on as the API shows them, in the order
+// they joined: its rows, or for an item without any the default entry of l, its factory's line
+// (domain.ResolveItemRepositories).
+func (s *server) itemRepositories(ctx context.Context, it domain.Item, l domain.Line) (*[]gen.ItemRepository, error) {
+	rows, err := s.items.ItemRepositories(ctx, it.ID)
+	if err != nil {
+		return nil, fmt.Errorf("item %s: repositories: %w", it.ID, err)
+	}
+
+	rs := domain.ResolveItemRepositories(rows, l)
+	out := make([]gen.ItemRepository, 0, len(rs))
+
+	for _, r := range rs {
+		o := gen.ItemRepository{Repo: r.Repo, Joined: gen.ItemRepositoryJoined(r.Joined)}
+		if !r.JoinedAt.IsZero() {
+			o.JoinedAt = new(r.JoinedAt)
+		}
+
+		out = append(out, o)
+	}
+
+	return &out, nil
 }
 
 // submittedFrom is where an item the request submits comes from, for Intake, and how its person
@@ -597,6 +632,17 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	if out.CameFrom, err = s.cameFrom(ctx, it); err != nil {
+		return nil, err
+	}
+
+	var l domain.Line
+	if f, err := s.factories.Lookup(ctx, string(it.FactoryID)); err == nil {
+		l = f.Line()
+	} else if !errors.Is(err, ports.ErrNotFound) {
+		return nil, err
+	}
+
+	if out.Repositories, err = s.itemRepositories(ctx, it, l); err != nil {
 		return nil, err
 	}
 
@@ -891,6 +937,7 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	}
 
 	out.Start, out.CreatedBy, out.Untrusted = itemStartOf(it), s.createdBy(it), new(it.Untrusted)
+	out.Branch = optional(it.Branch())
 
 	return out
 }

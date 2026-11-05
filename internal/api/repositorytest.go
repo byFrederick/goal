@@ -54,16 +54,9 @@ func repositoryTestProblem(err error) (gen.Problem, bool) {
 func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryRequestObject) (gen.TestRepositoryResponseObject, error) {
 	b := req.Body
 
-	u, err := url.Parse(b.Url)
+	u, err := repositoryURL(b.Url)
 	if err != nil {
-		return nil, fmt.Errorf("%w: it is not a URL, such as https://github.com/acme/app", errRepositoryURLInvalid)
-	}
-
-	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
-		len(strings.Split(strings.Trim(u.Path, "/"), "/")) < 2 {
-		// Redacted: a URL may carry a token in its user info.
-		return nil, fmt.Errorf("%w: %s is not a repository's https URL without credentials, such as https://github.com/acme/app",
-			errRepositoryURLInvalid, u.Redacted())
+		return nil, err
 	}
 
 	repo, ch, err := s.repositoryCodeHost(ctx, u)
@@ -105,6 +98,24 @@ func (s *server) TestRepository(ctx context.Context, req gen.TestRepositoryReque
 		Read:   gen.RepositoryCheck{Ok: access.Read.OK, Reason: environmentcheck.OneLine(access.Read.Reason, values)},
 		Push:   gen.RepositoryCheck{Ok: access.Push.OK, Reason: environmentcheck.OneLine(access.Push.Reason, values)},
 	}), nil
+}
+
+// repositoryURL is raw parsed as a repository's https URL without credentials, query or
+// fragment, with at least an owner and a name in its path; errRepositoryURLInvalid otherwise.
+func repositoryURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: it is not a URL, such as https://github.com/acme/app", errRepositoryURLInvalid)
+	}
+
+	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		len(strings.Split(strings.Trim(u.Path, "/"), "/")) < 2 {
+		// Redacted: a URL may carry a token in its user info.
+		return nil, fmt.Errorf("%w: %s is not a repository's https URL without credentials, such as https://github.com/acme/app",
+			errRepositoryURLInvalid, u.Redacted())
+	}
+
+	return u, nil
 }
 
 // repositoryCodeHost is the repository at u on the organization's code hosts (ADR 0041 decision

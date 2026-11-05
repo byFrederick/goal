@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -1365,5 +1366,221 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 
 	if _, err := New(Config{APIURL: dead.URL}).RepositoryAccess(t.Context(), repoOf(t, "https://github.com/"+repoApp), token); err == nil {
 		t.Error("a host that does not answer: err = nil; want an error")
+	}
+}
+
+// ownerRepo is one repository of the token's listing in ownerGitHub: its owner, and whether the
+// token can push to it.
+type ownerRepo struct {
+	owner string
+	push  bool
+}
+
+// ownerRepos are n repositories of owner, the first pushable of them pushable.
+func ownerRepos(owner string, n, pushable int) []ownerRepo {
+	out := make([]ownerRepo, n)
+	for i := range out {
+		out[i] = ownerRepo{owner: owner, push: i < pushable}
+	}
+
+	return out
+}
+
+// ownerGitHub is a stand-in GitHub answering GET /user/repos for the token with repos, 100 a
+// page, linking a next page while there are more, and any other token 401. It checks the
+// affiliation asked for and records each request.
+func ownerGitHub(t *testing.T, repos []ownerRepo) (*httptest.Server, func() []string) {
+	t.Helper()
+
+	var (
+		mu    sync.Mutex
+		paths []string
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+
+		paths = append(paths, r.Method+" "+r.URL.Path)
+
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: badCredentials})
+
+			return
+		}
+
+		q := r.URL.Query()
+		if got := q.Get("affiliation"); got != "owner,collaborator,organization_member" || q.Get("per_page") != "100" {
+			t.Errorf("GET /user/repos affiliation=%q per_page=%q; want every affiliation, 100 a page", got, q.Get("per_page"))
+		}
+
+		page, err := strconv.Atoi(q.Get("page"))
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		from, to := min((page-1)*100, len(repos)), min(page*100, len(repos))
+
+		out := []map[string]any{}
+		for i, or := range repos[from:to] {
+			out = append(out, map[string]any{
+				keyName: fmt.Sprintf("%s/repo-%d", or.owner, from+i), "owner": map[string]string{"login": or.owner},
+				keyPermissions: map[string]bool{"pull": true, "push": or.push},
+			})
+		}
+
+		if to < len(repos) {
+			w.Header().Set("Link", fmt.Sprintf(`<https://api.github.com/user/repos?page=%d>; rel="next"`, page+1))
+		}
+
+		_ = json.NewEncoder(w).Encode(out)
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return slices.Clone(paths)
+	}
+}
+
+// OwnerAccess counts the token's repositories of the owner, ignoring case, and those it can push
+// to, across pages; it stops at ports.MaxOwnerRepositories and says so. An owner the token has no
+// repositories of, and a bad token, are refusals in the result. It only lists the token's
+// repositories.
+func TestOwnerAccess(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, owner, token string
+		repos              []ownerRepo
+		want               ports.OwnerAccess
+		reason             string
+	}{
+		{
+			name: "read and push", owner: "Acme", token: token,
+			repos: slices.Concat(ownerRepos(acmeOwner, 3, 2), ownerRepos(octo, 4, 4)),
+			want:  ports.OwnerAccess{Readable: 3, Pushable: 2}, reason: "3",
+		},
+		{
+			name: "read only, across pages", owner: acmeOwner, token: token,
+			repos: slices.Concat(ownerRepos(octo, 120, 120), ownerRepos(acmeOwner, 130, 0)),
+			want:  ports.OwnerAccess{Readable: 130},
+		},
+		{
+			name: "truncated", owner: acmeOwner, token: token,
+			repos: ownerRepos(acmeOwner, ports.MaxOwnerRepositories+50, 1),
+			want:  ports.OwnerAccess{Readable: ports.MaxOwnerRepositories, Pushable: 1, Truncated: true},
+		},
+		{name: "no repositories of the owner", owner: "nobody", token: token, repos: ownerRepos(acmeOwner, 2, 2), reason: "nobody"},
+		{name: "bad token", owner: acmeOwner, token: "ghp_wrong", repos: ownerRepos(acmeOwner, 2, 2), reason: badCredentials},
+	} {
+		srv, paths := ownerGitHub(t, tc.repos)
+
+		got, err := New(Config{APIURL: srv.URL}).OwnerAccess(t.Context(), gitHubDotCom, tc.token, tc.owner)
+		if err != nil {
+			t.Fatalf("%s: err = %v", tc.name, err)
+		}
+
+		if reason := got.Reason; reason == "" || !strings.Contains(reason, tc.reason) {
+			t.Errorf("%s: reason %q; want one that says %q", tc.name, reason, tc.reason)
+		}
+
+		got.Reason = ""
+		if got != tc.want {
+			t.Errorf("%s: OwnerAccess = %+v; want %+v", tc.name, got, tc.want)
+		}
+
+		for _, p := range paths() {
+			if p != "GET /user/repos" {
+				t.Errorf("%s: sent %s; want only GET /user/repos", tc.name, p)
+			}
+		}
+
+		if n := len(paths()); n > ports.MaxOwnerRepositories/100 {
+			t.Errorf("%s: sent %d requests; want at most %d", tc.name, n, ports.MaxOwnerRepositories/100)
+		}
+	}
+}
+
+// An empty token or owner, an owner that is not a login and a host of another kind are refused
+// before anything is sent, and a token GitHub echoes is in no reason.
+func TestOwnerAccess_Refusals(t *testing.T) {
+	t.Parallel()
+
+	srv, paths := ownerGitHub(t, ownerRepos(acmeOwner, 1, 1))
+	c := New(Config{APIURL: srv.URL})
+
+	for _, bad := range []struct {
+		host         domain.CodeHost
+		token, owner string
+	}{
+		{gitHubDotCom, "", acmeOwner},
+		{gitHubDotCom, token, ""},
+		{gitHubDotCom, token, "../user"},
+		{domain.BuiltInCodeHosts()[1], token, acmeOwner},
+		{domain.CodeHost{Kind: domain.CodeHostGitHub}, token, acmeOwner},
+	} {
+		if _, err := c.OwnerAccess(t.Context(), bad.host, bad.token, bad.owner); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("OwnerAccess(%+v, %q) err = %v; want domain.ErrInvalid", bad.host, bad.owner, err)
+		}
+	}
+
+	if n := len(paths()); n != 0 {
+		t.Errorf("sent %d requests; want none", n)
+	}
+
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{message: "token " + token + " lacks a scope"})
+	}))
+	t.Cleanup(echo.Close)
+
+	got, err := New(Config{APIURL: echo.URL}).OwnerAccess(t.Context(), gitHubDotCom, token, acmeOwner)
+	if err != nil || got.Readable != 0 || got.Reason == "" || strings.Contains(got.Reason, token) {
+		t.Errorf("OwnerAccess with an echoed token = %+v, %v; want a refusal without the token", got, err)
+	}
+}
+
+// A redirect is not followed and is a refusal; a host that does not answer, or answers 5xx, is
+// an error.
+func TestOwnerAccess_RedirectsAndFailures(t *testing.T) {
+	t.Parallel()
+
+	var leaked atomic.Bool
+
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked.Store(leaked.Load() || r.Header.Get("Authorization") != "")
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect) //nolint:gosec // the redirect under test
+	}))
+	t.Cleanup(redirect.Close)
+
+	got, err := New(Config{APIURL: redirect.URL}).OwnerAccess(t.Context(), gitHubDotCom, token, acmeOwner)
+	if err != nil || got.Readable != 0 || leaked.Load() {
+		t.Errorf("OwnerAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a refusal and no token sent", got, err, leaked.Load())
+	}
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(failing.Close)
+
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+
+	for name, api := range map[string]string{"502": failing.URL, "no answer": dead.URL} {
+		if _, err := New(Config{APIURL: api}).OwnerAccess(t.Context(), gitHubDotCom, token, acmeOwner); err == nil {
+			t.Errorf("a host with %s: err = nil; want an error", name)
+		}
 	}
 }

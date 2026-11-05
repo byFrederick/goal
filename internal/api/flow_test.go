@@ -508,7 +508,7 @@ func TestAPI_BoardLine(t *testing.T) {
 	want := gen.BoardLine{
 		Status:   gen.BoardLineStatusRunning,
 		Wip:      gen.LineWip{InProgress: 1, Limit: &wipLimit},
-		Release:  gen.LineRelease{Policy: gen.DrumBufferRope, Enforced: false, Drum: &drum, Buffer: &buffer, InBuffer: 2},
+		Release:  gen.LineRelease{Policy: gen.LineReleasePolicyDrumBufferRope, Enforced: false, Drum: &drum, Buffer: &buffer, InBuffer: 2},
 		Expedite: &gen.LineExpedite{Limit: &limit, InUse: 1},
 		Budget:   &gen.LineBudget{WeeklyUsd: 70, SpentUsd: 30, Exhausted: false},
 	}

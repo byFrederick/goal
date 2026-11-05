@@ -562,7 +562,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications, NotificationSettings: h.notifySettings, SlackMessenger: h.slack,
 		DraftRequests: h.drafts,
-		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
+		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, RepositoryTests: repositoryTestsOf(testOrg, acmeID, lineID), Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity

@@ -30,12 +30,12 @@ Flags: `--compose`.
 ## goal run
 
 ```text
-goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach] [--at <time> | --in <wait>] [--after <item>]...
+goal run <factory> "<brief>" [--type T] [--body B] [--priority N] [--detach] [--at <time> | --in <wait>] [--after <item>]... [--repo <repository>]...
 ```
 
-submit a work item and follow it until a human or done (--type: one of the factory's work types; default its first, none when it declares none); with a start it waits at the first station and is not followed: --at a time (RFC 3339, or 2026-11-05T09:00 in your time zone), --in a wait (36h, 7d, 2w), --after an item that must be done first (repeatable); at most 365 days ahead
+submit a work item and follow it until a human or done (--type: one of the factory's work types; default its first, none when it declares none); with a start it waits at the first station and is not followed: --at a time (RFC 3339, or 2026-11-05T09:00 in your time zone), --in a wait (36h, 7d, 2w), --after an item that must be done first (repeatable); at most 365 days ahead. --repo names a repository it works on (repeatable, at most 10): an entry of the factory's runtime.repositories, owner/name, host/owner/name or an https URL; none uses the default entry's
 
-Flags: `--type T`, `--body B`, `--priority N`, `--detach`, `--at <time>`, `--in <wait>`, `--after <item>`.
+Flags: `--type T`, `--body B`, `--priority N`, `--detach`, `--at <time>`, `--in <wait>`, `--after <item>`, `--repo <repository>`.
 
 ## goal follow
 

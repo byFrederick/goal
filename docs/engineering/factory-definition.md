@@ -333,6 +333,8 @@ Publish then runs the secrets check (`authoring.SecretsCheck`, `internal/authori
 | `knowledge-source-unknown`, `knowledge-secret-not-in-scope`, `knowledge-copies-checkout` | see [Knowledge](#knowledge-knowledgesources) | a source in `knowledge.sources` |
 | `merge-needs-code-host` | error | a station has `action: merge` and no repository that writes has a `token` |
 | `repository-host-unlisted` | error | a `runtime.repository` or `runtime.repositories` URL's host, with its port, is neither built in (`github.com`, `gitlab.com`) nor one of the organization's code hosts (`SecretsCheck.Hosts`) |
+| `github-tools-not-read-only` | warning | an agent whose code is `read`, or a trigger check's agent, has an environment with a GitHub MCP server (`config.MCPServer.GitHub`: a remote server on `api.githubcopilot.com`, or a stdio command `github-mcp-server`) whose latest passing environment test lists a tool without `readOnlyHint` that the server's `tools` resolve to `allow` (`domain.ResolveToolMode`); located at `spec.agents[i].code` or the trigger's `check.agent`, naming up to 5 tools (`SecretsCheck.Tests`) |
+| `github-tools-unknown` | warning | such a GitHub server has no kept environment test, or its latest one failed |
 
 `plain-key` carries the fix "Move to Secrets", which replaces the value with a reference named after the variable in kebab case (`GH_TOKEN` becomes `{{gh-token}}`). A problem in an environment file has the section `environments` and the pointer `/environments/<name>/<keys below spec>`; the Form view does not show that section yet.
 

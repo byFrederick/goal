@@ -2,10 +2,12 @@
 // from the goald host for one project on a GitLab host of the organization's list
 // (domain.CodeRepository) and the access token that signs in to it (ADR 0041, decision 7).
 //
-// It reads merge requests, merges them, rebases them on their target and deletes branches, and
-// reads a branch's head and the commits between two commits with their files, nothing else. A project on a host of another kind, and a merge request URL that is not the
-// project's (https://<host>/<namespace>/<project>/-/merge_requests/<iid>), are refused before
-// anything is sent. The API is the host's domain.CodeHostAPIBase, https://<host>/api/v4. A merge
+// It reads merge requests, merges them, rebases them on their target, deletes branches, reads a
+// branch's head and the commits between two commits with their files, and checks what a token can
+// do in one project or in all of a group's or user's, nothing else. A project on a host of another
+// kind, and a merge request URL that is not the project's
+// (https://<host>/<namespace>/<project>/-/merge_requests/<iid>), are refused before anything is
+// sent. The API is the host's domain.CodeHostAPIBase, https://<host>/api/v4. A merge
 // names the head SHA it was asked for, so GitLab refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
 // conflicts, head moved) come back as ports.ErrNotMergeable. GitLab's rebase takes no expected
 // head: UpdateBranch reads the merge request first and rebases only if its head is the one it
@@ -325,12 +327,15 @@ func (cl *Client) DeleteBranch(ctx context.Context, repo domain.CodeRepository, 
 // only for requests that got no answer or an unreadable one. The token is scrubbed from the
 // message and from errors.
 func (cl *Client) call(ctx context.Context, m mergeRequest, method, path string, body, out any) (int, string, error) {
-	return cl.exchange(ctx, m, method, path, body, out, maxBodyBytes)
+	status, msg, _, err := cl.exchange(ctx, m, method, path, body, out, maxBodyBytes)
+
+	return status, msg, err
 }
 
-// exchange is call with its answer bounded by limit bytes; a longer answer is an error.
-func (cl *Client) exchange(ctx context.Context, m mergeRequest, method, path string, body, out any, limit int64) (int, string, error) {
-	status, msg, err := cl.send(ctx, m, method, path, body, out, limit)
+// exchange is call that also returns the answer's headers, with its answer bounded by limit
+// bytes; a longer answer is an error.
+func (cl *Client) exchange(ctx context.Context, m mergeRequest, method, path string, body, out any, limit int64) (int, string, http.Header, error) {
+	status, msg, header, err := cl.send(ctx, m, method, path, body, out, limit)
 
 	scrub := func(s string) string { return strings.ReplaceAll(s, m.token, "[redacted]") }
 
@@ -338,16 +343,16 @@ func (cl *Client) exchange(ctx context.Context, m mergeRequest, method, path str
 		err = errors.New(scrub(err.Error()))
 	}
 
-	return status, scrub(msg), err
+	return status, scrub(msg), header, err
 }
 
-func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string, body, out any, limit int64) (int, string, error) {
+func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string, body, out any, limit int64) (int, string, http.Header, error) {
 	var reader io.Reader
 
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return 0, "", err
+			return 0, "", nil, err
 		}
 
 		reader = bytes.NewReader(b)
@@ -355,7 +360,7 @@ func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string,
 
 	req, err := http.NewRequestWithContext(ctx, method, m.api+path, reader)
 	if err != nil {
-		return 0, "", err
+		return 0, "", nil, err
 	}
 
 	req.Header.Set("Accept", "application/json")
@@ -368,34 +373,34 @@ func (cl *Client) send(ctx context.Context, m mergeRequest, method, path string,
 
 	res, err := cl.http.Do(req)
 	if err != nil {
-		return 0, "", err
+		return 0, "", nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 
 	raw, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
 	if err != nil {
-		return 0, "", fmt.Errorf("read answer: %w", err)
+		return 0, "", nil, fmt.Errorf("read answer: %w", err)
 	}
 
 	if int64(len(raw)) > limit {
-		return 0, "", fmt.Errorf("read answer (%d): longer than %d bytes", res.StatusCode, limit)
+		return 0, "", nil, fmt.Errorf("read answer (%d): longer than %d bytes", res.StatusCode, limit)
 	}
 
 	if len(bytes.TrimSpace(raw)) == 0 || !strings.Contains(res.Header.Get("Content-Type"), "json") {
-		return res.StatusCode, "", nil
+		return res.StatusCode, "", res.Header, nil
 	}
 
 	if res.StatusCode >= http.StatusMultipleChoices {
-		return res.StatusCode, problem(raw), nil
+		return res.StatusCode, problem(raw), res.Header, nil
 	}
 
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {
-			return 0, "", fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
+			return 0, "", nil, fmt.Errorf("decode answer (%d): %w", res.StatusCode, err)
 		}
 	}
 
-	return res.StatusCode, "", nil
+	return res.StatusCode, "", res.Header, nil
 }
 
 // problem is the reason GitLab gives in an error answer: its message (a string, or an object of
@@ -424,7 +429,7 @@ func problem(raw []byte) string {
 
 // get reads path into out, its answer bounded by limit: a 404 is ports.ErrNotFound.
 func (cl *Client) get(ctx context.Context, m mergeRequest, path string, out any, limit int64) error {
-	status, msg, err := cl.exchange(ctx, m, http.MethodGet, path, nil, out, limit)
+	status, msg, _, err := cl.exchange(ctx, m, http.MethodGet, path, nil, out, limit)
 
 	switch {
 	case err != nil:
@@ -622,5 +627,126 @@ func pushCheck(level int, project string) ports.AccessCheck {
 		return ports.AccessCheck{Reason: "the token is no member of " + project + ", so it cannot push"}
 	default:
 		return ports.AccessCheck{Reason: fmt.Sprintf("the token has %s access (%d) to %s; pushing needs Developer (30)", role, level, project)}
+	}
+}
+
+// checkOwner refuses, before anything is sent, a host that is not a GitLab one, an empty token
+// and an owner that is no namespace path, each wrapping domain.ErrInvalid; it names the API that
+// reaches the host.
+func (cl *Client) checkOwner(host domain.CodeHost, token, owner string) (mergeRequest, error) {
+	switch {
+	case host.Kind != domain.CodeHostGitLab || host.Host == "":
+		return mergeRequest{}, fmt.Errorf("%s is not a GitLab host: %w", host.Host, domain.ErrInvalid)
+	case token == "":
+		return mergeRequest{}, fmt.Errorf("%s: no token: %w", owner, domain.ErrInvalid)
+	case !ownerPath(owner):
+		return mergeRequest{}, fmt.Errorf("%q is not a GitLab group or user: %w", owner, domain.ErrInvalid)
+	}
+
+	m := mergeRequest{api: cl.api, token: token}
+	if m.api == "" {
+		m.api = domain.CodeHostAPIBase(host)
+	}
+
+	return m, nil
+}
+
+// ownerPath is a GitLab namespace's full path: a user, or a group and its subgroups.
+func ownerPath(owner string) bool {
+	segs := strings.Split(owner, "/")
+
+	return !slices.ContainsFunc(segs, func(s string) bool { return !projectSegment.MatchString(s) || strings.Trim(s, ".") == "" })
+}
+
+// OwnerAccess implements ports.CodeHost with GET /groups/:id/projects?include_subgroups=true, or
+// GET /users/:username/projects when GitLab knows no group at owner (a path without subgroups):
+// the projects it lists are the readable ones. A second listing with min_access_level=30 counts
+// those the token can push to (Developer or more, as RepositoryAccess). Each listing reads 100 a
+// page, at most ports.MaxOwnerRepositories, and sets Truncated when GitLab names a page after
+// them. A refusal (401, 403, an unknown owner, a redirect) is in the result with GitLab's
+// message; a 5xx or no answer is an error.
+func (cl *Client) OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (ports.OwnerAccess, error) {
+	m, err := cl.checkOwner(host, token, owner)
+	if err != nil {
+		return ports.OwnerAccess{}, fmt.Errorf("owner access: %w", err)
+	}
+
+	listing, query := "/groups/"+url.PathEscape(owner)+"/projects", "&include_subgroups=true"
+
+	read, err := cl.countProjects(ctx, m, listing, query)
+	if err == nil && read.status == http.StatusNotFound && !strings.Contains(owner, "/") {
+		listing, query = "/users/"+url.PathEscape(owner)+"/projects", ""
+		read, err = cl.countProjects(ctx, m, listing, query)
+	}
+
+	switch {
+	case err != nil:
+		return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: %w", owner, err)
+	case read.status == http.StatusNotFound:
+		return ports.OwnerAccess{Reason: "GitLab knows no group or user " + owner + " the token can see"}, nil
+	case read.status != http.StatusOK:
+		return ports.OwnerAccess{Reason: strings.TrimSpace(fmt.Sprintf("GitLab answered %d: %s", read.status, read.msg))}, nil
+	case read.n == 0:
+		return ports.OwnerAccess{Reason: "GitLab shows the token no projects in " + owner}, nil
+	}
+
+	push, err := cl.countProjects(ctx, m, listing, query+"&min_access_level="+strconv.Itoa(pushLevel))
+
+	switch {
+	case err != nil:
+		return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: pushable projects: %w", owner, err)
+	case push.status != http.StatusOK:
+		return ports.OwnerAccess{}, fmt.Errorf("owner access of %s: pushable projects: GitLab answered %d %s", owner, push.status, push.msg)
+	}
+
+	return ports.OwnerAccess{
+		Readable: read.n, Pushable: push.n, Truncated: read.truncated || push.truncated,
+		Reason: fmt.Sprintf("GitLab shows the token %d projects in %s, %d it can push to", read.n, owner, push.n),
+	}, nil
+}
+
+// projectCount is what countProjects found: the projects counted, whether it stopped before the
+// last page, or GitLab's refusal when status is not 200.
+type projectCount struct {
+	n         int
+	truncated bool
+	status    int
+	msg       string
+}
+
+// countProjects counts the projects of listing (a path), filtered by query (parameters, each
+// after an &), 100 a page, reading at
+// most ports.MaxOwnerRepositories of them; err is a 5xx or no answer.
+func (cl *Client) countProjects(ctx context.Context, m mergeRequest, listing, query string) (projectCount, error) {
+	var out projectCount
+
+	for page := 1; ; page++ {
+		var projects []struct {
+			ID int64 `json:"id"`
+		}
+
+		status, msg, header, err := cl.exchange(ctx, m, http.MethodGet, listing+"?simple=true&per_page=100&page="+strconv.Itoa(page)+query, nil, &projects, maxBodyBytes)
+
+		switch {
+		case err != nil:
+			return projectCount{}, err
+		case status >= http.StatusInternalServerError:
+			return projectCount{}, fmt.Errorf("GitLab answered %d %s", status, msg)
+		case status != http.StatusOK:
+			return projectCount{status: status, msg: msg}, nil
+		}
+
+		out.status = status
+		out.n += len(projects)
+
+		if header.Get("X-Next-Page") == "" {
+			return out, nil
+		}
+
+		if page*100 >= ports.MaxOwnerRepositories {
+			out.truncated = true
+
+			return out, nil
+		}
 	}
 }
