@@ -2,12 +2,14 @@ package storetest
 
 import (
 	"fmt"
+	"slices"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // repositoriesTests cover items' branches and repositories (ADR 0041 decisions 4 and 6).
@@ -21,6 +23,10 @@ var repositoriesTests = []struct {
 	{"ItemRepositories_StartFollowUpTakesItsSources", testStartFollowUpTakesItsSourcesRepositories},
 	{"ItemRepositories_TriageGainsJoiningSourcesUpToTheCap", testTriageGainsJoiningSourcesRepositories},
 	{"OpenItemRepositories_OnlyOpenItems", testOpenItemRepositoriesOnlyOpenItems},
+	{"ItemRepositories_JoinAppendsUpToTheCap", testJoinItemRepositoriesAppendsUpToTheCap},
+	{"ItemRepositories_PushedJoinAtFinish", testPushedRepositoriesJoinAtFinish},
+	{"ItemRepositories_ReadOnlyStaysOnRun", testReadOnlyRepositoriesStayOnRun},
+	{"ItemRepositories_PushPastCapStaysOnRun", testPushPastCapStaysOnRun},
 }
 
 // The repositories the cases name.
@@ -303,5 +309,158 @@ func testOpenItemRepositoriesOnlyOpenItems(f *fixture) {
 
 	if got, err := f.Store.OpenItemRepositories(domain.WithOrg(t.Context(), f.NewOrg(t)), f.factory); err != nil || len(got) != 0 {
 		t.Errorf("another organization's OpenItemRepositories = %+v, %v; want none", got, err)
+	}
+}
+
+// JoinItemRepositories appends the keys an item lacks, joined as given with the next ordinals,
+// until it has MaxItemRepositories, and leaves the rest out without an error; an unknown item
+// and another organization's are ErrNotFound.
+func testJoinItemRepositoriesAppendsUpToTheCap(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{Title: "Old item"})
+	join := func(keys ...string) {
+		t.Helper()
+
+		if err := f.Store.JoinItemRepositories(f.ctx(t), it.ID, domain.JoinedDefault, keys, t1); err != nil {
+			t.Fatalf("JoinItemRepositories: %v", err)
+		}
+	}
+
+	join(repoWeb)
+	join(repoWeb, repoAPI)
+
+	want := []domain.ItemRepository{
+		{Repo: repoWeb, Joined: domain.JoinedDefault, JoinedAt: t1},
+		{Repo: repoAPI, Joined: domain.JoinedDefault, JoinedAt: t1, Ordinal: 1},
+	}
+	if got := f.itemRepositories(t, it.ID); !reflect.DeepEqual(got, want) {
+		t.Errorf("repositories =\n%+v\nwant\n%+v", got, want)
+	}
+
+	many := make([]string, 0, domain.MaxItemRepositories)
+	for i := range domain.MaxItemRepositories {
+		many = append(many, fmt.Sprintf("github.com/acme/r%d", i))
+	}
+
+	join(many...)
+
+	if got := f.itemRepositories(t, it.ID); len(got) != domain.MaxItemRepositories || got[2].Repo != many[0] {
+		t.Errorf("after joining past the cap = %v; want %d, the first two kept", domain.ItemRepositoryKeys(got), domain.MaxItemRepositories)
+	}
+
+	err := f.Store.JoinItemRepositories(f.ctx(t), missingItem, domain.JoinedDefault, []string{repoWeb}, t1)
+	expect(t, "JoinItemRepositories of an unknown item", err, ports.ErrNotFound)
+
+	err = f.Store.JoinItemRepositories(f.otherOrg(t).ctx(t), it.ID, domain.JoinedDefault, []string{repoOps}, t1)
+	expect(t, "JoinItemRepositories of another org's item", err, ports.ErrNotFound)
+}
+
+// pushedRun starts a run of item at t1 that checked out in's repositories and finishes it at
+// endedAt with pushed.
+func (f *fixture) pushedRun(t *testing.T, item domain.ItemID, in, pushed []domain.RunRepository, endedAt time.Time) domain.Run {
+	t.Helper()
+
+	id := f.startRun(t, item, t1)
+	if err := f.Store.RecordRunInput(f.ctx(t), id, domain.RunInput{Repositories: in}); err != nil {
+		t.Fatalf("RecordRunInput: %v", err)
+	}
+
+	if err := f.Store.FinishRun(f.ctx(t), id, domain.RunResult{Status: domain.RunSucceeded, Repositories: pushed}, endedAt); err != nil {
+		t.Fatalf("FinishRun: %v", err)
+	}
+
+	run, err := f.Store.Run(f.ctx(t), id)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	return run
+}
+
+// runRepos are the repositories of a run's rows, in the order recorded.
+func runRepos(rs []domain.RunRepository) []string {
+	out := make([]string, len(rs))
+	for i, r := range rs {
+		out[i] = r.Repo
+	}
+
+	return out
+}
+
+// A run that pushes a change to a second repository adds it to its item as joined push, at the
+// run's end, with the next ordinal; the item's first repository stays first.
+func testPushedRepositoriesJoinAtFinish(f *fixture) {
+	t := f.t
+	ended := t1.Add(time.Hour)
+
+	it := f.create(t, domain.NewItem{Title: "Push", Repositories: filed(repoAPI)})
+	f.pushedRun(t, it.ID,
+		[]domain.RunRepository{{Repo: repoAPI, BranchHead: "a1"}, {Repo: repoWeb, BranchHead: "w1"}},
+		[]domain.RunRepository{{Repo: repoAPI, PushedHead: "a2"}, {Repo: repoWeb, PushedHead: "w2"}}, ended)
+
+	rows := f.itemRepositories(t, it.ID)
+	want := []domain.ItemRepository{
+		{Repo: repoAPI, Joined: domain.JoinedFiling, JoinedAt: t0, Ordinal: 0},
+		{Repo: repoWeb, Joined: domain.JoinedPush, JoinedAt: ended, Ordinal: 1},
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("repositories =\n%+v\nwant\n%+v", rows, want)
+	}
+
+	if first, ok := domain.ItemRepositories(rows).First(); !ok || first.Repo != repoAPI {
+		t.Errorf("first = %+v, %t; want %s", first, ok, repoAPI)
+	}
+}
+
+// A repository the run fetched and did not write, one it pushed its branch head back to, and a
+// migrated row without a repository join no item; the run keeps their rows.
+func testReadOnlyRepositoriesStayOnRun(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{Title: "Read", Repositories: filed(repoAPI)})
+	run := f.pushedRun(t, it.ID,
+		[]domain.RunRepository{{Repo: repoAPI, BranchHead: "a1"}, {Repo: repoWeb, BranchHead: "w1"}, {Repo: repoOps, BranchHead: "o1"}},
+		[]domain.RunRepository{{Repo: repoWeb, PushedHead: "w1"}, {Repo: repoOps}, {PushedHead: "x1", Wrote: true}}, t1.Add(time.Hour))
+
+	if got := f.repoKeys(t, it.ID); !reflect.DeepEqual(got, []string{repoAPI}) {
+		t.Errorf("repositories = %v; want only [%s]", got, repoAPI)
+	}
+
+	if got, want := runRepos(run.Input.Repositories), []string{repoAPI, repoWeb, repoOps, ""}; !reflect.DeepEqual(got, want) {
+		t.Errorf("run's repositories = %q; want %q", got, want)
+	}
+}
+
+// An item that has MaxItemRepositories gains none at finish, and the run keeps its row for the
+// one past the cap; a Jonah run, which works no item, joins nothing and finishes.
+func testPushPastCapStaysOnRun(f *fixture) {
+	t := f.t
+
+	many := make([]string, 0, domain.MaxItemRepositories)
+	for i := range domain.MaxItemRepositories {
+		many = append(many, fmt.Sprintf("github.com/acme/r%d", i))
+	}
+
+	it := f.create(t, domain.NewItem{Title: "Full", Repositories: filed(many...)})
+	run := f.pushedRun(t, it.ID, []domain.RunRepository{{Repo: repoOps, BranchHead: "o1"}},
+		[]domain.RunRepository{{Repo: repoOps, PushedHead: "o2"}}, t1.Add(time.Hour))
+
+	if got := f.repoKeys(t, it.ID); !reflect.DeepEqual(got, many) {
+		t.Errorf("repositories = %v; want the %d filed", got, domain.MaxItemRepositories)
+	}
+
+	if !slices.ContainsFunc(run.Result.Repositories, func(r domain.RunRepository) bool { return r.Repo == repoOps && r.Wrote }) {
+		t.Errorf("run's pushed repositories = %+v; want %s, wrote", run.Result.Repositories, repoOps)
+	}
+
+	jonah, err := f.Store.StartRun(f.ctx(t), ports.NewRun{FactoryID: f.factory, Agent: agJonah, StartedAt: t1, Kind: domain.RunKindJonah})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, Repositories: []domain.RunRepository{{Repo: repoOps, PushedHead: "o3", Wrote: true}}}
+	if err := f.Store.FinishRun(f.ctx(t), jonah, res, t1.Add(time.Hour)); err != nil {
+		t.Errorf("FinishRun of a Jonah run: %v", err)
 	}
 }

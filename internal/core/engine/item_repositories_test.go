@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -126,5 +127,67 @@ func TestAssemble_RefusedRepositoryBlocks(t *testing.T) {
 	ev := h.eventsOf(it.ID, domain.EventBlocked)
 	if len(ev) != 1 || !strings.Contains(fmt.Sprint(ev[0].Data["reason"]), `"acme/unknown"`) {
 		t.Errorf("blocked events %+v; want one quoting the repository", ev)
+	}
+}
+
+// The first run start on an item with no repositories records the default entry's as joined
+// default, so its next run starts there even after the line's default entry changes; an item on a
+// line without a default entry gets none.
+func TestEngine_RunStartKeepsTheDefaultEntrysRepository(t *testing.T) {
+	t.Parallel()
+
+	line := withRepositories(lineOf(agentStation(stWork, agWorker, 1, 1), agentStation(stReview, agReviewer, 1, 1)))
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+
+	// An item filed with no row, as one filed before repositories or by an old instance.
+	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
+		FactoryID: factoryID, Type: typeFeature, Title: "Old item", Station: stWork, State: domain.StateQueued,
+		Class: domain.ClassStandard, CreatedAt: t0.Add(-time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	rows, err := h.store.ItemRepositories(inOrg(t), it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || rows[0].Repo != keyAPI || rows[0].Joined != domain.JoinedDefault || rows[0].Ordinal != 0 {
+		t.Fatalf("repositories after the first run start = %+v; want %s joined default", rows, keyAPI)
+	}
+
+	moved := withRepositories(lineOf(agentStation(stWork, agWorker, 1, 1), agentStation(stReview, agReviewer, 1, 1)))
+	moved.Runtime.Repositories[0].Default = false
+	moved.Runtime.Repositories = append(moved.Runtime.Repositories, domain.RepositoryEntry{
+		Name: "web", URL: "https://" + keyWeb, Access: "write", Default: true,
+	})
+	h.setLines(t, moved)
+
+	h.step(t)
+
+	runs := h.worker.Runs()
+	if len(runs) != 2 {
+		t.Fatalf("%d runs; want one per station", len(runs))
+	}
+
+	if feedback := runs[1].Env["GOAL_FEEDBACK"]; !strings.Contains(feedback, "/acme/api at /workspace") {
+		t.Errorf("second run's workspace note %q; want %s at /workspace, the recorded repository", feedback, keyAPI)
+	}
+
+	if got := h.repoKeys(t, it.ID); !slices.Equal(got, []string{keyAPI}) {
+		t.Errorf("repositories after the default moved = %v; want [%s]", got, keyAPI)
+	}
+
+	none := lineOf(agentStation(stWork, agWorker, 1, 1))
+	h2 := newHarness(t, none, porttest.Succeed(`{}`))
+	bare := h2.queuedAt(t, stWork, "No default")
+
+	h2.step(t)
+
+	if got := h2.repoKeys(t, bare.ID); len(got) != 0 {
+		t.Errorf("an item on a line without a default entry has %v; want none", got)
 	}
 }

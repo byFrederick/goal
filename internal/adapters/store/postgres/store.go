@@ -824,6 +824,16 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			return nil
 		}
 
+		// The repositories the run wrote to join its item (ADR 0041 decision 5), under its lock.
+		wrote, err := wroteRepositories(ctx, q, run)
+		if err == nil {
+			err = joinItemRepositories(ctx, q, *item, domain.JoinedPush, wrote, endedAt)
+		}
+
+		if err != nil {
+			return err
+		}
+
 		if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: *item, CostUsd: res.CostUSD}); err != nil {
 			return err
 		}
