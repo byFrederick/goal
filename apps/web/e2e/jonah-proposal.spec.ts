@@ -2,6 +2,7 @@
 // draft and Reject records a reason. Not run in the box: Playwright needs a browser, which the box does not have.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -12,10 +13,41 @@ test('the page shows proposal 7 as pictured: the estimate, the two diffs, the fo
 }) => {
   await page.goto('/o/acme/f/software/jonah/proposals/7');
   await expect(page.getByRole('heading', { level: 1, name: /Ask frontend-engineer for a screenshot/ })).toBeVisible();
-  await expect(page.getByText('Waiting for your review')).toBeVisible();
+  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
   await expect(page.getByText('2 files, v21 to v22')).toBeVisible();
   await expect(page.getByRole('region', { name: /Why/ })).toBeVisible();
   await expect(page.getByText('v22; running items keep v21')).toBeVisible();
+
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('the memory proposal shows its facts, the people it quotes and that no try ran', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/proposals/10');
+  await expect(
+    page.getByRole('heading', { level: 1, name: /Add 3 facts from answers, notes and send-backs/ }),
+  ).toBeVisible();
+  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+  await expect(page.getByText('Changes to factory memory')).toBeVisible();
+  await expect(page.getByText('Each quotes a person')).toBeVisible();
+  await expect(page.getByText('Memory changes run no try')).toBeVisible();
+
+  await expectAccessible(page);
+  await expectNoHorizontalScroll(page);
+});
+
+test('the model proposal shows its tries, the line result and the tried items', async ({ page }) => {
+  await page.goto('/o/acme/f/software/jonah/proposals/10');
+  await expect(page.getByRole('heading', { level: 1, name: 'frontend-engineer on claude-haiku-5-5' })).toBeVisible();
+  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
+  await expect(page.getByText('Tries passed', { exact: true })).toBeVisible();
+  await expect(page.getByText('11 of 21', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('On the line', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'On the line' })).toBeVisible();
+  await expect(page.getByText('5 of 7', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Tried on past items', { exact: true }).first()).toBeVisible();
+  const table = page.getByRole('table', { name: 'Tries per item' });
+  await expect(table.getByRole('rowheader', { name: /Phone fixes/ })).toBeVisible();
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -87,14 +119,14 @@ test('the page fits 375 and 768 px and renders in dark mode', async ({ page }) =
   for (const width of [375, 768]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/o/acme/f/software/jonah/proposals/7');
-    await expect(page.getByText('Waiting for your review')).toBeVisible();
+    await expect(page.getByText('Waiting for your review').first()).toBeVisible();
     await expectNoHorizontalScroll(page);
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/o/acme/f/software/jonah/proposals/7');
-  await expect(page.getByText('Waiting for your review')).toBeVisible();
+  await expect(page.getByText('Waiting for your review').first()).toBeVisible();
   await expectAccessible(page);
 });
 
@@ -111,3 +143,65 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('the tries ⓘ is 44×44 and does not lie over Try again at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  const again = page.getByRole('button', { name: 'Try again' });
+  await expect(again).toBeVisible();
+  for (const name of ['How tries work', 'How model tries work']) {
+    const tip = page.getByRole('button', { name });
+    if ((await tip.count()) === 0) continue;
+    await expectTarget44(tip, name);
+    await expectNoOverlap(tip, again, `${name} and Try again`);
+  }
+});
+
+// Not run in the box: Playwright needs a browser, which the box does not have.
+for (const width of [375, 768, 1440]) {
+  test(`a model proposal shows no evidence lines at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/software/jonah/proposals');
+    const card = page.getByRole('article', { name: /frontend-engineer on claude-haiku-5-5/ });
+    await expect(card).toBeVisible();
+    await expect(card.getByText(/runs sent back/)).toHaveCount(0);
+
+    await page.goto('/o/acme/f/software/jonah/proposals/10');
+    await expect(page.getByRole('heading', { level: 1, name: /frontend-engineer on claude-haiku-5-5/ })).toBeVisible();
+    await expect(page.getByText('Found in')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Why/ })).toHaveCount(0);
+    await expect(page.getByText(/runs sent back/)).toHaveCount(0);
+  });
+}
+
+test('Reject with a reason works from More actions at 375 px', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Reject with a reason' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Reject with a reason' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Reason' }).fill('Put the screenshot rule in the pull request template.');
+  await dialog.getByRole('button', { name: 'Reject proposal' }).click();
+  await expect(page.getByText(/^Rejected/).first()).toBeVisible();
+});
+
+test('at 768 px the last crumb stays visible and overlaps no action', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/o/acme/f/software/jonah/proposals/7');
+  const bar = page.getByRole('banner');
+  const crumb = await bar.getByText('Proposal 7', { exact: true }).boundingBox();
+  expect(crumb).not.toBeNull();
+  expect(crumb?.width ?? 0).toBeGreaterThan(40);
+  for (const name of ['Edit', 'Reject with a reason', 'Approve and publish v22']) {
+    const box = await bar
+      .getByRole('button', { name })
+      .or(bar.getByRole('link', { name, exact: true }))
+      .first()
+      .boundingBox();
+    expect(box).not.toBeNull();
+    const apart =
+      (crumb?.x ?? 0) + (crumb?.width ?? 0) <= (box?.x ?? 0) || (crumb?.y ?? 0) + (crumb?.height ?? 0) <= (box?.y ?? 0);
+    expect(apart).toBe(true);
+  }
+});

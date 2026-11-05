@@ -2,7 +2,11 @@
 # task tf:plan against production's R2 state with the credentials of the GitHub environment
 # production (ADR 0010, amendment: one environment for plan and apply), posted as one pull request
 # comment that every push updates. It changes nothing: it only plans, and -lock=false keeps a pull
-# request's plan from holding the state lock against an apply.
+# request's plan from holding the state lock against an apply. The plan is saved to a file so the
+# bound-secrets guard (deploy/terraform/scripts/bound-secrets-guard.sh) can fail the job when it
+# destroys or replaces a Secrets Store secret the deployed goal Worker binds; the guard reads the
+# Worker's bindings with CLOUDFLARE_DEPLOY_API_TOKEN, given to that one read only, and the saved
+# plan is deleted at the end.
 # Only branches of this repository get a plan, never a fork (ADR 0010 rejects the fork trigger).
 # Until the owner has done bootstrap step 13 (docs/engineering/cloudflare-operations.md), the job
 # fails at the Google step: the environment's variables and the federation do not exist yet.
@@ -88,8 +92,38 @@ jobs:
         # --silent keeps task's own command echo out of the comment; terraform's output stays.
         run: |
           set +e -o pipefail
-          task --silent tf:plan -- -lock=false -input=false -no-color 2>&1 | tee "$RUNNER_TEMP/plan.txt"
+          task --silent tf:plan -- -lock=false -input=false -no-color -out=tfplan 2>&1 | tee "$RUNNER_TEMP/plan.txt"
           exit "${PIPESTATUS[0]}"
+      # The bindings of the goal Worker that production runs now, which may be older than main's
+      # wrangler.jsonc: Terraform applies on merge, the Worker deploys later. Names only, no values.
+      - name: Read the deployed goal Worker's bindings
+        id: bindings
+        env:
+          CLOUDFLARE_DEPLOY_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          umask 077
+          curl --fail --silent --show-error --max-time 30 \
+            -H "Authorization: Bearer $CLOUDFLARE_DEPLOY_API_TOKEN" \
+            -o "$RUNNER_TEMP/worker-settings.json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/goal/settings"
+      # The plan's JSON holds sensitive values in the clear: it goes through a pipe, never to disk.
+      - name: Refuse to destroy a store secret the deployed Worker binds
+        id: guard
+        shell: bash
+        env:
+          GOOGLE_OAUTH_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GOAL_TF_STATE_ACCESS_KEY: ${{ secrets.GOAL_TF_STATE_ACCESS_KEY }}
+          GOAL_TF_STATE_SECRET_KEY: ${{ secrets.GOAL_TF_STATE_SECRET_KEY }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_ID }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+        run: |
+          set -o pipefail
+          task --silent tf:show -- -json tfplan \
+            | sh deploy/terraform/scripts/bound-secrets-guard.sh /dev/stdin "$RUNNER_TEMP/worker-settings.json" \
+            | tee "$RUNNER_TEMP/guard.txt"
       # Runs whenever the job was not cancelled, so a failed check or plan replaces the last plan
       # in the comment with what failed instead of leaving a stale one.
       - name: Post the plan as the pull request's one plan comment
@@ -101,6 +135,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CHECK_OUTCOME: ${{ steps.check.outcome }}
           PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          BINDINGS_OUTCOME: ${{ steps.bindings.outcome }}
+          GUARD_OUTCOME: ${{ steps.guard.outcome }}
         run: |
           marker='<!-- goal:terraform-plan -->'
           plan_file="$RUNNER_TEMP/plan.txt"
@@ -114,6 +150,11 @@ jobs:
             failure) status="failed" ;;
             *) status="did not run (task tf:check: $CHECK_OUTCOME)" ;;
           esac
+          case "$PLAN_OUTCOME/$BINDINGS_OUTCOME/$GUARD_OUTCOME" in
+            success/success/success) ;;
+            success/success/*) status="succeeded, but the bound-secrets guard refused it" ;;
+            success/*) status="succeeded, but the deployed Worker's bindings could not be read" ;;
+          esac
           summary=""
           if [ -s "$plan_file" ]; then
             summary="$(grep -m1 -E '^(Plan: |No changes\.|Error: |Changes to Outputs:)' "$plan_file" || true)"
@@ -125,6 +166,9 @@ jobs:
             printf 'Commit %s · [workflow run](%s)\n\n' "$HEAD_SHA" "$run_url"
             if [ -n "$summary" ]; then
               printf '**%s**\n\n' "$summary"
+            fi
+            if [ "$GUARD_OUTCOME" = failure ] && [ -s "$RUNNER_TEMP/guard.txt" ]; then
+              printf '%s\n\n' "$(sed 's/^::error title=[^:]*:://' "$RUNNER_TEMP/guard.txt")"
             fi
             if [ -s "$plan_file" ]; then
               printf '<details><summary>Plan output</summary>\n\n````text\n'
@@ -151,3 +195,6 @@ jobs:
           else
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -F "body=@$body" > /dev/null
           fi
+      - name: Delete the saved plan and the Worker's settings
+        if: always()
+        run: rm -f deploy/terraform/tfplan "$RUNNER_TEMP/worker-settings.json"

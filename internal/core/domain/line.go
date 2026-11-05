@@ -147,6 +147,10 @@ func (p JonahPolicy) Budget(s JonahSpend) JonahBudget {
 // moves on. A budget of 0, as for a line that spent nothing, is always exhausted.
 func (b JonahBudget) Exhausted() bool { return b.SpentUSD >= b.BudgetUSD }
 
+// LeftUSD is what the budget has left, in whole cents and never below 0: the amount Jonah's
+// estimates answer and compare with.
+func (b JonahBudget) LeftUSD() float64 { return RoundCents(max(b.BudgetUSD-b.SpentUSD, 0)) }
+
 // ReviewCap is the cost cap of a review run: what the budget has left, at most PerReviewUSD and
 // at least a cent.
 func (b JonahBudget) ReviewCap() float64 {

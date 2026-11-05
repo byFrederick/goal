@@ -1,7 +1,8 @@
 import { isCancelledError, useQueryErrorResetBoundary } from '@tanstack/react-query';
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
-import { ApiError } from '../api/client';
+import { ApiError, NetworkError } from '../api/client';
+import { InfoTip } from '../features/jonah/info-tip';
 import { Button } from '../ui/button';
 import { PageShape, PendingSkeleton } from './route-skeletons';
 
@@ -15,12 +16,15 @@ export function PendingScreen() {
 }
 
 /**
- * Why a load failed: goald refused it (an ApiError), the request never got an answer, or it was
- * cancelled (the page that started the fetch was left while it ran): that one is loaded again.
+ * Why a load failed: goald is unreachable (the request got no answer, or a gateway answered 502, 503
+ * or 504), goald refused it (another ApiError), it was cancelled (the page that started the fetch was
+ * left while it ran: that one is loaded again), or the page's own code crashed.
  */
-export function loadFailure(error: unknown): 'refused' | 'unreachable' | 'interrupted' {
+export function loadFailure(error: unknown): 'refused' | 'unreachable' | 'interrupted' | 'crashed' {
   if (isCancelledError(error)) return 'interrupted';
-  return error instanceof ApiError ? 'refused' : 'unreachable';
+  if (error instanceof NetworkError) return 'unreachable';
+  if (error instanceof ApiError) return [502, 503, 504].includes(error.status) ? 'unreachable' : 'refused';
+  return 'crashed';
 }
 
 const failureText = {
@@ -28,6 +32,7 @@ const failureText = {
     title: 'goald is not answering',
     body: 'Check that goald is running (goal up) and that this page is served by it or proxied to it.',
   },
+  crashed: { title: 'This page hit an error', body: '' },
   interrupted: { title: 'This view stopped loading', body: 'Its data was still loading when the page changed.' },
 };
 
@@ -55,20 +60,24 @@ export function ErrorScreen({ error, reset }: ErrorComponentProps) {
   const text =
     kind === 'interrupted'
       ? failureText.interrupted
-      : error instanceof ApiError
+      : kind === 'refused' && error instanceof ApiError
         ? { title: 'This view could not load', body: error.message }
-        : failureText.unreachable;
+        : kind === 'crashed'
+          ? failureText.crashed
+          : failureText.unreachable;
+  const detail = kind === 'crashed' && error instanceof Error ? error.message : '';
   return (
     <div
       role="alert"
       className="flex max-w-xl flex-col gap-3 rounded-card border border-rework-tint bg-rework-tint p-5"
     >
       <h1 className="m-0 text-xl font-medium text-rework-ink">{text.title}</h1>
-      <p className="m-0 text-[15px] leading-relaxed text-ink">{text.body}</p>
-      <div>
-        <Button variant="primary" onClick={retry}>
-          Try again
+      {text.body ? <p className="m-0 text-[15px] leading-relaxed text-ink">{text.body}</p> : null}
+      <div className="flex items-center gap-2">
+        <Button variant="primary" onClick={kind === 'crashed' ? () => window.location.reload() : retry}>
+          {kind === 'crashed' ? 'Reload' : 'Try again'}
         </Button>
+        {detail ? <InfoTip label="What went wrong">{detail}</InfoTip> : null}
       </div>
     </div>
   );

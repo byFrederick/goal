@@ -322,15 +322,15 @@ describe('the sidebar', () => {
     const sidebar = await nav();
 
     expect(within(sidebar).getByRole('link', { name: /Needs you/ }).textContent).toContain('waiting on you');
-    expect(within(sidebar).getByRole('link', { name: /sre factory, 3 waiting on you/ })).toBeTruthy();
-    expect(within(sidebar).getByRole('link', { name: /support factory.*andon pulled/ })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: /^S sre 3 waiting on you/ })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: /^Su support.*andon pulled/ })).toBeTruthy();
   });
 
   it('starts a factory link’s accessible name with its visible name', async () => {
     renderSidebar();
     const sidebar = await nav();
-    const link = within(sidebar).getByRole('link', { name: /^sre factory/ });
-    expect(link.getAttribute('aria-label')).toBe('sre factory, 3 waiting on you');
+    const link = within(sidebar).getByRole('link', { name: /^S sre/ });
+    expect(link.getAttribute('aria-label')).toBe('S sre 3 waiting on you');
     expect(link.textContent?.startsWith('S')).toBe(true);
   });
 
@@ -384,7 +384,9 @@ describe('the sidebar', () => {
     renderSidebar();
     const sidebar = await nav();
 
-    expect(within(sidebar).getByRole('button', { name: 'FC, Freddy Cruz, account' }).textContent).toContain('Owner');
+    expect(within(sidebar).getByRole('button', { name: 'FC Freddy Cruz Owner, account' }).textContent).toContain(
+      'Owner',
+    );
   });
 
   it('renders loading as busy with a spoken “Loading” and no placeholder', async () => {
@@ -404,7 +406,7 @@ describe('the sidebar', () => {
     expect(within(sidebar).queryByText('Spend this week')).toBeNull();
     expect(within(sidebar).queryByText(/waiting on you/)).toBeNull();
     expect(within(sidebar).getByRole('link', { name: 'Needs you' })).toBeTruthy();
-    expect(within(sidebar).getByRole('link', { name: /sre factory/ })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: /^S sre/ })).toBeTruthy();
   });
 
   it('shows only the Factories label and its + with no factories', async () => {

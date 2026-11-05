@@ -790,7 +790,7 @@ export const definitionTextQuery = (org: string, factory: Factory) =>
         queryKey: intakeKeys.definition(org, factory.id, factory.current?.id ?? 'none'),
         queryFn: async ({ signal }) =>
           factory.current
-            ? getVersionFile(org, factory.id, factory.current.id, definitionFile, signal)
+            ? getVersionFile(org, factory.id, 'current', definitionFile, signal)
             : { text: '', sha256: '' },
         staleTime: Number.POSITIVE_INFINITY,
       });

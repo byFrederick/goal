@@ -17,7 +17,7 @@ internal/config/       loader and cross-reference validation (reads a folder or 
 internal/authoring/    definition authoring behind the API: drafts, validation, publish, restore, the template catalog
 internal/adapters/     grouped by port: store/postgres (LISTEN/NOTIFY), objectstore/s3 (S3 and RustFS), sandboxes/docker, codehost/github (merges), secrets/env, clock/sys
 packages/api-client/   @goal/api-client: typed TypeScript client of the API (generated types + openapi-fetch) for the UI
-contracts/definitions/ factory.schema.json, evals.schema.json (judges, eval cases), connection-kind.schema.json (editor autocompletion + validation)
+contracts/definitions/ factory.schema.json, connection-kind.schema.json (editor autocompletion + validation)
 db/migrations/         PostgreSQL schema (goose, forward-only)
 db/queries/            SQL for sqlc (pgx/v5); db/sqlc.yaml compiles them
 compose.yaml           local PostgreSQL 18 with pgvector, RustFS (S3-compatible object storage) and Mailpit (the dev inbox)

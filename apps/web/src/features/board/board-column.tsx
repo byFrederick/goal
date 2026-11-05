@@ -9,6 +9,7 @@ import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/type
 import { formatDuration, humanize, plural } from '../../shared/format';
 import { waitingOnYou } from '../../shared/item-state';
 import { cn } from '../../ui/cn';
+import { SegmentMeter } from '../../ui/segment-meter';
 import { BoardCard, type CardDrag } from './board-card';
 import { DraggableCard, DropColumn } from './board-dnd';
 import { columnCount, columnGroups, columnLimit, isExpedite, stationNote, visibleCards } from './stats';
@@ -20,12 +21,14 @@ function ColumnCard({
   draggable,
   assemblyParts,
   arrived,
+  dimmed = false,
 }: {
   item: ItemCard;
   onMove: ((item: ItemCard) => void) | undefined;
   draggable: boolean;
   assemblyParts: PartsSummary | undefined;
   arrived: boolean;
+  dimmed?: boolean;
 }) {
   const card = (drag: CardDrag | undefined) => (
     <BoardCard
@@ -34,6 +37,7 @@ function ColumnCard({
       drag={drag}
       assemblyParts={assemblyParts}
       arrived={arrived}
+      dimmed={dimmed}
     />
   );
   return draggable ? <DraggableCard item={item}>{card}</DraggableCard> : card(undefined);
@@ -48,19 +52,16 @@ function WipMeter({ station }: { station: BoardStation }) {
   const waiting = Math.min(waitingOnYou(station), limit - busy);
   const label = `${station.in_progress} of ${limit} in progress`;
   return (
-    <span role="img" aria-label={label} className="flex gap-1">
-      {Array.from({ length: limit }, (_, i) => (
-        <i
-          // biome-ignore lint/suspicious/noArrayIndexKey: the segments are fixed slots by position, never reordered
-          key={i}
-          aria-hidden="true"
-          className={cn(
-            'block h-1 flex-1 rounded-chip',
-            i < busy ? 'bg-ink' : i < busy + waiting ? 'bg-you' : 'bg-line',
-          )}
-        />
-      ))}
-    </span>
+    <SegmentMeter
+      total={limit}
+      filled={busy}
+      waiting={waiting}
+      height={4}
+      gap={4}
+      tones={{ filled: 'bg-ink', waiting: 'bg-you', empty: 'bg-line' }}
+      label={label}
+      className="flex-none"
+    />
   );
 }
 
@@ -180,7 +181,7 @@ export function StationColumn({
 }: StationColumnProps) {
   const constraint = station.id === board.constraint;
   const partsOf = (id: string | undefined) => board.assemblies.find((a) => a.id === id)?.parts ?? undefined;
-  const card = (item: ItemCard) => (
+  const card = (item: ItemCard, dimmed = false) => (
     <ColumnCard
       key={item.id}
       item={item}
@@ -188,6 +189,7 @@ export function StationColumn({
       draggable={draggable}
       assemblyParts={partsOf(item.assembly?.id)}
       arrived={arrived?.(item.id) ?? false}
+      dimmed={dimmed}
     />
   );
 
@@ -221,7 +223,7 @@ export function StationColumn({
           className="m-0 flex min-h-11 min-w-0 flex-col gap-2 rounded-cell border-0 bg-amber-tint p-2 transition-colors duration-(--duration-quick)"
         >
           {inBoard === undefined || inBoard === 1 ? <ExpediteLabel /> : null}
-          {expedite.map(card)}
+          {expedite.map((item) => card(item))}
         </fieldset>
       ) : null}
       <div className="flex min-h-10 w-full min-w-0 flex-col gap-2 self-start rounded-cell bg-panel p-2">
@@ -238,11 +240,11 @@ export function StationColumn({
                 )
               ) : null}
               {group.kind === 'ready' ? (
-                <div className="flex min-w-0 flex-col gap-2 opacity-70" data-group="ready">
-                  {shown.map(card)}
+                <div className="flex min-w-0 flex-col gap-2" data-group="ready">
+                  {shown.map((item) => card(item, true))}
                 </div>
               ) : (
-                shown.map(card)
+                shown.map((item) => card(item))
               )}
               {group.kind === 'in-progress' && group.items.length > columnLimit ? (
                 <button
@@ -265,7 +267,7 @@ export function StationColumn({
               </h3>
               <span className="tabular-nums">{later.length}</span>
             </div>
-            {later.map(card)}
+            {later.map((item) => card(item))}
           </section>
         ) : null}
         {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted md:py-0">Empty</p> : null}

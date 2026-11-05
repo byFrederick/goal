@@ -457,7 +457,10 @@ export function RunsPage() {
                             to="/o/$org/f/$factory/items/$ref"
                             params={{ org: org.slug, factory: run.factory.name, ref: refParam(run.item.ref) }}
                             title={`${numberOf(run.item.ref)} ${run.item.title}`}
-                            className="block max-w-57.5 truncate font-medium text-ink no-underline hover:text-run-ink"
+                            className={cn(
+                              touchLink,
+                              'block max-w-57.5 truncate font-medium text-ink no-underline hover:text-run-ink',
+                            )}
                           >
                             {numberOf(run.item.ref)} {run.item.title}
                           </Link>

@@ -10,6 +10,7 @@ import { formatAge, formatUsd, humanize } from '../../shared/format';
 import { describeState, itemStatus, toneText } from '../../shared/item-state';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { SegmentMeter } from '../../ui/segment-meter';
 import { StatusIcon } from '../../ui/status-icon';
 
 type PartOf = NonNullable<ItemCard['assembly']>;
@@ -80,7 +81,7 @@ export function SelectBox({
     if (box.current) box.current.indeterminate = indeterminate;
   }, [indeterminate]);
   return (
-    <span className="flex size-11 items-center justify-center md:size-6">
+    <label className="flex size-11 items-center justify-center md:size-6">
       <input
         ref={box}
         type="checkbox"
@@ -89,7 +90,7 @@ export function SelectBox({
         onChange={onChange}
         className="m-0 size-4 cursor-pointer accent-run"
       />
-    </span>
+    </label>
   );
 }
 
@@ -294,23 +295,19 @@ export function AssemblyTableRow({
                 {stations}
               </span>
             ) : null}
-            <span className="inline-flex items-center gap-2 text-secondary text-ink-soft">
+            <span className="inline-flex w-40 min-w-0 max-w-full items-center gap-2 text-secondary text-ink-soft">
               {summary ? (
-                <span aria-hidden="true" className="inline-flex gap-px" data-testid="assembly-meter">
-                  {Array.from({ length: summary.total }, (_, i) => (
-                    <span
-                      // biome-ignore lint/suspicious/noArrayIndexKey: segments are fixed in number and never reorder
-                      key={i}
-                      data-done={i < summary.merged}
-                      className={cn(
-                        'h-1 w-4 flex-none rounded-chip transition-colors duration-(--duration-quick) ease-out motion-reduce:transition-none',
-                        i < summary.merged ? 'bg-ink' : 'bg-rule',
-                      )}
-                    />
-                  ))}
-                </span>
+                <SegmentMeter
+                  total={summary.total}
+                  filled={summary.merged}
+                  height={4}
+                  gap={1}
+                  tones={{ filled: 'bg-ink', empty: 'bg-rule' }}
+                  testId="assembly-meter"
+                  className="min-w-0 shrink"
+                />
               ) : null}
-              <span>{count}</span>
+              <span className="shrink-0 whitespace-nowrap">{count}</span>
             </span>
           </div>
         </td>

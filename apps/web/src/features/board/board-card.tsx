@@ -10,6 +10,7 @@ import { holds } from '../../shared/permissions';
 import { WaitLine } from '../../shared/waiting-for';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { SegmentMeter } from '../../ui/segment-meter';
 import { WorkingLine } from '../../ui/working-line';
 import type { OpenAssembly } from './board-filters';
 import { cardState, isExpedite, waitsOn } from './stats';
@@ -53,6 +54,7 @@ export function BoardCard({
   compact = false,
   assemblyParts,
   arrived = false,
+  dimmed = false,
 }: {
   item: ItemCard;
   onMove?: (() => void) | undefined;
@@ -62,6 +64,8 @@ export function BoardCard({
   assemblyParts?: PartsSummary | undefined;
   /** The card is new on the board since it first had cards: it rises in (MOTION.md, A new item appears). */
   arrived?: boolean;
+  /** A Ready (buffer) card: the panel surface instead of the card's, so it recedes without opacity (MASTER.md, Board column). */
+  dimmed?: boolean;
 }) {
   // A decision waits on "you" only for someone who decides here.
   const decides = holds(useFactory(), 'item:decide');
@@ -97,8 +101,9 @@ export function BoardCard({
       onKeyDown={moveKeys(onMove, drag)}
       style={drag?.style}
       className={cn(
-        'group relative flex w-full min-w-0 rounded-control border bg-card transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
+        'group relative flex w-full min-w-0 rounded-control border transition-[border-color,box-shadow,opacity] duration-(--duration-quick)',
         'hover:border-muted has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-offset-2 has-[a:focus-visible]:outline-run',
+        dimmed ? 'bg-panel' : 'bg-card',
         compact ? 'items-center gap-2 p-3' : 'flex-col gap-2 rounded-cell p-3',
         // The desktop card keeps its border plain: an expedite item is tinted by its column's zone.
         !compact
@@ -238,7 +243,6 @@ export function AssemblyLine({
       to="/o/$org/f/$factory/items/$ref"
       params={{ ...params, ref: refParam(assembly.ref) }}
       draggable={false}
-      aria-label={`Part ${assembly.part} of ${assembly.parts} of ${assembly.title}`}
       className={cn(
         'relative z-10 flex min-w-0 items-center no-underline hover:text-link',
         parts ? 'gap-2 text-meta font-medium text-ink-soft' : 'gap-1 text-xs text-muted',
@@ -249,9 +253,10 @@ export function AssemblyLine({
       </span>
       {parts ? <PartPips total={parts.total} merged={parts.merged} /> : null}
       <span className={cn('shrink-0 whitespace-nowrap', parts && 'ml-auto font-normal text-muted')}>
-        {parts ? null : '› '}
+        {parts ? null : <span aria-hidden="true">› </span>}
         {assembly.part} of {assembly.parts}
       </span>
+      <span className="sr-only">, part of an assembly</span>
     </Link>
   );
 }
@@ -259,15 +264,15 @@ export function AssemblyLine({
 /** One pip per part of the assembly; the merged parts are filled. Decorative: the count says the same. */
 function PartPips({ total, merged }: { total: number; merged: number }) {
   return (
-    <span aria-hidden="true" className="flex shrink-0 gap-1">
-      {Array.from({ length: total }, (_, i) => (
-        <i
-          // biome-ignore lint/suspicious/noArrayIndexKey: the pips are fixed slots by position, never reordered
-          key={i}
-          className={cn('block h-1 w-2 rounded-chip', i < merged ? 'bg-ink' : 'bg-rule')}
-        />
-      ))}
-    </span>
+    <SegmentMeter
+      total={total}
+      filled={merged}
+      segmentWidth={8}
+      height={4}
+      gap={4}
+      tones={{ filled: 'bg-ink', empty: 'bg-rule' }}
+      className="max-w-[60%] shrink"
+    />
   );
 }
 
@@ -285,8 +290,20 @@ function DeskState({
 }) {
   if (item.state === 'done') return null;
   if (wait) return <WaitLine waiting={wait} status={itemStatus(item)} className="text-meta" />;
-  if (item.state === 'waiting_human' && decides) return <Chip tone="you">{state.text}</Chip>;
-  if (state.tone === 'rework') return <Chip tone="rework">{state.text}</Chip>;
+  // A chip wraps inside a narrow column instead of reaching past it.
+  const wraps = 'min-w-0 max-w-full shrink whitespace-normal';
+  if (item.state === 'waiting_human' && decides)
+    return (
+      <Chip tone="you" className={wraps}>
+        {state.text}
+      </Chip>
+    );
+  if (state.tone === 'rework')
+    return (
+      <Chip tone="rework" className={wraps}>
+        {state.text}
+      </Chip>
+    );
   if (item.state === 'in_progress') {
     return (
       <span className="flex min-w-0 items-center gap-2 text-meta text-run-ink">

@@ -161,8 +161,8 @@ test('the builder lists the organization’s sources to tick for the factory', a
   await fits(page);
 });
 
-// The pictures of the list, a source and New source at 1440 and 390 px in both themes. The Playwright
-// suite cannot run in the build box, so the baselines are made by the first CI run with --update-snapshots.
+// The pictures of the list, a source and New source at 1440 and 390 px in both themes. The baselines are
+// made on the CI runner (the e2e job uploads them), since another machine's fonts draw other pixels.
 for (const theme of ['light', 'dark'] as const) {
   for (const width of [1440, 390]) {
     const screens = [
@@ -172,7 +172,9 @@ for (const theme of ['light', 'dark'] as const) {
       { name: 'new-confluence', path: '/o/acme/knowledge/new?kind=confluence', heading: 'New source' },
     ];
     for (const { name, path, heading } of screens) {
-      test(`knowledge ${name} screenshot, ${theme}, ${width} px`, async ({ page }) => {
+      test(`knowledge ${name} screenshot, ${theme}, ${width} px`, async ({ page }, testInfo) => {
+        // The viewport is set below, so the three projects draw the same picture: one keeps its baselines.
+        test.skip(testInfo.project.name !== 'desktop-1440', 'one project keeps the baselines');
         await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
         await page.setViewportSize({ width, height: 900 });
         await page.goto(path);
@@ -249,3 +251,65 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test.describe('phone tap areas at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 900 } });
+
+  test('a failing source with two actions puts them in a row under its message', async ({ page }) => {
+    await page.goto('/o/acme/knowledge');
+    const alert = page.getByRole('alert').filter({ hasText: 'product-specs' });
+    const message = alert.locator('div').first();
+    await expect(alert.getByRole('link')).toHaveCount(2);
+    const m = await message.boundingBox();
+    expect(m?.width ?? 0).toBeGreaterThanOrEqual(240);
+    for (const link of await alert.getByRole('link').all()) {
+      const b = await link.boundingBox();
+      expect(b?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(b?.y ?? 0).toBeGreaterThanOrEqual((m?.y ?? 0) + (m?.height ?? 0) - 0.5);
+    }
+  });
+
+  test('file links in Most read and in Files found keep their hit areas apart', async ({ page }) => {
+    const apart = async (links: ReturnType<Page['locator']>) => {
+      const boxes = await links.evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom };
+        }),
+      );
+      expect(boxes.length).toBeGreaterThan(1);
+      for (let i = 1; i < boxes.length; i++) {
+        expect(boxes[i]!.top, `row ${i} starts below row ${i - 1}`).toBeGreaterThanOrEqual(boxes[i - 1]!.bottom - 0.5);
+      }
+    };
+    await page.goto('/o/acme/knowledge');
+    await apart(page.getByRole('table', { name: 'Most read files' }).getByRole('link'));
+    await page.goto('/o/acme/knowledge?q=md');
+    await apart(page.getByRole('list', { name: 'Files found' }).getByRole('link'));
+  });
+});
+
+test.describe('files table at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 900 } });
+
+  test('the Files table scrolls in its own container and the page does not', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/runbooks');
+    const table = page.getByRole('table', { name: /^Files of/ });
+    await expect(table).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Reads, 7 days' })).toBeAttached();
+    const scrolls = await table.evaluate(
+      (el) => (el.parentElement?.scrollWidth ?? 0) >= (el.parentElement?.clientWidth ?? 0),
+    );
+    expect(scrolls).toBe(true);
+    await expectNoHorizontalScroll(page);
+  });
+
+  test('the Files scroller is a named region a keyboard can reach, and axe finds nothing', async ({ page }) => {
+    await page.goto('/o/acme/knowledge/runbooks');
+    const region = page.getByRole('region', { name: 'Files table' });
+    await expect(region).toBeVisible();
+    await region.focus();
+    await expect(region).toBeFocused();
+    await expectAccessible(page);
+  });
+});

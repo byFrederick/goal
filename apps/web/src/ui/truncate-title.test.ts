@@ -15,7 +15,6 @@ const shown = 'the full text is shown elsewhere on the row, or the text is short
 const allowed: Record<string, { count: number; reason: string }> = {
   'app/account-menu.tsx': { count: 3, reason: shown },
   'app/org-menu.tsx': { count: 1, reason: shown },
-  'app/phone-chrome.tsx': { count: 1, reason: shown },
   'app/sidebar-factories.tsx': { count: 3, reason: shown },
   'app/sidebar-search.tsx': { count: 8, reason: shown },
   'app/sidebar.tsx': { count: 4, reason: shown },
@@ -36,7 +35,6 @@ const allowed: Record<string, { count: number; reason: string }> = {
   'features/items/assembly-rows.tsx': { count: 1, reason: shown },
   'features/items/item-page.tsx': { count: 1, reason: shown },
   'features/members/members-page.tsx': { count: 6, reason: shown },
-  'features/needs-you/rows.tsx': { count: 2, reason: shown },
   'features/onboarding/factory-preview.tsx': { count: 1, reason: shown },
   'features/onboarding/first-item-step.tsx': { count: 1, reason: shown },
   'features/sign-in/invitation-page.tsx': { count: 2, reason: shown },

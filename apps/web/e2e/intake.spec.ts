@@ -13,7 +13,7 @@ test('the Intake page lists what is coming up, where items came from, the trigge
   page,
 }) => {
   await page.goto(intake);
-  await expect(page).toHaveTitle('Intake · Software · Acme · Goal');
+  await expect(page).toHaveTitle('Intake · software · Acme · Goal');
   await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Coming up' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'Where items came from' })).toBeVisible();

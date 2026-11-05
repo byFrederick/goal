@@ -2,6 +2,7 @@
 // revision 42 based on v8 (3 changes in 2 sections, 1 warning).
 import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone, openNavigation, orgNav } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 const basics = '/o/acme/f/goal/definition/basics';
 const draft = '/v1/orgs/acme/factories/goal/draft';
@@ -78,6 +79,24 @@ for (const colorScheme of ['light', 'dark'] as const) {
       });
     });
   }
+}
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the Ask input and the status links are 44 px targets at 390 px, ${colorScheme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openBasics(page);
+    for (const target of [
+      page.getByRole('textbox', { name: 'Ask the factory to change its definition' }),
+      page.getByRole('link', { name: '3 changes in 2 sections' }),
+      page.getByRole('link', { name: /^1 problem$/ }),
+    ]) {
+      await expect(target).toBeVisible();
+      expect((await target.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    }
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+  });
 }
 
 test('Definition opens the Line from the sidebar or the drawer', async ({ page }) => {
@@ -384,3 +403,16 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('the change-count and problems links are 44×44 at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBasics(page);
+  const bar = status(page);
+  await expectTarget44(bar.getByRole('link', { name: /\d+ changes? in \d+ sections?/ }), 'the change count');
+  await expectTarget44(bar.getByRole('link', { name: /\d+ problems?/ }), 'the problems link');
+  await expectNoOverlap(
+    bar.getByRole('link', { name: /\d+ changes? in \d+ sections?/ }),
+    bar.getByRole('link', { name: /\d+ problems?/ }),
+    'the change count and the problems link',
+  );
+});

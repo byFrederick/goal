@@ -126,9 +126,14 @@ RETURNING *;
 UPDATE definition_versions SET
   state = 'published', number = sqlc.arg(number), message = sqlc.arg(message),
   published_by = sqlc.arg(published_by)::text, published_at = now(),
-  updated_by = sqlc.arg(published_by)::text, updated_at = now()
+  updated_by = sqlc.arg(published_by)::text, updated_at = now(), counts = sqlc.narg(counts)::jsonb
 WHERE id = sqlc.arg(id) AND state = 'draft'
 RETURNING *;
+
+-- name: SetVersionCounts :exec
+-- Stores the counts of a published version that has none; a version that has them keeps them.
+UPDATE definition_versions SET counts = sqlc.arg(counts)::jsonb
+WHERE id = sqlc.arg(id) AND state = 'published' AND counts IS NULL;
 
 -- name: OpenItemsAt :many
 -- A factory's open items at stations, locked (item locks use FOR NO KEY UPDATE, as everywhere).

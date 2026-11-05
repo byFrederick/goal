@@ -14,6 +14,7 @@ import {
   type ReactNode,
   type RefObject,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -95,7 +96,7 @@ export function PhoneTopBar({ title, actions, back, onMenu, drawerOpen, menuRef 
         <GoalMark size="shell" />
       </button>
       {back ? <div className="flex-none">{back}</div> : null}
-      <p className="m-0 min-w-16 flex-1 truncate text-heading text-ink">{title}</p>
+      <TopBarTitle title={title} />
       <TopBarActions>{actions}</TopBarActions>
     </header>
   );
@@ -114,19 +115,45 @@ function flattenActions(node: ReactNode): ReactNode[] {
  * The page's actions, except those marked data-desktop-only (the page reaches them another way on a phone): the last (the primary one) stays in the bar, the others sit behind More actions, so the
  * title keeps its room. Keycap hints are hidden and every control is 44 px tall.
  */
+const hiddenFocusable = 'a, button, input, select, textarea, summary, [tabindex]';
+
 function TopBarActions({ children }: { children: ReactNode }) {
   const actions = flattenActions(children).filter(
     (a) => !(isValidElement<{ 'data-desktop-only'?: boolean }>(a) && a.props['data-desktop-only']),
   );
-  if (actions.length === 0) return null;
   const primary = actions[actions.length - 1];
   const more = actions.slice(0, -1);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const hidden = useRef<HTMLDivElement>(null);
+  // The hidden copies stay out of the tab order; only a menu item (or a closing dialog) reaches them.
+  // A control that mounts later (a dialog's trigger, a lazy child) is taken out of the tab order too, so
+  // nothing the keyboard can reach sits under aria-hidden (axe aria-hidden-focus).
+  useLayoutEffect(() => {
+    const root = hidden.current;
+    if (!root) return;
+    const untab = () => {
+      for (const control of root.querySelectorAll<HTMLElement>(hiddenFocusable)) {
+        if (control.tabIndex >= 0) control.tabIndex = -1;
+      }
+    };
+    untab();
+    const observer = new MutationObserver(untab);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['tabindex', 'disabled'],
+    });
+    return () => observer.disconnect();
+  });
+  if (actions.length === 0) return null;
   return (
     <div className="flex min-w-0 shrink items-center gap-1 [&_a]:min-h-11 [&_button]:min-h-11 [&_kbd]:hidden">
       {more.length > 0 ? (
         <Menu>
           <MenuTrigger asChild>
             <button
+              ref={moreRef}
               type="button"
               aria-label="More actions"
               className="flex size-11 flex-none items-center justify-center rounded-control text-ink-soft hover:bg-hover hover:text-ink"
@@ -136,10 +163,25 @@ function TopBarActions({ children }: { children: ReactNode }) {
           </MenuTrigger>
           <MenuContent align="end" side="bottom">
             {more.map((action, i) => (
-              <MoreAction key={isValidElement(action) && action.key != null ? action.key : i}>{action}</MoreAction>
+              <MoreAction key={isValidElement(action) && action.key != null ? action.key : i} index={i} copies={hidden}>
+                {action}
+              </MoreAction>
             ))}
           </MenuContent>
         </Menu>
+      ) : null}
+      {/* One copy of each hidden action lives here, so a dialog it owns outlives the closing menu. A dialog
+          returns focus to its trigger, which is in this copy; focus then goes on to More actions. */}
+      {more.length > 0 ? (
+        <div ref={hidden} aria-hidden="true" className="sr-only" onFocus={() => moreRef.current?.focus()}>
+          {more.map((action, i) =>
+            menuParts(action) ? null : (
+              <div key={isValidElement(action) && action.key != null ? action.key : i} data-more-action={i}>
+                {action}
+              </div>
+            ),
+          )}
+        </div>
       ) : null}
       {primary}
     </div>
@@ -162,9 +204,17 @@ function menuParts(action: ReactNode): { label: ReactNode; entries: ReactNode } 
 
 /**
  * One hidden action as an entry of the More actions menu: a menu action of the page becomes a submenu; any other
- * is a menu item that activates the page's own button or link, and closes the menu.
+ * is a menu item that activates the hidden copy of the page's own button or link, and closes the menu.
  */
-function MoreAction({ children }: { children: ReactNode }) {
+function MoreAction({
+  children,
+  index,
+  copies,
+}: {
+  children: ReactNode;
+  index: number;
+  copies: RefObject<HTMLDivElement | null>;
+}) {
   const parts = menuParts(children);
   if (parts) {
     return (
@@ -177,9 +227,8 @@ function MoreAction({ children }: { children: ReactNode }) {
   return (
     <MenuItem
       asChild
-      onSelect={(event) => {
-        const control = (event.currentTarget as HTMLElement).querySelector<HTMLElement>('a, button');
-        control?.click();
+      onSelect={() => {
+        copies.current?.querySelector<HTMLElement>(`[data-more-action="${index}"] :is(a, button)`)?.click();
       }}
     >
       <div className="[&_*]:pointer-events-none [&_kbd]:hidden">{children}</div>
@@ -314,7 +363,7 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
       to="/o/$org/needs-you"
       params={{ org: org.slug }}
       className={tab}
-      aria-label={waiting > 0 ? `Needs you, ${waiting} waiting on you` : 'Needs you'}
+      aria-label={waiting > 0 ? `${waiting} Needs you, waiting on you` : 'Needs you'}
     >
       <span className="relative">
         <Inbox size={20} strokeWidth={1.5} aria-hidden="true" />
@@ -326,7 +375,7 @@ function NeedsYouTab({ org }: { org: OrgSummary }) {
             <NumberRoll value={waiting} />
           </span>
         ) : null}
-      </span>
+      </span>{' '}
       Needs you
     </Link>
   );
@@ -365,5 +414,26 @@ function FactoryTab({ org, factory, to, exact = false, label, icon: Icon }: Fact
     <Link to={to} params={{ org: org.slug, factory }} activeOptions={{ exact }} className={tab}>
       {body}
     </Link>
+  );
+}
+
+/** The title, truncating its words but never a trailing number ("Proposal 10" keeps its 10). */
+function TopBarTitle({ title }: { title: string | undefined }) {
+  const parts = title?.match(/^(.+?)(\s+#?\d+)$/);
+  return (
+    <p className="m-0 flex min-w-16 flex-1 text-heading text-ink">
+      {parts ? (
+        <>
+          <span className="min-w-0 truncate" title={title}>
+            {parts[1]}
+          </span>
+          <span className="shrink-0 whitespace-pre">{parts[2]}</span>
+        </>
+      ) : (
+        <span className="min-w-0 truncate" title={title}>
+          {title}
+        </span>
+      )}
+    </p>
   );
 }

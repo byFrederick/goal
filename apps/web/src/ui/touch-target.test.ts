@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { touchLink, touchTarget } from './touch-target';
+import { touchLink, touchLinkWide, touchTarget } from './touch-target';
 
 const words = (classes: string) => classes.split(' ');
 
@@ -27,5 +27,17 @@ describe('touchLink', () => {
 
   it('adds no motion', () => {
     expect(touchLink).not.toMatch(/transition|animate|duration/);
+  });
+});
+
+describe('touchLinkWide', () => {
+  it('pads a short link on both axes below 768 px and takes the padding back with margins', () => {
+    expect(words(touchLinkWide)).toEqual(
+      expect.arrayContaining(['max-md:px-3', 'max-md:-mx-3', 'max-md:py-4', 'max-md:-my-4']),
+    );
+  });
+
+  it('adds no motion', () => {
+    expect(touchLinkWide).not.toMatch(/transition|animate|duration/);
   });
 });

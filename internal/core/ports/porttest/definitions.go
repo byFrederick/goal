@@ -719,6 +719,11 @@ func (d *Definitions) Publish(ctx context.Context, p ports.Publish) (domain.Defi
 		v.State, v.Number, v.Message = domain.VersionPublished, number, p.Message
 		v.PublishedBy, v.PublishedAt, v.UpdatedBy, v.UpdatedAt = by, now, by, now
 
+		if p.Counts != nil {
+			c := *p.Counts
+			v.Counts = &c
+		}
+
 		if f.current == "" && !p.Start {
 			f.pausedAt, f.pausedBy = now, by
 		}
@@ -727,6 +732,23 @@ func (d *Definitions) Publish(ctx context.Context, p ports.Publish) (domain.Defi
 
 		return cloneVersion(v), []ports.DefinitionNotice{draftNotice(v), d.currentNoticeLocked(f)}, nil
 	})
+}
+
+// SetVersionCounts implements ports.DefinitionStore.
+func (d *Definitions) SetVersionCounts(ctx context.Context, id domain.DefinitionVersionID, c domain.VersionCounts) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if v, ok := d.versions[id]; ok && v.OrgID == org && v.State == domain.VersionPublished && v.Counts == nil {
+		v.Counts = &c
+	}
+
+	return nil
 }
 
 // Restore implements ports.DefinitionStore.
@@ -994,6 +1016,11 @@ func cloneVersion(v *domain.DefinitionVersion) domain.DefinitionVersion {
 	c := *v
 	c.Manifest = maps.Clone(v.Manifest)
 	c.Source = cloneSource(v.Source)
+
+	if v.Counts != nil {
+		counts := *v.Counts
+		c.Counts = &counts
+	}
 
 	return c
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { NetworkError } from '../../api/client';
 import { getIntake } from '../../api/intake';
 import type { Factory, Intake, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
@@ -127,7 +128,7 @@ describe('IntakePage', () => {
   });
 
   it('shows the error with Try again when the intake cannot be read', async () => {
-    vi.mocked(getIntake).mockRejectedValue(new Error('goald is unreachable'));
+    vi.mocked(getIntake).mockRejectedValue(new NetworkError(new TypeError('fetch failed')));
     renderIntake();
 
     expect(await screen.findByText('goald is not answering')).toBeTruthy();

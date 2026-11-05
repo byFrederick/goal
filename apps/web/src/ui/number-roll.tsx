@@ -43,25 +43,42 @@ export function NumberRoll({ value, className }: NumberRollProps) {
     return { key: `${place}-${current.generation}`, character, delay };
   });
 
+  // Cells are grouped into words (a space ends its word and stays with it), each group never breaking, so a
+  // long value wraps between words and never inside one.
+  const words: (typeof cells)[] = [];
+  let word: typeof cells = [];
+  for (const cell of cells) {
+    word.push(cell);
+    if (cell.character === ' ') {
+      words.push(word);
+      word = [];
+    }
+  }
+  if (word.length > 0) words.push(word);
+
   return (
-    <span className={cn('inline-flex tabular-nums', className)}>
+    <span className={cn('inline-flex min-w-0 max-w-full flex-wrap tabular-nums', className)}>
       <span className="sr-only">{text}</span>
-      <span aria-hidden="true" className="inline-flex">
-        {cells.map((cell) =>
-          cell.delay === undefined ? (
-            <span key={cell.key} className="inline-block whitespace-pre">
-              {cell.character}
-            </span>
-          ) : (
-            <span
-              key={cell.key}
-              className="inline-block whitespace-pre motion-safe:animate-number-pop-in motion-reduce:animate-fade-in"
-              style={{ animationDelay: `calc(var(--duration-stagger) * ${cell.delay})` }}
-            >
-              {cell.character}
-            </span>
-          ),
-        )}
+      <span aria-hidden="true" className="inline-flex min-w-0 max-w-full flex-wrap">
+        {words.map((group) => (
+          <span key={group[group.length - 1]?.key.split('-')[0]} className="inline-flex whitespace-nowrap">
+            {group.map((cell) =>
+              cell.delay === undefined ? (
+                <span key={cell.key} className="inline-block whitespace-pre">
+                  {cell.character}
+                </span>
+              ) : (
+                <span
+                  key={cell.key}
+                  className="inline-block whitespace-pre motion-safe:animate-number-pop-in motion-reduce:animate-fade-in"
+                  style={{ animationDelay: `calc(var(--duration-stagger) * ${cell.delay})` }}
+                >
+                  {cell.character}
+                </span>
+              ),
+            )}
+          </span>
+        ))}
       </span>
     </span>
   );

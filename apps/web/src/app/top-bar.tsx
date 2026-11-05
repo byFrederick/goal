@@ -123,18 +123,20 @@ export function pageLabel(routeId: string): string | undefined {
   return orgRoutePages[routeId]?.label;
 }
 
-/** The bar, from 768 px. Phones use phone-chrome.tsx's top bar instead (ShellFrame picks one). */
+/** The bar, from 768 px: one 56 px row, or the crumbs with the actions in a right-aligned row under them when they do not fit side by side. Phones use phone-chrome.tsx's top bar instead (ShellFrame picks one). */
 export function TopBar({ state }: { state: TopBarState | null }) {
   const routeId = useMatches({ select: (matches) => matches.at(-1)?.routeId ?? '' });
   const inFactory = routeId.startsWith('/o/$org/f/$factory/');
   return (
-    <header className="shell-topbar hidden h-14 flex-none items-center gap-2 border-b border-rule bg-shell px-7 md:flex">
+    <header className="shell-topbar hidden min-h-14 flex-none flex-wrap items-center gap-x-2 gap-y-1 border-b border-rule bg-shell px-7 py-2 md:flex">
       {inFactory ? (
         <FactoryCrumbs routeId={routeId} crumb={state?.crumb} />
       ) : (
         <OrgCrumbs routeId={routeId} crumb={state?.crumb} />
       )}
-      {state?.actions ? <div className="ml-auto flex min-w-0 shrink items-center gap-2">{state.actions}</div> : null}
+      {state?.actions ? (
+        <div className="ml-auto flex min-w-0 max-w-full shrink items-center justify-end gap-2">{state.actions}</div>
+      ) : null}
     </header>
   );
 }

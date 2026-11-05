@@ -9,6 +9,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { Dialog as D } from 'radix-ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   attentionQuery,
@@ -253,6 +254,53 @@ describe('the phone top bar with actions', () => {
   });
 });
 
+describe('the hidden copy of actions', () => {
+  it('has nothing the keyboard can reach under aria-hidden', async () => {
+    const { container } = topBar(
+      <>
+        <button type="button">New factory</button>
+        <a href="/import">Import</a>
+        <button type="button">New item</button>
+      </>,
+    );
+    const copy = container.querySelector('[aria-hidden="true"].sr-only') as HTMLElement;
+    const controls = copy.querySelectorAll<HTMLElement>('a, button, input, [tabindex]');
+    expect(controls.length).toBeGreaterThan(0);
+    for (const c of controls) expect(c.tabIndex).toBeLessThan(0);
+    const late = document.createElement('button');
+    copy.append(late);
+    await waitFor(() => expect(late.tabIndex).toBe(-1));
+  });
+});
+
+describe('a hidden action that owns a dialog', () => {
+  it('keeps its dialog open after the menu closes, and returns focus to More actions', async () => {
+    topBar(
+      <>
+        <D.Root>
+          <D.Trigger>Try another model</D.Trigger>
+          <D.Portal>
+            <D.Content aria-describedby={undefined}>
+              <D.Title>Pick a model</D.Title>
+              <D.Close>Close</D.Close>
+            </D.Content>
+          </D.Portal>
+        </D.Root>
+        <button type="button">New item</button>
+      </>,
+    );
+    const more = screen.getByRole('button', { name: 'More actions' });
+    fireEvent.pointerDown(more, { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Try another model' }));
+    expect(await screen.findByRole('dialog', { name: 'Pick a model' })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Pick a model' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(more));
+  });
+});
+
 describe('the phone top bar with a Back link', () => {
   it('puts the Back link after the Goal mark and before the title', () => {
     render(
@@ -334,7 +382,7 @@ describe('the drawer', () => {
 describe('the tab bar', () => {
   it('links Needs you to /o/$org/needs-you, with the count it waits on', async () => {
     renderShell({ at: '/o/acme/f/software' });
-    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    const needs = within(await tabs()).getByRole('link', { name: /Needs you/ });
     expect(needs.getAttribute('href')).toBe('/o/acme/needs-you');
     expect(needs.getAttribute('aria-disabled')).toBeNull();
   });
@@ -342,7 +390,7 @@ describe('the tab bar', () => {
   it('draws the Needs you count as an orange 18 px pill that rolls and enters', async () => {
     attention = { waiting_on_you: 3, factories: [] };
     renderShell({ at: '/o/acme/f/software' });
-    const needs = within(await tabs()).getByRole('link', { name: /^Needs you/ });
+    const needs = within(await tabs()).getByRole('link', { name: /Needs you/ });
     const pill = await waitFor(() => {
       const found = needs.querySelector('span[aria-hidden="true"].bg-you');
       if (!found) throw new Error('no count yet');

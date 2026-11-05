@@ -21,6 +21,15 @@ const heading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Org
 const save = (page: Page) => page.getByRole('button', { name: 'Save changes' });
 const slotsFor = (page: Page) => page.getByRole('group', { name: 'Most slots each factory may use' });
 
+test('Notifications shows the saved Slack secret to the default caller, not an error', async ({ page }) => {
+  await page.goto('/o/acme/settings');
+  const section = page.getByRole('region', { name: 'Notifications' });
+  await expect(section.getByRole('combobox', { name: 'Slack secret' })).toContainText('slack-bot');
+  await expect(section.getByRole('alert')).toHaveCount(0);
+  await section.getByRole('button', { name: 'Test' }).click();
+  await expect(section.getByText('Works with Acme')).toBeVisible();
+});
+
 test('organization settings is accessible and fits the screen', async ({ page }) => {
   await page.goto('/o/acme/settings');
   await expect(heading(page)).toBeVisible();
@@ -147,7 +156,7 @@ test('slot limits: per factory and across the organization', async ({ page, requ
 test('leaving with unsaved changes asks first', async ({ page }) => {
   await page.goto('/o/acme/settings');
   await page.getByLabel('Name').fill('Acme Robotics');
-  const goal = orgNav(page).getByRole('link', { name: /^G, goal factory/ });
+  const goal = orgNav(page).getByRole('link', { name: /^G goal / });
 
   await goal.click();
   const prompt = page.getByRole('dialog', { name: 'Leave without saving?' });

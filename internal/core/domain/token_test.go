@@ -114,52 +114,10 @@ func signedAs(t *testing.T, key []byte, c TaskClaims, aud string) string {
 	return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac(key, payload))
 }
 
-func TestTaskToken_EvalNamesNoConnection(t *testing.T) {
+// A production task's token has no kind, and its encoding leaves the field out.
+func TestTaskToken_ProductionHasNoKind(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	key := []byte("gateway-key")
-	claims := TaskClaims{
-		Kind: TaskKindEval, OrgID: "o1", FactoryID: "f1", VersionID: "v1", Station: stationBuild, Agent: "backend", RunID: "r1",
-		ExpiresAt: now.Add(time.Hour).Unix(),
-	}
-
-	token, err := SignTaskToken(key, claims)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := VerifyTaskToken(key, token, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if got.Kind != TaskKindEval || len(got.Connections) != 0 {
-		t.Errorf("claims = %+v, want an eval task with no connections", got)
-	}
-
-	withConnection := claims
-	withConnection.Connections = []string{"acme-host"}
-
-	if _, err := SignTaskToken(key, withConnection); !errors.Is(err, ErrBadTaskToken) {
-		t.Errorf("signing an eval token with a connection: err = %v, want ErrBadTaskToken", err)
-	}
-
-	// A token signed by another issuer that names a connection is refused all the same.
-	forged := withConnection
-	forged.Audience = TaskAudience
-
-	payload, err := json.Marshal(forged)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	enc := base64.RawURLEncoding
-	if _, err := VerifyTaskToken(key, enc.EncodeToString(payload)+"."+enc.EncodeToString(mac(key, payload)), now); !errors.Is(err, ErrBadTaskToken) {
-		t.Errorf("verifying an eval token with a connection: err = %v, want ErrBadTaskToken", err)
-	}
-
-	// A production task's token has no kind, and its encoding leaves the field out.
 	plain, err := json.Marshal(TaskClaims{OrgID: "o1"})
 	if err != nil {
 		t.Fatal(err)
@@ -199,15 +157,15 @@ func TestTaskToken_JonahNamesNoConnectionAndAWindow(t *testing.T) {
 	}
 
 	tests := map[string]func(*TaskClaims){
-		"a jonah token with a connection":      func(c *TaskClaims) { c.Connections = []string{"acme-host"} },
-		"a jonah token without a window":       func(c *TaskClaims) { c.WindowStart, c.WindowEnd = 0, 0 },
-		"a jonah token without a start":        func(c *TaskClaims) { c.WindowStart = 0 },
-		"a jonah token ending at its start":    func(c *TaskClaims) { c.WindowEnd = c.WindowStart },
-		"a jonah token ending before start":    func(c *TaskClaims) { c.WindowEnd = c.WindowStart - 1 },
-		"a station token with a window":        func(c *TaskClaims) { c.Kind = "" },
-		"an eval token with a window":          func(c *TaskClaims) { c.Kind = TaskKindEval },
-		"a station token marked manual":        func(c *TaskClaims) { c.Kind, c.WindowStart, c.WindowEnd = "", 0, 0 },
-		"an eval token with only a window end": func(c *TaskClaims) { c.Kind, c.WindowStart, c.Manual = TaskKindEval, 0, false },
+		"a jonah token with a connection":    func(c *TaskClaims) { c.Connections = []string{"acme-host"} },
+		"a jonah token without a window":     func(c *TaskClaims) { c.WindowStart, c.WindowEnd = 0, 0 },
+		"a jonah token without a start":      func(c *TaskClaims) { c.WindowStart = 0 },
+		"a jonah token ending at its start":  func(c *TaskClaims) { c.WindowEnd = c.WindowStart },
+		"a jonah token ending before start":  func(c *TaskClaims) { c.WindowEnd = c.WindowStart - 1 },
+		"a station token with a window":      func(c *TaskClaims) { c.Kind = "" },
+		"a try token with a window":          func(c *TaskClaims) { c.Kind = TaskKindTry },
+		"a station token marked manual":      func(c *TaskClaims) { c.Kind, c.WindowStart, c.WindowEnd = "", 0, 0 },
+		"a try token with only a window end": func(c *TaskClaims) { c.Kind, c.WindowStart, c.Manual = TaskKindTry, 0, false },
 	}
 
 	enc := base64.RawURLEncoding

@@ -115,12 +115,12 @@ Rules:
   - **Organization-wide:** Home, Needs you (orange count), Runs, Connections, Credentials, Knowledge. 32px rows, 16px icons. The current page is a grey `--color-hover` fill with ink text and an ink icon.
   - **Factories:** each factory is a collapsible group: its 18px letter badge, its name, and an orange count (needs you) or a red dot (andon). The open factory's pages (Floor, Board, Items, Agents, Intake, Jonah, Definition, Settings) sit under a 1px guide line; the current one is a grey fill.
   - **Bottom:** spend this week as a plain row with a 4px bar (no card), then the person.
-- **Top bar** (52px): the breadcrumb (muted ancestors, ink current) on the left; the page's actions on the right, the primary one last.
+- **Top bar** (52px): the breadcrumb (muted ancestors, ink current) on the left; the page's actions on the right, the primary one last. At tablet widths, when the actions do not fit beside the crumbs, they wrap to a right-aligned row under the crumbs (no animation); the crumbs keep at least their last item, ellipsized.
 - **Phones** (below 768px): a top bar with the mark (opens the drawer), the title and actions; a bottom tab bar (Needs you, Floor, Board, Items, More) with a 2px ink indicator on the current tab. Targets are at least 44px.
 
 ## Vocabulary
 
-Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Alert), Intake, Trigger, Agents, Jonah (Proposals, Judges, Evals, Bake-offs), Credentials, Connections, Hands-off, Sent back; agents named by role. Keep Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition as the [glossary](../reference/glossary.md) defines them.
+Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Alert), Intake, Trigger, Agents, Jonah (Overview, Proposals, Tests), Credentials, Connections, Hands-off, Sent back; agents named by role. Keep Floor, Board, Items, line, station, lane, WIP, buffer, expedite lane, constraint, andon, assembly, part, touch and definition as the [glossary](../reference/glossary.md) defines them.
 
 ## Components
 
@@ -138,7 +138,7 @@ Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Ale
 - **Switch:** 32×18px track; off `rule`, on `ink`; the thumb travels (MOTION.md, Toggle).
 - **Stat strip** (replaces the KPI tiles): up to four numbers in one row separated by 1px vertical rules, no boxes. Each has a 12px muted label, the 24px number and unit, and one meta line: the target, and the signed delta in `ok-ink` or `rework-ink`. A 2px bar under the number shows progress to target only when there is one.
 - **The line** (replaces the andon panel): a plain section on the page, no dark panel. Each station is a column: its name at 13px/500, the item count at 24px/500, a 4px load bar (ink for busy, `rule` for free capacity, amber for the constraint), the agent slots as 8px squares (ink working, orange waiting on you, outlined free) and what waits as muted text. Stations are joined by a 1px rule with a small chevron. The constraint gets a yellow 6px marker and the word "Constraint". When the andon is pulled, a red-tint strip spans the top of the Floor with the reason, who pulled it and Clear.
-- **Board column:** a header row (name, "n of WIP" with a 4px segmented meter, agents and busy share) over a `panel` cell; no header card. The constraint's header has a yellow marker. The expedite lane is a row with the amber tint above the standard lane. A station with a buffer (Build) shows its **In progress** cards first, at the top of the column, then the **Ready (buffer)** cards below them, dimmed, under their own "Ready, buffer n of m" label; "Show N more" belongs to the In progress group. The same order holds on phones.
+- **Board column:** a header row (name, "n of WIP" with a 4px segmented meter, agents and busy share) over a `panel` cell; no header card. The constraint's header has a yellow marker. The expedite lane is a row with the amber tint above the standard lane. A station with a buffer (Build) shows its **In progress** cards first, at the top of the column, then the **Ready (buffer)** cards below them, dimmed with the `panel` surface instead of `card` (never opacity, which fails text contrast), under their own "Ready, buffer n of m" label; "Show N more" belongs to the In progress group. The same order holds on phones.
 - **Item card:** white, 8px radius, line border, 12px padding: the ref in mono and the type, the title (two lines), the assembly line, the agent and cost, and one status chip. A card waiting on you has a 1px orange border and an orange dot, not a glow. Cards lift nothing on hover; the border darkens.
 - **Run timeline:** runs are plain sections with a header (station, agent, outcome chip, duration, turns, cost). Events are rows with the time in mono, a 6px dot on a 1px vertical rule (red for a failed check, green for passed, orange for a person), the text and a meta column.
 - **Needs you list:** rows with the factory badge, the type as a word in its colour, the title, item and station, the age. The selected row has the orange tint and no edge bar.
@@ -149,7 +149,7 @@ Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Ale
 
 ## Screens
 
-The screens on the canvas, one page per flow (unchanged list from version 2): Get started (sign up, the code, eight onboarding steps, ready), Daily work (Home, Floor, Board, Work item, Needs you, Items, Runs), Intake (Intake, New trigger, Trigger, Webhooks), Build a factory (Agents, Agent, Definition, Review and publish, Factory settings), Jonah (Overview, Proposal, Judges, Judge, Evals, Bake-off), Connections and knowledge, Organization, Sidebar and account, Mobile. Controls for features not built yet render disabled with "Not available yet" (ADR 0016, decision 4).
+The screens on the canvas, one page per flow (unchanged list from version 2): Get started (sign up, the code, eight onboarding steps, ready), Daily work (Home, Floor, Board, Work item, Needs you, Items, Runs), Intake (Intake, New trigger, Trigger, Webhooks), Build a factory (Agents, Agent, Definition, Review and publish, Factory settings), Jonah (Overview, Proposals, Proposal, Tests), Connections and knowledge, Organization, Sidebar and account, Mobile. Controls for features not built yet render disabled with "Not available yet" (ADR 0016, decision 4).
 
 ## Accessibility and checks
 

@@ -189,6 +189,14 @@ describe('API keys page', () => {
     expect(screen.getAllByRole('button', { name: 'New key' })).toHaveLength(1);
   });
 
+  it('lets a keyboard scroll the sign-in command', async () => {
+    await renderPage(pictured);
+
+    const region = screen.getByRole('region', { name: 'Example sign-in command' });
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain('focus-visible:outline-run');
+  });
+
   it('draws the terminal prompts in the muted colour, not the running blue', async () => {
     await renderPage(pictured);
 

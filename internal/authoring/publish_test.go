@@ -3,9 +3,11 @@ package authoring_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -640,4 +642,167 @@ func TestPublish_RefusesWebhookNotOpen(t *testing.T) {
 	if _, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f)); err != nil {
 		t.Errorf("publish naming an open webhook = %v; want it published", err)
 	}
+}
+
+// acmeCounts are the counts of acmeYAML's tree as the version list shows them.
+var acmeCounts = authoring.Counts{Stations: 4, Agents: 1, Skills: 0, Connections: 0}
+
+// blobCountingStore counts the blobs read through it and fails them while fail is set.
+type blobCountingStore struct {
+	ports.DefinitionStore
+
+	reads atomic.Int64
+	fail  atomic.Bool
+}
+
+var errBucketDown = errors.New("bucket down")
+
+func (s *blobCountingStore) Blob(ctx context.Context, h domain.BlobHash) ([]byte, error) {
+	s.reads.Add(1)
+
+	if s.fail.Load() {
+		return nil, errBucketDown
+	}
+
+	return s.DefinitionStore.Blob(ctx, h)
+}
+
+func withBlobCounting(s **blobCountingStore) option {
+	return withStore(func(inner ports.DefinitionStore) ports.DefinitionStore {
+		*s = &blobCountingStore{DefinitionStore: inner}
+
+		return *s
+	})
+}
+
+func TestVersions_ListReadsNoTrees(t *testing.T) {
+	t.Parallel()
+
+	var blobs *blobCountingStore
+
+	h := newHarness(t, withBlobCounting(&blobs))
+	f := h.published(t)
+
+	for i := 2; i <= authoring.MaxVersionPage; i++ {
+		h.edit(t, f, strings.Replace(acmeYAML, "wip: 1", fmt.Sprintf("wip: %d", i), 1))
+		h.publish(t, f)
+	}
+
+	blobs.reads.Store(0)
+
+	start := time.Now()
+
+	page, err := h.svc.Versions(h.ctx, f, 0, authoring.MaxVersionPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("listing %d versions took %v, want under a second", authoring.MaxVersionPage, took)
+	}
+
+	if n := blobs.reads.Load(); n != 0 {
+		t.Errorf("listing versions read %d blobs, want none", n)
+	}
+
+	if len(page.Versions) != authoring.MaxVersionPage {
+		t.Fatalf("listed %d versions, want %d", len(page.Versions), authoring.MaxVersionPage)
+	}
+
+	for _, v := range page.Versions {
+		if v.Counts != acmeCounts {
+			t.Errorf("v%d counts = %+v, want %+v", v.Number, v.Counts, acmeCounts)
+		}
+	}
+}
+
+func TestVersions_BackfillsMissingCounts(t *testing.T) {
+	t.Parallel()
+
+	var blobs *blobCountingStore
+
+	h := newHarness(t, withBlobCounting(&blobs))
+	f := h.imported(t, acmeFiles(acmeYAML))
+
+	// porttest.Publish publishes through the store without counts, as versions published
+	// before counts were kept are.
+	for _, files := range []map[string][]byte{
+		acmeFiles(acmeYAML),
+		acmeFiles(strings.Replace(acmeYAML, "wip: 1", "wip: 2", 1)),
+		{yamlFile: []byte("spec: [does not parse\n")},
+	} {
+		if _, err := porttest.Publish(h.ctx, h.store, f, "acme-review", files); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	blobs.fail.Store(true)
+
+	if _, err := h.svc.Versions(h.ctx, f, 0, 10); !errors.Is(err, errBucketDown) {
+		t.Errorf("list while the bucket is down = %v, want %v", err, errBucketDown)
+	}
+
+	for i, c := range h.storedCounts(t, f) {
+		if c != nil {
+			t.Errorf("version %d got counts %+v from a failed tree read, want none", 3-i, *c)
+		}
+	}
+
+	blobs.fail.Store(false)
+
+	want := []authoring.Counts{{}, acmeCounts, acmeCounts}
+
+	for _, round := range []string{"first list", "second list"} {
+		blobs.reads.Store(0)
+
+		if got := h.listedCounts(t, f); !slices.Equal(got, want) {
+			t.Errorf("%s counts = %+v, want %+v", round, got, want)
+		}
+
+		if n := blobs.reads.Load(); (n == 0) != (round == "second list") {
+			t.Errorf("%s read %d blobs", round, n)
+		}
+	}
+
+	wantStored := []domain.VersionCounts{{}, {Stations: 4, Agents: 1}, {Stations: 4, Agents: 1}}
+
+	for i, c := range h.storedCounts(t, f) {
+		if c == nil || *c != wantStored[i] {
+			t.Errorf("version %d stored counts %v, want %+v", 3-i, c, wantStored[i])
+		}
+	}
+}
+
+// listedCounts lists a factory's versions and returns their counts, newest first.
+func (h *harness) listedCounts(t *testing.T, f domain.FactoryID) []authoring.Counts {
+	t.Helper()
+
+	page, err := h.svc.Versions(h.ctx, f, 0, authoring.MaxVersionPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make([]authoring.Counts, 0, len(page.Versions))
+	for _, v := range page.Versions {
+		out = append(out, v.Counts)
+	}
+
+	return out
+}
+
+// storedCounts returns the counts the store keeps for a factory's versions, newest first.
+func (h *harness) storedCounts(t *testing.T, f domain.FactoryID) []*domain.VersionCounts {
+	t.Helper()
+
+	vs, err := h.store.Versions(h.ctx, f, 0, authoring.MaxVersionPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make([]*domain.VersionCounts, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, v.Counts)
+	}
+
+	return out
 }

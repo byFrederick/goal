@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -243,6 +244,9 @@ type Deps struct {
 	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
+	// Log records what the service recovers from, such as a version's counts it could not
+	// save; nil discards.
+	Log *slog.Logger
 }
 
 // Service implements definition authoring over a DefinitionStore. It is safe for concurrent
@@ -256,6 +260,7 @@ type Service struct {
 	clock       ports.Clock
 	newID       func() string
 	templates   *TemplateCatalog
+	log         *slog.Logger
 }
 
 // New returns the service.
@@ -265,8 +270,13 @@ func New(d Deps) *Service {
 		newID = func() string { return uuid.Must(uuid.NewV7()).String() }
 	}
 
+	log := d.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
 	return &Service{
-		store: d.Store, loads: d.Loads, credentials: d.Credentials,
+		store: d.Store, loads: d.Loads, credentials: d.Credentials, log: log,
 		policies: d.Policies, webhooks: d.Webhooks,
 		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),

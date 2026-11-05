@@ -4,6 +4,7 @@
 // them through goald's routes (api.ts) and the identity service's (auth.ts). The seed is the
 // boards' Acme: an owner, an admin, two members with factory roles, two pending invitations.
 import type { FactoryRole, Member, OrgRole } from '@goal/api-client';
+import { orgPermissionsOf, type PermissionTable } from './roles.ts';
 
 export interface MockPerson {
   id: string;
@@ -159,10 +160,8 @@ export function seedPeople(now: number, { acme, labs, factories }: SeedOrgs): Mo
 }
 
 /** An organization's permissions by role (contracts/api/permissions.yaml), sorted, as goald answers Org.can. */
-export function orgCanOf(role: OrgRole, every: readonly string[]): string[] {
-  if (role === 'owner') return [...every];
-  if (role === 'admin') return every.filter((p) => p !== 'org:delete' && p !== 'org:transfer');
-  return ['member:read', 'org:read', 'personal_token:manage', 'personal_token:read'];
+export function orgCanOf(table: PermissionTable, role: OrgRole): string[] {
+  return orgPermissionsOf(table, role);
 }
 
 /**

@@ -264,7 +264,7 @@ function WaitingPanel() {
             <Link
               to="/o/$org/f/$factory/jonah/proposals"
               params={params}
-              className="text-link no-underline hover:text-run-ink"
+              className="text-link underline underline-offset-3 hover:text-run-ink"
             >
               All proposals
             </Link>

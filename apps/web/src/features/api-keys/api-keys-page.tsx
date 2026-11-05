@@ -236,17 +236,24 @@ export function ApiKeysPage() {
                 From your terminal
               </h2>
               <p className="m-0 text-secondary text-ink-soft">People sign in as themselves instead of using a key.</p>
-              <pre className="m-0 overflow-x-auto rounded-cell bg-panel p-3 font-mono text-secondary leading-relaxed whitespace-pre text-ink-soft">
-                <span aria-hidden="true" className="text-muted">
-                  ${' '}
-                </span>
-                goal login
-                {'\n'}
-                <span aria-hidden="true" className="text-muted">
-                  ${' '}
-                </span>
-                goal run {sample} "Fix the flaky test" --detach
-              </pre>
+              <section
+                aria-label="Example sign-in command"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+                tabIndex={0}
+                className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+              >
+                <pre className="m-0 w-max min-w-full rounded-cell bg-panel p-3 font-mono text-secondary leading-relaxed whitespace-pre text-ink-soft">
+                  <span aria-hidden="true" className="text-muted">
+                    ${' '}
+                  </span>
+                  goal login
+                  {'\n'}
+                  <span aria-hidden="true" className="text-muted">
+                    ${' '}
+                  </span>
+                  goal run {sample} "Fix the flaky test" --detach
+                </pre>
+              </section>
             </section>
             <section
               aria-labelledby="mcp-h"

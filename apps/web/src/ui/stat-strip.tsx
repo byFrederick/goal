@@ -80,14 +80,14 @@ export function StatStrip({
 function StatFigure({ stat }: { stat: Stat }) {
   if (stat.value === null) {
     return (
-      <span className="flex items-baseline gap-1 text-kpi tabular-nums">
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-1 break-words text-kpi tabular-nums">
         <span aria-hidden="true">—</span>
         <span className="sr-only">No data yet</span>
       </span>
     );
   }
   return (
-    <span className="flex items-baseline gap-1">
+    <span className="flex min-w-0 flex-wrap items-baseline gap-x-1 break-words">
       <NumberRoll
         value={stat.value}
         className={cn('text-kpi', stat.tone === 'rework' && 'text-rework-ink', stat.tone === 'you' && 'text-you-ink')}

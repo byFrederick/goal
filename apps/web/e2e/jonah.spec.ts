@@ -3,12 +3,13 @@
 // Not run in the box: Playwright needs a browser, which the box does not have.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll } from './support';
+import { expectNoOverlap, expectTarget44 } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the overview shows the two proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
+test('the overview shows the proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
@@ -17,10 +18,30 @@ test('the overview shows the two proposals waiting, the policy and what Jonah no
   await expect(page.getByText('Proposal 8')).toBeVisible();
   await expect(page.getByText('Based on 4 runs sent back')).toBeVisible();
   await expect(page.getByText('Watching, 3 of 5')).toBeVisible();
+  await expect(page.getByText('Review sends back 1 in 4 frontend items for a missing phone check')).toBeVisible();
+  await expect(page.getByText(/Plain-language judge/)).toHaveCount(0);
   await expect(page.getByRole('region', { name: /After publish/ })).toBeVisible();
 
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
+});
+
+test('what Jonah noticed sits right under After publish, not below its placeholder', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/o/acme/f/software/jonah');
+  const after = page.getByRole('region', { name: /After publish/ });
+  const noticed = page.getByRole('region', { name: /What Jonah noticed this week/ });
+  await expect(after).toBeVisible();
+  await expect(noticed).toBeVisible();
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  await expect
+    .poll(async () => {
+      const afterBox = await after.boundingBox();
+      const noticedBox = await noticed.boundingBox();
+      if (!afterBox || !noticedBox) return Number.POSITIVE_INFINITY;
+      return noticedBox.y - (afterBox.y + afterBox.height);
+    })
+    .toBeLessThan(24);
 });
 
 test('the tabs are Overview, Proposals and Tests, each at its own address', async ({ page }) => {
@@ -36,7 +57,7 @@ test('the tabs are Overview, Proposals and Tests, each at its own address', asyn
 
 test('each proposal links to its page', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah');
-  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/8$/);
+  await expect(page.getByRole('link', { name: /^Review/ }).first()).toHaveAttribute('href', /\/jonah\/proposals\/10$/);
 });
 
 test('Look for improvements now queues a review, and a second one is refused', async ({ page }) => {
@@ -88,7 +109,7 @@ test('the Tests tab shows each kept test’s last result and links a run to its 
   await expect(kept.getByText('Failed')).toBeVisible();
   await expect(kept.getByText('Error', { exact: true })).toBeVisible();
   await expect(kept.getByText('Not run yet')).toBeVisible();
-  await kept.getByRole('link', { name: /Passed on/ }).click();
+  await kept.getByRole('link', { name: /^Passed / }).click();
   await expect(page).toHaveURL(/\/items\/451\?tab=trace/);
 });
 
@@ -136,7 +157,9 @@ const jonahPages = [
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1440, 1024, 768, 390]) {
     for (const [name, url, tab] of jonahPages) {
-      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({ page }) => {
+      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({
+        page,
+      }, testInfo) => {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
         await page.goto(url);
@@ -144,8 +167,52 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(tabs.locator('[aria-current="page"]')).toHaveCount(1);
         await expect(tabs.getByRole('link', { name: new RegExp(tab) })).toHaveAttribute('aria-current', 'page');
         await expectNoHorizontalScroll(page);
-        await expect(page).toHaveScreenshot(`jonah-${name}-${width}-${scheme}.png`);
+        // The viewport is set above, so the three projects draw the same picture: one keeps its baselines.
+        if (testInfo.project.name === 'desktop-1440') {
+          await expect(page).toHaveScreenshot(`jonah-${name}-${width}-${scheme}.png`);
+        }
       });
     }
   }
 }
+
+for (const width of [375, 768, 1440]) {
+  test(`the proposal filter reaches its last option and keeps the chosen one in view at ${width} px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/software/jonah/proposals?state=applied');
+    const last = page.getByRole('radio', { name: 'Superseded' });
+    await last.scrollIntoViewIfNeeded();
+    await last.evaluate((el) => el.parentElement?.scrollIntoView({ inline: 'nearest' }));
+    const box = await last.boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true);
+    await page.getByRole('radio', { name: 'Applied' }).check();
+    const chosen = await page.getByRole('radio', { name: 'Applied' }).boundingBox();
+    expect(chosen && chosen.x >= 0 && chosen.x + chosen.width <= width).toBe(true);
+    if (width === 375) {
+      const title = page.locator('header.shell-topbar p').first();
+      expect(await title.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+  });
+}
+
+test('on the Tests tab each result ⓘ is 44×44 and does not lie over the next row at 390 px', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/o/acme/f/software/jonah/tests');
+  await expect(page.getByText('Not run yet')).toBeVisible();
+  const tips = page.getByRole('button', { name: 'What the last result is' });
+  const rows = page.getByRole('region', { name: 'Kept tests' }).locator('a, button');
+  for (let i = 0; i < (await tips.count()); i++) {
+    const tip = tips.nth(i);
+    await expectTarget44(tip, 'What the last result is');
+    const tipBox = await tip.boundingBox();
+    for (let j = 0; j < (await rows.count()); j++) {
+      const row = rows.nth(j);
+      if (await tip.evaluate((el, other) => el === other, await row.elementHandle())) continue;
+      const box = await row.boundingBox();
+      if (!tipBox || !box || box.y < tipBox.y) continue;
+      await expectNoOverlap(tip, row, 'What the last result is and the control after it');
+    }
+  }
+});

@@ -26,8 +26,9 @@ One item, one branch, one small pull request (AGENTS.md, "Changes"). What a chan
    - every acceptance criterion, whether it is met and its evidence: the test, the command and its result, or the file and line that shows it;
    - each check you ran, with its result;
    - what you did not run, and why (no PostgreSQL, no browser, no credentials), so a reviewer knows what CI or a person still has to cover;
+   - each Playwright spec under `apps/web/e2e/` you added or changed, by name, and that the box could not run them: CI's e2e job (`task web:e2e`) runs them on a pull request into an assembly's integration branch (it is skipped on pull requests into main until software#685 turns it back on), so say where to find your specs' results in its report;
    - what a person must do after the merge (an apply, a deploy, an edit outside the repository), in order;
    - follow-ups you found and left out of scope.
 5. **Verify after the last push.** Run the item's verification and the checks of what you touched (the change map's Run column). Fix what fails, then push again.
-6. **Mark it ready** with `gh pr ready` once that verification passes. GitHub merges no draft, and the reviewer's approval merges a ready pull request.
+6. **Mark it ready** with `gh pr ready` once that verification passes. GitHub merges no draft, and the reviewer's approval merges a ready pull request. A reviewer of a change under `apps/web/`, `packages/api-client/` or `contracts/` reads its e2e job where it runs, as the [web rule](../../rules/web.md#review) says.
 7. **Leave the gate alone.** Never merge, close, approve or delete a pull request or a branch yourself; the review gate merges.

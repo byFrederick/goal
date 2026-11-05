@@ -138,12 +138,16 @@ export function AccountMenu({ org, size = 'sidebar' }: { org: OrgSummary; size?:
   const [open, setOpen] = useState(false);
   const name = person ? displayName(person) : 'Local user';
   const initials = person ? initialsOf(person) : 'LU';
-  const label = `${initials}, ${name}, account`;
+  const role = roleName(org.role);
+  // The rail shows the initials alone; the sidebar shows initials, name and role, and its name starts with
+  // them in that order (WCAG 2.5.3, label in name).
+  const railLabel = `${initials}, ${name}, account`;
+  const label = `${[initials, name, role].filter(Boolean).join(' ')}, account`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {size === 'rail' ? (
-        <PopoverTrigger aria-label={label} className={railItemClass}>
+        <PopoverTrigger aria-label={railLabel} className={railItemClass}>
           <Avatar initials={initials} size="sidebar" />
         </PopoverTrigger>
       ) : (
@@ -151,9 +155,9 @@ export function AccountMenu({ org, size = 'sidebar' }: { org: OrgSummary; size?:
           aria-label={label}
           className="flex w-full items-center gap-3 rounded-cell p-2 text-left text-ink hover:bg-hover aria-expanded:bg-hover"
         >
-          <Avatar initials={initials} size="sidebar" />
+          <Avatar initials={initials} size="sidebar" />{' '}
           <span className="flex min-w-0 flex-col">
-            <span className="truncate text-body font-semibold">{name}</span>
+            <span className="truncate text-body font-semibold">{name}</span>{' '}
             {roleName(org.role) ? <span className="truncate text-meta text-muted">{roleName(org.role)}</span> : null}
           </span>
           <ChevronsUpDown size={16} strokeWidth={1.5} aria-hidden="true" className="ml-auto flex-none text-muted" />

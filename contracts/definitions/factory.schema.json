@@ -138,7 +138,7 @@
       "additionalProperties": false,
       "properties": {
         "model": { "$ref": "#/$defs/model" },
-        "modelKey": { "$ref": "#/$defs/secretRef", "description": "The {{secret}} that gives every run its model: a Claude subscription token (sk-ant-oat…) or an Anthropic API key. Judges, evals and bake-offs use it too." },
+        "modelKey": { "$ref": "#/$defs/secretRef", "description": "The {{secret}} that gives every run its model: a Claude subscription token (sk-ant-oat…) or an Anthropic API key. Jonah's reviews and the tries of past items use it too." },
         "modelConnection": { "$ref": "#/$defs/slug", "description": "Removed by ADR 0037 (moved-to-environment): set modelKey. Accepted so versions published before still load and run until Goal converts them." },
         "size": { "enum": ["small", "medium", "large"], "description": "Removed by ADR 0037 (moved-to-environment): set size in each environment file. Accepted so versions published before still load and run until Goal converts them." },
         "tools": {

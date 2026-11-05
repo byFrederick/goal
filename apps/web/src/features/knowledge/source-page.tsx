@@ -180,37 +180,45 @@ function FilesCard({ source }: { source: KnowledgeSource }) {
                 : 'No files yet. The first sync writes them.'}
           </p>
         ) : (
-          <table className="w-full border-collapse text-body">
-            <caption className="sr-only">Files of {source.name}</caption>
-            <thead>
-              <tr className="bg-panel text-left text-secondary text-muted [&>th]:border-t [&>th]:border-line [&>th]:px-5 [&>th]:py-2 [&>th]:font-control">
-                <th scope="col">Path</th>
-                <th scope="col" className="text-right">
-                  Size
-                </th>
-                <th scope="col" className="text-right">
-                  Reads, 7 days
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((f) => (
-                <tr
-                  key={f.path}
-                  className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-3"
-                >
-                  <td className="min-w-0">
-                    <span translate="no" className="font-mono break-all">
-                      {f.path}
-                    </span>
-                    {f.title ? <span className="block text-secondary break-words text-muted">{f.title}</span> : null}
-                  </td>
-                  <td className="text-right whitespace-nowrap tabular-nums">{formatBytes(f.bytes)}</td>
-                  <td className="text-right tabular-nums">{reads.get(f.path) ?? 0}</td>
+          <section
+            data-testid="files-scroll"
+            aria-label="Files table"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+            tabIndex={0}
+            className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+          >
+            <table className="w-full min-w-[360px] border-collapse text-body">
+              <caption className="sr-only">Files of {source.name}</caption>
+              <thead>
+                <tr className="bg-panel text-left text-secondary text-muted [&>th]:border-t [&>th]:border-line [&>th]:px-5 [&>th]:py-2 [&>th]:font-control">
+                  <th scope="col">Path</th>
+                  <th scope="col" className="text-right">
+                    Size
+                  </th>
+                  <th scope="col" className="text-right">
+                    Reads, 7 days
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((f) => (
+                  <tr
+                    key={f.path}
+                    className="animate-row-in align-top [&>td]:border-t [&>td]:border-line [&>td]:px-5 [&>td]:py-3"
+                  >
+                    <td className="min-w-0">
+                      <span translate="no" className="font-mono break-all">
+                        {f.path}
+                      </span>
+                      {f.title ? <span className="block text-secondary break-words text-muted">{f.title}</span> : null}
+                    </td>
+                    <td className="text-right whitespace-nowrap tabular-nums">{formatBytes(f.bytes)}</td>
+                    <td className="text-right tabular-nums">{reads.get(f.path) ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
       </Skeleton>
     </section>

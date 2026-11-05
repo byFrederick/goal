@@ -8,4 +8,4 @@ The mock's waiting approval and its route: `apps/web/mock/fixtures.ts` (item 151
 
 ## Run
 
-`pnpm --dir apps/web run typecheck`, `pnpm --dir apps/web run lint`, `pnpm --dir apps/web exec vitest run src/features/needs-you mock`, and the Playwright spec `needs-you.spec.ts` where a browser is available
+`pnpm --dir apps/web run typecheck`, `pnpm --dir apps/web run lint`, `pnpm --dir apps/web exec vitest run src/features/needs-you mock`, and CI's e2e job runs the Playwright spec `needs-you.spec.ts`

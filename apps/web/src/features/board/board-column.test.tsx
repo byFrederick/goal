@@ -170,7 +170,9 @@ describe('a column with a buffer', () => {
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     const ready = within(build).getByRole('link', { name: 'Card 1' }).closest('[data-group="ready"]');
-    expect(ready?.classList).toContain('opacity-70');
+    expect([...(ready?.classList ?? [])].some((c) => c.startsWith('opacity-'))).toBe(false);
+    expect(within(ready as HTMLElement).getByRole('article').classList).toContain('bg-panel');
+    expect(within(build).getByRole('link', { name: 'Card 2' }).closest('article')?.classList).toContain('bg-card');
   });
 
   it('keeps the same order on a phone', async () => {

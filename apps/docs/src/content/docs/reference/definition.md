@@ -34,7 +34,7 @@ object, required.
 
 - `runtime`: object, required.
   - `model`: string matching `^claude-[a-z0-9-]+$`.
-  - `modelKey`: string. The {{secret}} that gives every run its model: a Claude subscription token (sk-ant-oat…) or an Anthropic API key. Judges, evals and bake-offs use it too.
+  - `modelKey`: string. The {{secret}} that gives every run its model: a Claude subscription token (sk-ant-oat…) or an Anthropic API key. Jonah's reviews and the tries of past items use it too.
   - `modelConnection`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. Removed by ADR 0037 (moved-to-environment): set modelKey. Accepted so versions published before still load and run until Goal converts them.
   - `size`: one of `"small"`, `"medium"`, `"large"`. Removed by ADR 0037 (moved-to-environment): set size in each environment file. Accepted so versions published before still load and run until Goal converts them.
   - `tools`: array of string. Removed by ADR 0037 (moved-to-environment): set tools in each environment file. Accepted so versions published before still load and run until Goal converts them.

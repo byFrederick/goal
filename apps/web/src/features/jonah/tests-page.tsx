@@ -61,7 +61,7 @@ function LastResult({ test }: { test: KeptTest }) {
   const { label, tone } = resultLabels[last.result];
   const body = (
     <>
-      <Chip tone={tone}>{label}</Chip>
+      <Chip tone={tone}>{label}</Chip>{' '}
       <span className="text-secondary text-muted tabular-nums">{keptOn.format(new Date(last.at))}</span>
     </>
   );
@@ -72,7 +72,7 @@ function LastResult({ test }: { test: KeptTest }) {
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(`${factory.name}#${test.item.number}`) }}
           search={{ tab: 'trace' }}
-          aria-label={`${label} on ${keptOn.format(new Date(last.at))}, open the run of #${test.item.number}`}
+          aria-label={`${label} ${keptOn.format(new Date(last.at))}, open the run of #${test.item.number}`}
           className="inline-flex items-center gap-2 text-ink no-underline hover:text-link max-md:min-h-11"
         >
           {body}

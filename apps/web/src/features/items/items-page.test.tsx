@@ -357,10 +357,19 @@ describe('Items filters in the URL', () => {
     renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
 
     const meter = await screen.findByTestId('assembly-meter');
-    const segments = Array.from(meter.children);
+    const segments = Array.from(meter.querySelectorAll('i'));
     expect(segments).toHaveLength(3);
     expect(segments.filter((s) => s.className.includes('bg-ink'))).toHaveLength(1);
     expect(segments.filter((s) => s.className.includes('bg-rule'))).toHaveLength(2);
+  });
+
+  it('bounds a 60-part assembly meter to its column and draws the continuous bar', async () => {
+    renderItems([assembly({ parts: { total: 60, merged: 20, in_progress: 1, waiting: 0, stations: [] } })]);
+
+    const meter = await screen.findByTestId('assembly-meter');
+    expect(meter.getAttribute('data-mode')).toBe('bar');
+    expect(meter.style.width).toBe('100%');
+    expect(meter.parentElement?.className).toContain('w-40');
   });
 
   it('lines the assembly row up with the header, cell for cell', async () => {
@@ -578,6 +587,21 @@ describe('Items list bulk actions', () => {
 
     fireEvent.click(within(bar).getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Bulk actions' })).toBeNull());
+  });
+
+  it('toggles the selection from the enlarged label and keeps the accessible name', async () => {
+    renderItems(twoItems());
+
+    const box = await screen.findByRole('checkbox', { name: 'Select sre#1' });
+    const label = box.parentElement as HTMLElement;
+    expect(label.tagName).toBe('LABEL');
+    fireEvent.click(label);
+    expect(await screen.findByRole('region', { name: 'Bulk actions' })).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Select sre#1' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(label);
+    await waitFor(() =>
+      expect((screen.getByRole('checkbox', { name: 'Select sre#1' }) as HTMLInputElement).checked).toBe(false),
+    );
   });
 
   it('pauses each checked item with its own request', async () => {

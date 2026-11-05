@@ -649,6 +649,16 @@ describe('the question, the tabs and the spec', () => {
   });
 });
 
+describe('Spec outputs', () => {
+  it('lets a keyboard scroll an object output', async () => {
+    renderTab('items/147?tab=changes', item({ outputs: { build: { plan: { steps: 3 } } } }));
+
+    const region = await screen.findByRole('region', { name: 'Output value' });
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain('focus-visible:outline-run');
+  });
+});
+
 describe('Watch live', () => {
   function stubWidth(phone: boolean) {
     window.matchMedia = (query: string) =>
