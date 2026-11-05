@@ -19,6 +19,7 @@ var repositoriesTests = []struct {
 }{
 	{"CreateItem_StoresBranchAndRepositories", testCreateItemStoresBranchAndRepositories},
 	{"ItemRepositories_InJoinOrder", testItemRepositoriesInJoinOrder},
+	{"ItemsRepositories_OnePageAtOnce", testItemsRepositoriesOnePageAtOnce},
 	{"ItemRepositories_PartsWrittenWithTheirs", testPartsWrittenWithTheirRepositories},
 	{"ItemRepositories_StartFollowUpTakesItsSources", testStartFollowUpTakesItsSourcesRepositories},
 	{"ItemRepositories_TriageGainsJoiningSourcesUpToTheCap", testTriageGainsJoiningSourcesRepositories},
@@ -128,6 +129,45 @@ func testItemRepositoriesInJoinOrder(f *fixture) {
 
 	if got := f.itemRepositories(t, missingItem); len(got) != 0 {
 		t.Errorf("unknown item = %+v; want none", got)
+	}
+}
+
+// ItemsRepositories reads a page of items' repositories in one call, each item's in first-joined
+// order as ItemRepositories reads them; an item without rows, an unknown id and an id that is not
+// a UUID are left out, and another organization reads none of them.
+func testItemsRepositoriesOnePageAtOnce(f *fixture) {
+	t := f.t
+
+	two := f.create(t, domain.NewItem{Repositories: []domain.ItemRepository{
+		{Repo: repoOps, Joined: domain.JoinedDefault},
+		{Repo: repoWeb, Joined: domain.JoinedFiling},
+	}})
+	one := f.create(t, domain.NewItem{Repositories: filed(repoAPI)})
+	none := f.create(t, domain.NewItem{})
+	ids := []domain.ItemID{two.ID, one.ID, none.ID, missingItem, "not-a-uuid"}
+
+	got, err := f.Store.ItemsRepositories(f.ctx(t), ids)
+	if err != nil {
+		t.Fatalf("ItemsRepositories: %v", err)
+	}
+
+	keys := map[domain.ItemID][]string{}
+	for id, rows := range got {
+		keys[id] = domain.ItemRepositoryKeys(rows)
+	}
+
+	want := map[domain.ItemID][]string{two.ID: {repoWeb, repoOps}, one.ID: {repoAPI}}
+	if !reflect.DeepEqual(keys, want) {
+		t.Errorf("ItemsRepositories = %v; want %v", keys, want)
+	}
+
+	if !reflect.DeepEqual(got[two.ID], f.itemRepositories(t, two.ID)) {
+		t.Errorf("ItemsRepositories of %s = %+v; want what ItemRepositories reads, %+v", two.ID, got[two.ID], f.itemRepositories(t, two.ID))
+	}
+
+	o := f.otherOrg(t)
+	if other, err := o.Store.ItemsRepositories(o.ctx(t), ids); err != nil || len(other) != 0 {
+		t.Errorf("another organization's ItemsRepositories = %v, %v; want none", other, err)
 	}
 }
 

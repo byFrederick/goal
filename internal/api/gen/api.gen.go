@@ -5067,7 +5067,7 @@ type Item struct {
 	// Ref <factory name>#<number>, as in goal#2
 	Ref string `json:"ref"`
 
-	// Repositories The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only. An item filed before repositories shows the factory's default entry's, and an item of a factory without code none
+	// Repositories The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only (ItemCard has them too). An item filed before repositories shows the factory's default entry's, and an item of a factory without code none
 	Repositories *[]ItemRepository `json:"repositories,omitempty"`
 	ReworkCount  int               `json:"rework_count"`
 
@@ -5182,8 +5182,11 @@ type ItemCard struct {
 	PullRequests []string `json:"pull_requests"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string `json:"ref"`
-	ReworkCount int    `json:"rework_count"`
+	Ref string `json:"ref"`
+
+	// Repositories As Item's repositories: the repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4). An item filed before repositories shows the factory's default entry's, and an item of a factory without code an empty array
+	Repositories []ItemRepository `json:"repositories"`
+	ReworkCount  int              `json:"rework_count"`
 
 	// RopeHeld Held at a queue station by the drum-buffer-rope release; always false until it is enforced
 	RopeHeld bool `json:"rope_held"`

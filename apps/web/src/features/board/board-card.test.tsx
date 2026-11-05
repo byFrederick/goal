@@ -41,6 +41,7 @@ const card = (over: Partial<ItemCard>): ItemCard => ({
   agent: null,
   pr_url: null,
   pull_requests: [],
+  repositories: [],
   slot: null,
   turn: null,
   summary: null,
