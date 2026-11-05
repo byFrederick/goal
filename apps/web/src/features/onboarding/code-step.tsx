@@ -78,23 +78,30 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
   const templates = useQuery(templatesQuery(org.id));
   const template = templates.data?.find((t) => t.name === search.template);
   const code: TemplateCode = template?.code ?? 'none';
-  return (
-    <Skeleton ready={!templates.isPending} placeholder={<CodePlaceholder org={org} />}>
-      {templates.isPending ? null : search.factory ? (
-        <CodeForm key={code} org={org} search={search} factory={search.factory} code={code} />
-      ) : (
-        <NoFactory org={org} search={search} />
-      )}
-    </Skeleton>
+  // The page's frame stays real while the template loads: only the form's blocks are the placeholder, so
+  // nothing focusable sits inside the hidden layer.
+  if (templates.isPending) {
+    return (
+      <OnboardingLayout step="code" org={org} preview={{ organization: organizationCard(org, window.location.host) }}>
+        <Skeleton ready={false} placeholder={<CodePlaceholder />}>
+          {null}
+        </Skeleton>
+      </OnboardingLayout>
+    );
+  }
+  return search.factory ? (
+    <CodeForm key={code} org={org} search={search} factory={search.factory} code={code} />
+  ) : (
+    <NoFactory org={org} search={search} />
   );
 }
 
-/** The step's layout while the template is read: the same blocks as muted shapes. */
-function CodePlaceholder({ org }: { org: OrgSummary }) {
+/** The form's blocks as muted shapes, while the template is read. */
+function CodePlaceholder() {
   return (
-    <OnboardingLayout step="code" org={org} preview={{ organization: organizationCard(org, window.location.host) }}>
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="m-0 text-kpi tracking-display">Connect your code</h1>
+        <div className="h-8 w-2/3 rounded-control bg-hover" />
         <div className="h-5 w-3/5 rounded-control bg-hover" />
       </div>
       <div className="grid gap-3 @[480px]:grid-cols-3">
@@ -104,7 +111,7 @@ function CodePlaceholder({ org }: { org: OrgSummary }) {
       </div>
       <div className="h-11 rounded-control bg-hover" />
       <div className="h-11 rounded-control bg-hover" />
-    </OnboardingLayout>
+    </div>
   );
 }
 

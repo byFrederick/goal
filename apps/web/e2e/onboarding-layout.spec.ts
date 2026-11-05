@@ -1,7 +1,7 @@
 // Onboarding step 2, Connect your code (canvas get-started/repository) against the mock (a repository URL, a write-only token, the host's answer): at 1440, 1280, 1024, 768
 // and 390 px, in light and dark, nothing goes past the viewport edge, no text is clipped, and a phone's
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoClippedElements, expectNoHorizontalScroll } from './support';
 
 const sizes = [
@@ -14,6 +14,13 @@ const sizes = [
 
 const path = '/o/goal/get-started/factory';
 
+/** Makes the factory on step 2, which opens the Code step. */
+async function openCodeStep(page: Page) {
+  await page.goto(path);
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
+}
+
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
@@ -24,7 +31,7 @@ for (const size of sizes) {
       test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
       await page.setViewportSize(size);
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto(path);
+      await openCodeStep(page);
       await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
 
       await expectNoHorizontalScroll(page);
@@ -40,7 +47,7 @@ for (const size of sizes) {
 test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(path);
+  await openCodeStep(page);
   await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
   const targets = page
     .getByRole('main')

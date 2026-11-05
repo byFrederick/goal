@@ -246,7 +246,15 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
   };
   reset(clock());
 
-  const list = (org: string) => stored.get(org) ?? [];
+  /** The organization's secrets; an organization with none yet (one made after the reset) gets its own list. */
+  const list = (org: string) => {
+    let secrets = stored.get(org);
+    if (!secrets) {
+      secrets = [];
+      stored.set(org, secrets);
+    }
+    return secrets;
+  };
   const named = (org: string, name: string) => list(org).find((s) => s.secret.name === name);
 
   /** The secret as the contract has it: its scope as factory ids. */
