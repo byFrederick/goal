@@ -18,7 +18,8 @@ var _ ports.CodeHosts = (*Store)(nil)
 
 // The organization's code hosts (ADR 0041, decision 1) over 00127's code_hosts, as goal_app under
 // row-level security. A save takes the organization's code-host lock, compares, then deletes the
-// hosts it drops, upserts the rest and appends its audit entry, all in one transaction.
+// hosts it drops, upserts the rest and appends its audit entry, all in one transaction; the seed
+// (SeedCodeHosts) takes the same lock.
 
 // CodeHosts implements ports.CodeHosts.
 func (s *Store) CodeHosts(ctx context.Context) ([]domain.CodeHost, error) {
@@ -80,6 +81,66 @@ func (s *Store) SetCodeHosts(ctx context.Context, by domain.Actor, hosts []domai
 	}
 
 	return next, nil
+}
+
+// SeedCodeHosts implements ports.CodeHosts. Under the organization's code-host lock it writes the
+// organization's code_hosts_seeded row (00128) and adds the hosts only when that row is new, so
+// two instances, or two calls, seed once, and a PUT never mixes with the seed.
+func (s *Store) SeedCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) (bool, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return false, domain.ErrNoOrg
+	}
+
+	var seeded bool
+
+	err := s.inTx(ctx, func(q *db.Queries) error {
+		if err := q.LockCodeHosts(ctx); err != nil {
+			return err
+		}
+
+		n, err := q.MarkCodeHostsSeeded(ctx)
+		if err != nil || n == 0 {
+			return err
+		}
+
+		seeded = true
+
+		rows, err := q.CodeHosts(ctx)
+		if err != nil {
+			return err
+		}
+
+		added := 0
+
+		for _, h := range hosts {
+			n, err := q.AddCodeHost(ctx, db.AddCodeHostParams{Host: h.Host, Kind: string(h.Kind), CreatedBy: by.Ref()})
+			if err != nil {
+				return codeHostError(err)
+			}
+
+			added += int(n)
+		}
+
+		if added == 0 {
+			return nil
+		}
+
+		after, err := q.CodeHosts(ctx)
+		if err != nil {
+			return err
+		}
+
+		return appendAudit(ctx, q, domain.AuditEntry{
+			Actor: by, Action: domain.AuditOrgCodeHostsSet, TargetKind: domain.AuditTargetOrg, TargetID: string(org),
+			Data: domain.CodeHostsAuditData(codeHostsOf(after), codeHostsOf(rows)),
+		})
+	})
+	if err != nil {
+		return false, fmt.Errorf("seed code hosts: %w", err)
+	}
+
+	return seeded, nil
 }
 
 func codeHostsOf(rows []db.CodeHostsRow) []domain.CodeHost {

@@ -9,6 +9,27 @@ import (
 	"context"
 )
 
+const addCodeHost = `-- name: AddCodeHost :execrows
+INSERT INTO code_hosts (host, kind, created_by)
+VALUES ($1, $2, $3)
+ON CONFLICT (org_id, host) DO NOTHING
+`
+
+type AddCodeHostParams struct {
+	Host      string
+	Kind      string
+	CreatedBy string
+}
+
+// Adds host unless it is listed, keeping a listed host's kind and who added it.
+func (q *Queries) AddCodeHost(ctx context.Context, arg AddCodeHostParams) (int64, error) {
+	result, err := q.db.Exec(ctx, addCodeHost, arg.Host, arg.Kind, arg.CreatedBy)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const codeHosts = `-- name: CodeHosts :many
 
 SELECT host, kind FROM code_hosts ORDER BY host COLLATE "C"
@@ -59,6 +80,19 @@ SELECT pg_advisory_xact_lock(hashtextextended('goal.code-hosts:' || goal_org()::
 func (q *Queries) LockCodeHosts(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockCodeHosts)
 	return err
+}
+
+const markCodeHostsSeeded = `-- name: MarkCodeHostsSeeded :execrows
+INSERT INTO code_hosts_seeded DEFAULT VALUES ON CONFLICT (org_id) DO NOTHING
+`
+
+// One row the first time for the organization (00128), none after: the caller seeds only on 1.
+func (q *Queries) MarkCodeHostsSeeded(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, markCodeHostsSeeded)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const putCodeHost = `-- name: PutCodeHost :exec

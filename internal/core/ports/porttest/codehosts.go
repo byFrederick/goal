@@ -47,3 +47,37 @@ func (t *Tenancy) SetCodeHosts(ctx context.Context, by domain.Actor, hosts []dom
 
 	return slices.Clone(next), nil
 }
+
+// SeedCodeHosts implements ports.CodeHosts.
+func (t *Tenancy) SeedCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	r, err := t.liveLocked(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if r.codeHostsSeeded {
+		return false, nil
+	}
+
+	r.codeHostsSeeded = true
+	next := slices.Clone(r.codeHosts)
+
+	for _, h := range hosts {
+		if !slices.ContainsFunc(next, func(c domain.CodeHost) bool { return c.Host == h.Host }) {
+			next = append(next, h)
+		}
+	}
+
+	if len(next) == len(r.codeHosts) {
+		return true, nil
+	}
+
+	slices.SortFunc(next, func(a, b domain.CodeHost) int { return cmp.Compare(a.Host, b.Host) })
+	t.appendLocked(r.org.ID, orgEntry(by, domain.AuditOrgCodeHostsSet, r.org, domain.CodeHostsAuditData(next, r.codeHosts)))
+	r.codeHosts = next
+
+	return true, nil
+}

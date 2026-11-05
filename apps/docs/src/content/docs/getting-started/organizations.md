@@ -47,6 +47,8 @@ Each host in the answer has the API base goald derives for it:
 | any other GitHub host (GitHub Enterprise Server) | `github` | `https://<host>/api/v3` |
 | any GitLab host | `gitlab` | `https://<host>/api/v4` |
 
+When goald first started with the list, it added, once, the hosts the organization's factories and knowledge sources already used: the host of every published version's `runtime.repository`, with its `forge`, and the host of every knowledge repository source, with its `code_host`. That entry is in the audit log as `org.code_hosts_set` by Goal. A host it couldn't add, such as one with a port or with no kind, is in goald's log as `code host not seeded` with the reason. goald doesn't add hosts again, so a host an owner removes stays removed, and a factory published later on a new host needs an owner to add that host.
+
 The list doesn't yet change where goald sends tokens. The repository test and knowledge repository sources still accept only github.com and gitlab.com.
 
 ## Pick the organization the CLI acts in

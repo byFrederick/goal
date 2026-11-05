@@ -221,6 +221,10 @@ func (mxOrgs) SetCodeHosts(context.Context, domain.Actor, []domain.CodeHost) ([]
 	panic(errReached)
 }
 
+func (mxOrgs) SeedCodeHosts(context.Context, domain.Actor, []domain.CodeHost) (bool, error) {
+	panic(errReached)
+}
+
 func (mxOrgs) Org(_ context.Context, ref string) (domain.Org, error) {
 	for _, o := range []domain.Org{{ID: mxAcme, Slug: "acme", Name: "Acme"}, {ID: mxOther, Slug: "other", Name: "Other"}} {
 		if ref == o.Slug || ref == string(o.ID) {

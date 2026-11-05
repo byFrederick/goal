@@ -46,6 +46,8 @@ type orgRow struct {
 	signup  *domain.SignupDomain
 	// codeHosts are the organization's added code hosts, sorted by host.
 	codeHosts []domain.CodeHost
+	// codeHostsSeeded is whether SeedCodeHosts ran for the organization.
+	codeHostsSeeded bool
 }
 
 type auditRow struct {

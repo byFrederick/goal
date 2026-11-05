@@ -22,7 +22,7 @@ var orgTables = []string{
 	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "secrets", "org_policies", "org_notification_settings",
 	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uploads", "standing_rules",
 	"org_signup_domains", "draft_requests", "environment_tests", "knowledge_snapshots", "knowledge_files", "knowledge_reads",
-	"jonah_reviews", "jonah_proposals", "jonah_observations", "follow_ups", "code_hosts",
+	"jonah_reviews", "jonah_proposals", "jonah_observations", "follow_ups", "code_hosts", "code_hosts_seeded",
 }
 
 // withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;
