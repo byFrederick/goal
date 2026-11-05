@@ -443,7 +443,7 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		{
 			Name: "architect", PromptPath: "./agents/architect.md", Model: "claude-opus-5-5",
 			Skills:      []domain.SkillRef{{Name: "acme-conventions", Source: "./skills/acme-conventions"}},
-			Connections: []string{"docs"}, ToolsAllow: []string{"Read", "Grep"},
+			Connections: []string{"docs"}, Code: domain.CodeWrite, ToolsAllow: []string{"Read", "Grep"},
 		},
 		{
 			Name: "engineer", PromptPath: "./agents/engineer.md",
@@ -451,9 +451,10 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 				{Name: "acme-conventions", Source: "./skills/acme-conventions"},
 				{Name: "golang-testing", Source: "skills.sh:samber/cc-skills-golang@golang-testing"},
 			},
-			ToolsAllow: []string{"Read", "Edit", "Bash"}, ToolsDeny: []string{"Bash(git push*)"},
+			Code: domain.CodeWrite, ToolsAllow: []string{"Read", "Edit", "Bash"}, ToolsDeny: []string{"Bash(git push*)"},
 		},
-		{Name: "reviewer", PromptPath: "./agents/reviewer.md"},
+		// No agent says its code, and the factory has an entry that writes (Factory.AgentCode).
+		{Name: "reviewer", PromptPath: "./agents/reviewer.md", Code: domain.CodeWrite},
 	}
 	if !reflect.DeepEqual(l.Agents, wantAgents) {
 		t.Errorf("agents =\n%+v\nwant\n%+v", l.Agents, wantAgents)
@@ -1061,5 +1062,37 @@ func TestLine_CarriesRepositoryEntries(t *testing.T) {
 
 	if got := (&Factory{}).Line().Runtime.Repositories; got != nil {
 		t.Errorf("no code: repositories = %+v; want none", got)
+	}
+}
+
+// Each agent's code reaches the line as AgentCode gives it: what the agent says, else write when
+// the factory has an entry that writes and read otherwise.
+func TestLine_AgentsCarryTheirCode(t *testing.T) {
+	t.Parallel()
+
+	agents := []Agent{{Name: "builder"}, {Name: "reviewer", Code: CodeRead}}
+
+	for _, tt := range []struct {
+		name    string
+		entries []RepositoryEntry
+		want    []string
+	}{
+		{name: "an entry that writes", entries: []RepositoryEntry{{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite}}, want: []string{CodeWrite, CodeRead}},
+		{name: "read entries alone", entries: []RepositoryEntry{{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead}}, want: []string{CodeRead, CodeRead}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := &Factory{Spec: Spec{Runtime: Runtime{Repositories: tt.entries}, Agents: agents}}
+
+			var got []string
+			for _, a := range f.Line().Agents {
+				got = append(got, a.Code)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("codes = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

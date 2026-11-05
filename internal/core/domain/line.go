@@ -329,8 +329,11 @@ type AgentSpec struct {
 	Connections []string
 	// Environment is the environment file the agent's box gets on secrets; "" is DefaultEnvironment.
 	Environment string
-	ToolsAllow  []string
-	ToolsDeny   []string
+	// Code is whether the agent writes the factory's repositories (CodeWrite) or only reads them
+	// (CodeRead), as the definition says or defaults it (ADR 0041 decision 3); "" writes.
+	Code       string
+	ToolsAllow []string
+	ToolsDeny  []string
 }
 
 // SkillRef is a skill an agent loads: a local folder (resolved path) or a skills.sh source.
