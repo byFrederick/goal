@@ -39,7 +39,7 @@ interface OnboardingLayoutProps {
 
 /** The text style of "Save and finish later", for the link and for the button that signs out. */
 export const saveLaterClass =
-  'rounded-control font-control text-secondary text-ink-soft no-underline hover:text-ink focus-visible:outline-2 focus-visible:outline-run';
+  'inline-flex items-center rounded-control font-control text-secondary text-ink-soft no-underline hover:text-ink focus-visible:outline-2 focus-visible:outline-run max-md:min-h-11';
 
 export function OnboardingLayout({ step, org, back, action, preview, children }: OnboardingLayoutProps) {
   return (
