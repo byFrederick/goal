@@ -52,6 +52,10 @@ func TestCodeHost_RepositoryParse(t *testing.T) {
 		if again, err := ParseCodeRepository(hosts, got.URL()); err != nil || again != got {
 			t.Errorf("ParseCodeRepository(URL() %s) = %+v, %v; want %+v", got.URL(), again, err, got)
 		}
+
+		if key, ok := RepositoryKey(c.raw); !strings.Contains(c.raw, "/-/") && !strings.Contains(c.raw, "/pull/") && (!ok || key != got.Key()) {
+			t.Errorf("RepositoryKey(%s) = %q, %v; want the repository's Key %q", c.raw, key, ok, got.Key())
+		}
 	}
 }
 

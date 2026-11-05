@@ -22,7 +22,8 @@ type CodeRepository struct {
 	Owner, Name string
 }
 
-// Key is r's normalized host/owner/name, in lower case.
+// Key is r's normalized host/owner/name, in lower case and without .git: the RepositoryKey of
+// r's URL.
 func (r CodeRepository) Key() string {
 	return strings.ToLower(r.Host.Host + "/" + r.Owner + "/" + r.Name)
 }
@@ -36,9 +37,6 @@ func (r CodeRepository) String() string { return r.Key() }
 // ListedCodeHosts are the organization's code hosts: the built-in ones, then added, the hosts it
 // stored (ports.CodeHosts).
 func ListedCodeHosts(added []CodeHost) []CodeHost { return append(BuiltInCodeHosts(), added...) }
-
-// schemeHTTPS is the only scheme a repository URL may have.
-const schemeHTTPS = "https"
 
 // pathSegment is one segment of a repository's path on either kind of host.
 var pathSegment = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
@@ -66,7 +64,7 @@ func ParseCodeRepository(hosts []CodeHost, raw string) (CodeRepository, error) {
 			strings.ToLower(u.Host), ErrCodeHostUnlisted)
 	}
 
-	segs, ok := repositorySegments(host.Kind, strings.Split(strings.Trim(u.Path, "/"), "/"))
+	segs, ok := codeRepositorySegments(host.Kind, strings.Split(strings.Trim(u.Path, "/"), "/"))
 	if !ok || slices.ContainsFunc(segs, func(s string) bool { return !pathSegment.MatchString(s) || strings.Trim(s, ".") == "" }) {
 		return CodeRepository{}, fmt.Errorf("%s names no repository of %s, such as https://%s/acme/app: %w", u.Redacted(), host.Host, host.Host, ErrInvalid)
 	}
@@ -74,9 +72,9 @@ func ParseCodeRepository(hosts []CodeHost, raw string) (CodeRepository, error) {
 	return CodeRepository{Host: host, Owner: strings.Join(segs[:len(segs)-1], "/"), Name: segs[len(segs)-1]}, nil
 }
 
-// repositorySegments are the owner and name segments of a repository path on a host of kind, or
+// codeRepositorySegments are the owner and name segments of a repository path on a host of kind, or
 // of a pull request or merge request path in it, and false for any other path.
-func repositorySegments(kind CodeHostKind, segs []string) ([]string, bool) {
+func codeRepositorySegments(kind CodeHostKind, segs []string) ([]string, bool) {
 	if kind == CodeHostGitLab {
 		if i := slices.Index(segs, "-"); i >= 0 {
 			// A merge request: /<group>/.../<name>/-/merge_requests/<iid>.
