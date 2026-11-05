@@ -415,6 +415,8 @@ func TestAppendRepositories_NextOrdinalsUpToTheCap(t *testing.T) {
 func TestRepositoriesFrom(t *testing.T) {
 	t.Parallel()
 
+	const repos = "repos"
+
 	l := repoLine(entryAPI)
 
 	tests := []struct {
@@ -422,18 +424,18 @@ func TestRepositoriesFrom(t *testing.T) {
 		want                []string
 		bad                 string
 	}{
-		{name: "unmapped", output: `{"repos":["api"]}`},
-		{name: "missing", field: "repos", output: `{}`},
-		{name: "null", field: "repos", output: `{"repos":null}`},
-		{name: "not an object", field: "repos", output: `[]`},
+		{name: "field unmapped", output: `{"repos":["api"]}`},
+		{name: "field missing", field: repos, output: `{}`},
+		{name: "field null", field: repos, output: `{"repos":null}`},
+		{name: "output an array", field: repos, output: `[]`},
 		{
-			name: "resolved", field: "repos",
+			name: "names resolved", field: repos,
 			output: `{"repos":["acme-labs/web","api","https://github.com/acme/api","github.com/Acme-Labs/Web"]}`,
 			want:   []string{keyLabsWeb, keyAPI},
 		},
-		{name: "not a list", field: "repos", output: `{"repos":"api"}`, bad: `"api"`},
-		{name: "not strings", field: "repos", output: `{"repos":[1]}`, bad: `[1]`},
-		{name: "unknown", field: "repos", output: `{"repos":["api","acme/unknown"]}`, bad: `"acme/unknown"`},
+		{name: "a string", field: repos, output: `{"repos":"api"}`, bad: `"api"`},
+		{name: "numbers", field: repos, output: `{"repos":[1]}`, bad: `[1]`},
+		{name: "not the factory's", field: repos, output: `{"repos":["api","acme/unknown"]}`, bad: `"acme/unknown"`},
 	}
 
 	for _, tt := range tests {

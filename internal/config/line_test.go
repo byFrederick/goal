@@ -957,13 +957,13 @@ func TestLine_CarriesClose(t *testing.T) {
 func TestLine_CarriesOutputRepositories(t *testing.T) {
 	t.Parallel()
 
-	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { repositories: repos }\n", nil))
+	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { repositories: joining }\n", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if o := f.Line().Flow.Outputs; o.Repositories != "repos" {
-		t.Errorf("outputs = %+v; want repositories repos", o)
+	if o := f.Line().Flow.Outputs; o.Repositories != "joining" {
+		t.Errorf("outputs = %+v; want repositories joining", o)
 	}
 
 	for _, flow := range []string{"outputs: { repositories: \"\" }", "outputs: { repositories: [a] }"} {
