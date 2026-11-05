@@ -13,9 +13,18 @@ import (
 
 const goMod = "go.mod"
 
-// githubConn is a code host login on github.com.
-func githubConn() domain.CodeHostLogin {
-	return domain.CodeHostLogin{Name: "github", Host: "github.com", Token: "test-token"}
+const testToken = "test-token"
+
+// repositoryOf is the repository at raw on a built-in host.
+func repositoryOf(t *testing.T, raw string) domain.CodeRepository {
+	t.Helper()
+
+	r, err := domain.ParseCodeRepository(domain.BuiltInCodeHosts(), raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return r
 }
 
 // The fake must update branches by the adapters' rules, or tests built on it prove nothing.
@@ -28,7 +37,7 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 		head     = "4b825dc6"
 	)
 
-	conn := githubConn()
+	app := repositoryOf(t, "https://github.com/acme/app")
 	h := porttest.NewCodeHost()
 	h.Add(ports.PullRequest{URL: pr, Open: true, Mergeable: true, HeadSHA: head})
 	h.Add(ports.PullRequest{URL: conflict, Open: true, HeadSHA: head})
@@ -41,13 +50,14 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 		{"https://github.com/acme/app/pull/9", head},
 		{"https://github.com/acme/app/pull/10", head},
 		{"https://gitlab.example.com/acme/app/-/merge_requests/7", head},
+		{"https://github.com/acme/other/pull/7", head},
 	} {
-		if err := h.UpdateBranch(t.Context(), conn, tt.url, tt.head); !errors.Is(err, ports.ErrNotMergeable) {
+		if err := h.UpdateBranch(t.Context(), app, testToken, tt.url, tt.head); !errors.Is(err, ports.ErrNotMergeable) {
 			t.Errorf("UpdateBranch(%s, %s) = %v; want ErrNotMergeable", tt.url, tt.head, err)
 		}
 	}
 
-	err := h.UpdateBranch(t.Context(), conn, conflict, head)
+	err := h.UpdateBranch(t.Context(), app, testToken, conflict, head)
 
 	var mc *ports.MergeConflictError
 	if !errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || !slices.Equal(mc.Files, []string{goMod, "internal/x.go"}) {
@@ -58,11 +68,11 @@ func TestCodeHost_UpdateBranch(t *testing.T) {
 		t.Errorf("a conflict %v also matches ErrNotMergeable; callers must tell them apart", err)
 	}
 
-	if err := h.UpdateBranch(t.Context(), conn, pr, head); err != nil {
+	if err := h.UpdateBranch(t.Context(), app, testToken, pr, head); err != nil {
 		t.Fatalf("UpdateBranch = %v; want nil", err)
 	}
 
-	got, err := h.PullRequest(t.Context(), conn, pr)
+	got, err := h.PullRequest(t.Context(), app, testToken, pr)
 	if err != nil || got.HeadSHA != "updated-"+head {
 		t.Errorf("head after the update = %q, %v; want updated-%s", got.HeadSHA, err, head)
 	}
@@ -81,16 +91,16 @@ func TestCodeHost_UpdateBranchUpToDate(t *testing.T) {
 		head = "4b825dc6"
 	)
 
-	conn := githubConn()
+	app := repositoryOf(t, "https://github.com/acme/app")
 	h := porttest.NewCodeHost()
 	h.Add(ports.PullRequest{URL: pr, Open: true, Mergeable: true, HeadSHA: head})
 	h.UpToDate(pr)
 
-	if err := h.UpdateBranch(t.Context(), conn, pr, head); err != nil {
+	if err := h.UpdateBranch(t.Context(), app, testToken, pr, head); err != nil {
 		t.Fatalf("UpdateBranch(up to date) = %v; want nil", err)
 	}
 
-	got, err := h.PullRequest(t.Context(), conn, pr)
+	got, err := h.PullRequest(t.Context(), app, testToken, pr)
 	if err != nil || got.HeadSHA != head {
 		t.Errorf("head after updating an up-to-date branch = %q, %v; want %s unchanged", got.HeadSHA, err, head)
 	}
@@ -99,7 +109,7 @@ func TestCodeHost_UpdateBranchUpToDate(t *testing.T) {
 		t.Errorf("UpdatedBranches = %v; want none: nothing was merged in", calls)
 	}
 
-	if err := h.UpdateBranch(t.Context(), conn, pr, "moved"); !errors.Is(err, ports.ErrNotMergeable) {
+	if err := h.UpdateBranch(t.Context(), app, testToken, pr, "moved"); !errors.Is(err, ports.ErrNotMergeable) {
 		t.Errorf("UpdateBranch(up to date, moved head) = %v; want ErrNotMergeable", err)
 	}
 }
@@ -111,7 +121,7 @@ func TestCodeHost_PendingReads(t *testing.T) {
 
 	const pr = "https://github.com/acme/app/pull/7"
 
-	conn := githubConn()
+	app := repositoryOf(t, "https://github.com/acme/app")
 	h := porttest.NewCodeHost()
 	h.Add(ports.PullRequest{URL: pr, Open: true, Mergeable: true, HeadSHA: "4b825dc6"})
 	h.PendingReads(pr, 2)
@@ -119,7 +129,7 @@ func TestCodeHost_PendingReads(t *testing.T) {
 	var pending []bool
 
 	for range 3 {
-		got, err := h.PullRequest(t.Context(), conn, pr)
+		got, err := h.PullRequest(t.Context(), app, testToken, pr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,11 +149,11 @@ func TestCodeHost_PendingReads(t *testing.T) {
 
 	h.RefuseMerges(pr, 1)
 
-	if _, err := h.Merge(t.Context(), conn, pr, merge); !errors.Is(err, ports.ErrNotMergeable) {
+	if _, err := h.Merge(t.Context(), app, testToken, pr, merge); !errors.Is(err, ports.ErrNotMergeable) {
 		t.Errorf("Merge while refused = %v; want ErrNotMergeable", err)
 	}
 
-	if _, err := h.Merge(t.Context(), conn, pr, merge); err != nil {
+	if _, err := h.Merge(t.Context(), app, testToken, pr, merge); err != nil {
 		t.Errorf("Merge after the refusal = %v; want nil", err)
 	}
 }
@@ -155,7 +165,7 @@ func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
 
 	const repo = "https://github.com/acme/app"
 
-	conn := githubConn()
+	app := repositoryOf(t, repo)
 	h := porttest.NewCodeHost()
 
 	h.SetBranchHead(repo, "", "c3")
@@ -166,33 +176,37 @@ func TestCodeHost_BranchHeadAndCompare(t *testing.T) {
 	)
 	h.AddCommits(repo, ports.Commit{SHA: "c3", Subject: "third", Files: []string{"docs/a.md", goMod}})
 
-	checkBranchHeads(t, h, conn, repo)
-	checkCompare(t, h, conn, repo)
-	checkCompareCap(t, h, conn)
+	checkBranchHeads(t, h, app)
+	checkCompare(t, h, app)
+	checkCompareCap(t, h)
 }
 
-func checkBranchHeads(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin, repo string) {
+func checkBranchHeads(t *testing.T, h *porttest.CodeHost, app domain.CodeRepository) {
 	t.Helper()
 
 	for _, tt := range []struct{ branch, want string }{{"", "c3"}, {"goal/7-add-x", "f1"}} {
-		if got, err := h.BranchHead(t.Context(), conn, repo, tt.branch); err != nil || got != tt.want {
+		if got, err := h.BranchHead(t.Context(), app, testToken, tt.branch); err != nil || got != tt.want {
 			t.Errorf("BranchHead(%q) = %q, %v; want %q", tt.branch, got, err, tt.want)
 		}
 	}
 
-	if _, err := h.BranchHead(t.Context(), conn, repo, "gone"); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := h.BranchHead(t.Context(), app, testToken, "gone"); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("BranchHead(gone) = %v; want ErrNotFound", err)
 	}
 
-	if _, err := h.BranchHead(t.Context(), conn, "https://gitlab.example.com/acme/app", ""); err == nil {
-		t.Error("BranchHead off the connection's host succeeded; want refused")
+	if _, err := h.BranchHead(t.Context(), app, "", ""); err == nil {
+		t.Error("BranchHead without a token succeeded; want refused")
+	}
+
+	if _, err := h.BranchHead(t.Context(), domain.CodeRepository{}, testToken, ""); err == nil {
+		t.Error("BranchHead without a repository succeeded; want refused")
 	}
 }
 
-func checkCompare(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin, repo string) {
+func checkCompare(t *testing.T, h *porttest.CodeHost, app domain.CodeRepository) {
 	t.Helper()
 
-	got, err := h.Compare(t.Context(), conn, repo, "c1", "c3")
+	got, err := h.Compare(t.Context(), app, testToken, "c1", "c3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,23 +216,26 @@ func checkCompare(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin,
 		t.Errorf("Compare(c1, c3) = %+v; want c2 then c3 with their files", got)
 	}
 
-	if got, err := h.Compare(t.Context(), conn, repo, "c3", "c1"); err != nil || len(got.Commits) != 0 {
+	if got, err := h.Compare(t.Context(), app, testToken, "c3", "c1"); err != nil || len(got.Commits) != 0 {
 		t.Errorf("Compare(c3, c1) = %+v, %v; want no commits", got, err)
 	}
 
-	for _, tt := range []struct{ repo, base, head string }{
-		{repo, "gone", "c3"},
-		{repo, "c1", "gone"},
-		{"https://github.com/acme/other", "c1", "c3"},
+	for _, tt := range []struct {
+		repo       domain.CodeRepository
+		base, head string
+	}{
+		{app, "gone", "c3"},
+		{app, "c1", "gone"},
+		{repositoryOf(t, "https://github.com/acme/other"), "c1", "c3"},
 	} {
-		if _, err := h.Compare(t.Context(), conn, tt.repo, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
+		if _, err := h.Compare(t.Context(), tt.repo, testToken, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
 			t.Errorf("Compare(%s, %s, %s) = %v; want ErrNotFound", tt.repo, tt.base, tt.head, err)
 		}
 	}
 }
 
 // checkCompareCap checks that past the cap Compare returns the oldest MaxCompareCommits, truncated.
-func checkCompareCap(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLogin) {
+func checkCompareCap(t *testing.T, h *porttest.CodeHost) {
 	t.Helper()
 
 	const long = "https://github.com/acme/long"
@@ -227,7 +244,7 @@ func checkCompareCap(t *testing.T, h *porttest.CodeHost, conn domain.CodeHostLog
 		h.AddCommits(long, ports.Commit{SHA: "l" + strconv.Itoa(i)})
 	}
 
-	got, err := h.Compare(t.Context(), conn, long, "l0", "l"+strconv.Itoa(ports.MaxCompareCommits+4))
+	got, err := h.Compare(t.Context(), repositoryOf(t, long), testToken, "l0", "l"+strconv.Itoa(ports.MaxCompareCommits+4))
 	if err != nil || !got.Truncated || len(got.Commits) != ports.MaxCompareCommits || got.Commits[0].SHA != "l1" {
 		t.Errorf("Compare past the cap = %d commits, truncated %v, %v; want %d from l1, truncated",
 			len(got.Commits), got.Truncated, err, ports.MaxCompareCommits)

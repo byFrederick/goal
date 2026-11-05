@@ -16,9 +16,9 @@ import (
 var _ ports.CodeHost = (*CodeHost)(nil)
 
 // CodeHost is an in-memory code host holding the pull requests, branch heads and commits a test
-// adds. Like the adapters, it serves only pull requests and repositories on the login's host,
-// and it merges and updates branches like a careful host: only open pull
-// requests whose head has not moved.
+// adds, each keyed by its repository's URL. Like the adapters, it refuses a call without a token
+// or a repository, and a pull request URL that is not the repository's, and it merges and
+// updates branches like a careful host: only open pull requests whose head has not moved.
 type CodeHost struct {
 	mu       sync.Mutex
 	prs      map[string]*ports.PullRequest
@@ -38,7 +38,7 @@ type CodeHost struct {
 	access   map[string]ports.RepositoryAccess // repo + " " + token → what RepositoryAccess answers
 	stall    bool                              // RepositoryAccess waits for its context to end
 	tokens   []string                          // the tokens RepositoryAccess was given, in order
-	logins   []string                          // the tokens of the other calls' logins, in order
+	logins   []string                          // the tokens of the other calls, in order
 }
 
 // SetAccess makes a what RepositoryAccess answers for token in the repository at repo. Any other
@@ -51,7 +51,7 @@ func (c *CodeHost) SetAccess(repo, token string, a ports.RepositoryAccess) {
 		c.access = map[string]ports.RepositoryAccess{}
 	}
 
-	c.access[repo+" "+token] = a
+	c.access[repoKey(repo)+" "+token] = a
 }
 
 // StallAccess makes RepositoryAccess give no answer until its context ends, as a host that does
@@ -97,11 +97,12 @@ func (c *CodeHost) SetBranchHead(repo, branch, sha string) {
 		c.heads = map[string]map[string]string{}
 	}
 
-	if c.heads[repo] == nil {
-		c.heads[repo] = map[string]string{}
+	key := repoKey(repo)
+	if c.heads[key] == nil {
+		c.heads[key] = map[string]string{}
 	}
 
-	c.heads[repo][branch] = sha
+	c.heads[key][branch] = sha
 }
 
 // AddCommits appends commits to the linear history of the repository at repo, oldest first.
@@ -115,7 +116,7 @@ func (c *CodeHost) AddCommits(repo string, commits ...ports.Commit) {
 
 	for _, cm := range commits {
 		cm.Files = slices.Clone(cm.Files)
-		c.history[repo] = append(c.history[repo], cm)
+		c.history[repoKey(repo)] = append(c.history[repoKey(repo)], cm)
 	}
 }
 
@@ -209,11 +210,10 @@ func (c *CodeHost) Reads(url string) int {
 	return c.reads[url]
 }
 
-// MergeCall is one merge asked of the fake: the pull request, the name of the login it came with
-// (its connection) and how.
+// MergeCall is one merge asked of the fake: the pull request, the token it came with and how.
 type MergeCall struct {
-	URL        string
-	Connection string
+	URL   string
+	Token string
 	ports.Merge
 }
 
@@ -245,8 +245,8 @@ func (c *CodeHost) DeletedBranches() []string {
 }
 
 // PullRequest implements ports.CodeHost.
-func (c *CodeHost) PullRequest(_ context.Context, login domain.CodeHostLogin, url string) (ports.PullRequest, error) {
-	if err := c.onHost(login, url); err != nil {
+func (c *CodeHost) PullRequest(_ context.Context, repo domain.CodeRepository, token, url string) (ports.PullRequest, error) {
+	if err := c.inRepository(repo, token, url); err != nil {
 		return ports.PullRequest{}, err
 	}
 
@@ -281,15 +281,15 @@ func (c *CodeHost) PullRequest(_ context.Context, login domain.CodeHostLogin, ur
 }
 
 // Merge implements ports.CodeHost.
-func (c *CodeHost) Merge(_ context.Context, login domain.CodeHostLogin, url string, m ports.Merge) (string, error) {
-	if err := c.onHost(login, url); err != nil {
+func (c *CodeHost) Merge(_ context.Context, repo domain.CodeRepository, token, url string, m ports.Merge) (string, error) {
+	if err := c.inRepository(repo, token, url); err != nil {
 		return "", err
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.merges = append(c.merges, MergeCall{URL: url, Connection: login.Name, Merge: m})
+	c.merges = append(c.merges, MergeCall{URL: url, Token: token, Merge: m})
 
 	pr, ok := c.prs[url]
 	switch {
@@ -311,8 +311,8 @@ func (c *CodeHost) Merge(_ context.Context, login domain.CodeHostLogin, url stri
 
 // UpdateBranch implements ports.CodeHost. An update moves the head to "updated-" and the head
 // it was given; an up-to-date branch (UpToDate) is left as it is.
-func (c *CodeHost) UpdateBranch(_ context.Context, login domain.CodeHostLogin, url, headSHA string) error {
-	if err := c.onHost(login, url); err != nil {
+func (c *CodeHost) UpdateBranch(_ context.Context, repo domain.CodeRepository, token, url, headSHA string) error {
+	if err := c.inRepository(repo, token, url); err != nil {
 		return err
 	}
 
@@ -344,8 +344,8 @@ func (c *CodeHost) UpdateBranch(_ context.Context, login domain.CodeHostLogin, u
 }
 
 // DeleteBranch implements ports.CodeHost.
-func (c *CodeHost) DeleteBranch(_ context.Context, login domain.CodeHostLogin, url, branch string) error {
-	if err := c.onHost(login, url); err != nil {
+func (c *CodeHost) DeleteBranch(_ context.Context, repo domain.CodeRepository, token, url, branch string) error {
+	if err := c.inRepository(repo, token, url); err != nil {
 		return err
 	}
 
@@ -358,15 +358,15 @@ func (c *CodeHost) DeleteBranch(_ context.Context, login domain.CodeHostLogin, u
 }
 
 // BranchHead implements ports.CodeHost from SetBranchHead.
-func (c *CodeHost) BranchHead(_ context.Context, login domain.CodeHostLogin, repo, branch string) (string, error) {
-	if err := c.onHost(login, repo); err != nil {
+func (c *CodeHost) BranchHead(_ context.Context, repo domain.CodeRepository, token, branch string) (string, error) {
+	if err := c.inRepository(repo, token, ""); err != nil {
 		return "", err
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	sha, ok := c.heads[repo][branch]
+	sha, ok := c.heads[repo.Key()][branch]
 	if !ok {
 		return "", fmt.Errorf("branch %q of %s: %w", branch, repo, ports.ErrNotFound)
 	}
@@ -376,15 +376,15 @@ func (c *CodeHost) BranchHead(_ context.Context, login domain.CodeHostLogin, rep
 
 // Compare implements ports.CodeHost from AddCommits: the commits after base up to head, none
 // when head is not after base.
-func (c *CodeHost) Compare(_ context.Context, login domain.CodeHostLogin, repo, base, head string) (ports.Comparison, error) {
-	if err := c.onHost(login, repo); err != nil {
+func (c *CodeHost) Compare(_ context.Context, repo domain.CodeRepository, token, base, head string) (ports.Comparison, error) {
+	if err := c.inRepository(repo, token, ""); err != nil {
 		return ports.Comparison{}, err
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	history, ok := c.history[repo]
+	history, ok := c.history[repo.Key()]
 	if !ok {
 		return ports.Comparison{}, fmt.Errorf("repository %s: %w", repo, ports.ErrNotFound)
 	}
@@ -416,9 +416,9 @@ func (c *CodeHost) Compare(_ context.Context, login domain.CodeHostLogin, repo, 
 }
 
 // Repositories implements ports.CodeHost from SetRepositories.
-func (c *CodeHost) Repositories(_ context.Context, login domain.CodeHostLogin, owner string) (ports.RepositoryList, error) {
-	if err := login.Validate(); err != nil {
-		return ports.RepositoryList{}, err
+func (c *CodeHost) Repositories(_ context.Context, host domain.CodeHost, token, owner string) (ports.RepositoryList, error) {
+	if host.Host == "" || token == "" {
+		return ports.RepositoryList{}, fmt.Errorf("repositories: no host or no token: %w", domain.ErrInvalid)
 	}
 
 	c.mu.Lock()
@@ -444,15 +444,15 @@ func (c *CodeHost) Repositories(_ context.Context, login domain.CodeHostLogin, o
 }
 
 // RepositoryAccess implements ports.CodeHost from SetAccess and StallAccess.
-func (c *CodeHost) RepositoryAccess(ctx context.Context, repo, token string) (ports.RepositoryAccess, error) {
-	if u, err := url.Parse(repo); err != nil || u.Scheme != "https" || u.Host == "" || strings.Trim(u.Path, "/") == "" {
-		return ports.RepositoryAccess{}, fmt.Errorf("%q is not a repository URL: %w", repo, domain.ErrInvalid)
+func (c *CodeHost) RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (ports.RepositoryAccess, error) {
+	if repo.Host.Host == "" || repo.Name == "" {
+		return ports.RepositoryAccess{}, fmt.Errorf("repository access of %s: no repository: %w", repo, domain.ErrInvalid)
 	}
 
 	c.mu.Lock()
 	c.tokens = append(c.tokens, token)
 	stall := c.stall
-	a, ok := c.access[repo+" "+token]
+	a, ok := c.access[repo.Key()+" "+token]
 	c.mu.Unlock()
 
 	if stall {
@@ -470,8 +470,8 @@ func (c *CodeHost) RepositoryAccess(ctx context.Context, repo, token string) (po
 	return a, nil
 }
 
-// LoginTokens are the tokens of the logins the pull request and repository calls were made
-// with, in order, refused ones included.
+// LoginTokens are the tokens the pull request and repository calls were made with, in order,
+// refused ones included.
 func (c *CodeHost) LoginTokens() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -479,22 +479,35 @@ func (c *CodeHost) LoginTokens() []string {
 	return slices.Clone(c.logins)
 }
 
-// onHost records login's token and refuses a pull request or repository URL that is not on the
-// login's host.
-func (c *CodeHost) onHost(login domain.CodeHostLogin, raw string) error {
+// inRepository records token and refuses a call without a token or a repository, or for a pull
+// request URL (when raw is set) that is not one of repo's.
+func (c *CodeHost) inRepository(repo domain.CodeRepository, token, raw string) error {
 	c.mu.Lock()
-	c.logins = append(c.logins, login.Token)
+	c.logins = append(c.logins, token)
 	c.mu.Unlock()
 
-	if err := login.Validate(); err != nil {
-		return err
+	if token == "" || repo.Host.Host == "" || repo.Owner == "" || repo.Name == "" {
+		return fmt.Errorf("%s: no repository or no token: %w", repo, domain.ErrInvalid)
 	}
 
-	host := login.Host
+	if raw == "" {
+		return nil
+	}
 
-	if u, err := url.Parse(raw); err != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, host) {
-		return fmt.Errorf("%s is not on %s: %w", raw, host, ports.ErrNotMergeable)
+	if got, err := domain.ParseCodeRepository([]domain.CodeHost{repo.Host}, raw); err != nil || got.Key() != repo.Key() {
+		return fmt.Errorf("%s is not a pull request of %s: %w", raw, repo, ports.ErrNotMergeable)
 	}
 
 	return nil
+}
+
+// repoKey is the lower-case host/owner/name of the repository URL raw, as domain.CodeRepository's
+// Key, whatever its host.
+func repoKey(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+
+	return strings.ToLower(u.Host + "/" + strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git"))
 }

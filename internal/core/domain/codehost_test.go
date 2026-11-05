@@ -2,74 +2,102 @@ package domain
 
 import (
 	"errors"
-	"fmt"
-	"log/slog"
 	"strings"
 	"testing"
 )
 
-func TestCodeHostLogin_FromConnection(t *testing.T) {
+// A repository URL, or a pull request's or merge request's in it, names one repository of a listed
+// host: .git and a trailing slash are dropped, the key is in lower case, and GitLab's groups nest.
+func TestCodeHost_RepositoryParse(t *testing.T) {
 	t.Parallel()
 
-	const token = "ghp_secret-value"
+	ghe := CodeHost{Host: hostGHE, Kind: CodeHostGitHub}
+	lab := CodeHost{Host: hostGitAcme, Kind: CodeHostGitLab}
+	hosts := ListedCodeHosts([]CodeHost{ghe, lab})
+	gitHub, gitLab := BuiltInCodeHosts()[0], BuiltInCodeHosts()[1]
 
-	resolved := func(k ConnectionKind, values map[string]string) ResolvedConnection {
-		return ResolvedConnection{Connection: Connection{Name: stCode}, Kind: k, Values: values}
-	}
-
-	got, err := resolved(githubKind(), map[string]string{fieldToken: token, fieldHost: "GHE.Example.com"}).CodeHostLogin()
-	if want := (CodeHostLogin{Name: stCode, Host: hostGHE, Token: token}); err != nil || got != want {
-		t.Errorf("CodeHostLogin = %v, %v; want %v", got, err, want)
-	}
-
-	for name, rc := range map[string]ResolvedConnection{
-		"no git login": resolved(apiKeyKind(), map[string]string{
-			fieldPrefix: "DOCS", fieldBaseURL: apiExampleURL, fieldKey: token,
-		}),
-		"no password value": resolved(githubKind(), map[string]string{}),
+	for _, c := range []struct {
+		raw  string
+		want CodeRepository
+		key  string
+	}{
+		{raw: "https://github.com/acme/app", want: CodeRepository{Host: gitHub, Owner: "acme", Name: "app"}, key: "github.com/acme/app"},
+		{raw: "https://GitHub.com/Acme/App.git", want: CodeRepository{Host: gitHub, Owner: "Acme", Name: "App"}, key: "github.com/acme/app"},
+		{raw: "https://github.com/acme/app/", want: CodeRepository{Host: gitHub, Owner: "acme", Name: "app"}, key: "github.com/acme/app"},
+		{raw: "https://github.com/acme/app/pull/7", want: CodeRepository{Host: gitHub, Owner: "acme", Name: "app"}, key: "github.com/acme/app"},
+		{raw: "https://GHE.example.com/acme/app.git", want: CodeRepository{Host: ghe, Owner: "acme", Name: "app"}, key: hostGHE + "/acme/app"},
+		{raw: "https://gitlab.com/acme/web", want: CodeRepository{Host: gitLab, Owner: "acme", Name: "web"}, key: "gitlab.com/acme/web"},
+		{
+			raw:  "https://gitlab.com/acme/platform/web/-/merge_requests/3",
+			want: CodeRepository{Host: gitLab, Owner: "acme/platform", Name: "web"}, key: "gitlab.com/acme/platform/web",
+		},
+		{
+			raw:  "https://" + hostGitAcme + "/Acme/Platform/Web.git",
+			want: CodeRepository{Host: lab, Owner: "Acme/Platform", Name: "Web"}, key: hostGitAcme + "/acme/platform/web",
+		},
 	} {
-		login, err := rc.CodeHostLogin()
-		if !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), token) || !strings.Contains(err.Error(), stCode) {
-			t.Errorf("%s: CodeHostLogin = %v; want ErrInvalid naming the connection, without a value", name, err)
+		got, err := ParseCodeRepository(hosts, c.raw)
+		if err != nil || got != c.want || got.Key() != c.key {
+			t.Errorf("ParseCodeRepository(%s) = %+v (key %q), %v; want %+v, key %q", c.raw, got, got.Key(), err, c.want, c.key)
 		}
 
-		if login != (CodeHostLogin{}) {
-			t.Errorf("%s: CodeHostLogin = %v on an error; want the zero login", name, login)
+		if again, err := ParseCodeRepository(hosts, got.URL()); err != nil || again != got {
+			t.Errorf("ParseCodeRepository(URL() %s) = %+v, %v; want %+v", got.URL(), again, err, got)
 		}
 	}
 }
 
-func TestCodeHostLogin_Validate(t *testing.T) {
+// A URL on a host the organization doesn't list, a port included, fails with
+// ErrCodeHostUnlisted naming the host; a URL that names no repository wraps ErrInvalid, and never
+// shows credentials it carries.
+func TestCodeHost_RepositoryParseRefuses(t *testing.T) {
 	t.Parallel()
 
-	if err := (CodeHostLogin{Name: stCode, Host: "github.com", Token: "test-token"}).Validate(); err != nil {
-		t.Errorf("Validate of a whole login = %v; want nil", err)
+	hosts := ListedCodeHosts([]CodeHost{{Host: hostGHE, Kind: CodeHostGitHub}})
+
+	for _, raw := range []string{
+		"https://code.example.com/acme/app",
+		"https://" + hostGHE + ":8443/acme/app.git",
+		"https://" + hostGitAcme + "/acme/app/-/merge_requests/1",
+	} {
+		_, err := ParseCodeRepository(hosts, raw)
+		host := strings.Split(strings.TrimPrefix(raw, "https://"), "/")[0]
+
+		if !errors.Is(err, ErrCodeHostUnlisted) || !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), host) {
+			t.Errorf("ParseCodeRepository(%s) = %v; want ErrCodeHostUnlisted naming %s", raw, err, host)
+		}
 	}
 
-	for _, l := range []CodeHostLogin{{Name: stCode, Token: "test-token"}, {Name: stCode, Host: "github.com"}} {
-		if err := l.Validate(); !errors.Is(err, ErrInvalid) || strings.Contains(err.Error(), "test-token") {
-			t.Errorf("Validate(%v) = %v; want ErrInvalid without the token", l, err)
+	for _, raw := range []string{
+		"", "::", "http://github.com/acme/app", "https://github.com/acme", "https://github.com/acme/app?x=1",
+		"https://github.com/acme/app#x", "https://github.com/acme/app/issues/7", "https://github.com/acme/app/pull/0",
+		"https://github.com/acme/app/tree/main", "https://github.com/acme/team/app", "https://gitlab.com/acme",
+		"https://gitlab.com/acme/web/-/issues/3", "https://gitlab.com/-/merge_requests/3", "https://github.com/acme/a%20b",
+		"https://x-token:ghp_secret-value@github.com/acme/app",
+	} {
+		_, err := ParseCodeRepository(BuiltInCodeHosts(), raw)
+		if !errors.Is(err, ErrInvalid) || errors.Is(err, ErrCodeHostUnlisted) || strings.Contains(fmtErr(err), "ghp_secret-value") {
+			t.Errorf("ParseCodeRepository(%q) = %v; want ErrInvalid without credentials", raw, err)
 		}
 	}
 }
 
-// A login reaches errors and logs through %v and slog; the token never does.
-func TestCodeHostLogin_HidesTheToken(t *testing.T) {
+// ListedCodeHosts are the built-in hosts, then the added ones.
+func TestListedCodeHosts_BuiltInsFirst(t *testing.T) {
 	t.Parallel()
 
-	const token = "ghp_secret-value"
+	ghe := CodeHost{Host: hostGHE, Kind: CodeHostGitHub}
 
-	login := CodeHostLogin{Name: stCode, Host: "github.com", Token: token}
-
-	var logged strings.Builder
-	slog.New(slog.NewTextHandler(&logged, nil)).Info("login", "login", login)
-
-	for name, s := range map[string]string{
-		"String": login.String(), "%v": fmt.Sprintf("%v", login), "%+v": fmt.Sprintf("%+v", login),
-		"slog": logged.String(),
-	} {
-		if strings.Contains(s, token) || !strings.Contains(s, "github.com") {
-			t.Errorf("%s = %q; want the host without the token", name, s)
-		}
+	got := ListedCodeHosts([]CodeHost{ghe})
+	if len(got) != 3 || got[0].Host != hostGitHub || got[1].Host != hostGitLab || got[2] != ghe {
+		t.Errorf("ListedCodeHosts = %+v; want github.com, gitlab.com, then %s", got, hostGHE)
 	}
+}
+
+func fmtErr(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	return err.Error()
 }
