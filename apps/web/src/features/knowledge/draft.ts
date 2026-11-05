@@ -3,7 +3,7 @@
 // factory.yaml, keeps the file's comments and order, and leaves a source already listed alone.
 // It only writes the draft; publishing is the factory's own step.
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml';
-import { getDraftFile, putDraftFile } from '../../api/definitions';
+import { getDraftFile, openDraft, putDraftFile } from '../../api/definitions';
 
 const file = 'factory.yaml';
 const path = ['spec', 'knowledge', 'sources'];
@@ -19,6 +19,8 @@ function names(item: unknown, source: string): boolean {
  * already. A draft that does not parse is refused, not overwritten.
  */
 export async function listInDraft(org: string, factory: string, source: string): Promise<boolean> {
+  // As the CLI does: a factory with no open draft gets one (the call returns the open one otherwise).
+  await openDraft(org, factory);
   const draft = await getDraftFile(org, factory, file);
   const doc = parseDocument(draft.text);
   if (doc.errors.length > 0) throw new Error(`The draft’s ${file} does not parse: ${doc.errors[0]?.message ?? ''}`);
