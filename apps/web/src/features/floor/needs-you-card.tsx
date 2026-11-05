@@ -57,8 +57,8 @@ function DecisionActions({
       </Button>
       <Button
         size="sm"
-        variant="primary"
-        className="border-you bg-you hover:bg-you/90 max-md:hidden"
+        variant="approve"
+        className="max-md:hidden"
         disabled={decide.isPending || approved}
         aria-label={`${approved ? 'Approved' : 'Approve'} ${item.ref}`}
         onClick={() => decide.mutate({ kind: 'approve' }, { onSuccess: onApproved })}
