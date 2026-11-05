@@ -468,4 +468,14 @@ describe('the Proposals tab', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'All' }));
     await waitFor(() => expect(router.state.location.search).not.toHaveProperty('state'));
   });
+
+  it('checks the chosen state on the click itself, before the navigation settles', async () => {
+    renderProposals();
+
+    await screen.findByRole('article', { name: /Name the agent/ });
+    const applied = screen.getByRole('radio', { name: 'Applied' }) as HTMLInputElement;
+    expect(applied.checked).toBe(false);
+    fireEvent.click(applied);
+    expect(applied.checked).toBe(true);
+  });
 });
