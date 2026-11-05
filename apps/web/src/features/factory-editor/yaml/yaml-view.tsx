@@ -397,7 +397,7 @@ export function YamlView({ search }: SectionViewProps) {
                 aria-expanded={filesOpen}
                 aria-controls={treeId}
                 onClick={() => setFilesOpen((v) => !v)}
-                className="inline-flex items-center px-3 text-secondary font-control text-ink @[640px]:hidden"
+                className="inline-flex min-h-10 items-center px-3 text-secondary font-control text-ink max-md:min-h-11 @[640px]:hidden"
               >
                 Files
               </button>
@@ -408,7 +408,7 @@ export function YamlView({ search }: SectionViewProps) {
                   aria-selected="true"
                   aria-controls={panelId}
                   tabIndex={0}
-                  className="inline-flex h-10 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
+                  className="inline-flex h-10 max-md:h-11 min-w-0 items-center gap-2 border-b-2 border-ink bg-panel px-4 font-control font-mono text-secondary text-ink"
                 >
                   <span className="truncate">{path}</span>
                 </button>
