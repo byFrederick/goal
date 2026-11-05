@@ -53,7 +53,7 @@ func (h *harness) builtItem(t *testing.T, run bool, kinds ...domain.EventKind) d
 		t.Fatal(err)
 	}
 
-	if err := h.store.RecordRunInput(ctx, id, domain.RunInput{BranchHead: strings.Repeat("c", 40), BaseHead: strings.Repeat("b", 40)}); err != nil {
+	if err := h.store.RecordRunInput(ctx, id, domain.RunInput{Repositories: []domain.RunRepository{{BranchHead: strings.Repeat("c", 40), BaseCommit: strings.Repeat("b", 40)}}}); err != nil {
 		t.Fatal(err)
 	}
 

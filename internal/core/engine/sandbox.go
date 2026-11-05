@@ -50,8 +50,12 @@ type prepared struct {
 	Seconds       float64 `json:"seconds"`
 	Tools         int     `json:"tools"`
 	BranchExisted bool    `json:"branch_existed"`
-	// BranchHead and BaseHead are the item branch's and its base's commits before prepare brought
-	// the branch up to date; absent without a repository.
+	// Repositories are the repositories prepare checked out, each with its base commit and the
+	// branch head before prepare brought the branch up to date (ADR 0041 decision 5).
+	Repositories []domain.WorkerRepository `json:"repositories"`
+	// BranchHead and BaseHead are the single repository's heads, as a prepare without Repositories
+	// reports them; absent without a repository. Accepted for one deploy, so an older worker
+	// image works.
 	BranchHead string `json:"branch_head"`
 	BaseHead   string `json:"base_head"`
 }

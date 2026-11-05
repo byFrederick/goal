@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"math"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -259,19 +260,31 @@ func testRunsJonahWithoutItem(f *fixture) {
 	}
 }
 
+// The repositories testRunRecords' runs record.
+const (
+	repoApp  = "github.com/acme/app"
+	repoSame = "github.com/acme/same"
+	repoDocs = "github.com/acme/docs"
+)
+
 // testRunRecords: a run keeps what it was given (RecordRunInput) and its own output and pushed
-// head (FinishRun), and Run and Runs return them; empty values read back empty, and another
-// organization can record nothing on the run (ADR 0039, decision 8).
+// heads (FinishRun), one row per repository (ADR 0041 decision 5), and Run and Runs return them;
+// a run wrote a repository when it said so or pushed a commit other than its branch head. Empty
+// values read back empty, and another organization can record nothing on the run (ADR 0039,
+// decision 8).
 func testRunRecords(f *fixture) {
 	t := f.t
 
 	it := f.create(t, domain.NewItem{})
 	t2 := t1.Add(time.Minute)
-	in := domain.RunInput{
-		Brief: "Add a button\n\nThe reviewer asked for tests.", BranchHead: strings.Repeat("a", 40), BaseHead: strings.Repeat("b", 40),
-	}
+	a, b, c, d, e := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40), strings.Repeat("d", 40), strings.Repeat("e", 40)
+	in := domain.RunInput{Brief: "Add a button\n\nThe reviewer asked for tests.", Repositories: []domain.RunRepository{
+		{Repo: repoApp, BaseCommit: b, BranchHead: a},
+		{Repo: repoSame, BaseCommit: b, BranchHead: e},
+	}}
 	res := domain.RunResult{
-		Status: domain.RunSucceeded, Output: json.RawMessage(`{"lane":"backend","n":1}`), CostUSD: 0.5, PushedHead: strings.Repeat("c", 40),
+		Status: domain.RunSucceeded, Output: json.RawMessage(`{"lane":"backend","n":1}`), CostUSD: 0.5,
+		Repositories: []domain.RunRepository{{Repo: repoApp, PushedHead: c}, {Repo: repoSame, PushedHead: e}, {Repo: repoDocs, PushedHead: d}},
 	}
 
 	first := f.recordedRun(t, it.ID, t1, in, res)
@@ -281,8 +294,17 @@ func testRunRecords(f *fixture) {
 		t.Fatal(err)
 	}
 
-	if got.Input != in || got.Result.PushedHead != res.PushedHead {
-		t.Errorf("Run input = %+v, pushed head %q; want %+v, %q", got.Input, got.Result.PushedHead, in, res.PushedHead)
+	rows := []domain.RunRepository{
+		{Repo: repoApp, BaseCommit: b, BranchHead: a, PushedHead: c, Wrote: true},
+		{Repo: repoSame, BaseCommit: b, BranchHead: e, PushedHead: e},
+		{Repo: repoDocs, PushedHead: d, Wrote: true},
+	}
+	if want := (domain.RunInput{Brief: in.Brief, Repositories: rows}); !reflect.DeepEqual(got.Input, want) {
+		t.Errorf("Run input = %+v; want %+v", got.Input, want)
+	}
+
+	if !reflect.DeepEqual(got.Result.Repositories, rows) {
+		t.Errorf("Run result's repositories = %+v; want %+v", got.Result.Repositories, rows)
 	}
 
 	if g, w := normalJSON(t, got.Result.Output), normalJSON(t, res.Output); g != w {
@@ -298,12 +320,12 @@ func testRunRecords(f *fixture) {
 		t.Fatalf("Runs = %+v, %v; want two", runs, err)
 	}
 
-	if r := runs[1]; r.Input != retryIn || r.Result.PushedHead != "" || r.Result.Output != nil {
-		t.Errorf("Runs' retry = input %+v, pushed head %q, output %s; want only its brief", r.Input, r.Result.PushedHead, r.Result.Output)
+	if r := runs[1]; !reflect.DeepEqual(r.Input, retryIn) || r.Result.Repositories != nil || r.Result.Output != nil {
+		t.Errorf("Runs' retry = input %+v, repositories %+v, output %s; want only its brief", r.Input, r.Result.Repositories, r.Result.Output)
 	}
 
-	if runs[0].Input != in {
-		t.Errorf("Runs' first run input = %+v; want %+v", runs[0].Input, in)
+	if !reflect.DeepEqual(runs[0].Input.Repositories, rows) {
+		t.Errorf("Runs' first run repositories = %+v; want %+v", runs[0].Input.Repositories, rows)
 	}
 
 	f.expectNoRunRecords(t, it.ID, in)
@@ -331,8 +353,8 @@ func (f *fixture) expectNoRunRecords(t *testing.T, item domain.ItemID, in domain
 	t.Helper()
 
 	bare := f.startRun(t, item, t1)
-	if got, err := f.Store.Run(f.ctx(t), bare); err != nil || got.Input != (domain.RunInput{}) || got.Result.PushedHead != "" {
-		t.Errorf("Run without records = %+v, %v; want no input and no pushed head", got, err)
+	if got, err := f.Store.Run(f.ctx(t), bare); err != nil || !reflect.DeepEqual(got.Input, domain.RunInput{}) || got.Result.Repositories != nil {
+		t.Errorf("Run without records = %+v, %v; want no input and no repositories", got, err)
 	}
 
 	err := f.Store.RecordRunInput(f.ctx(t), missingRun, in)
@@ -341,7 +363,7 @@ func (f *fixture) expectNoRunRecords(t *testing.T, item domain.ItemID, in domain
 	err = f.Store.RecordRunInput(f.otherOrg(t).ctx(t), bare, in)
 	expect(t, "RecordRunInput of another org's run", err, ports.ErrNotFound)
 
-	if got, err := f.Store.Run(f.ctx(t), bare); err != nil || got.Input != (domain.RunInput{}) {
+	if got, err := f.Store.Run(f.ctx(t), bare); err != nil || !reflect.DeepEqual(got.Input, domain.RunInput{}) {
 		t.Errorf("Run after another org's RecordRunInput = %+v, %v; want no input", got.Input, err)
 	}
 }
