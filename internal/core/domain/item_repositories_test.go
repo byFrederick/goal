@@ -14,8 +14,9 @@ const (
 	repoDeep = "https://gitlab.example.com/acme/platform/*"
 
 	// entryAPI is the repoAPI entry's name and keyAPI its key.
-	entryAPI = "api"
-	keyAPI   = "github.com/acme/api"
+	entryAPI  = "api"
+	entryLabs = "labs"
+	keyAPI    = "github.com/acme/api"
 	// keyLabsWeb is a repository under the repoAll pattern.
 	keyLabsWeb = "github.com/acme-labs/web"
 )
@@ -25,7 +26,7 @@ func repoLine(def string) Line {
 	l := fileLine()
 	l.Runtime.Repositories = []RepositoryEntry{
 		{Name: entryAPI, URL: repoAPI, Access: "write", Default: def == entryAPI},
-		{Name: "labs", URL: repoAll, Access: "read"},
+		{Name: entryLabs, URL: repoAll, Access: "read"},
 		{Name: "platform", URL: repoDeep, Access: "write"},
 	}
 
@@ -90,7 +91,7 @@ func TestFile_RepositoriesRefusalNamesTheValue(t *testing.T) {
 		want []string
 	}{
 		"unknown name":  {repoLine(""), "Web", []string{`"Web"`}},
-		"pattern entry": {repoLine(""), "labs", []string{`"labs"`, "owner/name"}},
+		"pattern entry": {repoLine(""), entryLabs, []string{`"labs"`, "owner/name"}},
 		"unknown owner": {repoLine(""), "Acme/Web", []string{`"Acme/Web"`}},
 		"unknown host":  {repoLine(""), "GitHub.com/acme/web", []string{`"GitHub.com/acme/web"`}},
 		"two hosts":     {ambiguous, "acme/api", []string{`"acme/api"`, gitHubDotCom, hostGitAcme}},
@@ -130,7 +131,7 @@ func TestFile_RepositoriesRefused(t *testing.T) {
 		"not https":          {"http://github.com/acme/api"},
 		"blank":              {" "},
 		"owner/name nowhere": {"acme/web"},
-		"a pattern's name":   {"labs"},
+		"a pattern's name":   {entryLabs},
 		"an unknown name":    {"mobile-app"},
 		"more than the cap":  eleven,
 	} {
@@ -223,11 +224,8 @@ func TestResolveItemRepositories_FirstIsFirstNamed(t *testing.T) {
 	}
 }
 
-// keyLabsWeb is a repository the labs owner pattern covers, and ownerAPI keyAPI's owner/name.
-const (
-	keyLabsWeb = "github.com/acme-labs/web"
-	ownerAPI   = "acme/api"
-)
+// ownerAPI is keyAPI's owner/name.
+const ownerAPI = "acme/api"
 
 // A trigger's or a check's repository value resolves against the line's entries, owner
 // patterns included and in any case: an entry's name, host/owner/name, an https URL or
@@ -251,7 +249,7 @@ func TestTriggerRepositories_Resolve(t *testing.T) {
 	}{
 		{"an entry's name", repoLine(""), entryAPI, "", keyAPI},
 		{"an entry's name in any case", repoLine(""), "API", "", keyAPI},
-		{"an owner pattern's name", repoLine(""), "labs", "", ""},
+		{"an owner pattern's name", repoLine(""), entryLabs, "", ""},
 		{"host/owner/name", repoLine(""), "GitHub.com/acme/api", "", keyAPI},
 		{"an https URL with .git", repoLine(""), "https://github.com/acme/API.git", "", keyAPI},
 		{"owner/name", repoLine(""), ownerAPI, SenderGitHub, keyAPI},
