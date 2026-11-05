@@ -299,6 +299,7 @@ func stateClearedOnlyInOrg(t *testing.T, pool *pgxpool.Pool, acme, labs domain.O
 	t.Helper()
 
 	insert := `INSERT INTO trigger_state (factory_id, trigger, state, updated_at) VALUES ('` + string(factory) + `', 'nightly-audit', '{"since": "a"}', now())`
+
 	if err := inOrgTx(t, pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), insert); return err }); err != nil {
 		t.Fatal(err)
 	}

@@ -299,18 +299,25 @@ func (s *server) GetIntakeTrigger(ctx context.Context, req gen.GetIntakeTriggerR
 		out.Events = append(out.Events, intakeEvent(e))
 	}
 
-	if t.Check != nil {
-		m, err := s.intake.CheckMemory(ctx, l.FactoryID, t.Name, s.clock.Now())
-		if err != nil {
-			return nil, err
-		}
-
-		if out.Memory, err = checkMemory(m); err != nil {
-			return nil, err
-		}
+	if out.Memory, err = s.triggerMemory(ctx, l.FactoryID, t); err != nil {
+		return nil, err
 	}
 
 	return out, nil
+}
+
+// triggerMemory is a check trigger's memory, and nil for a trigger without a check.
+func (s *server) triggerMemory(ctx context.Context, f domain.FactoryID, t *domain.Trigger) (*gen.TriggerCheckMemory, error) {
+	if t.Check == nil {
+		return nil, nil //nolint:nilnil // a trigger without a check has no memory, and the answer leaves it out
+	}
+
+	m, err := s.intake.CheckMemory(ctx, f, t.Name, s.clock.Now())
+	if err != nil {
+		return nil, err
+	}
+
+	return checkMemory(m)
 }
 
 // checkMemory is a check trigger's memory as the API answers it: lists never null, and a null

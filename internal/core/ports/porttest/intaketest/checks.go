@@ -225,7 +225,7 @@ func testCheckInput(f *fixture) {
 		t.Errorf("closed = %+v, want INC-2 cancelled at %s", in.Closed, t0)
 	}
 
-	if string(in.LastDecisions) != "null" || string(in.State) != "null" {
+	if string(in.LastDecisions) != jsonNull || string(in.State) != jsonNull {
 		t.Errorf("decisions, state = %s, %s; want null and null", in.LastDecisions, in.State)
 	}
 
@@ -262,6 +262,9 @@ func sameJSON[A, B ~string | ~[]byte](a A, b B) bool {
 
 // watcher is the check's agent.
 const watcher = "watcher"
+
+// jsonNull is a JSON column read back empty: no saved state or decisions.
+const jsonNull = "null"
 
 // runCheck fires, claims and finishes a check of nightly queued at the instant given, with answer, its items made for
 // each file entry, and returns the firing as it reads back. try queues it as a try check.
@@ -578,7 +581,7 @@ func testIsolatedKeys(f *fixture) {
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
 
-	if in, err := f.in.CheckInput(labs, f.factory, nightly, t0.Add(time.Hour)); err != nil || len(in.Open) != 0 || string(in.LastDecisions) != "null" {
+	if in, err := f.in.CheckInput(labs, f.factory, nightly, t0.Add(time.Hour)); err != nil || len(in.Open) != 0 || string(in.LastDecisions) != jsonNull {
 		t.Errorf("labs CheckInput = %+v, %v; want nothing", in, err)
 	}
 
@@ -599,10 +602,7 @@ func testIsolatedKeys(f *fixture) {
 func testCheckMemory(f *fixture) {
 	t := f.t
 
-	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0); err != nil || m.Open != 0 || m.OpenItems == nil || len(m.OpenItems) != 0 ||
-		m.Closed != 0 || m.ClosedKeys == nil || len(m.ClosedKeys) != 0 || string(m.State) != "null" || !m.CheckedUpTo.IsZero() {
-		t.Errorf("CheckMemory before a check = %+v, %v; want empty lists, a null state and no time", m, err)
-	}
+	f.expectNoMemory()
 
 	first := f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "db-1"}],
 		"state": {"since": "a"}}`, domain.CheckLimits{}, false)
@@ -635,6 +635,20 @@ func testCheckMemory(f *fixture) {
 	f.expectCleared()
 }
 
+// expectNoMemory checks nightly's memory before any check: empty lists, never nil, a null state
+// and no time.
+func (f *fixture) expectNoMemory() {
+	m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0)
+	if err != nil {
+		f.t.Fatalf("CheckMemory before a check: %v", err)
+	}
+
+	lists := m.OpenItems != nil && len(m.OpenItems) == 0 && m.ClosedKeys != nil && len(m.ClosedKeys) == 0
+	if !lists || m.Open != 0 || m.Closed != 0 || string(m.State) != jsonNull || !m.CheckedUpTo.IsZero() {
+		f.t.Errorf("CheckMemory before a check = %+v; want empty lists, a null state and no time", m)
+	}
+}
+
 // expectCleared clears nightly's state twice, checks the state is gone and its keys kept, and
 // that a queued check refuses the clear.
 func (f *fixture) expectCleared() {
@@ -646,11 +660,11 @@ func (f *fixture) expectCleared() {
 		}
 	}
 
-	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || string(m.State) != "null" || !m.CheckedUpTo.IsZero() || m.Closed != 1 {
+	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || string(m.State) != jsonNull || !m.CheckedUpTo.IsZero() || m.Closed != 1 {
 		t.Errorf("CheckMemory after Clear = %+v, %v; want a null state, no time and the closed key kept", m, err)
 	}
 
-	if in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || string(in.State) != "null" {
+	if in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || string(in.State) != jsonNull {
 		t.Errorf("CheckInput after Clear = %s, %v; want a null state", in.State, err)
 	}
 
@@ -678,7 +692,7 @@ func testIsolatedClear(f *fixture) {
 		t.Errorf("labs ClearCheckState = %v, want nil", err)
 	}
 
-	if m, err := f.in.CheckMemory(labs, f.factory, nightly, t0.Add(time.Hour)); err != nil || m.Open != 0 || len(m.OpenItems) != 0 || string(m.State) != "null" {
+	if m, err := f.in.CheckMemory(labs, f.factory, nightly, t0.Add(time.Hour)); err != nil || m.Open != 0 || len(m.OpenItems) != 0 || string(m.State) != jsonNull {
 		t.Errorf("labs CheckMemory = %+v, %v; want nothing", m, err)
 	}
 

@@ -1029,13 +1029,8 @@ func TestIntakeTrigger_Memory(t *testing.T) {
 	h := newHarness(t)
 	path := intakePath + "/triggers/" + incidentsName
 
-	var raw map[string]json.RawMessage
-	if code := h.call(t, http.MethodGet, path, "", &raw); code != http.StatusOK {
-		t.Fatalf("trigger = %d; want 200", code)
-	}
-
-	if want := `{"open":0,"open_items":[],"closed":0,"closed_keys":[],"state":null,"checked_up_to":null}`; !sameJSON(t, raw["memory"], want) {
-		t.Errorf("memory before a check = %s; want %s", raw["memory"], want)
+	if want := `{"open":0,"open_items":[],"closed":0,"closed_keys":[],"state":null,"checked_up_to":null}`; !sameJSON(t, rawMemory(t, h, path), want) {
+		t.Errorf("memory before a check = %s; want %s", rawMemory(t, h, path), want)
 	}
 
 	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "INC-1"}}`, "")
@@ -1045,19 +1040,37 @@ func TestIntakeTrigger_Memory(t *testing.T) {
 		t.Fatalf("trigger = %d %+v; want 200 with its memory", code, d)
 	}
 
-	m := d.Memory
+	wantIncidentsMemory(t, d.Memory, oct(22, 4).Add(time.Minute))
+
+	if m := rawMemory(t, h, intakePath+"/triggers/"+nightlyName); m != nil {
+		t.Errorf("trigger without a check has memory %s; want none", m)
+	}
+}
+
+// wantIncidentsMemory checks the memory after one check filed INC-1 and saved {"since": "INC-1"},
+// finishing at done.
+func wantIncidentsMemory(t *testing.T, m *gen.TriggerCheckMemory, done time.Time) {
+	t.Helper()
+
 	if m.Open != 1 || len(m.OpenItems) != 1 || m.OpenItems[0].Key != "INC-1" || m.OpenItems[0].Title != "API down" || m.Closed != 0 || len(m.ClosedKeys) != 0 {
 		t.Errorf("memory = %+v; want INC-1 open and no closed key", m)
 	}
 
-	if m.State == nil || (*m.State)["since"] != "INC-1" || m.CheckedUpTo == nil || !m.CheckedUpTo.Equal(oct(22, 4).Add(time.Minute)) {
-		t.Errorf("state = %v, checked up to %v; want the check's, at %s", m.State, m.CheckedUpTo, oct(22, 4).Add(time.Minute))
+	if m.State == nil || (*m.State)["since"] != "INC-1" || m.CheckedUpTo == nil || !m.CheckedUpTo.Equal(done) {
+		t.Errorf("state = %v, checked up to %v; want the check's, at %s", m.State, m.CheckedUpTo, done)
+	}
+}
+
+// rawMemory reads the trigger at path and returns its memory as sent, nil when left out.
+func rawMemory(t *testing.T, h *harness, path string) json.RawMessage {
+	t.Helper()
+
+	var raw map[string]json.RawMessage
+	if code := h.call(t, http.MethodGet, path, "", &raw); code != http.StatusOK {
+		t.Fatalf("trigger %s = %d; want 200", path, code)
 	}
 
-	var plain map[string]json.RawMessage
-	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+nightlyName, "", &plain); code != http.StatusOK || plain["memory"] != nil {
-		t.Errorf("trigger without a check = %d, memory %s; want 200 without memory", code, plain["memory"])
-	}
+	return raw["memory"]
 }
 
 // sameJSON reports whether got holds the same JSON value as want.
@@ -1105,6 +1118,14 @@ func TestTriggerChecks_ClearState(t *testing.T) {
 		t.Fatalf("try = %d; want 202", code)
 	}
 
+	refusedClears(t, h, statePath)
+}
+
+// refusedClears checks the clears refused once a check of the trigger at statePath is queued:
+// that one, a trigger without a check, an unknown trigger and a viewer's.
+func refusedClears(t *testing.T, h *harness, statePath string) {
+	t.Helper()
+
 	for _, c := range []struct {
 		what, path string
 		status     int
@@ -1121,7 +1142,7 @@ func TestTriggerChecks_ClearState(t *testing.T) {
 
 	h.as(acmeMember(domain.FactoryViewer))
 
-	if code, p := problemOfCall(t, h, http.MethodDelete, statePath, ""); code != http.StatusForbidden || deref(p.Code) != "forbidden" {
+	if code, p := problemOfCall(t, h, http.MethodDelete, statePath, ""); code != http.StatusForbidden || deref(p.Code) != wantForbidden {
 		t.Errorf("a viewer's clear = %d %s, want 403 forbidden", code, deref(p.Code))
 	}
 }
