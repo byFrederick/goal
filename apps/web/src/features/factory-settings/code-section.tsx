@@ -169,7 +169,21 @@ export function CodeSection() {
   const edit = (next: RepositoryEntry[]) =>
     session.edit(setBasics(basics, 'repositories', next.length > 0 ? next : undefined));
   const add = () => {
-    edit([...stored, { name: freshName(stored), url: '', access: 'read' }]);
+    if (shorthand) {
+      // Publish refuses runtime.repository together with runtime.repositories, so the shorthand moves into the list.
+      const { repository, ...rest } = basics;
+      const token = repository?.token;
+      const first: RepositoryEntry = {
+        name: 'repo',
+        url: repository?.url ?? '',
+        access: 'write',
+        ...(token ? { token } : {}),
+        default: true,
+      };
+      session.edit(setBasics(rest, 'repositories', [first, { name: freshName([first]), url: '', access: 'read' }]));
+    } else {
+      edit([...stored, { name: freshName(stored), url: '', access: 'read' }]);
+    }
     setEditing(true);
   };
 
@@ -183,7 +197,7 @@ export function CodeSection() {
             <span className="flex items-center gap-1 text-sm font-medium">
               Agents that write
               <InfoTip about="Agents that write">
-                Agents with code write push, open pull requests and merge in the repositories that write. An agent
+                Agents whose code is write push, open pull requests and merge in the repositories that write. An agent
                 without a setting writes when the factory has a write repository.
               </InfoTip>
             </span>

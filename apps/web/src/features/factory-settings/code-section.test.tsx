@@ -183,6 +183,16 @@ describe('Code section', () => {
     expect(within(region).getAllByLabelText('URL').length).toBe(2);
   });
 
+  it('Add a repository on the shorthand moves it into the list instead of setting both forms', async () => {
+    setDraft({ repository: { url: 'https://github.com/acme/app', token: '{{github-token}}' } });
+    const region = await renderCode();
+    await within(region).findByText('Read and write');
+    fireEvent.click(within(region).getByRole('button', { name: 'Add a repository' }));
+    await waitFor(() => expect(within(region).getByRole('button', { name: 'Done' })).toBeTruthy());
+    const urls = within(region).getAllByLabelText('URL') as HTMLInputElement[];
+    expect(urls.map((u) => u.value)).toEqual(['https://github.com/acme/app', '']);
+  });
+
   it('with no repositories says No code, offers Add and makes no test request', async () => {
     setDraft({});
     const region = await renderCode({ seedResults: false });
