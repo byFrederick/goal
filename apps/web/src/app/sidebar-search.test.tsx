@@ -507,6 +507,17 @@ describe('the Actions group of search', () => {
     expect(screen.queryByRole('option', { name: /^New item about "spend"/ })).toBeNull();
   });
 
+  it('an item row keeps a space between its title and its station, so the visible text splits into words', async () => {
+    vi.mocked(searchOrg).mockResolvedValue(spend);
+    renderSidebar({ path: '/o/acme/f/goal', list: granting(['item:decide']) });
+    await nav();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await type('spend');
+    const row = screen.getByRole('option', { name: /^\w+ #147 Show this week's spend/ });
+    expect(row.textContent).toMatch(/spend\s+\S/);
+  });
+
   it('Pause the line calls pauseFactory for the open factory', async () => {
     vi.mocked(searchOrg).mockResolvedValue(empty);
     vi.mocked(pauseFactory).mockResolvedValue({ ...factories[0], paused: true } as Factory);

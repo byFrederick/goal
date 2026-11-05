@@ -177,7 +177,7 @@ export function SidebarSearch({
           </span>
           <span className="min-w-0 flex-1 truncate">
             #{hit.number} {hit.title}
-          </span>
+          </span>{' '}
           <span className="flex-none text-meta text-muted">{humanize(hit.station)}</span>
         </>
       ),
@@ -221,7 +221,7 @@ export function SidebarSearch({
         content: (
           <>
             <screen.icon {...iconProps} />
-            <span className="min-w-0 flex-1 truncate">{screen.label}</span>
+            <span className="min-w-0 flex-1 truncate">{screen.label}</span>{' '}
             <span className="flex-none text-meta text-muted">{detail}</span>
           </>
         ),
@@ -234,7 +234,7 @@ export function SidebarSearch({
       content: (
         <>
           <Bot {...iconProps} />
-          <span className="min-w-0 flex-1 truncate">{hit.name}</span>
+          <span className="min-w-0 flex-1 truncate">{hit.name}</span>{' '}
           <span className="flex-none text-meta text-muted">{hit.factory_name}</span>
         </>
       ),
