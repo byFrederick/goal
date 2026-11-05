@@ -104,9 +104,18 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 		cmdIntake: indented(t, intakeAnswer(nightly, ci, at)),
 		"trigger": indented(t, detail),
 		subDeliveries: indented(t, gen.WebhookDeliveryPage{NextAfter: &next, Deliveries: []gen.WebhookDelivery{
-			{Id: "d2", ReceivedAt: at, Outcome: gen.WebhookDeliveryOutcomeCreated, Item: &gen.WebhookDeliveryItem{Id: "i12", Number: 12}},
-			{Id: "d1", ReceivedAt: at.Add(-time.Minute), Outcome: gen.WebhookDeliveryOutcomeRefused, Reason: "signature did not match"},
-			{Id: "d0", ReceivedAt: at.Add(-2 * time.Minute), Outcome: gen.WebhookDeliveryOutcomeAccepted},
+			{
+				Id: "d2", ReceivedAt: at, Outcome: gen.WebhookDeliveryOutcomeCreated, Item: &gen.WebhookDeliveryItem{Id: "i12", Number: 12},
+				Receipt: new(gen.WebhookDeliveryReceiptAccepted), Evaluations: []gen.WebhookDeliveryEvaluation{
+					{Factory: "f1", FactoryName: "docs", State: gen.WebhookDeliveryEvaluationStateDone, Outcome: new(gen.WebhookDeliveryEvaluationOutcomeCreated)},
+					{Factory: "f2", FactoryName: "line", State: gen.WebhookDeliveryEvaluationStatePending},
+				},
+			},
+			{
+				Id: "d1", ReceivedAt: at.Add(-time.Minute), Outcome: gen.WebhookDeliveryOutcomeRefused, Reason: "signature did not match",
+				Receipt: new(gen.WebhookDeliveryReceiptRefused), Evaluations: []gen.WebhookDeliveryEvaluation{},
+			},
+			{Id: "d0", ReceivedAt: at.Add(-2 * time.Minute), Outcome: gen.WebhookDeliveryOutcomeAccepted, Evaluations: []gen.WebhookDeliveryEvaluation{}},
 		}}),
 		firingCreate: indented(t, wouldCreate),
 		firingSkip:   indented(t, skipped),

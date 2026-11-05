@@ -2403,7 +2403,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a webhook endpoint and its deliveries
-         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
          */
         delete: operations["deleteWebhookEndpoint"];
         options?: never;
@@ -2542,14 +2542,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a webhook, its openings and its deliveries
-         * @description Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+         * @description Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers name it; a trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
          */
         delete: operations["deleteWebhook"];
         options?: never;
         head?: never;
         /**
          * Open, close, limit, rename, enable or disable a webhook
-         * @description open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+         * @description open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
          */
         patch: operations["patchWebhook"];
         trace?: never;
@@ -4081,7 +4081,7 @@ export interface components {
             try_estimate?: components["schemas"]["TryProposalEstimate"];
             /** @description secret-in-use only, what uses the secret */
             uses?: components["schemas"]["SecretUse"][];
-            /** @description webhook-in-use only, the published triggers that use the webhook */
+            /** @description webhook-in-use only, the published triggers that name the webhook */
             triggers?: components["schemas"]["WebhookTrigger"][];
         };
         /**
@@ -8306,7 +8306,7 @@ export interface components {
             token: components["schemas"]["WebhookTokenSettings"] | null;
             /** @description The factories it is open to, by factory id */
             openings: components["schemas"]["WebhookOpening"][];
-            /** @description The triggers of the published definitions of the factories it is open to that use it (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger */
+            /** @description The triggers of the published definitions of the factories it is open to that name it (on webhook.<name>, <name> or either followed by .<event>), enabled or not, and the enabled ones that name its sender with an event (<sender>.<event>), by factory name then trigger. Archived factories' triggers are left out. */
             triggers: components["schemas"]["WebhookTrigger"][];
             /** Format: date-time */
             created_at: string;
@@ -8365,7 +8365,7 @@ export interface components {
             receipt: "accepted" | "duplicate" | "refused" | null;
             /** @description How many later deliveries had its delivery id and created nothing */
             duplicates: number;
-            /** @description Its evaluation by each factory that names it, by factory. A factory's own routes list only that factory's. */
+            /** @description Its evaluation by each factory that names it, by factory name then factory id. A factory's own routes list only that factory's. */
             evaluations: components["schemas"]["WebhookDeliveryEvaluation"][];
         };
         WebhookDeliveryEvaluation: {

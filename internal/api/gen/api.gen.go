@@ -3566,7 +3566,7 @@ type CreatedWebhook struct {
 	// Token The token sender's settings; null for another sender
 	Token *WebhookTokenSettings `json:"token"`
 
-	// Triggers The triggers of the published definitions of the factories it is open to that use it (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger
+	// Triggers The triggers of the published definitions of the factories it is open to that name it (on webhook.<name>, <name> or either followed by .<event>), enabled or not, and the enabled ones that name its sender with an event (<sender>.<event>), by factory name then trigger. Archived factories' triggers are left out.
 	Triggers []WebhookTrigger `json:"triggers"`
 }
 
@@ -6597,7 +6597,7 @@ type Problem struct {
 	Status int     `json:"status"`
 	Title  string  `json:"title"`
 
-	// Triggers webhook-in-use only, the published triggers that use the webhook
+	// Triggers webhook-in-use only, the published triggers that name the webhook
 	Triggers *[]WebhookTrigger `json:"triggers,omitempty"`
 
 	// TryEstimate learning-budget-exhausted of Try again only, the estimate it refused
@@ -8513,7 +8513,7 @@ type Webhook struct {
 	// Token The token sender's settings; null for another sender
 	Token *WebhookTokenSettings `json:"token"`
 
-	// Triggers The triggers of the published definitions of the factories it is open to that use it (on webhook.<name>, <name> or either followed by .<event>), by factory then trigger
+	// Triggers The triggers of the published definitions of the factories it is open to that name it (on webhook.<name>, <name> or either followed by .<event>), enabled or not, and the enabled ones that name its sender with an event (<sender>.<event>), by factory name then trigger. Archived factories' triggers are left out.
 	Triggers []WebhookTrigger `json:"triggers"`
 }
 
@@ -8522,7 +8522,7 @@ type WebhookDelivery struct {
 	// Duplicates How many later deliveries had its delivery id and created nothing
 	Duplicates int `json:"duplicates"`
 
-	// Evaluations Its evaluation by each factory that names it, by factory. A factory's own routes list only that factory's.
+	// Evaluations Its evaluation by each factory that names it, by factory name then factory id. A factory's own routes list only that factory's.
 	Evaluations []WebhookDeliveryEvaluation `json:"evaluations"`
 
 	// Event The sender's event, such as check_run; empty when it names none or it was refused
@@ -8611,7 +8611,7 @@ type WebhookDeliveryRequest struct {
 	// Duplicates How many later deliveries had its delivery id and created nothing
 	Duplicates int `json:"duplicates"`
 
-	// Evaluations Its evaluation by each factory that names it, by factory. A factory's own routes list only that factory's.
+	// Evaluations Its evaluation by each factory that names it, by factory name then factory id. A factory's own routes list only that factory's.
 	Evaluations []WebhookDeliveryEvaluation `json:"evaluations"`
 
 	// Event The sender's event, such as check_run; empty when it names none or it was refused
@@ -10927,7 +10927,7 @@ type ClientInterface interface {
 
 	// DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
 	//
-	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
 	DeleteWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11844,7 +11844,7 @@ type ClientInterface interface {
 
 	// DeleteWebhook Delete a webhook, its openings and its deliveries
 	//
-	// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+	// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers name it; a trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 	//
 	// Corresponds with DELETE /v1/orgs/{org}/webhooks/{webhook} (the `DeleteWebhook` operationId).
 	DeleteWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11858,7 +11858,7 @@ type ClientInterface interface {
 
 	// PatchWebhookWithBody Open, close, limit, rename, enable or disable a webhook
 	//
-	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -11867,7 +11867,7 @@ type ClientInterface interface {
 
 	// PatchWebhook Open, close, limit, rename, enable or disable a webhook
 	//
-	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -14476,7 +14476,7 @@ func (c *Client) CreateWebhookEndpoint(ctx context.Context, org OrgRef, factory 
 
 // DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
 //
-// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
 //
 // Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
 func (c *Client) DeleteWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -16543,7 +16543,7 @@ func (c *Client) CreateWebhook(ctx context.Context, org OrgRef, body CreateWebho
 
 // DeleteWebhook Delete a webhook, its openings and its deliveries
 //
-// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers name it; a trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 //
 // Corresponds with DELETE /v1/orgs/{org}/webhooks/{webhook} (the `DeleteWebhook` operationId).
 func (c *Client) DeleteWebhook(ctx context.Context, org OrgRef, webhook WebhookRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -16577,7 +16577,7 @@ func (c *Client) GetWebhook(ctx context.Context, org OrgRef, webhook WebhookRef,
 
 // PatchWebhookWithBody Open, close, limit, rename, enable or disable a webhook
 //
-// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -16596,7 +16596,7 @@ func (c *Client) PatchWebhookWithBody(ctx context.Context, org OrgRef, webhook W
 
 // PatchWebhook Open, close, limit, rename, enable or disable a webhook
 //
-// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -28935,7 +28935,7 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteWebhookEndpointWithResponse Delete a webhook endpoint and its deliveries
 	//
-	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -29956,7 +29956,7 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteWebhookWithResponse Delete a webhook, its openings and its deliveries
 	//
-	// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+	// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers name it; a trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -29974,7 +29974,7 @@ type ClientWithResponsesInterface interface {
 
 	// PatchWebhookWithBodyWithResponse Open, close, limit, rename, enable or disable a webhook
 	//
-	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -29983,7 +29983,7 @@ type ClientWithResponsesInterface interface {
 
 	// PatchWebhookWithResponse Open, close, limit, rename, enable or disable a webhook
 	//
-	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+	// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -42025,7 +42025,7 @@ func (c *ClientWithResponses) CreateWebhookEndpointWithResponse(ctx context.Cont
 
 // DeleteWebhookEndpointWithResponse Delete a webhook endpoint and its deliveries
 //
-// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -43736,7 +43736,7 @@ func (c *ClientWithResponses) CreateWebhookWithResponse(ctx context.Context, org
 
 // DeleteWebhookWithResponse Delete a webhook, its openings and its deliveries
 //
-// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers use it. Needs a sign-in from the last 10 minutes.
+// Its address stops accepting requests; its secret stays. 404 webhook-not-found; 409 webhook-in-use, with triggers, while published triggers name it; a trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -43766,7 +43766,7 @@ func (c *ClientWithResponses) GetWebhookWithResponse(ctx context.Context, org Or
 
 // PatchWebhookWithBodyWithResponse Open, close, limit, rename, enable or disable a webhook
 //
-// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -43781,7 +43781,7 @@ func (c *ClientWithResponses) PatchWebhookWithBodyWithResponse(ctx context.Conte
 
 // PatchWebhookWithResponse Open, close, limit, rename, enable or disable a webhook
 //
-// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that use the webhook without it: publish them without it first. Needs a sign-in from the last 10 minutes.
+// open opens the webhook to each factory, or replaces the repositories an opening is limited to; close closes it to each factory. 400 webhook-invalid for a name it refuses, a factory both opened and closed, or a repository list over 100; 404 webhook-not-found, and factory-not-found for a factory the organization does not have; 409 webhook-name-taken; 409 webhook-in-use, with triggers, when a rename or a close would leave published triggers that name the webhook without it: publish them without it first. A trigger that names only its sender does not hold it. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //

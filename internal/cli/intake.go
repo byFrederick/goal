@@ -1066,6 +1066,27 @@ func webhooksDeliveries(ctx context.Context, out *printer, getenv func(string) s
 	return nil
 }
 
+// evaluationsText is a delivery's evaluations as "factory: outcome", or its state while it has no
+// outcome, joined by ", "; "-" for none.
+func evaluationsText(evals []gen.WebhookDeliveryEvaluation) string {
+	if len(evals) == 0 {
+		return "-"
+	}
+
+	parts := make([]string, 0, len(evals))
+
+	for _, e := range evals {
+		what := string(e.State)
+		if e.Outcome != nil {
+			what = string(*e.Outcome)
+		}
+
+		parts = append(parts, e.FactoryName+": "+what)
+	}
+
+	return strings.Join(parts, ", ")
+}
+
 func printDeliveries(out *printer, webhook string, p *gen.WebhookDeliveryPage) {
 	if len(p.Deliveries) == 0 {
 		out.printf("No deliveries\n")
@@ -1073,10 +1094,14 @@ func printDeliveries(out *printer, webhook string, p *gen.WebhookDeliveryPage) {
 		var b bytes.Buffer
 
 		tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-		_, _ = fmt.Fprintln(tw, "RECEIVED\tOUTCOME\tREASON\tITEM")
+		_, _ = fmt.Fprintln(tw, "RECEIVED\tOUTCOME\tRECEIPT\tREASON\tITEM\tEVALUATIONS")
 
 		for _, d := range p.Deliveries {
-			reason, item := "-", "-"
+			receipt, reason, item := "-", "-", "-"
+			if d.Receipt != nil {
+				receipt = string(*d.Receipt)
+			}
+
 			if d.Reason != "" {
 				reason = oneLine(d.Reason)
 			}
@@ -1085,7 +1110,7 @@ func printDeliveries(out *printer, webhook string, p *gen.WebhookDeliveryPage) {
 				item = "#" + strconv.FormatInt(d.Item.Number, 10)
 			}
 
-			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", stamp(d.ReceivedAt), d.Outcome, reason, item)
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", stamp(d.ReceivedAt), d.Outcome, receipt, reason, item, evaluationsText(d.Evaluations))
 		}
 
 		_ = tw.Flush()
