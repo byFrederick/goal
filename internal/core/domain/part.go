@@ -17,6 +17,12 @@ type NewPart struct {
 	Brief string
 	Paths []string
 	Needs []string
+	// Repositories are the repositories the plan names for the part, as a person names them
+	// (FileRequest.Repositories); none gives it its assembly's.
+	Repositories []string
+	// Filed are the part's repositories as domain.File resolved them, which the engine sets and
+	// the store writes with the part.
+	Filed []ItemRepository
 }
 
 // PlanField is the platform-defined property of a station's output that holds a plan (PlanFrom).
@@ -27,7 +33,7 @@ const PlanField = "plan"
 var ErrBadPlan = errors.New("bad plan")
 
 // PlanFrom reads the "plan" a station's output declares, the platform-defined field that makes
-// the item an assembly: [{key, title, lane, brief, paths, needs}]. It returns nil, nil when the
+// the item an assembly: [{key, title, lane, brief, paths, needs, repositories}]. It returns nil, nil when the
 // output has no plan (absent, null or empty) and ErrBadPlan, wrapping ValidatePlan's error when
 // it refused the plan, when the plan is malformed.
 func PlanFrom(output json.RawMessage) ([]NewPart, error) {
@@ -39,6 +45,8 @@ func PlanFrom(output json.RawMessage) ([]NewPart, error) {
 			Brief string   `json:"brief"`
 			Paths []string `json:"paths"`
 			Needs []string `json:"needs"`
+			// Repositories are optional: none gives the part its assembly's.
+			Repositories []string `json:"repositories"`
 		} `json:"plan"`
 	}
 
@@ -52,7 +60,7 @@ func PlanFrom(output json.RawMessage) ([]NewPart, error) {
 
 	parts := make([]NewPart, len(v.Plan))
 	for i, p := range v.Plan {
-		parts[i] = NewPart{Key: p.Key, Title: p.Title, Lane: p.Lane, Brief: p.Brief, Paths: p.Paths, Needs: p.Needs}
+		parts[i] = NewPart{Key: p.Key, Title: p.Title, Lane: p.Lane, Brief: p.Brief, Paths: p.Paths, Needs: p.Needs, Repositories: p.Repositories}
 	}
 
 	if err := ValidatePlan(parts); err != nil {

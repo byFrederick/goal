@@ -294,6 +294,12 @@ func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]dom
 		return nil, nil
 	}
 
+	return s.orderedRepos(item), nil
+}
+
+// orderedRepos are item's repositories in first-joined order, as ItemRepositories reads them.
+// s.mu is held.
+func (s *Store) orderedRepos(item domain.ItemID) []domain.ItemRepository {
 	out := slices.Clone(s.repos[item])
 	slices.SortStableFunc(out, func(a, b domain.ItemRepository) int {
 		return cmp.Or(
@@ -301,7 +307,7 @@ func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]dom
 			a.JoinedAt.Compare(b.JoinedAt), cmp.Compare(a.Ordinal, b.Ordinal))
 	})
 
-	return out, nil
+	return out
 }
 
 // OpenItemRepositories implements ports.Store.

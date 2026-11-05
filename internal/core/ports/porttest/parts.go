@@ -229,7 +229,7 @@ func partOf(it *domain.Item, p domain.NewPart, by domain.Actor, at time.Time) do
 		FactoryID: it.FactoryID, ParentID: it.ID, Type: it.Type, Lane: p.Lane, Title: p.Title, Body: p.Brief,
 		Priority: it.Priority, Station: it.Station, State: domain.StateQueued, Class: it.Class, CreatedAt: at,
 		Origin: domain.OriginPlan, CreatedBy: by, Generation: it.Generation, Untrusted: it.Untrusted,
-		FactoryName: domain.BranchFactory(it.StoredBranch),
+		FactoryName: domain.BranchFactory(it.StoredBranch), Repositories: slices.Clone(p.Filed),
 	}
 }
 

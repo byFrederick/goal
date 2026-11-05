@@ -11,6 +11,13 @@ VALUES (sqlc.arg(item_id), sqlc.arg(repo), sqlc.arg(joined), sqlc.arg(joined_at)
 SELECT * FROM work_item_repositories WHERE item_id = $1
 ORDER BY (joined <> 'filing'), joined_at, ordinal;
 
+-- name: JoinItemRepository :exec
+-- One repository joining an item after it was filed, with the next ordinal the caller computed;
+-- a repository the item already has stays as it is.
+INSERT INTO work_item_repositories (item_id, repo, joined, joined_at, ordinal)
+VALUES (sqlc.arg(item_id), sqlc.arg(repo), sqlc.arg(joined), sqlc.arg(joined_at), sqlc.arg(ordinal)::int)
+ON CONFLICT (item_id, repo) DO NOTHING;
+
 -- name: OpenItemRepositories :many
 -- The repositories the factory's open items use, by repository then item number: publish
 -- refuses a version that drops the entry one of them needs (ADR 0041 decision 4).

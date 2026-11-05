@@ -90,11 +90,16 @@ func defaultRepository(l Line) []ItemRepository {
 }
 
 // fileRepositories are the repositories a filed item starts with: each of named, resolved
-// against l's entries (resolveRepository) and joined filing, once and in the order named, or the
-// default entry's when none is named. A value that resolves to no repository, or to more than
-// one, and more than MaxItemRepositories are ErrInvalid.
-func fileRepositories(l Line, named []string) ([]ItemRepository, error) {
+// against l's entries (resolveRepository) and joined filing, once and in the order named; when
+// none is named, those of inherited that l covers (JoinRepositories), else the default entry's.
+// A value that resolves to no repository, or to more than one, and more than
+// MaxItemRepositories named are ErrInvalid.
+func fileRepositories(l Line, named, inherited []string) ([]ItemRepository, error) {
 	if len(named) == 0 {
+		if rs := JoinRepositories(l, nil, inherited, time.Time{}); len(rs) > 0 {
+			return rs, nil
+		}
+
 		return defaultRepository(l), nil
 	}
 
@@ -116,6 +121,52 @@ func fileRepositories(l Line, named []string) ([]ItemRepository, error) {
 	}
 
 	return out, nil
+}
+
+// JoinRepositories are the rows an item that has have gains from keys, the repositories
+// (RepositoryKey) of the items it comes from: each key one of l's entries covers and have lacks,
+// once and in order, joined filing at time at with the next ordinal, until the item has
+// MaxItemRepositories. The rest are left out without an error.
+func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time) []ItemRepository {
+	entries := l.repositoryEntries()
+	next := len(have)
+
+	for _, r := range have {
+		next = max(next, r.Ordinal+1)
+	}
+
+	var out []ItemRepository
+
+	for _, raw := range keys {
+		if len(have)+len(out) >= MaxItemRepositories || next >= MaxItemRepositories {
+			break
+		}
+
+		key, ok := RepositoryKey(raw)
+		if !ok || !coveredBy(entries, key) {
+			continue
+		}
+
+		has := func(r ItemRepository) bool { return r.Repo == key }
+		if slices.ContainsFunc(have, has) || slices.ContainsFunc(out, has) {
+			continue
+		}
+
+		out = append(out, ItemRepository{Repo: key, Joined: JoinedFiling, JoinedAt: at, Ordinal: next})
+		next++
+	}
+
+	return out
+}
+
+// ItemRepositoryKeys are the keys of rs, in order.
+func ItemRepositoryKeys(rs []ItemRepository) []string {
+	keys := make([]string, len(rs))
+	for i, r := range rs {
+		keys[i] = r.Repo
+	}
+
+	return keys
 }
 
 // resolveRepository is the key (RepositoryKey) of the repository raw names among entries, in

@@ -46,7 +46,12 @@ func (e *Engine) AddPart(ctx context.Context, assembly domain.ItemID, by domain.
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, ErrNotAssembly)
 	}
 
-	if err := checkPart(l, it, by, part); err != nil {
+	repos, err := e.repositoryKeys(ctx, assembly)
+	if err != nil {
+		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, err)
+	}
+
+	if part, err = checkPart(l, it, by, part, repos); err != nil {
 		return domain.Item{}, domain.Parts{}, fmt.Errorf("add part to %s: %w", assembly, err)
 	}
 
@@ -81,15 +86,32 @@ func (e *Engine) AddPart(ctx context.Context, assembly domain.ItemID, by domain.
 	return got, parts, nil
 }
 
-// checkPart checks part p of the assembly a, filed by by, through domain.File (origin plan); the
-// store files it as File does, with a's type, priority, class, station, generation and untrusted.
-func checkPart(l domain.Line, a domain.Item, by domain.Actor, p domain.NewPart) error {
-	_, err := domain.File(l, domain.FileRequest{
+// checkPart checks part p of the assembly a, filed by by, through domain.File (origin plan), and
+// returns it with Filed set to its repositories: those p names, else a's, repos (ADR 0041
+// decision 4). The store files it as File does, with a's type, priority, class, station,
+// generation and untrusted.
+func checkPart(l domain.Line, a domain.Item, by domain.Actor, p domain.NewPart, repos []string) (domain.NewPart, error) {
+	n, err := domain.File(l, domain.FileRequest{
 		Origin: domain.OriginPlan, By: by, Assembly: &a, Title: p.Title, Lane: p.Lane, Body: p.Brief,
-		Generation: a.Generation, Untrusted: a.Untrusted,
+		Generation: a.Generation, Untrusted: a.Untrusted, Repositories: p.Repositories, Inherited: repos,
 	})
+	if err != nil {
+		return domain.NewPart{}, err
+	}
 
-	return err
+	p.Filed = n.Repositories
+
+	return p, nil
+}
+
+// repositoryKeys are item's repositories as keys, in first-joined order.
+func (e *Engine) repositoryKeys(ctx context.Context, item domain.ItemID) ([]string, error) {
+	rows, err := e.store.ItemRepositories(ctx, item)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of %s: %w", item, err)
+	}
+
+	return domain.ItemRepositoryKeys(rows), nil
 }
 
 // trimPart is p with the space around its title, lane, brief and each need trimmed.

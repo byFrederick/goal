@@ -298,3 +298,93 @@ func TestTriggerRepositories_ResolveList(t *testing.T) {
 		t.Errorf("skip = %q, want %q", skip, want)
 	}
 }
+
+// A part naming no repositories takes its assembly's, joined filing in the assembly's order; the
+// ones it names win, resolved as a person's are.
+func TestFile_PartTakesItsAssemblysRepositories(t *testing.T) {
+	t.Parallel()
+
+	asm := &Item{ID: "a", Type: fileStory, Station: fileMake}
+	part := func(named []string) ([]ItemRepository, error) {
+		n, err := File(repoLine(entryAPI), FileRequest{
+			Origin: OriginPlan, Assembly: asm, Title: "Part", Repositories: named, Inherited: []string{keyLabsWeb, keyAPI},
+		})
+
+		return n.Repositories, err
+	}
+
+	got, err := part(nil)
+	if want := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling}, {Repo: keyAPI, Joined: JoinedFiling, Ordinal: 1}}; err != nil ||
+		!reflect.DeepEqual(got, want) {
+		t.Errorf("the assembly's: %+v, %v; want %+v", got, err, want)
+	}
+
+	got, err = part([]string{entryAPI})
+	if want := []ItemRepository{{Repo: keyAPI, Joined: JoinedFiling}}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("named: %+v, %v; want %+v", got, err, want)
+	}
+
+	if _, err := part([]string{"acme/unknown"}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), `"acme/unknown"`) {
+		t.Errorf("an uncovered name: err %v; want ErrInvalid quoting it", err)
+	}
+}
+
+// Inherited repositories are kept only when one of the line's entries covers them, once each and
+// at most MaxItemRepositories, without an error past it; with none left the item gets the default
+// entry's.
+func TestFile_InheritedRepositoriesOnlyThoseTheLineCovers(t *testing.T) {
+	t.Parallel()
+
+	file := func(inherited ...string) []string {
+		n, err := File(repoLine(entryAPI), FileRequest{Origin: OriginFollowUp, Title: "t", Inherited: inherited})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var keys []string
+		for _, r := range n.Repositories {
+			keys = append(keys, r.Repo)
+		}
+
+		return keys
+	}
+
+	if got, want := file("github.com/other/x", keyLabsWeb, keyLabsWeb), []string{keyLabsWeb}; !reflect.DeepEqual(got, want) {
+		t.Errorf("covered only = %v; want %v", got, want)
+	}
+
+	if got, want := file("github.com/other/x"), []string{keyAPI}; !reflect.DeepEqual(got, want) {
+		t.Errorf("none covered = %v; want the default %v", got, want)
+	}
+
+	var many []string
+	for i := range MaxItemRepositories + 2 {
+		many = append(many, "github.com/acme-labs/r"+string(rune('a'+i)))
+	}
+
+	if got := file(many...); !reflect.DeepEqual(got, many[:MaxItemRepositories]) {
+		t.Errorf("past the cap = %v; want the first %d", got, MaxItemRepositories)
+	}
+}
+
+// JoinRepositories are the rows an item gains: each covered key it lacks, joined filing at time at
+// with the next ordinal, until it has MaxItemRepositories.
+func TestJoinRepositories_SkipsWhatTheItemHasUpToTheCap(t *testing.T) {
+	t.Parallel()
+
+	have := []ItemRepository{{Repo: keyAPI, Joined: JoinedDefault}}
+	got := JoinRepositories(repoLine(entryAPI), have, []string{keyAPI, "github.com/other/x", keyLabsWeb, keyLabsWeb}, fileAt)
+
+	if want := []ItemRepository{{Repo: keyLabsWeb, Joined: JoinedFiling, JoinedAt: fileAt, Ordinal: 1}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("JoinRepositories = %+v; want %+v", got, want)
+	}
+
+	full := make([]ItemRepository, MaxItemRepositories)
+	for i := range full {
+		full[i] = ItemRepository{Repo: "github.com/acme-labs/r" + string(rune('a'+i)), Ordinal: i}
+	}
+
+	if got := JoinRepositories(repoLine(entryAPI), full, []string{keyLabsWeb}, fileAt); len(got) != 0 {
+		t.Errorf("a full item gains %+v; want none", got)
+	}
+}

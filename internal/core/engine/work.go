@@ -850,27 +850,38 @@ func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, ou
 
 // assemble makes the claimed item an assembly with the parts of its plan, queued at the station
 // that planned them; the item stays there, in state assembly. A part cannot plan an assembly
-// (assemblies do not nest), so its plan blocks it, as does a part domain.File refuses. A lost acknowledgement is only logged: the
-// store's Assemble is idempotent, so the parts exist at most once.
+// (assemblies do not nest), so its plan blocks it, as does a part domain.File refuses. Each part
+// gets the repositories its plan entry names, else the assembly's. A lost acknowledgement is only
+// logged: the store's Assemble is idempotent, so the parts exist at most once.
 func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a ports.Assembly) {
 	if c.item.ParentID != "" {
 		e.block(ctx, log, c, "a part cannot plan an assembly")
 		return
 	}
 
-	for _, p := range a.Parts {
-		if err := checkPart(c.line, c.item, a.By, p); err != nil {
+	repos, err := e.repositoryKeys(ctx, c.item.ID)
+	if err != nil {
+		log.ErrorContext(ctx, "assemble item; the lease will expire and requeue it", slog.Any("error", err))
+		return
+	}
+
+	parts := make([]domain.NewPart, len(a.Parts))
+
+	for i, p := range a.Parts {
+		if parts[i], err = checkPart(c.line, c.item, a.By, p, repos); err != nil {
 			e.block(ctx, log, c, "assemble: part "+p.Key+": "+err.Error())
 			return
 		}
 	}
+
+	a.Parts = parts
 
 	a.Transition.To = domain.Position{Station: c.station.ID, State: domain.StateAssembly}
 
 	ctx, cancel := cleanup(ctx)
 	defer cancel()
 
-	_, parts, err := e.store.Assemble(ctx, a)
+	_, filed, err := e.store.Assemble(ctx, a)
 
 	switch {
 	case errors.Is(err, ports.ErrLeaseLost), errors.Is(err, ports.ErrConflict):
@@ -880,7 +891,7 @@ func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a po
 	case err != nil:
 		log.ErrorContext(ctx, "assemble item; the lease will expire and requeue it", slog.Any("error", err))
 	default:
-		log.InfoContext(ctx, "item assembled", slog.String("station", c.station.ID), slog.Int("parts", parts.Total))
+		log.InfoContext(ctx, "item assembled", slog.String("station", c.station.ID), slog.Int("parts", filed.Total))
 	}
 }
 

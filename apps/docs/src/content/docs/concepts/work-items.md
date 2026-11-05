@@ -62,6 +62,18 @@ Reading one item (`GET /v1/orgs/{org}/items/{item}`) also answers `came_from` fo
 
 Items of any other origin have no `came_from`.
 
+## An item's repositories
+
+Every item records the repositories it works on when it is filed, at most 10. Each one must be covered by one of the factory's `runtime.repositories` entries. Where they come from depends on how the item was filed:
+
+- A person's item takes the repositories the person names (`goal run --repo`, or `repositories` in the API).
+- A trigger's or a check's item takes the ones its `create.repositories` names.
+- A part takes the `repositories` its plan entry names. A part whose entry names none, and a part added to an assembly, takes its assembly's, in the assembly's order.
+- A follow-up's item takes its `start.repositories`. When the start names none, it takes its source item's repositories that the receiving factory's entries cover.
+- A triage item takes its sources' repositories, in the order its sources joined. When a source joins an open triage item, its repositories that the triage item lacks join it, until it has 10; the rest are left out.
+
+A named value that no entry covers is refused, with the value quoted: a person's request with `400 Bad Request`, a plan by blocking the item that planned it, and a follow-up's start by sending it to triage with the reason. An item that gets no repository this way takes the default entry's. A factory without a default entry gives such an item none.
+
 ## Notes from other items
 
 An agent can leave a note for another open item. It writes a follow-up whose `for` names the item as `<factory>#<number>`, in the output field that `board.flow.outputs.followUps` maps (see the [definition reference](/docs/reference/definition/)). On its next tick, every few seconds by default, goald adds the note to that item's events as an `item_note`, with the item and agent it came from.
