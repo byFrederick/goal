@@ -74,3 +74,30 @@ func (q *Queries) ItemRepositories(ctx context.Context, itemID uuid.UUID) ([]Wor
 	}
 	return items, nil
 }
+
+const joinItemRepository = `-- name: JoinItemRepository :exec
+INSERT INTO work_item_repositories (item_id, repo, joined, joined_at, ordinal)
+VALUES ($1, $2, $3, $4, $5::int)
+ON CONFLICT (item_id, repo) DO NOTHING
+`
+
+type JoinItemRepositoryParams struct {
+	ItemID   uuid.UUID
+	Repo     string
+	Joined   string
+	JoinedAt time.Time
+	Ordinal  int32
+}
+
+// One repository joining an item after it was filed, with the next ordinal the caller computed;
+// a repository the item already has stays as it is.
+func (q *Queries) JoinItemRepository(ctx context.Context, arg JoinItemRepositoryParams) error {
+	_, err := q.db.Exec(ctx, joinItemRepository,
+		arg.ItemID,
+		arg.Repo,
+		arg.Joined,
+		arg.JoinedAt,
+		arg.Ordinal,
+	)
+	return err
+}

@@ -197,7 +197,7 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 			Lane: p.Lane, Title: p.Title, Body: p.Brief, Priority: int(parent.Priority), Station: parent.Station,
 			State: domain.StateQueued, Class: domain.ClassOfService(parent.ClassOfService), CreatedAt: at,
 			Origin: domain.OriginPlan, CreatedBy: by, Generation: int(parent.Generation), Untrusted: parent.Untrusted,
-			FactoryName: domain.BranchFactory(deref(parent.Branch)),
+			FactoryName: domain.BranchFactory(deref(parent.Branch)), Repositories: p.Filed,
 		},
 		factory: parent.FactoryID, parent: &parent.ID, partKey: &key, partPaths: p.Paths, baseCommit: parent.BaseCommit,
 		after: after, afterBy: afterBy,

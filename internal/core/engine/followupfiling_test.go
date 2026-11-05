@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -54,6 +55,48 @@ func TestEngine_TickFilesFollowUpsWhenWorkLands(t *testing.T) {
 
 	if !triage.Triage || triage.Title != "Follow-ups from "+testFactory+"#1" {
 		t.Errorf("triage item = %+v; want the factory's triage item for #1", triage)
+	}
+}
+
+// The items filed when work lands take its repositories: the start's item the source's, the
+// triage item its sources'. A source joining the open triage item adds the repositories it lacks.
+func TestEngine_TickFilesFollowUpsWithTheirSourcesRepositories(t *testing.T) {
+	t.Parallel()
+
+	b := &byCall{runs: map[string]int{}, out: map[string][]string{
+		agWorker: {landedFollowUps, `{"followups":["Look at the traces"]}`, `{}`},
+	}}
+	h := newHarness(t, withRepositories(withFollowUps(lineOf(agentStation(stBuild, agWorker, 1, 1)))), b.agent)
+	it := h.submitRepos(t, "Add the flag", "acme-labs/web")
+
+	h.untilDone(t, it.ID, 4)
+	h.step(t)
+
+	got := h.followUps(t, it.ID)
+	if len(got) != 2 || got[0].FiledItem == "" || got[1].FiledItem == "" {
+		t.Fatalf("follow-ups = %+v; want both filed", got)
+	}
+
+	start, triage := got[0].FiledItem, got[1].FiledItem
+	if keys := h.repoKeys(t, start); !slices.Equal(keys, []string{keyWeb}) {
+		t.Errorf("start item's repositories = %v; want the source's %v", keys, []string{keyWeb})
+	}
+
+	if keys := h.repoKeys(t, triage); !slices.Equal(keys, []string{keyWeb}) {
+		t.Errorf("triage item's repositories = %v; want its source's %v", keys, []string{keyWeb})
+	}
+
+	second := h.submitRepos(t, "Trace it", "api", "acme-labs/web")
+
+	h.untilDone(t, second.ID, 4)
+	h.step(t)
+
+	if fs := h.followUps(t, second.ID); len(fs) != 1 || fs[0].FiledItem != triage {
+		t.Fatalf("second follow-ups = %+v; want one joining triage item %s", fs, triage)
+	}
+
+	if keys, want := h.repoKeys(t, triage), []string{keyWeb, keyAPI}; !slices.Equal(keys, want) {
+		t.Errorf("triage item's repositories after a join = %v; want %v", keys, want)
 	}
 }
 
@@ -129,5 +172,48 @@ func TestFollowUp_FileAndDropByAPerson(t *testing.T) {
 	it, err := h.e.FileFollowUp(inOrg(t), src.ID, fs[0].ID, req)
 	if err != nil || it.Origin != domain.OriginFollowUp || it.CreatedBy != ada.Ref() || it.Generation != 1 || it.Title != "Read the logs" {
 		t.Fatalf("FileFollowUp = %+v, %v; want Ada's follow-up at generation 1", it, err)
+	}
+}
+
+// A follow-up a person files takes the repositories the person names, else its start's, else
+// its source's.
+func TestFollowUp_FileByAPersonTakesRepositories(t *testing.T) {
+	t.Parallel()
+
+	out := `{"followups":["Look at the logs",{"text":"Index","start":{"title":"Index runs","repositories":["acme-labs/docs"]}},"Trace it"]}`
+	b := &byCall{runs: map[string]int{}, out: map[string][]string{agWorker: {out, `{}`}}}
+	h := newHarness(t, withRepositories(withFollowUps(lineOf(agentStation(stBuild, agWorker, 1, 1)))), b.agent)
+	src := h.submitRepos(t, "Add the flag", "acme-labs/web")
+
+	h.step(t)
+
+	fs := h.followUps(t, src.ID)
+	if len(fs) != 3 {
+		t.Fatalf("follow-ups = %+v; want three", fs)
+	}
+
+	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
+
+	for _, tt := range []struct {
+		f     domain.FollowUp
+		named []string
+		want  []string
+	}{
+		{fs[0], nil, []string{keyWeb}},
+		{fs[1], nil, []string{keyDocs}},
+		{fs[2], []string{"api"}, []string{keyAPI}},
+	} {
+		if _, err := h.e.DropFollowUp(inOrg(t), src.ID, tt.f.ID, ada); err != nil {
+			t.Fatal(err)
+		}
+
+		it, err := h.e.FileFollowUp(inOrg(t), src.ID, tt.f.ID, domain.FileRequest{By: ada, Title: "Filed " + tt.f.Text, Repositories: tt.named})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got := h.repoKeys(t, it.ID); !slices.Equal(got, tt.want) {
+			t.Errorf("%q named %v: repositories = %v; want %v", tt.f.Text, tt.named, got, tt.want)
+		}
 	}
 }

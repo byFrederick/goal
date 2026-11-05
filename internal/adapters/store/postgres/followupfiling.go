@@ -112,6 +112,44 @@ func (l *lander) factories() []domain.NoteFactory {
 	return out
 }
 
+// repositories are the keys of item id's repositories, in first-joined order.
+func (l *lander) repositories(ctx context.Context, id uuid.UUID) ([]string, error) {
+	rows, err := l.q.ItemRepositories(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of item %s: %w", id, err)
+	}
+
+	keys := make([]string, len(rows))
+	for i, r := range rows {
+		keys[i] = r.Repo
+	}
+
+	return keys, nil
+}
+
+// entry is follow-up r's triage entry, with its source item and the source's repositories.
+func (l *lander) entry(ctx context.Context, r db.FollowUp) (domain.TriageEntry, error) {
+	f, err := followUpFrom(r)
+	if err != nil {
+		return domain.TriageEntry{}, err
+	}
+
+	src, err := l.item(ctx, r.ItemID)
+	if err != nil {
+		return domain.TriageEntry{}, err
+	}
+
+	repos, err := l.repositories(ctx, r.ItemID)
+	if err != nil {
+		return domain.TriageEntry{}, err
+	}
+
+	return domain.TriageEntry{
+		FollowUp: f, Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
+		Repositories: repos,
+	}, nil
+}
+
 // ref is it's item ref, by its factory's metadata.name when goald has it loaded.
 func (l *lander) ref(it domain.Item) domain.ItemRef {
 	name := string(it.FactoryID)
@@ -258,24 +296,17 @@ func (l *lander) untrustedTriage(ctx context.Context, factory domain.FactoryID, 
 	return l.fileOnto(ctx, rows, row.ID)
 }
 
-// entries are rows' triage entries, with their source items.
+// entries are rows' triage entries, with their source items and repositories.
 func (l *lander) entries(ctx context.Context, rows []db.FollowUp) ([]domain.TriageEntry, error) {
 	es := make([]domain.TriageEntry, 0, len(rows))
 
 	for _, r := range rows {
-		f, err := followUpFrom(r)
+		e, err := l.entry(ctx, r)
 		if err != nil {
 			return nil, err
 		}
 
-		src, err := l.item(ctx, r.ItemID)
-		if err != nil {
-			return nil, err
-		}
-
-		es = append(es, domain.TriageEntry{
-			FollowUp: f, Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
-		})
+		es = append(es, e)
 	}
 
 	return es, nil
@@ -370,7 +401,12 @@ func (l *lander) fileStart(ctx context.Context, f domain.FollowUp, src domain.It
 		return db.FollowUp{}, "", err
 	}
 
-	n, err := domain.File(toLine, domain.FollowUpFileRequest(to.ID, src, l.ref(src), f, after, landed))
+	repos, err := l.repositories(ctx, uuid.MustParse(string(src.ID)))
+	if err != nil {
+		return db.FollowUp{}, "", err
+	}
+
+	n, err := domain.File(toLine, domain.FollowUpFileRequest(to.ID, src, l.ref(src), f, after, repos, landed))
 	if err != nil {
 		return db.FollowUp{}, domain.ReasonOf(err), nil
 	}
@@ -450,7 +486,8 @@ func (l *lander) after(ctx context.Context, refs []string) ([]domain.After, erro
 
 // joinTriage files rows, follow-ups for triage, onto the collecting triage item of factory, filing
 // one when there is none, and rewrites its title, brief, priority and generation from all of its
-// follow-ups, under the factory's lock.
+// follow-ups, under the factory's lock; an open one gains the repositories of the joining sources
+// it lacks (joinRepositories).
 func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows []db.FollowUp) ([]domain.FollowUp, error) {
 	ln, ok := l.line(factory)
 	if !ok || !isUUID(string(factory)) {
@@ -465,6 +502,8 @@ func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows 
 	tri, err := l.q.CollectingTriageItem(ctx, fid)
 	if notFound(err) {
 		tri, err = l.fileTriage(ctx, ln, fid, rows)
+	} else if err == nil {
+		err = l.joinRepositories(ctx, ln, tri.ID, rows)
 	}
 
 	if err != nil {
@@ -516,24 +555,46 @@ func (l *lander) joinTriage(ctx context.Context, factory domain.FactoryID, rows 
 	return out, nil
 }
 
-// fileTriage files a new triage item on ln for rows (domain.TriageFileRequest) and marks it.
-func (l *lander) fileTriage(ctx context.Context, ln domain.Line, factory uuid.UUID, rows []db.FollowUp) (db.WorkItem, error) {
-	es := make([]domain.TriageEntry, 0, len(rows))
+// joinRepositories adds to the open triage item tri the repositories of rows' sources it lacks,
+// joined filing at l.at with the next ordinal, until it has domain.MaxItemRepositories
+// (domain.JoinRepositories). The factory's lock, which joinTriage holds, serializes the joins.
+func (l *lander) joinRepositories(ctx context.Context, ln domain.Line, tri uuid.UUID, rows []db.FollowUp) error {
+	have, err := l.q.ItemRepositories(ctx, tri)
+	if err != nil {
+		return fmt.Errorf("repositories of triage item %s: %w", tri, err)
+	}
+
+	cur := make([]domain.ItemRepository, len(have))
+	for i, r := range have {
+		cur[i] = domain.ItemRepository{Repo: r.Repo, Joined: domain.RepositoryJoin(r.Joined), Ordinal: int(r.Ordinal)}
+	}
 
 	for _, r := range rows {
-		f, err := followUpFrom(r)
+		keys, err := l.repositories(ctx, r.ItemID)
 		if err != nil {
-			return db.WorkItem{}, err
+			return err
 		}
 
-		src, err := l.item(ctx, r.ItemID)
-		if err != nil {
-			return db.WorkItem{}, err
-		}
+		for _, j := range domain.JoinRepositories(ln, cur, keys, l.at) {
+			if err := l.q.JoinItemRepository(ctx, db.JoinItemRepositoryParams{
+				ItemID: tri, Repo: j.Repo, Joined: string(j.Joined), JoinedAt: j.JoinedAt, Ordinal: int32(min(j.Ordinal, maxInt32)),
+			}); err != nil {
+				return fmt.Errorf("repository %s joins triage item %s: %w", j.Repo, tri, err)
+			}
 
-		es = append(es, domain.TriageEntry{
-			FollowUp: f, Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
-		})
+			cur = append(cur, j)
+		}
+	}
+
+	return nil
+}
+
+// fileTriage files a new triage item on ln for rows (domain.TriageFileRequest), with its
+// sources' repositories, and marks it.
+func (l *lander) fileTriage(ctx context.Context, ln domain.Line, factory uuid.UUID, rows []db.FollowUp) (db.WorkItem, error) {
+	es, err := l.entries(ctx, rows)
+	if err != nil {
+		return db.WorkItem{}, err
 	}
 
 	n, err := domain.File(ln, domain.TriageFileRequest(ln.FactoryID, es, l.at))

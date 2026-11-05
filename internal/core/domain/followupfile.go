@@ -124,9 +124,10 @@ func StartTriageReason(p FollowUpPlan, reason string) string {
 // FollowUpFileRequest is the filing of start follow-up f of src, whose ref is from, into factory
 // to when its work landed at landed (ADR 0040 decision 8): origin follow-up by the engine, the
 // start's title, type and lane, standard class whatever its type, a priority one below src's, a
-// generation one above, src's untrusted, and its start resolved at landed with after, the items
-// its refs name.
-func FollowUpFileRequest(to FactoryID, src Item, from ItemRef, f FollowUp, after []After, landed time.Time) FileRequest {
+// generation one above, src's untrusted, its start resolved at landed with after, the items its
+// refs name, and the start's repositories, else repos, src's repositories as keys, which File
+// keeps only where the target line's entries cover them (ADR 0041 decision 4).
+func FollowUpFileRequest(to FactoryID, src Item, from ItemRef, f FollowUp, after []After, repos []string, landed time.Time) FileRequest {
 	p := f.Start
 
 	return FileRequest{
@@ -134,6 +135,7 @@ func FollowUpFileRequest(to FactoryID, src Item, from ItemRef, f FollowUp, after
 		Body:     FollowUpBody(f, from),
 		Priority: src.Priority - 1, Class: ClassStandard, Generation: src.Generation + 1, Untrusted: src.Untrusted,
 		Start: &StartRequest{At: p.At, In: p.In, After: after}, At: landed,
+		Repositories: slices.Clone(p.Repositories), Inherited: slices.Clone(repos),
 	}
 }
 
@@ -153,6 +155,8 @@ type TriageEntry struct {
 	Priority int
 	// Generation is the source's.
 	Generation int
+	// Repositories are the source's, as keys (RepositoryKey).
+	Repositories []string
 }
 
 // TriageSources are the distinct source items of es, in the order they first appear.
@@ -207,6 +211,22 @@ func TriageGeneration(es []TriageEntry) int {
 	return high + 1
 }
 
+// TriageRepositories are the repositories of es's sources, once each in the order they first
+// appear.
+func TriageRepositories(es []TriageEntry) []string {
+	var out []string
+
+	for _, e := range es {
+		for _, r := range e.Repositories {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
+	}
+
+	return out
+}
+
 // TriageBrief is a triage item's body, which goald writes: each follow-up quoted, grouped by
 // source item with the station and agent that wrote it, and why it could not go where it said
 // when it has a reason, then TriageClosing.
@@ -249,12 +269,13 @@ func TriageBrief(es []TriageEntry) string {
 // TriageFileRequest is the filing of a triage item into factory for es, the follow-ups that
 // first join it, when it is filed (ADR 0040 decision 10): origin follow-up by the engine, its first
 // source's type, standard class, starting TriageWait after at, with TriageTitle, TriageBrief,
-// TriagePriority and TriageGeneration.
+// TriagePriority and TriageGeneration, and TriageRepositories, which File keeps up to
+// MaxItemRepositories.
 func TriageFileRequest(factory FactoryID, es []TriageEntry, at time.Time) FileRequest {
 	r := FileRequest{
 		FactoryID: factory, Origin: OriginFollowUp, Title: TriageTitle(es), Body: TriageBrief(es),
 		Priority: TriagePriority(es), Class: ClassStandard, Generation: TriageGeneration(es),
-		Start: &StartRequest{In: TriageWait}, At: at,
+		Start: &StartRequest{In: TriageWait}, Inherited: TriageRepositories(es), At: at,
 	}
 
 	if len(es) > 0 {

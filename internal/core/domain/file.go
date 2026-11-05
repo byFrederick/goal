@@ -70,8 +70,12 @@ type FileRequest struct {
 	Start *StartRequest
 	// Repositories are the repositories the item works on, each an entry's name, owner/name, an
 	// https URL or host/owner/name that one of the line's runtime.repositories entries covers;
-	// none gives it the default entry's (ADR 0041 decision 4).
+	// none gives it Inherited's, else the default entry's (ADR 0041 decision 4).
 	Repositories []string
+	// Inherited are the repositories, as keys (RepositoryKey), of the items this one comes from:
+	// its assembly's for a part, its source's for a follow-up's item, its sources' for a triage
+	// item. File uses them only when Repositories names none.
+	Inherited []string
 	At           time.Time
 }
 
@@ -86,8 +90,10 @@ type FileRequest struct {
 // r.At (StartRequest.Resolve): its time becomes StartAt and its open after items After. An item
 // placed at a later station than the line's first has started when it is filed. Its repositories
 // are those the request names, resolved against the line's entries by entry name, URL,
-// host/owner/name or owner/name (case, .git and owner patterns included) and joined filing in the order named, once each and at most MaxItemRepositories, or
-// the default entry's, joined default, when it names none; none without a default entry. The
+// host/owner/name or owner/name (case, .git and owner patterns included) and joined filing in the
+// order named, once each and at most MaxItemRepositories. When it names none, they are the
+// Inherited ones the line's entries cover, joined filing in order, once each and cut at
+// MaxItemRepositories; else the default entry's, joined default; none without a default entry. The
 // item's branch takes the line's name (NewItem.FactoryName). Every refusal is ErrInvalid.
 func File(l Line, r FileRequest) (NewItem, error) {
 	n := NewItem{
@@ -120,7 +126,7 @@ func File(l Line, r FileRequest) (NewItem, error) {
 		return NewItem{}, fmt.Errorf("file an item: %w", err)
 	}
 
-	if n.Repositories, err = fileRepositories(l, r.Repositories); err != nil {
+	if n.Repositories, err = fileRepositories(l, r.Repositories, r.Inherited); err != nil {
 		return NewItem{}, fmt.Errorf("file an item: %w", err)
 	}
 
