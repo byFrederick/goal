@@ -9,7 +9,7 @@ You know where each part of the web app is, and you can reach any page from the 
 
 The sidebar sits on the left of every organization page, from 768 px wide up.
 
-- **Organization menu.** Choose the organization's name at the top. The menu switches organizations, creates one (platform admins, or everyone when sign-in is off), and opens the organization's pages: Members and roles, Spend and billing, Models and policies, API keys (where you may read them) and Organization settings.
+- **Organization menu.** Choose the organization's name at the top. The menu switches organizations, creates one (anyone signed in, and everyone when sign-in is off), and opens the organization's pages: Members and roles, Spend and billing, Models and policies, API keys (where you may read them) and Organization settings.
 - **Search.** Choose the search icon, or press `⌘K` (`Ctrl K` on Windows and Linux). See [Search](#search).
 - **Collapse.** Choose the collapse icon, or drag the sidebar's right edge narrower than about 160 px, to fold it into the rail. Drag it back wider, or choose the expand icon, to open it again. Double-click the edge to reset its width.
 - **New item.** Choose New item, or press `C`, to open the composer. See [Submit and follow items](../submit-and-follow-items/).

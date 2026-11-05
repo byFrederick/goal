@@ -112,6 +112,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
     await page.goto(items);
     const links = page.getByRole('table', { name: 'Items' }).getByRole('link', { name: /^Assembly,/ });
+    await expect(links.first()).toBeVisible();
     const count = await links.count();
     for (let i = 0; i < count; i++) {
       const link = links.nth(i);
