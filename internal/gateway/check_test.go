@@ -12,6 +12,13 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
+// The variables of the code tests' entry tokens, and the default environment's file.
+const (
+	envAcmeToken   = "GOAL_REPOSITORY_TOKEN_ACME"
+	envAPIToken    = "GOAL_REPOSITORY_TOKEN_API"
+	defaultEnvFile = "environments/default.yaml"
+)
+
 // fakeChecks gives every check checkInput.
 type fakeChecks struct{}
 
@@ -81,7 +88,7 @@ func (h *harness) checkClaims() domain.TaskClaims {
 func TestBundle_Check(t *testing.T) {
 	t.Parallel()
 
-	h := newHarnessWith(t, Config{}, harnessDeps{yaml: checkYAML, files: map[string]string{"environments/default.yaml": checkEnvironment}})
+	h := newHarnessWith(t, Config{}, harnessDeps{yaml: checkYAML, files: map[string]string{defaultEnvFile: checkEnvironment}})
 	c := h.checkClaims()
 
 	status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
@@ -220,21 +227,21 @@ func TestBundle_CheckCode(t *testing.T) {
 		{
 			name: "read entry", entries: "[" + apiWrite + ", " + acmeRead + "]", code: "read",
 			logins: []bundleLogin{
-				{Prefix: api, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
-				{Prefix: all, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: api, Username: user, PasswordEnv: envAcmeToken},
+				{Prefix: all, Username: user, PasswordEnv: envAcmeToken},
 			},
 			readOnly: []string{api, all},
 		},
 		{
 			name: "only write entries", entries: "[" + apiWrite + "]", code: "read",
-			logins:   []bundleLogin{{Prefix: api, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_API"}},
+			logins:   []bundleLogin{{Prefix: api, Username: user, PasswordEnv: envAPIToken}},
 			readOnly: []string{api},
 		},
 		{
 			name: "agent writes", entries: "[" + apiWrite + ", " + acmeRead + "]", code: "write",
 			logins: []bundleLogin{
-				{Prefix: api, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
-				{Prefix: all, Username: user, PasswordEnv: "GOAL_REPOSITORY_TOKEN_ACME"},
+				{Prefix: api, Username: user, PasswordEnv: envAcmeToken},
+				{Prefix: all, Username: user, PasswordEnv: envAcmeToken},
 			},
 			readOnly: []string{api, all},
 		},
@@ -245,7 +252,7 @@ func TestBundle_CheckCode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarnessWith(t, Config{}, harnessDeps{yaml: checkEntriesYAML(tt.entries, tt.code), files: map[string]string{"environments/default.yaml": checkEnvironment}})
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: checkEntriesYAML(tt.entries, tt.code), files: map[string]string{defaultEnvFile: checkEnvironment}})
 
 			status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, h.checkClaims()))
 			if status != http.StatusOK {
@@ -293,7 +300,7 @@ func TestBundle_CheckRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			tt.deps.yaml, tt.deps.files = checkYAML, map[string]string{"environments/default.yaml": checkEnvironment}
+			tt.deps.yaml, tt.deps.files = checkYAML, map[string]string{defaultEnvFile: checkEnvironment}
 			h := newHarnessWith(t, Config{}, tt.deps)
 			c := h.checkClaims()
 			tt.change(&c)
