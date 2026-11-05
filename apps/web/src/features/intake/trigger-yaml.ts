@@ -6,11 +6,11 @@ import { Document, isMap, isScalar, isSeq, parseDocument, type YAMLMap, type YAM
 import type { Trigger } from '../../shared/definition/model';
 
 /** The keys of a trigger, in the order the schema lists them. The name is the route's and never written as a change. */
-const keys = ['name', 'enabled', 'on', 'cron', 'timeZone', 'filter', 'only', 'create', 'limits'] as const;
+const keys = ['name', 'enabled', 'on', 'cron', 'timeZone', 'check', 'filter', 'only', 'create', 'limits'] as const;
 export type TriggerKey = (typeof keys)[number];
 
 /** The page's blocks that a problem can name: the YAML key it sits under decides the block. */
-export type TriggerBlock = 'on' | 'filter' | 'only' | 'create' | 'limits';
+export type TriggerBlock = 'on' | 'filter' | 'only' | 'check' | 'create' | 'limits';
 
 /** Where a trigger's keys sit in the file: the first and last line of each, 1-based. */
 export type KeyLines = Partial<Record<TriggerKey, { from: number; to: number }>>;
@@ -21,17 +21,48 @@ export interface BoardChoices {
   stations: string[];
   /** The keys of each station's `route`, by station id: the lanes the Create section's lane select offers. */
   lanes: Record<string, string[]>;
+  /** The factory's agents with the tools each has on: what a check's agent picker offers. */
+  agents: { name: string; tools: string[] }[];
 }
 
 interface Shape {
-  spec?: { board?: { workTypes?: unknown; stations?: { id?: unknown; route?: unknown }[]; triggers?: unknown } };
+  spec?: {
+    agents?: unknown;
+    board?: { workTypes?: unknown; stations?: { id?: unknown; route?: unknown }[]; triggers?: unknown };
+  };
 }
 
-/** The file's triggers as the form reads them, by name. Unparsed or missing: an empty list. */
-export function readTriggers(text: string): Trigger[] {
+/** The file's triggers exactly as written, by name. Unparsed or missing: an empty list. */
+function readRawTriggers(text: string): Trigger[] {
   const js = parseDocument(text).toJS() as Shape | null;
   const list = js?.spec?.board?.triggers;
   return Array.isArray(list) ? (list as Trigger[]) : [];
+}
+
+const asList = (v: string | string[] | undefined) => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
+
+/**
+ * A trigger the way the schema reads it now (factory.schema.json, `on`): `github.check_run.failed` is
+ * `github.check_run` with conclusion failure, `github.issues.labeled` is `github.issues` with action
+ * labeled, and `webhook.<name>[.<event>]` is `<name>[.<event>]`. A value the file already gives stays.
+ */
+export function normalizeTrigger(trigger: Trigger): Trigger {
+  let { on } = trigger;
+  let filter = trigger.filter;
+  const legacy = (event: string, key: 'action' | 'conclusion', value: string) => {
+    on = event;
+    if (asList(filter?.[key]).length === 0) filter = { ...filter, [key]: value };
+  };
+  if (on === 'github.check_run.failed') legacy('github.check_run', 'conclusion', 'failure');
+  else if (on === 'github.issues.labeled') legacy('github.issues', 'action', 'labeled');
+  else if (on.startsWith('webhook.')) on = on.slice('webhook.'.length);
+  if (on === trigger.on) return trigger;
+  return { ...trigger, on, ...(filter ? { filter } : {}) };
+}
+
+/** The file's triggers as the form reads them, by name, in the schema's current words. */
+export function readTriggers(text: string): Trigger[] {
+  return readRawTriggers(text).map(normalizeTrigger);
 }
 
 /** The trigger named `name`, or undefined when the file has none under that name. */
@@ -39,16 +70,32 @@ export function readTrigger(text: string, name: string): Trigger | undefined {
   return readTriggers(text).find((t) => t.name === name);
 }
 
+/** The trigger named `name` as the file writes it, for the page's view of the definition. */
+export function readRawTrigger(text: string, name: string): Trigger | undefined {
+  return readRawTriggers(text).find((t) => t.name === name);
+}
+
 /** The work types and station ids the file declares, for the Create section's choices. */
 export function readBoard(text: string): BoardChoices {
-  const board = (parseDocument(text).toJS() as Shape | null)?.spec?.board;
+  const spec = (parseDocument(text).toJS() as Shape | null)?.spec;
+  const board = spec?.board;
   const strings = (list: unknown) =>
     Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [];
   const lanes: Record<string, string[]> = {};
   for (const s of Array.isArray(board?.stations) ? board.stations : []) {
     if (typeof s.id === 'string' && s.route && typeof s.route === 'object') lanes[s.id] = Object.keys(s.route);
   }
+  const agents: BoardChoices['agents'] = [];
+  for (const a of Array.isArray(spec?.agents) ? (spec.agents as Record<string, unknown>[]) : []) {
+    if (typeof a?.name !== 'string') continue;
+    const on = Object.entries((a.builtins ?? {}) as Record<string, unknown>)
+      .filter(([, mode]) => mode !== 'off' && mode !== undefined && mode !== false)
+      .map(([group]) => group);
+    const allow = (a.tools as { allow?: unknown } | undefined)?.allow;
+    agents.push({ name: a.name, tools: [...on, ...strings(allow)] });
+  }
   return {
+    agents,
     workTypes: strings(board?.workTypes),
     stations: strings(board?.stations?.map((s) => s.id)),
     lanes,
@@ -102,7 +149,11 @@ export function toFile(trigger: Trigger): Trigger {
     if (trigger.cron !== undefined) out.cron = trigger.cron;
     if (trigger.timeZone) out.timeZone = trigger.timeZone;
   }
-  const filter = drop(trigger.filter);
+  if (trigger.on === 'schedule' && trigger.check) {
+    const check = drop(trigger.check);
+    if (check) out.check = check as unknown as Trigger['check'];
+  }
+  const filter = drop(trigger.filter && { ...trigger.filter, match: drop(trigger.filter.match) });
   if (filter) out.filter = filter;
   const only = drop(trigger.only);
   if (only) out.only = only;
