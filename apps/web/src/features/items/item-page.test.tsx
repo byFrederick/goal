@@ -169,6 +169,7 @@ describe('the item page header', () => {
     expect(screen.getByRole('link', { name: 'Usage and budgets, part 4 of 4' }).getAttribute('href')).toContain(
       '/items/144',
     );
+    expect(screen.getByTitle('Usage and budgets, part 4 of 4')).toBeTruthy();
   });
 
   it('shows no assembly chip for an item that is not a part', async () => {

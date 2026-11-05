@@ -21,16 +21,24 @@ afterEach(() => {
 const definition = `spec:
   agents:
     - name: engineer
-      tools: { allow: [Bash] }
+      tools: { allow: [Bash, Edit, 'Bash(sed -n*)', 'github__get_*'] }
     - name: scout
+      environment: research
       builtins: { web: on }
-      tools: { allow: [Bash, mcp__sentry] }
+      tools: { allow: [Bash] }
   board:
     triggers:
       - name: new-check
         on: schedule
         create: { type: fix, station: build }
 `;
+
+const environments = {
+  default:
+    'spec:\n  mcp:\n    github: { url: "https://example.com/github" }\n    cloudflare: { url: "https://example.com/cf" }\n',
+  research:
+    'spec:\n  mcp:\n    context7: { url: "https://example.com/c7" }\n    github: { url: "https://example.com/github" }\n',
+};
 
 /** An Intake answer; the suggestions are the definition's disabled triggers. */
 const intakeFixture = (suggestions: unknown[]) => ({ triggers: [], suggestions });
@@ -70,6 +78,8 @@ function renderPicker(kinds: string[] = ['github', 'cloudflare'], suggestions: u
     seed: [
       [connectionsQuery(org.id).queryKey, connections],
       [intakeKeys.definition(org.id, factory.id, 'v1'), { text: definition, sha256: 'sha' }],
+      [intakeKeys.environment(org.id, factory.id, 'v1', 'default'), { text: environments.default, sha256: 'a' }],
+      [intakeKeys.environment(org.id, factory.id, 'v1', 'research'), { text: environments.research, sha256: 'b' }],
       [keys.intake(org.id, factory.id), intakeFixture(suggestions)],
     ],
   });
@@ -184,18 +194,20 @@ describe('New trigger picker', () => {
     expect(query.get('check')).toBe('engineer');
   });
 
-  it("lists the factory's tools once each, and a tool's check goes to the first agent that has it", async () => {
+  it("lists the MCP servers the agents' environments give them, never tools, and a server's check goes to the first agent that has it", async () => {
     const { router } = renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
 
     const group = screen.getAllByRole('heading', { name: 'Check with an agent' })[0]?.parentElement as HTMLElement;
-    expect(
-      within(group)
-        .getAllByRole('button')
-        .map((b) => b.textContent),
-    ).toEqual(['Bashits tool', 'webits tool', 'mcp__sentryits tool']);
+    await waitFor(() =>
+      expect(
+        within(group)
+          .getAllByRole('button')
+          .map((b) => b.textContent),
+      ).toEqual(['GitHubits tool', 'Cloudflareits tool', 'context7its tool']),
+    );
 
-    fireEvent.click(within(group).getByRole('button', { name: /^mcp__sentry/ }));
+    fireEvent.click(within(group).getByRole('button', { name: /^context7/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(router.state.location.href).toContain('check=scout'));
   });

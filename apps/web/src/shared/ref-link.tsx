@@ -15,7 +15,7 @@ export function RefLink({ item, className }: { item: string; className?: string 
     <Link
       to="/o/$org/f/$factory/items/$ref"
       params={{ org: org.slug, factory: factoryOfRef(item), ref: refParam(item) }}
-      className={className ?? 'font-medium text-link no-underline hover:underline'}
+      className={className ?? 'font-medium text-link underline hover:no-underline'}
     >
       {item}
     </Link>
