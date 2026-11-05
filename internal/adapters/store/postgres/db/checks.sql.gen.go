@@ -12,6 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const checkClosedCount = `-- name: CheckClosedCount :one
+SELECT count(*) FROM work_items
+WHERE factory_id = $1 AND trigger = $2 AND state IN ('done', 'cancelled')
+  AND coalesce(done_at, updated_at) >= $3
+`
+
+type CheckClosedCountParams struct {
+	FactoryID uuid.UUID
+	Trigger   *string
+	Since     *time.Time
+}
+
+// How many of the trigger's items closed at or after since, as CheckClosedItems reads them.
+func (q *Queries) CheckClosedCount(ctx context.Context, arg CheckClosedCountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, checkClosedCount, arg.FactoryID, arg.Trigger, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const checkClosedItems = `-- name: CheckClosedItems :many
 SELECT w.number, w.state, coalesce(w.done_at, w.updated_at)::timestamptz AS closed_at,
        coalesce((SELECT k.key FROM trigger_keys k WHERE k.item_id = w.id LIMIT 1),
@@ -87,6 +107,24 @@ type CheckFiledSinceParams struct {
 // How many items the trigger filed at or after since: a check's perDay.
 func (q *Queries) CheckFiledSince(ctx context.Context, arg CheckFiledSinceParams) (int64, error) {
 	row := q.db.QueryRow(ctx, checkFiledSince, arg.FactoryID, arg.Trigger, arg.Since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const checkOpenCount = `-- name: CheckOpenCount :one
+SELECT count(*) FROM work_items
+WHERE factory_id = $1 AND trigger = $2 AND state NOT IN ('done', 'cancelled')
+`
+
+type CheckOpenCountParams struct {
+	FactoryID uuid.UUID
+	Trigger   *string
+}
+
+// How many of the trigger's items are open, as CheckOpenItems reads them.
+func (q *Queries) CheckOpenCount(ctx context.Context, arg CheckOpenCountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, checkOpenCount, arg.FactoryID, arg.Trigger)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -217,6 +255,21 @@ func (q *Queries) ClaimTriggerCheck(ctx context.Context, arg ClaimTriggerCheckPa
 		&i.LeaseUntil,
 	)
 	return i, err
+}
+
+const clearTriggerState = `-- name: ClearTriggerState :exec
+DELETE FROM trigger_state WHERE factory_id = $1 AND trigger = $2
+`
+
+type ClearTriggerStateParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+}
+
+// Deletes the trigger's saved state; its trigger_keys rows stay.
+func (q *Queries) ClearTriggerState(ctx context.Context, arg ClearTriggerStateParams) error {
+	_, err := q.db.Exec(ctx, clearTriggerState, arg.FactoryID, arg.Trigger)
+	return err
 }
 
 const expireTriggerChecks = `-- name: ExpireTriggerChecks :execrows
@@ -721,4 +774,26 @@ func (q *Queries) TriggerState(ctx context.Context, arg TriggerStateParams) ([]b
 	var state []byte
 	err := row.Scan(&state)
 	return state, err
+}
+
+const triggerStateAt = `-- name: TriggerStateAt :one
+SELECT state, updated_at FROM trigger_state WHERE factory_id = $1 AND trigger = $2
+`
+
+type TriggerStateAtParams struct {
+	FactoryID uuid.UUID
+	Trigger   string
+}
+
+type TriggerStateAtRow struct {
+	State     []byte
+	UpdatedAt time.Time
+}
+
+// The trigger's saved state and when the check that saved it finished.
+func (q *Queries) TriggerStateAt(ctx context.Context, arg TriggerStateAtParams) (TriggerStateAtRow, error) {
+	row := q.db.QueryRow(ctx, triggerStateAt, arg.FactoryID, arg.Trigger)
+	var i TriggerStateAtRow
+	err := row.Scan(&i.State, &i.UpdatedAt)
+	return i, err
 }

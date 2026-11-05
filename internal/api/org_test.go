@@ -301,6 +301,7 @@ var probes = map[string]probe{
 	},
 	"listTriggerChecks":  {method: http.MethodGet, path: "/v1/orgs/acme/factories/acme/intake/triggers/new-incidents/checks", org: testOrg, factory: acmeID},
 	"tryTriggerCheck":    {method: http.MethodPost, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit/checks", org: testOrg, factory: acmeID},
+	"clearTriggerState":  {method: http.MethodDelete, path: "/v1/orgs/acme/factories/acme/intake/triggers/nightly-audit/state", org: testOrg, factory: acmeID},
 	"getOrgTouchMetrics": {method: http.MethodGet, path: "/v1/orgs/acme/metrics/touches", org: testOrg},
 	"setTouchReason": {
 		method: http.MethodPut, path: "/v1/orgs/acme/items/acme%231/touches/1/reason", body: `{"reason":"other"}`, org: testOrg, factory: acmeID,

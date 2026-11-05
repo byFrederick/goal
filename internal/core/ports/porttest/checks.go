@@ -198,7 +198,7 @@ func (in *Intake) FinishCheck(ctx context.Context, l domain.CheckLease, res doma
 	}
 
 	if res.State == domain.CheckDone && !f.Try && len(res.Saved) > 0 && string(res.Saved) != "null" {
-		in.d.states[stateKey{org: org, factory: r.f.FactoryID, trigger: r.f.Trigger}] = slices.Clone(res.Saved)
+		in.d.states[stateKey{org: org, factory: r.f.FactoryID, trigger: r.f.Trigger}] = savedState{state: slices.Clone(res.Saved), at: r.f.CheckedAt}
 	}
 
 	in.d.mu.Unlock()
@@ -408,6 +408,17 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 	in.store.mu.Lock()
 	defer in.store.mu.Unlock()
 
+	for _, it := range in.triggerItemsLocked(org, factory, trigger) {
+		in.addItemLocked(&out, it, keys[it.ID], now)
+	}
+
+	slices.SortStableFunc(out.Closed, func(a, b domain.CheckClosed) int { return b.At.Compare(a.At) })
+
+	return out, nil
+}
+
+// triggerItemsLocked are the trigger's items, newest first. Callers hold in.store.mu.
+func (in *Intake) triggerItemsLocked(org domain.OrgID, factory domain.FactoryID, trigger string) []domain.Item {
 	var items []domain.Item
 
 	for _, it := range in.store.items {
@@ -418,13 +429,66 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 
 	slices.SortFunc(items, func(a, b domain.Item) int { return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID)) })
 
-	for _, it := range items {
-		in.addItemLocked(&out, it, keys[it.ID], now)
+	return items
+}
+
+// CheckMemory implements ports.Intake.
+func (in *Intake) CheckMemory(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckMemory, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return domain.CheckMemory{}, err
 	}
 
-	slices.SortStableFunc(out.Closed, func(a, b domain.CheckClosed) int { return b.At.Compare(a.At) })
+	input := domain.CheckInput{State: json.RawMessage("null")}
+	keys := in.checkFiringsInput(org, factory, trigger, &input)
+	out := domain.CheckMemory{OpenItems: []domain.CheckOpenItem{}, ClosedKeys: []domain.CheckClosed{}, State: input.State}
+
+	in.d.mu.Lock()
+	out.CheckedUpTo = in.d.states[stateKey{org: org, factory: factory, trigger: trigger}].at
+	in.d.mu.Unlock()
+
+	in.store.mu.Lock()
+	defer in.store.mu.Unlock()
+
+	for _, it := range in.triggerItemsLocked(org, factory, trigger) {
+		switch open, closed, ok := in.checkEntryLocked(it, keys[it.ID], now); {
+		case !ok:
+		case open != nil:
+			out.Open++
+			if len(out.OpenItems) < domain.MaxCheckMemoryItems {
+				out.OpenItems = append(out.OpenItems, *open)
+			}
+		default:
+			out.Closed++
+			out.ClosedKeys = append(out.ClosedKeys, *closed)
+		}
+	}
+
+	slices.SortStableFunc(out.ClosedKeys, func(a, b domain.CheckClosed) int { return b.At.Compare(a.At) })
+	out.ClosedKeys = out.ClosedKeys[:min(len(out.ClosedKeys), domain.MaxCheckMemoryItems)]
 
 	return out, nil
+}
+
+// ClearCheckState implements ports.Intake: fires is the trigger's lock, as in Fire.
+func (in *Intake) ClearCheckState(ctx context.Context, factory domain.FactoryID, trigger string) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	in.d.fires.Lock()
+	defer in.d.fires.Unlock()
+
+	if live, err := in.liveCheck(ctx, factory, trigger); err != nil || live {
+		return cmp.Or(err, fmt.Errorf("clear the state of trigger %s: %w", trigger, ports.ErrConflict))
+	}
+
+	in.d.mu.Lock()
+	delete(in.d.states, stateKey{org: org, factory: factory, trigger: trigger})
+	in.d.mu.Unlock()
+
+	return nil
 }
 
 // checkFiringsInput sets out's last decisions and saved state from the trigger's firings and
@@ -456,7 +520,7 @@ func (in *Intake) checkFiringsInput(org domain.OrgID, factory domain.FactoryID, 
 	}
 
 	if s, ok := in.d.states[stateKey{org: org, factory: factory, trigger: trigger}]; ok {
-		out.State = slices.Clone(s)
+		out.State = slices.Clone(s.state)
 	}
 
 	in.keyedItemsLocked(stateKey{org: org, factory: factory, trigger: trigger}, keys)
@@ -477,24 +541,35 @@ func (in *Intake) keyedItemsLocked(sk stateKey, keys map[domain.ItemID]string) {
 // addItemLocked adds it to out: to the closed keys when it closed within the window, to the open
 // items while there are fewer than the most. Callers hold in.store.mu.
 func (in *Intake) addItemLocked(out *domain.CheckInput, it domain.Item, key string, now time.Time) {
+	switch open, closed, ok := in.checkEntryLocked(it, key, now); {
+	case !ok:
+	case open == nil && len(out.Closed) < domain.MaxCheckClosed:
+		out.Closed = append(out.Closed, *closed)
+	case open != nil && len(out.Open) < domain.MaxCheckOpenItems:
+		out.Open = append(out.Open, *open)
+	}
+}
+
+// checkEntryLocked is it as a check reads it: an open item, or a closed key when it closed within
+// the window; false for an item closed before it. Callers hold in.store.mu.
+func (in *Intake) checkEntryLocked(it domain.Item, key string, now time.Time) (*domain.CheckOpenItem, *domain.CheckClosed, bool) {
 	ref := fmt.Sprintf("#%d", it.Number)
 
-	switch closedAt := cmp.Or(it.DoneAt, it.UpdatedAt); {
-	case it.State == domain.StateDone || it.State == domain.StateCancelled:
-		if closedAt.Before(now.Add(-domain.CheckClosedWindow)) || len(out.Closed) >= domain.MaxCheckClosed {
-			return
+	if closedAt := cmp.Or(it.DoneAt, it.UpdatedAt); it.State == domain.StateDone || it.State == domain.StateCancelled {
+		if closedAt.Before(now.Add(-domain.CheckClosedWindow)) {
+			return nil, nil, false
 		}
 
-		out.Closed = append(out.Closed, domain.CheckClosed{
+		return nil, &domain.CheckClosed{
 			Key: key, Ref: ref, How: string(it.State), Why: in.lastTextLocked(it.ID, "reason", domain.EventDone, domain.EventCancelled),
 			At: closedAt.UTC(),
-		})
-	case len(out.Open) < domain.MaxCheckOpenItems:
-		out.Open = append(out.Open, domain.CheckOpenItem{
-			Key: key, Ref: ref, Title: it.Title, State: string(it.State),
-			LastNote: in.lastTextLocked(it.ID, "text", domain.EventNote, domain.EventItemNote),
-		})
+		}, true
 	}
+
+	return &domain.CheckOpenItem{
+		Key: key, Ref: ref, Title: it.Title, State: string(it.State),
+		LastNote: in.lastTextLocked(it.ID, "text", domain.EventNote, domain.EventItemNote),
+	}, nil, true
 }
 
 // lastTextLocked is field of the item's newest event of one of kinds, "" for none. Callers hold

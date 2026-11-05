@@ -2256,7 +2256,9 @@ paths:
       summary: One trigger with this week's results and its recent events
       description: >-
         The trigger as getIntake shows it, what the items it created in the weekly budget's
-        window (the last 7×24 hours) came to, and its 20 newest events. Clients re-read it on
+        window (the last 7×24 hours) came to, its 20 newest events, and for a check trigger its
+        memory: the open items and closed keys its checks are given and the state they saved
+        (ADR 0040 decision 19). Clients re-read it on
         `item` and `definition` stream events. 404 trigger-not-found for a name the current
         definition does not have.
       responses:
@@ -2356,6 +2358,31 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TriggerCheck" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+      - name: trigger
+        in: path
+        required: true
+        description: The trigger's name in the current definition
+        schema: { type: string }
+    delete:
+      operationId: clearTriggerState
+      x-goal-scope: definition:edit
+      tags: [intake]
+      summary: Clear the state a check trigger saved, so its next check starts with none
+      description: >-
+        Clear on a check's page (ADR 0040 decision 19): deletes the state the trigger's last done
+        check saved (getIntakeTrigger's memory.state), so its next check is given none. The
+        trigger's keys stay: a key whose item closed is still not filed again. Clearing a trigger
+        with no saved state answers 204 too. Writes a trigger.state_cleared audit entry. 404
+        trigger-not-found for a name the current definition does not have; 409 still-checking
+        while the trigger's check is queued or running, because it would save its state again
+        when it finishes; 422 no-check for a trigger without check.
+      responses:
+        "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/metrics/lead-time:
     parameters:
@@ -8167,6 +8194,7 @@ components:
           type: array
           description: Its 20 newest events, newest first
           items: { $ref: "#/components/schemas/IntakeEvent" }
+        memory: { $ref: "#/components/schemas/TriggerCheckMemory" }
     IntakeEvent:
       type: object
       required: [id, title, event, at, outcome, item_number, reason, missed]
@@ -8186,6 +8214,50 @@ components:
         item_number: { type: integer, format: int64, nullable: true, description: The item it created; null when it created none or that item is gone }
         reason: { type: string, nullable: true, description: Why it was skipped or what it missed; null otherwise }
         missed: { type: integer, description: How many schedule instants a missed event covers; 0 for any other outcome }
+    TriggerCheckMemory:
+      type: object
+      description: >-
+        What a check trigger carries from one check to the next (ADR 0040 decision 19, the
+        Remembers row of its page); present only for a trigger with a check. Every key, title and
+        reason comes from the check's agent or the source it read: text to show as text, never
+        markup.
+      required: [open, open_items, closed, closed_keys, state, checked_up_to]
+      properties:
+        open: { type: integer, description: How many of the items it filed are open (neither done nor cancelled) }
+        open_items:
+          type: array
+          description: Its newest open items, at most 50, newest first
+          maxItems: 50
+          items: { $ref: "#/components/schemas/TriggerCheckOpenItem" }
+        closed: { type: integer, description: How many of its keys' items closed in the last 7×24 hours }
+        closed_keys:
+          type: array
+          description: The keys whose items closed in the last 7×24 hours, at most 50, newest first; the next check does not file them again
+          maxItems: 50
+          items: { $ref: "#/components/schemas/TriggerCheckClosedKey" }
+        state:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: The JSON object its last done check saved for the next one (at most 4 KiB); null when none is saved
+        checked_up_to: { type: string, format: date-time, nullable: true, description: When the check that saved the state finished; null without a saved state }
+    TriggerCheckOpenItem:
+      type: object
+      required: [key, ref, title, state]
+      properties:
+        key: { type: string, description: "The source's own id it was filed for" }
+        ref: { type: string, description: "The item's ref, #<number>" }
+        title: { type: string }
+        state: { type: string, description: The item's state }
+    TriggerCheckClosedKey:
+      type: object
+      required: [key, ref, how, why, at]
+      properties:
+        key: { type: string }
+        ref: { type: string, description: "The closed item's ref, #<number>" }
+        how: { type: string, enum: [done, cancelled] }
+        why: { type: string, description: The reason given when it closed; empty for none }
+        at: { type: string, format: date-time, description: When it closed }
     TriggerCheckList:
       type: object
       required: [checks]

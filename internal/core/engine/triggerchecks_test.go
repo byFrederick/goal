@@ -451,3 +451,49 @@ func TestChecks_TryFilesNothing(t *testing.T) {
 		t.Errorf("saved state after a try = %s, %v; want none", in.State, err)
 	}
 }
+
+// Clear deletes the state a check saved and writes a trigger.state_cleared entry; it refuses a
+// trigger the line does not have, one without a check, and one whose check is queued, which
+// would save its state again when it finishes.
+func TestChecks_ClearState(t *testing.T) {
+	t.Parallel()
+
+	plain := checkTrigger("plain")
+	plain.Check, plain.Enabled = nil, false // fires nothing
+	h := checkHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)),
+		porttest.Succeed(`{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "x"}}`), checkTrigger(incidents), plain)
+
+	h.fireAt(t, t0.Add(2*time.Minute))
+	h.tick(t)
+	h.wait(t, h.e)
+
+	if err := h.e.ClearCheckState(inOrg(t), factoryID, incidents, domain.LocalUser); err != nil {
+		t.Fatalf("ClearCheckState: %v", err)
+	}
+
+	if in, err := h.intake.CheckInput(inOrg(t), factoryID, incidents, t0); err != nil || string(in.State) != "null" || len(in.Open) != 1 {
+		t.Errorf("input after Clear = %+v, %v; want no state and the open item", in, err)
+	}
+
+	if a := h.audited(t, domain.AuditTriggerStateCleared); len(a) != 1 || a[0].TargetKind != domain.AuditTargetTrigger || a[0].TargetID != incidents {
+		t.Errorf("trigger.state_cleared = %+v; want one naming %s", a, incidents)
+	}
+
+	for name, want := range map[string]error{"gone": engine.ErrTriggerNotFound, "plain": engine.ErrNoCheck} {
+		if err := h.e.ClearCheckState(inOrg(t), factoryID, name, domain.LocalUser); !errors.Is(err, want) {
+			t.Errorf("ClearCheckState %s = %v; want %v", name, err, want)
+		}
+	}
+
+	if _, err := h.e.TryCheck(inOrg(t), factoryID, incidents, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.e.ClearCheckState(inOrg(t), factoryID, incidents, domain.LocalUser); !errors.Is(err, engine.ErrStillChecking) {
+		t.Errorf("ClearCheckState while a check is queued = %v; want ErrStillChecking", err)
+	}
+
+	if a := h.audited(t, domain.AuditTriggerStateCleared); len(a) != 1 {
+		t.Errorf("%d trigger.state_cleared entries; want none for a refused clear", len(a))
+	}
+}
