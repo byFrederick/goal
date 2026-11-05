@@ -64,7 +64,7 @@ export function Checkbox({
       <span
         aria-hidden="true"
         data-checked={checked || undefined}
-        className="check-box relative flex size-4 shrink-0 items-center justify-center rounded-chip border border-rule bg-card transition-[background-color,border-color] duration-(--duration-quick) peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-run data-checked:border-run data-checked:bg-run"
+        className="check-box pointer-events-none relative flex size-4 shrink-0 items-center justify-center rounded-chip border border-rule bg-card transition-[background-color,border-color] duration-(--duration-quick) peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-run data-checked:border-run data-checked:bg-run"
       >
         <svg
           viewBox="0 0 12 12"
