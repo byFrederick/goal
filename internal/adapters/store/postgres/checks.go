@@ -403,22 +403,9 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 	since := now.Add(-domain.CheckClosedWindow)
 
 	err = in.s.read(ctx, func(q *db.Queries) error {
-		open, err := q.CheckOpenItems(ctx, db.CheckOpenItemsParams{FactoryID: fid, Trigger: &trigger, MaxItems: domain.MaxCheckOpenItems})
-		if err != nil {
-			return fmt.Errorf("open items: %w", err)
-		}
-
-		for _, r := range open {
-			out.Open = append(out.Open, domain.CheckOpenItem{Key: r.Key, Ref: fmt.Sprintf("#%d", r.Number), Title: r.Title, State: r.State, LastNote: r.LastNote})
-		}
-
-		closed, err := q.CheckClosedItems(ctx, db.CheckClosedItemsParams{FactoryID: fid, Trigger: &trigger, Since: &since, MaxItems: domain.MaxCheckClosed})
-		if err != nil {
-			return fmt.Errorf("closed items: %w", err)
-		}
-
-		for _, r := range closed {
-			out.Closed = append(out.Closed, domain.CheckClosed{Key: r.Key, Ref: fmt.Sprintf("#%d", r.Number), How: r.State, Why: r.Why, At: r.ClosedAt.UTC()})
+		var err error
+		if out.Open, out.Closed, err = checkLists(ctx, q, fid, trigger, since, domain.MaxCheckOpenItems, domain.MaxCheckClosed); err != nil {
+			return err
 		}
 
 		switch d, err := q.LastCheckDecisions(ctx, db.LastCheckDecisionsParams{FactoryID: fid, Trigger: trigger}); {
@@ -442,4 +429,107 @@ func (in *Intake) CheckInput(ctx context.Context, factory domain.FactoryID, trig
 	}
 
 	return out, nil
+}
+
+// checkLists are the trigger's open items, at most maxOpen, and the keys whose items closed at or
+// after since, at most maxClosed, each newest first, as a check reads them; empty, never nil.
+func checkLists(ctx context.Context, q *db.Queries, fid uuid.UUID, trigger string, since time.Time, maxOpen, maxClosed int32,
+) ([]domain.CheckOpenItem, []domain.CheckClosed, error) {
+	open, err := q.CheckOpenItems(ctx, db.CheckOpenItemsParams{FactoryID: fid, Trigger: &trigger, MaxItems: maxOpen})
+	if err != nil {
+		return nil, nil, fmt.Errorf("open items: %w", err)
+	}
+
+	openItems := make([]domain.CheckOpenItem, 0, len(open))
+	for _, r := range open {
+		openItems = append(openItems, domain.CheckOpenItem{Key: r.Key, Ref: fmt.Sprintf("#%d", r.Number), Title: r.Title, State: r.State, LastNote: r.LastNote})
+	}
+
+	closed, err := q.CheckClosedItems(ctx, db.CheckClosedItemsParams{FactoryID: fid, Trigger: &trigger, Since: &since, MaxItems: maxClosed})
+	if err != nil {
+		return nil, nil, fmt.Errorf("closed items: %w", err)
+	}
+
+	closedKeys := make([]domain.CheckClosed, 0, len(closed))
+	for _, r := range closed {
+		closedKeys = append(closedKeys, domain.CheckClosed{Key: r.Key, Ref: fmt.Sprintf("#%d", r.Number), How: r.State, Why: r.Why, At: r.ClosedAt.UTC()})
+	}
+
+	return openItems, closedKeys, nil
+}
+
+// CheckMemory implements ports.Intake, in one read transaction.
+func (in *Intake) CheckMemory(ctx context.Context, factory domain.FactoryID, trigger string, now time.Time) (domain.CheckMemory, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.CheckMemory{}, err
+	}
+
+	out := domain.CheckMemory{State: json.RawMessage("null")}
+	since := now.Add(-domain.CheckClosedWindow)
+
+	err = in.s.read(ctx, func(q *db.Queries) error {
+		var err error
+		if out.OpenItems, out.ClosedKeys, err = checkLists(ctx, q, fid, trigger, since, domain.MaxCheckMemoryItems, domain.MaxCheckMemoryItems); err != nil {
+			return err
+		}
+
+		open, err := q.CheckOpenCount(ctx, db.CheckOpenCountParams{FactoryID: fid, Trigger: &trigger})
+		if err != nil {
+			return fmt.Errorf("open count: %w", err)
+		}
+
+		closed, err := q.CheckClosedCount(ctx, db.CheckClosedCountParams{FactoryID: fid, Trigger: &trigger, Since: &since})
+		if err != nil {
+			return fmt.Errorf("closed count: %w", err)
+		}
+
+		out.Open, out.Closed = int(open), int(closed)
+
+		switch s, err := q.TriggerStateAt(ctx, db.TriggerStateAtParams{FactoryID: fid, Trigger: trigger}); {
+		case err == nil:
+			out.State, out.CheckedUpTo = s.State, s.UpdatedAt.UTC()
+		case !notFound(err):
+			return fmt.Errorf("saved state: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.CheckMemory{}, fmt.Errorf("memory of trigger %s: %w", trigger, err)
+	}
+
+	return out, nil
+}
+
+// ClearCheckState implements ports.Intake: the trigger's advisory lock first (LockTriggerFiring,
+// as Fire and FinishCheck take it), so no check is queued or finishes between the refusal and
+// the delete.
+func (in *Intake) ClearCheckState(ctx context.Context, factory domain.FactoryID, trigger string) error {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return err
+	}
+
+	err = in.s.inTx(ctx, func(q *db.Queries) error {
+		if err := q.LockTriggerFiring(ctx, db.LockTriggerFiringParams{FactoryID: fid, Trigger: trigger}); err != nil {
+			return fmt.Errorf("lock the trigger: %w", err)
+		}
+
+		live, err := q.LiveTriggerCheck(ctx, db.LiveTriggerCheckParams{FactoryID: fid, Trigger: trigger})
+
+		switch {
+		case err != nil:
+			return fmt.Errorf("live check: %w", err)
+		case live:
+			return fmt.Errorf("a check is queued or running: %w", ports.ErrConflict)
+		}
+
+		return q.ClearTriggerState(ctx, db.ClearTriggerStateParams{FactoryID: fid, Trigger: trigger})
+	})
+	if err != nil {
+		return fmt.Errorf("clear the state of trigger %s: %w", trigger, err)
+	}
+
+	return nil
 }

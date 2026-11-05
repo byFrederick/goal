@@ -255,6 +255,7 @@ func TestIntake_RLSAndGrants(t *testing.T) {
 	}
 
 	firingsPrunedAndChecked(t, d, in, acme, labs, s.Endpoint.FactoryID)
+	stateClearedOnlyInOrg(t, d.store.pool, acme, labs, s.Endpoint.FactoryID)
 
 	// Without an organization, goal_app reaches an endpoint's organization and the prune only
 	// through the definers.
@@ -289,6 +290,34 @@ func firingsPrunedAndChecked(t *testing.T, d connectionsDB, in *Intake, acme, la
 
 	if n, err := in.PruneFirings(domain.WithOrg(t.Context(), acme), factory, later); err != nil || n != 1 {
 		t.Errorf("PruneFirings = %d, %v; want acme's one firing", n, err)
+	}
+}
+
+// stateClearedOnlyInOrg checks migration 00124: goal_app deletes a trigger's saved state (Clear),
+// and labs, scoped to its own organization, deletes no row of acme's.
+func stateClearedOnlyInOrg(t *testing.T, pool *pgxpool.Pool, acme, labs domain.OrgID, factory domain.FactoryID) {
+	t.Helper()
+
+	insert := `INSERT INTO trigger_state (factory_id, trigger, state, updated_at) VALUES ('` + string(factory) + `', 'nightly-audit', '{"since": "a"}', now())`
+	if err := inOrgTx(t, pool, acme, func(tx pgx.Tx) error { _, err := tx.Exec(t.Context(), insert); return err }); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		org  domain.OrgID
+		want int64
+	}{{labs, 0}, {acme, 1}} {
+		err := inOrgTx(t, pool, c.org, func(tx pgx.Tx) error {
+			tag, err := tx.Exec(t.Context(), `DELETE FROM trigger_state WHERE true`)
+			if err == nil && tag.RowsAffected() != c.want {
+				t.Errorf("goal_app of %s deleted %d trigger_state rows; want %d", c.org, tag.RowsAffected(), c.want)
+			}
+
+			return err
+		})
+		if err != nil {
+			t.Errorf("goal_app of %s DELETE FROM trigger_state: %v", c.org, err)
+		}
 	}
 }
 

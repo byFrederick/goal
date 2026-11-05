@@ -157,3 +157,22 @@ WHERE factory_id = ANY(sqlc.arg(factories)::uuid[]) AND check_state = 'done' AND
   AND applied->'skipped' @> '[{"reason": "over the limit"}]'::jsonb
 GROUP BY factory_id, trigger
 ORDER BY factory_id, trigger;
+
+-- name: CheckOpenCount :one
+-- How many of the trigger's items are open, as CheckOpenItems reads them.
+SELECT count(*) FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND state NOT IN ('done', 'cancelled');
+
+-- name: CheckClosedCount :one
+-- How many of the trigger's items closed at or after since, as CheckClosedItems reads them.
+SELECT count(*) FROM work_items
+WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND state IN ('done', 'cancelled')
+  AND coalesce(done_at, updated_at) >= sqlc.arg(since);
+
+-- name: TriggerStateAt :one
+-- The trigger's saved state and when the check that saved it finished.
+SELECT state, updated_at FROM trigger_state WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger);
+
+-- name: ClearTriggerState :exec
+-- Deletes the trigger's saved state; its trigger_keys rows stay.
+DELETE FROM trigger_state WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger);
