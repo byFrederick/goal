@@ -35,7 +35,9 @@ Name a repository in any of these forms:
 - `owner/name`, such as `acme/web`, or `group/sub/name` on a host with nested groups. Goal looks it up under the hosts of the factory's entries. When it is on more than one of them, name the host too.
 - `host/owner/name`, such as `github.com/acme/web`, or an https URL, such as `https://github.com/acme/web.git`.
 
-Case and a trailing `.git` do not matter, and names that point at the same repository count once. An item has at most 10 repositories. An item that names none works on the factory's default entry's repository, or on none when the factory has no default entry.
+Case and a trailing `.git` do not matter, and names that point at the same repository count once. An item has at most 10 repositories. An item that names none works on the factory's default entry's repository, or on none when the factory has no default entry. It keeps that repository from its first run, so changing the default entry later does not move it.
+
+An item's list grows as its agents work. When a run pushes a change to a repository the item does not have, that repository joins the item, joined `push`, until the item has 10. A repository a run only read, or one past the 10, does not join the item; the run still records it.
 
 A value that matches none of the factory's entries is refused with a 400 problem that quotes the value as you gave it, and nothing is filed. So is an owner entry's name, an `owner/name` on more than one host, and an 11th repository.
 

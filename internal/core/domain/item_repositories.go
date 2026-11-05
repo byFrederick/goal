@@ -124,11 +124,27 @@ func fileRepositories(l Line, named, inherited []string) ([]ItemRepository, erro
 }
 
 // JoinRepositories are the rows an item that has have gains from keys, the repositories
-// (RepositoryKey) of the items it comes from: each key one of l's entries covers and have lacks,
-// once and in order, joined filing at time at with the next ordinal, until the item has
-// MaxItemRepositories. The rest are left out without an error.
+// (RepositoryKey) of the items it comes from: each key one of l's entries covers, joined filing
+// at time at (AppendRepositories). The rest are left out without an error.
 func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time) []ItemRepository {
 	entries := l.repositoryEntries()
+
+	covered := make([]string, 0, len(keys))
+
+	for _, raw := range keys {
+		if key, ok := RepositoryKey(raw); ok && coveredBy(entries, key) {
+			covered = append(covered, key)
+		}
+	}
+
+	return AppendRepositories(have, JoinedFiling, covered, at)
+}
+
+// AppendRepositories are the rows an item that has have gains from keys (RepositoryKey): each
+// key have lacks, once and in order, joined as joined at time at with the next ordinal, until
+// the item has MaxItemRepositories. A value that is no key and the rest past the cap are left
+// out without an error.
+func AppendRepositories(have []ItemRepository, joined RepositoryJoin, keys []string, at time.Time) []ItemRepository {
 	next := len(have)
 
 	for _, r := range have {
@@ -143,7 +159,7 @@ func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time
 		}
 
 		key, ok := RepositoryKey(raw)
-		if !ok || !coveredBy(entries, key) {
+		if !ok {
 			continue
 		}
 
@@ -152,7 +168,7 @@ func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time
 			continue
 		}
 
-		out = append(out, ItemRepository{Repo: key, Joined: JoinedFiling, JoinedAt: at, Ordinal: next})
+		out = append(out, ItemRepository{Repo: key, Joined: joined, JoinedAt: at, Ordinal: next})
 		next++
 	}
 
