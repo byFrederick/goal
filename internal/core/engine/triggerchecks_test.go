@@ -536,6 +536,7 @@ func TestCheckItems_Repositories(t *testing.T) {
 	}
 
 	got := map[string]string{}
+
 	for _, it := range items {
 		rows, err := h.store.ItemRepositories(inOrg(t), it.ID)
 		if err != nil {

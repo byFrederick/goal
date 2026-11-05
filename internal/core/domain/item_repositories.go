@@ -211,6 +211,12 @@ func (l Line) ResolveRepository(value string, sender WebhookSender) (string, boo
 		return "", false
 	}
 
+	return ownerNameKey(entries, value, sender)
+}
+
+// ownerNameKey is owner/name's key on the host of an entry that covers it there: the entry on
+// sender's own host when there is one, else the first in definition order.
+func ownerNameKey(entries []RepositoryEntry, value string, sender WebhookSender) (string, bool) {
 	var found string
 
 	for _, e := range entries {
@@ -224,7 +230,7 @@ func (l Line) ResolveRepository(value string, sender WebhookSender) (string, boo
 			continue
 		}
 
-		if segs[0] == senderHost(sender) {
+		if segs[0] == senderHosts[sender] {
 			return key, true
 		}
 
@@ -270,15 +276,5 @@ func (l Line) repositoryEntries() []RepositoryEntry {
 	return l.Runtime.Repositories
 }
 
-// senderHost is the code host sender's deliveries come from when it is a code host's own, "" for
-// any other sender.
-func senderHost(sender WebhookSender) string {
-	switch sender {
-	case SenderGitHub:
-		return gitHubDotCom
-	case SenderGitLab:
-		return gitLabDotCom
-	}
-
-	return ""
-}
+// senderHosts are the code hosts the code hosts' own senders deliver from.
+var senderHosts = map[WebhookSender]string{SenderGitHub: gitHubDotCom, SenderGitLab: gitLabDotCom}

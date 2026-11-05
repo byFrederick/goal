@@ -5,6 +5,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,8 +28,8 @@ func (c *checker) triggers() {
 	dup(c, "trigger", names(b.Triggers, func(t Trigger) string { return t.Name }), "board", "triggers", keyName)
 
 	for i, t := range b.Triggers {
-		base := at("spec", "board", "triggers", i)
-		create := append(slices.Clone(base), "create")
+		base := at(keySpec, keyBoard, keyTriggers, i)
+		create := append(slices.Clone(base), keyCreate)
 
 		if !slices.Contains(b.WorkTypes, t.Create.Type) {
 			c.errorf(checkReferences, codeUnknownWorkType, append(slices.Clone(create), "type"),
@@ -77,7 +78,7 @@ func (c *checker) triggerRepositories(t Trigger, create []string) {
 	l := domain.Line{Runtime: domain.Runtime{Repository: repo, Repositories: entries}}
 
 	for i, v := range t.Create.Repositories {
-		at := append(slices.Clone(create), "repositories", fmt.Sprint(i))
+		at := append(slices.Clone(create), "repositories", strconv.Itoa(i))
 
 		switch bad := badPlaceholder(v); {
 		case bad != "":
@@ -236,7 +237,7 @@ func DeliveryRefusals(t domain.Trigger, sender domain.WebhookSender, event strin
 	}
 
 	if why := t.TrustedRefusal(sender); why != "" {
-		out = append(out, DeliveryRefusal{Code: CodeTrustedRefused, Key: "create", Message: why})
+		out = append(out, DeliveryRefusal{Code: CodeTrustedRefused, Key: keyCreate, Message: why})
 	}
 
 	return out
