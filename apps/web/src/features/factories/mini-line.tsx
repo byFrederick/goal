@@ -1,8 +1,9 @@
 // A factory's line on Home (MASTER.md, Components: The line; screens/daily-work/home.jpg): one compact row of its
 // stations from intake to done, each the count over its name with its agent slots under, joined to the next by a
 // 1 px rule. Done shows what finished today with a green dot. Its board comes from boardQuery, so the Floor's
-// invalidations keep it fresh. A stopped line mutes its counts (a dimmed line failed the 4.5:1 contrast of its labels). On a phone the line scrolls sideways inside its card. A failed
-// board leaves only a note; a loading one shows its skeleton in the line's place.
+// invalidations keep it fresh. A stopped line mutes its counts (never opacity: MASTER.md).
+// On a phone the line scrolls sideways inside its card. A failed board leaves only a note; a loading one shows its
+// skeleton in the line's place.
 import { useQuery } from '@tanstack/react-query';
 import { Fragment } from 'react';
 import { boardQuery } from '../../api/queries';
@@ -30,7 +31,7 @@ export function MiniLine({
   /** The factory's name, for the line's label. */
   name: string;
   constraint: string | null;
-  /** The andon is pulled: the counts take the muted ink, as the picture's stopped line does. */
+  /** The andon is pulled: the counts turn muted; opacity would fail text contrast. */
   stopped?: boolean | undefined;
   className?: string | undefined;
 }) {
@@ -87,9 +88,7 @@ function HomeLine({
       aria-label={`${name} line`}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
       tabIndex={0}
-      className={cn(
-        'min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
-      )}
+      className="min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
     >
       <ol className="m-0 flex w-max list-none items-start gap-2 p-0">
         {stations.map((s, i) => (
@@ -106,7 +105,12 @@ function HomeLine({
 function Station({ station: s, stopped }: { station: LineStation; stopped: boolean }) {
   return (
     <li className="flex min-w-12 flex-col items-start gap-1">
-      <span className={cn('flex items-center gap-1 text-heading font-semibold tabular-nums', stopped && 'text-muted')}>
+      <span
+        className={cn(
+          'flex items-center gap-1 text-heading font-semibold tabular-nums transition-colors duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none',
+          stopped && 'text-muted',
+        )}
+      >
         {s.done ? <span aria-hidden="true" className="size-2 rounded-full bg-ok" /> : null}
         <NumberRoll value={s.count} />
       </span>
