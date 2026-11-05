@@ -123,6 +123,13 @@ const toMarker = (p: DefinitionProblem): EditorMarker => ({
   message: p.message,
 });
 
+/** The first line of the last run of consecutive changed lines (ascending), or undefined. */
+function lastChangeStart(changed: number[]): number | undefined {
+  let at = changed.length - 1;
+  while (at > 0 && changed[at - 1] === (changed[at] as number) - 1) at--;
+  return changed[at];
+}
+
 export function YamlView({ search }: SectionViewProps) {
   const session = useDraftSession();
   const viewOnly = useViewOnly();
@@ -235,7 +242,9 @@ export function YamlView({ search }: SectionViewProps) {
   const written = useRef<number | undefined>(undefined);
   const revealed = useRef('');
   const { mode: _m, file: _f, line: _l, compare: _c, add: _a, ...entity } = search;
-  // A file opens where it changed, so a tool just added is on screen; factory.yaml opens at its place.
+  // A file opens where it changed last, so a tool just added is on screen (a tool written back in block
+  // style also rewrites the lines above it, so the first change is not where the tool is); factory.yaml
+  // opens at its place.
   const changesPending =
     hasDraft &&
     path !== factoryFile &&
@@ -243,7 +252,8 @@ export function YamlView({ search }: SectionViewProps) {
       comparisonQuery.isPlaceholderData ||
       (fileChange?.op === 'modified' && baseText === undefined));
   const entryLine =
-    search.line ?? (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : changed[0]);
+    search.line ??
+    (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : lastChangeStart(changed));
   // biome-ignore lint/correctness/useExhaustiveDependencies: revealed once per file and asked-for line
   useEffect(() => {
     if (!editor || text === undefined) return;
