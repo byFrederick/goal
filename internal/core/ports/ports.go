@@ -984,7 +984,33 @@ type CodeHost interface {
 	// answers (an unknown repository, a bad token, no push) is in the result; err is a host that
 	// gave no answer it could read. It only reads.
 	RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (RepositoryAccess, error)
+
+	// OwnerAccess reports what token can do in the repositories of owner on host (one of the
+	// organization's list), for an owner pattern such as https://github.com/acme/* (ADR 0041,
+	// decision 8): how many of them it can read and how many it can push to, with a one-line
+	// reason from the host. owner is an account, an organization or a GitLab group path (subgroups
+	// included). The count stops once the adapter has seen MaxOwnerRepositories repositories, and
+	// OwnerAccess.Truncated says so. A refusal the host answers (a bad token, an unknown owner, no
+	// repositories) is in the result, with Readable 0; err is a host that gave no answer it could
+	// read (no answer, a 5xx). An empty token or owner, an owner that is no account or group path
+	// and a host of another kind than the adapter's are refused, wrapping domain.ErrInvalid, before
+	// anything is sent. The token goes only to the host's domain.CodeHostAPIBase, redirects are
+	// not followed, and it only reads.
+	OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (OwnerAccess, error)
 }
+
+// OwnerAccess is what CodeHost.OwnerAccess found a token can do in an owner's repositories.
+type OwnerAccess struct {
+	// Readable and Pushable count the owner's repositories the token can read and push to.
+	Readable, Pushable int
+	// Truncated reports that the count stopped at MaxOwnerRepositories: there may be more.
+	Truncated bool
+	// Reason is the host's answer in one line.
+	Reason string
+}
+
+// MaxOwnerRepositories bounds the repositories one CodeHost.OwnerAccess looks at.
+const MaxOwnerRepositories = 1000
 
 // RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
 type RepositoryAccess struct {

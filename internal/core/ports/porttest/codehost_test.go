@@ -250,3 +250,36 @@ func checkCompareCap(t *testing.T, h *porttest.CodeHost) {
 			len(got.Commits), got.Truncated, err, ports.MaxCompareCommits)
 	}
 }
+
+// OwnerAccess answers what SetOwnerAccess set for the host, the owner (ignoring case) and the
+// token; anything else is a refusal, and a call without a host, token or owner is refused as the
+// adapters refuse it.
+func TestCodeHost_OwnerAccess(t *testing.T) {
+	t.Parallel()
+
+	github := domain.BuiltInCodeHosts()[0]
+	set := ports.OwnerAccess{Readable: 48, Pushable: 2, Reason: "the host shows 48"}
+
+	c := porttest.NewCodeHost()
+	c.SetOwnerAccess(github.Host, "acme", testToken, set)
+
+	if got, err := c.OwnerAccess(t.Context(), github, testToken, "Acme"); err != nil || got != set {
+		t.Errorf("OwnerAccess(Acme) = %+v, %v; want %+v", got, err, set)
+	}
+
+	for name, call := range map[string][2]string{"another token": {"other-token", "acme"}, "another owner": {testToken, "octo"}} {
+		if got, err := c.OwnerAccess(t.Context(), github, call[0], call[1]); err != nil || got.Readable != 0 || got.Reason == "" {
+			t.Errorf("%s: OwnerAccess = %+v, %v; want a refusal with a reason", name, got, err)
+		}
+	}
+
+	for _, bad := range [][2]string{{"", "acme"}, {testToken, ""}} {
+		if _, err := c.OwnerAccess(t.Context(), github, bad[0], bad[1]); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("OwnerAccess(%q, %q) err = %v; want domain.ErrInvalid", bad[0], bad[1], err)
+		}
+	}
+
+	if _, err := c.OwnerAccess(t.Context(), domain.CodeHost{}, testToken, "acme"); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("OwnerAccess without a host err = %v; want domain.ErrInvalid", err)
+	}
+}
