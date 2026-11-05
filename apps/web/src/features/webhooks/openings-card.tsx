@@ -41,10 +41,10 @@ export function OpeningsCard({
           {webhook.openings.map((o) => (
             <li
               key={o.factory}
-              className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5 first:border-t-0"
+              className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 first:border-t-0"
             >
               <FactoryChip id={o.factory} factories={factories} />
-              <span className="truncate text-secondary text-muted">
+              <span title={(o.repositories ?? []).join(', ')} className="truncate text-secondary text-muted">
                 {o.repositories && o.repositories.length > 0 ? o.repositories.join(', ') : 'All repositories'}
               </span>
             </li>
@@ -59,10 +59,11 @@ export function OpeningsCard({
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {webhook.triggers.map((t) => (
-            <li key={`${t.factory}/${t.trigger}`} className="flex items-center justify-between gap-3 px-4 py-2.5">
+            <li key={`${t.factory}/${t.trigger}`} className="flex items-center justify-between gap-3 px-4 py-3">
               <Link
                 to="/o/$org/f/$factory/intake/$trigger"
                 params={{ org: orgSlug, factory: t.factory_name, trigger: t.trigger }}
+                title={t.trigger}
                 className="min-w-0 truncate text-body font-medium text-ink no-underline hover:underline"
               >
                 {t.trigger}

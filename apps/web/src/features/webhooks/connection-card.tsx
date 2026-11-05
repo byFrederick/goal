@@ -8,7 +8,7 @@ import { InfoTip } from '../../ui/info-tip';
 import { Card, StatusChip } from './parts';
 import { addressUrl, pingText, senderLabel, statusOf } from './words';
 
-const row = 'grid grid-cols-[88px_minmax(0,1fr)] items-start gap-x-4 gap-y-1 px-4 py-2.5 text-secondary';
+const row = 'grid grid-cols-[88px_minmax(0,1fr)] items-start gap-x-4 gap-y-1 px-4 py-3 text-secondary';
 
 export function ConnectionCard({ webhook, orgSlug }: { webhook: Webhook; orgSlug: string }) {
   const canRotate = useOrgHolds('secret:manage');

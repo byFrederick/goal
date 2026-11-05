@@ -136,9 +136,13 @@ function DeliveryRow({
         {time}
       </time>
       <span className="flex min-w-0 flex-col">
-        <span className="truncate font-mono text-ink">{delivery.event || 'No event'}</span>
+        <span title={delivery.event} className="truncate font-mono text-ink">
+          {delivery.event || 'No event'}
+        </span>
         {note ? (
-          <span className={cn('truncate text-meta', receipt.refused ? 'text-rework-ink' : 'text-muted')}>{note}</span>
+          <span title={note} className={cn('truncate text-meta', receipt.refused ? 'text-rework-ink' : 'text-muted')}>
+            {note}
+          </span>
         ) : null}
       </span>
       <span className="flex items-center gap-2">

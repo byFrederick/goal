@@ -40,18 +40,25 @@ export function Card({
 /** A factory by its letter badge and its name; the opening's id may name a factory that is gone, which shows nothing. */
 export function FactoryChip({ id, factories, name }: { id: string; factories: readonly Factory[]; name?: string }) {
   const factory = factories.find((f) => f.id === id);
-  if (!factory) return name ? <span className="truncate text-secondary text-ink">{name}</span> : null;
+  if (!factory)
+    return name ? (
+      <span title={name} className="truncate text-secondary text-ink">
+        {name}
+      </span>
+    ) : null;
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-secondary text-ink">
+    <span className="inline-flex min-w-0 items-center gap-2 text-secondary text-ink">
       <FactoryBadge mark={factoryMark(factory, factories)} />
-      <span className="truncate">{factoryTitle(factory)}</span>
+      <span title={factoryTitle(factory)} className="truncate">
+        {factoryTitle(factory)}
+      </span>
     </span>
   );
 }
 
 export function StatusChip({ status }: { status: WebhookStatus }) {
   return (
-    <Chip tone="quiet" dot className="gap-1.5">
+    <Chip tone="quiet" dot className="gap-2">
       {status.label}
     </Chip>
   );

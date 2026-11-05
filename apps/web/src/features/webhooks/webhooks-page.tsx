@@ -96,11 +96,13 @@ function Row({
           params={{ org: orgSlug, webhook: webhook.name }}
           className="flex min-w-0 flex-col text-ink no-underline after:absolute after:inset-0 after:content-['']"
         >
-          <span className="truncate text-body font-medium">{webhook.name}</span>
-          <span className="truncate text-meta text-muted">
+          <span title={webhook.name} className="truncate text-body font-medium">
+            {webhook.name}
+          </span>
+          <span title={webhook.address} className="truncate text-meta text-muted">
             {senderLabel(webhook.sender)}, <span className="font-mono">{webhook.address}</span>
           </span>
-          <span className="truncate text-meta text-muted">
+          <span title={webhook.secret} className="truncate text-meta text-muted">
             Secret <span className="font-mono">{webhook.secret}</span>
           </span>
         </Link>

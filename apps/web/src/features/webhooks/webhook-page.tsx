@@ -56,7 +56,7 @@ export function WebhookPage() {
         }
       />
       <div className="flex min-w-0 flex-col gap-5">
-        <header className="flex min-w-0 flex-col gap-0.5">
+        <header className="flex min-w-0 flex-col gap-1">
           <h1 className="m-0 break-words text-page-title tracking-display">{webhook.name}</h1>
           <span className="text-secondary text-muted">{senderLabel(webhook.sender)}</span>
         </header>

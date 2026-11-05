@@ -31,7 +31,7 @@ export function SetupCard({ webhook }: { webhook: Webhook }) {
               {webhook.setup_events.map((event) => (
                 <code
                   key={event}
-                  className="rounded-chip border border-line bg-panel px-1.5 font-mono text-meta text-ink"
+                  className="rounded-chip border border-line bg-panel px-2 font-mono text-meta text-ink"
                 >
                   {event}
                 </code>
