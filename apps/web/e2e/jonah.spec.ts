@@ -10,6 +10,8 @@ test.beforeEach(async ({ request }) => {
 });
 
 test('the overview shows the proposals waiting, the policy and what Jonah noticed', async ({ page }) => {
+  // Axe reads colour mid-fade while the entrance runs (MOTION.md, reduced motion): settle it first.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/o/acme/f/software/jonah');
   await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Waiting for your review' })).toBeVisible();
@@ -158,7 +160,7 @@ const jonahPages = [
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1440, 1024, 768, 390]) {
     for (const [name, url, tab] of jonahPages) {
-      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({ page }) => {
+      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({ page }, testInfo) => {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
         await page.goto(url);
@@ -168,7 +170,7 @@ for (const scheme of ['light', 'dark'] as const) {
         await expectNoHorizontalScroll(page);
         await expect(page.getByRole('heading', { level: 1, name: 'Jonah' })).toBeVisible();
         // A picture for people to look at; the checks above are the assertions (no pixel baselines are kept).
-        await page.screenshot({ path: `test-results/jonah-${name}-${width}-${scheme}.png`, fullPage: true });
+        await page.screenshot({ path: `test-results/jonah-${testInfo.project.name}-${name}-${width}-${scheme}.png`, fullPage: true });
       });
     }
   }
