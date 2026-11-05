@@ -66,6 +66,94 @@ func testBaseCommitCopiedToParts(f *fixture) {
 	sameBaseCommit(t, "added part", added, f.item(t, added.ID), "c0ffee02")
 }
 
+// A transition's BaseCommits set each named repository row's base commit; a repository that is
+// absent, one with an empty sha and one the item lacks keep their rows as they are.
+func testBaseCommitSetPerRepository(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{Repositories: filed(repoWeb, repoAPI)})
+	_, l := f.claim(t, work, 0, t1)
+
+	tr := next(it, l, t1.Add(time.Minute))
+	tr.BaseCommit = "c0ffee10"
+	tr.BaseCommits = map[string]string{repoWeb: "c0ffee10", repoAPI: "c0ffee11", repoOps: "c0ffee12"}
+
+	if _, err := f.Store.Transition(f.ctx(t), tr); err != nil {
+		t.Fatal(err)
+	}
+
+	sameRepoBaseCommits(t, "after BaseCommits set", f.itemRepositories(t, it.ID), map[string]string{repoWeb: "c0ffee10", repoAPI: "c0ffee11"})
+
+	queued := domain.Position{Station: stNext, State: domain.StateQueued}
+
+	if _, err := f.Store.Transition(f.ctx(t), ports.Transition{
+		ItemID: it.ID, From: queued, To: queued, At: t1.Add(2 * time.Minute), BaseCommits: map[string]string{repoWeb: "", repoAPI: "c0ffee13"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sameRepoBaseCommits(t, "after an empty sha", f.itemRepositories(t, it.ID), map[string]string{repoWeb: "c0ffee10", repoAPI: "c0ffee13"})
+}
+
+// Assemble gives each part's repository row the assembly's base commit for the same repository,
+// and a part added later gets them too; a repository the assembly has no base commit for has none.
+func testBaseCommitCopiedToEveryPartPerRepository(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig, Type: typeFeature, Repositories: filed(repoWeb, repoAPI, repoOps)})
+	ps := plan()
+	ps[0].Filed = filed(repoWeb, repoAPI)
+	ps[1].Filed = filed(repoOps)
+	a := assembly(it, l, ps)
+	a.Transition.BaseCommit = "c0ffee20"
+	a.Transition.BaseCommits = map[string]string{repoWeb: "c0ffee20", repoAPI: "c0ffee21"}
+
+	assembled, parts := f.assemble(t, a)
+
+	sameRepoBaseCommits(t, "assembly", f.itemRepositories(t, it.ID), map[string]string{repoWeb: "c0ffee20", repoAPI: "c0ffee21", repoOps: ""})
+
+	want := map[string]map[string]string{
+		keyAPI:   {repoWeb: "c0ffee20", repoAPI: "c0ffee21"},
+		keyStore: {repoOps: ""},
+	}
+
+	for _, p := range parts.Items {
+		if w, ok := want[p.PartKey]; ok {
+			sameRepoBaseCommits(t, "part "+p.PartKey, f.itemRepositories(t, p.ID), w)
+		}
+	}
+
+	add := addedPart(assembled, t1.Add(time.Minute))
+	add.Part.Filed = filed(repoAPI)
+
+	added, _, err := f.Store.AddPart(f.ctx(t), add)
+	if err != nil {
+		t.Fatalf("AddPart: %v", err)
+	}
+
+	sameRepoBaseCommits(t, "added part", f.itemRepositories(t, added.ID), map[string]string{repoAPI: "c0ffee21"})
+}
+
+// sameRepoBaseCommits checks that rows are exactly want's repositories, each with its base commit.
+func sameRepoBaseCommits(t *testing.T, when string, rows []domain.ItemRepository, want map[string]string) {
+	t.Helper()
+
+	got := make(map[string]string, len(rows))
+	for _, r := range rows {
+		got[r.Repo] = r.BaseCommit
+	}
+
+	if len(got) != len(want) {
+		t.Errorf("%s: repositories %v; want %v", when, got, want)
+	}
+
+	for repo, sha := range want {
+		if c, ok := got[repo]; !ok || c != sha {
+			t.Errorf("%s: %s base commit %q (present %t); want %q", when, repo, c, ok, sha)
+		}
+	}
+}
+
 // MergedItems finds the factory's items by the sha of their merged events: another factory's,
 // another kind's and an unknown sha are absent, and the latest event wins a shared sha.
 func testMergedItems(f *fixture) {

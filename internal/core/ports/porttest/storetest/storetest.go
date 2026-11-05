@@ -88,6 +88,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Paths_SetByTransitionKeptOtherwise", testPathsSetByTransition},
 		{"BaseCommit_SetByTransitionKeptOtherwise", testBaseCommitSetByTransition},
 		{"BaseCommit_CopiedToEveryPart", testBaseCommitCopiedToParts},
+		{"BaseCommit_SetPerRepository", testBaseCommitSetPerRepository},
+		{"BaseCommit_CopiedToEveryPartPerRepository", testBaseCommitCopiedToEveryPartPerRepository},
 		{"MergedItems_ByTheSHAOfTheirMergedEvent", testMergedItems},
 		{"Transition_LeaseLostChangesNothing", testTransitionLeaseLost},
 		{"RequeueExpiredLeases_RequeuesAndFailsRuns", testRequeue},

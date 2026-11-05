@@ -13,16 +13,18 @@ import (
 )
 
 // filing is one item for fileItem to write: n as domain.File checked it, with a part's key,
-// planned paths and base commit, and the items it follows, linked by afterBy.
+// planned paths and base commit, its assembly's base commits by repository, which its repository
+// rows copy, and the items it follows, linked by afterBy.
 type filing struct {
-	n          domain.NewItem
-	factory    uuid.UUID
-	parent     *uuid.UUID
-	partKey    *string
-	partPaths  []string
-	baseCommit *string
-	after      []uuid.UUID
-	afterBy    domain.Actor
+	n           domain.NewItem
+	factory     uuid.UUID
+	parent      *uuid.UUID
+	partKey     *string
+	partPaths   []string
+	baseCommit  *string
+	baseCommits map[string]string
+	after       []uuid.UUID
+	afterBy     domain.Actor
 }
 
 // fileItem writes a filed item in q's transaction (ADR 0040 decision 1): the row, with the
@@ -85,7 +87,7 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 		return db.WorkItem{}, err
 	}
 
-	if err := insertItemRepositories(ctx, q, row, n.Repositories); err != nil {
+	if err := insertItemRepositories(ctx, q, row, n.Repositories, f.baseCommits); err != nil {
 		return db.WorkItem{}, err
 	}
 
@@ -107,11 +109,13 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 	return row, nil
 }
 
-// insertItemRepositories writes an item's repositories joined at its creation, in order.
-func insertItemRepositories(ctx context.Context, q *db.Queries, item db.WorkItem, repos []domain.ItemRepository) error {
+// insertItemRepositories writes an item's repositories joined at its creation, in order, each
+// with its base commit in baseCommits.
+func insertItemRepositories(ctx context.Context, q *db.Queries, item db.WorkItem, repos []domain.ItemRepository, baseCommits map[string]string) error {
 	for i, r := range repos {
 		err := q.InsertItemRepository(ctx, db.InsertItemRepositoryParams{
 			ItemID: item.ID, Repo: r.Repo, Joined: string(r.Joined), JoinedAt: item.CreatedAt, Ordinal: int32(min(i, maxInt32)),
+			BaseCommit: optional(baseCommits[r.Repo]),
 		})
 		if err != nil {
 			return fmt.Errorf("repository %s of item %d: %w", r.Repo, item.Number, err)

@@ -976,6 +976,12 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 		it.BaseCommit = t.BaseCommit
 	}
 
+	for i, r := range s.repos[it.ID] {
+		if sha := t.BaseCommits[r.Repo]; sha != "" {
+			s.repos[it.ID][i].BaseCommit = sha
+		}
+	}
+
 	if t.Output != nil {
 		it.Outputs[t.OutputStation] = t.Output
 	}

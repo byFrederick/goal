@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -946,6 +948,10 @@ func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Tra
 		return db.WorkItem{}, fmt.Errorf("move item: %w", err)
 	}
 
+	if err := setRepositoryBaseCommits(ctx, q, cur.ID, t.BaseCommits); err != nil {
+		return db.WorkItem{}, err
+	}
+
 	if err := appendEvents(ctx, q, t.Events); err != nil {
 		return db.WorkItem{}, err
 	}
@@ -991,6 +997,24 @@ func releaseOrTake(ctx context.Context, q *db.Queries, item uuid.UUID, t ports.T
 
 	if n == 0 {
 		return fmt.Errorf("item %s: %w", t.ItemID, ports.ErrLeaseLost)
+	}
+
+	return nil
+}
+
+// setRepositoryBaseCommits sets the base commit of each of the item's repositories shas names
+// with a sha, in key order; an empty sha and a repository the item lacks change nothing.
+func setRepositoryBaseCommits(ctx context.Context, q *db.Queries, item uuid.UUID, shas map[string]string) error {
+	for _, repo := range slices.Sorted(maps.Keys(shas)) {
+		if shas[repo] == "" {
+			continue
+		}
+
+		if err := q.SetItemRepositoryBaseCommit(ctx, db.SetItemRepositoryBaseCommitParams{
+			ItemID: item, Repo: repo, BaseCommit: shas[repo],
+		}); err != nil {
+			return fmt.Errorf("base commit of repository %s: %w", repo, err)
+		}
 	}
 
 	return nil

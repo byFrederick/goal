@@ -14,20 +14,23 @@ import (
 
 const insertItemRepository = `-- name: InsertItemRepository :exec
 
-INSERT INTO work_item_repositories (item_id, repo, joined, joined_at, ordinal)
-VALUES ($1, $2, $3, $4, $5::int)
+INSERT INTO work_item_repositories (item_id, repo, joined, joined_at, ordinal, base_commit)
+VALUES ($1, $2, $3, $4, $5::int,
+  $6::text)
 `
 
 type InsertItemRepositoryParams struct {
-	ItemID   uuid.UUID
-	Repo     string
-	Joined   string
-	JoinedAt time.Time
-	Ordinal  int32
+	ItemID     uuid.UUID
+	Repo       string
+	Joined     string
+	JoinedAt   time.Time
+	Ordinal    int32
+	BaseCommit *string
 }
 
 // An item's repositories (ADR 0041 decision 4), keyed by normalized host/owner/name.
-// One repository the item starts with, written with the item (fileItem).
+// One repository the item starts with, written with the item (fileItem); a part's has its
+// assembly's base commit for the same repository.
 func (q *Queries) InsertItemRepository(ctx context.Context, arg InsertItemRepositoryParams) error {
 	_, err := q.db.Exec(ctx, insertItemRepository,
 		arg.ItemID,
@@ -35,6 +38,7 @@ func (q *Queries) InsertItemRepository(ctx context.Context, arg InsertItemReposi
 		arg.Joined,
 		arg.JoinedAt,
 		arg.Ordinal,
+		arg.BaseCommit,
 	)
 	return err
 }
@@ -136,4 +140,22 @@ func (q *Queries) OpenItemRepositories(ctx context.Context, factoryID uuid.UUID)
 		return nil, err
 	}
 	return items, nil
+}
+
+const setItemRepositoryBaseCommit = `-- name: SetItemRepositoryBaseCommit :exec
+UPDATE work_item_repositories SET base_commit = $1::text
+WHERE item_id = $2 AND repo = $3
+`
+
+type SetItemRepositoryBaseCommitParams struct {
+	BaseCommit string
+	ItemID     uuid.UUID
+	Repo       string
+}
+
+// The base commit of one of the item's repositories (ADR 0041 decision 5), set by a transition;
+// a repository the item lacks changes nothing.
+func (q *Queries) SetItemRepositoryBaseCommit(ctx context.Context, arg SetItemRepositoryBaseCommitParams) error {
+	_, err := q.db.Exec(ctx, setItemRepositoryBaseCommit, arg.BaseCommit, arg.ItemID, arg.Repo)
+	return err
 }
