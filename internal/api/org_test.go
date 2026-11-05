@@ -268,6 +268,8 @@ var probes = map[string]probe{
 	"updateOrgSettings":       {method: http.MethodPatch, path: "/v1/orgs/acme/settings", body: `{"mark":"AC"}`, org: testOrg},
 	"setSignupDomain":         {method: http.MethodPut, path: "/v1/orgs/acme/settings/signup-domain", body: ownDomain, org: testOrg},
 	"clearSignupDomain":       {method: http.MethodDelete, path: "/v1/orgs/acme/settings/signup-domain", org: testOrg},
+	"getCodeHosts":            {method: http.MethodGet, path: "/v1/orgs/acme/code-hosts", org: testOrg},
+	"setCodeHosts":            {method: http.MethodPut, path: "/v1/orgs/acme/code-hosts", body: `{"hosts":[]}`, org: testOrg},
 	"getNotificationSettings": {method: http.MethodGet, path: "/v1/orgs/acme/settings/notifications", org: testOrg},
 	// Slack off and a test of nothing saved, so the probes open no secret and change nothing.
 	"setNotificationSettings":  {method: http.MethodPut, path: "/v1/orgs/acme/settings/notifications", body: `{"slack_secret":null}`, org: testOrg},
