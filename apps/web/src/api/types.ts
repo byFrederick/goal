@@ -304,4 +304,7 @@ export type ModelProposalEstimate = Schemas['ModelProposalEstimate'];
 export type Watch = Schemas['Watch'];
 export type WatchVerdict = Schemas['WatchVerdict'];
 export type TriggerTry = Schemas['TriggerTry'];
+export type TriggerCheck = Schemas['TriggerCheck'];
+export type TriggerCheckList = Schemas['TriggerCheckList'];
+export type TriggerCheckMemory = Schemas['TriggerCheckMemory'];
 export type TriggerTryStep = Schemas['TriggerTryStep'];

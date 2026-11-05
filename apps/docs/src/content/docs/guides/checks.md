@@ -51,6 +51,12 @@ It answers in a fixed shape:
 - **One at a time.** A firing while the trigger's check is queued or running is skipped, "still checking". No check is queued while the factory's line is paused.
 - **Failures.** An error, a timeout or an answer that breaks the fixed shape is recorded with its reason and files nothing. Three in a row show in Needs you.
 
+## The check's page
+
+A trigger with `check` opens a page with When (the schedule), Check, Create and Limits, and a log of checks beside them. Check sets the agent, shows the tools that agent has on, and holds the brief. Remembers shows how many of the trigger's items are open, how many closed this week, how far the last check got and Clear, which forgets the saved state; Clear is refused while a check is queued or running. Limits sets `perCheck`, `perDay`, what one check may spend and whether to pause when the weekly budget is spent. The title line shows today's checks, items and cost.
+
+The log lists each check with its time, how it ended (Filed, Noted, Nothing new, Failed) and what it cost, and under it each key it filed, noted or skipped with the reason and a link to the item. Try a check queues a try; its row is marked Try and lists what it would do.
+
 ## Read the checks
 
 From the CLI, or with `GET` on the same API path:
