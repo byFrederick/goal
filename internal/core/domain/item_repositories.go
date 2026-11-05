@@ -142,31 +142,47 @@ func JoinRepositories(l Line, have []ItemRepository, keys []string, at time.Time
 	return AppendRepositories(have, JoinedFiling, covered, at)
 }
 
+// JoinIntegration are the rows an assembly that has have gains for its integration branch from
+// keys, its parts' repositories (ADR 0041 decision 5): each key have lacks, once and in order,
+// joined filing at time at with the next ordinal, until the assembly has MaxItemRepositories.
+// The parts' repositories were covered when they joined, so no entry is asked again. left are the
+// keys past the cap, which get no integration branch.
+func JoinIntegration(have []ItemRepository, keys []string, at time.Time) (joins []ItemRepository, left []string) {
+	return appendKeys(have, JoinedFiling, keys, at)
+}
+
 // AppendRepositories are the rows an item that has have gains from keys (RepositoryKey): each
 // key have lacks, once and in order, joined as joined at time at with the next ordinal, until
 // the item has MaxItemRepositories. A value that is no key and the rest past the cap are left
 // out without an error.
 func AppendRepositories(have []ItemRepository, joined RepositoryJoin, keys []string, at time.Time) []ItemRepository {
+	out, _ := appendKeys(have, joined, keys, at)
+
+	return out
+}
+
+// appendKeys are AppendRepositories' rows and the keys left out past the cap, once and in order.
+func appendKeys(have []ItemRepository, joined RepositoryJoin, keys []string, at time.Time) (out []ItemRepository, left []string) {
 	next := len(have)
 
 	for _, r := range have {
 		next = max(next, r.Ordinal+1)
 	}
 
-	var out []ItemRepository
-
 	for _, raw := range keys {
-		if len(have)+len(out) >= MaxItemRepositories || next >= MaxItemRepositories {
-			break
-		}
-
 		key, ok := RepositoryKey(raw)
 		if !ok {
 			continue
 		}
 
 		has := func(r ItemRepository) bool { return r.Repo == key }
-		if slices.ContainsFunc(have, has) || slices.ContainsFunc(out, has) {
+		if slices.ContainsFunc(have, has) || slices.ContainsFunc(out, has) || slices.Contains(left, key) {
+			continue
+		}
+
+		if len(have)+len(out) >= MaxItemRepositories || next >= MaxItemRepositories {
+			left = append(left, key)
+
 			continue
 		}
 
@@ -174,7 +190,7 @@ func AppendRepositories(have []ItemRepository, joined RepositoryJoin, keys []str
 		next++
 	}
 
-	return out
+	return out, left
 }
 
 // ErrBadRepositories is an output's repositories that goald refuses: it fails the output's check.
