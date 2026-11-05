@@ -31,9 +31,6 @@ type AgentRun struct {
 	Kind                string
 	Brief               *string
 	Output              []byte
-	BranchHead          *string
-	BaseHead            *string
-	PushedHead          *string
 }
 
 type AndonPull struct {
