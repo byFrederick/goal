@@ -13,11 +13,21 @@ import { yamlView } from '../section-views';
 import type { EditorSection } from '../sections';
 import { validateDefinitionSearch } from '../sections';
 
-export function ViewToggle({ section, yaml }: { section: EditorSection; yaml: boolean }) {
+/** `cursorLine`: the YAML view's cursor, which Form opens at before `?line=` has caught up with it. */
+export function ViewToggle({
+  section,
+  yaml,
+  cursorLine,
+}: {
+  section: EditorSection;
+  yaml: boolean;
+  cursorLine?: number | undefined;
+}) {
   const params = useFactoryParams();
   const navigate = useNavigate();
   const showYaml = yaml && yamlView !== null;
-  const { mode: _mode, file, line, ...entity } = validateDefinitionSearch(useSearch({ strict: false }));
+  const { mode: _mode, file, line: urlLine, ...entity } = validateDefinitionSearch(useSearch({ strict: false }));
+  const line = cursorLine ?? urlLine;
   const model = useModel();
   const ranges = useDraft((s) => s.ranges);
   const here =

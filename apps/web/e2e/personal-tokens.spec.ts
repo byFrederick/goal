@@ -216,7 +216,19 @@ test('the account menu opens your personal tokens', async ({ page }) => {
   await page.getByRole('dialog', { name: 'Account' }).getByRole('link', { name: 'Personal tokens' }).click();
   await expect(page).toHaveURL(/\/account#personal-tokens$/);
   await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeFocused();
-  await expect(own(page).getByRole('heading', { name: 'Personal tokens' })).toBeInViewport();
+  const heading = own(page).getByRole('heading', { name: 'Personal tokens' });
+  await expect(heading).toBeInViewport();
+  // Clear of the sticky top bar and, on a phone, of the fixed tab bar, once the sections above have loaded.
+  await expect
+    .poll(async () => {
+      const box = await heading.boundingBox();
+      const top = await page.getByRole('banner').first().boundingBox();
+      const tabs = page.getByRole('navigation', { name: 'Tabs' });
+      const tabBox = (await tabs.isVisible()) ? await tabs.boundingBox() : null;
+      if (!box || !top) return false;
+      return box.y >= top.y + top.height && (!tabBox || box.y + box.height <= tabBox.y);
+    })
+    .toBe(true);
 });
 
 test('with sign-in off there are no personal tokens to make', async ({ page, request }) => {

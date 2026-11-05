@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { TextareaEditor } from './code-editor';
+import { createRef } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { type CodeEditorHandle, TextareaEditor } from './code-editor';
 
 afterEach(cleanup);
 
@@ -18,5 +19,18 @@ describe('the textarea editor', () => {
   it('keeps 16px on a phone, so iOS does not zoom into the field', () => {
     render(<TextareaEditor {...base} phone />);
     expect(screen.getByRole('textbox', { name: 'factory.yaml' }).className).toContain('text-base');
+  });
+});
+
+describe('revealing a line in the textarea editor', () => {
+  it('moves only the editor for an automatic reveal, and may move the page when asked for', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const ref = createRef<CodeEditorHandle>();
+    render(<TextareaEditor {...base} ref={ref} value={'a: 1\nb: 2'} />);
+    expect(ref.current?.reveal(2)).toBe(true);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(ref.current?.reveal(2, true)).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 });

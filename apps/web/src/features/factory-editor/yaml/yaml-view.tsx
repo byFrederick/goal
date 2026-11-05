@@ -415,7 +415,7 @@ export function YamlView({ search }: SectionViewProps) {
               </div>
             </div>
             <div className="flex items-center px-3 py-1">
-              <ViewToggle section={section} yaml />
+              <ViewToggle section={section} yaml cursorLine={cursorPath.current === path ? cursorLine : undefined} />
             </div>
           </div>
 

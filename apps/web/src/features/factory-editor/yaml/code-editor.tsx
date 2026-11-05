@@ -197,7 +197,7 @@ export function TextareaEditor({
         cursor.current?.(positionAt(el.value, at));
         const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight) || 28;
         scroller.scrollTop = Math.max(0, (line - 1) * lineHeight - scroller.clientHeight / 2);
-        scroller.scrollIntoView({ block: 'nearest' });
+        if (focus) scroller.scrollIntoView({ block: 'nearest' });
         return true;
       },
     }),
