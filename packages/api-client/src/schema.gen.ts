@@ -4746,6 +4746,40 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
+        /** @description Where an item came from; follow_ups for origin follow-up, trigger for origin trigger */
+        ItemCameFrom: {
+            /** @description The follow-ups filed as or onto the item, oldest first: its sources. Present, an empty list when none resolves, for origin follow-up; absent otherwise */
+            follow_ups?: components["schemas"]["CameFromFollowUp"][];
+            /** @description The trigger that filed the item; present for origin trigger, absent otherwise */
+            trigger?: components["schemas"]["CameFromTrigger"];
+        };
+        /** @description A follow-up an item was filed from, the item and run that wrote it and the landing that filed it */
+        CameFromFollowUp: {
+            /** @description The follow-up's id */
+            id: string;
+            /** @description The source item, <factory name>#<number>, another factory's included */
+            from_item: string;
+            from_item_id: string;
+            /** @description The agent whose run wrote it */
+            agent: string;
+            /** @description The station whose run wrote it */
+            station: string;
+            /** @description The item whose landing filed it, <factory name>#<number>: the source, or its assembly when the source is a part */
+            landed_item: string;
+            landed_item_id: string;
+        };
+        /** @description The trigger that filed an item */
+        CameFromTrigger: {
+            /** @description The trigger's name */
+            name: string;
+            /**
+             * @description check for a trigger with a check, schedule for another schedule trigger, webhook otherwise; absent when the trigger is not in the factory's loaded definition
+             * @enum {string}
+             */
+            kind?: "schedule" | "check" | "webhook";
+            /** @description The key a check filed the item under; absent for any other trigger, and when the check filed the key again since, which keeps only the key's last item */
+            key?: string;
+        };
         FileFollowUpRequest: {
             title: string;
             body?: string;
@@ -4819,6 +4853,8 @@ export interface components {
             created_by?: components["schemas"]["Actor"];
             /** @description Whether it, or an item it came from, was made from a webhook delivery (ADR 0040 decision 21): a person merges its work, and its follow-ups wait for a person */
             untrusted?: boolean;
+            /** @description Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the follow-ups filed as it, or its trigger; getItem only, absent unless origin is follow-up or trigger */
+            came_from?: components["schemas"]["ItemCameFrom"];
             /** @description The follow-ups its runs wrote, oldest first, each saying where it went or will go; getItem only */
             follow_ups?: components["schemas"]["FollowUp"][];
             /** @description The notes other items' agents and triggers' checks left on it, oldest first, at most 200; getItem only */

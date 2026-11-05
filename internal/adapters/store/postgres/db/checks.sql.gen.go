@@ -406,6 +406,32 @@ func (q *Queries) HeartbeatTriggerCheck(ctx context.Context, arg HeartbeatTrigge
 	return result.RowsAffected(), nil
 }
 
+const itemCheckKey = `-- name: ItemCheckKey :many
+SELECT key FROM trigger_keys WHERE item_id = $1 ORDER BY trigger, key LIMIT 1
+`
+
+// The key whose last item is the item (trigger_keys_item_idx); none when a later check filed the
+// key again.
+func (q *Queries) ItemCheckKey(ctx context.Context, itemID *uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, itemCheckKey, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, err
+		}
+		items = append(items, key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const keepTriggerKey = `-- name: KeepTriggerKey :exec
 INSERT INTO trigger_keys (factory_id, trigger, key, item_id)
 VALUES ($1, $2, $3, $4)

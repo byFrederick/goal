@@ -96,6 +96,11 @@ LIMIT sqlc.arg(max_items);
 SELECT key, item_id, last_note_at, last_note_text FROM trigger_keys
 WHERE factory_id = sqlc.arg(factory_id) AND trigger = sqlc.arg(trigger) AND key = ANY(sqlc.arg(keys)::text[]);
 
+-- name: ItemCheckKey :many
+-- The key whose last item is the item (trigger_keys_item_idx); none when a later check filed the
+-- key again.
+SELECT key FROM trigger_keys WHERE item_id = sqlc.arg(item_id) ORDER BY trigger, key LIMIT 1;
+
 -- name: LockCheckItems :many
 -- The keys' items, locked in id order, each with how it stands: its number, station and state,
 -- when it closed and the reason of its closing event.
