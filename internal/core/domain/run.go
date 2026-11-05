@@ -216,8 +216,9 @@ type RunRequest struct {
 	Repository Repository
 	// Branch and Base are the run's branch and the branch it is cut from (TaskClaims).
 	Branch, Base string
-	// Code is a station run's repositories, logins and read-only prefixes (Line.RunCode), whose
-	// picked entry tokens prepare gets on a version on secrets; zero for every other run.
+	// Code is a station run's repositories, logins and read-only prefixes (Line.RunCode), or a
+	// check's logins and read-only prefixes (Line.CheckCode), whose picked entry tokens prepare
+	// gets on a version on secrets; zero for every other run.
 	Code RunCode
 	// ModelConnection is the connection that gives a run on connections its model access.
 	ModelConnection string
@@ -372,8 +373,8 @@ func (r RunRequest) checkTry() error {
 }
 
 // checkCheck refuses a check run with an item, a station, a lease, a repository, a commit, a try,
-// a grade, checks or knowledge (ADR 0040 decision 19: it only reads, clones nothing and has no
-// person to ask), or on another bundle than a check's.
+// a grade, checks, knowledge or code that clones (ADR 0040 decision 19: it only reads, clones
+// nothing and has no person to ask), or on another bundle than a check's.
 func (r RunRequest) checkCheck() error {
 	switch {
 	case r.Item != "" || r.Station != "" || r.Lease != nil || r.Repository != (Repository{}) || r.Commit != "" ||
@@ -381,6 +382,8 @@ func (r RunRequest) checkCheck() error {
 		return fmt.Errorf("%w: a check has no item, station, lease, repository, commit, try, grade, checks or knowledge", ErrBadRunRequest)
 	case r.Bundle != TaskKindCheck:
 		return fmt.Errorf("%w: a check runs on a check bundle", ErrBadRunRequest)
+	case len(r.Code.Clones) > 0:
+		return fmt.Errorf("%w: a check clones no repository; it opens what it reads with git", ErrBadRunRequest)
 	}
 
 	return nil

@@ -313,7 +313,10 @@ func checkFailed(run *domain.RunResult, format string, a ...any) domain.CheckRes
 
 // checkRequest is t's check as a RunRequest of kind check: its agent, with the organization
 // policy applied as to a station's run (applyPolicy), on the agent's environment, with no item,
-// station, lease, repository or knowledge; check.maxUsd is its spend limit (the gateway's bundle
+// station, lease, repository or knowledge. Its code is a reader's (domain.Line.CheckCode): a
+// login per entry and every prefix read only, so prepare gets the entry tokens it picks, and
+// its brief is the workspace note saying how to open a repository with git (codeNote), when
+// the line has entries; check.maxUsd is its spend limit (the gateway's bundle
 // says it) and check.timeout its time limit, within the policy's box time limit. An error when
 // the agent or its environment is missing, the policy cannot be read or refuses its model.
 func (e *Engine) checkRequest(ctx context.Context, l domain.Line, t domain.Trigger) (domain.RunRequest, error) {
@@ -338,7 +341,15 @@ func (e *Engine) checkRequest(ctx context.Context, l domain.Line, t domain.Trigg
 		return domain.RunRequest{}, errors.New(refusal)
 	}
 
-	r := c.request("")
+	// A check reads whatever its agent's code (ADR 0041 decision 3), so its note says so too.
+	c.code, c.agent.Code = l.CheckCode(), domain.CodeRead
+
+	var note string
+	if code := codeNote(c); code != "" {
+		note = "## Workspace\n\n" + code
+	}
+
+	r := c.request(note)
 	r.Kind, r.Bundle, r.Trigger, r.Lease, r.Repository, r.Branch, r.Base, r.Knowledge = domain.RunKindCheck, domain.TaskKindCheck, t.Name, nil, domain.Repository{}, "", "", nil
 	r.Timeout = t.Check.Timeout
 
