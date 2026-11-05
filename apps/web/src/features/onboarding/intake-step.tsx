@@ -314,7 +314,7 @@ function Ready({
           <p className="m-0 flex flex-wrap items-center gap-2 text-secondary">
             <span className="text-ink-soft">Always on:</span>
             <Chip>New item</Chip>
-            <Chip>goal item create</Chip>
+            <Chip>goal run</Chip>
             <Chip>The API</Chip>
           </p>
         </>

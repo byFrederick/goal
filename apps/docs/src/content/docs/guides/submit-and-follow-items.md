@@ -103,7 +103,7 @@ A waiting follow-up has **Drop**, which stops it from ever being delivered or fi
 
 The rest of the page tells how the item came to be:
 
-- **Came from**, in Details, says whether a person filed it (and through New item, the CLI or the API), it is a part of an assembly, a trigger filed it, or a follow-up did.
+- **Came from**, in Details, says whether a person filed it (and through New item, the CLI or the API), it is a part of an assembly, a trigger filed it, or a follow-up did. A follow-up reads "A follow-up by <agent> on <item>, filed when <item> landed", with both items linked. A check's item reads "The check <name>, <key>", and a schedule's or webhook's reads its name.
 - **Notes from other items** lists the notes that other items' agents, and trigger checks, left on this item, with their source. They are not a person's touch.
 - When an agent closed the item with a reason, the page says **Closed by** that agent, with the reason. Closing is not a person's Cancel; the item is cancelled all the same.
 

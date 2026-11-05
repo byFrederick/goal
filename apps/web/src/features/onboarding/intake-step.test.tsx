@@ -224,7 +224,7 @@ describe('step 6, choose where work comes from', () => {
     expect(screen.getByRole('switch', { name: 'weekly-dependency-audit' }).getAttribute('aria-disabled')).toBe('true');
     expect(screen.getByText('Always on:')).toBeTruthy();
     expect(screen.getByText('New item')).toBeTruthy();
-    expect(screen.getByText('goal item create')).toBeTruthy();
+    expect(screen.getByText('goal run')).toBeTruthy();
     expect(screen.getByText('The API')).toBeTruthy();
   });
 
