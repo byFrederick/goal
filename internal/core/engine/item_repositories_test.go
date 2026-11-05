@@ -191,3 +191,93 @@ func TestEngine_RunStartKeepsTheDefaultEntrysRepository(t *testing.T) {
 		t.Errorf("an item on a line without a default entry has %v; want none", got)
 	}
 }
+
+// fieldRepos is the output field the output repositories tests' lines map.
+const fieldRepos = "repos"
+
+// An accepted output's repositories join its item, joined output in the order named after those
+// it had, each once; a gate's rejection adds none of those it names.
+func TestEngine_OutputRepositoriesJoinItem(t *testing.T) {
+	t.Parallel()
+
+	line := withRepositories(reviewLine(3))
+	line.Flow.Outputs.Repositories = fieldRepos
+
+	h := newHarness(t, line, byAgent(map[string]string{
+		agWorker:   `{"repos":["acme-labs/docs","acme-labs/web","api"]}`,
+		agReviewer: `{"decision":"reject","reason":"still wrong","repos":["acme-labs/other"]}`,
+	}))
+	it := h.submitRepos(t, "Add a flag", "acme-labs/web")
+
+	h.step(t)
+
+	rows, err := h.store.ItemRepositories(inOrg(t), it.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := domain.ItemRepositoryKeys(rows), []string{keyWeb, keyDocs, keyAPI}; !slices.Equal(got, want) {
+		t.Fatalf("repositories after build = %v (events %v); want %v", got, h.kinds(it.ID), want)
+	}
+
+	for _, r := range rows[1:] {
+		if r.Joined != domain.JoinedOutput {
+			t.Errorf("%s joined %s; want output", r.Repo, r.Joined)
+		}
+	}
+
+	h.step(t)
+
+	if len(h.eventsOf(it.ID, domain.EventGateRejected)) == 0 {
+		t.Fatalf("events %v; want the gate to reject", h.kinds(it.ID))
+	}
+
+	if got := h.repoKeys(t, it.ID); slices.Contains(got, "github.com/acme-labs/other") {
+		t.Errorf("repositories after the rejection = %v; want none of the rejection's", got)
+	}
+}
+
+// An output whose repositories would give its item more than 10 fails its check with the count
+// and the cap, is retried like any bad output, and adds none; a name no entry covers fails too.
+func TestEngine_OutputRepositoriesPastTheCapFailCheck(t *testing.T) {
+	t.Parallel()
+
+	nine := make([]string, domain.MaxItemRepositories-1)
+	for i := range nine {
+		nine[i] = fmt.Sprintf("acme-labs/r%d", i)
+	}
+
+	for _, tt := range []struct{ name, out, reason string }{
+		{name: "past the cap", out: `{"repos":["acme-labs/docs","api"]}`, reason: "11 repositories, more than an item's 10"},
+		{name: "unknown", out: `{"repos":["acme/unknown"]}`, reason: `"acme/unknown"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			line := withRepositories(lineOf(agentStation(stBuild, agWorker, 1, 1), agentStation(stReview, agReviewer, 1, 1)))
+			line.Flow.Outputs.Repositories = fieldRepos
+
+			h := newHarness(t, line, byAgent(map[string]string{agWorker: tt.out, agReviewer: `{}`}))
+			it := h.submitRepos(t, "Add a flag", nine...)
+
+			h.step(t)
+
+			failed := h.eventsOf(it.ID, domain.EventContractFailed)
+			if len(failed) != 2 {
+				t.Fatalf("contract_failed events %d (events %v); want one per attempt", len(failed), h.kinds(it.ID))
+			}
+
+			if msg, _ := failed[0].Data["error"].(string); !strings.Contains(msg, tt.reason) {
+				t.Errorf("contract_failed error %q; want it to say %s", msg, tt.reason)
+			}
+
+			if got := h.item(t, it.ID); got.State != domain.StateBlocked || got.Station != stBuild {
+				t.Errorf("item %s at %s; want blocked at %s after its attempts", got.State, got.Station, stBuild)
+			}
+
+			if got := h.repoKeys(t, it.ID); len(got) != len(nine) {
+				t.Errorf("repositories = %v; want the %d filed", got, len(nine))
+			}
+		})
+	}
+}

@@ -30,6 +30,7 @@ var repositoriesTests = []struct {
 	{"IntegrationBranch_PerRepositorySetOnce", testIntegrationBranchPerRepositorySetOnce},
 	{"IntegrationBranch_PerRepositoryUpToTheCap", testIntegrationBranchPerRepositoryUpToTheCap},
 	{"IntegrationBranch_LandingTakesThePartsRepositories", testIntegrationBranchLandingTakesThePartsRepositories},
+	{"Transition_JoinsOutputRepositories", testTransitionJoinsOutputRepositories},
 }
 
 // The repositories the cases name.
@@ -466,5 +467,40 @@ func testPushPastCapStaysOnRun(f *fixture) {
 	res := domain.RunResult{Status: domain.RunSucceeded, Repositories: []domain.RunRepository{{Repo: repoOps, PushedHead: "o3", Wrote: true}}}
 	if err := f.Store.FinishRun(f.ctx(t), jonah, res, t1.Add(time.Hour)); err != nil {
 		t.Errorf("FinishRun of a Jonah run: %v", err)
+	}
+}
+
+// A transition's repositories join the item, joined output at its At with the next ordinals, in
+// the transition's transaction: those the item lacks, once each. A transition that fails its
+// guard joins none.
+func testTransitionJoinsOutputRepositories(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{Repositories: filed(repoAPI)})
+	queued := domain.Position{Station: it.Station, State: domain.StateQueued}
+
+	tr := ports.Transition{ItemID: it.ID, From: queued, To: queued, At: t1, Repositories: []string{repoAPI, repoWeb, repoOps, repoWeb}}
+	if _, err := f.Store.Transition(f.ctx(t), tr); err != nil {
+		t.Fatalf("Transition: %v", err)
+	}
+
+	want := []domain.ItemRepository{
+		{Repo: repoAPI, Joined: domain.JoinedFiling, JoinedAt: it.CreatedAt},
+		{Repo: repoWeb, Joined: domain.JoinedOutput, JoinedAt: t1, Ordinal: 1},
+		{Repo: repoOps, Joined: domain.JoinedOutput, JoinedAt: t1, Ordinal: 2},
+	}
+	if got := f.itemRepositories(t, it.ID); !reflect.DeepEqual(got, want) {
+		t.Errorf("repositories =\n%+v\nwant\n%+v", got, want)
+	}
+
+	stale := ports.Transition{
+		ItemID: it.ID, From: domain.Position{Station: it.Station, State: domain.StateInProgress}, To: queued, At: t1,
+		Repositories: []string{"github.com/acme/docs"},
+	}
+	_, err := f.Store.Transition(f.ctx(t), stale)
+	expect(t, "Transition from where the item is not", err, ports.ErrConflict)
+
+	if got := f.repoKeys(t, it.ID); len(got) != len(want) {
+		t.Errorf("after a refused transition = %v; want %d", got, len(want))
 	}
 }

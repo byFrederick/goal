@@ -74,6 +74,8 @@ Every item records the repositories it works on when it is filed, at most 10. Ea
 
 A named value that no entry covers is refused, with the value quoted: a person's request with `400 Bad Request`, a plan by blocking the item that planned it, and a follow-up's start by sending it to triage with the reason. An item that gets no repository this way takes the default entry's. A factory without a default entry gives such an item none.
 
+An item's list grows in two ways while it is open. A repository a run pushes to joins it, joined `push`. A station's output can name repositories in the field `board.flow.outputs.repositories` maps; those the item lacks join it when the output is accepted, joined `output`. An item never has more than 10: a push past 10 is left off, and an output whose names would go past 10 fails its check, so the agent tries again.
+
 ## Notes from other items
 
 An agent can leave a note for another open item. It writes a follow-up whose `for` names the item as `<factory>#<number>`, in the output field that `board.flow.outputs.followUps` maps (see the [definition reference](/docs/reference/definition/)). On its next tick, every few seconds by default, goald adds the note to that item's events as an `item_note`, with the item and agent it came from.
