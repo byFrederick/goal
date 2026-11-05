@@ -5,6 +5,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,8 +28,8 @@ func (c *checker) triggers() {
 	dup(c, "trigger", names(b.Triggers, func(t Trigger) string { return t.Name }), "board", "triggers", keyName)
 
 	for i, t := range b.Triggers {
-		base := at("spec", "board", "triggers", i)
-		create := append(slices.Clone(base), "create")
+		base := at(keySpec, keyBoard, keyTriggers, i)
+		create := append(slices.Clone(base), keyCreate)
 
 		if !slices.Contains(b.WorkTypes, t.Create.Type) {
 			c.errorf(checkReferences, codeUnknownWorkType, append(slices.Clone(create), "type"),
@@ -54,6 +55,8 @@ func (c *checker) triggers() {
 			}
 		}
 
+		c.triggerRepositories(t, create)
+
 		if t.On != onSchedule {
 			c.deliveries(trigger(t), base)
 		}
@@ -63,6 +66,31 @@ func (c *checker) triggers() {
 		} else if t.Limits != nil && t.Limits.PerCheck > 0 {
 			c.errorf(checkTriggers, codePerCheckWithoutCheck, append(slices.Clone(base), "limits", "perCheck"),
 				"trigger %s: limits.perCheck caps what one check files, and the trigger has no check", t.Name)
+		}
+	}
+}
+
+// triggerRepositories checks create.repositories (ADR 0041 decision 13): each placeholder is
+// well formed, and a fixed value (one without a placeholder) matches a runtime.repositories
+// entry, as intake matches it (domain.Line.ResolveRepository).
+func (c *checker) triggerRepositories(t Trigger, create []string) {
+	repo, entries := c.f.Spec.Runtime.lineRepositories()
+	l := domain.Line{Runtime: domain.Runtime{Repository: repo, Repositories: entries}}
+
+	for i, v := range t.Create.Repositories {
+		at := append(slices.Clone(create), "repositories", strconv.Itoa(i))
+
+		switch bad := badPlaceholder(v); {
+		case bad != "":
+			c.errorf(checkTriggers, codePlaceholderInvalid, at,
+				"trigger %s: create.repositories has a malformed placeholder %q; a placeholder is {{field}} or {{field.sub}}", t.Name, bad)
+		case strings.Contains(v, "{{"):
+		default:
+			if _, ok := l.ResolveRepository(v, ""); !ok {
+				c.errorf(checkTriggers, codeTriggerRepository, at,
+					"trigger %s: create.repositories names %q, which no runtime.repositories entry matches; "+
+						"name an entry, or a repository an entry covers as host/owner/name, an https URL or owner/name", t.Name, v)
+			}
 		}
 	}
 }
@@ -209,7 +237,7 @@ func DeliveryRefusals(t domain.Trigger, sender domain.WebhookSender, event strin
 	}
 
 	if why := t.TrustedRefusal(sender); why != "" {
-		out = append(out, DeliveryRefusal{Code: CodeTrustedRefused, Key: "create", Message: why})
+		out = append(out, DeliveryRefusal{Code: CodeTrustedRefused, Key: keyCreate, Message: why})
 	}
 
 	return out

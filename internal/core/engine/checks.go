@@ -243,7 +243,9 @@ func (e *Engine) triggerCheck(ctx context.Context, l domain.Line, lease domain.C
 // checkItems are the items a's file entries make on l at now, each through domain.File (ADR 0040
 // decision 19): origin trigger, by the check's agent, at t's create.station in its arrival state,
 // of the entry's type and lane or else create's, untrusted unless t is create.trusted, since what
-// the agent read is outside text. An entry File refuses keeps why.
+// the agent read is outside text, with the repositories it names resolved against l's entries
+// (domain.Line.ResolveRepositories). An entry that names one l doesn't have, or that File
+// refuses, keeps why.
 func checkItems(l domain.Line, t domain.Trigger, a domain.CheckAnswer, now time.Time) []domain.CheckItem {
 	out := make([]domain.CheckItem, 0, len(a.File))
 	st, onLine := l.Station(t.Create.Station)
@@ -252,6 +254,12 @@ func checkItems(l domain.Line, t domain.Trigger, a domain.CheckAnswer, now time.
 	for _, f := range a.File {
 		if !onLine {
 			out = append(out, domain.CheckItem{Key: f.Key, Refused: fmt.Sprintf("create.station %q is not on the line", t.Create.Station)})
+			continue
+		}
+
+		repos, skip := l.ResolveRepositories(f.Repositories, "")
+		if skip != "" {
+			out = append(out, domain.CheckItem{Key: f.Key, Refused: skip})
 			continue
 		}
 
@@ -265,7 +273,7 @@ func checkItems(l domain.Line, t domain.Trigger, a domain.CheckAnswer, now time.
 		r := domain.FileRequest{
 			Origin: domain.OriginTrigger, By: agent, Type: typ, Lane: cmp.Or(f.Lane, t.Create.Lane), Title: f.Title, Body: f.Brief,
 			Priority: f.Priority, Station: st.ID, State: st.Arrival(), Class: class, At: now, Source: domain.ItemFromSchedule,
-			Trigger: t.Name, Untrusted: !t.Create.Trusted, Start: checkStart(f.Start),
+			Trigger: t.Name, Untrusted: !t.Create.Trusted, Start: checkStart(f.Start), Repositories: repos,
 		}
 
 		n, err := domain.File(l, r)

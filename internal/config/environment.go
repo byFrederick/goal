@@ -211,14 +211,15 @@ var factoryRefPlaces = [][]string{
 	{keySpec, keyRuntime, "repository", "token"},
 	{keySpec, keyRuntime, "repositories", "*", "token"},
 	{keySpec, keyRuntime, "modelKey"},
-	{keySpec, keyBoard, "triggers", "*", "only", "modelAgrees", "key"},
+	{keySpec, keyBoard, keyTriggers, "*", "only", "modelAgrees", "key"},
 }
 
 // factoryTemplatePlaces are the factory.yaml keys whose {{field}} placeholders take an event's
 // fields, so they are not secret references.
 var factoryTemplatePlaces = [][]string{
-	{keySpec, keyBoard, "triggers", "*", "create", "title"},
-	{keySpec, keyBoard, "triggers", "*", "create", "brief"},
+	{keySpec, keyBoard, keyTriggers, "*", keyCreate, "title"},
+	{keySpec, keyBoard, keyTriggers, "*", keyCreate, "brief"},
+	{keySpec, keyBoard, keyTriggers, "*", keyCreate, "repositories", "*"},
 }
 
 // environmentRefPlaces are the keys of an environment file a {{secret}} may be in.
@@ -510,8 +511,8 @@ func (c *checker) forge() {
 }
 
 // factoryPlacement checks factory.yaml's {{…}}: a {{secret}} only in the keys decision 6 allows,
-// where it is written well, and the event placeholders of a trigger's title and brief left to
-// the triggers check. runtime.modelKey, modelAgrees.key and a runtime.repositories entry's token
+// where it is written well, and the event placeholders of a trigger's title, brief and
+// repositories left to the triggers check. runtime.modelKey, modelAgrees.key and a runtime.repositories entry's token
 // are one whole reference; a runtime.repository token that has none is the removed form
 // env-reference-removed.
 func (c *checker) factoryPlacement() {
