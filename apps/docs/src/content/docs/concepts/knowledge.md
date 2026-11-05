@@ -18,7 +18,7 @@ A source has a name, a kind, a read-when line and the settings of its kind.
 | Kind | Where the files come from |
 | --- | --- |
 | Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML, and PDF and Office files when goald has a conversion service (`GOAL_WORKERS_AI_URL`; without one it refuses them). The originals stay in the bucket. |
-| Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host picks the code host. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
+| Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host must be one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts), and the kind it is listed as picks the API goald reads it through. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
 | Confluence | The pages of one or more spaces of a Confluence Cloud site, or only one page and the pages under it, at the path of their page tree: Paging under Runbooks in space ENG is `ENG/runbooks/paging-<id>.md`. A page you move is fetched again at its new path. It reads with the site, the account's email and a secret that holds the API token. |
 
 Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to all factories, because a source belongs to the organization, not to one factory ([Access and secrets](../access-and-secrets/)). You can't delete a secret while a source reads with it: the error names the source.
@@ -49,7 +49,7 @@ A synced source names a secret (`goal secret`, [Access and secrets](../access-an
 
 | Reader | Config | The secret holds |
 | --- | --- | --- |
-| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. A repository off github.com and gitlab.com also needs `code_host: github` or `gitlab`. | The code host's token. |
+| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. The repository's host must be one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts), or the sync fails before the secret is opened; the kind the host is listed as wins over any `code_host` in the config. | The code host's token. |
 | `confluence` | `reader: confluence`, `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`), and optionally `root_page` (a page id: only that page and the pages under it, with paths that start at that page, such as `runbooks/paging-<id>.md`). | The account's API token. |
 
 ```sh

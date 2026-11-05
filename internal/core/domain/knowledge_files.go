@@ -501,6 +501,12 @@ func CheckReadWhen(s string) error {
 // read by gitdocs, reads.
 const SourceRepositoryKey = "repository"
 
+// SourceCodeHostKey is the config key of a source gitdocs reads naming its code host's kind
+// (github or gitlab). For a source on a secret the ingestor sets it to the kind the
+// organization lists the repository's host as (ADR 0041 decision 1), whatever the stored config
+// says.
+const SourceCodeHostKey = "code_host"
+
 // CopiesCheckout reports whether s reads the repository at checkout: a Repository source, or a
 // synced source that gitdocs reads, until the cut-over converts it (ADR 0038 decision 16), whose
 // repository has the same host and path, whatever their case, a trailing slash or .git.

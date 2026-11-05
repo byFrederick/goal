@@ -307,8 +307,9 @@ func (r *secretsRun) repositoryHosts(hosts []domain.CodeHost) {
 		}
 
 		h := strings.ToLower(u.Host)
+		_, ok := domain.ListedCodeHost(hosts, h)
 
-		return h, slices.ContainsFunc(hosts, func(c domain.CodeHost) bool { return c.Host == h })
+		return h, ok
 	}
 
 	unlisted := func(p, what, host string) {

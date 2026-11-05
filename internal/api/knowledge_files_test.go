@@ -210,6 +210,7 @@ func TestKnowledge_Check(t *testing.T) {
 	h := newHarness(t)
 	ctx := inOrg(t)
 	h.kbDocs.paths = []string{"runbooks/disk.md", "runbooks/cpu.md"}
+	h.listHosts(t, domain.CodeHost{Host: enterpriseHost, Kind: domain.CodeHostGitHub})
 
 	if _, err := h.secrets.Create(ctx, domain.NewSecret{Name: "docs-token", Value: "test-token", Scope: domain.SecretScope{All: true}}, domain.LocalUser); err != nil {
 		t.Fatal(err)
