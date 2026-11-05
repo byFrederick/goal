@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	token   = "glpat-test-token-never-shown"
-	mrURL   = "https://gitlab.com/acme/platform/web/-/merge_requests/3"
-	project = "/projects/acme%2Fplatform%2Fweb"
-	headSHA = "4b825dc6"
-	branch  = "goal/3-add-x"
+	token      = "glpat-test-token-never-shown"
+	mrURL      = "https://gitlab.com/acme/platform/web/-/merge_requests/3"
+	project    = "/projects/acme%2Fplatform%2Fweb"
+	headSHA    = "4b825dc6"
+	branch     = "goal/3-add-x"
+	mainBranch = "main"
 
 	keyState    = "state"
 	stateClosed = "closed"
@@ -90,6 +91,7 @@ func (f *fakeGitLab) seedHistory(n int) {
 	defer f.mu.Unlock()
 
 	f.history = nil
+
 	for i := 1; i <= n; i++ {
 		name := "f" + strconv.Itoa(i) + ".go"
 		f.history = append(f.history, fakeCommit{
@@ -98,7 +100,7 @@ func (f *fakeGitLab) seedHistory(n int) {
 		})
 	}
 
-	f.branches = map[string]string{"main": "c" + strconv.Itoa(n), branch: headSHA}
+	f.branches = map[string]string{mainBranch: "c" + strconv.Itoa(n), branch: headSHA}
 }
 
 // compare answers GitLab's compare of from...to on the linear history: the commits after from
@@ -126,7 +128,7 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 	t.Helper()
 
 	f := &fakeGitLab{mr: map[string]any{
-		"iid": 3, keyState: "opened", "sha": headSHA, "source_branch": branch, "target_branch": "main",
+		"iid": 3, keyState: "opened", "sha": headSHA, "source_branch": branch, "target_branch": mainBranch,
 		"source_project_id": 42, "target_project_id": 42, keyStatus: "mergeable",
 		"merge_commit_sha": nil, "squash_commit_sha": nil,
 	}}
@@ -150,6 +152,10 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 			return
 		}
 
+		if f.serveHistory(t, w, r, route) {
+			return
+		}
+
 		switch {
 		case route == "GET "+project+"/merge_requests/3":
 			f.reply(w, http.StatusOK, f.mr)
@@ -170,53 +176,6 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 			f.mu.Unlock()
 
 			f.reply(w, status, res)
-		case route == "GET "+project:
-			f.reply(w, http.StatusOK, map[string]any{"path_with_namespace": "acme/platform/web", "default_branch": "main"})
-		case strings.HasPrefix(route, "GET "+project+"/repository/branches/"):
-			// GitLab reads the branch as one segment: a slash in it must arrive escaped.
-			segment := strings.TrimPrefix(route, "GET "+project+"/repository/branches/")
-			name, err := url.PathUnescape(segment)
-
-			f.mu.Lock()
-			sha, ok := f.branches[name]
-			f.mu.Unlock()
-
-			if err != nil || strings.Contains(segment, "/") || !ok {
-				f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Branch Not Found"})
-				return
-			}
-
-			f.reply(w, http.StatusOK, map[string]any{"name": "x", "commit": map[string]any{"id": sha, "short_id": sha[:min(len(sha), 8)]}})
-		case route == "GET "+project+"/repository/compare":
-			q := r.URL.Query()
-			if q.Get("straight") != "false" {
-				t.Errorf("compare query %s; want straight=false", r.URL.RawQuery)
-			}
-
-			f.mu.Lock()
-			status, res := f.compare(q.Get("from"), q.Get("to"))
-			f.mu.Unlock()
-
-			f.reply(w, status, res)
-		case strings.HasPrefix(route, "GET "+project+"/repository/commits/") && strings.HasSuffix(route, "/diff"):
-			if r.URL.Query().Get("per_page") != "100" {
-				t.Errorf("diff query %s; want per_page=100", r.URL.RawQuery)
-			}
-
-			sha := strings.TrimSuffix(strings.TrimPrefix(route, "GET "+project+"/repository/commits/"), "/diff")
-
-			f.mu.Lock()
-			i := slices.IndexFunc(f.history, func(c fakeCommit) bool { return c.sha == sha })
-			f.mu.Unlock()
-
-			switch {
-			case i < 0:
-				f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Commit Not Found"})
-			case f.history[i].diffStatus != 0:
-				f.reply(w, f.history[i].diffStatus, map[string]any{keyMessage: "500 Internal Server Error"})
-			default:
-				f.reply(w, http.StatusOK, f.history[i].diffs)
-			}
 		case strings.HasPrefix(route, "DELETE "+project+"/repository/branches/"):
 			f.mu.Lock()
 			f.deleted = append(f.deleted, strings.TrimPrefix(route, "DELETE "+project+"/repository/branches/"))
@@ -229,6 +188,66 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 	t.Cleanup(srv.Close)
 
 	return f, New(Config{APIURL: srv.URL})
+}
+
+// serveHistory answers the reads of the project's history (the project, its branches, compare
+// and a commit's diff), reporting whether route was one.
+func (f *fakeGitLab) serveHistory(t *testing.T, w http.ResponseWriter, r *http.Request, route string) bool {
+	t.Helper()
+
+	switch {
+	case route == "GET "+project:
+		f.reply(w, http.StatusOK, map[string]any{"path_with_namespace": "acme/platform/web", "default_branch": mainBranch})
+	case strings.HasPrefix(route, "GET "+project+"/repository/branches/"):
+		// GitLab reads the branch as one segment: a slash in it must arrive escaped.
+		segment := strings.TrimPrefix(route, "GET "+project+"/repository/branches/")
+		name, err := url.PathUnescape(segment)
+
+		f.mu.Lock()
+		sha, ok := f.branches[name]
+		f.mu.Unlock()
+
+		if err != nil || strings.Contains(segment, "/") || !ok {
+			f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Branch Not Found"})
+			return true
+		}
+
+		f.reply(w, http.StatusOK, map[string]any{"name": "x", "commit": map[string]any{"id": sha, "short_id": sha[:min(len(sha), 8)]}})
+	case route == "GET "+project+"/repository/compare":
+		q := r.URL.Query()
+		if q.Get("straight") != "false" {
+			t.Errorf("compare query %s; want straight=false", r.URL.RawQuery)
+		}
+
+		f.mu.Lock()
+		status, res := f.compare(q.Get("from"), q.Get("to"))
+		f.mu.Unlock()
+
+		f.reply(w, status, res)
+	case strings.HasPrefix(route, "GET "+project+"/repository/commits/") && strings.HasSuffix(route, "/diff"):
+		if r.URL.Query().Get("per_page") != "100" {
+			t.Errorf("diff query %s; want per_page=100", r.URL.RawQuery)
+		}
+
+		sha := strings.TrimSuffix(strings.TrimPrefix(route, "GET "+project+"/repository/commits/"), "/diff")
+
+		f.mu.Lock()
+		i := slices.IndexFunc(f.history, func(c fakeCommit) bool { return c.sha == sha })
+		f.mu.Unlock()
+
+		switch {
+		case i < 0:
+			f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Commit Not Found"})
+		case f.history[i].diffStatus != 0:
+			f.reply(w, f.history[i].diffStatus, map[string]any{keyMessage: "500 Internal Server Error"})
+		default:
+			f.reply(w, http.StatusOK, f.history[i].diffs)
+		}
+	default:
+		return false
+	}
+
+	return true
 }
 
 func (f *fakeGitLab) reply(w http.ResponseWriter, status int, body any) {
@@ -319,7 +338,7 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 			}
 
 			want := tt.want
-			want.URL, want.HeadSHA, want.HeadBranch, want.BaseBranch = mrURL, headSHA, branch, "main"
+			want.URL, want.HeadSHA, want.HeadBranch, want.BaseBranch = mrURL, headSHA, branch, mainBranch
 			// Only the fork case moves the source project away from the target's.
 			want.SameRepository = tt.mr["source_project_id"] == nil
 
@@ -567,20 +586,34 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 
 	moved := New(Config{APIURL: redirect.URL})
 
-	if _, err := moved.PullRequest(t.Context(), webRepo(t), token, mrURL); err == nil || leaked {
-		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	for name, call := range map[string]func(*Client) error{
+		"PullRequest": func(c *Client) error { _, err := c.PullRequest(t.Context(), webRepo(t), token, mrURL); return err },
+		"BranchHead":  func(c *Client) error { _, err := c.BranchHead(t.Context(), webRepo(t), token, ""); return err },
+		"Compare":     func(c *Client) error { _, err := c.Compare(t.Context(), webRepo(t), token, "c1", "c2"); return err },
+	} {
+		if err := call(moved); err == nil || leaked {
+			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
+		}
 	}
 
-	if _, err := moved.BranchHead(t.Context(), webRepo(t), token, ""); err == nil || leaked {
-		t.Errorf("BranchHead via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
-	}
+	// The reads echoing the credential back keep it out of their errors too.
+	echoing := echoGitLab(t)
 
-	if _, err := moved.Compare(t.Context(), webRepo(t), token, "c1", "c2"); err == nil || leaked {
-		t.Errorf("Compare via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	for name, err := range map[string]error{
+		"BranchHead": func() error { _, err := echoing.BranchHead(t.Context(), webRepo(t), token, branch); return err }(),
+		"Compare":    func() error { _, err := echoing.Compare(t.Context(), webRepo(t), token, "c1", "c2"); return err }(),
+	} {
+		if err == nil || strings.Contains(err.Error(), token) {
+			t.Errorf("%s err = %v; want an error without the token", name, err)
+		}
 	}
+}
 
-	// The reads echoing the credential back keep it out of their errors too, and carry it only
-	// in the PRIVATE-TOKEN header.
+// echoGitLab is a client of a GitLab that answers every request 500 with the token in its
+// message, and checks that the token arrives in the PRIVATE-TOKEN header only.
+func echoGitLab(t *testing.T) *Client {
+	t.Helper()
+
 	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("PRIVATE-TOKEN") != token || strings.Contains(r.URL.String(), token) {
 			t.Errorf("request %s: want the token in PRIVATE-TOKEN only", r.URL.Path)
@@ -592,15 +625,7 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 	}))
 	t.Cleanup(echo.Close)
 
-	echoing := New(Config{APIURL: echo.URL})
-
-	if _, err := echoing.BranchHead(t.Context(), webRepo(t), token, branch); err == nil || strings.Contains(err.Error(), token) {
-		t.Errorf("BranchHead err = %v; want an error without the token", err)
-	}
-
-	if _, err := echoing.Compare(t.Context(), webRepo(t), token, "c1", "c2"); err == nil || strings.Contains(err.Error(), token) {
-		t.Errorf("Compare err = %v; want an error without the token", err)
-	}
+	return New(Config{APIURL: echo.URL})
 }
 
 func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
@@ -611,7 +636,7 @@ func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
 
 	for _, tt := range []struct{ branch, want string }{
 		{"", "c3"},
-		{"main", "c3"},
+		{mainBranch, "c3"},
 		{branch, headSHA},
 	} {
 		got, err := c.BranchHead(t.Context(), webRepo(t), token, tt.branch)
@@ -634,7 +659,7 @@ func TestBranchHead_UnknownIsNotFound(t *testing.T) {
 	for _, tt := range []struct{ repo, branch string }{
 		{"https://gitlab.com/acme/platform/web", "gone"},
 		{"https://gitlab.com/acme/other", ""},
-		{"https://gitlab.com/acme/other", "main"},
+		{"https://gitlab.com/acme/other", mainBranch},
 	} {
 		if _, err := c.BranchHead(t.Context(), repoOf(t, tt.repo), token, tt.branch); !errors.Is(err, ports.ErrNotFound) {
 			t.Errorf("BranchHead(%s, %q) = %v; want ErrNotFound", tt.repo, tt.branch, err)
