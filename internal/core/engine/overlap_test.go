@@ -137,13 +137,13 @@ func TestEngine_OverlapComparesRepositories(t *testing.T) {
 	l := lineOf(agentStation(stSpec, agArchitect, 4, 4), agentStation(stBuild, agWorker, 2, 2))
 	l.Flow.Dependencies.Paths = fieldPaths
 	l = withRepositories(l)
-	l.Runtime.Repositories = append(l.Runtime.Repositories, domain.RepositoryEntry{Name: "web", URL: "https://github.com/acme/web", Access: "write"})
+	l.Runtime.Repositories = append(l.Runtime.Repositories, domain.RepositoryEntry{Name: "site", URL: "https://github.com/acme/web", Access: domain.AccessWrite})
 
 	s := newScripted()
 	h := newHarness(t, l, s.agent)
 
 	a := h.submitRepos(t, "a", entryAPI)
-	b := h.submitRepos(t, "b", "web")
+	b := h.submitRepos(t, "b", "site")
 	c := h.submitRepos(t, "c", entryAPI)
 	d := h.submitRepos(t, "d", "acme/web")
 

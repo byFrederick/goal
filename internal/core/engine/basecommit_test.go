@@ -288,7 +288,7 @@ func TestEngine_ChangedSinceStripsTheFirstRepositorysPrefix(t *testing.T) {
 	t.Parallel()
 
 	l := changedSinceLine()
-	l.Runtime.Repositories = []domain.RepositoryEntry{{Name: "app", URL: appRepo, Access: "write", Default: true}}
+	l.Runtime.Repositories = []domain.RepositoryEntry{{Name: "app", URL: appRepo, Access: domain.AccessWrite, Default: true}}
 
 	h := newHarness(t, l, porttest.Succeed(`{"touches":["acme/app:internal/store/**","acme/web:docs/**"]}`))
 	h.codehost.SetBranchHead(appRepo, "", base)
@@ -297,14 +297,14 @@ func TestEngine_ChangedSinceStripsTheFirstRepositorysPrefix(t *testing.T) {
 	h.step(t) // spec, at base
 
 	h.land(ports.Commit{SHA: base},
-		ports.Commit{SHA: "c0ffee000002", Subject: "Fix the store's lock", Files: []string{"internal/store/lock.go"}},
-		ports.Commit{SHA: "c0ffee000003", Subject: "Update the docs", Files: []string{"docs/items.md"}},
+		ports.Commit{SHA: "c0ffee000012", Subject: "Fix the store's lock", Files: []string{"internal/store/lock.go"}},
+		ports.Commit{SHA: "c0ffee000013", Subject: "Update the docs", Files: []string{"docs/items.md"}},
 	)
 
 	h.step(t) // build
 
 	section := h.changedSinceOf(1)
-	if want := `- commit c0ffee000002 "Fix the store's lock": internal/store/lock.go`; !strings.Contains(section, want) {
+	if want := `- commit c0ffee000012 "Fix the store's lock": internal/store/lock.go`; !strings.Contains(section, want) {
 		t.Errorf("section lacks %q:\n%s", want, section)
 	}
 
