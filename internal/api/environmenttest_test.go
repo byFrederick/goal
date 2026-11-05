@@ -15,6 +15,7 @@ import (
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
+	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
 // The route the environment tests call, acme's default environment file in the draft and the
@@ -316,8 +317,8 @@ func TestEnvironmentTest_Template(t *testing.T) {
 }
 
 // A template test resolves the template with the request's parameters: github with an Enterprise
-// host sends GET /api/v3/user to that host with the token, its local MCP server stays untested,
-// and a value that is not a host is 400.
+// host sends GET /api/v3/user to that host with the token, its local MCP server stays untested
+// while acme does not list the host, and a value that is not a host is 400.
 func TestEnvironmentTest_TemplateParameters(t *testing.T) {
 	t.Parallel()
 
@@ -352,6 +353,7 @@ func TestEnvironmentTest_TemplateParameters(t *testing.T) {
 		t.Errorf("sent %s %s with %q; want ghe.example.com /api/v3/user with the token", got.host, got.path, got.auth)
 	}
 
+	// The host is not one acme lists: the local server is not started.
 	if sums := summaries(r.Servers); !slices.Equal(sums, []serverSum{{Server: kindGitHub}}) || len(h.tools.Called()) != 0 {
 		t.Errorf("servers = %+v, called %v; want the local server untested", sums, h.tools.Called())
 	}
@@ -361,4 +363,177 @@ func TestEnvironmentTest_TemplateParameters(t *testing.T) {
 	refused(t, "an unknown parameter", h.request(t, http.MethodPost, envTestPath,
 		`{"template":{"name":"github","secrets":{"token":"acme-token"},"parameters":{"region":"eu"}}}`, nil),
 		http.StatusBadRequest, "environment-test-invalid")
+}
+
+// stdioEnvYAML is an environment whose stdio servers run the github template's Enterprise
+// command, which the tool catalog ships, and commands it does not.
+const stdioEnvYAML = `apiVersion: goal/v1
+kind: Environment
+spec:
+  mcp:
+    github:
+      command: [github-mcp-server, stdio]
+      env: {GITHUB_PERSONAL_ACCESS_TOKEN: "{{acme-token}}", GITHUB_HOST: "https://ghe.example.com"}
+    playwright:
+      command: [npx, "@playwright/mcp@0.0.41"]
+      env: {TOKEN: "{{acme-token}}"}
+    toolsets:
+      command: [github-mcp-server, stdio, --toolsets, all]
+      env: {GITHUB_PERSONAL_ACCESS_TOKEN: "{{acme-token}}"}
+    shell:
+      command: [sh, -c, "github-mcp-server stdio"]
+`
+
+// A stdio server whose command is not exactly one the tool catalog ships is refused: no secret is
+// opened, no process starts, and its result says goald starts only the catalog's commands.
+func TestEnvironmentTest_StdioOutsideCatalogRefused(t *testing.T) {
+	t.Parallel()
+
+	secrets := &countedSecrets{}
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) {
+		secrets.OrgSecrets = d.OrgSecrets
+		d.OrgSecrets = secrets
+	})
+	h.createSecret(t)
+	h.draftEnvironment(t, stdioEnvYAML)
+
+	for _, server := range []string{"playwright", "toolsets", "shell"} {
+		got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"`+server+`"}`, nil), http.StatusOK)
+
+		if len(got.Servers) != 1 || got.Servers[0].Tested || got.Servers[0].Ok ||
+			!strings.Contains(valueOf(got.Servers[0].Error), "only the tool catalog's commands") {
+			t.Errorf("%s: test = %s; want it refused as outside the catalog", server, body(t, got))
+		}
+	}
+
+	if n := secrets.resolves.Load(); n != 0 {
+		t.Errorf("secrets were opened %d times; want none", n)
+	}
+
+	if called := h.tools.Called(); len(called) != 0 {
+		t.Errorf("started %v; want nothing", called)
+	}
+
+	if kept, err := h.envTests.List(inOrg(t), acmeID); err != nil || len(kept) != 0 {
+		t.Errorf("kept = %+v, %v; want nothing", kept, err)
+	}
+}
+
+// gheHost is the GitHub Enterprise host the stdio tests list, and stdioGitHub the github
+// template's Enterprise MCP server command.
+const gheHost = "ghe.example.com"
+
+var stdioGitHub = []string{"github-mcp-server", "stdio"}
+
+// stdioHarness is a harness whose acme lists gheHost and whose tool lister serves stdioGitHub
+// with get_issue read-only.
+func stdioHarness(t *testing.T) *harness {
+	t.Helper()
+
+	h := newHarness(t)
+	h.createSecret(t)
+	h.listHosts(t, domain.CodeHost{Host: gheHost, Kind: domain.CodeHostGitHub})
+
+	h.tools.Serve(porttest.StdioKey(stdioGitHub...), "merge_pull_request")
+	h.tools.ServeReadOnly(porttest.StdioKey(stdioGitHub...), "get_issue")
+
+	return h
+}
+
+// startedGitHub reports whether e is stdioGitHub started with the opened token and gheHost.
+func startedGitHub(e ports.MCPEndpoint) bool {
+	return slices.Equal(e.Command, stdioGitHub) && e.Env["GITHUB_PERSONAL_ACCESS_TOKEN"] == secretValue &&
+		e.Env["GITHUB_HOST"] == "https://"+gheHost
+}
+
+// githubTested is the summary of the github server tested with its tools.
+var githubTested = []serverSum{{Server: kindGitHub, Tested: true, Ok: true, Tools: "get_issue,merge_pull_request", At: true}}
+
+// A stdio server of an environment file with a catalog command starts with its env's secrets
+// opened and keeps its tools and read-only tools. A URL in its env on a host acme does not list
+// starts nothing.
+func TestEnvironmentTest_StdioFromCatalog(t *testing.T) {
+	t.Parallel()
+
+	h := stdioHarness(t)
+	h.draftEnvironment(t, stdioEnvYAML)
+
+	got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"github"}`, nil), http.StatusOK)
+	if sums := summaries(got.Servers); !slices.Equal(sums, githubTested) {
+		t.Errorf("servers = %+v; want github tested", sums)
+	}
+
+	if called := h.tools.Called(); len(called) != 1 || !startedGitHub(called[0]) {
+		t.Fatalf("called = %v; want github-mcp-server with its token opened", called)
+	}
+
+	kept, err := h.envTests.List(inOrg(t), acmeID)
+	if err != nil || len(kept) != 1 || !slices.Equal(kept[0].ReadOnly, []string{"get_issue"}) {
+		t.Errorf("kept = %+v, %v; want github with get_issue read-only", kept, err)
+	}
+
+	h.listHosts(t)
+
+	unlisted := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"github"}`, nil), http.StatusOK)
+	if s := unlisted.Servers[0]; s.Tested || !strings.Contains(valueOf(s.Error), gheHost) || len(h.tools.Called()) != 1 {
+		t.Errorf("test with an unlisted host = %s; want it refused naming the host", body(t, unlisted))
+	}
+}
+
+// A stdio server whose env takes its host URL from a secret is checked with the secret opened: a
+// secret holding a host acme does not list starts nothing, keeps nothing and says nothing of the
+// value.
+func TestEnvironmentTest_StdioHostFromSecretChecked(t *testing.T) {
+	t.Parallel()
+
+	h := stdioHarness(t)
+
+	const private = "https://10.0.0.5"
+
+	created := `{"name":"ghe-url","value":"` + private + `",
+"scope":{"all_factories":false,"factories":["` + string(acmeID) + `"]},"expires_at":"2027-01-31T00:00:00Z","remind_days":14}`
+	h.request(t, http.MethodPost, secretsPath, created, nil)
+
+	h.draftEnvironment(t, `apiVersion: goal/v1
+kind: Environment
+spec:
+  mcp:
+    github:
+      command: [github-mcp-server, stdio]
+      env: {GITHUB_PERSONAL_ACCESS_TOKEN: "{{acme-token}}", GITHUB_HOST: "{{ghe-url}}"}
+`)
+
+	got := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, `{"server":"github"}`, nil), http.StatusOK)
+	if len(got.Servers) != 1 || got.Servers[0].Tested || got.Servers[0].Ok ||
+		!strings.Contains(valueOf(got.Servers[0].Error), "organization's code hosts") || strings.Contains(body(t, got), "10.0.0.5") {
+		t.Errorf("test with a secret's unlisted host = %s; want it refused without the value", body(t, got))
+	}
+
+	if called := h.tools.Called(); len(called) != 0 {
+		t.Errorf("started %v; want nothing", called)
+	}
+
+	if kept, err := h.envTests.List(inOrg(t), acmeID); err != nil || len(kept) != 0 {
+		t.Errorf("kept = %+v, %v; want nothing", kept, err)
+	}
+}
+
+// A template test of github with an Enterprise host acme lists starts the otherwise lines' stdio
+// server with the slot's value.
+func TestEnvironmentTest_StdioTemplate(t *testing.T) {
+	t.Parallel()
+
+	h := stdioHarness(t)
+	h.openDraft(t)
+
+	tpl := `{"template":{"name":"github","secrets":{"token":"acme-token"},"parameters":{"host":"` + gheHost + `"}},"server":"github"}`
+
+	r := decode[gen.EnvironmentTestResult](t, h.request(t, http.MethodPost, envTestPath, tpl, nil), http.StatusOK)
+	if sums := summaries(r.Servers); !slices.Equal(sums, githubTested) {
+		t.Errorf("template servers = %+v; want the otherwise lines' server tested", sums)
+	}
+
+	if called := h.tools.Called(); len(called) != 1 || !startedGitHub(called[0]) {
+		t.Errorf("called = %v; want the template's server with the slot's value", called)
+	}
 }

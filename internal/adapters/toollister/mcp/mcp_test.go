@@ -44,7 +44,7 @@ func server(t *testing.T, key string, names ...string) *httptest.Server {
 func TestListTools_NamesSorted(t *testing.T) {
 	t.Parallel()
 
-	srv := server(t, "test-token", "list_issues", "create_issue", "delete_issue")
+	srv := server(t, "test-token", "list_issues", toolCreate, "delete_issue")
 
 	got, err := mcp.New(http.DefaultTransport).ListTools(t.Context(),
 		ports.MCPEndpoint{URL: srv.URL, Headers: map[string]string{"Authorization": "Bearer test-token"}})
@@ -52,7 +52,7 @@ func TestListTools_NamesSorted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := []ports.Tool{{Name: "create_issue"}, {Name: "delete_issue"}, {Name: "list_issues"}}; !slices.Equal(got, want) {
+	if want := []ports.Tool{{Name: toolCreate}, {Name: "delete_issue"}, {Name: "list_issues"}}; !slices.Equal(got, want) {
 		t.Errorf("tools = %v; want %v", got, want)
 	}
 }
@@ -63,9 +63,9 @@ func TestListTools_ReadOnlyHints(t *testing.T) {
 
 	s := sdk.NewServer(&sdk.Implementation{Name: "acme", Version: "1"}, nil)
 	for _, tool := range []*sdk.Tool{
-		{Name: "get_issue", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}},
+		{Name: toolGet, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}},
 		{Name: "merge_pull_request", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: false}},
-		{Name: "create_issue"},
+		{Name: toolCreate},
 	} {
 		sdk.AddTool(s, tool, func(context.Context, *sdk.CallToolRequest, struct{}) (*sdk.CallToolResult, any, error) {
 			return &sdk.CallToolResult{}, nil, nil
@@ -80,7 +80,7 @@ func TestListTools_ReadOnlyHints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []ports.Tool{{Name: "create_issue"}, {Name: "get_issue", ReadOnly: true}, {Name: "merge_pull_request"}}
+	want := []ports.Tool{{Name: toolCreate}, {Name: toolGet, ReadOnly: true}, {Name: "merge_pull_request"}}
 	if !slices.Equal(got, want) {
 		t.Errorf("tools = %+v; want %+v", got, want)
 	}
