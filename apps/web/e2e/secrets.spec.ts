@@ -38,8 +38,11 @@ test.describe('the Secrets list', () => {
 
   test('keeps the filter in the URL', async ({ page }) => {
     await page.goto('/o/acme/secrets');
-    await page.getByRole('radio', { name: /Not used/ }).check();
+    // The filter lives in the URL, so the radio is checked after the router navigates, not at the click.
+    const notUsed = page.getByRole('radio', { name: /Not used/ });
+    await notUsed.click();
 
+    await expect(notUsed).toBeChecked();
     await expect(page).toHaveURL(/[?&]filter=unused/);
     await expect(secretRows(page)).toHaveCount(isPhone(page) ? 1 : 2);
   });
