@@ -102,10 +102,12 @@ export function FileTree({
           className={cn(rowBase, selected && 'bg-hover font-control text-ink')}
         >
           <File size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-muted" />
-          <span className="truncate font-mono text-meta">
+          <span aria-hidden="true" className="truncate font-mono text-meta">
             {file.name}
-            {errors > 0 ? <span className="sr-only">, {plural(errors, 'error')}</span> : null}
-            {changed.has(file.path) ? <span className="sr-only">, changed</span> : null}
+          </span>
+          {/* One text node: a block-level sr-only span would get spaces around it in the name. */}
+          <span className="sr-only">
+            {`${file.name}${errors > 0 ? `, ${plural(errors, 'error')}` : ''}${changed.has(file.path) ? ', changed' : ''}`}
           </span>
           <ErrorCount count={errors} />
           <ChangedMark on={changed.has(file.path)} words={false} />
