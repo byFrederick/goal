@@ -101,6 +101,7 @@ type Items interface {
 	FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error)
 	ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error)
 	ItemByNumber(ctx context.Context, factory domain.FactoryID, number int64) (domain.Item, error)
+	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
@@ -518,7 +519,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 	it, err := s.engine.Submit(ctx, domain.FileRequest{
 		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
 		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
-		Start: start,
+		Start: start, Repositories: deref(b.Repositories),
 	})
 	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
 		return nil, fmt.Errorf("%w: %s", errInvalid, err.Error())
@@ -528,7 +529,36 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	return gen.SubmitItem201JSONResponse(s.itemOf(ctx, it)), nil
+	out := s.itemOf(ctx, it)
+	if out.Repositories, err = s.itemRepositories(ctx, it, f.Line()); err != nil {
+		return nil, err
+	}
+
+	return gen.SubmitItem201JSONResponse(out), nil
+}
+
+// itemRepositories are the repositories an item works on as the API shows them, in the order
+// they joined: its rows, or for an item without any the default entry of l, its factory's line
+// (domain.ResolveItemRepositories).
+func (s *server) itemRepositories(ctx context.Context, it domain.Item, l domain.Line) (*[]gen.ItemRepository, error) {
+	rows, err := s.items.ItemRepositories(ctx, it.ID)
+	if err != nil {
+		return nil, fmt.Errorf("item %s: repositories: %w", it.ID, err)
+	}
+
+	rs := domain.ResolveItemRepositories(rows, l)
+	out := make([]gen.ItemRepository, 0, len(rs))
+
+	for _, r := range rs {
+		o := gen.ItemRepository{Repo: r.Repo, Joined: gen.ItemRepositoryJoined(r.Joined)}
+		if !r.JoinedAt.IsZero() {
+			o.JoinedAt = new(r.JoinedAt)
+		}
+
+		out = append(out, o)
+	}
+
+	return &out, nil
 }
 
 // submittedFrom is where an item the request submits comes from, for Intake, and how its person
@@ -597,6 +627,17 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	if out.CameFrom, err = s.cameFrom(ctx, it); err != nil {
+		return nil, err
+	}
+
+	var l domain.Line
+	if f, err := s.factories.Lookup(ctx, string(it.FactoryID)); err == nil {
+		l = f.Line()
+	} else if !errors.Is(err, ports.ErrNotFound) {
+		return nil, err
+	}
+
+	if out.Repositories, err = s.itemRepositories(ctx, it, l); err != nil {
 		return nil, err
 	}
 
@@ -891,6 +932,7 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	}
 
 	out.Start, out.CreatedBy, out.Untrusted = itemStartOf(it), s.createdBy(it), new(it.Untrusted)
+	out.Branch = optional(it.Branch())
 
 	return out
 }
