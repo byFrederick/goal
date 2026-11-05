@@ -96,6 +96,74 @@ func TestPathsOverlap(t *testing.T) {
 	}
 }
 
+// Entries compare repository and path: an `owner/name:` prefix names the repository, any host
+// and case alike, an entry without one is in the item's first repository, and one whose
+// repository is unknown meets every repository's paths.
+func TestRepositoryPathsOverlap(t *testing.T) {
+	t.Parallel()
+
+	const (
+		web = "github.com/acme/web"
+		api = "github.com/acme/api"
+	)
+
+	for _, tc := range []struct {
+		name   string
+		a      []string
+		firstA string
+		b      []string
+		firstB string
+		want   []PathOverlap
+	}{
+		{"same glob, same first repository", []string{"internal/**"}, web, []string{"internal/a.go"}, web, []PathOverlap{{"internal/**", "internal/a.go"}}},
+		{"same glob in two repositories", []string{"internal/**"}, web, []string{"internal/**"}, api, nil},
+		{"unprefixed against a prefix naming the first repository", []string{"acme/web:internal/**"}, api, []string{"internal/a.go"}, web,
+			[]PathOverlap{{"acme/web:internal/**", "internal/a.go"}}},
+		{"prefix naming another repository", []string{"acme/api:internal/**"}, web, []string{"internal/a.go"}, web, nil},
+		{"mixed-case prefix", []string{"Acme/Web:internal/**"}, api, []string{"internal/**"}, "gitlab.example.com/ACME/web",
+			[]PathOverlap{{"Acme/Web:internal/**", "internal/**"}}},
+		{"two prefixes in one repository", []string{"acme/web:go.mod"}, "", []string{"acme/web:go.mod"}, "", []PathOverlap{{"acme/web:go.mod", "acme/web:go.mod"}}},
+		{"unknown repository meets every repository", []string{"internal/**"}, "", []string{"acme/api:internal/a.go", "internal/b.go"}, web,
+			[]PathOverlap{{"internal/**", "acme/api:internal/a.go"}, {"internal/**", "internal/b.go"}}},
+		{"a drive letter is not a prefix", []string{"C:internal/**"}, web, []string{"C:internal/a.go"}, web, []PathOverlap{{"C:internal/**", "C:internal/a.go"}}},
+		{"a colon without a slash before it is not a prefix", []string{"docs:a/b.md"}, web, []string{"docs:a/*.md"}, web, []PathOverlap{{"docs:a/b.md", "docs:a/*.md"}}},
+		{"a wildcard prefix is not a prefix", []string{"acme/*:a"}, web, []string{"acme/*:a"}, api, nil},
+		{"every pair is reported", []string{"acme/api:a/**", "b/x"}, web, []string{"acme/api:a/y", "b/*", "acme/api:b/x"}, api,
+			[]PathOverlap{{"acme/api:a/**", "acme/api:a/y"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := RepositoryPathsOverlap(tc.a, tc.firstA, tc.b, tc.firstB); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("RepositoryPathsOverlap(%q, %q, %q, %q) = %v, want %v", tc.a, tc.firstA, tc.b, tc.firstB, got, tc.want)
+			}
+
+			if got := RepositoryPathsOverlap(tc.b, tc.firstB, tc.a, tc.firstA); len(got) != len(tc.want) {
+				t.Errorf("reversed = %v, want %d pairs (overlap is symmetric)", got, len(tc.want))
+			}
+		})
+	}
+}
+
+// RepositoryGlobs keeps the entries in one repository, without their prefix.
+func TestRepositoryGlobs(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{"internal/**", "acme/web:web/**", "acme/api:api/**", "C:x"}
+
+	if got, want := RepositoryGlobs(paths, "github.com/acme/web", "github.com/acme/web"), []string{"internal/**", "web/**", "C:x"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("web's globs = %q, want %q", got, want)
+	}
+
+	if got, want := RepositoryGlobs(paths, "github.com/acme/web", "github.com/acme/api"), []string{"api/**"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("api's globs = %q, want %q", got, want)
+	}
+
+	if got, want := RepositoryGlobs(paths, "", "github.com/acme/api"), []string{"internal/**", "api/**", "C:x"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("api's globs with no first repository = %q, want %q", got, want)
+	}
+}
+
 // A glob whose braces expand past the limit is held as overlapping everything.
 func TestPathsOverlap_TooManyAlternativesOverlapEverything(t *testing.T) {
 	t.Parallel()
