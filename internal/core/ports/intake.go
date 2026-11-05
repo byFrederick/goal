@@ -161,7 +161,9 @@ type Intake interface {
 	// haven't started (no StartedAt, as the claim filters read it) and have a start or an open
 	// planned or linked need: those with a start first, soonest first, then the rest oldest first
 	// (created_at, then id), with how many there are in all. Each has its open needs' numbers and
-	// the item whose follow-up filed it (none for a triage item).
+	// the item whose follow-up filed it (none for a triage item). An assembly's parts (items with
+	// a ParentID) are left out, of the items and of the count: their plan orders them, and their
+	// assembly's page shows each part and what it waits for.
 	ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error)
 	// TriageQueue is the factory's collecting triage item (open, triage, trusted, no run yet; the
 	// oldest), with how many follow-ups joined it, and at most limit of its trusted items with

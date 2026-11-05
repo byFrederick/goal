@@ -28,7 +28,7 @@ It lists the items that have not started (when each may start, or the needs it w
 
 ## Items that have not started
 
-An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
+An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. An assembly's parts are not listed, since the assembly's plan orders them: the assembly's page shows each part and what it waits for. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
 
 ## Triggers
 
