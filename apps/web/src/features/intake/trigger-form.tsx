@@ -11,8 +11,8 @@ import { Switch } from '../../ui/switch';
 import { InfoTip } from '../jonah/info-tip';
 import { Block, type BlockProblems, Count, Option } from './form-parts';
 import { templateFieldsOf } from './github-events';
-import { CheckSection, Usd } from './trigger-check-section';
 import { hasVariable, TemplateText } from './template-text';
+import { CheckSection, Usd } from './trigger-check-section';
 import { TriggerWhen } from './trigger-when';
 import type { BoardChoices } from './trigger-yaml';
 
@@ -183,11 +183,7 @@ export function TriggerForm({ value, onChange, board, factoryName, problems, mem
           <>
             <div className="flex flex-wrap items-center gap-2 text-body">
               <span>At most</span>
-              <Count
-                label="Items a check"
-                value={limits.perCheck ?? 5}
-                onChange={(n) => setLimits({ perCheck: n })}
-              />
+              <Count label="Items a check" value={limits.perCheck ?? 5} onChange={(n) => setLimits({ perCheck: n })} />
               <span>items a check and</span>
               <Count label="Items a day" value={limits.perDay ?? 20} onChange={(n) => setLimits({ perDay: n })} />
               <span>a day</span>
@@ -203,10 +199,7 @@ export function TriggerForm({ value, onChange, board, factoryName, problems, mem
           </>
         ) : (
           <div className="flex flex-col gap-3">
-            <Option
-              checked={limits.perDay !== undefined}
-              onChange={(on) => setLimits({ perDay: on ? 3 : undefined })}
-            >
+            <Option checked={limits.perDay !== undefined} onChange={(on) => setLimits({ perDay: on ? 3 : undefined })}>
               At most
               <Count
                 label="Items a day"

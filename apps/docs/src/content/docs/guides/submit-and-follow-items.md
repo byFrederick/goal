@@ -74,7 +74,7 @@ Agents can leave work for later too; see [Let agents leave follow-ups](../follow
 
 ## Create items from events and schedules
 
-A factory can also create items on its own, from an event or a schedule. Those triggers are set in the factory definition (`board.triggers`) and listed on the factory's Intake page at `/o/<org>/f/<factory>/intake`.
+A factory can also create items on its own, from an event or a schedule. Those triggers are set in the factory definition (`board.triggers`) and listed on the factory's Intake page at `/o/<org>/f/<factory>/intake`. Each trigger has its own page there, where you set its event, filters, payload matches and limits and try it on a past delivery; read [Review what enters a factory](../intake/).
 
 On that page you can:
 

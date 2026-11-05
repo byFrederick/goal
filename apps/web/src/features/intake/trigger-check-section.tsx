@@ -11,8 +11,7 @@ import { InfoTip } from '../jonah/info-tip';
 import { Block } from './form-parts';
 import type { BoardChoices } from './trigger-yaml';
 
-const checkedUpTo = (at: string) =>
-  new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const checkedUpTo = (at: string) => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
 export interface CheckSectionProps {
   id: string;
@@ -29,9 +28,10 @@ export interface CheckSectionProps {
 export function CheckSection({ id, value, onChange, board, problems, memory, onClear }: CheckSectionProps) {
   const check = value.check ?? { agent: '', brief: '' };
   const set = (patch: Partial<typeof check>) => onChange({ ...value, check: { ...check, ...patch } });
-  const agents = board.agents.some((a) => a.name === check.agent) || !check.agent
-    ? board.agents
-    : [...board.agents, { name: check.agent, tools: [] }];
+  const agents =
+    board.agents.some((a) => a.name === check.agent) || !check.agent
+      ? board.agents
+      : [...board.agents, { name: check.agent, tools: [] }];
   const tools = agents.find((a) => a.name === check.agent)?.tools ?? [];
   const briefId = `${id}-brief`;
   return (
@@ -76,7 +76,8 @@ export function CheckSection({ id, value, onChange, board, problems, memory, onC
         <span className="flex items-center gap-1 text-secondary font-semibold">
           <label htmlFor={briefId}>Brief</label>
           <InfoTip label="About the brief">
-            Text it reads from the source reaches the agent marked as untrusted data, never as instructions. A path to a Markdown file in the definition, such as ./triggers/name.md, works too.
+            Text it reads from the source reaches the agent marked as untrusted data, never as instructions. A path to a
+            Markdown file in the definition, such as ./triggers/name.md, works too.
           </InfoTip>
         </span>
         <Textarea
@@ -92,7 +93,13 @@ export function CheckSection({ id, value, onChange, board, problems, memory, onC
   );
 }
 
-function Remembers({ memory, onClear }: { memory?: TriggerCheckMemory | undefined; onClear?: (() => Promise<void>) | undefined }) {
+function Remembers({
+  memory,
+  onClear,
+}: {
+  memory?: TriggerCheckMemory | undefined;
+  onClear?: (() => Promise<void>) | undefined;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const clear = async () => {
@@ -112,7 +119,8 @@ function Remembers({ memory, onClear }: { memory?: TriggerCheckMemory | undefine
       <span className="flex items-center gap-1 text-secondary font-semibold">
         Remembers
         <InfoTip label="About memory">
-          The items this trigger filed, by the source’s id, open ones and ones closed this week, and the note the agent left itself for the next check. A closed one is filed again only when the agent says why.
+          The items this trigger filed, by the source’s id, open ones and ones closed this week, and the note the agent
+          left itself for the next check. A closed one is filed again only when the agent says why.
         </InfoTip>
       </span>
       {memory ? (

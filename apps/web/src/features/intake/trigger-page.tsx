@@ -197,7 +197,10 @@ function TriggerEditor({ org, factory, text, saved, raw, blank, board, detail }:
     value.create.type !== '' &&
     value.create.station !== '' &&
     (!isCheck || (value.check?.agent !== '' && value.check?.brief.trim() !== ''));
-  const checks = useQuery({ ...triggerChecksQuery(org.id, factory.id, value.name), enabled: saved?.check !== undefined });
+  const checks = useQuery({
+    ...triggerChecksQuery(org.id, factory.id, value.name),
+    enabled: saved?.check !== undefined,
+  });
   const checking = (checks.data?.checks ?? []).some((c) => c.state === 'queued' || c.state === 'running');
   const [tryProblem, setTryProblem] = useState<string | null>(null);
   // Why Try is unavailable, shown under the title: a new trigger is not saved, unsaved edits are not the saved

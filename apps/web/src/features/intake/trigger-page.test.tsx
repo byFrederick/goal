@@ -620,8 +620,6 @@ describe('the event filters', () => {
   });
 });
 
-const yamlCard = () => screen.getByRole('region', { name: 'In the definition' });
-
 describe('the route while it loads', () => {
   it('shows the page skeleton, announced as loading', () => {
     render(<TriggerSkeleton />);

@@ -5,11 +5,11 @@
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import type { TriggerCheck } from '../../api/types';
+import { useArrivals } from '../../ui/arrivals';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { NumberRoll } from '../../ui/number-roll';
-import { useArrivals } from '../../ui/arrivals';
 import { InfoTip } from '../jonah/info-tip';
 import { eventWhen } from './trigger-events';
 
@@ -38,7 +38,15 @@ export function statusOf(check: TriggerCheck): { tone: ChipTone; text: string } 
 }
 
 /** "Today: 168 checks, 2 items, $0.41": the day's checks that were not tries, with their numbers rolling in place. */
-export function TodaySummary({ checks, now = new Date(), className }: { checks: TriggerCheck[]; now?: Date; className?: string }) {
+export function TodaySummary({
+  checks,
+  now = new Date(),
+  className,
+}: {
+  checks: TriggerCheck[];
+  now?: Date;
+  className?: string;
+}) {
   const today = checks.filter((c) => !c.try && new Date(c.at).toDateString() === now.toDateString());
   const items = today.reduce((n, c) => n + c.filed.length, 0);
   const spent = today.reduce((n, c) => n + c.cost_usd, 0);
@@ -71,7 +79,19 @@ function Line({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Row({ check, org, factory, arrived, now }: { check: TriggerCheck; org: string; factory: string; arrived: boolean; now?: Date | undefined }) {
+function Row({
+  check,
+  org,
+  factory,
+  arrived,
+  now,
+}: {
+  check: TriggerCheck;
+  org: string;
+  factory: string;
+  arrived: boolean;
+  now?: Date | undefined;
+}) {
   const status = statusOf(check);
   return (
     <li

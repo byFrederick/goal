@@ -110,7 +110,8 @@ export function Option({
 }
 
 /** A value or a list as the list: an empty one is `undefined`, a single one stays a plain string in the file. */
-export const listOf = (v: string | string[] | undefined): string[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
+export const listOf = (v: string | string[] | undefined): string[] =>
+  v === undefined ? [] : Array.isArray(v) ? v : [v];
 export const fromList = (list: string[]): string | string[] | undefined =>
   list.length === 0 ? undefined : list.length === 1 ? list[0] : list;
 
@@ -153,7 +154,8 @@ export function ChipList({
     }
   };
   return (
-    <div role="group" aria-label={label} className={cn('flex min-w-0 flex-wrap items-center gap-2', className)}>
+    <fieldset className={cn('m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0', className)}>
+      <legend className="sr-only">{label}</legend>
       {values.map((value) => (
         <span
           key={value}
@@ -183,6 +185,6 @@ export function ChipList({
         onBlur={add}
         className="h-8 w-40 rounded-control text-body"
       />
-    </div>
+    </fieldset>
   );
 }

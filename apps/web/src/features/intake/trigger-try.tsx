@@ -17,7 +17,6 @@ import { Field, NativeSelect } from '../../ui/field';
 import { Spinner } from '../../ui/spinner';
 import { eventWhen } from './trigger-events';
 
-
 /** The copy for each step the try answers, in the order the trigger runs them. */
 const stepLabel: Partial<Record<TriggerTryStep['step'], string>> = {
   when: 'The event matches When',
@@ -53,7 +52,14 @@ interface TryProps {
 }
 
 /** The header button and its dialog. The page computes the reason it is disabled. */
-export function TryWithPastEvent({ org, factory, trigger, events, disabled, title = 'Try with a past event' }: TryProps) {
+export function TryWithPastEvent({
+  org,
+  factory,
+  trigger,
+  events,
+  disabled,
+  title = 'Try with a past event',
+}: TryProps) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -62,27 +68,13 @@ export function TryWithPastEvent({ org, factory, trigger, events, disabled, titl
         {title}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        {open ? (
-          <TryDialog
-            org={org}
-            factory={factory}
-            trigger={trigger}
-            events={events}
-            title={title}
-          />
-        ) : null}
+        {open ? <TryDialog org={org} factory={factory} trigger={trigger} events={events} title={title} /> : null}
       </Dialog>
     </>
   );
 }
 
-function TryDialog({
-  org,
-  factory,
-  trigger,
-  events,
-  title,
-}: Omit<TryProps, 'disabled' | 'title'> & { title: string }) {
+function TryDialog({ org, factory, trigger, events, title }: Omit<TryProps, 'disabled' | 'title'> & { title: string }) {
   const [firing, setFiring] = useState(events[0]?.id ?? '');
   const run = useMutation(intakeTryMutation(org, factory, trigger));
   const resultId = useId();
@@ -228,7 +220,9 @@ export function TryCheck({ org, factory, trigger, disabled, checking, readAt, on
         } else if (error instanceof ApiError && error.problem.code === 'no-check') {
           onProblem(error.problem.detail ?? 'This trigger has no check to try. Save it with a check first.');
         } else {
-          onProblem(`Could not try a check. ${error instanceof ApiError ? (error.problem.detail ?? error.problem.title) : 'Try again in a moment.'}`);
+          onProblem(
+            `Could not try a check. ${error instanceof ApiError ? (error.problem.detail ?? error.problem.title) : 'Try again in a moment.'}`,
+          );
         }
       },
     });

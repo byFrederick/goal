@@ -7,12 +7,13 @@ import type { Trigger, TriggerFilter, TriggerValues } from '../../shared/definit
 import { Button } from '../../ui/button';
 import { Field, Input, NativeSelect } from '../../ui/field';
 import { NotAvailable } from '../../ui/not-available';
-import { type BlockProblems, Block, ChipList, fromList, listOf, Option } from './form-parts';
+import { Block, type BlockProblems, ChipList, fromList, listOf, Option } from './form-parts';
 import { type FilterKey, githubEventOf, githubEvents } from './github-events';
 
 type Source = 'schedule' | 'github' | 'webhook';
 
-const sourceOf = (on: string): Source => (on === 'schedule' ? 'schedule' : on.startsWith('github.') ? 'github' : 'webhook');
+const sourceOf = (on: string): Source =>
+  on === 'schedule' ? 'schedule' : on.startsWith('github.') ? 'github' : 'webhook';
 
 /** The schedules the select offers; a cron outside this list is "Custom" and shows its own field. */
 const schedules = [
@@ -68,8 +69,10 @@ export function TriggerWhen({ value, onChange, problems = {}, id }: WhenProps) {
   const pickSource = (next: Source) => {
     if (next === source) return;
     const { cron: _c, timeZone: _t, check: _k, ...rest } = value;
-    if (next === 'schedule') onChange({ ...rest, on: 'schedule', cron: schedules[0]?.cron ?? '*/5 * * * *', filter: undefined });
-    else if (next === 'github') onChange({ ...rest, on: `github.${githubEvents[0]?.event ?? 'check_run'}`, filter: undefined });
+    if (next === 'schedule')
+      onChange({ ...rest, on: 'schedule', cron: schedules[0]?.cron ?? '*/5 * * * *', filter: undefined });
+    else if (next === 'github')
+      onChange({ ...rest, on: `github.${githubEvents[0]?.event ?? 'check_run'}`, filter: undefined });
     else onChange({ ...rest, on: '', filter: undefined });
   };
 
@@ -88,12 +91,7 @@ export function TriggerWhen({ value, onChange, problems = {}, id }: WhenProps) {
   );
 
   return (
-    <Block
-      id={id}
-      title="When"
-      info={info}
-      problems={[...(problems.on ?? []), ...(problems.filter ?? [])]}
-    >
+    <Block id={id} title="When" info={info} problems={[...(problems.on ?? []), ...(problems.filter ?? [])]}>
       {source === 'schedule' ? (
         <ScheduleRow value={value} onChange={onChange} sourceControl={sourceControl} />
       ) : (
@@ -120,16 +118,16 @@ export function TriggerWhen({ value, onChange, problems = {}, id }: WhenProps) {
                   aria-label="Webhook"
                   placeholder="Webhook name"
                   value={hook}
-                  onChange={(e) => onChange({ ...value, on: [e.target.value.trim(), ...rest].filter(Boolean).join('.') })}
+                  onChange={(e) =>
+                    onChange({ ...value, on: [e.target.value.trim(), ...rest].filter(Boolean).join('.') })
+                  }
                   className="h-8 w-44 rounded-control text-body"
                 />
                 <Input
                   aria-label="Webhook event"
                   placeholder="Any event"
                   value={rest.join('.')}
-                  onChange={(e) =>
-                    onChange({ ...value, on: [hook, e.target.value.trim()].filter(Boolean).join('.') })
-                  }
+                  onChange={(e) => onChange({ ...value, on: [hook, e.target.value.trim()].filter(Boolean).join('.') })}
                   className="h-8 w-36 rounded-control text-body"
                 />
               </>
@@ -332,8 +330,8 @@ function Matches({
   };
   const edit = (id: number, patch: Partial<Row>) => commit(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   return (
-    <div role="group" aria-label="Payload matches" className="flex flex-col gap-2">
-      <span className="text-secondary font-semibold">Payload matches</span>
+    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+      <legend className="p-0 text-secondary font-semibold">Payload matches</legend>
       {rows.map((row) => (
         <div key={row.id} className="flex flex-wrap items-center gap-2">
           <Input
@@ -371,6 +369,6 @@ function Matches({
           Add a payload match
         </Button>
       </div>
-    </div>
+    </fieldset>
   );
 }

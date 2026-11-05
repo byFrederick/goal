@@ -51,7 +51,12 @@ describe('reading the triggers', () => {
   });
 
   it('reads the work types and station ids the Create section chooses from', () => {
-    expect(readBoard(file)).toEqual({ workTypes: ['feature', 'fix'], stations: ['intake', 'build'], lanes: {}, agents: [] });
+    expect(readBoard(file)).toEqual({
+      workTypes: ['feature', 'fix'],
+      stations: ['intake', 'build'],
+      lanes: {},
+      agents: [],
+    });
   });
 
   it("reads each station's route keys as its lanes", () => {
@@ -309,11 +314,13 @@ describe('the sender, event filters, payload matches and checks', () => {
     const t = readTrigger(base, 'old-label') as Trigger;
     expect(writeTrigger(base, { ...t, limits: { perHour: 4 } })).toBe(
       base.replace(
-        "on: github.issues.labeled\n        create: { type: fix, station: build }",
+        'on: github.issues.labeled\n        create: { type: fix, station: build }',
         'on: github.issues.labeled\n        create: { type: fix, station: build }\n        limits: { perHour: 4 }',
       ),
     );
-    expect(readTrigger(writeTrigger(base, { ...t, filter: { action: ['labeled', 'unlabeled'] } }), 'old-label')?.filter).toEqual({
+    expect(
+      readTrigger(writeTrigger(base, { ...t, filter: { action: ['labeled', 'unlabeled'] } }), 'old-label')?.filter,
+    ).toEqual({
       action: ['labeled', 'unlabeled'],
     });
   });
