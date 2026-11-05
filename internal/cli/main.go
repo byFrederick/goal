@@ -2,7 +2,7 @@
 // goald's HTTP API, always within one organization (org.go resolves which), it changes factory definitions (factory.go: goald keeps them as
 // drafts and published versions; a folder pulled with goal factory pull is edited and sent back
 // with goal factory push, which is the one way a definition changes outside the builder),
-// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), lists, shows and decides Jonah's proposals (jonah.go), keeps, lists and removes kept tests (test.go), proposes another model for an agent (agent.go), reads its spend (spend.go) reads and tries a factory's triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
+// manages organizations, searches one (search.go), lists and revokes its standing rules (standingrules.go), lists its agent runs (runs.go), lists, shows and decides Jonah's proposals (jonah.go), keeps, lists and removes kept tests (test.go), proposes another model for an agent (agent.go), reads its spend (spend.go) reads a factory's intake, reads and tries its triggers and manages its webhook endpoints (intake.go), and submits, follows and decides on work items. It also starts the
 // local platform (goal up), validates folders offline (goal validate), and keeps the install's
 // skills and template catalogs in the bucket (catalog.go).
 //
@@ -248,13 +248,21 @@ const usage = `usage:
                                                   week), per merged item and on rework, and each
                                                   factory's budget: running, stopped or over_budget,
                                                   its spend today and in the last 7 days
+  goal intake <factory> [--window 7d|30d|90d] [--json]
+                                                  what is coming to the factory: the items that
+                                                  haven't started (when each may start or the needs
+                                                  it waits for, and where it came from), its items
+                                                  by origin over the window (default 30d), its
+                                                  follow-ups to triage and the items they join from,
+                                                  its triggers (a check marked) and the webhooks open
+                                                  to it: receiving, no trigger or closed
   goal triggers list <factory> [--json]           the factory's triggers in definition order: on or off,
                                                   when they fire, what they create, the items they
                                                   created in the last 7 days, and why one may not be
                                                   creating items (triggers change in the definition)
   goal triggers show <factory> <trigger> [--json] a trigger, what its items did in the last 7 days
-                                                  and its recent events: created, merged, skipped
-                                                  or missed
+                                                  and its recent events: created, merged, skipped,
+                                                  missed or checked
   goal triggers try <factory> <trigger> --event ID [--json]
                                                   dry-run the trigger on one of its 20 newest events
                                                   (ID from goal triggers show): whether it matched,
@@ -420,7 +428,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbStart: startItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
 		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalMoved, "bake-off": bakeOffMoved, "spend": spend,
-		"judge": judgeMoved, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
+		"judge": judgeMoved, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "intake": intakeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
 	}
