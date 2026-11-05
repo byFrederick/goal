@@ -137,10 +137,13 @@ func (c *checker) notReadOnly(a Agent) []string {
 		}
 	}
 
-	env := a.Environment
-	if env == "" {
-		env = domain.DefaultEnvironment
-	}
+	return append(why, c.serversNotReadOnly(a.EnvironmentName())...)
+}
+
+// serversNotReadOnly names each MCP server of environment env, but GitHub's, with a tool its file
+// allows.
+func (c *checker) serversNotReadOnly(env string) []string {
+	var why []string
 
 	for _, e := range c.f.environments {
 		if e.Name != env {

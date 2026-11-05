@@ -24,7 +24,7 @@ board:
       limits: { perCheck: 5, perDay: 20, pauseOnBudget: true }
 ```
 
-- `agent` is any agent of the factory. The check runs with its environment: its tools, secrets and model. Give it read-only tools; publishing warns when the agent may use tools that are not read-only. A check only reads, whatever the agent's `code` setting, and it clones nothing.
+- `agent` is any agent of the factory. The check runs with its environment: its tools, secrets and model. Give it read-only tools; publishing warns when the agent may use tools that are not read-only. For GitHub's MCP server, the warning names the tools the environment's last test found not read-only, or says their access is unknown when the server hasn't passed a test ([Access and secrets](/docs/concepts/access-and-secrets/)). A check only reads, whatever the agent's `code` setting, and it clones nothing.
 - `brief` says what to look for and what is worth an item. It can name a Markdown file of the definition (`./triggers/<name>.md`).
 - `maxUsd` is the most one check may spend (default 0.10), and `timeout` its time limit (default `5m`, at most `1h`).
 - `create` holds the defaults for the items the check files. `create.trusted` applies to them as it does to a delivery's items.

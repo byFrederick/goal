@@ -101,9 +101,8 @@ func (r *secretsRun) gitHubServer(ro readsOnly, env, server string, s config.MCP
 
 	i := slices.IndexFunc(tests, func(t domain.EnvironmentTest) bool { return t.Environment == env && t.Server == server })
 	if i < 0 || !tests[i].OK {
-		r.add(at, domain.SeverityWarning, CodeGitHubToolsUnknown, fmt.Sprintf(
-			"%s: whether its tools write is unknown until the server is tested; test the environment, or use the github-read template",
-			where))
+		r.add(at, domain.SeverityWarning, CodeGitHubToolsUnknown,
+			where+": whether its tools write is unknown until the server is tested; test the environment, or use the github-read template")
 
 		return
 	}
