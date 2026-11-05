@@ -30,9 +30,16 @@ export function TestPanel({
       </h2>
       <p className="m-0 text-secondary text-ink-soft">Post JSON to the address with the signature header.</p>
       <div className="relative">
-        <pre className="m-0 overflow-x-auto rounded-control border border-line bg-panel p-4 font-mono text-meta leading-relaxed text-ink">
-          {curl}
-        </pre>
+        <section
+          aria-label="Example request"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
+          tabIndex={0}
+          className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+        >
+          <pre className="m-0 w-max min-w-full rounded-control border border-line bg-panel p-4 font-mono text-meta leading-relaxed text-ink">
+            {curl}
+          </pre>
+        </section>
         <CopyButton text={curl} className="absolute top-2 right-2" />
       </div>
       <div className="flex flex-col gap-2">

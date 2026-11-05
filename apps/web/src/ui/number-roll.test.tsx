@@ -9,7 +9,8 @@ afterEach(() => {
 });
 
 // The animated characters: the visible copy is aria-hidden, so its spans are the characters.
-const characters = (container: HTMLElement) => Array.from(container.querySelectorAll('[aria-hidden="true"] > span'));
+const characters = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('[aria-hidden="true"] > span > span'));
 const popping = (container: HTMLElement) =>
   characters(container).map((el) => el.classList.contains('motion-safe:animate-number-pop-in'));
 
@@ -19,6 +20,15 @@ describe('NumberRoll', () => {
     const space = characters(container)[1];
     expect(space?.textContent).toBe(' ');
     expect(space?.classList.contains('whitespace-pre')).toBe(true);
+  });
+
+  it('groups a multi-word value into one nowrap group per word and keeps the full text for screen readers', () => {
+    const { container } = render(<NumberRoll value="About 16 h 43 min" />);
+    const groups = container.querySelectorAll('[aria-hidden="true"] > span');
+    expect(groups).toHaveLength(5);
+    for (const group of groups) expect(group.classList.contains('whitespace-nowrap')).toBe(true);
+    expect(container.querySelector('[aria-hidden="true"]')?.classList.contains('flex-wrap')).toBe(true);
+    expect(screen.getByText('About 16 h 43 min', { selector: '.sr-only' })).toBeTruthy();
   });
 
   it('shows the value to a screen reader, and draws the first value without animation', () => {

@@ -274,6 +274,14 @@ describe('the ready page', () => {
     expect(pre?.textContent).toContain('title: "Fix flaky {{check.name}} on main"');
   });
 
+  it('lets a keyboard scroll the trigger file', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    const region = screen.getByRole('region', { name: 'Trigger file' });
+    expect(region.tabIndex).toBe(0);
+    expect(region.className).toContain('focus-visible:outline-run');
+  });
+
   it('opens More filters in place', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1 });
