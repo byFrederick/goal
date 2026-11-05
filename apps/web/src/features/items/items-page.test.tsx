@@ -354,6 +354,27 @@ describe('Items filters in the URL', () => {
     expect(screen.queryByText('Feature')).toBeNull();
   });
 
+  it('adds a Repositories column after Title when the items name several repositories', async () => {
+    renderItems([
+      item({ id: 'a', ref: 'sre#1', title: 'One', repositories: [{ repo: 'github.com/acme/api', joined: 'default' }] }),
+      item({ id: 'b', ref: 'sre#2', title: 'Two', repositories: [{ repo: 'github.com/acme/docs', joined: 'filing' }] }),
+    ]);
+    const row = await rowOf('One');
+    expect(within(row).getByText('acme/api')).toBeTruthy();
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers.indexOf('Repositories')).toBe(headers.indexOf('Title') + 1);
+  });
+
+  it('has no Repositories column when every item uses one repository', async () => {
+    const one = [{ repo: 'github.com/acme/api', joined: 'default' as const }];
+    renderItems([
+      item({ id: 'a', title: 'One', repositories: one }),
+      item({ id: 'b', title: 'Two', repositories: one }),
+    ]);
+    await rowOf('One');
+    expect(screen.queryByRole('columnheader', { name: 'Repositories' })).toBeNull();
+  });
+
   it('draws assembly progress as one segment per part, the merged ones in ink', async () => {
     renderItems([assembly(), partOf(1, { title: 'Move the schema', state: 'done' })]);
 
