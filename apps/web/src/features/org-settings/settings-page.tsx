@@ -28,6 +28,7 @@ import { ReadOnly } from '../../ui/read-only';
 import { Switch } from '../../ui/switch';
 import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { describedBy, SettingsRow, SettingsSection } from './card';
+import { CodeHostsSection } from './code-hosts-section';
 import { DangerZone } from './danger-zone';
 import { changedFields, type FieldErrors, formOf, type SettingsForm, slotNote, validate } from './form';
 import { NotificationsSection } from './notifications-section';
@@ -71,6 +72,7 @@ const sections = [
   ['slots', 'Slots'],
   ['signin', 'Sign-in'],
   ['notifications', 'Notifications'],
+  ['hosts', 'Code hosts'],
   ['data', 'Data'],
 ] as const;
 
@@ -335,6 +337,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
           </SettingsSection>
 
           <NotificationsSection />
+          <CodeHostsSection />
 
           <SettingsSection id="data" title="Data">
             <SettingsRow label="Definitions and knowledge" help="Versioned files, one folder per factory">

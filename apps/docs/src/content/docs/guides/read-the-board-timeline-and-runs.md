@@ -15,6 +15,8 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 - **Column order:** a station with a buffer, such as Build, shows its **In progress** cards first, at the top. The **Ready, buffer n of m** cards sit below them, dimmed, under their own label. The same order holds on a phone.
 - **Show N more:** a column shows its first six In progress cards, then a **Show N more** button that reveals the rest. In a station with a buffer, the button ends the In progress group, above the Ready cards. **Show fewer** folds the column back.
 - **Assembly line:** a card that is part of an assembly shows the assembly's title, one pip per part (filled for each merged part) and its place, such as `2 of 4`. An assembly with many parts shows one bar, filled to the share merged, instead of one pip per part.
+- **Repositories:** when the items on the Board name more than one repository, each card shows its first repository as `owner/name` and `+N` for the others. The ⓘ beside it lists every repository and how it joined the item: **Named when filed**, **Factory default**, **An agent pushed to it**, or **A station's output named it**. A Board whose items all use one repository shows none of this. Goal decides this from the items it loaded, not from the factory definition, so a factory with several repositories shows them once an item uses a second one.
+- **Done column:** its header says **Merged pull requests** when a station of the line merges, and **Finished items** when none does. Both show the number finished this week.
 - **Waiting** items say what they wait on: a person's decision, another item, or a clock. A waiting card and its row in the list use the same words.
 - **Constraint:** the column of the line's constraint, the drum, carries a yellow mark and the word **Constraint** in its header. The buffer's **Ready, buffer n of m** group is in that column, whichever station it is. Which station that is comes from the factory definition's `flow.constraint`; without it, the line's detected constraint.
 - **Expedite** items sit in a yellow **Expedite** box in each column, all at the same height across the board; the label is in the first column's box. The boxes show whenever the line has an expedite lane, even when empty. From 1280 px wide every station fits without scrolling sideways; on narrower screens the board scrolls inside its own frame. On a phone the lane shows just the **Expedite** chip above the station's expedite cards.
@@ -23,7 +25,7 @@ A card that moves to another column or lane, because an agent finished or becaus
 
 The search box is in the top bar. The **Board | List** switch shows there from 1024 px wide; on narrower screens, open the list from **Items** in the sidebar. Four dropdown buttons next to the title filter by work type, lane, assembly and agent role; each choice is kept in the page's address, so a link reproduces the view. On a phone, the **Filter** button shows them, with status and grouping by assembly, and the Board has one tab per station.
 
-The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, with saved views and CSV export.
+The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, with saved views and CSV export. When the items name more than one repository, the table gets a **Repositories** column after **Title**, in the same form as the cards.
 
 ## Needs you
 

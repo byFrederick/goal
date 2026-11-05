@@ -98,6 +98,7 @@ export type {
   ItemFlow,
   ItemNoteFrom,
   ItemQuestion,
+  ItemRepository,
   ItemSpan,
   ItemStart,
   ItemState,
@@ -249,6 +250,10 @@ export type SecretImportOutcome = Schemas['SecretImportOutcome'];
 // The signed-in person's notification preferences (ADR 0023, decision 1): the events, their channels and the email.
 export type NotificationPreferences = Schemas['NotificationPreferences'];
 export type OrgNotificationSettings = Schemas['NotificationSettings'];
+export type CodeHost = Schemas['CodeHost'];
+export type CodeHosts = Schemas['CodeHosts'];
+export type CodeHostInput = Schemas['CodeHostInput'];
+export type CodeHostKind = Schemas['CodeHostKind'];
 export type NotificationTestResult = Schemas['NotificationTestResult'];
 export type NotificationEvents = Schemas['NotificationEvents'];
 export type NotificationChannels = Schemas['NotificationChannels'];

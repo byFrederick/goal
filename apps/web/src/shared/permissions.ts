@@ -11,6 +11,7 @@ export type OrgPermission =
   | 'org:manage'
   | 'org:delete'
   | 'org:transfer'
+  | 'org:code_hosts'
   | 'factory:create'
   | 'factory:archive'
   | 'factory:delete'
