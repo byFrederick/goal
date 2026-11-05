@@ -15,7 +15,7 @@ export const Route = createFileRoute('/o/$org/f/$factory/intake/new')({
 function NewTriggerRoute() {
   return (
     <>
-      <IntakePage group="software" onGroupChange={() => {}} />
+      <IntakePage />
       <NewTriggerDialog />
     </>
   );

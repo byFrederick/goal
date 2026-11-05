@@ -1,7 +1,7 @@
 // "How work gets in" on the Floor (ready.jpg, ADR 0032 decision 2): the ways an item reaches the factory.
 // A GitHub row per enabled `github.issues.labeled` trigger, with the label the trigger matches (read from
 // the published model's intake entry, where its filter says `label`). The Slack row connects while the
-// organization has no slack connection. New item opens the composer (and C does too); goal item create
+// organization has no slack connection. New item opens the composer (and C does too); goal run
 // is the CLI's way in. Its states: loading (sr-only), error (with Retry) and ready, with an empty line
 // when the factory has no triggers.
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +23,7 @@ import { GitHubMark } from '../../ui/github-mark';
 import { CardEmpty, CardFailed, CardLoading } from './card-states';
 
 /** The CLI command the last row copies. */
-export const itemCreateCommand = 'goal item create';
+export const runCommand = 'goal run';
 
 /** One GitHub row: the label an enabled `github.issues.labeled` trigger matches. */
 export interface LabelRow {
@@ -136,9 +136,9 @@ export function WaysInCard() {
         <li>
           <WayLine
             icon={<SquareTerminal size={14} strokeWidth={1.6} aria-hidden="true" />}
-            text={<span className="font-mono text-meta text-ink">{itemCreateCommand}</span>}
+            text={<span className="font-mono text-meta text-ink">{runCommand}</span>}
           >
-            <CopyButton text={itemCreateCommand} aria-label="Copy command" />
+            <CopyButton text={runCommand} aria-label="Copy command" />
           </WayLine>
         </li>
       </ul>

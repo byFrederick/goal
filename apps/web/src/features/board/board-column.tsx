@@ -192,7 +192,12 @@ export function StationColumn({
   );
 
   const expedite = station.items.filter(isExpedite);
-  const standard = station.items.filter((it) => !isExpedite(it));
+  const standardAll = station.items.filter((it) => !isExpedite(it));
+  // The inbox's items that may not start yet wait under "Later", soonest first (ADR 0040).
+  const later = standardAll
+    .filter((it) => it.start)
+    .toSorted((a, b) => (a.start?.at ?? '').localeCompare(b.start?.at ?? ''));
+  const standard = standardAll.filter((it) => !it.start);
   // The drum's column: In progress cards first, then the buffer's Ready cards, dimmed.
   const isDrum = board.line.release.drum === station.id;
   const [expanded, setExpanded] = useState(false);
@@ -252,6 +257,17 @@ export function StationColumn({
             </Fragment>
           );
         })}
+        {later.length > 0 ? (
+          <section aria-labelledby={`later-${station.id}`} className="flex min-w-0 flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 px-1 text-meta font-medium text-muted">
+              <h3 id={`later-${station.id}`} className="m-0 text-meta font-medium">
+                Later
+              </h3>
+              <span className="tabular-nums">{later.length}</span>
+            </div>
+            {later.map(card)}
+          </section>
+        ) : null}
         {station.items.length === 0 ? <p className="m-0 px-1 py-2 text-meta text-muted md:py-0">Empty</p> : null}
       </div>
     </DropColumn>

@@ -13,9 +13,10 @@ import { cleanPath } from '../../shared/definition/place';
 import { parseRule } from '../../shared/definition/rule-md';
 import { whereAgentWorks } from '../../shared/definition/where';
 import { refParam } from '../../shared/factory';
-import { formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
+import { formatStart, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
 import { pullRequestLabel, pullRequestsOf } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
+import { CameFrom } from '../../shared/origin';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -106,6 +107,10 @@ export function DetailsCard({
     rows.push({ label: 'Station', value: station });
     if (branch) rows.push({ label: 'Branch', value: <span className="font-mono">{branch}</span> });
     if (pulls.length > 0) rows.push({ label: 'Pull request', value: pullLinks });
+    if (item.start) {
+      const when = formatStart(item.start.at);
+      rows.push({ label: 'Starts', value: `${when.day}, ${when.time}` });
+    }
     if (item.assembly) {
       const { ref, title } = item.assembly;
       const value = (
@@ -122,6 +127,8 @@ export function DetailsCard({
         </>
       );
       rows.push({ label: 'Came from', value });
+    } else if (item.origin) {
+      rows.push({ label: 'Came from', value: <CameFrom item={item} /> });
     }
   }
 
