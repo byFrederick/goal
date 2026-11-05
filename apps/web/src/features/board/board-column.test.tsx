@@ -141,7 +141,7 @@ describe('the Done column header', () => {
       factory,
       board: {
         ...base,
-        stations: [done],
+        stations: [{ ...buildStation([]), id: 'merge', kind: 'human', action: 'merge' }, done],
         constraint: null,
         line: { ...base.line, touches: { ...base.line.touches, finished: 281 } },
       },

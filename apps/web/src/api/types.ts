@@ -98,6 +98,7 @@ export type {
   ItemFlow,
   ItemNoteFrom,
   ItemQuestion,
+  ItemRepository,
   ItemSpan,
   ItemStart,
   ItemState,

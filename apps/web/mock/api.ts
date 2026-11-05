@@ -485,7 +485,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       agent: it.agent,
       pr_url: it.pr_url,
       pull_requests: stationsOf(it).find((s) => s.id === it.station)?.action === 'merge' ? pullRequestsOf(it) : [],
-      repositories: [],
+      repositories: it.repositories ?? [],
       slot: run && copies > 1 ? run.slot + 1 : null,
       turn: run ? run.turn : null,
       summary: summaryOf(it),
