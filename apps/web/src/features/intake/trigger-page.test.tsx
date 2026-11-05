@@ -18,7 +18,7 @@ import { keyLines } from './trigger-yaml';
 
 const route = vi.hoisted(() => ({
   params: { trigger: 'flaky-test-on-main' } as { trigger: string },
-  search: {} as { on?: string },
+  search: {} as { on?: string; check?: string },
 }));
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
@@ -493,6 +493,19 @@ describe('a new trigger from the New trigger picker', () => {
     const [, , , text] = mocked.putDraftFile.mock.calls[0] ?? [];
     expect(text).toContain('- name: lint-main\n');
     expect(text).toContain('on: github.check_run.failed');
+  });
+});
+
+describe('a new check from the New trigger picker', () => {
+  it('opens a blank trigger in the check layout with the chosen agent', async () => {
+    route.params = { trigger: 'new-check' };
+    route.search = { on: 'schedule', check: 'engineer' };
+    mocked.getIntakeTrigger.mockRejectedValue(new ApiError({ title: 'Not found', status: 404 } as Problem));
+    renderPage();
+    expect(await screen.findByRole('heading', { level: 1, name: 'New check' })).toBeTruthy();
+    expect(screen.getByText('Not in the definition yet. Save to add it.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try a check' })).toBeTruthy();
+    expect((screen.getByRole('combobox', { name: 'Agent' }) as HTMLSelectElement).value).toBe('engineer');
   });
 });
 

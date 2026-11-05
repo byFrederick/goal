@@ -1,13 +1,46 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { connectionsQuery } from '../../api/queries';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { connectionsQuery, intakeKeys, keys } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
 import { connectionFixture } from '../../test/connection-fixture';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
+import { setTriggerEnabled } from './set-trigger-enabled';
 
-afterEach(cleanup);
+vi.mock('./set-trigger-enabled', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./set-trigger-enabled')>()),
+  setTriggerEnabled: vi.fn().mockResolvedValue(undefined),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+const definition = `spec:
+  agents:
+    - name: engineer
+      tools: { allow: [Bash] }
+    - name: scout
+      builtins: { web: on }
+      tools: { allow: [Bash, mcp__sentry] }
+  board:
+    triggers:
+      - name: new-check
+        on: schedule
+        create: { type: fix, station: build }
+`;
+
+/** An Intake answer; the suggestions are the definition's disabled triggers. */
+const intakeFixture = (suggestions: unknown[]) => ({ triggers: [], suggestions });
+const suggestion = (name: string, station: string) => ({
+  name,
+  source: 'schedule',
+  on: 'schedule',
+  when: '0 9 * * MON, UTC',
+  create: { type: 'fix', station, lane: null, expedite: false, title: '' },
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
 const factory: Factory = {
@@ -25,14 +58,20 @@ const factory: Factory = {
   can: ['definition:edit'],
 } as unknown as Factory;
 
-function renderPicker(kinds: string[] = ['github', 'cloudflare']) {
+const withDefinition = { ...factory, current: { id: 'v1', number: 1 } } as unknown as Factory;
+
+function renderPicker(kinds: string[] = ['github', 'cloudflare'], suggestions: unknown[] = []) {
   const connections = kinds.map((kind) => connectionFixture({ name: `${kind}-acme`, kind }));
   return renderFactoryPage({
     page: () => <NewTriggerDialog />,
     path: 'intake/new',
     org,
-    factory,
-    seed: [[connectionsQuery(org.id).queryKey, connections]],
+    factory: withDefinition,
+    seed: [
+      [connectionsQuery(org.id).queryKey, connections],
+      [intakeKeys.definition(org.id, factory.id, 'v1'), { text: definition, sha256: 'sha' }],
+      [keys.intake(org.id, factory.id), intakeFixture(suggestions)],
+    ],
   });
 }
 
@@ -102,58 +141,94 @@ describe('New trigger picker', () => {
     expect(screen.getByRole('radio', { name: 'Push to a branch' }).getAttribute('aria-disabled')).toBe('true');
   });
 
-  it('continues to the trigger page with the chosen event in the address', async () => {
+  it('continues to a blank trigger named for the choice, with the chosen event in the address', async () => {
     const { router } = renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
+    expect(screen.getByText('Next: filters, what it creates and its limits, as a draft')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('radio', { name: 'Issue labeled' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new/github'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new-issues-labeled'));
     expect(new URLSearchParams(router.state.location.search).get('on')).toBe('github.issues.labeled');
   });
 
-  it('continues a schedule to its trigger page with the schedule event', async () => {
+  it('continues a schedule to a blank trigger with the schedule event', async () => {
     const { router } = renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new/schedule'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new-schedule'));
     expect(new URLSearchParams(router.state.location.search).get('on')).toBe('schedule');
   });
 
-  it('offers the suggested triggers under "Or start from a suggestion"', async () => {
+  it('lists Check with an agent after Schedule and continues with a name the definition lacks', async () => {
+    const { router } = renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    const builtIn = screen.getByRole('heading', { name: 'Built in' }).parentElement as HTMLElement;
+    const names = within(builtIn)
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    expect(names.slice(0, 2)).toEqual(['Schedule', 'Check with an agent']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check with an agent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    // new-check is taken in the definition, so the next free name is used; the first agent checks.
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new-check-2'));
+    const query = new URLSearchParams(router.state.location.search);
+    expect(query.get('on')).toBe('schedule');
+    expect(query.get('check')).toBe('engineer');
+  });
+
+  it("lists the factory's tools once each, and a tool's check goes to the first agent that has it", async () => {
+    const { router } = renderPicker();
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    const group = screen.getAllByRole('heading', { name: 'Check with an agent' })[0]?.parentElement as HTMLElement;
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Bashits tool', 'webits tool', 'mcp__sentryits tool']);
+
+    fireEvent.click(within(group).getByRole('button', { name: /^mcp__sentry/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(router.state.location.href).toContain('check=scout'));
+  });
+
+  it('has no Continue for a source without an event key', async () => {
     renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
 
-    expect(screen.getByRole('heading', { name: 'Or start from a suggestion' })).toBeTruthy();
-    const row = screen.getByText('Fix failing checks on pull requests').parentElement as HTMLElement;
-    expect(within(row).getByText('Build')).toBeTruthy();
-    expect(within(row).getByRole('button', { name: 'Use' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Webhook' }));
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
   });
 
-  it('uses a suggestion: goes to its trigger page with its event in the address', async () => {
-    const { router } = renderPicker();
+  it("lists the API's suggestions and turns one on", async () => {
+    renderPicker([], [suggestion('weekly-vulnerability-sweep', 'spec'), suggestion('nightly-review', 'review')]);
     await screen.findByRole('dialog', { name: 'New trigger' });
 
+    expect(screen.getByRole('heading', { name: "Or turn on a suggestion from Widgets's definition" })).toBeTruthy();
     const row = screen.getByText('Weekly vulnerability sweep').parentElement as HTMLElement;
-    fireEvent.click(within(row).getByRole('button', { name: 'Use' }));
+    expect(within(row).getByText('spec')).toBeTruthy();
+    expect(screen.getByText('Nightly review')).toBeTruthy();
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new/schedule'));
-    expect(new URLSearchParams(router.state.location.search).get('on')).toBe('schedule');
+    fireEvent.click(within(row).getByRole('button', { name: 'Turn on' }));
+    await waitFor(() =>
+      expect(setTriggerEnabled).toHaveBeenCalledWith(
+        expect.objectContaining({ trigger: 'weekly-vulnerability-sweep', enabled: true }),
+      ),
+    );
   });
 
-  it('disables Use for a suggestion whose event the schema does not accept', async () => {
-    const { router } = renderPicker();
+  it('shows no suggestions block when the API has none', async () => {
+    renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
-
-    const row = screen.getByText('Answer review comments by people').parentElement as HTMLElement;
-    const use = within(row).getByRole('button', { name: 'Use' }) as HTMLButtonElement;
-    expect(use.disabled).toBe(true);
-    fireEvent.click(use);
-    expect(router.state.location.pathname).toBe('/o/acme/f/widgets/intake/new');
+    expect(screen.queryByRole('heading', { name: /turn on a suggestion/ })).toBeNull();
   });
 
   it('groups the sources, links Connect for those not connected and filters them by search', async () => {
