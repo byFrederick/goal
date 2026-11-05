@@ -27,6 +27,8 @@ var checkTests = []struct {
 	{"Check_TryAppliesNothing", testTryCheck},
 	{"Check_AlertsFailuresAndLimits", testCheckAlerts},
 	{"OtherOrg_ReadsNoTriggerKey", testIsolatedKeys},
+	{"Check_MemoryCountsAndClear", testCheckMemory},
+	{"OtherOrg_ClearsNoState", testIsolatedClear},
 }
 
 // checkFiring is a schedule firing of nightly for the instant at, which queues a check.
@@ -586,5 +588,101 @@ func testIsolatedKeys(f *fixture) {
 
 	if got, err := f.in.CheckAlerts(labs, []domain.FactoryID{f.factory}, t0.Truncate(24*time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs CheckAlerts = %+v, %v; want none", got, err)
+	}
+}
+
+// CheckMemory counts the trigger's open items and closed keys in full and lists the newest
+// domain.MaxCheckMemoryItems of each, with the saved state and when the check that saved it
+// finished; before any check the lists are empty and the state null. ClearCheckState deletes
+// the state and keeps the keys, so the next check gets no state and is still refused a closed
+// key; while a check is queued it is ErrConflict.
+func testCheckMemory(f *fixture) {
+	t := f.t
+
+	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0); err != nil || m.Open != 0 || m.OpenItems == nil || len(m.OpenItems) != 0 ||
+		m.Closed != 0 || m.ClosedKeys == nil || len(m.ClosedKeys) != 0 || string(m.State) != "null" || !m.CheckedUpTo.IsZero() {
+		t.Errorf("CheckMemory before a check = %+v, %v; want empty lists, a null state and no time", m, err)
+	}
+
+	first := f.runCheck(t0, `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk full", "brief": "db-1"}],
+		"state": {"since": "a"}}`, domain.CheckLimits{}, false)
+	_, inc2 := f.expectFiled(first)
+	f.close(inc2, domain.StateCancelled)
+
+	var newest domain.Item
+	for i := range domain.MaxCheckMemoryItems {
+		newest = f.item(domain.ItemFromSchedule, nightly, t0.Add(time.Duration(i+1)*time.Second))
+	}
+
+	m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("CheckMemory: %v", err)
+	}
+
+	if m.Open != domain.MaxCheckMemoryItems+1 || len(m.OpenItems) != domain.MaxCheckMemoryItems || m.OpenItems[0].Ref != refOf(newest) {
+		t.Fatalf("open = %d, listed %+v; want %d counted and %d listed, %s first",
+			m.Open, m.OpenItems, domain.MaxCheckMemoryItems+1, domain.MaxCheckMemoryItems, refOf(newest))
+	}
+
+	if m.Closed != 1 || len(m.ClosedKeys) != 1 || m.ClosedKeys[0].Key != "INC-2" || m.ClosedKeys[0].How != string(domain.StateCancelled) {
+		t.Errorf("closed = %d, %+v; want INC-2 cancelled", m.Closed, m.ClosedKeys)
+	}
+
+	if !sameJSON(m.State, `{"since": "a"}`) || !m.CheckedUpTo.Equal(t0.Add(time.Minute)) {
+		t.Errorf("state = %s, checked up to %s; want the first check's, at %s", m.State, m.CheckedUpTo, t0.Add(time.Minute))
+	}
+
+	f.expectCleared()
+}
+
+// expectCleared clears nightly's state twice, checks the state is gone and its keys kept, and
+// that a queued check refuses the clear.
+func (f *fixture) expectCleared() {
+	t := f.t
+
+	for range 2 {
+		if err := f.in.ClearCheckState(f.ctx(), f.factory, nightly); err != nil {
+			t.Fatalf("ClearCheckState: %v", err)
+		}
+	}
+
+	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || string(m.State) != "null" || !m.CheckedUpTo.IsZero() || m.Closed != 1 {
+		t.Errorf("CheckMemory after Clear = %+v, %v; want a null state, no time and the closed key kept", m, err)
+	}
+
+	if in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || string(in.State) != "null" {
+		t.Errorf("CheckInput after Clear = %s, %v; want a null state", in.State, err)
+	}
+
+	again := f.runCheck(t0.Add(2*time.Hour), `{"file": [{"key": "INC-2", "title": "Disk full", "brief": "again"}]}`, domain.CheckLimits{}, false)
+	if a := again.Applied; len(a.Filed) != 0 || !slices.Equal(skips(a), []string{"INC-2: closed on Oct 1: cancelled"}) {
+		t.Errorf("check after Clear applied %+v; want the closed key refused", a)
+	}
+
+	f.checkFiring(t0.Add(3 * time.Hour))
+
+	if err := f.in.ClearCheckState(f.ctx(), f.factory, nightly); !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("ClearCheckState while a check is queued = %v, want ErrConflict", err)
+	}
+}
+
+// Another organization's Clear deletes no state of the trigger, and its CheckMemory sees nothing.
+func testIsolatedClear(f *fixture) {
+	t := f.t
+
+	f.runCheck(t0, `{"file": [{"key": "a", "title": "a", "brief": "b"}], "state": {"since": "a"}}`, domain.CheckLimits{}, false)
+
+	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
+
+	if err := f.in.ClearCheckState(labs, f.factory, nightly); err != nil {
+		t.Errorf("labs ClearCheckState = %v, want nil", err)
+	}
+
+	if m, err := f.in.CheckMemory(labs, f.factory, nightly, t0.Add(time.Hour)); err != nil || m.Open != 0 || len(m.OpenItems) != 0 || string(m.State) != "null" {
+		t.Errorf("labs CheckMemory = %+v, %v; want nothing", m, err)
+	}
+
+	if m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour)); err != nil || m.Open != 1 || !sameJSON(m.State, `{"since": "a"}`) {
+		t.Errorf("CheckMemory after labs' Clear = %+v, %v; want the item and the state kept", m, err)
 	}
 }

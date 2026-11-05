@@ -49,7 +49,7 @@ type intakeData struct {
 	// secrets are the organization secrets webhooks are signed by (UseSecrets); nil has none.
 	secrets *OrgSecrets
 	// states are the triggers' saved check states (trigger_state).
-	states map[stateKey]json.RawMessage
+	states map[stateKey]savedState
 	// keys are the triggers' keys (trigger_keys): each key's last item and last note.
 	keys map[triggerKey]keyRow
 }
@@ -63,6 +63,12 @@ type keyRow struct {
 	item     domain.ItemID
 	noteAt   time.Time
 	noteText string
+}
+
+// savedState is a trigger's saved check state and when the check that saved it finished.
+type savedState struct {
+	state json.RawMessage
+	at    time.Time
 }
 
 type stateKey struct {
@@ -111,7 +117,7 @@ type firingRow struct {
 func NewIntake(key ports.MasterKey, store *Store) *Intake {
 	return &Intake{key: key, store: store, d: &intakeData{
 		endpoints: map[domain.WebhookEndpointID]*endpointRow{}, ledger: map[ledgerKey]time.Time{}, counts: map[countKey]int{},
-		states: map[stateKey]json.RawMessage{}, keys: map[triggerKey]keyRow{},
+		states: map[stateKey]savedState{}, keys: map[triggerKey]keyRow{},
 	}}
 }
 
