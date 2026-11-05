@@ -512,8 +512,7 @@ func (c *checker) forge() {
 
 // factoryPlacement checks factory.yaml's {{…}}: a {{secret}} only in the keys decision 6 allows,
 // where it is written well, and the event placeholders of a trigger's title, brief and
-// repositories left to
-// the triggers check. runtime.modelKey, modelAgrees.key and a runtime.repositories entry's token
+// repositories left to the triggers check. runtime.modelKey, modelAgrees.key and a runtime.repositories entry's token
 // are one whole reference; a runtime.repository token that has none is the removed form
 // env-reference-removed.
 func (c *checker) factoryPlacement() {
