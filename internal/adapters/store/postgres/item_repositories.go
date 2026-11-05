@@ -28,13 +28,34 @@ func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]dom
 	var out []domain.ItemRepository
 
 	for _, r := range rows {
-		out = append(out, domain.ItemRepository{
-			Repo: r.Repo, Joined: domain.RepositoryJoin(r.Joined), JoinedAt: r.JoinedAt.UTC(), Ordinal: int(r.Ordinal),
-			BaseCommit: deref(r.BaseCommit), IntegrationBranch: deref(r.IntegrationBranch),
-		})
+		out = append(out, itemRepositoryFrom(r))
 	}
 
 	return out, nil
+}
+
+// ItemsRepositories implements ports.Store.
+func (s *Store) ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error) {
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.WorkItemRepository, error) { return q.ItemsRepositories(ctx, uuids(items)) })
+	if err != nil {
+		return nil, fmt.Errorf("repositories of %d items: %w", len(items), err)
+	}
+
+	out := make(map[domain.ItemID][]domain.ItemRepository)
+	for _, r := range rows {
+		id := domain.ItemID(r.ItemID.String())
+		out[id] = append(out[id], itemRepositoryFrom(r))
+	}
+
+	return out, nil
+}
+
+// itemRepositoryFrom is one row of work_item_repositories.
+func itemRepositoryFrom(r db.WorkItemRepository) domain.ItemRepository {
+	return domain.ItemRepository{
+		Repo: r.Repo, Joined: domain.RepositoryJoin(r.Joined), JoinedAt: r.JoinedAt.UTC(), Ordinal: int(r.Ordinal),
+		BaseCommit: deref(r.BaseCommit), IntegrationBranch: deref(r.IntegrationBranch),
+	}
 }
 
 // OpenItemRepositories implements ports.Store.
