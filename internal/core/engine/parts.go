@@ -114,15 +114,43 @@ func (e *Engine) repositoryKeys(ctx context.Context, item domain.ItemID) ([]stri
 	return domain.ItemRepositoryKeys(rows), nil
 }
 
-// runCode is what agent's runs on item get of its repositories, resolved at run start (an item
-// with no rows uses the default entry) under l's entries.
+// runCode is what agent's runs on item get of its repositories, resolved at run start under l's
+// entries. An item with no rows uses the default entry's repository, which the first run start
+// records joined default (ADR 0041 decision 4), so the item keeps it when the default changes.
 func (e *Engine) runCode(ctx context.Context, l domain.Line, agent domain.AgentSpec, item domain.ItemID) (domain.RunCode, error) {
 	rows, err := e.store.ItemRepositories(ctx, item)
 	if err != nil {
 		return domain.RunCode{}, fmt.Errorf("repositories of %s: %w", item, err)
 	}
 
+	if len(rows) == 0 {
+		if rows, err = e.joinDefault(ctx, l, item); err != nil {
+			return domain.RunCode{}, err
+		}
+	}
+
 	return l.RunCode(agent, domain.ResolveItemRepositories(rows, l)), nil
+}
+
+// joinDefault records l's default entry's repository on item, which has none, and returns the
+// item's rows as stored: another run start may have recorded one first. None without a default
+// entry.
+func (e *Engine) joinDefault(ctx context.Context, l domain.Line, item domain.ItemID) ([]domain.ItemRepository, error) {
+	keys := domain.ItemRepositoryKeys(domain.ResolveItemRepositories(nil, l))
+	if len(keys) == 0 {
+		return nil, nil
+	}
+
+	if err := e.store.JoinItemRepositories(ctx, item, domain.JoinedDefault, keys, e.clock.Now()); err != nil {
+		return nil, fmt.Errorf("default repository of %s: %w", item, err)
+	}
+
+	rows, err := e.store.ItemRepositories(ctx, item)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of %s: %w", item, err)
+	}
+
+	return rows, nil
 }
 
 // trimPart is p with the space around its title, lane, brief and each need trimmed.
