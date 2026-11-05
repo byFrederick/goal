@@ -88,8 +88,14 @@ type Store interface {
 	// ItemRepositories returns an item's repositories in first-joined order: those joined at
 	// filing in the order named, then the rest by when they joined, then by ordinal. An unknown
 	// item, or one filed without any, has none; run start resolves those to the line's default
-	// entry (domain.ResolveItemRepositories).
+	// entry (domain.ResolveItemRepositories) and records it (JoinItemRepositories).
 	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
+
+	// JoinItemRepositories adds to item the repositories of keys it lacks, joined as joined at
+	// time at with the next ordinals, under the item's lock, until it has
+	// domain.MaxItemRepositories (domain.AppendRepositories); the rest are left out without an
+	// error. An unknown item is ErrNotFound.
+	JoinItemRepositories(ctx context.Context, item domain.ItemID, joined domain.RepositoryJoin, keys []string, at time.Time) error
 
 	// OpenItemRepositories returns the repositories the factory's open items (not done, not
 	// cancelled) use, one per item and repository, by repository then item number. Publish
@@ -291,7 +297,10 @@ type Store interface {
 
 	// FinishRun records a run's result, adds its cost to the item and appends a run_finished
 	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
-	// It also keeps the run's own output and the head it pushed (res.PushedHead).
+	// It also keeps the run's own output and each repository's pushed head (res.Repositories),
+	// and the repositories the run wrote to join its item as joined push at endedAt, in the same
+	// transaction, until the item has domain.MaxItemRepositories (ADR 0041 decision 5); those
+	// past the cap, and those the run only read, stay only on the run.
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
 
 	// RecordRunInput records what a run was given: its brief and the heads before prepare's

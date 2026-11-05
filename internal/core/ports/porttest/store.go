@@ -771,6 +771,8 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		return nil
 	}
 
+	s.joinRepositories(r.ItemID, domain.JoinedPush, wroteRepositories(rows), endedAt)
+
 	s.items[r.ItemID].CostUSD += res.CostUSD
 	s.append(domain.Event{
 		FactoryID: r.FactoryID, ItemID: r.ItemID, RunID: id, At: endedAt, Kind: domain.EventRunFinished,
@@ -839,6 +841,20 @@ func pushedRepositories(rows []domain.RunRepository) []domain.RunRepository {
 	for _, r := range rows {
 		if r.PushedHead != "" || r.Wrote {
 			out = append(out, r)
+		}
+	}
+
+	return out
+}
+
+// wroteRepositories are the repositories of rows the run wrote to, in order; a migrated row
+// without a repository is none.
+func wroteRepositories(rows []domain.RunRepository) []string {
+	var out []string
+
+	for _, r := range rows {
+		if r.Wrote && r.Repo != "" {
+			out = append(out, r.Repo)
 		}
 	}
 
@@ -1273,4 +1289,29 @@ func (s *Store) RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.Run
 	}
 
 	return over, nil
+}
+
+// JoinItemRepositories implements ports.Store.
+func (s *Store) JoinItemRepositories(ctx context.Context, item domain.ItemID, joined domain.RepositoryJoin, keys []string, at time.Time) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(item, org); !ok {
+		return fmt.Errorf("item %s: %w", item, ports.ErrNotFound)
+	}
+
+	s.joinRepositories(item, joined, keys, at)
+
+	return nil
+}
+
+// joinRepositories appends to item's rows the keys it lacks (domain.AppendRepositories). s.mu is
+// held.
+func (s *Store) joinRepositories(item domain.ItemID, joined domain.RepositoryJoin, keys []string, at time.Time) {
+	s.repos[item] = append(s.repos[item], domain.AppendRepositories(s.repos[item], joined, keys, at)...)
 }
