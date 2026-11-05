@@ -13,7 +13,7 @@ import (
 )
 
 const comingUpItems = `-- name: ComingUpItems :many
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, n.needs::bigint[] AS needs,
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, n.needs::bigint[] AS needs,
   coalesce(src.factory_id::text, '')::text AS from_factory_id, coalesce(src.number, 0)::bigint AS from_number,
   count(*) OVER ()::bigint AS total
 FROM work_items w
@@ -100,6 +100,7 @@ func (q *Queries) ComingUpItems(ctx context.Context, arg ComingUpItemsParams) ([
 			&i.WorkItem.StartAt,
 			&i.WorkItem.StartedAt,
 			&i.WorkItem.Triage,
+			&i.WorkItem.Branch,
 			&i.Needs,
 			&i.FromFactoryID,
 			&i.FromNumber,

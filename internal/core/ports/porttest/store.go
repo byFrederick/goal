@@ -41,11 +41,13 @@ type Store struct {
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
 	followUps []domain.FollowUp
-	joined    []domain.FollowUpID // follow-ups in the order they joined a triage item
-	views     map[domain.SavedViewID]savedViewRecord
-	jonah     jonahRows
-	ids       int
-	changes   changes
+	// repos are each item's repositories, in the order they joined.
+	repos   map[domain.ItemID][]domain.ItemRepository
+	joined  []domain.FollowUpID // follow-ups in the order they joined a triage item
+	views   map[domain.SavedViewID]savedViewRecord
+	jonah   jonahRows
+	ids     int
+	changes changes
 }
 
 // andonRecord is one andon pull of a factory of an organization.
@@ -62,6 +64,7 @@ func NewStore() *Store {
 		factCaps:  map[domain.FactoryID]int{},
 		checks:    map[string]checkSlot{},
 		items:     map[domain.ItemID]*domain.Item{},
+		repos:     map[domain.ItemID][]domain.ItemRepository{},
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
 		runs:      map[domain.RunID]*domain.Run{},
@@ -131,6 +134,7 @@ func (s *Store) purge(org domain.OrgID) {
 			delete(s.leases, id)
 			delete(s.spans, id)
 			delete(s.leaseLog, id)
+			delete(s.repos, id)
 		}
 	}
 
@@ -273,6 +277,40 @@ func (s *Store) Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	}
 
 	return clone(it), nil
+}
+
+// ItemRepositories implements ports.Store: the rows in first-joined order, as the PostgreSQL
+// store sorts them.
+func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(item, org); !ok {
+		return nil, nil
+	}
+
+	out := slices.Clone(s.repos[item])
+	slices.SortStableFunc(out, func(a, b domain.ItemRepository) int {
+		return cmp.Or(
+			cmp.Compare(boolRank(a.Joined != domain.JoinedFiling), boolRank(b.Joined != domain.JoinedFiling)),
+			a.JoinedAt.Compare(b.JoinedAt), cmp.Compare(a.Ordinal, b.Ordinal))
+	})
+
+	return out, nil
+}
+
+// boolRank orders false before true.
+func boolRank(b bool) int {
+	if b {
+		return 1
+	}
+
+	return 0
 }
 
 // Waiting implements ports.Store.

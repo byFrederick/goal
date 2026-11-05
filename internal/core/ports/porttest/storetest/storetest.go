@@ -166,7 +166,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
-	tests = append(append(tests, followUpsTests...), followUpFilingTests...)
+	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
@@ -355,6 +355,7 @@ func testCreateItem(f *fixture) {
 		ID: a.ID, OrgID: f.org, FactoryID: f.factory, Number: 1, Type: typeTask, Lane: laneBackend, Title: "a", Body: "details",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, Priority: 3,
 		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0, Origin: domain.OriginPerson,
+		StoredBranch: "goal/1-a",
 	}
 	sameItem(t, a, want)
 	sameItem(t, f.item(t, a.ID), want)
