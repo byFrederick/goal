@@ -30,7 +30,7 @@ export function MiniLine({
   /** The factory's name, for the line's label. */
   name: string;
   constraint: string | null;
-  /** The andon is pulled: the stations dim, as the picture's stopped line does. */
+  /** The andon is pulled: the counts take the muted ink, as the picture's stopped line does. */
   stopped?: boolean | undefined;
   className?: string | undefined;
 }) {

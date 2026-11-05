@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { ensureFound, ensureLoaded, factoriesQuery, meQuery, orgQuery, orgsQuery } from '../api/queries';
 import { AppShell, ShellFrame } from '../app/app-shell';
 import { ShellPending } from '../app/shell-pending';
-import { NotFoundScreen } from '../app/states';
+import { NotFoundScreen, unknownFactory } from '../app/states';
 import { TopBarSlot } from '../app/top-bar';
 import { findOrg, OrgContext, rememberOrg } from '../shared/org';
 import { OrgStream } from '../shared/stream';
@@ -60,10 +60,11 @@ function OrgNotFound({ data }: NotFoundRouteProps) {
       </main>
     );
   }
+  const factory = (data as { unknown?: string } | undefined)?.unknown === unknownFactory.unknown;
   return (
     <ShellFrame>
       <TopBarSlot crumb="Not found" />
-      <NotFoundScreen what="page" />
+      <NotFoundScreen what={factory ? 'factory' : 'page'} />
     </ShellFrame>
   );
 }

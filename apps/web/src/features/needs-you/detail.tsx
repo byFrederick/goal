@@ -9,6 +9,7 @@ import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
+import { refParam } from '../../shared/factory';
 import { formatAge, formatClock, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
@@ -137,7 +138,7 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
           <span aria-hidden="true">/</span>
           <Link
             to="/o/$org/f/$factory/items/$ref"
-            params={{ org: org.slug, factory, ref: entry.item.ref }}
+            params={{ org: org.slug, factory, ref: refParam(entry.item.ref) }}
             className="text-ink-soft hover:text-ink"
           >
             {entry.item.ref}
@@ -437,7 +438,7 @@ function AlertLinks({ entry, canUndo }: { entry: InboxEntry; canUndo: boolean })
       ) : null}
       {entry.item ? (
         <Button asChild variant="secondary">
-          <Link to="/o/$org/f/$factory/items/$ref" params={{ org: org.slug, factory, ref: entry.item.ref }}>
+          <Link to="/o/$org/f/$factory/items/$ref" params={{ org: org.slug, factory, ref: refParam(entry.item.ref) }}>
             Open {entry.item.ref}
           </Link>
         </Button>
