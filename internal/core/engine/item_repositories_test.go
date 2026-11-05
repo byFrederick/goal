@@ -162,7 +162,7 @@ func TestEngine_RunStartKeepsTheDefaultEntrysRepository(t *testing.T) {
 	moved := withRepositories(lineOf(agentStation(stWork, agWorker, 1, 1), agentStation(stReview, agReviewer, 1, 1)))
 	moved.Runtime.Repositories[0].Default = false
 	moved.Runtime.Repositories = append(moved.Runtime.Repositories, domain.RepositoryEntry{
-		Name: "web", URL: "https://" + keyWeb, Access: "write", Default: true,
+		Name: "labs-web", URL: "https://" + keyWeb, Access: "write", Default: true,
 	})
 	h.setLines(t, moved)
 

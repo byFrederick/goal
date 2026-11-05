@@ -2,8 +2,8 @@ package storetest
 
 import (
 	"fmt"
-	"slices"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -400,6 +400,7 @@ func testPushedRepositoriesJoinAtFinish(f *fixture) {
 		[]domain.RunRepository{{Repo: repoAPI, PushedHead: "a2"}, {Repo: repoWeb, PushedHead: "w2"}}, ended)
 
 	rows := f.itemRepositories(t, it.ID)
+
 	want := []domain.ItemRepository{
 		{Repo: repoAPI, Joined: domain.JoinedFiling, JoinedAt: t0, Ordinal: 0},
 		{Repo: repoWeb, Joined: domain.JoinedPush, JoinedAt: ended, Ordinal: 1},
