@@ -28,6 +28,8 @@ import type {
   Factory,
   FactoryOverviewList,
   FactoryRole,
+  FileFollowUpRequest,
+  FollowUp,
   Inbox,
   Invitation,
   Item,
@@ -69,6 +71,7 @@ import type {
   SignupDomain,
   SignupDomainInput,
   StandingRule,
+  StartRequest,
   Teardown,
   ToolDecision,
   TouchMetrics,
@@ -667,6 +670,30 @@ export function noteItem(org: string, item: string, text: string): Promise<NoteR
 
 export function submitItem(org: string, factory: string, item: NewItem): Promise<Item> {
   return unwrap(goal.POST(orgPath('/factories/{factory}/items'), { params: { path: { org, factory } }, body: item }));
+}
+
+/** Sets when an item that has not started may start (ADR 0040): a time, items it waits for, or both. */
+export function setItemStart(org: string, item: string, start: StartRequest): Promise<Item> {
+  return unwrap(goal.PUT(orgPath('/items/{item}/start'), { params: { path: { org, item } }, body: start }));
+}
+
+/** Clears an item's start time: Start now. Its after items still hold it until they are done. */
+export function clearItemStart(org: string, item: string): Promise<Item> {
+  return unwrap(goal.DELETE(orgPath('/items/{item}/start'), { params: { path: { org, item } } }));
+}
+
+/** Drops a waiting follow-up of an item so it is never delivered or filed. */
+export function dropFollowUp(org: string, item: string, followUp: string): Promise<FollowUp> {
+  return unwrap(
+    goal.POST(orgPath('/items/{item}/follow-ups/{followUp}/drop'), { params: { path: { org, item, followUp } } }),
+  );
+}
+
+/** Files an item from a dropped follow-up, or one in a closed triage item. */
+export function fileFollowUp(org: string, item: string, followUp: string, body: FileFollowUpRequest): Promise<Item> {
+  return unwrap(
+    goal.POST(orgPath('/items/{item}/follow-ups/{followUp}/file'), { params: { path: { org, item, followUp } }, body }),
+  );
 }
 
 export function approveItem(org: string, item: string): Promise<Item> {

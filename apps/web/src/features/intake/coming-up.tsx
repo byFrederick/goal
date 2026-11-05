@@ -1,0 +1,95 @@
+// Coming up (Intake, ADR 0040 decision 4): the items that have not started, soonest first, each with its
+// start or what it waits for, where it came from and Start now. A row that is started leaves the list
+// (MOTION.md, A rule leaves a list); a new one fades in (A new item appears in a list).
+import { useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import { CornerDownRight } from 'lucide-react';
+import { intakeKeys } from '../../api/queries';
+import type { IntakeComingUp } from '../../api/types';
+import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
+import { formatStart, plural } from '../../shared/format';
+import { useOrg } from '../../shared/org';
+import { CameFrom } from '../../shared/origin';
+import { StartNowButton } from '../../shared/start-now';
+import { useArrivals } from '../../ui/arrivals';
+import { cn } from '../../ui/cn';
+import { Leaving, useLeaving } from '../../ui/leaving';
+import { Panel, rowClass } from './panel';
+
+const info =
+  'Items that have not started: they wait in the inbox for their time, or for the items they name. Start now releases one on the next tick.';
+
+export function ComingUp({ items, total }: { items: readonly IntakeComingUp[]; total: number }) {
+  const arrived = useArrivals(items.map((item) => item.id));
+  return (
+    <Panel title="Coming up" info={info} aside={<span className="tabular-nums">{total}</span>}>
+      {items.length === 0 ? (
+        <p className="m-0 border-t border-line px-5 py-4 text-body text-muted">
+          Nothing is waiting to start. Items filed with a start time or after other items show here.
+        </p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {items.map((item) => (
+            <ComingUpRow key={item.id} item={item} arrived={arrived(item.id)} />
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean }) {
+  const org = useOrg();
+  const factory = useFactory();
+  const params = useFactoryParams();
+  const client = useQueryClient();
+  const { leaving, leave } = useLeaving(
+    () => void client.invalidateQueries({ queryKey: intakeKeys.root(org.id, factory.id) }),
+  );
+  const when = item.start ? formatStart(item.start.at) : null;
+  return (
+    <li className={cn('border-t border-line first:border-t-0', arrived && 'motion-safe:animate-item-in')}>
+      <Leaving leaving={leaving}>
+        <div className={cn(rowClass, 'border-t-0')}>
+          <span className="col-span-2 flex flex-col text-body font-medium tabular-nums md:col-span-1">
+            {when ? (
+              <>
+                {when.day}
+                <span className="text-secondary font-normal text-muted">{when.time}</span>
+              </>
+            ) : (
+              <>
+                Waiting
+                <span className="text-secondary font-normal text-muted">
+                  for {item.needs.length > 0 ? item.needs.join(', ') : 'its needs'}
+                </span>
+              </>
+            )}
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <Link
+              to="/o/$org/f/$factory/items/$ref"
+              params={{ ...params, ref: refParam(item.ref) }}
+              className="truncate font-medium text-ink no-underline hover:text-run-ink"
+              title={item.title}
+            >
+              {item.title}
+            </Link>
+            <span className="flex min-w-0 items-center gap-2 text-secondary text-muted">
+              <CornerDownRight size={12} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
+              <span className="min-w-0 truncate">
+                <CameFrom item={item} />
+                {when && item.needs.length > 0 ? `, then waits for ${plural(item.needs.length, 'open item')}` : null}
+              </span>
+            </span>
+          </span>
+          <span className="flex items-center gap-2">
+            {item.start ? (
+              <StartNowButton itemId={item.id} factoryId={factory.id} label={item.title} onStarted={leave} />
+            ) : null}
+          </span>
+        </div>
+      </Leaving>
+    </li>
+  );
+}
