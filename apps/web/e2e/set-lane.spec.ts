@@ -27,7 +27,11 @@ async function setLaneOfTwo(page: Page, request: APIRequestContext) {
   // the bar's count before the next one: a click made during the shift lands on the wrong row.
   const titles = ['Set lane first', 'Set lane second'];
   for (const [at, title] of titles.entries()) {
-    await page.getByRole('row').filter({ hasText: title }).getByRole('checkbox').check();
+    // click, not check: the selection lives in the URL, so the box changes after the router's navigation,
+    // and check() reads its state right after the click and fails when the box has not caught up yet.
+    const box = page.getByRole('row').filter({ hasText: title }).getByRole('checkbox');
+    await box.click();
+    await expect(box).toBeChecked();
     await expect(bar.getByText(`${at + 1} selected`)).toBeVisible();
   }
   await expect(bar.getByText('2 selected')).toBeVisible();
