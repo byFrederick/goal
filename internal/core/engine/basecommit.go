@@ -148,7 +148,8 @@ func (e *Engine) branchHead(ctx context.Context, l domain.Line, it domain.Item, 
 // changedSinceNote is the `## Changed since your plan` section (ADR 0015 decision 5) for a claim
 // while the line's flow.assemblies.changedSince is on, one per repository of the item with a base
 // commit (ADR 0041 decision 5): the commits on that repository's default branch since its base
-// commit that changed files the item's paths in it match. A commit an item of the factory merged
+// commit that changed files the item's paths in it match (domain.RepositoryGlobs: an
+// `owner/name:` prefix names the repository, and a path without one is in the first). A commit an item of the factory merged
 // is named by that item. The first repository falls back to the item's own base commit when its
 // row has none, as an item recorded before base commits per repository has. A repository without
 // such commits adds nothing, nor does one the code host or the store cannot say for, which is
@@ -177,7 +178,7 @@ func (e *Engine) changedSinceNote(ctx context.Context, l domain.Line, it domain.
 			r.base = cmp.Or(r.base, it.BaseCommit)
 		}
 
-		in := repositoryPaths(i, paths)
+		in := domain.RepositoryGlobs(paths, repos[0].key, r.key)
 		if r.base == "" || len(in) == 0 {
 			continue
 		}
@@ -194,16 +195,6 @@ func (e *Engine) changedSinceNote(ctx context.Context, l domain.Line, it domain.
 	}
 
 	return joinParts(notes...)
-}
-
-// repositoryPaths are the item's paths in its i-th repository: every path is in the first until
-// paths name their repository (software#717).
-func repositoryPaths(i int, paths []string) []string {
-	if i > 0 {
-		return nil
-	}
-
-	return paths
 }
 
 // changedSince compares r's base commit with the head of its default branch and renders the

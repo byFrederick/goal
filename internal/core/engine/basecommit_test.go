@@ -19,6 +19,8 @@ const (
 	base = "c0ffee000001"
 	// storeFile is a file under the store paths the tests' items change.
 	storeFile = "internal/store/items.go"
+	// storeSubject is the subject of a commit that changes storeFile.
+	storeSubject = "Fix the store"
 	// storePlan splits an item into one part that changes the store.
 	storePlan = `{"plan":[{"key":"store","title":"Store","brief":"Add the table.","paths":["internal/store/**"]}]}`
 	// touchesStore is a spec output whose item changes the store.
@@ -283,6 +285,37 @@ func TestEngine_ChangedSinceSkipsUnrelatedCommits(t *testing.T) {
 	}
 }
 
+// A path prefixed with the item's first repository, owner/name:, still matches the commits that
+// changed its files, and a path in another repository matches none of them.
+func TestEngine_ChangedSinceStripsTheFirstRepositorysPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := changedSinceLine()
+	l.Runtime.Repositories = []domain.RepositoryEntry{{Name: "app", URL: appRepo, Access: domain.AccessWrite, Default: true}}
+
+	h := newHarness(t, l, porttest.Succeed(`{"touches":["acme/app:internal/store/**","acme/web:docs/**"]}`))
+	h.codehost.SetBranchHead(appRepo, "", base)
+
+	h.submit(t, domain.NewItem{})
+	h.step(t) // spec, at base
+
+	h.land(ports.Commit{SHA: base},
+		ports.Commit{SHA: "c0ffee000012", Subject: "Fix the store's lock", Files: []string{"internal/store/lock.go"}},
+		ports.Commit{SHA: "c0ffee000013", Subject: "Update the docs", Files: []string{"docs/items.md"}},
+	)
+
+	h.step(t) // build
+
+	section := h.changedSinceOf(1)
+	if want := `- commit c0ffee000012 "Fix the store's lock": internal/store/lock.go`; !strings.Contains(section, want) {
+		t.Errorf("section lacks %q:\n%s", want, section)
+	}
+
+	if strings.Contains(section, "docs/items.md") {
+		t.Errorf("section lists a file for acme/web's paths, which are in another repository:\n%s", section)
+	}
+}
+
 func TestEngine_ChangedSinceCodeHostErrorLeavesItOut(t *testing.T) {
 	t.Parallel()
 
@@ -446,7 +479,7 @@ func TestEngine_ChangedSinceOnSecrets(t *testing.T) {
 	it := h.submit(t, domain.NewItem{})
 	h.step(t) // spec, at base
 
-	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000004", Subject: "Fix the store", Files: []string{storeFile}})
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000004", Subject: storeSubject, Files: []string{storeFile}})
 	h.step(t) // build
 
 	if section := h.changedSinceOf(1); !strings.Contains(section, `- commit c0ffee000004 "Fix the store": `+storeFile) {
@@ -562,8 +595,8 @@ func TestEngine_BaseCommitPerRepository(t *testing.T) {
 }
 
 // A claim of an item with two repositories compares each one's base commit with its head: the
-// section names the first repository and lists its commits under the item's paths alone, since
-// every path is in the first repository until paths name theirs (software#717).
+// section names the first repository and lists its commits under the item's paths alone, since a
+// path without an `owner/name:` prefix is in the first repository.
 func TestEngine_ChangedSincePerRepository(t *testing.T) {
 	t.Parallel()
 
@@ -574,7 +607,7 @@ func TestEngine_ChangedSincePerRepository(t *testing.T) {
 	it := h.submitRepos(t, "Two repositories", "github.com/acme/app", "github.com/acme/web")
 	h.step(t) // spec, at both bases
 
-	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000005", Subject: "Fix the store", Files: []string{storeFile}})
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000005", Subject: storeSubject, Files: []string{storeFile}})
 	h.codehost.AddCommits(webRepo, ports.Commit{SHA: webBase}, ports.Commit{SHA: "beef00000002", Subject: "Web store", Files: []string{storeFile}})
 	h.codehost.SetBranchHead(webRepo, "", "beef00000002")
 
@@ -596,6 +629,36 @@ func TestEngine_ChangedSincePerRepository(t *testing.T) {
 	}
 }
 
+// A path with an `owner/name:` prefix is compared in the repository it names, from that
+// repository's own base commit.
+func TestEngine_ChangedSincePerRepositoryPrefixedPath(t *testing.T) {
+	t.Parallel()
+
+	h := twoRepositoryHarness(t, porttest.Succeed(`{"touches":["acme/web:internal/store/**"]}`))
+	h.codehost.SetBranchHead(appRepo, "", base)
+	h.codehost.SetBranchHead(webRepo, "", webBase)
+
+	h.submitRepos(t, "Two repositories", "github.com/acme/app", "github.com/acme/web")
+	h.step(t) // spec, at both bases
+
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000007", Subject: storeSubject, Files: []string{storeFile}})
+	h.codehost.AddCommits(webRepo, ports.Commit{SHA: webBase}, ports.Commit{SHA: "beef00000003", Subject: "Web store", Files: []string{storeFile}})
+	h.codehost.SetBranchHead(webRepo, "", "beef00000003")
+
+	h.step(t) // build
+
+	section := h.changedSinceOf(1)
+	for _, want := range []string{"the default branch of github.com/acme/web since " + webBase, `- commit beef00000003 "Web store": ` + storeFile} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section lacks %q:\n%s", want, h.feedback(1))
+		}
+	}
+
+	if strings.Contains(section, "c0ffee000007") {
+		t.Errorf("section lists the first repository's commit for a path in the second:\n%s", section)
+	}
+}
+
 // A row without a base commit falls back to the item's own for its first repository.
 func TestEngine_ChangedSinceFallsBackToTheItemsBaseCommit(t *testing.T) {
 	t.Parallel()
@@ -610,7 +673,7 @@ func TestEngine_ChangedSinceFallsBackToTheItemsBaseCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000006", Subject: "Fix the store", Files: []string{storeFile}})
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000006", Subject: storeSubject, Files: []string{storeFile}})
 	h.step(t) // build
 
 	if section := h.changedSinceOf(1); !strings.Contains(section, `- commit c0ffee000006 "Fix the store": `+storeFile) {
