@@ -187,6 +187,7 @@ func linkAfter(ctx context.Context, q *db.Queries, roots []db.WorkItem, after []
 // insertPart files one part of the assembly parent through fileItem, filed by the actor given
 // at at, with the parent's type, priority, class of service, base commit, generation and
 // untrusted, queued at the parent's station, the one that planned it, following each of after.
+// Its branch names the factory the parent's does.
 func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, by domain.Actor, at time.Time, after []uuid.UUID, afterBy domain.Actor) (db.WorkItem, error) {
 	key := p.Key
 
@@ -196,6 +197,7 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 			Lane: p.Lane, Title: p.Title, Body: p.Brief, Priority: int(parent.Priority), Station: parent.Station,
 			State: domain.StateQueued, Class: domain.ClassOfService(parent.ClassOfService), CreatedAt: at,
 			Origin: domain.OriginPlan, CreatedBy: by, Generation: int(parent.Generation), Untrusted: parent.Untrusted,
+			FactoryName: domain.BranchFactory(deref(parent.Branch)),
 		},
 		factory: parent.FactoryID, parent: &parent.ID, partKey: &key, partPaths: p.Paths, baseCommit: parent.BaseCommit,
 		after: after, afterBy: afterBy,

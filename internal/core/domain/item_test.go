@@ -18,6 +18,7 @@ func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 		{12, "  Fix: lease sweep (again)!  ", "goal/12-fix-lease-sweep-again"},
 		{3, "Ünïcode only ✓", "goal/3-n-code-only"},
 		{4, "???", "goal/4"},
+		{6, "\u0130stanbul \u212Aelvin", "goal/6-istanbul-kelvin"}, // Go lowercases these two to ASCII
 		{5, "a very long title that keeps going well past the limit of a branch", "goal/5-a-very-long-title-that-keeps-going-well-p"},
 	}
 
@@ -25,6 +26,50 @@ func TestItemBranch_IsAStableGitRefFromNumberAndTitle(t *testing.T) {
 		if got := (Item{Number: tc.number, Title: tc.title}).Branch(); got != tc.want {
 			t.Errorf("Branch(%d, %q) = %q, want %q", tc.number, tc.title, got, tc.want)
 		}
+	}
+}
+
+// A new item's branch names its factory: goal/<factory>/<number>-<slug>, with Branch's slug;
+// without a factory name it is today's goal/<number>-<slug>.
+func TestItemBranch_NamesTheFactory(t *testing.T) {
+	t.Parallel()
+
+	if got, want := ItemBranch("acme-api", 7, "Add a `goal version` subcommand"), "goal/acme-api/7-add-a-goal-version-subcommand"; got != want {
+		t.Errorf("ItemBranch = %q; want %q", got, want)
+	}
+
+	if got, want := ItemBranch("acme-web", 4, "???"), "goal/acme-web/4"; got != want {
+		t.Errorf("ItemBranch without a slug = %q; want %q", got, want)
+	}
+
+	if got, want := ItemBranch("", 12, "Fix it"), "goal/12-fix-it"; got != want {
+		t.Errorf("ItemBranch without a factory = %q; want %q", got, want)
+	}
+
+	if got := BranchFactory("goal/acme-api/7-x"); got != "acme-api" {
+		t.Errorf("BranchFactory = %q; want acme-api", got)
+	}
+
+	for _, b := range []string{"goal/7-x", "", "goal/a7-x"} {
+		if got := BranchFactory(b); got != "" {
+			t.Errorf("BranchFactory(%q) = %q; want none", b, got)
+		}
+	}
+}
+
+// The stored branch wins: renaming the item or its factory never moves it. Only an item without
+// one (an old instance's insert) falls back to goal/<number>-<slug>.
+func TestItemBranch_StoredBranchWins(t *testing.T) {
+	t.Parallel()
+
+	it := Item{Number: 7, Title: "Renamed since", StoredBranch: "goal/acme/7-add-a-flag"}
+	if got := it.Branch(); got != "goal/acme/7-add-a-flag" {
+		t.Errorf("Branch = %q; want the stored goal/acme/7-add-a-flag", got)
+	}
+
+	it.StoredBranch = ""
+	if got := it.Branch(); got != "goal/7-renamed-since" {
+		t.Errorf("Branch without a stored one = %q; want goal/7-renamed-since", got)
 	}
 }
 

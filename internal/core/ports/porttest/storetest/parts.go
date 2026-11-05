@@ -134,6 +134,7 @@ func testAssembleCreatesParts(f *fixture) {
 			PartKey: p.Key, PartPaths: p.Paths, Paths: p.Paths, Type: "feature", Lane: p.Lane, Title: p.Title, Body: p.Brief,
 			Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
 			CreatedAt: t1, UpdatedAt: t1, Origin: domain.OriginPlan,
+			StoredBranch: domain.ItemBranch("", it.Number+int64(i)+1, p.Title),
 		}
 		sameItem(t, got, w)
 		sameEvents(t, f.Events(t, got.ID), []domain.Event{{
@@ -736,6 +737,7 @@ func testAddPart(f *fixture) {
 		PartKey: keyDocs, PartPaths: paths, Paths: paths, Type: typeFeature, Lane: laneBackend, Title: "Docs", Body: "the guide",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassExpedite, Priority: 4, Outputs: map[string]json.RawMessage{},
 		CreatedAt: t2, UpdatedAt: t2, Origin: domain.OriginPlan, CreatedBy: domain.LocalUser.Ref(),
+		StoredBranch: domain.ItemBranch("", it.Number+4, "Docs"),
 	})
 	sameItem(t, f.item(t, part.ID), part)
 

@@ -410,4 +410,16 @@ type WorkItem struct {
 	StartAt           *time.Time
 	StartedAt         *time.Time
 	Triage            bool
+	Branch            *string
+}
+
+type WorkItemRepository struct {
+	OrgID             uuid.UUID
+	ItemID            uuid.UUID
+	Repo              string
+	Joined            string
+	JoinedAt          time.Time
+	Ordinal           int32
+	BaseCommit        *string
+	IntegrationBranch *string
 }

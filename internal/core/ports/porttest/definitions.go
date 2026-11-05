@@ -1145,6 +1145,7 @@ func (s *Store) deleteFactory(id domain.FactoryID) {
 	maps.DeleteFunc(s.leases, func(item domain.ItemID, _ domain.Lease) bool { return gone[item] })
 	maps.DeleteFunc(s.spans, func(item domain.ItemID, _ []domain.Span) bool { return gone[item] })
 	maps.DeleteFunc(s.leaseLog, func(item domain.ItemID, _ []domain.LeaseSpan) bool { return gone[item] })
+	maps.DeleteFunc(s.repos, func(item domain.ItemID, _ []domain.ItemRepository) bool { return gone[item] })
 	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return r.FactoryID == id })
 	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool {
 		if e.FactoryID == id {

@@ -20,8 +20,8 @@ type filedPart struct {
 }
 
 // file adds n as an item of org, as the PostgreSQL store's fileItem does: the next number,
-// origin person when n has none, its span and its created event (part_created for a part) by
-// n.FiledBy. It returns the item and its item.filed audit entry, which the caller appends once
+// origin person when n has none, its branch and repositories, its span and its created event
+// (part_created for a part) by n.FiledBy. It returns the item and its item.filed audit entry, which the caller appends once
 // s.mu is released. s.mu is held.
 func (s *Store) file(org domain.OrgID, n domain.NewItem, p filedPart) (*domain.Item, domain.AuditEntry) {
 	s.numbers[n.FactoryID]++
@@ -33,6 +33,11 @@ func (s *Store) file(org domain.OrgID, n domain.NewItem, p filedPart) (*domain.I
 		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
 		Source: n.Source, Trigger: n.Trigger, Origin: cmp.Or(n.Origin, domain.OriginPerson), Via: n.Via,
 		Generation: n.Generation, Untrusted: n.Untrusted, StartAt: utc(n.StartAt), StartedAt: utc(n.StartedAt),
+	}
+	it.StoredBranch = domain.ItemBranch(n.FactoryName, it.Number, it.Title)
+
+	for i, r := range n.Repositories {
+		s.repos[it.ID] = append(s.repos[it.ID], domain.ItemRepository{Repo: r.Repo, Joined: r.Joined, JoinedAt: utc(n.CreatedAt), Ordinal: i})
 	}
 
 	by := n.FiledBy()

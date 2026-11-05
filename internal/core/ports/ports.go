@@ -77,12 +77,19 @@ func (e *MergeConflictError) Is(target error) bool { return target == ErrMergeCo
 // instances at once.
 type Store interface {
 	// CreateItem files an item domain.File checked: it inserts it with the next per-factory number
-	// (origin person when n.Origin is ""), and appends a created event and an item.filed audit
+	// (origin person when n.Origin is ""), its branch (domain.ItemBranch of n.FactoryName) and
+	// n.Repositories joined at n.CreatedAt, and appends a created event and an item.filed audit
 	// entry by n.CreatedBy (the engine when zero), in one transaction.
 	CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error)
 
 	// Item returns one item, or ErrNotFound.
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
+
+	// ItemRepositories returns an item's repositories in first-joined order: those joined at
+	// filing in the order named, then the rest by when they joined, then by ordinal. An unknown
+	// item, or one filed without any, has none; run start resolves those to the line's default
+	// entry (domain.ResolveItemRepositories).
+	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 
 	// FollowUps returns the follow-ups kept for an item (Transition.FollowUps), oldest first and
 	// in output order within a run, each filed one with the factory and number of the item it was
