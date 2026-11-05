@@ -880,6 +880,18 @@ const goalSeeds: Seed[] = [
     state: 'waiting_human',
     createdMin: 170,
     updatedMin: 48,
+    followUps: [
+      {
+        text: 'The checkout dashboard has no alert on p95 latency, so this took 38 minutes to be noticed.',
+        target: 'triage',
+        state: 'waiting',
+      },
+      {
+        text: 'Redis evictions on session-cache started at the same time; look at it when this is closed.',
+        target: 'note',
+        state: 'delivered',
+      },
+    ],
     outputs: {
       spec: specOutput(
         'Embed web/dist into goald and serve it at /, falling back to index.html for client routes; /v1 and /mcp keep their handlers.',
@@ -1458,18 +1470,6 @@ const sreSeeds: Seed[] = [
     agent: 'investigator',
     createdMin: 38,
     updatedMin: 1,
-    followUps: [
-      {
-        text: 'The checkout dashboard has no alert on p95 latency, so this took 38 minutes to be noticed.',
-        target: 'triage',
-        state: 'waiting',
-      },
-      {
-        text: 'Redis evictions on session-cache started at the same time; look at it when this is closed.',
-        target: 'note',
-        state: 'delivered',
-      },
-    ],
     steps: [
       { move: 'triage' },
       { run: 'triager', cost: 0.05, turns: 2, tools: [] },
