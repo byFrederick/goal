@@ -250,3 +250,110 @@ func TestGetItem_NotesFromOtherItems(t *testing.T) {
 		t.Errorf("source notes = %+v; want an empty list", s.Notes)
 	}
 }
+
+// A follow-up's item says where it came from: each follow-up filed as it, with its source item,
+// the agent and station that wrote it and the item whose landing filed it, another factory's
+// item included. A person's item has no came_from, and a follow-up's item none of whose rows
+// resolves an empty list.
+func TestGetItem_CameFromFollowUps(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	src := h.submit(t)
+
+	h.keepFollowUps(t, src,
+		domain.FollowUp{Text: "Look at the line", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{Title: "Look at the line", Factory: lineSlug}},
+		domain.FollowUp{Text: "Retry after it", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{Title: "Retry"}},
+	)
+	h.land(t, src, domain.Line{
+		FactoryID: lineID, Name: lineSlug, Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}},
+		Flow: domain.FlowPolicy{FollowUpsFrom: []domain.FactoryID{acmeID}},
+	})
+
+	got := h.getItem(t, src.Id)
+	if got.CameFrom != nil {
+		t.Errorf("a person's item came_from = %+v; want none", got.CameFrom)
+	}
+
+	if got.FollowUps == nil || len(*got.FollowUps) != 2 {
+		t.Fatalf("follow_ups = %+v; want 2", got.FollowUps)
+	}
+
+	for _, f := range *got.FollowUps {
+		filed := h.getItem(t, deref(f.FiledItemId))
+
+		want := []gen.CameFromFollowUp{{
+			Id: f.Id, FromItem: src.Ref, FromItemId: src.Id, Agent: writerAgent, Station: src.Station, LandedItem: src.Ref, LandedItemId: src.Id,
+		}}
+		if c := filed.CameFrom; c == nil || c.Trigger != nil || c.FollowUps == nil || !slices.Equal(*c.FollowUps, want) {
+			t.Errorf("%s came_from = %+v; want %+v", filed.Ref, c, want)
+		}
+	}
+
+	orphan := h.seedFrom(t, domain.OriginFollowUp, "")
+	if c := h.getItem(t, string(orphan.ID)).CameFrom; c == nil || c.FollowUps == nil || len(*c.FollowUps) != 0 {
+		t.Errorf("a follow-up's item with no source came_from = %+v; want an empty list", c)
+	}
+}
+
+// seedFrom creates an item of acme at the inbox with origin and trigger, as the door would.
+func (h *harness) seedFrom(t *testing.T, origin domain.Origin, trigger string) domain.Item {
+	t.Helper()
+
+	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
+		FactoryID: acmeID, Type: typeFix, Title: "seeded", Station: stInbox, State: domain.StateQueued, Class: domain.ClassStandard,
+		CreatedAt: t0, Origin: origin, Trigger: trigger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// A trigger's item names its trigger and kind: check, with the key it was filed under, for a
+// trigger with a check, schedule for another schedule, webhook otherwise, and no kind for a
+// trigger the definition no longer has. A plan's part has no came_from.
+func TestGetItem_CameFromTrigger(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}]}`, "")
+
+	checked := h.getItem(t, acmeName+"#1")
+	if checked.Origin == nil || *checked.Origin != gen.ItemOriginTrigger {
+		t.Fatalf("checked item = %+v; want the check's item", checked)
+	}
+
+	for _, c := range []struct {
+		what, id, want string
+	}{
+		{"a check's item", checked.Id, incidentsName + " check INC-1"},
+		{"a schedule's item", string(h.seedFrom(t, domain.OriginTrigger, "nightly-audit").ID), "nightly-audit schedule "},
+		{"a webhook's item", string(h.seedFrom(t, domain.OriginTrigger, "flaky-test-on-main").ID), "flaky-test-on-main webhook "},
+		{"a removed trigger's item", string(h.seedFrom(t, domain.OriginTrigger, "gone-trigger").ID), "gone-trigger  "},
+		{"a plan's part", string(h.seedFrom(t, domain.OriginPlan, "").ID), "absent"},
+	} {
+		if got := cameFromTrigger(h.getItem(t, c.id).CameFrom); got != c.want {
+			t.Errorf("%s came_from = %q; want %q", c.what, got, c.want)
+		}
+	}
+}
+
+// cameFromTrigger is c's trigger as its name, kind and key, "absent" when c is absent and "not a
+// trigger" when c has follow-ups or no trigger.
+func cameFromTrigger(c *gen.ItemCameFrom) string {
+	switch {
+	case c == nil:
+		return "absent"
+	case c.FollowUps != nil || c.Trigger == nil:
+		return "not a trigger"
+	}
+
+	kind := ""
+	if c.Trigger.Kind != nil {
+		kind = string(*c.Trigger.Kind)
+	}
+
+	return c.Trigger.Name + " " + kind + " " + deref(c.Trigger.Key)
+}

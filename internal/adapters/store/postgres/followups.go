@@ -41,6 +41,31 @@ func (s *Store) FollowUps(ctx context.Context, item domain.ItemID) ([]domain.Fol
 	return out, nil
 }
 
+// FiledFrom implements ports.Store.
+func (s *Store) FiledFrom(ctx context.Context, item domain.ItemID) ([]domain.FiledFrom, error) {
+	if !isUUID(string(item)) {
+		return nil, nil // an id that is not a UUID names no item, which has none
+	}
+
+	uid := uuid.MustParse(string(item))
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemFiledFromRow, error) { return q.ItemFiledFrom(ctx, &uid) })
+	if err != nil {
+		return nil, fmt.Errorf("follow-ups item %s was filed from: %w", item, err)
+	}
+
+	out := make([]domain.FiledFrom, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.FiledFrom{
+			FollowUp: domain.FollowUpID(r.ID.String()), Source: domain.ItemID(r.SourceID.String()),
+			SourceFactory: domain.FactoryID(r.SourceFactoryID.String()), SourceNumber: r.SourceNumber, Station: r.Station, Agent: r.Agent,
+			Landed: domain.ItemID(r.LandedID.String()), LandedFactory: domain.FactoryID(r.LandedFactoryID.String()), LandedNumber: r.LandedNumber,
+		})
+	}
+
+	return out, nil
+}
+
 // ItemNotes implements ports.Store.
 func (s *Store) ItemNotes(ctx context.Context, item domain.ItemID, limit int) ([]domain.Event, error) {
 	if !isUUID(string(item)) {

@@ -103,6 +103,22 @@ type FollowUp struct {
 	CreatedAt    time.Time
 }
 
+// FiledFrom is a follow-up an item was filed as or onto, one of its sources (ADR 0040 decision
+// 2): the source item and the run's station and agent that wrote it, and the item whose landing
+// filed it, which is the source or its assembly when the source is a part. Factories and numbers
+// are of any factory of the organization.
+type FiledFrom struct {
+	FollowUp      FollowUpID
+	Source        ItemID
+	SourceFactory FactoryID
+	SourceNumber  int64
+	Station       string
+	Agent         string
+	Landed        ItemID
+	LandedFactory FactoryID
+	LandedNumber  int64
+}
+
 // FollowUpKey is the text follow-ups of an item are kept once by: trimmed, case folded and its
 // whitespace collapsed to single spaces.
 func FollowUpKey(text string) string {

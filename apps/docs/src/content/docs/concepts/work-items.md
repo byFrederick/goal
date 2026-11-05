@@ -55,6 +55,13 @@ Every item is checked the same way however it arrives: its title can't be empty,
 
 Each item records where it came from as its `origin`: `person`, `plan` for a part, `trigger`, or `follow-up`. It also records who filed it. For a person's item, it records whether it was filed on the web, from the CLI or with an API key. The API answers an item's `origin`. Items filed before origins were recorded got theirs from how they were submitted, and those with no record of it show `person`.
 
+Reading one item (`GET /v1/orgs/{org}/items/{item}`) also answers `came_from` for an item with origin `follow-up` or `trigger`:
+
+- For a follow-up's item, `came_from.follow_ups` lists the follow-ups filed as it or onto it, oldest first. Each names the item whose run wrote it, the agent and station of that run, and the item whose landing filed it: the source item, or its assembly when the source is a part. Items of other factories are named the same way, as `<factory>#<number>`. The list is empty, never absent, when none of them can be read.
+- For a trigger's item, `came_from.trigger` names the trigger and its kind: `check` for a trigger with a check, `schedule` for another schedule, `webhook` otherwise. The kind is absent when the factory's current definition no longer has the trigger. For a check, `key` is the key the check filed the item under. A check keeps only each key's last item, so an item whose key a later check filed again has no `key`.
+
+Items of any other origin have no `came_from`.
+
 ## Notes from other items
 
 An agent can leave a note for another open item. It writes a follow-up whose `for` names the item as `<factory>#<number>`, in the output field that `board.flow.outputs.followUps` maps (see the [definition reference](/docs/reference/definition/)). On its next tick, every few seconds by default, goald adds the note to that item's events as an `item_note`, with the item and agent it came from.

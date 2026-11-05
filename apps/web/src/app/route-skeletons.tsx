@@ -246,8 +246,8 @@ export function ItemSkeleton() {
   return <PendingSkeleton placeholder={<ItemShape />} />;
 }
 
-/** The Trigger page: its title, then four form blocks beside the recent events and the YAML. */
-export function TriggerShape() {
+/** The Trigger page: its title, then four form blocks beside the recent events and the YAML. A check's page has a shorter Check block in place of Only if, and the log of checks. */
+export function TriggerShape({ check = false }: { check?: boolean } = {}) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <div className="flex items-center gap-4">
@@ -257,13 +257,13 @@ export function TriggerShape() {
       </div>
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
         <div className="flex min-w-0 flex-col gap-4">
-          <div className={cn(block, 'h-36')} />
-          <div className={cn(block, 'h-40')} />
-          <div className={cn(block, 'h-72')} />
+          <div className={cn(block, check ? 'h-24' : 'h-36')} />
+          <div className={cn(block, check ? 'h-72' : 'h-40')} />
+          <div className={cn(block, check ? 'h-36' : 'h-72')} />
           <div className={cn(block, 'h-28')} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          <div className={cn(block, 'h-64')} />
+          <div className={cn(block, check ? 'h-96' : 'h-64')} />
           <div className={cn(block, 'h-48')} />
         </div>
       </div>
@@ -314,6 +314,11 @@ export function ItemsSkeleton() {
 /** The pending component of the Trigger route. */
 export function TriggerSkeleton() {
   return <PendingSkeleton placeholder={<TriggerShape />} />;
+}
+
+/** The Trigger page of a trigger with a check, while its checks load. */
+export function TriggerCheckSkeleton() {
+  return <PendingSkeleton placeholder={<TriggerShape check />} />;
 }
 
 /** The Floor: its header, the stat strip, the line, then the cards. */

@@ -1,6 +1,7 @@
 package storetest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -30,6 +31,7 @@ var followUpFilingTests = []struct {
 	{"FollowUps_TriageNoneWhenNothingLeft", testTriageNoneWhenNothingLeft},
 	{"FollowUps_FileAndDropByAPerson", testFileAndDropByAPerson},
 	{"FollowUps_FileInAClosedTriageItem", testFileInAClosedTriageItem},
+	{"FollowUps_FiledFromNamesSourcesAndLanding", testFiledFromNamesSourcesAndLanding},
 }
 
 // tLanded is when the tests' work lands, and tSweep when the sweep runs.
@@ -645,3 +647,81 @@ const titleSrc = "src"
 
 // adaActor is the person who drops and files follow-ups.
 var adaActor = domain.Actor{Kind: domain.ActorUser, ID: "grace", Name: "Grace"}
+
+// FiledFrom reads the follow-ups an item was filed from: a part's names the part and its
+// assembly, whose landing filed it; one filed into another factory names its source there. An
+// item filed by no follow-up has none, and another organization reads none.
+func testFiledFromNamesSourcesAndLanding(f *fixture) {
+	t := f.t
+
+	ops := f.newFactory(t)
+	lines := []domain.Line{lineOf(f.factory, nameDev), lineOf(ops, nameOps, f.factory)}
+
+	root := f.create(t, domain.NewItem{Title: "the assembly"})
+	part := f.create(t, domain.NewItem{Title: "a part", ParentID: root.ID})
+	src := f.create(t, domain.NewItem{Title: titleSrc})
+
+	f.keepNotes(t, part, startFollowUp("Drop the column", domain.FollowUpPlan{Title: "Drop column"}))
+	f.keepNotes(t, src, startFollowUp("into ops", domain.FollowUpPlan{Title: "Ops work", Factory: nameOps}))
+	f.land(t, part, domain.StateDone, tLanded.Add(-time.Hour))
+	f.land(t, root, domain.StateDone, tLanded)
+	f.land(t, src, domain.StateDone, tLanded)
+
+	if got := f.sweep(t, lines, 10); len(got) != 2 {
+		t.Fatalf("FileFollowUps = %+v; want two filed", got)
+	}
+
+	fromPart, fromSrc := f.filedAs(t, part), f.filedAs(t, src)
+
+	if got := f.filedFrom(f.ctx(t), t, fromPart.FiledItem); len(got) != 1 || got[0] != (domain.FiledFrom{
+		FollowUp: fromPart.ID, Source: part.ID, SourceFactory: f.factory, SourceNumber: part.Number, Station: stWork, Agent: agWorker,
+		Landed: root.ID, LandedFactory: f.factory, LandedNumber: root.Number,
+	}) {
+		t.Errorf("FiledFrom of the part's follow-up item = %+v; want the part, landed with its assembly %s", got, root.ID)
+	}
+
+	if it := f.item(t, fromSrc.FiledItem); it.FactoryID != ops {
+		t.Fatalf("into ops filed in %s; want ops", it.FactoryID)
+	}
+
+	if got := f.filedFrom(f.ctx(t), t, fromSrc.FiledItem); len(got) != 1 || got[0] != (domain.FiledFrom{
+		FollowUp: fromSrc.ID, Source: src.ID, SourceFactory: f.factory, SourceNumber: src.Number, Station: stWork, Agent: agWorker,
+		Landed: src.ID, LandedFactory: f.factory, LandedNumber: src.Number,
+	}) {
+		t.Errorf("FiledFrom of the item filed into ops = %+v; want its source in dev, landed itself", got)
+	}
+
+	for what, id := range map[string]domain.ItemID{"a person's item": src.ID, "an unknown item": "not-an-item"} {
+		if got := f.filedFrom(f.ctx(t), t, id); len(got) != 0 {
+			t.Errorf("FiledFrom of %s = %+v; want none", what, got)
+		}
+	}
+
+	if got := f.filedFrom(f.otherOrg(t).ctx(t), t, fromPart.FiledItem); len(got) != 0 {
+		t.Errorf("another organization's FiledFrom = %+v; want none", got)
+	}
+}
+
+// filedAs is src's one follow-up, filed.
+func (f *fixture) filedAs(t *testing.T, src domain.Item) domain.FollowUp {
+	t.Helper()
+
+	kept, err := f.Store.FollowUps(f.ctx(t), src.ID)
+	if err != nil || len(kept) != 1 || kept[0].State != domain.FollowUpFiled {
+		t.Fatalf("FollowUps of %s = %+v, %v; want one filed", src.Title, kept, err)
+	}
+
+	return kept[0]
+}
+
+// filedFrom reads FiledFrom of id in ctx.
+func (f *fixture) filedFrom(ctx context.Context, t *testing.T, id domain.ItemID) []domain.FiledFrom {
+	t.Helper()
+
+	got, err := f.Store.FiledFrom(ctx, id)
+	if err != nil {
+		t.Fatalf("FiledFrom: %v", err)
+	}
+
+	return got
+}
