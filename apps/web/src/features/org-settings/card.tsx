@@ -9,10 +9,13 @@ export function SettingsSection({
   id,
   title,
   tone,
+  aside,
   children,
 }: {
   id: string;
   title: string;
+  /** Beside the heading: an ⓘ tip. */
+  aside?: ReactNode;
   tone?: 'danger';
   children: ReactNode;
 }) {
@@ -23,9 +26,12 @@ export function SettingsSection({
       aria-labelledby={headingId}
       className={cn('overflow-hidden rounded-card border border-rule', tone === 'danger' && 'border-rework/40')}
     >
-      <h2 id={headingId} className={cn('m-0 px-5 pt-4 pb-1 text-heading', tone === 'danger' && 'text-rework-ink')}>
-        {title}
-      </h2>
+      <div className="flex items-center gap-1 px-5 pt-4 pb-1">
+        <h2 id={headingId} className={cn('m-0 text-heading', tone === 'danger' && 'text-rework-ink')}>
+          {title}
+        </h2>
+        {aside}
+      </div>
       <div className="flex min-w-0 flex-col [&>:first-child]:border-t-0">{children}</div>
     </section>
   );

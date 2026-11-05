@@ -4,6 +4,7 @@ import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
 import type { ItemCard, PartsSummary } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatDay, formatUsd, humanize, plural } from '../../shared/format';
+import { ItemRepositories } from '../../shared/item-repositories';
 import { itemStatus, pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
@@ -55,6 +56,7 @@ export function BoardCard({
   assemblyParts,
   arrived = false,
   dimmed = false,
+  showRepositories = false,
 }: {
   item: ItemCard;
   onMove?: (() => void) | undefined;
@@ -66,6 +68,8 @@ export function BoardCard({
   arrived?: boolean;
   /** A Ready (buffer) card: the panel surface instead of the card's, so it recedes without opacity (MASTER.md, Board column). */
   dimmed?: boolean;
+  /** The board's cards name several repositories: this card names its own. */
+  showRepositories?: boolean;
 }) {
   // A decision waits on "you" only for someone who decides here.
   const decides = holds(useFactory(), 'item:decide');
@@ -158,6 +162,7 @@ export function BoardCard({
           {expediteLabel}
           <CardTitle item={item} describedBy={drag?.describedBy} movable={Boolean(onMove)} />
           {item.assembly ? <AssemblyLine item={item} parts={assemblyParts} /> : null}
+          {showRepositories ? <ItemRepositories item={item} /> : null}
           {item.agent ? <AgentLine item={item} /> : null}
           <div className={cn('flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1', onMove && 'md:pr-10')}>
             {stateLine}

@@ -28,6 +28,8 @@ An organization's roles are owner, admin and member. The person who creates an o
 
 An organization lists the code hosts its repositories live on. github.com (GitHub) and gitlab.com (GitLab) are built in: every organization lists them, and nobody adds or removes them. An owner adds a GitHub Enterprise or self-managed GitLab host, with its kind: `github` or `gitlab`.
 
+In the app, the list is under **Code hosts** in the organization's Settings, between Notifications and Data. Every member sees it. Only an owner sees the **Add a host** form, with the host name and its kind (GitHub or GitLab), and a **Remove** button on each added host. The built-in hosts have no Remove. Saving needs a sign-in from the last 10 minutes: if yours is older, Goal asks you to confirm it's you, then saves.
+
 Any member, and any API key or personal token with `org:read`, can read the list with `GET /v1/orgs/{org}/code-hosts`. The built-in hosts come first, then the added ones sorted by name.
 
 An owner sets the added hosts with `PUT /v1/orgs/{org}/code-hosts`, in a session signed in within the last 10 minutes. API keys and personal tokens can't set them. The body lists every added host, so a host left out is removed and an empty list removes them all:
