@@ -2,7 +2,7 @@
 // (aria-current="location", the hover fill, MASTER.md and the design's `.toc a.on`); the mark follows
 // scrolling and clicks. It changes colour only: a selection that follows scrolling is high frequency,
 // so nothing slides (MOTION.md, Hover on anything).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '../../ui/cn';
 
 export interface SectionLink {
@@ -13,6 +13,27 @@ export interface SectionLink {
 export function SectionNav({ links }: { links: readonly SectionLink[] }) {
   const [current, setCurrent] = useState(links[0]?.id);
   const ids = links.map((l) => l.id).join(',');
+  // A clicked link stays marked until the scroll it started ends or the person scrolls: the last
+  // sections can't reach the top of a short page, so the section in view would win over the click.
+  const pinned = useRef(false);
+
+  useEffect(() => {
+    const release = () => {
+      pinned.current = false;
+    };
+    // The observer reports a frame or two after the scroll ends: let that report pass first.
+    const releaseAfterScroll = () => requestAnimationFrame(() => requestAnimationFrame(release));
+    document.addEventListener('scrollend', releaseAfterScroll, true);
+    document.addEventListener('wheel', release, { passive: true });
+    document.addEventListener('touchmove', release, { passive: true });
+    document.addEventListener('keydown', release);
+    return () => {
+      document.removeEventListener('scrollend', releaseAfterScroll, true);
+      document.removeEventListener('wheel', release);
+      document.removeEventListener('touchmove', release);
+      document.removeEventListener('keydown', release);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof IntersectionObserver === 'undefined') return;
@@ -25,7 +46,7 @@ export function SectionNav({ links }: { links: readonly SectionLink[] }) {
           else visible.delete(e.target.id);
         }
         const first = order.find((id) => visible.has(id));
-        if (first) setCurrent(first);
+        if (first && !pinned.current) setCurrent(first);
       },
       { rootMargin: '0px 0px -60% 0px' },
     );
@@ -43,7 +64,10 @@ export function SectionNav({ links }: { links: readonly SectionLink[] }) {
           key={l.id}
           href={`#${l.id}`}
           aria-current={current === l.id ? 'location' : undefined}
-          onClick={() => setCurrent(l.id)}
+          onClick={() => {
+            pinned.current = true;
+            setCurrent(l.id);
+          }}
           className={cn(
             'press rounded-control px-3 py-1 text-ink-soft no-underline transition-colors duration-(--duration-quick) ease-(--ease-out) hover:bg-hover hover:text-ink',
             'aria-[current=location]:bg-hover aria-[current=location]:font-medium aria-[current=location]:text-ink',
