@@ -86,8 +86,8 @@ type harness struct {
 	knowledgeDeps engine.KnowledgeSnapshots
 	// intake holds the trigger firings and the schedule lock every engine of the harness shares.
 	intake *porttest.Intake
-	// modelCheck answers triggers' model checks; nil builds the engine without one.
-	modelCheck ports.ModelCheck
+	// events are the senders' event tables; nil builds the engine without them.
+	events ports.SenderEvents
 	// outbox queues the budget notifications every engine of the harness raises.
 	outbox *porttest.NotificationOutbox
 	line   domain.Line
@@ -201,8 +201,8 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
 		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		Connections: h.connections, Credentials: h.credentials, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab},
-		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake,
-		ModelCheck: h.modelCheck, Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
+		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
+		Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
 		MaxRuns:        maxRuns,
@@ -246,7 +246,10 @@ func (h *harness) submit(t *testing.T, n domain.NewItem) domain.Item {
 		n.Type = typeFeature
 	}
 
-	it, err := h.e.Submit(inOrg(t), n)
+	it, err := h.e.Submit(inOrg(t), domain.FileRequest{
+		FactoryID: n.FactoryID, Origin: domain.OriginPerson, Type: n.Type, Lane: n.Lane, Title: n.Title, Body: n.Body,
+		Priority: n.Priority,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -716,7 +719,7 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 
 	other := lineOf(agentStation(stWork, agWorker, 1, 1))
 	other.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a01"
-	n := domain.NewItem{FactoryID: other.FactoryID, Title: anItem, Type: typeFeature}
+	n := domain.FileRequest{Origin: domain.OriginPerson, FactoryID: other.FactoryID, Title: anItem, Type: typeFeature}
 
 	if _, err := h.e.Submit(inOrg(t), n); err == nil {
 		t.Fatal("submit to a factory that is not loaded succeeded")
@@ -741,7 +744,7 @@ func TestSetLines_LoadsAndUnloadsFactories(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := h.e.Submit(inOrg(t), domain.NewItem{FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
+	if _, err := h.e.Submit(inOrg(t), domain.FileRequest{Origin: domain.OriginPerson, FactoryID: factoryID, Title: "x", Type: typeFeature}); err == nil {
 		t.Error("submit to an unloaded factory succeeded")
 	}
 }
@@ -764,7 +767,7 @@ func TestSetLines_UnloadingAFactoryReleasesItsRuns(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		theirs, err := h.e.Submit(inOrg(t), domain.NewItem{FactoryID: other.FactoryID, Title: anItem, Type: typeFeature})
+		theirs, err := h.e.Submit(inOrg(t), domain.FileRequest{Origin: domain.OriginPerson, FactoryID: other.FactoryID, Title: anItem, Type: typeFeature})
 		if err != nil {
 			t.Fatal(err)
 		}

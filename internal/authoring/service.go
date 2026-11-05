@@ -238,6 +238,9 @@ type Deps struct {
 	// Policies is the organization policy whose allowed models a version may name (ADR 0024
 	// decision 3); nil leaves the policy check out.
 	Policies ports.OrgPolicies
+	// Webhooks are the organization's webhooks, which a trigger's webhook form must name open to
+	// the factory (ADR 0040 decision 14); nil leaves that check out.
+	Webhooks OrgWebhooks
 	Clock    ports.Clock
 	// NewID returns a new factory id (a UUIDv7); uuid.NewV7 when nil.
 	NewID func() string
@@ -253,6 +256,7 @@ type Service struct {
 	loads       Loads
 	credentials Credentials
 	policies    ports.OrgPolicies
+	webhooks    OrgWebhooks
 	clock       ports.Clock
 	newID       func() string
 	templates   *TemplateCatalog
@@ -273,8 +277,8 @@ func New(d Deps) *Service {
 
 	return &Service{
 		store: d.Store, loads: d.Loads, credentials: d.Credentials, log: log,
-		policies: d.Policies,
-		clock:    d.Clock, newID: newID,
+		policies: d.Policies, webhooks: d.Webhooks,
+		clock: d.Clock, newID: newID,
 		templates: NewTemplateCatalog(d.Templates, d.Clock),
 	}
 }

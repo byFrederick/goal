@@ -51,7 +51,7 @@ spec:
         on: schedule
         cron: "0 8 * * MON-FRI"
         timeZone: Europe/Berlin
-        create: { type: question, station: inbox, title: "Inbox sweep" }
+        create: { type: question, station: inbox, title: "Inbox sweep", brief: ./triggers/morning-sweep.md }
       - name: shop-incident
         on: webhook.shop-alerts.failed
         filter: { repo: acme/shop, skipBots: true }

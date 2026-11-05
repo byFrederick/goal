@@ -75,8 +75,8 @@ const (
 	AuditTargetJonahReview = "jonah_review"
 )
 
-// RunKind is whose run an agent run is: a line's, at a station, a Jonah review's (ADR 0034) or a
-// try of a past item (ADR 0039 decision 9).
+// RunKind is whose run an agent run is: a line's, at a station, a Jonah review's (ADR 0034), a
+// try of a past item (ADR 0039 decision 9) or a trigger's check (ADR 0040 decision 19).
 type RunKind string
 
 // Run kinds. A run with no kind is a station run.
@@ -84,7 +84,11 @@ const (
 	RunKindStation RunKind = "station"
 	RunKindJonah   RunKind = "jonah"
 	RunKindTry     RunKind = "try"
+	RunKindCheck   RunKind = "check"
 )
+
+// Itemless reports whether a run of kind k works no item: Jonah's runs and checks.
+func (k RunKind) Itemless() bool { return k.Jonahs() || k == RunKindCheck }
 
 // Jonahs reports whether a run of kind k is Jonah's: a review or a try. Jonah's runs work no item
 // and are paid from Jonah's share, never the line's spend (ADR 0039 decision 16).

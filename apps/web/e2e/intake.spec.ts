@@ -9,17 +9,21 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
 });
 
-test('the Intake page lists where work came from, the triggers and the suggested triggers', async ({ page }) => {
+test('the Intake page lists what is coming up, where items came from, the triggers and the webhooks', async ({
+  page,
+}) => {
   await page.goto(intake);
   await expect(page).toHaveTitle('Intake · software · Acme · Goal');
   await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'Where the last 48 items came from' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Coming up' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Where items came from' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Follow-ups to triage' })).toBeVisible();
 
   const triggers = page.getByRole('region', { name: 'Triggers' });
   await expect(triggers.getByRole('link', { name: 'flaky-test-on-main' })).toBeVisible();
   await expect(triggers.getByText('2 events refused, bad signature')).toBeVisible();
   await expect(triggers.getByRole('switch', { name: 'deploy-failed' })).toHaveAttribute('aria-checked', 'false');
-  await expect(page.getByRole('heading', { level: 2, name: 'Suggested triggers' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Webhooks open to Software' })).toBeVisible();
 
   await expect(page.getByRole('link', { name: 'Webhooks' })).toHaveAttribute('href', `${intake}/webhooks`);
   await expectAccessible(page);
@@ -52,7 +56,7 @@ test('the picker is one pane with Back on a phone', async ({ page }) => {
   await expectNoHorizontalScroll(page);
 });
 
-// The picker at the desktop and phone widths in both themes: plain icons, one suggestion per row, the breadcrumb.
+// The picker at the desktop and phone widths in both themes: plain icons, one suggestion per row, when the factory has them, the breadcrumb.
 for (const theme of ['light', 'dark'] as const) {
   for (const size of [
     { width: 1440, height: 900 },
@@ -69,11 +73,13 @@ for (const theme of ['light', 'dark'] as const) {
       const github = dialog.getByRole('button', { name: 'GitHub' });
       await expect(github.locator('[class*="bg-"]')).toHaveCount(0);
 
-      const rows = dialog.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Use' }) });
-      const first = await rows.nth(0).boundingBox();
-      const second = await rows.nth(1).boundingBox();
-      expect(second?.y ?? 0).toBeGreaterThan((first?.y ?? 0) + (first?.height ?? 0) - 1);
-      expect(second?.x).toBe(first?.x);
+      const rows = dialog.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Turn on' }) });
+      if ((await rows.count()) >= 2) {
+        const first = await rows.nth(0).boundingBox();
+        const second = await rows.nth(1).boundingBox();
+        expect(second?.y ?? 0).toBeGreaterThan((first?.y ?? 0) + (first?.height ?? 0) - 1);
+        expect(second?.x).toBe(first?.x);
+      }
 
       if (size.width >= 1440) {
         const nav = page.getByRole('navigation', { name: 'Breadcrumb' });

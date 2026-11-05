@@ -459,6 +459,10 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 	if !reflect.DeepEqual(l.ExpediteTypes, []string{"incident"}) {
 		t.Errorf("expedite types = %v, want [incident]", l.ExpediteTypes)
 	}
+
+	if !reflect.DeepEqual(l.WorkTypes, []string{"feature", workIncident}) {
+		t.Errorf("work types = %v, want board.workTypes [feature incident]", l.WorkTypes)
+	}
 }
 
 // A version published before the cutover keeps loading, but its line runs nothing: it names the
@@ -639,6 +643,9 @@ func TestLoad_RefusesUnknownDependencyKeys(t *testing.T) {
 	}
 }
 
+// branchMain is the branch the trigger mapping cases filter on.
+const branchMain = "main"
+
 // workIncident is the support factory's expedited work type.
 const workIncident = "incident"
 
@@ -654,18 +661,18 @@ func TestLine_Triggers(t *testing.T) {
 	want := []domain.Trigger{
 		{
 			Name: "morning-sweep", Enabled: true, On: domain.OnSchedule, Cron: "0 8 * * MON-FRI", TimeZone: "Europe/Berlin",
-			Create: domain.TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep"},
+			Create: domain.TriggerCreate{Type: "question", Station: "inbox", Title: "Inbox sweep", Brief: supportSweepBrief},
 		},
 		{
-			Name: "shop-incident", Enabled: true, On: "webhook.shop-alerts.failed",
-			Filter: domain.TriggerFilter{Repo: "acme/shop", SkipBots: true},
+			Name: "shop-incident", Enabled: true, On: "shop-alerts.failed",
+			Filter: domain.TriggerFilter{Repo: []string{"acme/shop"}, SkipBots: true},
 			Only: domain.TriggerOnly{
-				FailuresInARow: 2, Dedupe: "service", ModelAgrees: &domain.ModelAgrees{Question: "Is this a real outage rather than a blip?"},
+				FailuresInARow: 2, Dedupe: "service", ModelAgrees: true,
 			},
 			Create: domain.TriggerCreate{
 				Type: workIncident, Station: "triage", Expedite: true, Title: "{{service}} is failing", Brief: "Alert: {{alert.summary}}",
 			},
-			Limits: domain.TriggerLimits{PerDay: 3, PauseOnBudget: true},
+			Limits: domain.TriggerLimits{PerDay: 3, PerHour: domain.DefaultPerHour, PauseOnBudget: true},
 		},
 	}
 
@@ -676,6 +683,28 @@ func TestLine_Triggers(t *testing.T) {
 	off := false
 	if got := trigger(Trigger{Name: "off", Enabled: &off, On: domain.OnSchedule}); got.Enabled {
 		t.Error("a trigger with enabled: false maps as enabled")
+	}
+
+	// The keys written before ADR 0040 decision 14 read as its forms, with their filters.
+	old := []struct {
+		on, want string
+		filter   domain.TriggerFilter
+	}{
+		{domain.OnCheckRunFailed, "github.check_run", domain.TriggerFilter{Branch: branchMain, Conclusion: []string{"failure"}}},
+		{domain.OnIssuesLabeled, "github.issues", domain.TriggerFilter{Branch: branchMain, Action: []string{"labeled"}}},
+		{"webhook.deploys", "deploys", domain.TriggerFilter{Branch: branchMain}},
+		{"github.push", "github.push", domain.TriggerFilter{Branch: branchMain}},
+	}
+
+	for _, o := range old {
+		got := trigger(Trigger{Name: "t", On: o.on, Filter: &TriggerFilter{Branch: branchMain}, Limits: &TriggerLimits{PerHour: 4}})
+		if got.On != o.want || !reflect.DeepEqual(got.Filter, o.filter) || got.Limits.PerHour != 4 {
+			t.Errorf("on %s maps to on %s, filter %+v, perHour %d; want %s, %+v, 4", o.on, got.On, got.Filter, got.Limits.PerHour, o.want, o.filter)
+		}
+	}
+
+	if got := trigger(Trigger{Name: "s", On: domain.OnSchedule}); got.Limits.PerHour != 0 {
+		t.Errorf("a schedule's perHour = %d; want none", got.Limits.PerHour)
 	}
 }
 
@@ -858,5 +887,113 @@ func expectEnvironments(t *testing.T, l domain.Line) {
 
 	if want := map[string]string{engineer: "", "tester": "browser"}; !maps.Equal(envs, want) {
 		t.Errorf("agents' environments = %v; want %v", envs, want)
+	}
+}
+
+// otherFactoryID is a factory the follow-ups tests accept follow-ups from.
+const otherFactoryID = "00000000-0000-4000-8000-000000000020"
+
+// board.flow.outputs.followUps names the follow-ups field and board.flow.followUpsFrom the
+// factories, by metadata.id, that may send them; both map none when left out.
+func TestLine_CarriesFollowUps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		flow  string
+		field string
+		from  []domain.FactoryID
+	}{
+		{flow: ""},
+		{flow: "    flow:\n      outputs: {}\n      followUpsFrom: []\n"},
+		{
+			flow:  "    flow:\n      outputs: { followUps: followups }\n      followUpsFrom: [" + otherFactoryID + "]\n",
+			field: "followups", from: []domain.FactoryID{otherFactoryID},
+		},
+	}
+
+	for _, tt := range tests {
+		f, err := Load(checkTree(baseFactory+tt.flow, nil))
+		if err != nil {
+			t.Fatalf("flow %q: %v", tt.flow, err)
+		}
+
+		fl := f.Line().Flow
+		if fl.Outputs.FollowUps != tt.field || !slices.Equal(fl.FollowUpsFrom, tt.from) {
+			t.Errorf("flow %q: outputs.followUps %q, followUpsFrom %v; want %q, %v", tt.flow, fl.Outputs.FollowUps, fl.FollowUpsFrom, tt.field, tt.from)
+		}
+	}
+
+	for _, flow := range []string{
+		"outputs: { followUps: \"\" }", "outputs: { close: \"\" }", "outputs: { close: [a] }", "outputs: { followUps: [a] }",
+		"followUpsFrom: [acme-other]", "followUpsFrom: " + otherFactoryID, "followUpsFrom: [" + otherFactoryID + ", " + otherFactoryID + "]",
+	} {
+		_, problems := Check(checkTree(baseFactory+"    flow:\n      "+flow+"\n", nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("flow %s: problems %+v, want a schema problem", flow, problems)
+		}
+	}
+}
+
+// board.flow.outputs.close maps the field that closes an item onto the line, next to followUps.
+func TestLine_CarriesClose(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { followUps: followups, close: closing }\n", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if o := f.Line().Flow.Outputs; o.FollowUps != "followups" || o.Close != "closing" {
+		t.Errorf("outputs = %+v; want followUps followups and close closing", o)
+	}
+}
+
+// A station contract that declares the mapped follow-ups field declares it as a plain array, so a
+// follow-up never fails its run's checks: Load refuses a $ref, an item limit or required inner
+// fields, and takes strings, objects or both. Without the field mapped, the contract is not read.
+func TestLoad_RefusesStrictFollowUpsField(t *testing.T) {
+	t.Parallel()
+
+	contract := func(field string) string {
+		return `{"type":"object","properties":{"followups":` + field + `}}`
+	}
+
+	tests := []struct {
+		name    string
+		field   string
+		refused bool
+	}{
+		{name: "strings", field: `{"type":"array","items":{"type":"string"}}`},
+		{name: "strings or objects", field: `{"type":"array","items":{"anyOf":[{"type":"string"},{"type":"object","properties":{"text":{"type":"string"},"for":{"type":"string"}}}]}}`},
+		{name: "no items", field: `{"type":"array"}`},
+		{name: "a ref", field: `{"$ref":"#/$defs/followups"}`, refused: true},
+		{name: "a ref on its items", field: `{"type":"array","items":{"$ref":"#/$defs/followup"}}`, refused: true},
+		{name: "an item limit", field: `{"type":"array","maxItems":5,"items":{"type":"string"}}`, refused: true},
+		{name: "required inner fields", field: `{"type":"array","items":{"type":"object","required":["text"]}}`, refused: true},
+		{name: "required in one form", field: `{"type":"array","items":{"oneOf":[{"type":"string"},{"type":"object","required":["text"]}]}}`, refused: true},
+		{name: "not an array", field: `{"type":"string"}`, refused: true},
+	}
+
+	mapped := edited(specAgents, "  contracts:\n    answer: ./contracts/answer.schema.json\n"+specAgents,
+		workAgentLine, workAgentLine+"        output: answer\n") + "    flow:\n      outputs: { followUps: followups }\n"
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := Load(checkTree(mapped, map[string]string{answerContract: contract(tt.field)}))
+
+			switch {
+			case tt.refused && (err == nil || !strings.Contains(err.Error(), "followups")):
+				t.Errorf("Load = %v; want it refused, naming the field", err)
+			case !tt.refused && err != nil:
+				t.Errorf("Load = %v; want it loaded", err)
+			}
+
+			unmapped := strings.TrimSuffix(mapped, "    flow:\n      outputs: { followUps: followups }\n")
+			if _, err := Load(checkTree(unmapped, map[string]string{answerContract: contract(tt.field)})); err != nil {
+				t.Errorf("Load without the field mapped = %v; want it loaded", err)
+			}
+		})
 	}
 }

@@ -1,5 +1,5 @@
-RECEIVED              OUTCOME   REASON                   ITEM
-2026-10-26 08:00 UTC  created   -                        docs#12
-2026-10-26 07:59 UTC  refused   signature did not match  -
-2026-10-26 07:58 UTC  accepted  -                        -
-next: goal webhooks deliveries docs gh --after cursor-2
+RECEIVED              OUTCOME   RECEIPT   REASON                   ITEM  EVALUATIONS
+2026-10-26 08:00 UTC  created   accepted  -                        #12   docs: created, line: pending
+2026-10-26 07:59 UTC  refused   refused   signature did not match  -     -
+2026-10-26 07:58 UTC  accepted  -         -                        -     -
+next: goal webhooks deliveries gh --after cursor-2

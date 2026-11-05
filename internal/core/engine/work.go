@@ -39,6 +39,8 @@ type checked struct {
 	// after are the open items the output says the work must follow (followed).
 	after []domain.Item
 	next  domain.Line
+	// close is the reason the output closes its item with (domain.CloseFrom); "" when it does not.
+	close string
 }
 
 // claimed is an item this instance holds a lease on at an agent station.
@@ -132,7 +134,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
 		default:
-			e.finish(ctx, log, c, res.Output, chk)
+			e.finish(ctx, log, c, res.RunID, res.Output, chk)
 			return
 		}
 
@@ -276,7 +278,8 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 //   - Read the web and docs, off or ask: the deny rules also get the builtins.web tools
 //     (webTools); ask is served as off, as for builtins, since no tool approval is enforced.
 //   - Merge a pull request, off: an approving gate whose action is merge does not merge, and the
-//     item waits there for a person's merge (noMerge); review_approval is the version's say.
+//     item waits there for a person's merge (noMerge); review_approval is the version's say. An
+//     untrusted item (ADR 0040 decision 21) takes the same path whatever the policy says.
 //   - Use secrets (use_credentials), off: the agent's connections list is emptied, so neither its
 //     env nor its task token gets any of them; the runtime's model and repository connections
 //     still reach the run, which cannot start without them. On secrets the agent's environment
@@ -390,7 +393,8 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 // when not, it has blocked the item.
 func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
 	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
-		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, errCheckFailed)
+		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, domain.ErrBadClose) ||
+		errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
@@ -415,9 +419,9 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 
 // check validates an output against the station's contract (of the version the run started
 // on), at a gate reads its verdict and, when the output is not a rejection, the items it says
-// the work follows (followed) and, when the current line materializes plans, its plan. The
-// current line is read once here and finish moves the item along the same one, so a plan is
-// assembled only by a line that parsed it.
+// the work follows (followed), its close (closeOf) and, when the current line materializes plans,
+// its plan. The current line is read once here and finish moves the item along the same one, so a
+// plan is assembled only by a line that parsed it.
 func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (checked, error) {
 	if c.station.Output != "" {
 		if err := e.contracts.Validate(ctx, c.line.VersionID, c.station.Output, output); err != nil {
@@ -440,6 +444,13 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 		return chk, nil
 	}
 
+	reason, err := closeOf(c, output, chk.next)
+	if err != nil {
+		return checked{}, err
+	}
+
+	chk.close = reason
+
 	after, err := e.followed(ctx, c, output, chk.next.Flow.Dependencies.After)
 	if err != nil {
 		return checked{}, err
@@ -456,9 +467,40 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 		return checked{}, err
 	}
 
+	if err := domain.CheckTriagePlan(c.item, plan); err != nil {
+		return checked{}, err
+	}
+
 	chk.plan = plan
 
 	return chk, nil
+}
+
+// closeOf is the close the output gives in the field the line maps (flow.outputs.close), checked
+// before any plan is assembled: refused on an item a person filed, on a part, and together with a
+// plan when the current line (next) materializes plans. "" when the output closes nothing.
+func closeOf(c claimed, output json.RawMessage, next domain.Line) (string, error) {
+	reason, err := domain.CloseFrom(output, c.line.Flow.Outputs.Close)
+	if err != nil || reason == "" {
+		return "", err
+	}
+
+	var plan bool
+
+	if next.Flow.Assemblies.Materialize {
+		parts, err := domain.PlanFrom(output)
+		if err != nil {
+			return "", err
+		}
+
+		plan = len(parts) > 0
+	}
+
+	if err := domain.CheckClose(c.item, plan); err != nil {
+		return "", err
+	}
+
+	return reason, nil
 }
 
 // runOnce runs the claim's next run with the shared run lifecycle (runTask) under the claim's
@@ -700,21 +742,21 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 
 // finish moves an item whose output passed its checks, with an event for each declared rule the
 // output says was broken (violations) and the paths it lists in the field the line maps
-// (flow.dependencies.paths), with the base commit it was planned against (baseCommit): through the gate's verdict when the
-// station has one, into state assembly when its output has a plan (assemble), otherwise to the
-// next station. An approving gate whose action is merge leaves the merge to a person when the
+// (flow.dependencies.paths) and the follow-ups of run it holds (followUps), with the base commit it was planned against (baseCommit): through the gate's verdict when the
+// station has one, to cancelled at its station when its output closes the item (closeItem), into
+// state assembly when its output has a plan (assemble), otherwise to the next station. An approving gate whose action is merge leaves the merge to a person when the
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
 // a pull request is only not mergeable yet (deferMerge). The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
 // moves along v2.
-func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output json.RawMessage, chk checked) {
+func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run domain.RunID, output json.RawMessage, chk checked) {
 	next, v := chk.next, chk.verdict
 
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
 		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), BaseCommit: e.baseCommit(ctx, log, c),
-		Output: output, At: e.clock.Now(),
+		Output: output, At: e.clock.Now(), FollowUps: followUps(c, run, output),
 	}
 	t.Events = e.violations(ctx, log, c, output, t.At)
 
@@ -723,20 +765,20 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 	switch {
 	case v != nil && v.Decision == domain.Reject:
 		err = e.gateReject(c, next, *v, &t)
+	case chk.close != "":
+		closeItem(c, chk.close, &t)
 	case len(chk.plan) > 0:
 		if v != nil { // an approving gate's plan: no merge, the parts make the pull requests
 			t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		}
 
-		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c)})
+		e.assemble(ctx, log, c, ports.Assembly{Transition: t, Parts: chk.plan, After: itemIDs(chk.after), AfterBy: agentActor(c), By: agentActor(c)})
 
 		return
-	case v != nil && c.noMerge && c.station.Action == domain.ActionMerge:
+	case v != nil && c.waitsForPerson() && c.station.Action == domain.ActionMerge:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		t.To, t.Outcome = domain.Position{Station: c.station.ID, State: domain.StateWaitingHuman}, domain.LeaseEscalated
-		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{
-			keyReason: "approved; the organization policy lets no agent merge a pull request, so a person merges it",
-		}))
+		t.Events = append(t.Events, event(c.item, domain.EventWaitingHuman, t.At, domain.ActorEngine, map[string]any{keyReason: noMergeReason(c.item)}))
 	case v != nil:
 		t.Events = append(t.Events, event(c.item, domain.EventGateApproved, t.At, c.agent.Name, nil))
 		if err = e.mergeOnApproval(ctx, c, next, &t); err == nil {
@@ -758,6 +800,31 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, output
 	e.transition(ctx, log, t)
 }
 
+// closeItem points t at the item's cancellation at its station with reason, its agent the actor
+// (ADR 0040 decision 11). The lease ends advanced, as with any accepted output: this is not
+// Cancel, which takes a running run's lease.
+func closeItem(c claimed, reason string, t *ports.Transition) {
+	by := agentActor(c)
+	data := map[string]any{keyReason: reason, keyStation: c.station.ID, "agent": c.agent.Name, "closed": true}
+
+	t.To = domain.Position{Station: c.station.ID, State: domain.StateCancelled}
+	t.Events = append(t.Events, decision(c.item, domain.EventCancelled, t.At, by, data))
+	t.Audit = itemAudit(c.item, t.At, by, domain.AuditItemCancelled, data)
+}
+
+// followUps are the follow-ups an accepted output of run holds in the field the line maps
+// (flow.outputs.followUps), with the run, station and agent that wrote them. They go in the
+// transition that accepts the output, so they are kept once with it and never for an output that
+// is not; none when the line maps no field.
+func followUps(c claimed, run domain.RunID, output json.RawMessage) []domain.FollowUp {
+	fs := domain.FollowUpsFrom(output, c.line.Flow.Outputs.FollowUps)
+	for i := range fs {
+		fs[i].RunID, fs[i].Station, fs[i].Agent = run, c.station.ID, c.agent.Name
+	}
+
+	return fs
+}
+
 // violations are the rule_violated events of an accepted output, one per entry of its
 // violations that names a rule of the version the run started on. They go in the transition
 // that accepts the output, so they are written once with it and never for an output that is
@@ -774,7 +841,7 @@ func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, ou
 		}
 
 		events = append(events, event(c.item, domain.EventRuleViolated, at, c.agent.Name, map[string]any{
-			keyRule: v.Rule, keyReason: v.Reason, "station": c.station.ID, "agent": c.agent.Name,
+			keyRule: v.Rule, keyReason: v.Reason, keyStation: c.station.ID, "agent": c.agent.Name,
 		}))
 	}
 
@@ -783,12 +850,19 @@ func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, ou
 
 // assemble makes the claimed item an assembly with the parts of its plan, queued at the station
 // that planned them; the item stays there, in state assembly. A part cannot plan an assembly
-// (assemblies do not nest), so its plan blocks it. A lost acknowledgement is only logged: the
+// (assemblies do not nest), so its plan blocks it, as does a part domain.File refuses. A lost acknowledgement is only logged: the
 // store's Assemble is idempotent, so the parts exist at most once.
 func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a ports.Assembly) {
 	if c.item.ParentID != "" {
 		e.block(ctx, log, c, "a part cannot plan an assembly")
 		return
+	}
+
+	for _, p := range a.Parts {
+		if err := checkPart(c.line, c.item, a.By, p); err != nil {
+			e.block(ctx, log, c, "assemble: part "+p.Key+": "+err.Error())
+			return
+		}
 	}
 
 	a.Transition.To = domain.Position{Station: c.station.ID, State: domain.StateAssembly}
@@ -932,4 +1006,20 @@ func agentSpec(l domain.Line, name string) (domain.AgentSpec, error) {
 	}
 
 	return a, nil
+}
+
+// waitsForPerson is whether an approved merge is left to a person: the organization policy lets no
+// agent merge, or the item came from outside text (ADR 0040 decision 21).
+func (c claimed) waitsForPerson() bool {
+	return c.noMerge || c.item.Untrusted
+}
+
+// noMergeReason is why an approved merge waits for a person: the item came from outside text
+// (ADR 0040 decision 21), or the organization policy lets no agent merge.
+func noMergeReason(it domain.Item) string {
+	if it.Untrusted {
+		return "approved; the item was made from outside text (a webhook delivery), so a person merges it"
+	}
+
+	return "approved; the organization policy lets no agent merge a pull request, so a person merges it"
 }

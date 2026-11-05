@@ -98,6 +98,32 @@ type Item struct {
 	// creator did not say.
 	Source  ItemSource
 	Trigger string
+	// Origin is where the item came from (person, plan, trigger or follow-up), Via how a person
+	// filed it ("" otherwise) and CreatedBy the filer's actor ref ("" for items filed before ADR
+	// 0040). Generation counts the follow-ups it descends from; Untrusted marks work made from a
+	// webhook delivery (domain.File).
+	Origin     Origin
+	Via        Via
+	CreatedBy  string
+	Generation int
+	Untrusted  bool
+	// StartAt is when the item may start (ADR 0040 decision 3), zero when it may start now.
+	// StartedAt is when it left its line's first station, or when it was filed at a later one;
+	// zero until then. Lead time counts from it.
+	StartAt   time.Time
+	StartedAt time.Time
+	// Triage marks a factory's triage item, which collects follow-ups (ADR 0040 decision 10).
+	Triage bool
+}
+
+// LeadFrom is when the item's lead time starts: StartedAt, or CreatedAt when it has not started
+// (ADR 0040 decision 4).
+func (it Item) LeadFrom() time.Time {
+	if it.StartedAt.IsZero() {
+		return it.CreatedAt
+	}
+
+	return it.StartedAt
 }
 
 // Position returns the item's station and state.
@@ -190,7 +216,7 @@ func branchName(prefix string, it Item) string {
 	return fmt.Sprintf("%s%d-%s", prefix, it.Number, slug)
 }
 
-// NewItem is what intake supplies to create an item. The engine fills Station, State and Class.
+// NewItem is a filed item, as domain.File checks it, for the store to write.
 type NewItem struct {
 	FactoryID FactoryID
 	ParentID  ItemID
@@ -207,6 +233,20 @@ type NewItem struct {
 	// when the creator does not say.
 	Source  ItemSource
 	Trigger string
+	// Origin, Via, Generation and Untrusted are as on Item; the store writes OriginPerson when
+	// Origin is "". CreatedBy files it: the created event's actor and the item.filed audit entry's,
+	// EngineActor when zero.
+	Origin     Origin
+	Via        Via
+	CreatedBy  Actor
+	Generation int
+	Untrusted  bool
+	// StartAt is when the item may start, zero for now; StartedAt is CreatedAt for an item filed
+	// past its line's first station, zero otherwise; After are the items it waits for, each a
+	// linked edge by CreatedBy (domain.File).
+	StartAt   time.Time
+	StartedAt time.Time
+	After     []ItemID
 }
 
 // Assembly is an item with parts: a request split into several items (each part's ParentID is

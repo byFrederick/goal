@@ -124,9 +124,9 @@ type Deps struct {
 	// Intake records trigger firings and holds the schedule lock (intake.go, schedules.go); nil
 	// leaves Intake and FireSchedules failing with errNoIntake.
 	Intake ports.Intake
-	// ModelCheck asks a model a trigger's only.modelAgrees question (modelcheck.go); nil skips
-	// every event of a trigger with one, "Model check failed" (ADR 0028 decision 3).
-	ModelCheck ports.ModelCheck
+	// Events are the senders' event tables, which a delivery's fields are read by
+	// (deliveries.go); nil reads none, so deliveries match on their event and payload only.
+	Events ports.SenderEvents
 	// Audit takes the trigger.tried entry of each trigger dry run (try.go); nil leaves TryTrigger
 	// failing with errNoAudit.
 	Audit ports.Audit
@@ -197,6 +197,9 @@ func (c Config) LongestClaim() time.Duration {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyStation is the event and audit data key naming the station an item was at.
+const keyStation = "station"
+
 // keyRule is the event data key of the factory rule a rule_violated event counts.
 const keyRule = "rule"
 
@@ -239,12 +242,14 @@ type Engine struct {
 	policies    ports.OrgPolicies
 	knowledge   KnowledgeSnapshots // nil without Deps.Knowledge
 	intake      ports.Intake
-	modelCheck  ports.ModelCheck
-	audit       ports.Audit
-	outbox      ports.NotificationOutbox
-	clock       ports.Clock
-	log         *slog.Logger
-	cfg         Config
+	events      ports.SenderEvents
+	// holder names this instance's claims of delivery evaluations (deliveries.go).
+	holder string
+	audit  ports.Audit
+	outbox ports.NotificationOutbox
+	clock  ports.Clock
+	log    *slog.Logger
+	cfg    Config
 
 	mu    sync.RWMutex
 	lines map[domain.FactoryID]domain.Line
@@ -260,6 +265,8 @@ type Engine struct {
 	// active holds this instance's runs by item, so the engine can cancel them (BudgetStop).
 	activeMu sync.Mutex
 	active   map[domain.ItemID]*activeRun
+	// checks holds this instance's running checks by firing, so a budget stop cancels them too.
+	checks map[string]*activeRun
 	// exhausted holds the factories whose weekly budget was used up at the last tick, so each
 	// transition is logged once. It is a local hint, not state: an instance that starts reads
 	// the spend afresh and logs what it finds.
@@ -304,10 +311,16 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 
+	holder, err := newHolder()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Engine{
+		events: d.Events, holder: holder,
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, modelCheck: d.ModelCheck, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
-		active: map[domain.ItemID]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
+		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }
 
@@ -450,25 +463,22 @@ func (e *Engine) Run(ctx context.Context) error {
 // Wait blocks until every agent run started by this instance's ticks has finished.
 func (e *Engine) Wait() { e.runs.Wait() }
 
-// Submit creates an item at the first station of its factory's line. The factory must belong
-// to the organization in ctx; any other is ports.ErrNotFound.
-func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, error) {
-	l, err := e.lineIn(ctx, n.FactoryID)
+// Submit files an item on its factory's line through domain.File, which places it at the first
+// station, resolves its start at the clock's now and refuses what the line does not take with
+// domain.ErrInvalid; the store links each open after item. The factory must
+// belong to the organization in ctx; any other is ports.ErrNotFound.
+func (e *Engine) Submit(ctx context.Context, r domain.FileRequest) (domain.Item, error) {
+	l, err := e.lineIn(ctx, r.FactoryID)
 	if err != nil {
 		return domain.Item{}, err
 	}
 
-	// The type is one of the line's work types, or "" when the factory declares none.
-	if n.Title == "" {
-		return domain.Item{}, errors.New("submit: an item needs a title")
-	}
+	r.At = e.clock.Now()
 
-	first, err := l.First()
+	n, err := domain.File(l, r)
 	if err != nil {
-		return domain.Item{}, err
+		return domain.Item{}, fmt.Errorf("submit: %w", err)
 	}
-
-	n.Station, n.State, n.Class, n.CreatedAt = first.ID, first.Arrival(), l.ClassFor(n.Type), e.clock.Now()
 
 	it, err := e.store.CreateItem(ctx, n)
 	if err != nil {
@@ -481,7 +491,7 @@ func (e *Engine) Submit(ctx context.Context, n domain.NewItem) (domain.Item, err
 // Tick does one round of pulling: items waiting at queue stations move to the next station,
 // line by line, the weekly budgets are enforced (budgets), then agent stations of the lines
 // within budget claim work into their free slots and start runs, fairly across organizations
-// (claim). A paused line, and a line stopped by an open andon pull (read once per tick; an
+// (claim), and lease their queued checks into the slots left (workChecks). A paused line, and a line stopped by an open andon pull (read once per tick; an
 // unreadable one counts as open), neither releases nor claims, whatever its budget, while its
 // runs in progress finish; its budget is still enforced, so the stop policy still cancels its
 // runs. Each line's store calls are bound to its organization, whatever ctx carries. Runs
@@ -492,6 +502,16 @@ func (e *Engine) Tick(ctx context.Context) error {
 	e.mu.RLock()
 	lines := maps.Clone(e.lines)
 	e.mu.RUnlock()
+
+	// Notes go first, so a target claimed in this tick reads them; every line takes notes. Then
+	// the follow-ups of landed work are filed, before the queues release.
+	errs = append(errs, e.deliverNotes(ctx, lines), e.fileFollowUps(ctx, lines))
+
+	// Deliveries are evaluated on every instance; each claims its own rows (deliveries.go).
+	if e.intake != nil {
+		_, err := e.evaluateDeliveries(ctx, lines)
+		errs = append(errs, err)
+	}
 
 	running := maps.Clone(lines)
 	maps.DeleteFunc(running, func(_ domain.FactoryID, l domain.Line) bool { return l.Paused })
@@ -516,6 +536,11 @@ func (e *Engine) Tick(ctx context.Context) error {
 	claimable, err := e.budgets(ctx, lines)
 	maps.DeleteFunc(claimable, func(id domain.FactoryID, _ domain.Line) bool { _, ok := running[id]; return !ok })
 	errs = append(errs, err, e.claim(ctx, claimable))
+
+	// Checks are leased on every instance, into the slots the claims left (checks.go).
+	if e.intake != nil {
+		errs = append(errs, e.workChecks(ctx, lines, claimable))
+	}
 
 	return errors.Join(errs...)
 }
@@ -567,11 +592,12 @@ func (e *Engine) SweepLeases(ctx context.Context) (int, error) {
 	return swept, errors.Join(errs...)
 }
 
-// releaseQueue moves items waiting at a queue station to the next station.
+// releaseQueue moves the items a queue station releases now to the next station: those with
+// no open need and no start in the future (ADR 0040 decision 4), which wait there until then.
 func (e *Engine) releaseQueue(ctx context.Context, l domain.Line, st domain.Station) error {
-	items, err := e.store.Waiting(ctx, l.FactoryID, st.ID, e.cfg.SweepLimit)
+	items, err := e.store.Releasable(ctx, l.FactoryID, st.ID, e.clock.Now(), e.cfg.SweepLimit)
 	if err != nil {
-		return fmt.Errorf("station %s: list waiting: %w", st.ID, err)
+		return fmt.Errorf("station %s: list releasable: %w", st.ID, err)
 	}
 
 	next, err := l.Next(st.ID)

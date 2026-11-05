@@ -4,18 +4,6 @@
 -- never wait on each other's rows in opposite orders. AddPart locks the factory's row, then the
 -- assembly's, the order of AddEdge (item_edges.sql).
 
--- name: InsertPart :one
-INSERT INTO work_items (
-  id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
-  state, class_of_service, priority, base_commit, created_at, updated_at
-) VALUES (
-  sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(number), sqlc.arg(parent_id)::uuid, sqlc.arg(part_key)::text,
-  sqlc.arg(part_paths)::text[], sqlc.arg(part_paths)::text[], sqlc.arg(type), sqlc.narg(lane),
-  sqlc.arg(title), sqlc.arg(body), sqlc.arg(station), 'queued', sqlc.arg(class_of_service),
-  sqlc.arg(priority)::bigint, sqlc.narg(base_commit)::text, sqlc.arg(created_at), sqlc.arg(created_at)
-)
-RETURNING *;
-
 -- name: ItemParts :many
 -- An assembly's parts in plan order: they are numbered in that order (work_items_parent_part_key_idx).
 SELECT * FROM work_items WHERE parent_id = sqlc.arg(parent_id)::uuid AND part_key IS NOT NULL ORDER BY number;

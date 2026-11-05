@@ -164,8 +164,9 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
-	tests = append(tests, jonahTests...)
+	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
+	tests = append(append(tests, followUpsTests...), followUpFilingTests...)
 
 	for _, tc := range tests {
 		runCase(t, newHarness, tc.name, tc.test)
@@ -353,7 +354,7 @@ func testCreateItem(f *fixture) {
 	want := domain.Item{
 		ID: a.ID, OrgID: f.org, FactoryID: f.factory, Number: 1, Type: typeTask, Lane: laneBackend, Title: "a", Body: "details",
 		Station: stWork, State: domain.StateQueued, Class: domain.ClassStandard, Priority: 3,
-		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0,
+		Outputs: map[string]json.RawMessage{}, CreatedAt: t0, UpdatedAt: t0, Origin: domain.OriginPerson,
 	}
 	sameItem(t, a, want)
 	sameItem(t, f.item(t, a.ID), want)
@@ -364,6 +365,7 @@ func testCreateItem(f *fixture) {
 
 	sameEvents(t, f.Events(t, a.ID), []domain.Event{{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventCreated, Station: stWork, Actor: domain.ActorEngine,
+		Data: map[string]any{dataActor: domain.EngineActor.Ref()},
 	}})
 }
 
@@ -594,6 +596,7 @@ func testTransition(f *fixture) {
 	want := it
 	want.Station, want.State, want.Lane, want.ReworkCount, want.UpdatedAt = stNext, domain.StateQueued, laneBackend, 1, t2
 	want.Outputs = map[string]json.RawMessage{stWork: tr.Output}
+	want.StartedAt = t2 // its first move off a station: it left the first one
 	sameItem(t, moved, want)
 	sameItem(t, f.item(t, it.ID), want)
 
@@ -604,7 +607,7 @@ func testTransition(f *fixture) {
 	events := f.Events(t, it.ID)
 	sameEvents(t, events[len(events)-1:], tr.Events)
 
-	// No lease, no lane, no output: those stay; reaching done stores DoneAt.
+	// No lease, no lane, no output: those stay, and so does StartedAt; reaching done stores DoneAt.
 	done, err := f.Store.Transition(f.ctx(t), ports.Transition{
 		ItemID: it.ID, From: domain.Position{Station: stNext, State: domain.StateQueued},
 		To: domain.Position{Station: "done", State: domain.StateDone}, At: t3, DoneAt: t3,

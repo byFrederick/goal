@@ -73,6 +73,10 @@ function delivery(
     outcome,
     reason: extra.reason ?? '',
     item: extra.item ?? null,
+    event: outcome === 'refused' ? '' : extra.event,
+    receipt: outcome === 'refused' ? 'refused' : 'accepted',
+    duplicates: 0,
+    evaluations: [],
     headers: {
       'content-type': 'application/json',
       'user-agent': 'example-sender/1.0',
@@ -126,6 +130,7 @@ function endpointOf(
     id,
     name,
     kind,
+    sender: kind === 'github' ? 'github' : 'standard',
     address: `/hooks/${id}`,
     secret_name: `${name}-hook-secret`,
     created_at: '2026-10-01T00:00:00Z',

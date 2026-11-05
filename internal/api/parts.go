@@ -244,11 +244,11 @@ func (s *server) partAgents(ctx context.Context, factory domain.FactoryID, parts
 	return out, nil
 }
 
-// assemblyLead is an assembly's lead time: from its creation to its last part done once it is
-// closed (to when it closed when no part is done), or to now while it is open.
+// assemblyLead is an assembly's lead time: from when it started (Item.LeadFrom) to its last part
+// done once it is closed (to when it closed when no part is done), or to now while it is open.
 func assemblyLead(it domain.Item, parts domain.Parts, now time.Time) time.Duration {
 	if !closedState(it.State) {
-		return now.Sub(it.CreatedAt)
+		return now.Sub(it.LeadFrom())
 	}
 
 	var end time.Time
@@ -262,7 +262,7 @@ func assemblyLead(it domain.Item, parts domain.Parts, now time.Time) time.Durati
 		end = it.UpdatedAt
 	}
 
-	return end.Sub(it.CreatedAt)
+	return end.Sub(it.LeadFrom())
 }
 
 // closedState reports whether an item in state st is off the line for good.

@@ -39,6 +39,9 @@ import { Route as OOrgOrgKnowledgeNewRouteImport } from './routes/o.$org._org.kn
 import { Route as OOrgOrgSecretsIndexRouteImport } from './routes/o.$org._org.secrets.index'
 import { Route as OOrgOrgSecretsSecretRouteImport } from './routes/o.$org._org.secrets.$secret'
 import { Route as OOrgOrgSecretsImportRouteImport } from './routes/o.$org._org.secrets.import'
+import { Route as OOrgOrgWebhooksIndexRouteImport } from './routes/o.$org._org.webhooks.index'
+import { Route as OOrgOrgWebhooksWebhookRouteImport } from './routes/o.$org._org.webhooks.$webhook'
+import { Route as OOrgOrgWebhooksNewRouteImport } from './routes/o.$org._org.webhooks.new'
 import { Route as OOrgFFactoryIndexRouteImport } from './routes/o.$org.f.$factory.index'
 import { Route as OOrgFFactoryBoardRouteImport } from './routes/o.$org.f.$factory.board'
 import { Route as OOrgFFactoryDefinitionRouteImport } from './routes/o.$org.f.$factory.definition'
@@ -208,6 +211,21 @@ const OOrgOrgSecretsImportRoute = OOrgOrgSecretsImportRouteImport.update({
   path: '/secrets/import',
   getParentRoute: () => OOrgOrgRoute,
 } as any)
+const OOrgOrgWebhooksIndexRoute = OOrgOrgWebhooksIndexRouteImport.update({
+  id: '/webhooks/',
+  path: '/webhooks/',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgWebhooksWebhookRoute = OOrgOrgWebhooksWebhookRouteImport.update({
+  id: '/webhooks/$webhook',
+  path: '/webhooks/$webhook',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
+const OOrgOrgWebhooksNewRoute = OOrgOrgWebhooksNewRouteImport.update({
+  id: '/webhooks/new',
+  path: '/webhooks/new',
+  getParentRoute: () => OOrgOrgRoute,
+} as any)
 const OOrgFFactoryIndexRoute = OOrgFFactoryIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -338,12 +356,15 @@ export interface FileRoutesByFullPath {
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/secrets/$secret': typeof OOrgOrgSecretsSecretRoute
   '/o/$org/secrets/import': typeof OOrgOrgSecretsImportRoute
+  '/o/$org/webhooks/$webhook': typeof OOrgOrgWebhooksWebhookRoute
+  '/o/$org/webhooks/new': typeof OOrgOrgWebhooksNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/credentials/': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/secrets/': typeof OOrgOrgSecretsIndexRoute
+  '/o/$org/webhooks/': typeof OOrgOrgWebhooksIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -386,11 +407,14 @@ export interface FileRoutesByTo {
   '/o/$org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/secrets/$secret': typeof OOrgOrgSecretsSecretRoute
   '/o/$org/secrets/import': typeof OOrgOrgSecretsImportRoute
+  '/o/$org/webhooks/$webhook': typeof OOrgOrgWebhooksWebhookRoute
+  '/o/$org/webhooks/new': typeof OOrgOrgWebhooksNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/credentials': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/knowledge': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/secrets': typeof OOrgOrgSecretsIndexRoute
+  '/o/$org/webhooks': typeof OOrgOrgWebhooksIndexRoute
   '/o/$org/f/$factory': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -437,12 +461,15 @@ export interface FileRoutesById {
   '/o/$org/_org/knowledge/new': typeof OOrgOrgKnowledgeNewRoute
   '/o/$org/_org/secrets/$secret': typeof OOrgOrgSecretsSecretRoute
   '/o/$org/_org/secrets/import': typeof OOrgOrgSecretsImportRoute
+  '/o/$org/_org/webhooks/$webhook': typeof OOrgOrgWebhooksWebhookRoute
+  '/o/$org/_org/webhooks/new': typeof OOrgOrgWebhooksNewRoute
   '/o/$org/f/$factory/board': typeof OOrgFFactoryBoardRoute
   '/o/$org/f/$factory/definition': typeof OOrgFFactoryDefinitionRouteWithChildren
   '/o/$org/f/$factory/settings': typeof OOrgFFactorySettingsRoute
   '/o/$org/_org/credentials/': typeof OOrgOrgCredentialsIndexRoute
   '/o/$org/_org/knowledge/': typeof OOrgOrgKnowledgeIndexRoute
   '/o/$org/_org/secrets/': typeof OOrgOrgSecretsIndexRoute
+  '/o/$org/_org/webhooks/': typeof OOrgOrgWebhooksIndexRoute
   '/o/$org/f/$factory/': typeof OOrgFFactoryIndexRoute
   '/o/$org/f/$factory/agents/$agent': typeof OOrgFFactoryAgentsAgentRoute
   '/o/$org/f/$factory/definition/$section': typeof OOrgFFactoryDefinitionSectionRoute
@@ -489,12 +516,15 @@ export interface FileRouteTypes {
     | '/o/$org/knowledge/new'
     | '/o/$org/secrets/$secret'
     | '/o/$org/secrets/import'
+    | '/o/$org/webhooks/$webhook'
+    | '/o/$org/webhooks/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/settings'
     | '/o/$org/credentials/'
     | '/o/$org/knowledge/'
     | '/o/$org/secrets/'
+    | '/o/$org/webhooks/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -537,11 +567,14 @@ export interface FileRouteTypes {
     | '/o/$org/knowledge/new'
     | '/o/$org/secrets/$secret'
     | '/o/$org/secrets/import'
+    | '/o/$org/webhooks/$webhook'
+    | '/o/$org/webhooks/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/settings'
     | '/o/$org/credentials'
     | '/o/$org/knowledge'
     | '/o/$org/secrets'
+    | '/o/$org/webhooks'
     | '/o/$org/f/$factory'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -587,12 +620,15 @@ export interface FileRouteTypes {
     | '/o/$org/_org/knowledge/new'
     | '/o/$org/_org/secrets/$secret'
     | '/o/$org/_org/secrets/import'
+    | '/o/$org/_org/webhooks/$webhook'
+    | '/o/$org/_org/webhooks/new'
     | '/o/$org/f/$factory/board'
     | '/o/$org/f/$factory/definition'
     | '/o/$org/f/$factory/settings'
     | '/o/$org/_org/credentials/'
     | '/o/$org/_org/knowledge/'
     | '/o/$org/_org/secrets/'
+    | '/o/$org/_org/webhooks/'
     | '/o/$org/f/$factory/'
     | '/o/$org/f/$factory/agents/$agent'
     | '/o/$org/f/$factory/definition/$section'
@@ -836,6 +872,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OOrgOrgSecretsImportRouteImport
       parentRoute: typeof OOrgOrgRoute
     }
+    '/o/$org/_org/webhooks/': {
+      id: '/o/$org/_org/webhooks/'
+      path: '/webhooks'
+      fullPath: '/o/$org/webhooks/'
+      preLoaderRoute: typeof OOrgOrgWebhooksIndexRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/webhooks/$webhook': {
+      id: '/o/$org/_org/webhooks/$webhook'
+      path: '/webhooks/$webhook'
+      fullPath: '/o/$org/webhooks/$webhook'
+      preLoaderRoute: typeof OOrgOrgWebhooksWebhookRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
+    '/o/$org/_org/webhooks/new': {
+      id: '/o/$org/_org/webhooks/new'
+      path: '/webhooks/new'
+      fullPath: '/o/$org/webhooks/new'
+      preLoaderRoute: typeof OOrgOrgWebhooksNewRouteImport
+      parentRoute: typeof OOrgOrgRoute
+    }
     '/o/$org/f/$factory/': {
       id: '/o/$org/f/$factory/'
       path: '/'
@@ -987,9 +1044,12 @@ interface OOrgOrgRouteChildren {
   OOrgOrgKnowledgeNewRoute: typeof OOrgOrgKnowledgeNewRoute
   OOrgOrgSecretsSecretRoute: typeof OOrgOrgSecretsSecretRoute
   OOrgOrgSecretsImportRoute: typeof OOrgOrgSecretsImportRoute
+  OOrgOrgWebhooksWebhookRoute: typeof OOrgOrgWebhooksWebhookRoute
+  OOrgOrgWebhooksNewRoute: typeof OOrgOrgWebhooksNewRoute
   OOrgOrgCredentialsIndexRoute: typeof OOrgOrgCredentialsIndexRoute
   OOrgOrgKnowledgeIndexRoute: typeof OOrgOrgKnowledgeIndexRoute
   OOrgOrgSecretsIndexRoute: typeof OOrgOrgSecretsIndexRoute
+  OOrgOrgWebhooksIndexRoute: typeof OOrgOrgWebhooksIndexRoute
 }
 
 const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
@@ -1007,9 +1067,12 @@ const OOrgOrgRouteChildren: OOrgOrgRouteChildren = {
   OOrgOrgKnowledgeNewRoute: OOrgOrgKnowledgeNewRoute,
   OOrgOrgSecretsSecretRoute: OOrgOrgSecretsSecretRoute,
   OOrgOrgSecretsImportRoute: OOrgOrgSecretsImportRoute,
+  OOrgOrgWebhooksWebhookRoute: OOrgOrgWebhooksWebhookRoute,
+  OOrgOrgWebhooksNewRoute: OOrgOrgWebhooksNewRoute,
   OOrgOrgCredentialsIndexRoute: OOrgOrgCredentialsIndexRoute,
   OOrgOrgKnowledgeIndexRoute: OOrgOrgKnowledgeIndexRoute,
   OOrgOrgSecretsIndexRoute: OOrgOrgSecretsIndexRoute,
+  OOrgOrgWebhooksIndexRoute: OOrgOrgWebhooksIndexRoute,
 }
 
 const OOrgOrgRouteWithChildren =

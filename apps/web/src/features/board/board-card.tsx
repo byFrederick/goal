@@ -3,7 +3,7 @@ import { ExternalLink, Zap } from 'lucide-react';
 import type { CSSProperties, KeyboardEvent, PointerEvent, Ref } from 'react';
 import type { ItemCard, PartsSummary } from '../../api/types';
 import { refParam, useFactory, useFactoryParams } from '../../shared/factory';
-import { formatAge, formatUsd, humanize, plural } from '../../shared/format';
+import { formatAge, formatDay, formatUsd, humanize, plural } from '../../shared/format';
 import { itemStatus, pullRequestLabel, toneText } from '../../shared/item-state';
 import { isMoveShortcut, MoveButton, moveShortcut } from '../../shared/move-menu';
 import { holds } from '../../shared/permissions';
@@ -70,7 +70,8 @@ export function BoardCard({
   // A decision waits on "you" only for someone who decides here.
   const decides = holds(useFactory(), 'item:decide');
   const state = cardState(item, decides);
-  const age = formatAge(item.age_seconds);
+  // An item that may not start yet shows its start date where the others show their age.
+  const age = item.start ? formatDay(item.start.at) : formatAge(item.age_seconds);
   const expedite = isExpedite(item);
   const expediteLabel = expedite ? <ExpediteMark /> : null;
 

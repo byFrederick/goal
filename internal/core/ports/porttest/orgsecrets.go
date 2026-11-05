@@ -3,6 +3,7 @@ package porttest
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -42,12 +43,24 @@ type secretData struct {
 	// called under mu.
 	notifies      func(org domain.OrgID, name string) bool
 	notifyRenamed func(org domain.OrgID, from, to string)
+	// signs are, per organization and secret id, the names of the organization webhooks the
+	// secret signs: Intake.UseSecrets's view keeps them.
+	signs map[domain.OrgID]map[domain.SecretID]map[string]bool
 }
 
 type secretRow struct {
 	secret            domain.Secret
 	keyID             string
 	nonce, ciphertext []byte
+	// previous is the value a replace kept, for a secret a webhook uses; nil when there is none.
+	previous *previousValue
+}
+
+// previousValue is a secret's previous sealed value and when it lapses.
+type previousValue struct {
+	keyID             string
+	nonce, ciphertext []byte
+	until             time.Time
 }
 
 // NewOrgSecrets returns secrets sealed with key and audited through audit (a Tenancy that knows
@@ -194,7 +207,8 @@ func (s *OrgSecrets) Patch(ctx context.Context, name string, p domain.SecretPatc
 		}
 	}
 
-	sealed := &secretRow{secret: next, keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext}
+	sealed := &secretRow{secret: next, keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext, previous: s.d.keptLocked(org, r, p)}
+
 	if p.Replace != nil {
 		if err := s.sealLocked(org, sealed, *p.Replace); err != nil {
 			return domain.Secret{}, err
@@ -248,6 +262,10 @@ func (s *OrgSecrets) Delete(ctx context.Context, name string, by domain.Actor) e
 
 	if s.d.notifies != nil && s.d.notifies(org, name) {
 		return fmt.Errorf("secret %q is used by the Slack notification setting: %w", name, ports.ErrConflict)
+	}
+
+	if hooks := s.d.signedLocked(org, r.secret.ID); len(hooks) > 0 {
+		return fmt.Errorf("secret %q is used by webhooks %s: %w", name, strings.Join(hooks, ", "), ports.ErrConflict)
 	}
 
 	if err := s.appendAudit(ctx, by, domain.AuditSecretDeleted, r.secret, map[string]any{auditName: name}); err != nil {
@@ -312,6 +330,122 @@ func (s *OrgSecrets) Resolve(ctx context.Context, names []string, use domain.Sec
 	}
 
 	return out, nil
+}
+
+// OpenSigning implements ports.OrgSecrets.
+func (s *OrgSecrets) OpenSigning(ctx context.Context, id domain.SecretID) (domain.SigningSecret, error) {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return domain.SigningSecret{}, domain.ErrNoOrg
+	}
+
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+
+	r := s.d.byIDLocked(org, id)
+	if r == nil {
+		return domain.SigningSecret{}, fmt.Errorf("secret %s: %w", id, ports.ErrNotFound)
+	}
+
+	if s.key.Active() == "" {
+		return domain.SigningSecret{}, ports.ErrNoMasterKey
+	}
+
+	plain, err := s.key.Open(r.keyID, r.nonce, r.ciphertext, domain.SecretAAD(org, id, r.keyID))
+	if err != nil {
+		return domain.SigningSecret{}, fmt.Errorf("secret %s: %w", id, err)
+	}
+
+	out := domain.SigningSecret{Current: string(plain)}
+
+	if p := r.previous; p != nil && time.Now().Before(p.until) {
+		prev, err := s.key.Open(p.keyID, p.nonce, p.ciphertext, domain.SecretAAD(org, id, p.keyID))
+		if err != nil {
+			return domain.SigningSecret{}, fmt.Errorf("previous value of secret %s: %w", id, err)
+		}
+
+		until := p.until
+		out.Previous, out.PreviousUntil = string(prev), &until
+	}
+
+	return out, nil
+}
+
+// webhookSecret is the id of org's secret name, for a webhook it signs; false when there is none.
+func (s *OrgSecrets) webhookSecret(org domain.OrgID, name string) (domain.SecretID, bool) {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+
+	r, ok := s.d.rows[org][name]
+	if !ok {
+		return "", false
+	}
+
+	return r.secret.ID, true
+}
+
+// secretName is the name of org's secret id, "" when there is none.
+func (s *OrgSecrets) secretName(org domain.OrgID, id domain.SecretID) string {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+
+	if r := s.d.byIDLocked(org, id); r != nil {
+		return r.secret.Name
+	}
+
+	return ""
+}
+
+// sign records that org's secret id signs webhook, or with on false no longer does.
+func (s *OrgSecrets) sign(org domain.OrgID, id domain.SecretID, webhook string, on bool) {
+	s.d.mu.Lock()
+	defer s.d.mu.Unlock()
+
+	if s.d.signs == nil {
+		s.d.signs = map[domain.OrgID]map[domain.SecretID]map[string]bool{}
+	}
+
+	if s.d.signs[org] == nil {
+		s.d.signs[org] = map[domain.SecretID]map[string]bool{}
+	}
+
+	if s.d.signs[org][id] == nil {
+		s.d.signs[org][id] = map[string]bool{}
+	}
+
+	if on {
+		s.d.signs[org][id][webhook] = true
+	} else {
+		delete(s.d.signs[org][id], webhook)
+	}
+}
+
+// keptLocked is the previous value r keeps after p: its value now, for 24 hours, when p replaces
+// the value of a secret a webhook uses, and the one it had otherwise.
+func (d *secretData) keptLocked(org domain.OrgID, r *secretRow, p domain.SecretPatch) *previousValue {
+	if p.Replace == nil || len(d.signs[org][r.secret.ID]) == 0 {
+		return r.previous
+	}
+
+	return &previousValue{
+		keyID: r.keyID, nonce: r.nonce, ciphertext: r.ciphertext, until: time.Now().UTC().Add(domain.PreviousSecretKept).Truncate(time.Microsecond),
+	}
+}
+
+// signedLocked are the webhooks org's secret id signs, by name.
+func (d *secretData) signedLocked(org domain.OrgID, id domain.SecretID) []string {
+	return slices.Sorted(maps.Keys(d.signs[org][id]))
+}
+
+// byIDLocked is org's secret id; nil when there is none.
+func (d *secretData) byIDLocked(org domain.OrgID, id domain.SecretID) *secretRow {
+	for _, r := range d.rows[org] {
+		if r.secret.ID == id {
+			return r
+		}
+	}
+
+	return nil
 }
 
 // renamedLocked tells the knowledge sources and the notification setting that org's secret from

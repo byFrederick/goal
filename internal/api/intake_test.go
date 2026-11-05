@@ -1,9 +1,11 @@
 package api_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -126,8 +128,10 @@ func checkIntakeTriggers(t *testing.T, triggers []gen.IntakeTrigger) {
 
 	want := []string{
 		`nightly-audit: schedule on schedule, when "0 6 * * MON-FRI, Europe/Berlin", enabled true, creates feature at inbox lane - expedite false, problem false`,
-		`flaky-test-on-main: github on github.check_run.failed, when "github.check_run.failed", enabled true, creates fix at inbox lane - expedite true, problem true`,
-		`deploy-failed: webhook on webhook.ci-hooks.deploy, when "webhook.ci-hooks.deploy", enabled false, creates fix at inbox lane - expedite false, problem true`,
+		// The keys written before ADR 0040 decision 14 show as its forms.
+		`flaky-test-on-main: github on github.check_run, when "github.check_run", enabled true, creates fix at inbox lane - expedite true, problem true`,
+		`deploy-failed: webhook on ci-hooks.deploy, when "ci-hooks.deploy", enabled false, creates fix at inbox lane - expedite false, problem true`,
+		`new-incidents: schedule on schedule, when "*/5 * * * *, UTC", enabled true, creates fix at inbox lane - expedite false, problem false`,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("triggers =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -142,8 +146,8 @@ func TestIntake_SourceTallyEmpty(t *testing.T) {
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Items != 0 || in.From != nil || in.To != nil ||
-		in.Sources.People != 0 || len(in.Triggers) != 3 {
-		t.Errorf("intake = %d %+v, want no items, no window and the 3 triggers", code, in)
+		in.Sources.People != 0 || len(in.Triggers) != 4 {
+		t.Errorf("intake = %d %+v, want no items, no window and the 4 triggers", code, in)
 	}
 
 	for _, tr := range in.Triggers {
@@ -301,7 +305,7 @@ func TestIntake_TriggerProblems(t *testing.T) {
 
 	for _, at := range []time.Time{oct(10, 0), oct(20, 0), oct(23, 8)} { // the first is older than 7 days
 		if _, err := h.intake.RecordDelivery(inOrg(t), domain.NewWebhookDelivery{
-			EndpointID: gh, ReceivedAt: at, Outcome: domain.DeliveryRefused, Reason: "signature did not match",
+			EndpointID: gh, ReceivedAt: at, Outcome: domain.DeliveryRefused, Reason: signatureMismatch,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -567,5 +571,578 @@ func TestTryTrigger_Refusals(t *testing.T) {
 
 	if tried, _ := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried}); len(tried) != 0 {
 		t.Errorf("trigger.tried entries = %d, want none for refused tries", len(tried))
+	}
+}
+
+// Intake answers the definition's disabled triggers as its suggestions, in definition order, so
+// the web names no station or work type of its own (ADR 0040 decision 17).
+func TestIntake_SuggestionsAreTheDisabledTriggers(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK {
+		t.Fatalf("intake = %d", code)
+	}
+
+	if len(in.Suggestions) != 1 {
+		t.Fatalf("suggestions = %+v; want deploy-failed only", in.Suggestions)
+	}
+
+	s := in.Suggestions[0]
+	if got := fmt.Sprintf("%s: %s on %s, when %q, creates %s at %s expedite %v titled %q", s.Name, s.Source, s.On, s.When,
+		s.Create.Type, s.Create.Station, s.Create.Expedite, s.Create.Title); got != `deploy-failed: webhook on ci-hooks.deploy, when "ci-hooks.deploy", creates fix at inbox expedite false titled "A deploy failed"` {
+		t.Errorf("suggestion = %s", got)
+	}
+}
+
+// A schedule's missed gap shows among the trigger's events with its outcome, its reason and how
+// many instants it covers (ADR 0040 decision 16).
+func TestIntakeTrigger_MissedEvent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if _, _, err := h.intake.RecordFiring(inOrg(t), domain.TriggerFiring{
+		FactoryID: acmeID, Trigger: nightlyName, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: "missed/2026-10-20T04:00:00Z", Outcome: domain.FiringMissed, Missed: 3,
+		Reason: "3 instants were not fired", At: oct(22, 4),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+nightlyName, "", &d); code != http.StatusOK || len(d.Events) != 1 {
+		t.Fatalf("trigger = %d %+v; want its one event", code, d.Events)
+	}
+
+	if e := d.Events[0]; e.Outcome != gen.IntakeEventOutcomeMissed || e.Missed != 3 || e.ItemNumber != nil ||
+		e.Reason == nil || *e.Reason != "3 instants were not fired" {
+		t.Errorf("event = %+v; want missed, 3 instants, with its reason", e)
+	}
+}
+
+const (
+	incidentsName       = "new-incidents"
+	incidentsPath       = intakePath + "/triggers/" + incidentsName + "/checks"
+	unknownTrigger      = intakePath + "/triggers/no-such-trigger"
+	codeTriggerNotFound = "trigger-not-found"
+)
+
+// check runs a check of new-incidents queued at the instant given through the intake: done with answer (filing
+// an item for each file entry, at most perCheck 2), or failed with reason when answer is "".
+func (h *harness) check(t *testing.T, at time.Time, answer, reason string) {
+	t.Helper()
+
+	if _, _, err := h.intake.Fire(inOrg(t), domain.TriggerFiring{
+		FactoryID: acmeID, Trigger: incidentsName, Source: domain.TriggerSchedule, EventKey: domain.OnSchedule,
+		IdempotencyKey: at.UTC().Format(time.RFC3339), Outcome: domain.FiringChecked, CheckState: domain.CheckQueued, At: at,
+	}, nil, domain.FireLimits{}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, l, err := h.intake.ClaimCheck(inOrg(t), acmeID, "goald-a", at, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := domain.CheckResult{State: domain.CheckFailed, Reason: reason, At: at.Add(time.Minute)}
+
+	if answer != "" {
+		a, err := domain.ParseCheckAnswer(json.RawMessage(answer))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var items []domain.CheckItem
+		for _, f := range a.File {
+			items = append(items, domain.CheckItem{Key: f.Key, Item: domain.NewItem{
+				FactoryID: acmeID, Type: typeFix, Title: f.Title, Body: f.Brief, Station: stInbox, State: domain.StateQueued, CreatedAt: at,
+				Origin: domain.OriginTrigger, Trigger: incidentsName, Untrusted: true,
+			}})
+		}
+
+		res = domain.CheckResult{
+			State: domain.CheckDone, CostUSD: 0.03, Decisions: a.Decisions(), Saved: a.State, Items: items, Limits: domain.CheckLimits{PerCheck: 2},
+			At: at.Add(time.Minute),
+		}
+	}
+
+	if err := h.intake.FinishCheck(inOrg(t), l, res); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The trigger's checks list newest first, each with when, its state, cost and failure, and what it
+// filed (with the item's ref), noted and skipped with reasons.
+func TestTriggerChecks_List(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}, {"key": "INC-2", "title": "Disk", "brief": "db"},
+		{"key": "INC-3", "title": "Late", "brief": "x"}], "skip": [{"key": "INC-4", "reason": "a test page"}]}`, "")
+	h.check(t, oct(22, 5), "", "timed out after 5m0s")
+
+	var got gen.TriggerCheckList
+	if code := h.call(t, http.MethodGet, incidentsPath, "", &got); code != http.StatusOK || len(got.Checks) != 2 {
+		t.Fatalf("checks = %d %+v; want two", code, got)
+	}
+
+	if failed := got.Checks[0]; failed.State != gen.TriggerCheckStateFailed || deref(failed.Reason) != "timed out after 5m0s" || len(failed.Filed) != 0 ||
+		failed.CheckedAt == nil {
+		t.Errorf("newest check = %+v; want failed with its reason", failed)
+	}
+
+	expectDoneCheck(t, got.Checks[1])
+
+	if code := h.call(t, http.MethodGet, incidentsPath+"?limit=1", "", &got); code != http.StatusOK || len(got.Checks) != 1 {
+		t.Errorf("limit=1 = %d, %d checks; want one", code, len(got.Checks))
+	}
+
+	if code, p := problemOfCall(t, h, http.MethodGet, unknownTrigger+"/checks", ""); code != http.StatusNotFound || deref(p.Code) != codeTriggerNotFound {
+		t.Errorf("an unknown trigger's checks = %d %s; want 404 %s", code, deref(p.Code), codeTriggerNotFound)
+	}
+}
+
+// expectDoneCheck checks the done check with what it filed and skipped.
+func expectDoneCheck(t *testing.T, done gen.TriggerCheck) {
+	t.Helper()
+
+	filed := done.Filed
+	if len(filed) != 2 || filed[0].Key != "INC-1" || deref(filed[0].Ref) != "#1" {
+		t.Errorf("filed = %+v; want INC-1 and INC-2 filed as #1 and #2", filed)
+	}
+
+	if done.State != gen.TriggerCheckStateDone || done.CostUsd != 0.03 || done.Try || done.Reason != nil || len(done.Noted) != 0 {
+		t.Errorf("done check = %+v; want done, its cost and no notes", done)
+	}
+
+	wantSkips := []gen.TriggerCheckSkip{{Key: "INC-3", Reason: domain.CheckOverLimit}, {Key: "INC-4", Reason: "a test page"}}
+	if !reflect.DeepEqual(done.Skipped, wantSkips) {
+		t.Errorf("skipped = %+v; want %+v", done.Skipped, wantSkips)
+	}
+}
+
+// Try queues a try check and answers 202 with it, writing a trigger.tried entry; it answers 409
+// still-checking while a check is queued, 422 no-check for a trigger without one, and 404 for an
+// unknown trigger.
+func TestTriggerChecks_Try(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var got gen.TriggerCheck
+	if code := h.call(t, http.MethodPost, incidentsPath, "", &got); code != http.StatusAccepted || !got.Try || got.State != gen.TriggerCheckStateQueued {
+		t.Fatalf("try = %d %+v; want 202 with a queued try", code, got)
+	}
+
+	tried, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerTried})
+	if err != nil || len(tried) != 1 || tried[0].TargetID != incidentsName || tried[0].Data["firing"] != got.Id {
+		t.Errorf("trigger.tried = %+v, %v; want one naming the try", tried, err)
+	}
+
+	h.clock.Advance(time.Second)
+
+	for _, c := range []struct {
+		what, path string
+		status     int
+		code       string
+	}{
+		{"a try while one is queued", incidentsPath, http.StatusConflict, "still-checking"},
+		{"a trigger without a check", intakePath + "/triggers/" + nightlyName + "/checks", http.StatusUnprocessableEntity, "no-check"},
+		{"an unknown trigger", unknownTrigger + "/checks", http.StatusNotFound, codeTriggerNotFound},
+	} {
+		if code, p := problemOfCall(t, h, http.MethodPost, c.path, ""); code != c.status || deref(p.Code) != c.code {
+			t.Errorf("%s: %d %s, want %d %s", c.what, code, deref(p.Code), c.status, c.code)
+		}
+	}
+}
+
+// filedAt creates an open item of acme at its inbox, as n says.
+func (h *harness) filedAt(t *testing.T, n domain.NewItem) domain.Item {
+	t.Helper()
+
+	n.FactoryID, n.Type, n.Station, n.State, n.Class = acmeID, typeFix, stInbox, domain.StateQueued, domain.ClassStandard
+	if n.CreatedAt.IsZero() {
+		n.CreatedAt = t0
+	}
+
+	it, err := h.store.CreateItem(inOrg(t), n)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// Origins count acme's items created in the window, ending now, by origin, zero included; the
+// window is 30d unless asked for, and sources answer as before.
+func TestIntake_OriginsByWindow(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, n := range []struct {
+		origin domain.Origin
+		age    time.Duration
+	}{
+		{domain.OriginPerson, time.Hour},
+		{domain.OriginPerson, 10 * 24 * time.Hour},
+		{domain.OriginTrigger, 2 * 24 * time.Hour},
+		{domain.OriginFollowUp, 40 * 24 * time.Hour},
+		{domain.OriginPlan, 100 * 24 * time.Hour},
+	} {
+		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, Source: domain.ItemFromPeople, CreatedAt: t0.Add(-n.age)})
+	}
+
+	for _, c := range []struct{ query, want string }{
+		{"", "30d {FollowUp:0 Person:2 Plan:0 Trigger:1}"},
+		{"?window=7d", "7d {FollowUp:0 Person:1 Plan:0 Trigger:1}"},
+		{"?window=90d", "90d {FollowUp:1 Person:2 Plan:0 Trigger:1}"},
+	} {
+		var in gen.Intake
+		if code := h.call(t, http.MethodGet, intakePath+c.query, "", &in); code != http.StatusOK || in.Window == nil || in.Origins == nil {
+			t.Fatalf("intake%s = %d %+v; want 200 with a window and origins", c.query, code, in)
+		}
+
+		if got := fmt.Sprintf("%s %+v", *in.Window, *in.Origins); got != c.want {
+			t.Errorf("intake%s = %s; want %s", c.query, got, c.want)
+		}
+
+		if in.Items != 5 || in.Sources.People != 5 {
+			t.Errorf("intake%s sources = %d %+v; want the 5 items as before", c.query, in.Items, in.Sources)
+		}
+	}
+}
+
+// A window other than 7d, 30d or 90d is a bad request.
+func TestIntake_WindowRefused(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, q := range []string{"?window=1d", "?window=30", "?window="} {
+		if code := h.call(t, http.MethodGet, intakePath+q, "", nil); code != http.StatusBadRequest {
+			t.Errorf("intake%s = %d, want 400", q, code)
+		}
+	}
+}
+
+// The webhooks are the organization's open to acme, by name: receiving when enabled and an
+// enabled trigger names it, no_trigger when none does, closed when turned off. A factory endpoint
+// and a webhook not open to acme are left out.
+func TestIntake_OpenWebhooks(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	hook := func(name string, sender domain.WebhookSender, p domain.WebhookPatch) {
+		t.Helper()
+
+		if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: domain.WebhookSecretName(name), Value: "test-secret"}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+
+		w, err := h.intake.CreateWebhook(inOrg(t), domain.NewWebhook{Name: name, Sender: sender, Secret: domain.WebhookSecretName(name)})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := h.intake.PatchWebhook(inOrg(t), w.ID, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	open := []domain.WebhookOpening{{FactoryID: acmeID}}
+	off := false
+
+	hook("github-main", domain.SenderGitHub, domain.WebhookPatch{Open: open})
+	hook("ci-hooks", domain.SenderStandard, domain.WebhookPatch{Open: open}) // only the disabled deploy-failed names it
+	hook("pager", domain.SenderPagerDuty, domain.WebhookPatch{Open: open, Enabled: &off})
+	hook("elsewhere", domain.SenderGitHub, domain.WebhookPatch{Name: new("elsewhere")})
+
+	if _, err := h.intake.CreateEndpoint(inOrg(t), domain.NewWebhookEndpoint{FactoryID: acmeID, Name: "own", Kind: domain.WebhookGeneric}); err != nil {
+		t.Fatal(err)
+	}
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Webhooks == nil {
+		t.Fatalf("intake = %d %+v; want 200 with webhooks", code, in)
+	}
+
+	var got []string
+	for _, w := range *in.Webhooks {
+		got = append(got, fmt.Sprintf("%s %s %s", w.Name, w.Sender, w.State))
+	}
+
+	if want := []string{"ci-hooks standard no_trigger", "github-main github receiving", "pager pagerduty closed"}; !slices.Equal(got, want) {
+		t.Errorf("webhooks = %v; want %v", got, want)
+	}
+}
+
+// Coming up lists acme's items that haven't started: with a start soonest first, then those
+// waiting only for needs, each with its open needs' refs and where it came from; started and
+// closed items are left out.
+func TestIntake_ComingUp(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	need := h.filedAt(t, domain.NewItem{Title: "the need"})
+	h.filedAt(t, domain.NewItem{Title: "later", Origin: domain.OriginTrigger, StartAt: t0.Add(72 * time.Hour)})
+	h.filedAt(t, domain.NewItem{Title: "soon", Origin: domain.OriginPerson, Via: domain.ViaCLI, CreatedBy: domain.LocalUser, StartAt: t0.Add(24 * time.Hour)})
+	h.filedAt(t, domain.NewItem{Title: "waits", Origin: domain.OriginPlan, After: []domain.ItemID{need.ID}})
+	h.filedAt(t, domain.NewItem{Title: "started", StartAt: t0.Add(time.Hour), StartedAt: t0})
+
+	var in gen.Intake
+	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.ComingUp == nil || in.ComingUpTotal == nil {
+		t.Fatalf("intake = %d %+v; want 200 with coming up", code, in)
+	}
+
+	var got []string
+
+	for _, c := range *in.ComingUp {
+		start := "-"
+		if c.Start != nil {
+			start = c.Start.At.Format(time.RFC3339)
+		}
+
+		via := ""
+		if c.Via != nil {
+			via = string(*c.Via)
+		}
+
+		got = append(got, fmt.Sprintf("%s %s %s start %s needs %v via %s by %v", c.Ref, c.Title, c.Origin, start, c.Needs, via, c.CreatedBy != nil))
+	}
+
+	want := []string{
+		"acme#3 soon person start 2026-10-24T09:00:00Z needs [] via cli by true",
+		"acme#2 later trigger start 2026-10-26T09:00:00Z needs [] via  by false",
+		"acme#4 waits plan start - needs [acme#1] via  by false",
+	}
+	if !slices.Equal(got, want) || *in.ComingUpTotal != len(want) {
+		t.Errorf("coming up = %d in all\n%s\nwant\n%s", *in.ComingUpTotal, strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Triage is null without follow-ups for the architect; then it is the collecting triage item with
+// the follow-ups that joined it, and the open items whose triage follow-ups will join it.
+func TestIntake_Triage(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var in gen.Intake
+	if h.call(t, http.MethodGet, intakePath, "", &in); in.Triage != nil {
+		t.Errorf("triage without follow-ups = %+v; want null", in.Triage)
+	}
+
+	landed := h.submit(t)
+	h.keepFollowUp(t, landed, "Tidy the docs")
+	h.land(t, landed)
+
+	open := h.submit(t)
+	h.keepFollowUp(t, open, "One")
+	h.keepFollowUp(t, open, "Two")
+
+	in = gen.Intake{}
+	if h.call(t, http.MethodGet, intakePath, "", &in); in.Triage == nil || in.Triage.Item == nil {
+		t.Fatalf("triage = %+v; want the collecting item", in.Triage)
+	}
+
+	it := in.Triage.Item
+	if it.Ref != "acme#2" || it.Station != stInbox || it.FollowUps != 1 || it.Title == "" {
+		t.Errorf("triage item = %+v; want acme#2 at the inbox with 1 follow-up", *it)
+	}
+
+	if w := in.Triage.Waiting; len(w) != 1 || w[0].Ref != open.Ref || w[0].Title != open.Title || w[0].FollowUps != 2 {
+		t.Errorf("triage waiting = %+v; want %s with 2", w, open.Ref)
+	}
+}
+
+// land moves it to done and runs the follow-up sweep on acme's line and others.
+func (h *harness) land(t *testing.T, it gen.Item, others ...domain.Line) {
+	t.Helper()
+
+	from := domain.Position{Station: it.Station, State: domain.ItemState(it.State)}
+	if _, err := h.store.Transition(inOrg(t), ports.Transition{
+		ItemID: domain.ItemID(it.Id), From: from, To: domain.Position{Station: stDone, State: domain.StateDone}, At: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := append([]domain.Line{{FactoryID: acmeID, Name: acmeName, Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}}}}, others...)
+	if _, err := h.store.FileFollowUps(inOrg(t), lines, t0.Add(time.Hour), 20); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Each trigger with a check says which agent checks and the most one check spends.
+func TestIntake_TriggerCheck(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	var in gen.Intake
+	h.call(t, http.MethodGet, intakePath, "", &in)
+
+	checks := map[string]string{}
+
+	for _, tr := range in.Triggers {
+		if tr.Check != nil {
+			checks[tr.Name] = fmt.Sprintf("%s %.2f", tr.Check.Agent, tr.Check.MaxUsd)
+		}
+	}
+
+	if len(checks) != 1 || !strings.HasPrefix(checks[incidentsName], "writer ") {
+		t.Errorf("checks = %v; want new-incidents by writer only", checks)
+	}
+}
+
+// A firing that queued a check, a try among them, shows as checked among the trigger's events.
+func TestIntakeTrigger_CheckedEvent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if code := h.call(t, http.MethodPost, incidentsPath, "", nil); code != http.StatusAccepted {
+		t.Fatalf("try = %d; want 202", code)
+	}
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+incidentsName, "", &d); code != http.StatusOK || len(d.Events) != 1 {
+		t.Fatalf("trigger = %d %+v; want 200 with the try", code, d.Events)
+	}
+
+	if got := d.Events[0].Outcome; got != gen.IntakeEventOutcomeChecked {
+		t.Errorf("event outcome = %s; want checked", got)
+	}
+}
+
+// The trigger's read serves a check trigger's memory: empty lists and a null state before any
+// check, then its open items, closed keys and saved state with when it was saved; a trigger
+// without a check has none.
+func TestIntakeTrigger_Memory(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	path := intakePath + "/triggers/" + incidentsName
+
+	if want := `{"open":0,"open_items":[],"closed":0,"closed_keys":[],"state":null,"checked_up_to":null}`; !sameJSON(t, rawMemory(t, h, path), want) {
+		t.Errorf("memory before a check = %s; want %s", rawMemory(t, h, path), want)
+	}
+
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "INC-1"}}`, "")
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, path, "", &d); code != http.StatusOK || d.Memory == nil {
+		t.Fatalf("trigger = %d %+v; want 200 with its memory", code, d)
+	}
+
+	wantIncidentsMemory(t, d.Memory, oct(22, 4).Add(time.Minute))
+
+	if m := rawMemory(t, h, intakePath+"/triggers/"+nightlyName); m != nil {
+		t.Errorf("trigger without a check has memory %s; want none", m)
+	}
+}
+
+// wantIncidentsMemory checks the memory after one check filed INC-1 and saved {"since": "INC-1"},
+// finishing at done.
+func wantIncidentsMemory(t *testing.T, m *gen.TriggerCheckMemory, done time.Time) {
+	t.Helper()
+
+	if m.Open != 1 || len(m.OpenItems) != 1 || m.OpenItems[0].Key != "INC-1" || m.OpenItems[0].Title != "API down" || m.Closed != 0 || len(m.ClosedKeys) != 0 {
+		t.Errorf("memory = %+v; want INC-1 open and no closed key", m)
+	}
+
+	if m.State == nil || (*m.State)["since"] != "INC-1" || m.CheckedUpTo == nil || !m.CheckedUpTo.Equal(done) {
+		t.Errorf("state = %v, checked up to %v; want the check's, at %s", m.State, m.CheckedUpTo, done)
+	}
+}
+
+// rawMemory reads the trigger at path and returns its memory as sent, nil when left out.
+func rawMemory(t *testing.T, h *harness, path string) json.RawMessage {
+	t.Helper()
+
+	var raw map[string]json.RawMessage
+	if code := h.call(t, http.MethodGet, path, "", &raw); code != http.StatusOK {
+		t.Fatalf("trigger %s = %d; want 200", path, code)
+	}
+
+	return raw["memory"]
+}
+
+// sameJSON reports whether got holds the same JSON value as want.
+func sameJSON(t *testing.T, got json.RawMessage, want string) bool {
+	t.Helper()
+
+	var a, b any
+	if json.Unmarshal(got, &a) != nil || json.Unmarshal([]byte(want), &b) != nil {
+		return false
+	}
+
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+
+	return string(x) == string(y)
+}
+
+// Clear answers 204, empties the saved state and writes a trigger.state_cleared entry; it answers
+// 409 while a check is queued, 422 for a trigger without a check, 404 for an unknown one and 403
+// to a viewer.
+func TestTriggerChecks_ClearState(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	statePath := intakePath + "/triggers/" + incidentsName + "/state"
+
+	h.check(t, oct(22, 4), `{"file": [{"key": "INC-1", "title": "API down", "brief": "5xx"}], "state": {"since": "INC-1"}}`, "")
+
+	if code := h.call(t, http.MethodDelete, statePath, "", nil); code != http.StatusNoContent {
+		t.Fatalf("clear = %d; want 204", code)
+	}
+
+	var d gen.IntakeTriggerDetail
+	if code := h.call(t, http.MethodGet, intakePath+"/triggers/"+incidentsName, "", &d); code != http.StatusOK || d.Memory == nil ||
+		d.Memory.State != nil || d.Memory.CheckedUpTo != nil || d.Memory.Open != 1 {
+		t.Errorf("trigger after Clear = %d %+v; want no state and the open item kept", code, d.Memory)
+	}
+
+	cleared, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditTriggerStateCleared})
+	if err != nil || len(cleared) != 1 || cleared[0].TargetID != incidentsName {
+		t.Errorf("trigger.state_cleared = %+v, %v; want one naming %s", cleared, err, incidentsName)
+	}
+
+	if code := h.call(t, http.MethodPost, incidentsPath, "", nil); code != http.StatusAccepted {
+		t.Fatalf("try = %d; want 202", code)
+	}
+
+	refusedClears(t, h, statePath)
+}
+
+// refusedClears checks the clears refused once a check of the trigger at statePath is queued:
+// that one, a trigger without a check, an unknown trigger and a viewer's.
+func refusedClears(t *testing.T, h *harness, statePath string) {
+	t.Helper()
+
+	for _, c := range []struct {
+		what, path string
+		status     int
+		code       string
+	}{
+		{"a clear while a check is queued", statePath, http.StatusConflict, "still-checking"},
+		{"a trigger without a check", intakePath + "/triggers/" + nightlyName + "/state", http.StatusUnprocessableEntity, "no-check"},
+		{"an unknown trigger", unknownTrigger + "/state", http.StatusNotFound, codeTriggerNotFound},
+	} {
+		if code, p := problemOfCall(t, h, http.MethodDelete, c.path, ""); code != c.status || deref(p.Code) != c.code {
+			t.Errorf("%s: %d %s, want %d %s", c.what, code, deref(p.Code), c.status, c.code)
+		}
+	}
+
+	h.as(acmeMember(domain.FactoryViewer))
+
+	if code, p := problemOfCall(t, h, http.MethodDelete, statePath, ""); code != http.StatusForbidden || deref(p.Code) != wantForbidden {
+		t.Errorf("a viewer's clear = %d %s, want 403 forbidden", code, deref(p.Code))
 	}
 }

@@ -228,3 +228,25 @@ func TestServeRun_NotesRefusesWhatTheTokenDoesNotName(t *testing.T) {
 		})
 	}
 }
+
+// A note another item's agent left (item_note) waits for the item's next run: a run already
+// working never reads it from the gateway.
+func TestServeRun_NotesLeaveOutItemNotes(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, Config{})
+	url := h.runServer(t)
+	it := h.submit(t, factoryID, "Write the spec", "")
+	c := h.claims()
+	c.ItemID = it.ID
+
+	h.appendEvent(t, it, domain.EventRunStarted, c.RunID, nil)
+	h.appendEvent(t, it, domain.EventItemNote, "", domain.NoteData(domain.FollowUp{
+		ID: "fu-1", FactoryID: factoryID, ItemID: "other", Station: tryStation, Agent: "backend", Text: "from another item",
+	}, domain.ItemRef{Factory: "acme", Number: 2}))
+	h.note(t, it, "from a person")
+
+	if g := texts(h.fetchNotes(t, url, c, 0)); g != "from a person" {
+		t.Errorf("notes %q; want only the person's", g)
+	}
+}

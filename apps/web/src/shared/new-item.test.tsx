@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, submitItem } from '../api/client';
 import { factoriesQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { TooltipProvider } from '../ui/tooltip';
@@ -27,6 +28,11 @@ vi.mock('../api/queries', async (importOriginal) => {
       queryOptions({ queryKey: ['test', 'factories', org], queryFn: () => source.load() as Promise<never> }),
   };
 });
+
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
+  submitItem: vi.fn(),
+}));
 
 const summary: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'Ac', factory_count: 3, role: 'owner' };
 
@@ -177,5 +183,77 @@ describe('the sidebar’s New item picker', () => {
 
     expect(screen.getByText('Choose a factory for the item.')).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Factory' }).getAttribute('aria-invalid')).toBe('true');
+  });
+});
+
+describe('the Start control', () => {
+  const created = { ref: 'goal#9', station: 'intake', start: undefined };
+
+  async function openOnGoal() {
+    vi.mocked(submitItem).mockReset();
+    renderPicker(writable);
+    fireEvent.click(await newItemButton());
+    fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Factory' }), { key: 'Enter' });
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'goal' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Check the budget' } });
+  }
+
+  const startGroup = () => screen.getByRole('group', { name: 'Start' });
+  const choose = (name: string) => fireEvent.click(within(startGroup()).getByRole('radio', { name }));
+
+  it('starts Now by default and sends no start', async () => {
+    await openOnGoal();
+    vi.mocked(submitItem).mockResolvedValue(created as never);
+    expect((within(startGroup()).getByRole('radio', { name: 'Now' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
+
+    await waitFor(() => expect(submitItem).toHaveBeenCalled());
+    expect(vi.mocked(submitItem).mock.calls[0]?.[2]).toEqual({ title: 'Check the budget' });
+  });
+
+  it('sends the date and time of Later as start.at', async () => {
+    await openOnGoal();
+    vi.mocked(submitItem).mockResolvedValue(created as never);
+    choose('Later');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-11-19' } });
+    fireEvent.change(screen.getByLabelText('Time'), { target: { value: '09:30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
+
+    await waitFor(() => expect(submitItem).toHaveBeenCalled());
+    expect(vi.mocked(submitItem).mock.calls[0]?.[2]).toEqual({
+      title: 'Check the budget',
+      start: { at: '2026-11-19T09:30' },
+    });
+  });
+
+  it('sends the refs of After items as start.after, and asks for at least one', async () => {
+    await openOnGoal();
+    vi.mocked(submitItem).mockResolvedValue(created as never);
+    choose('After items');
+    fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
+    expect(await screen.findByText('Name the items it waits for, such as goal#2.')).toBeTruthy();
+    expect(submitItem).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Items it waits for'), { target: { value: 'goal#2, goal#3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
+
+    await waitFor(() => expect(submitItem).toHaveBeenCalled());
+    expect(vi.mocked(submitItem).mock.calls[0]?.[2]).toEqual({
+      title: 'Check the budget',
+      start: { after: ['goal#2', 'goal#3'] },
+    });
+  });
+
+  it('shows goald’s refusal of the start on the Start field', async () => {
+    await openOnGoal();
+    vi.mocked(submitItem).mockRejectedValue(
+      new ApiError({ title: 'Bad request', status: 400, detail: 'start is more than 365 days ahead' }),
+    );
+    choose('Later');
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('start is more than 365 days ahead');
+    expect(screen.getByLabelText('Date').getAttribute('aria-invalid')).toBe('true');
   });
 });

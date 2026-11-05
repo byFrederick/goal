@@ -124,7 +124,10 @@ func testEdgesAddListRemove(f *fixture) {
 	removed.Data["reason"] = "paths no longer overlap"
 
 	sameEvents(t, f.Events(t, b.ID), []domain.Event{
-		{FactoryID: f.factory, ItemID: b.ID, At: t0, Kind: domain.EventCreated, Station: stWork, Actor: domain.ActorEngine},
+		{
+			FactoryID: f.factory, ItemID: b.ID, At: t0, Kind: domain.EventCreated, Station: stWork, Actor: domain.ActorEngine,
+			Data: map[string]any{dataActor: domain.EngineActor.Ref()},
+		},
 		edgeEvent(domain.EventEdgeAdded, b, a.ID, domain.EdgePlanned, t0),
 		removed,
 	})

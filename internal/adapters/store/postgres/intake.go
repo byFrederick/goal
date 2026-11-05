@@ -58,7 +58,9 @@ func (in *Intake) CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoin
 		return domain.WebhookSecret{}, err
 	}
 
-	e := domain.WebhookEndpoint{ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind}
+	e := domain.WebhookEndpoint{
+		ID: domain.WebhookEndpointID(id.String()), FactoryID: n.FactoryID, Name: n.Name, Kind: n.Kind, Sender: n.Kind.Sender(), Enabled: true,
+	}
 
 	secret, s, err := in.newSecret(org, e.ID)
 	if err != nil {
@@ -67,7 +69,7 @@ func (in *Intake) CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoin
 
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
 		at, err := q.InsertWebhookEndpoint(ctx, db.InsertWebhookEndpointParams{
-			ID: id, FactoryID: factory, Name: n.Name, Kind: string(n.Kind), KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext,
+			ID: id, FactoryID: &factory, Name: n.Name, Kind: new(string(n.Kind)), KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext,
 		})
 
 		switch {
@@ -97,14 +99,16 @@ func (in *Intake) ListEndpoints(ctx context.Context, factory domain.FactoryID) (
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.WebhookEndpointsRow, error) { return q.WebhookEndpoints(ctx, fid) })
+	out, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]domain.WebhookEndpoint, error) {
+		rows, err := q.WebhookEndpoints(ctx, &fid)
+		if err != nil {
+			return nil, err
+		}
+
+		return withOpenings(ctx, q, convertRows(rows, func(r db.WebhookEndpointsRow) db.WebhookEndpointRow { return db.WebhookEndpointRow(r) }))
+	})
 	if err != nil {
 		return nil, fmt.Errorf("endpoints of factory %s: %w", factory, err)
-	}
-
-	out := make([]domain.WebhookEndpoint, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, endpointFrom(db.WebhookEndpointRow(r)))
 	}
 
 	return out, nil
@@ -117,7 +121,7 @@ func (in *Intake) Endpoint(ctx context.Context, id domain.WebhookEndpointID) (do
 		return domain.WebhookEndpoint{}, err
 	}
 
-	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.WebhookEndpointRow, error) { return q.WebhookEndpoint(ctx, uid) })
+	e, err := fetch(ctx, in.s.read, func(q *db.Queries) (domain.WebhookEndpoint, error) { return endpointIn(ctx, q, uid) })
 
 	switch {
 	case notFound(err):
@@ -125,7 +129,7 @@ func (in *Intake) Endpoint(ctx context.Context, id domain.WebhookEndpointID) (do
 	case err != nil:
 		return domain.WebhookEndpoint{}, fmt.Errorf("endpoint %s: %w", id, err)
 	default:
-		return endpointFrom(r), nil
+		return e, nil
 	}
 }
 
@@ -146,8 +150,21 @@ func (in *Intake) RotateSecret(ctx context.Context, id domain.WebhookEndpointID)
 		return domain.WebhookSecret{}, fmt.Errorf("rotate endpoint %s: %w", id, err)
 	}
 
-	r, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (db.RotateWebhookSecretRow, error) {
-		return q.RotateWebhookSecret(ctx, db.RotateWebhookSecretParams{KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: uid})
+	e, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (domain.WebhookEndpoint, error) {
+		if _, err := q.RotateWebhookSecret(ctx, db.RotateWebhookSecretParams{KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: uid}); !notFound(err) {
+			if err != nil {
+				return domain.WebhookEndpoint{}, err
+			}
+
+			return endpointIn(ctx, q, uid)
+		}
+
+		// No factory endpoint: an organization webhook is signed by a secret, replaced on its own.
+		if _, err := q.WebhookEndpoint(ctx, uid); err != nil {
+			return domain.WebhookEndpoint{}, err
+		}
+
+		return domain.WebhookEndpoint{}, fmt.Errorf("webhook %s is signed by an organization secret; replace its value: %w", id, domain.ErrInvalid)
 	})
 
 	switch {
@@ -156,7 +173,7 @@ func (in *Intake) RotateSecret(ctx context.Context, id domain.WebhookEndpointID)
 	case err != nil:
 		return domain.WebhookSecret{}, fmt.Errorf("rotate endpoint %s: %w", id, err)
 	default:
-		return domain.WebhookSecret{Endpoint: endpointFrom(db.WebhookEndpointRow(r)), Secret: secret}, nil
+		return domain.WebhookSecret{Endpoint: e, Secret: secret}, nil
 	}
 }
 
@@ -337,11 +354,38 @@ func (in *Intake) Delivery(ctx context.Context, endpoint domain.WebhookEndpointI
 	}
 }
 
+// DeliveryBySender implements ports.Intake.
+func (in *Intake) DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error) {
+	wid, err := parseID("webhook", string(webhook))
+	if err != nil {
+		return domain.WebhookDelivery{}, err
+	}
+
+	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.WebhookDeliveryBySenderRow, error) {
+		return q.WebhookDeliveryBySender(ctx, db.WebhookDeliveryBySenderParams{EndpointID: wid, DeliveryID: deliveryID})
+	})
+
+	switch {
+	case notFound(err):
+		return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of webhook %s: %w", deliveryID, webhook, ports.ErrNotFound)
+	case err != nil:
+		return domain.WebhookDelivery{}, fmt.Errorf("delivery %s of webhook %s: %w", deliveryID, webhook, err)
+	default:
+		return deliveryFrom(db.WebhookDeliveriesRow(r))
+	}
+}
+
 // DeliveryDays implements ports.Intake.
 func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error) {
-	fid, err := parseID("factory", string(factory))
-	if err != nil {
-		return nil, err
+	var fid *uuid.UUID
+
+	if factory != "" {
+		id, err := parseID("factory", string(factory))
+		if err != nil {
+			return nil, err
+		}
+
+		fid = &id
 	}
 
 	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.WebhookDeliveryDaysRow, error) {
@@ -362,13 +406,158 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 }
 
 // PruneDeliveries implements ports.Intake.
-func (in *Intake) PruneDeliveries(ctx context.Context, before time.Time) (int, error) {
-	n, err := fetch(ctx, in.s.systemTx, func(q *db.Queries) (int64, error) { return q.PruneWebhookDeliveries(ctx, before) })
+func (in *Intake) PruneDeliveries(ctx context.Context, now time.Time) (int, error) {
+	n, err := fetch(ctx, in.s.systemTx, func(q *db.Queries) (int64, error) {
+		deliveries, err := q.PruneWebhookDeliveries(ctx, now.Add(-domain.DeliveryRetention))
+		if err != nil {
+			return 0, err
+		}
+
+		ledger, err := q.PruneWebhookLedger(ctx, now.Add(-domain.LedgerRetention))
+
+		return deliveries + ledger, err
+	})
 	if err != nil {
 		return 0, fmt.Errorf("prune deliveries: %w", err)
 	}
 
 	return int(n), nil
+}
+
+// Receive implements ports.Intake: the ledger's insert decides a duplicate, so two goalds that
+// receive one delivery at once keep one, and a kept delivery's evaluations go in with its row.
+func (in *Intake) Receive(ctx context.Context, n domain.NewReceipt) (domain.Received, error) {
+	if err := n.Check(); err != nil {
+		return domain.Received{}, fmt.Errorf("receive delivery: %w", err)
+	}
+
+	webhook, err := parseID("webhook", string(n.WebhookID))
+	if err != nil {
+		return domain.Received{}, err
+	}
+
+	headers, err := json.Marshal(domain.StoredHeaders(n.Headers))
+	if err != nil {
+		return domain.Received{}, fmt.Errorf("receive delivery: headers: %w", err)
+	}
+
+	out := domain.Received{Receipt: n.Receipt, DeliveryID: n.DeliveryID}
+
+	err = in.s.inTx(ctx, func(q *db.Queries) error {
+		if n.Receipt == domain.ReceiptAccepted {
+			if keep, err := ledger(ctx, q, webhook, n, &out); err != nil || !keep {
+				return err
+			}
+		}
+
+		row, err := in.insertReceived(ctx, q, webhook, headers, n)
+		out.Row = row
+
+		if err != nil || len(n.Evaluations) == 0 {
+			return err
+		}
+
+		return insertEvaluations(ctx, q, uuid.MustParse(string(row)), n)
+	})
+
+	switch {
+	case isForeignKeyViolation(err):
+		return domain.Received{}, fmt.Errorf("webhook %s: %w", n.WebhookID, ports.ErrNotFound)
+	case err != nil:
+		return domain.Received{}, fmt.Errorf("receive delivery: %w", ruleError(err, ""))
+	default:
+		return out, nil
+	}
+}
+
+// ledger takes accepted delivery n's id into webhook's ledger in the receipt's transaction: a
+// duplicate is counted on its first row, a ping sets the webhook's time, and a delivery no trigger
+// named is counted on its UTC day. keep is whether n keeps a row of its own.
+func ledger(ctx context.Context, q *db.Queries, webhook uuid.UUID, n domain.NewReceipt, out *domain.Received) (keep bool, err error) {
+	at := n.ReceivedAt.UTC()
+	_, err = q.InsertLedgerID(ctx, db.InsertLedgerIDParams{WebhookID: webhook, DeliveryID: n.DeliveryID, ReceivedAt: at})
+
+	switch {
+	case notFound(err):
+		out.Receipt = domain.ReceiptDuplicate
+
+		// The first row is gone, or there was none: the id was only counted.
+		row, err := q.CountDuplicate(ctx, db.CountDuplicateParams{EndpointID: webhook, DeliveryID: n.DeliveryID})
+		if notFound(err) {
+			return false, nil
+		}
+
+		out.Row = domain.WebhookDeliveryID(row.String())
+
+		return false, err
+	case err != nil:
+		return false, err
+	}
+
+	if n.Ping {
+		if err := q.PingWebhook(ctx, db.PingWebhookParams{ID: webhook, At: at}); err != nil {
+			return false, err
+		}
+	}
+
+	if !n.Named {
+		return false, q.CountUnnamedDelivery(ctx, db.CountUnnamedDeliveryParams{WebhookID: webhook, ReceivedAt: at})
+	}
+
+	return true, nil
+}
+
+// insertReceived keeps the row of a delivery the receiver accepted or refused, with its body for an
+// accepted one.
+func (in *Intake) insertReceived(ctx context.Context, q *db.Queries, webhook uuid.UUID, headers []byte, n domain.NewReceipt,
+) (domain.WebhookDeliveryID, error) {
+	id, err := newID()
+	if err != nil {
+		return "", err
+	}
+
+	p := db.InsertReceivedDeliveryParams{
+		ID: id, EndpointID: webhook, ReceivedAt: n.ReceivedAt.UTC(), Headers: headers, Body: n.Body, Outcome: string(domain.DeliveryAccepted),
+		Reason: n.Reason, Event: n.Event, Receipt: new(string(n.Receipt)),
+	}
+
+	if n.Receipt == domain.ReceiptRefused {
+		p.Outcome = string(domain.DeliveryRefused)
+	} else {
+		p.DeliveryID = &n.DeliveryID
+	}
+
+	if p.Body == nil {
+		p.Body = []byte{}
+	}
+
+	if _, err := q.InsertReceivedDelivery(ctx, p); err != nil {
+		return "", err
+	}
+
+	return domain.WebhookDeliveryID(id.String()), nil
+}
+
+// UnnamedDays implements ports.Intake.
+func (in *Intake) UnnamedDays(ctx context.Context, webhook domain.WebhookEndpointID, since time.Time) ([]domain.DeliveryCount, error) {
+	uid, err := parseID("webhook", string(webhook))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.UnnamedDeliveryDaysRow, error) {
+		return q.UnnamedDeliveryDays(ctx, db.UnnamedDeliveryDaysParams{WebhookID: uid, Since: since})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unnamed deliveries of webhook %s: %w", webhook, err)
+	}
+
+	out := make([]domain.DeliveryCount, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.DeliveryCount{WebhookID: webhook, Day: r.Day.UTC(), Count: int(r.Count)})
+	}
+
+	return out, nil
 }
 
 // RecordFiring implements ports.Intake.
@@ -400,7 +589,8 @@ func (in *Intake) RecordFiring(ctx context.Context, f domain.TriggerFiring) (dom
 	err = in.s.inTx(ctx, func(q *db.Queries) error {
 		_, err := q.InsertTriggerFiring(ctx, db.InsertTriggerFiringParams{
 			ID: id, FactoryID: factory, Trigger: f.Trigger, Source: string(f.Source), EventKey: f.EventKey,
-			IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: item, At: f.At,
+			IdempotencyKey: f.IdempotencyKey, Dedupe: f.Dedupe, Outcome: string(f.Outcome), Reason: f.Reason, ItemID: item,
+			Missed: int32(min(max(f.Missed, 0), math.MaxInt32)), At: f.At, CheckState: checkStateArg(f.CheckState),
 		})
 
 		switch {
@@ -551,21 +741,33 @@ func (in *Intake) OpenItemByDedupe(ctx context.Context, factory domain.FactoryID
 
 // SourceTally implements ports.Intake.
 func (in *Intake) SourceTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.SourceCount, error) {
+	return factoryTally(ctx, in, factory, "item sources", func(q *db.Queries, fid uuid.UUID) ([]db.ItemSourceTallyRow, error) {
+		return q.ItemSourceTally(ctx, db.ItemSourceTallyParams{FactoryID: fid, Since: since})
+	}, sourceCount)
+}
+
+func sourceCount(r db.ItemSourceTallyRow) domain.SourceCount {
+	return domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)}
+}
+
+// factoryTally reads a factory's counts with query and makes each row a count with count; what
+// names them in an error.
+func factoryTally[R, C any](ctx context.Context, in *Intake, factory domain.FactoryID, what string,
+	query func(q *db.Queries, fid uuid.UUID) ([]R, error), count func(R) C,
+) ([]C, error) {
 	fid, err := parseID("factory", string(factory))
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.ItemSourceTallyRow, error) {
-		return q.ItemSourceTally(ctx, db.ItemSourceTallyParams{FactoryID: fid, Since: since})
-	})
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]R, error) { return query(q, fid) })
 	if err != nil {
-		return nil, fmt.Errorf("item sources of factory %s: %w", factory, err)
+		return nil, fmt.Errorf("%s of factory %s: %w", what, factory, err)
 	}
 
-	out := make([]domain.SourceCount, 0, len(rows))
+	out := make([]C, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)})
+		out = append(out, count(r))
 	}
 
 	return out, nil
@@ -624,6 +826,97 @@ func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, las
 	return w, nil
 }
 
+// OriginTally implements ports.Intake.
+func (in *Intake) OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error) {
+	return factoryTally(ctx, in, factory, "item origins", func(q *db.Queries, fid uuid.UUID) ([]db.OriginTallyRow, error) {
+		return q.OriginTally(ctx, db.OriginTallyParams{FactoryID: fid, Since: since})
+	}, originCount)
+}
+
+func originCount(r db.OriginTallyRow) domain.OriginCount {
+	return domain.OriginCount{Origin: domain.Origin(r.Origin), Items: int(r.Items)}
+}
+
+// ComingUp implements ports.Intake.
+func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ComingUp, int, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.ComingUpItemsRow, error) {
+		return q.ComingUpItems(ctx, db.ComingUpItemsParams{FactoryID: fid, MaxItems: int32(min(max(limit, 0), math.MaxInt32))})
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("items coming up in factory %s: %w", factory, err)
+	}
+
+	out := make([]domain.ComingUp, 0, len(rows))
+	total := 0
+
+	for _, r := range rows {
+		it, err := itemFrom(r.WorkItem)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		needs := r.Needs
+		if needs == nil {
+			needs = []int64{}
+		}
+
+		out = append(out, domain.ComingUp{Item: it, Needs: needs, FromFactory: domain.FactoryID(r.FromFactoryID), FromNumber: r.FromNumber})
+		total = int(r.Total)
+	}
+
+	return out, total, nil
+}
+
+// TriageQueue implements ports.Intake.
+func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, limit int) (domain.TriageQueue, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return domain.TriageQueue{}, err
+	}
+
+	q := domain.TriageQueue{Waiting: []domain.TriageSource{}}
+
+	err = in.s.read(ctx, func(dq *db.Queries) error {
+		row, err := dq.TriageQueueItem(ctx, fid)
+
+		switch {
+		case notFound(err):
+		case err != nil:
+			return fmt.Errorf("triage item: %w", err)
+		default:
+			it, err := itemFrom(row.WorkItem)
+			if err != nil {
+				return err
+			}
+
+			q.Item, q.FollowUps = &it, int(row.FollowUps)
+		}
+
+		rows, err := dq.WaitingTriageSources(ctx, db.WaitingTriageSourcesParams{FactoryID: fid, MaxItems: int32(min(max(limit, 0), math.MaxInt32))})
+		if err != nil {
+			return fmt.Errorf("waiting triage sources: %w", err)
+		}
+
+		for _, r := range rows {
+			q.Waiting = append(q.Waiting, domain.TriageSource{
+				ID: domain.ItemID(r.ID.String()), Number: r.Number, Title: r.Title, FollowUps: int(r.FollowUps),
+			})
+		}
+
+		return nil
+	})
+	if err != nil {
+		return domain.TriageQueue{}, fmt.Errorf("triage queue of factory %s: %w", factory, err)
+	}
+
+	return q, nil
+}
+
 // TriggerDays implements ports.Intake.
 func (in *Intake) TriggerDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerDay, error) {
 	fid, err := parseID("factory", string(factory))
@@ -664,11 +957,30 @@ func (in *Intake) Firings(ctx context.Context, factory domain.FactoryID, trigger
 	for _, r := range rows {
 		out = append(out, domain.FiringEntry{Firing: firingFrom(db.TriggerFiringByKeyRow{
 			ID: r.ID, FactoryID: r.FactoryID, Trigger: r.Trigger, Source: r.Source, EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey,
-			Dedupe: r.Dedupe, Outcome: r.Outcome, Reason: r.Reason, ItemID: r.ItemID, At: r.At,
+			Dedupe: r.Dedupe, Outcome: r.Outcome, Reason: r.Reason, ItemID: r.ItemID, Missed: r.Missed, At: r.At,
+			CheckState: r.CheckState, RunID: r.RunID, CostUsd: r.CostUsd, Decisions: r.Decisions,
 		}), ItemNumber: r.ItemNumber, Merged: r.Merged})
 	}
 
 	return out, nil
+}
+
+// PruneFirings implements ports.Intake, in the organization in ctx, through goal_app's DELETE
+// grant on trigger_firings.
+func (in *Intake) PruneFirings(ctx context.Context, factory domain.FactoryID, before time.Time) (int, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (int64, error) {
+		return q.PruneTriggerFirings(ctx, db.PruneTriggerFiringsParams{FactoryID: fid, Before: before})
+	})
+	if err != nil {
+		return 0, fmt.Errorf("prune firings of factory %s: %w", factory, err)
+	}
+
+	return int(n), nil
 }
 
 // newSecret generates a signing secret for endpoint id of org and seals it under the active key.
@@ -695,11 +1007,29 @@ func (in *Intake) newSecret(org domain.OrgID, id domain.WebhookEndpointID) ([]by
 	return secret, sealedValue{keyID: keyID, nonce: nonce, ciphertext: ct}, nil
 }
 
+// endpointFrom is r without its openings (withOpenings): a factory endpoint reads as its kind's
+// sender, enabled.
 func endpointFrom(r db.WebhookEndpointRow) domain.WebhookEndpoint {
-	return domain.WebhookEndpoint{
-		ID: domain.WebhookEndpointID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), Name: r.Name,
-		Kind: domain.WebhookKind(r.Kind), CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt),
+	e := domain.WebhookEndpoint{
+		ID: domain.WebhookEndpointID(r.ID.String()), Name: r.Name, Kind: domain.WebhookKind(deref(r.Kind)),
+		Sender: domain.WebhookSender(deref(r.Sender)), Secret: r.SecretName, Enabled: r.Enabled,
+		Token:     domain.TokenSettings{Header: deref(r.TokenHeader), EventPath: deref(r.TokenEventPath), IDPath: deref(r.TokenIDPath)},
+		CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt), PingedAt: utc(r.PingedAt),
 	}
+
+	if r.FactoryID != nil {
+		e.FactoryID = domain.FactoryID(r.FactoryID.String())
+	}
+
+	if r.SecretID != nil {
+		e.SecretID = domain.SecretID(r.SecretID.String())
+	}
+
+	if e.Sender == "" {
+		e.Sender = e.Kind.Sender()
+	}
+
+	return e
 }
 
 func deliveryFrom(r db.WebhookDeliveriesRow) (domain.WebhookDelivery, error) {
@@ -717,6 +1047,16 @@ func deliveryFrom(r db.WebhookDeliveriesRow) (domain.WebhookDelivery, error) {
 		d.ItemID = domain.ItemID(r.ItemID.String())
 	}
 
+	if r.DeliveryID != nil {
+		d.DeliveryID = *r.DeliveryID
+	}
+
+	if r.Receipt != nil {
+		d.Receipt = domain.DeliveryReceipt(*r.Receipt)
+	}
+
+	d.Event, d.Duplicates = r.Event, int(r.Duplicates)
+
 	return d, nil
 }
 
@@ -724,11 +1064,31 @@ func firingFrom(r db.TriggerFiringByKeyRow) domain.TriggerFiring {
 	f := domain.TriggerFiring{
 		ID: r.ID.String(), FactoryID: domain.FactoryID(r.FactoryID.String()), Trigger: r.Trigger, Source: domain.TriggerSource(r.Source),
 		EventKey: r.EventKey, IdempotencyKey: r.IdempotencyKey, Dedupe: r.Dedupe, Outcome: domain.FiringOutcome(r.Outcome),
-		Reason: r.Reason, At: r.At.UTC(),
+		Reason: r.Reason, Missed: int(r.Missed), At: r.At.UTC(), CostUSD: r.CostUsd, Decisions: string(r.Decisions),
 	}
 
 	if r.ItemID != nil {
 		f.ItemID = domain.ItemID(r.ItemID.String())
+	}
+
+	if r.CheckState != nil {
+		f.CheckState = domain.CheckState(*r.CheckState)
+	}
+
+	if r.RunID != nil {
+		f.RunID = domain.RunID(r.RunID.String())
+	}
+
+	f.Try = r.Try
+	if r.CheckedAt != nil {
+		f.CheckedAt = r.CheckedAt.UTC()
+	}
+
+	if len(r.Applied) > 0 {
+		var a domain.CheckApplied
+		if json.Unmarshal(r.Applied, &a) == nil { // the column holds what FinishCheck wrote
+			f.Applied = &a
+		}
 	}
 
 	return f
@@ -748,7 +1108,7 @@ func resealWebhookSecrets(ctx context.Context, q *db.Queries, key ports.MasterKe
 	}
 
 	return resealRows(key, "webhook endpoint", stale, webhookSecretAAD, func(id uuid.UUID, s sealedValue) error {
-		return q.ResealWebhookSecret(ctx, db.ResealWebhookSecretParams{KeyID: s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
+		return q.ResealWebhookSecret(ctx, db.ResealWebhookSecretParams{KeyID: &s.keyID, Nonce: s.nonce, Ciphertext: s.ciphertext, ID: id})
 	})
 }
 

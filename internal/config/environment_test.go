@@ -93,10 +93,11 @@ func TestEnvironmentSchema(t *testing.T) {
 }
 
 // withoutImageWarning is problems without the image warning, which fullEnvironment's image
-// gets and TestCheck_EnvironmentImageWarns covers.
+// gets and TestCheck_EnvironmentImageWarns covers, and without field-ignored warnings, which a
+// modelAgrees.key's trigger gets and TestCheck_IgnoredFieldsWarnAndDoNotRefuse covers.
 func withoutImageWarning(problems []domain.DefinitionProblem) []domain.DefinitionProblem {
 	return slices.DeleteFunc(slices.Clone(problems), func(p domain.DefinitionProblem) bool {
-		return p.Code == codeEnvironmentImage && p.Severity == domain.SeverityWarning
+		return (p.Code == codeEnvironmentImage || p.Code == codeFieldIgnored) && p.Severity == domain.SeverityWarning
 	})
 }
 

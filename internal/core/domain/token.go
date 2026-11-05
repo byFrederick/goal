@@ -43,6 +43,11 @@ const TaskKindTry TaskKind = "try"
 // and no repository, definition, file or MCP tool.
 const TaskKindGrade TaskKind = "grade"
 
+// TaskKindCheck is a trigger's check (ADR 0040 decision 19). Its token names the trigger
+// (Trigger) and no item or station: the gateway serves the trigger's brief and input, its
+// agent's environment with ask tools off, no knowledge and no tool of its own.
+const TaskKindCheck TaskKind = "check"
+
 // TaskClaims scope one agent task's access to the MCP gateway: which organization, factory,
 // definition version, item, station, agent and run it acts for, which connections it may use,
 // what the organization policy decided at run start (the model, the denied commands and whether
@@ -101,8 +106,11 @@ type TaskClaims struct {
 	TryOf PastTryID `json:"tr,omitempty"`
 	// GradeOf is which result a TaskKindGrade task grades; only such a token names one, and it
 	// always does.
-	GradeOf   GradeOf `json:"g,omitempty"`
-	ExpiresAt int64   `json:"e"` // unix seconds
+	GradeOf GradeOf `json:"g,omitempty"`
+	// Trigger is the trigger a TaskKindCheck task checks for; only such a token names one, and it
+	// always does.
+	Trigger   string `json:"tg,omitempty"`
+	ExpiresAt int64  `json:"e"` // unix seconds
 }
 
 // SignTaskToken issues a per-task gateway token for TaskAudience, whatever c.Audience says. Any
@@ -193,6 +201,10 @@ func (c TaskClaims) checkKind() error {
 		return err
 	}
 
+	if err := c.checkCheck(); err != nil {
+		return err
+	}
+
 	return c.checkDraftRequest()
 }
 
@@ -251,6 +263,19 @@ func (c TaskClaims) checkGrade() error {
 		return fmt.Errorf("%w: a grade's task names no try or result to grade", ErrBadTaskToken)
 	case c.Kind == TaskKindGrade && (c.ItemID != "" || len(c.Connections) > 0):
 		return fmt.Errorf("%w: a grade's task names an item or connections", ErrBadTaskToken)
+	}
+
+	return nil
+}
+
+// checkCheck refuses a check's claims that name an item or a station, or no trigger, and any
+// other task's that name a trigger.
+func (c TaskClaims) checkCheck() error {
+	switch {
+	case c.Kind != TaskKindCheck && c.Trigger != "":
+		return fmt.Errorf("%w: only a check's task names a trigger", ErrBadTaskToken)
+	case c.Kind == TaskKindCheck && (c.Trigger == "" || c.ItemID != "" || c.Station != ""):
+		return fmt.Errorf("%w: a check's task names its trigger and no item or station", ErrBadTaskToken)
 	}
 
 	return nil
