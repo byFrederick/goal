@@ -2,7 +2,7 @@
 // the on/off switch, this week's results, the When, Only if, Create and Limits blocks, its recent events
 // and its YAML in the definition. Save changes writes spec.board.triggers through the draft files API and
 // publishes a new version (trigger-save.ts). A name the definition does not have opens a blank trigger
-// when the URL carries the event the New trigger picker chose (?on=<event key>). A trigger with `check` shows
+// when the URL carries the event the New trigger picker chose (?on=<event key>, with &check=<agent> for a check). A trigger with `check` shows
 // the check layout (intake/trigger-check.jpg): the Check block, its log of checks and Try a check.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearch } from '@tanstack/react-router';
@@ -73,7 +73,7 @@ export function TriggerPage() {
   const org = useOrg();
   const listed = useFactory();
   const { trigger: name } = useParams({ from: '/o/$org/f/$factory/intake/$trigger' });
-  const { on } = useSearch({ from: '/o/$org/f/$factory/intake/$trigger' });
+  const { on, check } = useSearch({ from: '/o/$org/f/$factory/intake/$trigger' });
   const factory = useQuery(factoryQuery(org.id, listed.id)).data ?? listed;
   const definition = useQuery(definitionTextQuery(org.id, factory));
   const text = definition.data?.text;
@@ -142,6 +142,7 @@ export function TriggerPage() {
     name,
     on: on ?? '',
     create: { type: board.workTypes[0] ?? '', station: board.stations[0] ?? '' },
+    ...(check === undefined ? {} : { check: { agent: check, brief: '' } }),
   };
   return (
     <TriggerEditor
