@@ -18,13 +18,13 @@ const choices: { kind: Exclude<StationKind, 'done'>; label: string; name: string
 export function AddStationMenu() {
   const editor = useLineEditor();
   // The new row's name takes focus; the menu must not hand focus back to its trigger after it.
-  const added = useRef(false);
+  const added = useRef<string | null>(null);
 
   const add = (kind: Exclude<StationKind, 'done'>, name: string) => {
     const after = editor.lastFocused.current;
     const known = after !== undefined && editor.stations.some((s) => s.id === after && s.kind !== 'done');
     const { edit, station } = addStation(editor.line, kind, { name, ...(known ? { after } : {}) });
-    added.current = true;
+    added.current = station.id;
     editor.insert(edit, station);
   };
 
@@ -42,9 +42,15 @@ export function AddStationMenu() {
         align="end"
         className="w-60"
         onCloseAutoFocus={(event) => {
-          if (!added.current) return;
-          added.current = false;
+          const id = added.current;
+          if (!id) return;
+          added.current = null;
           event.preventDefault();
+          // The menu has finished closing: the new row's name takes focus now, whatever the menu did on the way out.
+          requestAnimationFrame(() => {
+            const name = document.querySelector<HTMLElement>(`[data-station="${CSS.escape(id)}"] [data-station-name]`);
+            if (name && document.activeElement !== name) name.focus();
+          });
         }}
       >
         {choices.map(({ kind, label, name, Icon }) => (
