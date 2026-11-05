@@ -208,9 +208,9 @@ type SecretRef struct {
 // factoryRefPlaces are the factory.yaml keys a {{secret}} may be in (ADR 0037 decision 6); a *
 // is any one key or index. Every other key that has one is a secret-placement problem.
 var factoryRefPlaces = [][]string{
-	{keySpec, "runtime", "repository", "token"},
-	{keySpec, "runtime", "repositories", "*", "token"},
-	{keySpec, "runtime", "modelKey"},
+	{keySpec, keyRuntime, "repository", "token"},
+	{keySpec, keyRuntime, "repositories", "*", "token"},
+	{keySpec, keyRuntime, "modelKey"},
 	{keySpec, keyBoard, "triggers", "*", "only", "modelAgrees", "key"},
 }
 
@@ -491,7 +491,7 @@ func (c *checker) forge() {
 		return
 	}
 
-	base := at("spec", "runtime", "repository")
+	base := at("spec", keyRuntime, "repository")
 	forge := append(slices.Clone(base), "forge")
 	section, _ := ModelPointer(forge)
 
@@ -524,10 +524,10 @@ func (c *checker) factoryPlacement() {
 			if braces {
 				c.errorf(checkEnvironments, codeSecretPlacement, p,
 					"%s: a {{secret}} reference is valid only in runtime.repository.token, a runtime.repositories entry's token, "+
-							"runtime.modelKey, a trigger's modelAgrees.key "+
+						"runtime.modelKey, a trigger's modelAgrees.key "+
 						"and environment files; a literal {{ is not supported", displayPath(p[1:]))
 			}
-		case slices.Equal(p, []string{keySpec, "runtime", "repository", "token"}) && !braces:
+		case slices.Equal(p, []string{keySpec, keyRuntime, "repository", "token"}) && !braces:
 			// env-reference-removed
 		case !wholeReference(value):
 			c.errorf(checkEnvironments, codeReferenceInvalid, p,

@@ -200,10 +200,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
 	// definition's secret references and knowledge sources are checked against the organization's
-	// (ADR 0037), its models against the organization policy.
+	// (ADR 0037), its repositories against the code hosts it lists (ADR 0041), its models against
+	// the organization policy.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
-		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake}, Log: log,
+		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake, Hosts: store}, Log: log,
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,
 	// the engine merges with them and the API lists what a connection reaches.

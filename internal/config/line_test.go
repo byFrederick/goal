@@ -1007,7 +1007,7 @@ func TestLine_RepositoryIsTheDefaultEntry(t *testing.T) {
 		name, doc string
 		want      domain.Repository
 	}{
-		{name: "one repository", doc: withRepos(appEntry), want: domain.Repository{URL: "https://github.com/acme/app", Token: "{{gh-token}}"}},
+		{name: "one repository", doc: withRepos(appEntry), want: domain.Repository{URL: urlApp, Token: "{{gh-token}}"}}, //nolint:gosec // a reference, not a secret
 		{name: "an owner pattern", doc: withRepos(ownerEntry)},
 		{name: "no code", doc: baseFactory},
 	} {

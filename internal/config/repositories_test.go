@@ -22,13 +22,15 @@ func TestRuntime_RepositoryEntries(t *testing.T) {
 		{name: "no code", runtime: Runtime{}},
 		{
 			name:    "the shorthand",
-			runtime: Runtime{Repository: &Repository{URL: "https://github.com/acme/Web-App.git", Token: "{{gh-token}}"}},
-			want:    []RepositoryEntry{{Name: "web-app", URL: "https://github.com/acme/Web-App.git", Token: "{{gh-token}}", Access: AccessWrite, Default: true}},
+			runtime: Runtime{Repository: &Repository{URL: "https://github.com/acme/Web-App.git", Token: "{{gh-token}}"}}, //nolint:gosec // a reference, not a secret
+			want: []RepositoryEntry{{ //nolint:gosec // a reference, not a secret
+				Name: "web-app", URL: "https://github.com/acme/Web-App.git", Token: "{{gh-token}}", Access: AccessWrite, Default: true,
+			}},
 		},
 		{
 			name:    "the shorthand of a public repository",
 			runtime: Runtime{Repository: &Repository{URL: "https://gitlab.com/acme/api/"}},
-			want:    []RepositoryEntry{{Name: "api", URL: "https://gitlab.com/acme/api/", Access: AccessWrite, Default: true}},
+			want:    []RepositoryEntry{{Name: nameAPI, URL: "https://gitlab.com/acme/api/", Access: AccessWrite, Default: true}},
 		},
 		{
 			name:    "a last segment that is too short for a slug",
@@ -42,34 +44,34 @@ func TestRuntime_RepositoryEntries(t *testing.T) {
 		},
 		{
 			name:    "the only entry, one repository",
-			runtime: Runtime{Repositories: []RepositoryEntry{{Name: "app", URL: "https://github.com/acme/app", Token: "{{gh}}", Access: AccessWrite}}},
-			want:    []RepositoryEntry{{Name: "app", URL: "https://github.com/acme/app", Token: "{{gh}}", Access: AccessWrite, Default: true}},
+			runtime: Runtime{Repositories: []RepositoryEntry{{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite}}},
+			want:    []RepositoryEntry{{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite, Default: true}},
 		},
 		{
 			name:    "the only entry, an owner pattern",
-			runtime: Runtime{Repositories: []RepositoryEntry{{Name: "acme", URL: "https://github.com/acme/*", Token: "{{gh}}", Access: AccessWrite}}},
-			want:    []RepositoryEntry{{Name: "acme", URL: "https://github.com/acme/*", Token: "{{gh}}", Access: AccessWrite}},
+			runtime: Runtime{Repositories: []RepositoryEntry{{Name: "acme", URL: "https://github.com/acme/*", Token: tokenRef, Access: AccessWrite}}},
+			want:    []RepositoryEntry{{Name: "acme", URL: "https://github.com/acme/*", Token: tokenRef, Access: AccessWrite}},
 		},
 		{
 			name: "several entries keep the default they say",
 			runtime: Runtime{Repositories: []RepositoryEntry{
-				{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead},
-				{Name: "api", URL: "https://github.com/acme/api", Token: "{{gh}}", Access: AccessWrite, Default: true},
+				{Name: nameApp, URL: urlApp, Access: AccessRead},
+				{Name: nameAPI, URL: urlAPI, Token: tokenRef, Access: AccessWrite, Default: true},
 			}},
 			want: []RepositoryEntry{
-				{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead},
-				{Name: "api", URL: "https://github.com/acme/api", Token: "{{gh}}", Access: AccessWrite, Default: true},
+				{Name: nameApp, URL: urlApp, Access: AccessRead},
+				{Name: nameAPI, URL: urlAPI, Token: tokenRef, Access: AccessWrite, Default: true},
 			},
 		},
 		{
 			name: "several entries without a default",
 			runtime: Runtime{Repositories: []RepositoryEntry{
-				{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead},
-				{Name: "api", URL: "https://github.com/acme/api", Token: "{{gh}}", Access: AccessWrite},
+				{Name: nameApp, URL: urlApp, Access: AccessRead},
+				{Name: nameAPI, URL: urlAPI, Token: tokenRef, Access: AccessWrite},
 			}},
 			want: []RepositoryEntry{
-				{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead},
-				{Name: "api", URL: "https://github.com/acme/api", Token: "{{gh}}", Access: AccessWrite},
+				{Name: nameApp, URL: urlApp, Access: AccessRead},
+				{Name: nameAPI, URL: urlAPI, Token: tokenRef, Access: AccessWrite},
 			},
 		},
 	}
@@ -98,6 +100,16 @@ func TestRuntime_RepositoryEntries(t *testing.T) {
 func withRepos(entries ...string) string {
 	return edited(runtimeModel, runtimeModel+"    repositories:\n      "+strings.Join(entries, "\n      ")+"\n")
 }
+
+// The repositories the cases name.
+const (
+	urlApp  = "https://github.com/acme/app"
+	urlAPI  = "https://github.com/acme/api"
+	nameApp = "app"
+	nameAPI = "api"
+	// tokenRef is a reference, not a secret.
+	tokenRef = "{{gh}}"
+)
 
 const (
 	appEntry     = `- { name: app, url: "https://github.com/acme/app", token: "{{gh-token}}", access: write }`
@@ -273,9 +285,9 @@ func TestCheck_ReaderWithWriteToken(t *testing.T) {
 func TestFactory_AgentCode(t *testing.T) {
 	t.Parallel()
 
-	write := &Factory{Spec: Spec{Runtime: Runtime{Repository: &Repository{URL: "https://github.com/acme/app"}}}}
+	write := &Factory{Spec: Spec{Runtime: Runtime{Repository: &Repository{URL: urlApp}}}}
 	none := &Factory{}
-	read := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{{Name: "app", URL: "https://github.com/acme/app", Access: AccessRead}}}}}
+	read := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{{Name: nameApp, URL: urlApp, Access: AccessRead}}}}}
 
 	for _, tt := range []struct {
 		f    *Factory

@@ -134,8 +134,8 @@ type repoURL struct {
 // parseRepoURL reads an https URL of one repository (https://host/owner/name, .git optional) or
 // of an owner pattern (https://host/owner/*); false for anything else.
 func parseRepoURL(raw string) (repoURL, bool) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	u, ok := plainHTTPS(raw)
+	if !ok {
 		return repoURL{}, false
 	}
 
@@ -158,6 +158,16 @@ func parseRepoURL(raw string) (repoURL, bool) {
 	}
 
 	return repoURL{owner: host + "/" + strings.Join(segs[:len(segs)-1], "/"), name: segs[len(segs)-1]}, true
+}
+
+// plainHTTPS parses raw as an https URL with a host and no credentials, query or fragment.
+func plainHTTPS(raw string) (*url.URL, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return nil, false
+	}
+
+	return u, true
 }
 
 // covers reports whether entry e covers every repository t names: one repository covers itself,
@@ -213,7 +223,7 @@ func tokenEntry(entries []RepositoryEntry, t repoURL, reads bool) (RepositoryEnt
 // repositories checks runtime.repositories, agents' code and what a line that merges needs.
 func (c *checker) repositories() {
 	rt := c.f.Spec.Runtime
-	base := at("spec", "runtime", "repositories")
+	base := at("spec", keyRuntime, "repositories")
 
 	if rt.Repository != nil && len(rt.Repositories) > 0 {
 		c.errorf(checkRepositories, codeRepositoryForms, base,
@@ -223,7 +233,7 @@ func (c *checker) repositories() {
 	defaults := 0
 
 	for i, e := range rt.Repositories {
-		p := at("spec", "runtime", "repositories", i)
+		p := at("spec", keyRuntime, "repositories", i)
 		field := func(k string) []string { return append(slices.Clone(p), k) }
 
 		if slices.ContainsFunc(rt.Repositories[:i], func(o RepositoryEntry) bool { return o.Name == e.Name }) {
@@ -318,10 +328,10 @@ func (c *checker) notSupportedYet() {
 	for i, e := range c.f.Spec.Runtime.Repositories {
 		switch {
 		case i > 0:
-			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", "runtime", "repositories", i),
+			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", keyRuntime, "repositories", i),
 				"repository %s: a second repository %s", e.Name, why)
 		case e.Access == AccessRead:
-			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", "runtime", "repositories", i, "access"),
+			c.errorf(checkRepositories, codeRepositoryNotSupported, at("spec", keyRuntime, "repositories", i, "access"),
 				"repository %s: access read %s", e.Name, why)
 		}
 	}

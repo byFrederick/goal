@@ -96,7 +96,7 @@ type Runtime struct {
 	// Repositories are the repositories the factory's runs may open, each with its access (ADR
 	// 0041 decision 2).
 	Repositories []RepositoryEntry `json:"repositories,omitempty"`
-	Budget     *Budget     `json:"budget,omitempty"`
+	Budget       *Budget           `json:"budget,omitempty"`
 }
 
 // Repository is the git repository cloned into every run: a URL, the {{secret}} token that clones

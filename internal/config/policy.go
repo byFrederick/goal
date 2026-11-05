@@ -29,7 +29,7 @@ func ModelProblems(f *Factory, allowed []string) []domain.DefinitionProblem {
 	}
 
 	if m := f.Spec.Runtime.Model; m != "" && !slices.Contains(allowed, m) {
-		refuse(at("spec", "runtime", "model"), "runtime", m)
+		refuse(at("spec", keyRuntime, "model"), keyRuntime, m)
 	}
 
 	for i, a := range f.Spec.Agents {

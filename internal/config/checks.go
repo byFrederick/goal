@@ -638,7 +638,7 @@ func (c *checker) tools() {
 			continue
 		}
 
-		p := at("spec", "runtime", "tools", i)
+		p := at("spec", keyRuntime, "tools", i)
 		c.errorf(checkTools, codeToolSpecInvalid, p,
 			"runtime.tools: %q is not a mise tool spec, such as go, go@1.26.10 or npm:@acme/cli@2", t).
 			Fixes = []domain.ProblemFix{RemoveFix("Remove "+t, p)}
@@ -650,9 +650,9 @@ var removedKeys = []struct {
 	path []string
 	why  string
 }{
-	{at("spec", "runtime", "runner"), "the platform chooses where runs start"},
-	{at("spec", "runtime", "image"), "every run starts from the platform's agent image and installs the repository's tools and runtime.tools"},
-	{at("spec", "runtime", "auth"), "set runtime.modelConnection to an organization connection with model access"},
+	{at("spec", keyRuntime, "runner"), "the platform chooses where runs start"},
+	{at("spec", keyRuntime, "image"), "every run starts from the platform's agent image and installs the repository's tools and runtime.tools"},
+	{at("spec", keyRuntime, "auth"), "set runtime.modelConnection to an organization connection with model access"},
 	{at("spec", "knowledgeBase"), "list the organization's knowledge sources the factory may search in knowledge.sources"},
 	{at("spec", "secrets"), "the organization's connections hold its credentials"},
 }
@@ -672,7 +672,7 @@ func (c *checker) removedForms() {
 			Fixes = []domain.ProblemFix{RemoveFix("Remove "+name, k.path)}
 	}
 
-	if p := at("spec", "runtime", "repository", "token"); c.f.hasKey(p) && !strings.Contains(c.f.Spec.Runtime.Repository.Token, "{{") {
+	if p := at("spec", keyRuntime, "repository", "token"); c.f.hasKey(p) && !strings.Contains(c.f.Spec.Runtime.Repository.Token, "{{") {
 		c.removed(p, codeEnvReferenceRemoved,
 			"runtime.repository.token: only a {{secret}} reference is valid here, such as {{github-token}}; references of other forms are removed").
 			Fixes = []domain.ProblemFix{RemoveFix("Remove the token", p)}
@@ -762,10 +762,10 @@ var movedKeys = []struct {
 	to   string
 }{
 	{at("spec", "connections"), "what agents reach is listed in environments/<name>.yaml (env, files and mcp)"},
-	{at("spec", "runtime", "modelConnection"), "set runtime.modelKey to the {{secret}} that holds the model key"},
-	{at("spec", "runtime", "size"), "set size in each environment file"},
-	{at("spec", "runtime", "tools"), "set tools in each environment file"},
-	{at("spec", "runtime", "repository", "connection"), "set runtime.repository.token to the {{secret}} that clones and merges"},
+	{at("spec", keyRuntime, "modelConnection"), "set runtime.modelKey to the {{secret}} that holds the model key"},
+	{at("spec", keyRuntime, "size"), "set size in each environment file"},
+	{at("spec", keyRuntime, "tools"), "set tools in each environment file"},
+	{at("spec", keyRuntime, "repository", "connection"), "set runtime.repository.token to the {{secret}} that clones and merges"},
 }
 
 // movedNote ends every moved-to-environment message.
