@@ -63,6 +63,7 @@ type harness struct {
 	objects *porttest.ObjectStore
 	clock   *porttest.Clock
 	secrets *porttest.OrgSecrets
+	tenancy *porttest.Tenancy
 	ctx     context.Context //nolint:containedctx // the test's request context, built once per harness
 }
 
@@ -88,7 +89,7 @@ func withKnowledge(k authoring.KnowledgeSources) option {
 }
 
 // newHarness is authoring in one organization with the secrets claude-key and code-token, open
-// to every factory.
+// to every factory, and the code host git.example.com, the fixture's.
 func newHarness(t *testing.T, opts ...option) *harness {
 	t.Helper()
 
@@ -104,6 +105,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		objects: porttest.NewObjectStore(),
 		clock:   porttest.NewClock(time.Date(2026, 10, 9, 14, 32, 0, 0, time.UTC)),
 		secrets: porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
+		tenancy: tenancy,
 		ctx:     domain.WithActor(domain.WithOrg(t.Context(), o.ID), domain.LocalUser),
 	}
 	h.store = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: h.objects, Items: h.items, Now: h.clock.Now})
@@ -112,11 +114,15 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		h.secret(t, name, domain.SecretScope{All: true})
 	}
 
+	if _, err := tenancy.SetCodeHosts(h.ctx, domain.LocalUser, []domain.CodeHost{{Host: "git.example.com", Kind: domain.CodeHostGitHub}}); err != nil {
+		t.Fatal(err)
+	}
+
 	var ids atomic.Int64
 
 	d := authoring.Deps{
 		Store: h.store, Loads: h.items, Templates: h.objects, Clock: h.clock,
-		Credentials: authoring.SecretsCheck{Secrets: h.secrets},
+		Credentials: authoring.SecretsCheck{Secrets: h.secrets, Hosts: h.tenancy},
 		NewID:       func() string { return fmt.Sprintf("0b6f1c9e-0000-7000-8000-%012d", ids.Add(1)) },
 	}
 	for _, o := range opts {

@@ -38,11 +38,17 @@ object, required.
   - `modelConnection`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. Removed by ADR 0037 (moved-to-environment): set modelKey. Accepted so versions published before still load and run until Goal converts them.
   - `size`: one of `"small"`, `"medium"`, `"large"`. Removed by ADR 0037 (moved-to-environment): set size in each environment file. Accepted so versions published before still load and run until Goal converts them.
   - `tools`: array of string. Removed by ADR 0037 (moved-to-environment): set tools in each environment file. Accepted so versions published before still load and run until Goal converts them.
-  - `repository`: object. The git repository cloned into each run's box before the agent starts, on the item's branch (goal/&lt;number&gt;-&lt;slug&gt;).
+  - `repository`: object. The shorthand for one runtime.repositories entry that writes and is the default, named after the URL's last segment (repo when that is not a slug). It is cloned into each run's box before the agent starts, on the item's branch (goal/&lt;number&gt;-&lt;slug&gt;).
     - `url`: string matching `^https://[^/@]+/.+`, required. https clone URL without credentials
     - `token`: string. The {{secret}} that clones, pushes, and reads and merges pull requests. Omit it for a public repository. It reaches the agent's environment only when an environment file names it.
     - `forge`: one of `"github"`, `"gitlab"`. The code host the URL is on. github.com is github and gitlab.com is gitlab; any other host needs forge.
     - `connection`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. Removed by ADR 0037 (moved-to-environment): set token. Accepted so versions published before still load and run until Goal converts them.
+  - `repositories`: array of object. The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other. Until Goal starts and merges runs in several repositories, publish refuses a second entry and access read.
+    - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. Unique in the factory.
+    - `url`: string matching `^https://[^/@]+/.+`, required. One repository (https://github.com/acme/app) or an owner's every repository (https://github.com/acme/\*), on a code host the organization lists. No credentials in the URL.
+    - `token`: string. The {{secret}} that opens the repositories. Required for write; omit it for a public repository that is read.
+    - `access`: one of `"read"`, `"write"`, required. write lets agents whose code is write push, open pull requests and merge; read never does.
+    - `default`: boolean. The entry an item uses when it names no repository. At most one entry has it, and it must name one repository. The only entry is the default when it names one repository.
   - `runner`: one of `"docker"`, `"ecs"`. Removed in phase 4 (field-removed): the platform chooses the sandbox backend.
   - `image`: string. Removed in phase 4 (field-removed): set image in an environment file.
   - `auth`: one of `"claude-subscription"`, `"anthropic-api-key"`, `"bedrock"`. Removed in phase 4 (field-removed): set modelKey.
@@ -112,6 +118,7 @@ object, required.
   - `tools`: object. Custom rules in Claude Code's permission syntax. builtins replaces them; an agent has one or the other.
     - `allow`: array of string.
     - `deny`: array of string.
+  - `code`: one of `"write"`, `"read"`. Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise. Until Goal supports it, publish refuses read.
   - `builtins`: object. Built-in tools by group, each off, ask or allowed; an omitted group is off. ask is served as off until tool approvals cover built-in tools.
     - `read`: one of `"off"`, `"ask"`, `"allowed"`. Read, Grep, Glob
     - `edit`: one of `"off"`, `"ask"`, `"allowed"`. Edit, Write

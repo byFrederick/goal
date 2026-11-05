@@ -131,7 +131,7 @@
     "model": { "type": "string", "pattern": "^claude-[a-z0-9-]+$" },
     "secretRef": {
       "type": "string",
-      "description": "A {{secret}} reference: the name of an organization secret open to the factory, in double braces. Valid only in runtime.repository.token, runtime.modelKey and a trigger's modelAgrees.key, and in environment files."
+      "description": "A {{secret}} reference: the name of an organization secret open to the factory, in double braces. Valid only in runtime.repository.token, a runtime.repositories entry's token, runtime.modelKey and a trigger's modelAgrees.key, and in environment files."
     },
     "runtime": {
       "type": "object",
@@ -149,7 +149,7 @@
         },
         "repository": {
           "type": "object",
-          "description": "The git repository cloned into each run's box before the agent starts, on the item's branch (goal/<number>-<slug>).",
+          "description": "The shorthand for one runtime.repositories entry that writes and is the default, named after the URL's last segment (repo when that is not a slug). It is cloned into each run's box before the agent starts, on the item's branch (goal/<number>-<slug>).",
           "required": ["url"],
           "additionalProperties": false,
           "properties": {
@@ -158,6 +158,11 @@
             "forge": { "enum": ["github", "gitlab"], "description": "The code host the URL is on. github.com is github and gitlab.com is gitlab; any other host needs forge." },
             "connection": { "$ref": "#/$defs/slug", "description": "Removed by ADR 0037 (moved-to-environment): set token. Accepted so versions published before still load and run until Goal converts them." }
           }
+        },
+        "repositories": {
+          "type": "array",
+          "description": "The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other. Until Goal starts and merges runs in several repositories, publish refuses a second entry and access read.",
+          "items": { "$ref": "#/$defs/repositoryEntry" }
         },
         "runner": { "enum": ["docker", "ecs"], "description": "Removed in phase 4 (field-removed): the platform chooses the sandbox backend." },
         "image": { "type": "string", "description": "Removed in phase 4 (field-removed): set image in an environment file." },
@@ -341,6 +346,7 @@
             "deny": { "type": "array", "items": { "type": "string" } }
           }
         },
+        "code": { "enum": ["write", "read"], "description": "Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise. Until Goal supports it, publish refuses read." },
         "builtins": {
           "type": "object",
           "description": "Built-in tools by group, each off, ask or allowed; an omitted group is off. ask is served as off until tool approvals cover built-in tools.",
@@ -369,6 +375,18 @@
       "not": { "required": ["tools", "builtins"] }
     },
     "builtinMode": { "enum": ["off", "ask", "allowed"] },
+    "repositoryEntry": {
+      "type": "object",
+      "required": ["name", "url", "access"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug", "description": "Unique in the factory." },
+        "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "One repository (https://github.com/acme/app) or an owner's every repository (https://github.com/acme/*), on a code host the organization lists. No credentials in the URL." },
+        "token": { "$ref": "#/$defs/secretRef", "description": "The {{secret}} that opens the repositories. Required for write; omit it for a public repository that is read." },
+        "access": { "enum": ["read", "write"], "description": "write lets agents whose code is write push, open pull requests and merge; read never does." },
+        "default": { "type": "boolean", "description": "The entry an item uses when it names no repository. At most one entry has it, and it must name one repository. The only entry is the default when it names one repository." }
+      }
+    },
     "routeEntry": {
       "description": "The agent for a lane, or { agent, agents } to keep agents of the station's slots for the lane.",
       "oneOf": [

@@ -853,7 +853,10 @@ func TestCheck_AssemblyIntegration(t *testing.T) {
 			doc: edited(doneStation, "      - { id: land, kind: human, action: merge }\n"+doneStation), code: codeIntegrationLandAtNotMerge,
 		},
 		{name: "branch without a merge station", doc: baseFactory, integration: "{ mode: branch }", code: codeIntegrationWithoutMerge},
-		{name: "branch with a merge station", doc: mergeLine, integration: "{ mode: branch, landAt: land }"},
+		{
+			name: "branch with a merge station", integration: "{ mode: branch, landAt: land }",
+			doc: strings.Replace(mergeLine, runtimeModel, runtimeModel+`    repository: { url: "https://github.com/acme/app", token: "{{gh-token}}" }`+"\n", 1),
+		},
 		{name: "trunk without a merge station", doc: baseFactory, integration: "{ mode: trunk, minParts: 2 }"},
 	}
 

@@ -28,8 +28,15 @@ func (f *Factory) Line() domain.Line {
 		Agents:   make([]domain.AgentSpec, 0, len(s.Agents)),
 	}
 
-	if r := s.Runtime.Repository; r != nil {
+	// The line keeps one repository, the default entry, until runs start with an item's
+	// repositories (ADR 0041); the shorthand keeps its connection and forge.
+	switch r := s.Runtime.Repository; {
+	case r != nil:
 		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, Token: r.Token, Forge: r.Forge}
+	default:
+		if e, ok := s.Runtime.DefaultRepository(); ok {
+			l.Runtime.Repository = domain.Repository{URL: e.URL, Token: e.Token}
+		}
 	}
 
 	l.Environments = environments(f.environments)

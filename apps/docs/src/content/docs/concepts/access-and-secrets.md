@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. A server that fails its test keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. A server that fails its test keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as a repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
@@ -44,7 +44,7 @@ spec:
       tools: {create_comment: ask, "delete_*": off}
 ```
 
-The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists, signs no webhook and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
+The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in a `runtime.repositories` entry's `token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists, signs no webhook and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
 
 An environment can set `image` to run its box from an image of your own. A box on Cloudflare runs only the Worker's own images, so a run there fails on it. Publishing shows a warning at `image` and still publishes, since a box on Docker Compose runs it.
 
@@ -52,24 +52,49 @@ In the Definition, the **Environments** section has a tab per environment, and *
 
 ## The repository and the model
 
-Two secrets are named in the factory's runtime, not in an environment file:
+Two kinds of secret are named in the factory's runtime, not in an environment file:
 
 - `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab. Any other host needs `forge: github` or `forge: gitlab`; publishing refuses a version without it, and so does a merge.
+- `runtime.repositories` is the list form, described below. Each entry's `token` is a secret.
 - `runtime.modelKey` is the secret that gives every run its model. A value that starts with `sk-ant-oat` is a Claude subscription token and a run gets it as `CLAUDE_CODE_OAUTH_TOKEN`. Any other value is an Anthropic API key and becomes `ANTHROPIC_API_KEY`.
 
-Neither reaches the agent's environment unless an environment file names it, for example as `GH_TOKEN` for `gh`. Both are set on the factory's Settings page (see [Factory settings](../../guides/factory-settings/)).
+None of them reaches the agent's environment unless an environment file names it, for example as `GH_TOKEN` for `gh`. The shorthand and the model key are set on the factory's Settings page; `runtime.repositories` is edited in the YAML view (see [Factory settings](../../guides/factory-settings/)).
 
 The repository token signs git in to the repository's host for three things: the clone, the push of a new base branch (an assembly's integration branch), and the agent's own `git push`. Git signs in as `x-access-token` on GitHub and as `oauth2` on GitLab, with the token as the password. Goal keeps the token in git's credential store inside the run's box, outside the workspace, so the agent's push works without the token in its environment. The box and its store are thrown away after the run. The agent's prompt says that git signs in with the repository token. A public repository needs no token: it clones without a login.
 
 goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request on a host other than the repository's is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run.
 
+### Repositories and what agents may write
+
+`runtime.repositories` lists the repositories a factory's runs may open. A factory with none has no code.
+
+```yaml
+runtime:
+  repositories:
+    - name: app
+      url: https://github.com/acme/app
+      token: "{{github-acme}}"
+      access: write
+```
+
+- `name` is 3 to 40 lowercase letters, digits and hyphens, unique in the factory.
+- `url` is one repository, or an owner's every repository written as `https://github.com/acme/*`.
+- `access` is `read` or `write`. A `write` entry needs a `token`.
+- `default: true` marks the entry an item uses when it names none. Only one entry may have it, and it must name one repository. The only entry is the default when it names one repository.
+- The URL's host must be `github.com`, `gitlab.com` or one of the organization's code hosts. Publishing refuses any other host, so no token goes to a host nobody listed.
+
+`runtime.repository` is the shorthand for one `write` entry that is the default, named after the URL's last segment (`repo` when that isn't a valid name). A definition has one form or the other, never both.
+
+An agent's `code` says whether it writes: `write` or `read`, next to its `builtins`. An agent without `code` writes when the factory has a `write` entry, so existing factories keep working. A line that merges, with a merge station or integration branches, needs a `write` entry and an agent that writes.
+
+For now, publishing refuses a second entry, `access: read` and `code: read` with "not supported yet": runs start and merge in one repository that writes until Goal can work in several.
 ## Webhook secrets
 
 An organization webhook is signed by one of the organization's secrets, which no run can hold. Creating a webhook (`POST /v1/orgs/{org}/webhooks`) either creates a secret named `webhook-<name>`, cut to 40 characters without a trailing hyphen, with a generated value shown once, or uses a secret that exists, for a sender that issues its own value, such as PagerDuty or Sentry. A generated value is 64 hexadecimal characters, or `whsec_` and base64 for a Standard Webhooks sender. A created secret is open to no factory.
 
 The webhook refers to the secret by id, so renaming the secret keeps the webhook signed by it. The secret can't be deleted while a webhook uses it, and its uses list the webhook.
 
-Publishing refuses a version whose environment file, `runtime.repository.token`, `runtime.modelKey` or trigger key names a secret that signs a webhook (`secret-signs-webhook`), even when the secret is open to the factory. A run that held the value could sign deliveries of its own.
+Publishing refuses a version whose environment file, repository token, `runtime.modelKey` or trigger key names a secret that signs a webhook (`secret-signs-webhook`), even when the secret is open to the factory. A run that held the value could sign deliveries of its own.
 
 A factory's webhook endpoint made before organization webhooks is converted once when goald starts. Its signing secret becomes an organization secret named `webhook-<name>`, open to no factory, holding the value the endpoint showed when it was made. The endpoint becomes the organization's webhook with the same address, the `github` sender for a `github` endpoint and `standard` for a `generic` one, and is open to its factory for every repository. An endpoint keeps its name unless the name is reserved (a sender name, `schedule` or `webhook`) or an older endpoint of another factory has it; then it takes the first free suffix, such as `github-2`, cut to fit 40 characters. A secret name that is taken gets a suffix the same way. goald logs each rename as `webhook renamed` with the factory and both names: a published trigger that named the endpoint by its old name needs its `on` changed.
 
