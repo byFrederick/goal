@@ -448,7 +448,9 @@ function CodeForm({
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder={
-                  search.secret ? `Saved as ${search.secret}. Paste a new token to replace it.` : 'Paste the token'
+                  search.secret
+                    ? `Saved as ${search.secret}. Paste a token to save it under a new name.`
+                    : 'Paste the token'
                 }
                 autoComplete="off"
                 autoCapitalize="off"
