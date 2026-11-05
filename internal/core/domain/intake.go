@@ -53,6 +53,8 @@ type WebhookEndpoint struct {
 	CreatedAt time.Time
 	// RotatedAt is when its secret was last replaced; nil when it never was.
 	RotatedAt *time.Time
+	// PingedAt is when the receiver last accepted GitHub's ping to it; nil when it never did.
+	PingedAt *time.Time
 }
 
 // NewWebhookEndpoint is what creates an endpoint.

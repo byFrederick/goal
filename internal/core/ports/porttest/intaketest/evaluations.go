@@ -26,6 +26,7 @@ var evaluationTests = []struct {
 	{"ReceiverAddsEvaluationsPerFactory", testReceiverAddsEvaluations},
 	{"ClaimEvaluationsSkipLocked", testClaimEvaluationsSkipLocked},
 	{"FireHoldsLimitsAcrossInstances", testFireHoldsLimits},
+	{"EvaluationsOfAPageByDelivery", testEvaluationsOf},
 }
 
 // receiveEvaluated records an accepted delivery id to w at t0 with evaluations es.
@@ -276,5 +277,89 @@ func checkSkippedAtOnce(t *testing.T, e domain.DeliveryEvaluation, skip string) 
 
 	if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationSkipped || e.Reason != skip || !slices.Equal(e.Triggers, []string{flaky, nightly}) {
 		t.Errorf("skipped evaluation = %+v", e)
+	}
+}
+
+// The evaluations of a page of deliveries come by delivery then factory: a created one with its
+// item's number, a skipped one with its reason; a delivery not asked for and another
+// organization's rows never come back.
+func testEvaluationsOf(f *fixture) {
+	t := f.t
+	w := f.webhook(orgHook)
+	other := f.NewFactory(t, f.org)
+	skip := "acme/legacy is not one of shop's repositories"
+
+	created := f.receiveEvaluated(w.ID, "d-created", domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}})
+	skipped := f.receiveEvaluated(w.ID, "d-skipped",
+		domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}, Skip: skip},
+		domain.NewDeliveryEvaluation{FactoryID: other, Triggers: []string{nightly}, Skip: skip})
+	f.receiveEvaluated(w.ID, "d-unasked", domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}, Skip: skip})
+
+	it := f.item(domain.ItemFromGitHub, flaky, t0)
+
+	claimed, err := f.in.ClaimEvaluations(f.ctx(), "goald-a", t0, time.Minute, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("ClaimEvaluations = %+v, %v; want the one pending row", claimed, err)
+	}
+
+	c := claimed[0]
+	if ok, err := f.in.FinishEvaluation(f.ctx(), domain.EvaluationFinish{
+		ID: c.ID, Holder: c.LeaseHolder, Attempts: c.Attempts, State: domain.EvaluationDone, Outcome: domain.EvaluationCreated, ItemID: it.ID, At: t0,
+	}); err != nil || !ok {
+		t.Fatalf("FinishEvaluation = %v, %v", ok, err)
+	}
+
+	got, err := f.in.DeliveryEvaluationsOf(f.ctx(), []domain.WebhookDeliveryID{created.Row, skipped.Row})
+	if err != nil || len(got) != 3 {
+		t.Fatalf("DeliveryEvaluationsOf = %+v, %v; want three", got, err)
+	}
+
+	checkEvaluationsOf(t, f, got, created.Row, skipped.Row, it, skip)
+
+	theirs := &fixture{Harness: f.Harness, t: t, in: f.in, org: f.NewOrg(t)}
+	if got, err := f.in.DeliveryEvaluationsOf(theirs.ctx(), []domain.WebhookDeliveryID{created.Row, skipped.Row}); err != nil || len(got) != 0 {
+		t.Errorf("another organization's DeliveryEvaluationsOf = %+v, %v; want none", got, err)
+	}
+
+	if got, err := f.in.DeliveryEvaluationsOf(f.ctx(), nil); err != nil || len(got) != 0 {
+		t.Errorf("DeliveryEvaluationsOf no rows = %+v, %v; want none", got, err)
+	}
+}
+
+// checkEvaluationsOf checks the created and the two skipped evaluations, each with its delivery.
+func checkEvaluationsOf(t *testing.T, f *fixture, got []domain.DeliveryEvaluation, created, skipped domain.WebhookDeliveryID,
+	it domain.Item, skip string,
+) {
+	t.Helper()
+
+	seen := map[domain.WebhookDeliveryID]int{}
+
+	for _, e := range got {
+		seen[e.Delivery]++
+
+		switch e.Delivery {
+		case created:
+			checkCreatedOf(t, f, e, it)
+		case skipped:
+			if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationSkipped || e.Reason != skip || e.ItemID != "" || e.ItemNumber != 0 {
+				t.Errorf("skipped evaluation = %+v; want skipped with %q", e, skip)
+			}
+		default:
+			t.Errorf("evaluation of delivery %s not asked for", e.Delivery)
+		}
+	}
+
+	if seen[created] != 1 || seen[skipped] != 2 {
+		t.Errorf("evaluations by delivery = %v; want one created and two skipped", seen)
+	}
+}
+
+// checkCreatedOf checks e is the fixture factory's, done and created with it and its number.
+func checkCreatedOf(t *testing.T, f *fixture, e domain.DeliveryEvaluation, it domain.Item) {
+	t.Helper()
+
+	if e.State != domain.EvaluationDone || e.Outcome != domain.EvaluationCreated || e.ItemID != it.ID || e.ItemNumber != it.Number ||
+		e.FactoryID != f.factory || e.DeliveryID != "d-created" {
+		t.Errorf("created evaluation = %+v; want item %s #%d", e, it.ID, it.Number)
 	}
 }

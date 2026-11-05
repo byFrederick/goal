@@ -345,6 +345,28 @@ func TriggerNames(on, name string) bool {
 	return false
 }
 
+// SetupEvent is the event a trigger with on: needs w's sender to send (ADR 0040 decision 14):
+// ok when on names w, by its name or its sender with an event, and all when it names w with no
+// event, so the sender should send every one. A sender with no event names no delivery.
+func SetupEvent(on string, w WebhookEndpoint) (event string, all, ok bool) {
+	if on == OnSchedule {
+		return "", false, false
+	}
+
+	s, name, e := ParseOn(on)
+
+	switch {
+	case s != "" && (s != w.Sender || e == ""):
+		return "", false, false
+	case s != "":
+		return e, false, true
+	case name != w.Name:
+		return "", false, false
+	default:
+		return e, e == "", true
+	}
+}
+
 // WebhookSecretUse is one organization webhook signed by a secret.
 type WebhookSecretUse struct {
 	Secret  string
@@ -386,10 +408,6 @@ const LedgerRetention = 365 * 24 * time.Hour
 // MaxDeliveryID is the longest delivery id a webhook's ledger keeps, in characters.
 const MaxDeliveryID = 200
 
-// GitHubPingReason is the reason an accepted GitHub ping keeps, shown on its webhook (ADR 0040
-// decision 13).
-const GitHubPingReason = "Received GitHub's ping"
-
 // maxEvent is the longest event name a delivery keeps, in characters.
 const maxEvent = 200
 
@@ -412,6 +430,9 @@ type NewReceipt struct {
 	// (Trigger.NamesDelivery): an accepted delivery no trigger names keeps only its ledger id and a
 	// daily count.
 	Named bool
+	// Ping is GitHub's ping, sent when the webhook is added there: accepted and not a duplicate,
+	// it sets the webhook's PingedAt in the receipt's transaction.
+	Ping bool
 	// Evaluations are the factories that evaluate a named delivery (EvaluationFor), added with
 	// its row in the receipt's transaction; a duplicate adds none.
 	Evaluations []NewDeliveryEvaluation

@@ -8312,6 +8312,15 @@ export interface components {
             created_at: string;
             /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
             days: components["schemas"]["WebhookDeliveryDay"][];
+            /**
+             * Format: date-time
+             * @description When the receiver last accepted GitHub's ping to it; null when it never did
+             */
+            pinged_at: string | null;
+            /** @description The events to choose in the sender's settings: the sorted, distinct events of the enabled triggers of the published definitions of the factories it is open to that name it (<name>.<event>, webhook.<name>.<event>) or its sender (<sender>.<event>). Archived factories are left out. */
+            setup_events: string[];
+            /** @description true when such a trigger names it with no event, so the sender should send every event */
+            setup_all_events: boolean;
         };
         /** @description A new webhook, with the value of the secret goald generated for it, never readable again */
         CreatedWebhook: components["schemas"]["Webhook"] & {
@@ -8347,6 +8356,44 @@ export interface components {
             reason: string;
             /** @description The item it created; null for another outcome or once that item is gone */
             item: components["schemas"]["WebhookDeliveryItem"] | null;
+            /** @description The sender's event, such as check_run; empty when it names none or it was refused */
+            event: string;
+            /**
+             * @description What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
+             * @enum {string|null}
+             */
+            receipt: "accepted" | "duplicate" | "refused" | null;
+            /** @description How many later deliveries had its delivery id and created nothing */
+            duplicates: number;
+            /** @description Its evaluation by each factory that names it, by factory. A factory's own routes list only that factory's. */
+            evaluations: components["schemas"]["WebhookDeliveryEvaluation"][];
+        };
+        WebhookDeliveryEvaluation: {
+            /** @description The factory's metadata.id */
+            factory: string;
+            /** @description The factory's name; its metadata.id once the factory is gone */
+            factory_name: string;
+            /**
+             * @description pending, waiting to be evaluated or tried again; done, with its outcome; failed after five attempts
+             * @enum {string}
+             */
+            state: "pending" | "done" | "failed";
+            /**
+             * @description created, an item; skipped, with the reason; failed, with the error; null while pending
+             * @enum {string|null}
+             */
+            outcome: "created" | "skipped" | "failed" | null;
+            /** @description Why it was skipped or failed, or the last attempt's error while pending; empty otherwise */
+            reason: string;
+            /** @description The item it created; null for another outcome or once that item is gone */
+            item: components["schemas"]["WebhookEvaluationItem"] | null;
+        };
+        WebhookEvaluationItem: {
+            id: string;
+            /** Format: int64 */
+            number: number;
+            /** @description <factory name>#<number>, such as sre#88 */
+            ref: string;
         };
         WebhookDeliveryItem: {
             id: string;

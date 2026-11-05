@@ -10,7 +10,7 @@ RETURNING created_at;
 
 -- name: WebhookEndpoints :many
 -- The endpoints open to the factory: its own, and the organization's webhooks with an opening.
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.factory_id = sqlc.arg(factory_id)
@@ -18,21 +18,21 @@ WHERE e.factory_id = sqlc.arg(factory_id)
 ORDER BY e.name, e.id;
 
 -- name: WebhookEndpoint :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.id = sqlc.arg(id);
 
 -- name: OrgWebhooks :many
 -- The organization's webhooks (no factory), by name.
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.factory_id IS NULL
 ORDER BY e.name;
 
 -- name: OrgWebhookByName :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at
+SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.factory_id IS NULL AND e.name = sqlc.arg(name);
@@ -157,6 +157,10 @@ RETURNING delivery_id;
 UPDATE webhook_deliveries SET duplicates = duplicates + 1
 WHERE endpoint_id = sqlc.arg(endpoint_id) AND delivery_id = sqlc.arg(delivery_id)::text
 RETURNING id;
+
+-- name: PingWebhook :exec
+-- The webhook accepted GitHub's ping at the instant (00125).
+UPDATE webhook_endpoints SET pinged_at = sqlc.arg(at)::timestamptz WHERE id = sqlc.arg(id);
 
 -- name: CountUnnamedDelivery :exec
 -- One more delivery no enabled trigger named, on its UTC day.
