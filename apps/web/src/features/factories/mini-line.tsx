@@ -1,7 +1,7 @@
 // A factory's line on Home (MASTER.md, Components: The line; screens/daily-work/home.jpg): one compact row of its
 // stations from intake to done, each the count over its name with its agent slots under, joined to the next by a
 // 1 px rule. Done shows what finished today with a green dot. Its board comes from boardQuery, so the Floor's
-// invalidations keep it fresh. A stopped line dims. On a phone the line scrolls sideways inside its card. A failed
+// invalidations keep it fresh. A stopped line mutes its counts (a dimmed line failed the 4.5:1 contrast of its labels). On a phone the line scrolls sideways inside its card. A failed
 // board leaves only a note; a loading one shows its skeleton in the line's place.
 import { useQuery } from '@tanstack/react-query';
 import { Fragment } from 'react';
@@ -88,15 +88,14 @@ function HomeLine({
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
       tabIndex={0}
       className={cn(
-        'min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run transition-opacity duration-(--duration-fast) ease-(--ease-out) motion-reduce:transition-none',
-        stopped && 'opacity-60',
+        'min-w-0 overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run',
       )}
     >
       <ol className="m-0 flex w-max list-none items-start gap-2 p-0">
         {stations.map((s, i) => (
           <Fragment key={s.id}>
             {i > 0 ? <li aria-hidden="true" className="mt-3 h-px w-5 shrink-0 bg-rule" /> : null}
-            <Station station={s} />
+            <Station station={s} stopped={stopped} />
           </Fragment>
         ))}
       </ol>
@@ -104,10 +103,10 @@ function HomeLine({
   );
 }
 
-function Station({ station: s }: { station: LineStation }) {
+function Station({ station: s, stopped }: { station: LineStation; stopped: boolean }) {
   return (
     <li className="flex min-w-12 flex-col items-start gap-1">
-      <span className="flex items-center gap-1 text-heading font-semibold tabular-nums">
+      <span className={cn('flex items-center gap-1 text-heading font-semibold tabular-nums', stopped && 'text-muted')}>
         {s.done ? <span aria-hidden="true" className="size-2 rounded-full bg-ok" /> : null}
         <NumberRoll value={s.count} />
       </span>

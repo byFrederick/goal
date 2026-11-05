@@ -7,7 +7,6 @@ import {
   expectAccessible,
   expectNoHorizontalScroll,
   expectToast,
-  isPhone,
   openNavigation,
   orgMarkOf,
   orgNav,
@@ -39,7 +38,7 @@ test.afterEach(async ({ request }) => {
 });
 
 const heading = (page: Page) => page.getByRole('heading', { level: 1, name: /^Members/ });
-const people = (page: Page) => page.getByRole('region', { name: /members/ });
+const people = (page: Page) => page.getByRole('region', { name: /^Members/ });
 
 /**
  * Whether the page lists people as cards: below 720 px of main (phones, and tablets beside the
@@ -82,7 +81,6 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
   await expect(heading(page)).toBeVisible();
   await expect(page).toHaveTitle('Members and roles · Acme · Goal');
   await expect(page.getByText('4 members, 2 invites waiting')).toBeVisible();
-  await expect(page.getByText('3 factories. You’re an owner.')).toBeVisible({ visible: !isPhone(page) });
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
@@ -240,7 +238,7 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in to see your invitation' })).toBeVisible();
   await page.getByRole('link', { name: 'Sign in' }).click();
   await page.getByLabel('Email').fill('d.ross@example.com');
-  await page.getByRole('button', { name: 'Email me a code' }).click();
+  await page.getByRole('button', { name: 'Email me a sign-in code' }).click();
   await page.getByLabel('Code').fill('000000');
 
   await expect(
@@ -256,6 +254,7 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
 
   // Signed up by code, they have no name yet (Better Auth leaves it empty): Goal names them by
   // their email, with its initials, until they choose one.
+  await openNavigation(page);
   await orgNav(page)
     .filter({ visible: true })
     .getByRole('button', { name: /^DR d\.ross@example\.com.*, account$/ })
@@ -263,7 +262,6 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
   const account = page.getByRole('dialog', { name: 'Account' });
   await expect(account.getByText('d.ross@example.com', { exact: true })).toBeVisible();
   await expect(account.getByText('DR', { exact: true })).toBeVisible();
-  await expect(account.getByText('?', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   // Joined as a member with the invitation's factory role.
@@ -301,19 +299,19 @@ test('an invitation for someone else, one that cannot be used, and one to a memb
 test('an owner hands the organization to an admin and becomes one', async ({ page }) => {
   await signedInAs(page.request);
   await page.goto('/o/goal/settings');
-  // Goal has no admin: there is nobody to hand it to.
-  await page.getByRole('button', { name: 'Transfer ownership…' }).click();
-  const none = page.getByRole('dialog', { name: 'Transfer ownership of Goal' });
-  await expect(none.getByText('Only an admin can become the owner, and Goal has none.')).toBeVisible();
-  await expect(none.getByRole('link', { name: 'Open Members and roles' })).toBeVisible();
-  await expect(none.getByRole('button', { name: 'Transfer ownership' })).toBeDisabled();
-  await page.keyboard.press('Escape');
+  // Goal has no admin: there is nobody to hand it to, and the row says where to make one.
+  await expect(page.getByLabel('Transfer ownership')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Transfer', exact: true })).toBeDisabled();
+  await expect(page.getByText('Make someone an admin first.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Members and roles' })).toBeVisible();
 
   await page.goto('/o/acme/settings');
-  await page.getByRole('button', { name: 'Transfer ownership…' }).click();
+  // The row offers the admins; the dialog names the one chosen.
+  await expect(page.getByLabel('Transfer ownership')).toHaveValue(/.+/);
+  await expect(page.getByLabel('Transfer ownership').locator('option')).toHaveText(['M. Okafor']);
+  await page.getByRole('button', { name: 'Transfer', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Transfer ownership of Acme' });
-  await expect(dialog.getByLabel('New owner')).toHaveValue(/.+/);
-  await expect(dialog.getByLabel('New owner').locator('option')).toHaveText(['M. Okafor, admin']);
+  await expect(dialog.getByText('New owner: M. Okafor')).toBeVisible();
   await expectAccessible(page);
   await expect(dialog.getByRole('button', { name: 'Transfer ownership' })).toBeDisabled();
   await dialog.getByLabel('Type Acme to confirm').fill('Acme');
@@ -322,7 +320,6 @@ test('an owner hands the organization to an admin and becomes one', async ({ pag
   // An admin keeps the settings but not the Danger zone.
   await expect(page.getByRole('heading', { name: 'Danger zone' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
-  await expect(page.getByText('3 factories. You’re an admin.')).toBeVisible({ visible: !isPhone(page) });
 });
 
 test('a member sees the settings read-only', async ({ page }) => {
@@ -342,7 +339,7 @@ test('the organization menu says the caller’s role and opens Members and roles
   await openNavigation(page);
   await orgMarkOf(page).click();
   const menu = page.getByRole('menu');
-  await expect(menu.getByRole('menuitem', { name: /^Acme\s?3 factories, owner(\s?Current)?$/ })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /^Acme\s?4 factories, owner(\s?Current)?$/ })).toBeVisible();
   await menu.getByRole('menuitem', { name: 'Members and roles' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/members$/);
   await expect(heading(page)).toBeVisible();

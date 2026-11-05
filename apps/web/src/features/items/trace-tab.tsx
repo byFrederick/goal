@@ -417,6 +417,8 @@ export function TraceTab({
   const t1 = run ? Math.max(latest, now) : latest;
   const spanMs = Math.max(t1 - t0, 1000);
   const runs = trace.entries.filter((e) => e.kind === 'run').length;
+  // ADR 0019, decision 2: an item no run has worked on shows the empty state, not its created event alone.
+  const noRuns = steps.length === 0 || (runs === 0 && itemState !== 'in_progress');
 
   const current = steps.find((s) => s.key === selected) ?? steps.at(-1);
   // A phone's row closes when tapped again; a wide screen always has a step selected.
@@ -441,7 +443,7 @@ export function TraceTab({
         ) : null}
       </p>
       <Skeleton ready={ready} placeholder={placeholder}>
-        {steps.length === 0 ? (
+        {noRuns ? (
           <p className="m-0 text-body text-muted">No tool calls yet.</p>
         ) : (
           <div className="flex flex-col gap-4">
