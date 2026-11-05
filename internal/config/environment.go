@@ -61,6 +61,42 @@ type MCPServer struct {
 	Tools   map[string]string `json:"tools,omitempty"`
 }
 
+// The remote server and the stdio binary of GitHub's MCP server (internal/catalog's github and
+// github-read templates).
+const (
+	gitHubMCPHost   = "api.githubcopilot.com"
+	gitHubMCPBinary = "github-mcp-server"
+)
+
+// GitHub reports whether s is GitHub's MCP server: a remote one on api.githubcopilot.com, or a
+// stdio one whose command's first word has the base name github-mcp-server. A GitHub Enterprise
+// remote URL or a renamed binary is not recognized.
+func (s MCPServer) GitHub() bool {
+	if s.URL != "" {
+		u, err := url.Parse(s.URL)
+
+		return err == nil && strings.EqualFold(u.Hostname(), gitHubMCPHost)
+	}
+
+	if len(s.Command) == 0 {
+		return false
+	}
+
+	first := strings.Fields(s.Command[0])
+
+	return len(first) > 0 && path.Base(first[0]) == gitHubMCPBinary
+}
+
+// ToolModes is s's tools as domain modes, for domain.ResolveToolMode.
+func (s MCPServer) ToolModes() map[string]domain.ConnectionToolMode {
+	out := make(map[string]domain.ConnectionToolMode, len(s.Tools))
+	for p, m := range s.Tools {
+		out[p] = domain.ConnectionToolMode(m)
+	}
+
+	return out
+}
+
 // environmentFile is an environment file as decoded: its spec and the name it says it has.
 type environmentFile struct {
 	Metadata struct {
