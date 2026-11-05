@@ -234,8 +234,13 @@ export function YamlView({ search }: SectionViewProps) {
   const written = useRef<number | undefined>(undefined);
   const revealed = useRef('');
   const { mode: _m, file: _f, line: _l, compare: _c, add: _a, ...entity } = search;
+  // A file opens where it changed, so a tool just added is on screen; factory.yaml opens at its place.
+  const changesPending =
+    hasDraft &&
+    path !== factoryFile &&
+    (comparison === undefined || (fileChange?.op === 'modified' && baseText === undefined));
   const entryLine =
-    search.line ?? (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : undefined);
+    search.line ?? (path === factoryFile ? lineOfPlace(model, ranges, { section, ...entity } as never) : changed[0]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: revealed once per file and asked-for line
   useEffect(() => {
     if (!editor || text === undefined) return;
@@ -245,8 +250,9 @@ export function YamlView({ search }: SectionViewProps) {
       revealed.current = key;
       return;
     }
+    if (entryLine === undefined && changesPending) return;
     if (entryLine === undefined || editor.reveal(entryLine)) revealed.current = key;
-  }, [editor, path, search.line, entryLine, text === undefined]);
+  }, [editor, path, search.line, entryLine, text === undefined, changesPending]);
 
   const cursorLine = cursor?.line;
   // The file the cursor last moved in, and the latest search, so a pending write never lands on another file.
