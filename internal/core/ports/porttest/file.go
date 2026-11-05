@@ -12,11 +12,13 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// filedPart is what a part's row has beyond its NewItem: its key, planned paths and base commit.
+// filedPart is what a part's row has beyond its NewItem: its key, planned paths and base commit,
+// and its assembly's base commits by repository, which its repository rows copy.
 type filedPart struct {
-	key        string
-	paths      []string
-	baseCommit string
+	key         string
+	paths       []string
+	baseCommit  string
+	baseCommits map[string]string
 }
 
 // file adds n as an item of org, as the PostgreSQL store's fileItem does: the next number,
@@ -37,7 +39,9 @@ func (s *Store) file(org domain.OrgID, n domain.NewItem, p filedPart) (*domain.I
 	it.StoredBranch = domain.ItemBranch(n.FactoryName, it.Number, it.Title)
 
 	for i, r := range n.Repositories {
-		s.repos[it.ID] = append(s.repos[it.ID], domain.ItemRepository{Repo: r.Repo, Joined: r.Joined, JoinedAt: utc(n.CreatedAt), Ordinal: i})
+		s.repos[it.ID] = append(s.repos[it.ID], domain.ItemRepository{
+			Repo: r.Repo, Joined: r.Joined, JoinedAt: utc(n.CreatedAt), Ordinal: i, BaseCommit: p.baseCommits[r.Repo],
+		})
 	}
 
 	by := n.FiledBy()

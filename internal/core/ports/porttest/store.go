@@ -966,6 +966,16 @@ func (s *Store) checkTransition(it *domain.Item, t ports.Transition) error {
 	return nil
 }
 
+// setRepoBaseCommits sets the base commit of each of item's rows shas names with a sha, as the
+// PostgreSQL store's transition does. Callers hold s.mu.
+func (s *Store) setRepoBaseCommits(item domain.ItemID, shas map[string]string) {
+	for i, r := range s.repos[item] {
+		if sha := shas[r.Repo]; sha != "" {
+			s.repos[item][i].BaseCommit = sha
+		}
+	}
+}
+
 // move applies a guarded transition to it. Callers hold s.mu.
 func (s *Store) move(it *domain.Item, t ports.Transition) {
 	if held, ok := s.leases[t.ItemID]; ok && (t.Lease != nil || t.TakeLease) {
@@ -991,6 +1001,8 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 	if t.BaseCommit != "" {
 		it.BaseCommit = t.BaseCommit
 	}
+
+	s.setRepoBaseCommits(it.ID, t.BaseCommits)
 
 	if t.Output != nil {
 		it.Outputs[t.OutputStation] = t.Output

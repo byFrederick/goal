@@ -80,7 +80,7 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 	filed := make([]domain.AuditEntry, 0, len(a.Parts))
 
 	for _, p := range a.Parts {
-		part, audit := s.file(org, partOf(it, p, a.By, t.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
+		part, audit := s.file(org, partOf(it, p, a.By, t.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit, baseCommits: s.repoBaseCommits(it.ID)})
 		ids[p.Key] = part.ID
 
 		filed = append(filed, audit)
@@ -208,7 +208,7 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 	}
 
 	// A new part has no dependents, so its needs close no cycle.
-	part, filed := s.file(org, partOf(it, p, n.By, n.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
+	part, filed := s.file(org, partOf(it, p, n.By, n.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit, baseCommits: s.repoBaseCommits(it.ID)})
 
 	for _, k := range p.Needs {
 		s.edges = append(s.edges, domain.Edge{Item: part.ID, Needs: ids[k], Kind: domain.EdgePlanned, By: n.By.Ref(), At: n.At})
@@ -465,6 +465,19 @@ func (s *Store) SetIntegrationBranch(ctx context.Context, root domain.ItemID, br
 	it.IntegrationBranch, it.IntegrationLandAt, it.UpdatedAt = branch, landAt, at
 
 	return true, nil
+}
+
+// repoBaseCommits are item's base commits by repository, for its parts to copy. s.mu is held.
+func (s *Store) repoBaseCommits(item domain.ItemID) map[string]string {
+	out := map[string]string{}
+
+	for _, r := range s.repos[item] {
+		if r.BaseCommit != "" {
+			out[r.Repo] = r.BaseCommit
+		}
+	}
+
+	return out
 }
 
 // JoinIntegrationRepositories implements ports.Store.

@@ -888,8 +888,13 @@ type Transition struct {
 	// Paths, when non-nil, replaces the item's paths (the file globs it is expected to change);
 	// an empty non-nil slice clears them and nil keeps them.
 	Paths []string
-	// BaseCommit, when non-empty, replaces the item's base commit; empty keeps it.
+	// BaseCommit, when non-empty, replaces the item's base commit (its first repository's, ADR
+	// 0041 decision 5); empty keeps it.
 	BaseCommit string
+	// BaseCommits are base commits by repository (domain.RepositoryKey): each sets the base commit
+	// of the item's row for that repository. A repository absent, with an empty sha, or that is
+	// not one of the item's keeps its row as it is.
+	BaseCommits map[string]string
 	// Output, when set, is stored as the item's output for OutputStation.
 	OutputStation string
 	Output        json.RawMessage

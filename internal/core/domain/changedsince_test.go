@@ -14,7 +14,7 @@ import (
 func TestChangedSinceSection(t *testing.T) {
 	t.Parallel()
 
-	if got := domain.ChangedSinceSection("c0ffee", nil, true); got != "" {
+	if got := domain.ChangedSinceSection("github.com/acme/app", "c0ffee", nil, true); got != "" {
 		t.Errorf("section with no entries = %q, want empty", got)
 	}
 
@@ -29,11 +29,11 @@ func TestChangedSinceSection(t *testing.T) {
 		{Ref: "acme#4", Title: "Docs", SHA: "3333333333333333", Paths: many},
 	}
 
-	got := domain.ChangedSinceSection("abcdef0123456789", entries, false)
+	got := domain.ChangedSinceSection("github.com/acme/app", "abcdef0123456789", entries, false)
 
 	for _, want := range []string{
 		"## Changed since your plan\n\n",
-		"since abcdef012345",
+		"the default branch of github.com/acme/app since abcdef012345",
 		`- acme#3 "Move terraform": deploy/terraform/main.tf, docs/a.md`,
 		`- commit 222222222222 "Fix the lint": internal/a.go`,
 		"docs/19.md and 2 more",
@@ -51,7 +51,7 @@ func TestChangedSinceSection(t *testing.T) {
 		t.Errorf("section does not open with its heading:\n%s", got)
 	}
 
-	if !strings.Contains(domain.ChangedSinceSection("abc", entries[:1], true), "truncated") {
+	if !strings.Contains(domain.ChangedSinceSection("github.com/acme/app", "abc", entries[:1], true), "truncated") {
 		t.Error("a truncated comparison's section does not say so")
 	}
 }
