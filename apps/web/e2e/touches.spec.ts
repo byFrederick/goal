@@ -26,19 +26,10 @@ test("the board says the week's touches per item, by station and on each touched
   await touchSre8(page);
   await page.goto(isPhone(page) ? '/o/acme/f/sre/board?station=investigate' : '/o/acme/f/sre/board');
 
-  if (isPhone(page)) {
-    await expect(page.getByText(/^\d+\.\d touches per item$/)).toBeVisible();
-    await expect(page.getByText(/^Investigate is the constraint: \d+ of \d+ busy, \d+ waiting$/)).toBeVisible();
-    await expect(page.getByText(/^\d\.\d\d touches per item\.$/)).toBeVisible();
-    await expect(page.getByRole('link', { name: 'By station' })).toHaveAttribute(
-      'href',
-      '/o/acme/f/sre#touches-summary',
-    );
-  } else {
-    // The desktop board shows no touches (the canvas picture has none), and the Floor shows none either.
-    await expect(page.getByRole('link', { name: /touches per item/ })).toHaveCount(0);
-  }
-  const card = page.locator('[data-card]').filter({ hasText: 'sre#8' }).filter({ visible: true });
+  // Neither the desktop board nor the phone board draws a touches summary (frontend.md, the phone Board;
+  // the canvas pictures have none), and the Floor shows none either. Each touched card says its count.
+  await expect(page.getByText(/touches per item/)).toHaveCount(0);
+  const card = page.locator('[data-card-ref="sre#8"]').filter({ visible: true });
   await expect(card.getByText('1 touch', { exact: true })).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -53,7 +44,7 @@ test('the item lists its touches, and a reason set on one stays', async ({ page 
   await expect(card.getByText(/^sre averages \d+\.\d per item\. Set a reason/)).toBeVisible();
   await expect(card.getByText(/Local user left a note: “Also check the connection pool”\.$/)).toBeVisible();
   await expect(card.getByText(/^Investigate, (note, )?unplanned$/)).toBeVisible();
-  if (!isPhone(page)) await expect(page.getByText('1 human touch', { exact: true })).toBeVisible();
+  // The item head no longer repeats the count ("1 human touch"); the card's "1 so far" above is where it is said.
 
   const reason = card.getByRole('combobox', { name: /^Reason for the .+ touch$/ });
   await expect(reason).toHaveText('Choose a reason');
@@ -116,7 +107,7 @@ test('the board and the floor work while the touch metrics fail', async ({ page,
   // Every try fails (times 0) until the faults are cleared: the app retries a 500 twice first.
   await request.post('/__mock/fail', { data: { path: '/metrics/touches', method: 'GET', status: 500, times: 0 } });
   await page.goto('/o/acme/f/sre/board');
-  await expect(page.getByRole('heading', { level: 1, name: 'SRE board' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Board' })).toBeVisible();
 
   await page.goto('/o/acme/f/sre');
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();

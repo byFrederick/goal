@@ -7,7 +7,7 @@
 // item:operate pause and move are not offered. goald refuses them anyway.
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Ban, Check, Ellipsis, ExternalLink, GitMerge, Pause, Play, RotateCcw, Undo2 } from 'lucide-react';
-import { type FormEvent, useEffect, useId, useState } from 'react';
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, approveItem, cancelItem, mergeItem, pauseItem, rejectItem, retryItem } from '../api/client';
 import { keys } from '../api/queries';
@@ -210,6 +210,20 @@ export function ItemDecisions({
   // for its check (MOTION.md, Approve, publish, merge succeed), then goes. It is set only after the call resolved.
   const [held, setHeld] = useState<'approve' | 'merge' | null>(null);
   const [open, setOpen] = useState<'reject' | 'merge' | 'pause' | 'move' | null>(null);
+  // A dialog a menu entry opened gives focus back to the "More actions" button: what had focus when it
+  // opened, the entry, is gone by then (WCAG 2.4.3).
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const fromMenu = useRef(false);
+  const fromMenuOpen = (what: 'reject' | 'pause' | 'move') => () => {
+    fromMenu.current = true;
+    setOpen(what);
+  };
+  const backToMore = (event: Event) => {
+    if (!fromMenu.current) return;
+    fromMenu.current = false;
+    event.preventDefault();
+    moreRef.current?.focus();
+  };
   useEffect(() => {
     if (!held) return;
     const timer = setTimeout(() => {
@@ -331,7 +345,7 @@ export function ItemDecisions({
       {split === 'controls' && menuHas ? (
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="secondary" size="icon" aria-label="More actions" className="size-11">
+            <Button ref={moreRef} variant="secondary" size="icon" aria-label="More actions" className="size-11">
               <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
             </Button>
           </MenuTrigger>
@@ -344,19 +358,19 @@ export function ItemDecisions({
             }}
           >
             {ctl.pause ? (
-              <MenuItem disabled={decide.isPending} onSelect={() => setOpen('pause')}>
+              <MenuItem disabled={decide.isPending} onSelect={fromMenuOpen('pause')}>
                 <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
                 Pause
               </MenuItem>
             ) : null}
             {reject ? (
-              <MenuItem disabled={decide.isPending} onSelect={() => setOpen('reject')}>
+              <MenuItem disabled={decide.isPending} onSelect={fromMenuOpen('reject')}>
                 <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
                 {backTo}
               </MenuItem>
             ) : null}
             {ctl.move ? (
-              <MenuItem disabled={decide.isPending} onSelect={() => setOpen('move')}>
+              <MenuItem disabled={decide.isPending} onSelect={fromMenuOpen('move')}>
                 <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
                 Move
               </MenuItem>
@@ -373,7 +387,7 @@ export function ItemDecisions({
       {split === undefined && ctl.move && controls && moveInMenu ? (
         <Menu>
           <MenuTrigger asChild>
-            <Button variant="secondary" size="icon" aria-label="More actions">
+            <Button ref={moreRef} variant="secondary" size="icon" aria-label="More actions">
               <Ellipsis size={16} strokeWidth={1.75} aria-hidden="true" />
             </Button>
           </MenuTrigger>
@@ -385,7 +399,7 @@ export function ItemDecisions({
               if (open === 'move') event.preventDefault();
             }}
           >
-            <MenuItem onSelect={() => setOpen('move')}>
+            <MenuItem onSelect={fromMenuOpen('move')}>
               <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
               Move
             </MenuItem>
@@ -411,6 +425,7 @@ export function ItemDecisions({
         onOpenChange={(o) => setOpen(o ? 'reject' : null)}
         onConfirm={(reason) => decide.mutate({ kind: 'reject', reason }, { onSuccess: () => setOpen(null) })}
         pending={pending === 'reject'}
+        onCloseAutoFocus={backToMore}
       />
       {ctl.pause ? (
         <PauseDialog
@@ -419,6 +434,7 @@ export function ItemDecisions({
           onOpenChange={(o) => setOpen(o ? 'pause' : null)}
           onConfirm={(reason) => decide.mutate({ kind: 'pause', reason }, { onSuccess: () => setOpen(null) })}
           pending={pending === 'pause'}
+          onCloseAutoFocus={backToMore}
         />
       ) : null}
       {ctl.move && controls ? (
@@ -427,6 +443,7 @@ export function ItemDecisions({
           factory={controls.factory}
           open={open === 'move'}
           onOpenChange={(o) => setOpen(o ? 'move' : null)}
+          onCloseAutoFocus={backToMore}
         />
       ) : null}
       {can.merge ? (
@@ -516,6 +533,8 @@ interface DialogProps<T> {
   onOpenChange: (open: boolean) => void;
   onConfirm: (value: T) => void;
   pending: boolean;
+  /** Called as the dialog closes; preventDefault keeps focus from returning to what opened it. */
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
 }
 
 /** What stopping a run means, for the dialogs of the controls that do it. */
@@ -530,6 +549,7 @@ export function RejectDialog({
   onOpenChange,
   onConfirm,
   pending,
+  onCloseAutoFocus,
 }: DialogProps<string> & { to: string | null }) {
   const id = useId();
   const [reason, setReason] = useState('');
@@ -553,6 +573,7 @@ export function RejectDialog({
       <DialogContent
         title={to ? `Send ${item.ref} back to ${humanize(to)}` : `Send ${item.ref} back`}
         description={`It goes back to the agent for rework.${runStops(item)} Say what must change; the agent reads your reason first.`}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           <div className="flex flex-col gap-2">
@@ -590,7 +611,7 @@ export function RejectDialog({
   );
 }
 
-function PauseDialog({ item, open, onOpenChange, onConfirm, pending }: DialogProps<string>) {
+function PauseDialog({ item, open, onOpenChange, onConfirm, pending, onCloseAutoFocus }: DialogProps<string>) {
   const id = useId();
   const [reason, setReason] = useState('');
 
@@ -599,6 +620,7 @@ function PauseDialog({ item, open, onOpenChange, onConfirm, pending }: DialogPro
       <DialogContent
         title={`Pause ${item.ref}?`}
         description={`It stays where it is until you resume it; no agent picks it up meanwhile.${runStops(item)}`}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         <form
           className="flex flex-col gap-4"

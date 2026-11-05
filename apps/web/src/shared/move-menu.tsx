@@ -120,10 +120,12 @@ interface DialogProps {
   initialTo?: string | undefined;
   /** After goald moved the last of them (the board focuses the card again). */
   onMoved?: (updated: Item) => void;
+  /** Called as the dialog closes; preventDefault keeps focus from returning to what opened it. */
+  onCloseAutoFocus?: ((event: Event) => void) | undefined;
 }
 
 /** The Move menu: a dialog with the line's stations to choose from (Radix: focus trapped, Escape closes). */
-export function MoveDialog({ items, factory, open, onOpenChange, initialTo, onMoved }: DialogProps) {
+export function MoveDialog({ items, factory, open, onOpenChange, initialTo, onMoved, onCloseAutoFocus }: DialogProps) {
   const choices = moveChoicesFor(
     factory.stations,
     items.map((item) => item.station),
@@ -136,6 +138,7 @@ export function MoveDialog({ items, factory, open, onOpenChange, initialTo, onMo
           factory={factory}
           choices={choices}
           initialTo={initialTo}
+          onCloseAutoFocus={onCloseAutoFocus}
           onDone={(updated) => {
             onOpenChange(false);
             onMoved?.(updated);
@@ -151,12 +154,14 @@ function MoveForm({
   factory,
   choices,
   initialTo,
+  onCloseAutoFocus,
   onDone,
 }: {
   items: Movable[];
   factory: Factory;
   choices: MoveChoice[];
   initialTo: string | undefined;
+  onCloseAutoFocus: ((event: Event) => void) | undefined;
   onDone: (updated: Item) => void;
 }) {
   const id = useId();
@@ -189,6 +194,7 @@ function MoveForm({
           : `Choose the station ${items.length === 1 ? 'it goes to' : 'they go to'}.`
       }
       initialFocus={first}
+      onCloseAutoFocus={onCloseAutoFocus}
     >
       {choices.length === 0 ? (
         <p className="m-0 text-sm text-muted">This line has no other station to move it to.</p>

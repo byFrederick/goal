@@ -74,7 +74,10 @@ function WideActions({
               Review changes
             </Link>
           </Button>
-          <Publish canPublish={canPublish} number={publishNumber} describedBy={describedBy} />
+          {/* Review and publish has its own Publish button: one control for one action. */}
+          {section === 'review' ? null : (
+            <Publish canPublish={canPublish} number={publishNumber} describedBy={describedBy} />
+          )}
         </>
       )}
     </div>
@@ -95,7 +98,7 @@ function NarrowActions({
     <div className="flex w-full flex-nowrap items-center justify-between gap-2">
       {yaml ? <span /> : <ViewToggle section={section} yaml={false} />}
       <div className="flex items-center gap-2">
-        {viewOnly ? null : canPublish ? (
+        {viewOnly || section === 'review' ? null : canPublish ? (
           <Publish canPublish number={publishNumber} describedBy={describedBy} />
         ) : (
           <Button asChild variant="primary" className="h-11">
