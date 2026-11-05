@@ -169,7 +169,7 @@ func TestRun_AgentHearsWhatItsWorkspaceHolds(t *testing.T) {
 			h.step(t)
 
 			feedback := h.worker.Runs()[0].Env["GOAL_FEEDBACK"]
-			for _, s := range []string{repoURL, "`goal/1-add-a-version-command`", tt.note} {
+			for _, s := range []string{repoURL, "`goal/acme-api/1-add-a-version-command`", tt.note} {
 				if !strings.Contains(feedback, s) {
 					t.Errorf("feedback %q does not mention %q", feedback, s)
 				}
