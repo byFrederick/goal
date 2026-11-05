@@ -89,6 +89,19 @@ func CheckCodeHost(host string, kind CodeHostKind) (CodeHost, error) {
 	return CodeHost{Host: h, Kind: kind}, nil
 }
 
+// ListedCodeHost is the host of hosts named host, case ignored, and whether there is one: the
+// one lookup of every place that sends a repository token or a knowledge secret (ADR 0041,
+// decision 1). host is a URL's host as it stands, port included, so a host with a port is never
+// listed: listed hosts have none.
+func ListedCodeHost(hosts []CodeHost, host string) (CodeHost, bool) {
+	i := slices.IndexFunc(hosts, func(c CodeHost) bool { return strings.EqualFold(c.Host, host) })
+	if i < 0 || host == "" {
+		return CodeHost{}, false
+	}
+
+	return hosts[i], true
+}
+
 // CheckCodeHosts checks each of hosts with CheckCodeHost and returns them sorted by host; a host
 // listed twice, case ignored, or more than MaxCodeHosts hosts wrap ErrCodeHostInvalid.
 func CheckCodeHosts(hosts []CodeHost) ([]CodeHost, error) {
