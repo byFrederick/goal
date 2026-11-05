@@ -1,12 +1,21 @@
 // Knowledge (ADR 0038 decision 12) against the mock: the sources list with Find a file and Most read,
 // Add a source (Upload, Repository, Confluence, the Check and the factory checkboxes), and a source's
 // page with its files, latest sync, settings, the line agents see and who reads it. The mock starts with
-// acme's sources (dashboards and product-specs, whose last syncs failed; goal-docs; and support-macros,
-// which syncs only on demand) and no upload
-// source, so a flow that needs one creates `handbook` first. Not run in the build box (no browser).
+// acme's sources (dashboards and product-specs, whose last syncs failed; goal-docs; engineering-handbook;
+// brand-guide; and support-macros, which syncs only on demand) and no upload source, so a flow that needs
+// one creates `handbook` first. The screens' pictures are not compared pixel by pixel (no baselines are
+// committed): each test asserts what the picture showed and writes a screenshot to test-results/ to look at.
+// Not run in the build box (no browser).
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
 import { status } from './editor';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, orgNav, recordToasts } from './support';
+import {
+  expectAccessible,
+  expectNoClippedElements,
+  expectNoHorizontalScroll,
+  isPhone,
+  orgNav,
+  recordToasts,
+} from './support';
 
 test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
@@ -123,63 +132,107 @@ test.describe('Add a source', () => {
   test('repository: its settings show, and a name that is taken says so', async ({ page, request }) => {
     await createUploadSource(request, 'handbook');
     await page.goto('/o/acme/knowledge/new?kind=repository');
-    await expect(page.getByLabel('Repository')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Repository' })).toBeVisible();
     await page.getByLabel('Name', { exact: true }).fill('handbook');
     await expect(page.getByText('Acme already has a source named handbook.')).toBeVisible();
   });
 
   test('confluence: its settings show', async ({ page }) => {
     await page.goto('/o/acme/knowledge/new?kind=confluence');
-    await expect(page.getByLabel('Site')).toBeVisible();
-    await expect(page.getByLabel('Spaces')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Site' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Spaces' })).toBeVisible();
     await fits(page);
   });
 });
 
-test('the builder says while the organization’s sources load, never that it has none', async ({ page, request }) => {
+// ADR 0038 decision 12: the factory's sources are the Knowledge section of its Definition (the Sources card).
+test('the builder offers no source to add until the organization’s sources have loaded', async ({ page, request }) => {
   await request.post('/__mock/fail', { data: { path: '/knowledge/sources', method: 'GET', delay_ms: 2500, times: 0 } });
-  await page.goto('/o/acme/f/sre/definition/connections');
-  const knowledge = page.getByRole('region', { name: 'Knowledge sre may search' });
-  await expect(knowledge.getByText('Loading Acme’s knowledge sources…')).toBeVisible();
-  await expect(knowledge.getByText(/has no knowledge sources yet/)).toHaveCount(0);
-  await expect(knowledge.getByRole('checkbox', { name: /^Dashboards/ })).toBeChecked({ timeout: 10_000 });
+  await page.goto('/o/acme/f/sre/definition/knowledge');
+  const sources = page.getByRole('region', { name: /^Sources/ });
+  await expect(sources.getByRole('link', { name: 'dashboards', exact: true })).toBeVisible();
+  await expect(sources.getByText(/Every source is listed/)).toHaveCount(0);
+  await expect(sources.getByRole('combobox', { name: 'Add a source' })).toBeVisible({ timeout: 10_000 });
 });
 
-test('the builder lists the organization’s sources to tick for the factory', async ({ page }) => {
-  await page.goto('/o/acme/f/sre/definition/connections');
-  const knowledge = page.getByRole('region', { name: 'Knowledge sre may search' });
-  await expect(knowledge.getByRole('checkbox', { name: /^Dashboards/ })).toBeChecked();
-  await expect(knowledge.getByRole('checkbox', { name: /^goal docs/ })).not.toBeChecked();
-  await expect(knowledge).toContainText('Synced, github, acme/goal main, docs/**/*.md');
-  await knowledge.getByRole('checkbox', { name: /^Support macros/ }).check();
-  await expect(page.getByRole('region', { name: 'What runs get' })).toContainText('knowledge__search over 2 sources');
+test('the builder lists the factory’s sources and adds one of the organization’s', async ({ page }) => {
+  await page.goto('/o/acme/f/sre/definition/knowledge');
+  const sources = page.getByRole('region', { name: /^Sources/ });
+  await expect(sources.getByRole('link', { name: 'dashboards', exact: true })).toBeVisible();
+  await expect(sources.getByRole('link', { name: 'goal-docs', exact: true })).toHaveCount(0);
+  await sources.getByRole('combobox', { name: 'Add a source' }).click();
+  await page.getByRole('option', { name: 'support-macros' }).click();
+  await sources.getByRole('button', { name: 'Add source' }).click();
+  await expect(sources.getByRole('link', { name: 'support-macros', exact: true })).toBeVisible();
   await expect(status(page)).toContainText('Autosaved');
   await page.reload();
   await expect(
-    page.getByRole('region', { name: 'Knowledge sre may search' }).getByRole('checkbox', { name: /^Support macros/ }),
-  ).toBeChecked();
+    page.getByRole('region', { name: /^Sources/ }).getByRole('link', { name: 'support-macros', exact: true }),
+  ).toBeVisible();
   await fits(page);
 });
 
-// The pictures of the list, a source and New source at 1440 and 390 px in both themes. The baselines are
-// made on the CI runner (the e2e job uploads them), since another machine's fonts draw other pixels.
+// The list, a source and New source at 1440 and 390 px in both themes. No pixel baselines are committed (a
+// runner's fonts draw their own pixels), so each test asserts what the picture shows (the heading, the main
+// regions and fields, nothing past the right edge) and writes a screenshot to test-results/ for people to look at.
 for (const theme of ['light', 'dark'] as const) {
   for (const width of [1440, 390]) {
     const screens = [
-      { name: 'list', path: '/o/acme/knowledge', heading: 'Knowledge' },
-      { name: 'source', path: '/o/acme/knowledge/goal-docs', heading: 'goal-docs' },
-      { name: 'new', path: '/o/acme/knowledge/new', heading: 'New source' },
-      { name: 'new-confluence', path: '/o/acme/knowledge/new?kind=confluence', heading: 'New source' },
+      {
+        name: 'list',
+        path: '/o/acme/knowledge',
+        heading: 'Knowledge',
+        shows: (page: Page) => [
+          page.getByRole('region', { name: 'Sources', exact: true }),
+          page.getByRole('searchbox', { name: 'Find a file' }),
+          page.getByRole('region', { name: 'Most read' }),
+        ],
+      },
+      {
+        name: 'source',
+        path: '/o/acme/knowledge/goal-docs',
+        heading: 'goal-docs',
+        shows: (page: Page) => [
+          page.getByRole('table', { name: 'Files of goal-docs' }),
+          page.getByRole('region', { name: 'Latest sync' }),
+          page.getByRole('region', { name: 'What agents see' }),
+          page.getByRole('region', { name: 'Read by' }),
+        ],
+      },
+      {
+        name: 'new',
+        path: '/o/acme/knowledge/new',
+        heading: 'New source',
+        shows: (page: Page) => [
+          page.getByRole('group', { name: 'Where the files are' }),
+          page.getByLabel('Name', { exact: true }),
+          page.getByLabel('When should agents read it?'),
+          page.getByRole('button', { name: 'Add source' }),
+        ],
+      },
+      {
+        name: 'new-confluence',
+        path: '/o/acme/knowledge/new?kind=confluence',
+        heading: 'New source',
+        shows: (page: Page) => [
+          page.getByRole('textbox', { name: 'Site' }),
+          page.getByRole('textbox', { name: 'Spaces' }),
+          page.getByLabel('Root page (optional)'),
+          page.getByLabel('Sync every'),
+        ],
+      },
     ];
-    for (const { name, path, heading } of screens) {
-      test(`knowledge ${name} screenshot, ${theme}, ${width} px`, async ({ page }, testInfo) => {
-        // The viewport is set below, so the three projects draw the same picture: one keeps its baselines.
-        test.skip(testInfo.project.name !== 'desktop-1440', 'one project keeps the baselines');
+    for (const { name, path, heading, shows } of screens) {
+      test(`knowledge ${name} shows its parts and fits, ${theme}, ${width} px`, async ({ page }) => {
+        // The viewport is set here, so the three projects draw the same picture.
         await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
         await page.setViewportSize({ width, height: 900 });
         await page.goto(path);
         await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
-        await expect(page).toHaveScreenshot(`knowledge-${name}-${theme}-${width}.png`, { fullPage: true });
+        for (const part of shows(page)) await expect(part).toBeVisible();
+        await expectNoHorizontalScroll(page);
+        await expectNoClippedElements(page);
+        await page.screenshot({ path: `test-results/knowledge-${name}-${theme}-${width}.png`, fullPage: true });
       });
     }
   }
@@ -193,6 +246,7 @@ for (const scheme of ['light', 'dark'] as const) {
       test('the Check lists the first files with "and N more", and the page fits', async ({ page }) => {
         await page.goto('/o/acme/knowledge/new?kind=repository');
         await page.getByLabel('Name', { exact: true }).fill('runbooks');
+        await page.getByRole('textbox', { name: 'Repository' }).fill('https://github.com/acme/runbooks');
         await page.getByLabel('When should agents read it?').fill('How to fix what pages us. Read before acting.');
         await page.getByRole('button', { name: 'Check' }).click();
         const card = page.getByRole('region', { name: 'First files' });
@@ -271,6 +325,7 @@ test.describe('phone tap areas at 390 px', () => {
 
   test('file links in Most read and in Files found keep their hit areas apart', async ({ page }) => {
     const apart = async (links: ReturnType<Page['locator']>) => {
+      await expect(links.first()).toBeVisible();
       const boxes = await links.evaluateAll((els) =>
         els.map((el) => {
           const r = el.getBoundingClientRect();
@@ -293,7 +348,7 @@ test.describe('files table at 390 px', () => {
   test.use({ viewport: { width: 390, height: 900 } });
 
   test('the Files table scrolls in its own container and the page does not', async ({ page }) => {
-    await page.goto('/o/acme/knowledge/runbooks');
+    await page.goto('/o/acme/knowledge/goal-docs');
     const table = page.getByRole('table', { name: /^Files of/ });
     await expect(table).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Reads, 7 days' })).toBeAttached();
@@ -305,7 +360,7 @@ test.describe('files table at 390 px', () => {
   });
 
   test('the Files scroller is a named region a keyboard can reach, and axe finds nothing', async ({ page }) => {
-    await page.goto('/o/acme/knowledge/runbooks');
+    await page.goto('/o/acme/knowledge/goal-docs');
     const region = page.getByRole('region', { name: 'Files table' });
     await expect(region).toBeVisible();
     await region.focus();
