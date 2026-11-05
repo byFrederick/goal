@@ -4513,22 +4513,28 @@ type IntakeOrigins struct {
 // IntakeTriage defines model for IntakeTriage.
 type IntakeTriage struct {
 	// Item The collecting triage item: open, with no run yet; null when there is none, and the next item that lands with triage follow-ups files one
-	Item *struct {
-		// FollowUps How many follow-ups have joined it
-		FollowUps int    `json:"follow_ups"`
-		Id        string `json:"id"`
-		Ref       string `json:"ref"`
-		Station   string `json:"station"`
-		Title     string `json:"title"`
-	} `json:"item"`
+	Item *IntakeTriageItem `json:"item"`
 
 	// Waiting Each item of the factory with waiting triage follow-ups, oldest first, which join the collecting item when the item (or its assembly) lands. An untrusted item's are left out: they go to a paused triage item of their own
-	Waiting []struct {
-		FollowUps int    `json:"follow_ups"`
-		Id        string `json:"id"`
-		Ref       string `json:"ref"`
-		Title     string `json:"title"`
-	} `json:"waiting"`
+	Waiting []IntakeTriageSource `json:"waiting"`
+}
+
+// IntakeTriageItem A factory's collecting triage item
+type IntakeTriageItem struct {
+	// FollowUps How many follow-ups have joined it
+	FollowUps int    `json:"follow_ups"`
+	Id        string `json:"id"`
+	Ref       string `json:"ref"`
+	Station   string `json:"station"`
+	Title     string `json:"title"`
+}
+
+// IntakeTriageSource An item whose waiting triage follow-ups join the collecting triage item when it lands
+type IntakeTriageSource struct {
+	FollowUps int    `json:"follow_ups"`
+	Id        string `json:"id"`
+	Ref       string `json:"ref"`
+	Title     string `json:"title"`
 }
 
 // IntakeTrigger defines model for IntakeTrigger.

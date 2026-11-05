@@ -722,21 +722,33 @@ func (in *Intake) OpenItemByDedupe(ctx context.Context, factory domain.FactoryID
 
 // SourceTally implements ports.Intake.
 func (in *Intake) SourceTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.SourceCount, error) {
+	return factoryTally(ctx, in, factory, "item sources", func(q *db.Queries, fid uuid.UUID) ([]db.ItemSourceTallyRow, error) {
+		return q.ItemSourceTally(ctx, db.ItemSourceTallyParams{FactoryID: fid, Since: since})
+	}, sourceCount)
+}
+
+func sourceCount(r db.ItemSourceTallyRow) domain.SourceCount {
+	return domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)}
+}
+
+// factoryTally reads a factory's counts with query and makes each row a count with count; what
+// names them in an error.
+func factoryTally[R, C any](ctx context.Context, in *Intake, factory domain.FactoryID, what string,
+	query func(q *db.Queries, fid uuid.UUID) ([]R, error), count func(R) C,
+) ([]C, error) {
 	fid, err := parseID("factory", string(factory))
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.ItemSourceTallyRow, error) {
-		return q.ItemSourceTally(ctx, db.ItemSourceTallyParams{FactoryID: fid, Since: since})
-	})
+	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]R, error) { return query(q, fid) })
 	if err != nil {
-		return nil, fmt.Errorf("item sources of factory %s: %w", factory, err)
+		return nil, fmt.Errorf("%s of factory %s: %w", what, factory, err)
 	}
 
-	out := make([]domain.SourceCount, 0, len(rows))
+	out := make([]C, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)})
+		out = append(out, count(r))
 	}
 
 	return out, nil
@@ -797,24 +809,13 @@ func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, las
 
 // OriginTally implements ports.Intake.
 func (in *Intake) OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error) {
-	fid, err := parseID("factory", string(factory))
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.OriginTallyRow, error) {
+	return factoryTally(ctx, in, factory, "item origins", func(q *db.Queries, fid uuid.UUID) ([]db.OriginTallyRow, error) {
 		return q.OriginTally(ctx, db.OriginTallyParams{FactoryID: fid, Since: since})
-	})
-	if err != nil {
-		return nil, fmt.Errorf("item origins of factory %s: %w", factory, err)
-	}
+	}, originCount)
+}
 
-	out := make([]domain.OriginCount, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, domain.OriginCount{Origin: domain.Origin(r.Origin), Items: int(r.Items)})
-	}
-
-	return out, nil
+func originCount(r db.OriginTallyRow) domain.OriginCount {
+	return domain.OriginCount{Origin: domain.Origin(r.Origin), Items: int(r.Items)}
 }
 
 // ComingUp implements ports.Intake.

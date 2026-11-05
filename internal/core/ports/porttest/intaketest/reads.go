@@ -77,8 +77,12 @@ func testOrigins(f *fixture) {
 		origin domain.Origin
 		at     time.Time
 	}{
-		{domain.OriginPerson, t0}, {domain.OriginPerson, t0.Add(time.Hour)}, {domain.OriginPlan, t0},
-		{domain.OriginTrigger, t0}, {domain.OriginFollowUp, t0}, {domain.OriginTrigger, t0.Add(-48 * time.Hour)},
+		{domain.OriginPerson, t0},
+		{domain.OriginPerson, t0.Add(time.Hour)},
+		{domain.OriginPlan, t0},
+		{domain.OriginTrigger, t0},
+		{domain.OriginFollowUp, t0},
+		{domain.OriginTrigger, t0.Add(-48 * time.Hour)},
 	} {
 		f.filed(domain.NewItem{Title: string(n.origin), Origin: n.origin, CreatedAt: n.at})
 	}
@@ -89,8 +93,10 @@ func testOrigins(f *fixture) {
 	}
 
 	want := []domain.OriginCount{
-		{Origin: domain.OriginFollowUp, Items: 1}, {Origin: domain.OriginPerson, Items: 2},
-		{Origin: domain.OriginPlan, Items: 1}, {Origin: domain.OriginTrigger, Items: 1},
+		{Origin: domain.OriginFollowUp, Items: 1},
+		{Origin: domain.OriginPerson, Items: 2},
+		{Origin: domain.OriginPlan, Items: 1},
+		{Origin: domain.OriginTrigger, Items: 1},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("OriginTally = %v; want %v", got, want)
@@ -146,13 +152,21 @@ func testComingUp(f *fixture) {
 		t.Errorf("ComingUp's first = %+v; want soon with its start", got[0].Item)
 	}
 
-	if got, total, err := f.in.ComingUp(f.ctx(), f.factory, 1); err != nil || len(got) != 1 || got[0].Item.ID != soon.ID || total != len(want) {
-		t.Errorf("ComingUp limit 1 = %v, %d, %v; want soon of %d", got, total, err, len(want))
+	f.comingUpLimited(soon.ID, len(want))
+}
+
+// comingUpLimited checks that ComingUp limited to 1 answers first, of total in all, and that
+// another organization has none coming up.
+func (f *fixture) comingUpLimited(first domain.ItemID, total int) {
+	t := f.t
+
+	if got, n, err := f.in.ComingUp(f.ctx(), f.factory, 1); err != nil || len(got) != 1 || got[0].Item.ID != first || n != total {
+		t.Errorf("ComingUp limit 1 = %v, %d, %v; want %s of %d", got, n, err, first, total)
 	}
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
-	if got, total, err := f.in.ComingUp(labs, f.factory, 10); err != nil || len(got) != 0 || total != 0 {
-		t.Errorf("labs ComingUp = %v, %d, %v; want none", got, total, err)
+	if got, n, err := f.in.ComingUp(labs, f.factory, 10); err != nil || len(got) != 0 || n != 0 {
+		t.Errorf("labs ComingUp = %v, %d, %v; want none", got, n, err)
 	}
 }
 
@@ -189,8 +203,16 @@ func testTriageQueue(f *fixture) {
 		t.Errorf("TriageQueue's waiting = %+v; want %+v", q.Waiting, want)
 	}
 
+	f.claimed(q.Item.ID)
+}
+
+// claimed starts a run on the triage item: it no longer collects, its sources still wait, and
+// another organization has neither.
+func (f *fixture) claimed(item domain.ItemID) {
+	t := f.t
+
 	if _, err := f.Store.StartRun(f.ctx(), ports.NewRun{
-		FactoryID: f.factory, ItemID: q.Item.ID, Station: station, Agent: worker, Model: "claude-haiku-5-5", StartedAt: t0.Add(2 * time.Hour),
+		FactoryID: f.factory, ItemID: item, Station: station, Agent: worker, Model: "claude-haiku-5-5", StartedAt: t0.Add(2 * time.Hour),
 	}); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}

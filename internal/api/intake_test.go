@@ -786,8 +786,11 @@ func TestIntake_OriginsByWindow(t *testing.T) {
 		origin domain.Origin
 		age    time.Duration
 	}{
-		{domain.OriginPerson, time.Hour}, {domain.OriginPerson, 10 * 24 * time.Hour}, {domain.OriginTrigger, 2 * 24 * time.Hour},
-		{domain.OriginFollowUp, 40 * 24 * time.Hour}, {domain.OriginPlan, 100 * 24 * time.Hour},
+		{domain.OriginPerson, time.Hour},
+		{domain.OriginPerson, 10 * 24 * time.Hour},
+		{domain.OriginTrigger, 2 * 24 * time.Hour},
+		{domain.OriginFollowUp, 40 * 24 * time.Hour},
+		{domain.OriginPlan, 100 * 24 * time.Hour},
 	} {
 		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, Source: domain.ItemFromPeople, CreatedAt: t0.Add(-n.age)})
 	}
@@ -963,12 +966,12 @@ func (h *harness) land(t *testing.T, it gen.Item, others ...domain.Line) {
 
 	from := domain.Position{Station: it.Station, State: domain.ItemState(it.State)}
 	if _, err := h.store.Transition(inOrg(t), ports.Transition{
-		ItemID: domain.ItemID(it.Id), From: from, To: domain.Position{Station: "done", State: domain.StateDone}, At: t0,
+		ItemID: domain.ItemID(it.Id), From: from, To: domain.Position{Station: stDone, State: domain.StateDone}, At: t0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	lines := append([]domain.Line{{FactoryID: acmeID, Name: "acme", Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}}}}, others...)
+	lines := append([]domain.Line{{FactoryID: acmeID, Name: acmeName, Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}}}}, others...)
 	if _, err := h.store.FileFollowUps(inOrg(t), lines, t0.Add(time.Hour), 20); err != nil {
 		t.Fatal(err)
 	}

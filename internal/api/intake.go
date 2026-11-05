@@ -75,14 +75,9 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 		last = *n
 	}
 
-	window := gen.IntakeWindowN30d
-	if w := req.Params.Window; w != nil {
-		window = gen.IntakeWindow(*w)
-	}
-
-	days, ok := intakeWindows[window]
-	if !ok {
-		return nil, fmt.Errorf("%w: window must be 7d, 30d or 90d", errInvalid)
+	window, days, err := intakeWindow(req.Params.Window)
+	if err != nil {
+		return nil, err
 	}
 
 	f, err := s.factory(ctx, req.Factory)
@@ -131,6 +126,21 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 	out.Webhooks = openWebhooks(r.endpoints, l.Triggers)
 
 	return out, nil
+}
+
+// intakeWindow is the window w asks for, 30d when it asks for none, and its days.
+func intakeWindow(w *gen.GetIntakeParamsWindow) (gen.IntakeWindow, int, error) {
+	window := gen.IntakeWindowN30d
+	if w != nil {
+		window = gen.IntakeWindow(*w)
+	}
+
+	days, ok := intakeWindows[window]
+	if !ok {
+		return "", 0, fmt.Errorf("%w: window must be 7d, 30d or 90d", errInvalid)
+	}
+
+	return window, days, nil
 }
 
 // originsOf is counts by origin as Intake answers them, every origin answered.
@@ -199,27 +209,14 @@ func (s *server) triage(ctx context.Context, name string, factory domain.Factory
 	}
 
 	ref := func(n int64) string { return domain.ItemRef{Factory: name, Number: n}.String() }
-	out := &gen.IntakeTriage{}
+	out := &gen.IntakeTriage{Waiting: make([]gen.IntakeTriageSource, 0, len(q.Waiting))}
 
 	if it := q.Item; it != nil {
-		out.Item = &struct {
-			FollowUps int    `json:"follow_ups"`
-			Id        string `json:"id"`
-			Ref       string `json:"ref"`
-			Station   string `json:"station"`
-			Title     string `json:"title"`
-		}{FollowUps: q.FollowUps, Id: string(it.ID), Ref: ref(it.Number), Station: it.Station, Title: it.Title}
+		out.Item = &gen.IntakeTriageItem{FollowUps: q.FollowUps, Id: string(it.ID), Ref: ref(it.Number), Station: it.Station, Title: it.Title}
 	}
 
-	out.Waiting = make([]struct {
-		FollowUps int    `json:"follow_ups"`
-		Id        string `json:"id"`
-		Ref       string `json:"ref"`
-		Title     string `json:"title"`
-	}, len(q.Waiting))
-
-	for i, w := range q.Waiting {
-		out.Waiting[i].FollowUps, out.Waiting[i].Id, out.Waiting[i].Ref, out.Waiting[i].Title = w.FollowUps, string(w.ID), ref(w.Number), w.Title
+	for _, w := range q.Waiting {
+		out.Waiting = append(out.Waiting, gen.IntakeTriageSource{FollowUps: w.FollowUps, Id: string(w.ID), Ref: ref(w.Number), Title: w.Title})
 	}
 
 	return out, nil

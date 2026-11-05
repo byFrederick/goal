@@ -102,6 +102,9 @@ func TestTrigger_NamesDelivery(t *testing.T) {
 	}
 }
 
+// onCheckRun names every GitHub webhook's check_run deliveries.
+const onCheckRun = "github.check_run"
+
 // A trigger names a webhook, whatever the event, by the webhook's sender or by its name; Intake
 // shows the webhook receiving then.
 func TestTrigger_NamesWebhook(t *testing.T) {
@@ -115,9 +118,9 @@ func TestTrigger_NamesWebhook(t *testing.T) {
 		{"github-acme", true, true},
 		{"github-acme.check_run", true, true},
 		{"webhook.github-acme.push", true, true},
-		{"github.check_run", true, true},
+		{onCheckRun, true, true},
 		{"github.check_run.failed", true, true},
-		{"github.check_run", false, false},
+		{onCheckRun, false, false},
 		{"gitlab.push", true, false},
 		{string(SenderGitHub), true, false},
 		{OnSchedule, true, false},

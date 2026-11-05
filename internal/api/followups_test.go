@@ -136,6 +136,22 @@ func (h *harness) keepFollowUps(t *testing.T, it gen.Item, fs ...domain.FollowUp
 	}
 }
 
+// whereItGoes is a follow-up's text, state and where it went or will go, on one line.
+func whereItGoes(f gen.FollowUp) string {
+	start := "-"
+
+	if s := f.Start; s != nil {
+		var after []string
+		if s.After != nil {
+			after = *s.After
+		}
+
+		start = fmt.Sprintf("in %s after %v in %s", deref(s.In), after, deref(s.Factory))
+	}
+
+	return fmt.Sprintf("%s %s for %s start %s filed %s", f.Text, f.State, deref(f.For), start, deref(f.FiledItem))
+}
+
 // An item's follow-ups answer oldest first, each saying where it went or will go: a note its
 // item, a start its plan (another factory named) and the item it was filed as there, a triage
 // one the triage item it joined. The item says how it was filed and by whom.
@@ -146,19 +162,19 @@ func TestGetItem_FollowUpsSayWhereTheyGo(t *testing.T) {
 	src, target := h.submit(t), h.submit(t)
 
 	h.keepFollowUps(t, src,
-		domain.FollowUp{Text: "Mind the cache", Target: domain.FollowUpNote, For: &domain.ItemRef{Factory: "acme", Number: target.Number}},
-		domain.FollowUp{Text: "Check the line", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{In: "7d", Title: "Check the line", Factory: "line"}},
+		domain.FollowUp{Text: "Mind the cache", Target: domain.FollowUpNote, For: &domain.ItemRef{Factory: acmeName, Number: target.Number}},
+		domain.FollowUp{Text: "Check the line", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{In: "7d", Title: "Check the line", Factory: lineSlug}},
 		domain.FollowUp{Text: "Retry after it", Target: domain.FollowUpStart, Start: &domain.FollowUpPlan{After: []string{target.Ref}, Title: "Retry"}},
 		domain.FollowUp{Text: "Tidy the docs", Target: domain.FollowUpTriage},
 	)
 
-	acmeNotes := domain.NoteFactory{ID: acmeID, Name: "acme"}
-	if _, err := h.store.DeliverNotes(inOrg(t), []domain.NoteFactory{acmeNotes, {ID: lineID, Name: "line"}}, t0, 10); err != nil {
+	acmeNotes := domain.NoteFactory{ID: acmeID, Name: acmeName}
+	if _, err := h.store.DeliverNotes(inOrg(t), []domain.NoteFactory{acmeNotes, {ID: lineID, Name: lineSlug}}, t0, 10); err != nil {
 		t.Fatal(err)
 	}
 
 	h.land(t, src, domain.Line{
-		FactoryID: lineID, Name: "line", Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}},
+		FactoryID: lineID, Name: lineSlug, Stations: []domain.Station{{ID: stInbox, Kind: domain.KindQueue}},
 		Flow: domain.FlowPolicy{FollowUpsFrom: []domain.FactoryID{acmeID}},
 	})
 
@@ -167,20 +183,9 @@ func TestGetItem_FollowUpsSayWhereTheyGo(t *testing.T) {
 		t.Fatalf("follow_ups = %+v; want 4", got.FollowUps)
 	}
 
-	var lines []string
-
+	lines := make([]string, 0, len(*got.FollowUps))
 	for _, f := range *got.FollowUps {
-		start := "-"
-		if s := f.Start; s != nil {
-			var after []string
-			if s.After != nil {
-				after = *s.After
-			}
-
-			start = fmt.Sprintf("in %s after %v in %s", deref(s.In), after, deref(s.Factory))
-		}
-
-		lines = append(lines, fmt.Sprintf("%s %s for %s start %s filed %s", f.Text, f.State, deref(f.For), start, deref(f.FiledItem)))
+		lines = append(lines, whereItGoes(f))
 	}
 
 	want := []string{
@@ -210,9 +215,9 @@ func TestGetItem_NotesFromOtherItems(t *testing.T) {
 	h := newHarness(t)
 	src, target := h.submit(t), h.submit(t)
 
-	h.keepFollowUps(t, src, domain.FollowUp{Text: "Mind the cache", Target: domain.FollowUpNote, For: &domain.ItemRef{Factory: "acme", Number: target.Number}})
+	h.keepFollowUps(t, src, domain.FollowUp{Text: "Mind the cache", Target: domain.FollowUpNote, For: &domain.ItemRef{Factory: acmeName, Number: target.Number}})
 
-	if _, err := h.store.DeliverNotes(inOrg(t), []domain.NoteFactory{{ID: acmeID, Name: "acme"}}, t0, 10); err != nil {
+	if _, err := h.store.DeliverNotes(inOrg(t), []domain.NoteFactory{{ID: acmeID, Name: acmeName}}, t0, 10); err != nil {
 		t.Fatal(err)
 	}
 

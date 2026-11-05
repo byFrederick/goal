@@ -6368,21 +6368,25 @@ export interface components {
         };
         IntakeTriage: {
             /** @description The collecting triage item: open, with no run yet; null when there is none, and the next item that lands with triage follow-ups files one */
-            item: {
-                id: string;
-                ref: string;
-                title: string;
-                station: string;
-                /** @description How many follow-ups have joined it */
-                follow_ups: number;
-            } | null;
+            item: components["schemas"]["IntakeTriageItem"] | null;
             /** @description Each item of the factory with waiting triage follow-ups, oldest first, which join the collecting item when the item (or its assembly) lands. An untrusted item's are left out: they go to a paused triage item of their own */
-            waiting: {
-                id: string;
-                ref: string;
-                title: string;
-                follow_ups: number;
-            }[];
+            waiting: components["schemas"]["IntakeTriageSource"][];
+        };
+        /** @description A factory's collecting triage item */
+        IntakeTriageItem: {
+            id: string;
+            ref: string;
+            title: string;
+            station: string;
+            /** @description How many follow-ups have joined it */
+            follow_ups: number;
+        };
+        /** @description An item whose waiting triage follow-ups join the collecting triage item when it lands */
+        IntakeTriageSource: {
+            id: string;
+            ref: string;
+            title: string;
+            follow_ups: number;
         };
         /** @description An organization webhook open to the factory */
         IntakeWebhook: {

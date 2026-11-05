@@ -435,16 +435,9 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 			CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, AgeSeconds: ageSeconds(it, now),
 			PrUrl: optional(it.PullRequest(l)), Summary: optional(it.Summary(l)),
 			InBuffer: drum != "" && it.Station == drum && it.State.Waiting(), TouchCount: touches[it.ID],
-			PullRequests: []string{}, CreatedBy: s.createdBy(it), Untrusted: new(it.Untrusted), Start: itemStartOf(it),
+			PullRequests: []string{},
 		}
-
-		if it.Origin != "" {
-			c.Origin = new(gen.ItemCardOrigin(it.Origin))
-		}
-
-		if it.Via != "" {
-			c.Via = new(gen.ItemCardVia(it.Via))
-		}
+		s.filing(&c, it)
 
 		// Whoever merges sees every pull request the merge lands (spec 4 §4.7), not just the latest.
 		st, _ := l.Station(it.Station)
@@ -476,6 +469,20 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 	}
 
 	return out, nil
+}
+
+// filing sets how it was filed on its card c: its origin, how and by whom, whether it is
+// untrusted and when it may start (ADR 0040).
+func (s *server) filing(c *gen.ItemCard, it domain.Item) {
+	c.CreatedBy, c.Untrusted, c.Start = s.createdBy(it), new(it.Untrusted), itemStartOf(it)
+
+	if it.Origin != "" {
+		c.Origin = new(gen.ItemCardOrigin(it.Origin))
+	}
+
+	if it.Via != "" {
+		c.Via = new(gen.ItemCardVia(it.Via))
+	}
 }
 
 // touchCounts counts the touches of each of items that has any, by item.

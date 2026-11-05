@@ -1338,43 +1338,58 @@ func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit 
 	var all []domain.ComingUp
 
 	for _, it := range in.store.items {
-		if it.OrgID != org || it.FactoryID != factory || !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		if it.OrgID != org || it.FactoryID != factory {
 			continue
 		}
 
-		c := domain.ComingUp{Item: clone(it), Needs: []int64{}}
-
-		for _, e := range in.store.edges {
-			if e.Item == it.ID && e.Kind != domain.EdgeOverlap && in.openLocked(org, e.Needs) {
-				c.Needs = append(c.Needs, in.store.items[e.Needs].Number)
-			}
+		if c, ok := in.comingUpLocked(org, it); ok {
+			all = append(all, c)
 		}
-
-		if it.StartAt.IsZero() && len(c.Needs) == 0 {
-			continue
-		}
-
-		if !it.Triage {
-			c.FromFactory, c.FromNumber = in.filedFromLocked(org, it.ID)
-		}
-
-		all = append(all, c)
 	}
 
-	slices.SortFunc(all, func(a, b domain.ComingUp) int {
-		x, y := a.Item, b.Item
-		if x.StartAt.IsZero() != y.StartAt.IsZero() {
-			if x.StartAt.IsZero() {
-				return 1
-			}
-
-			return -1
-		}
-
-		return cmp.Or(x.StartAt.Compare(y.StartAt), x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
-	})
+	slices.SortFunc(all, comingUpOrder)
 
 	return all[:min(len(all), max(limit, 0))], len(all), nil
+}
+
+// comingUpLocked is it as coming up, when it is open, hasn't started and has a start or an open
+// planned or linked need. Callers hold in.store.mu.
+func (in *Intake) comingUpLocked(org domain.OrgID, it *domain.Item) (domain.ComingUp, bool) {
+	if !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
+		return domain.ComingUp{}, false
+	}
+
+	c := domain.ComingUp{Item: clone(it), Needs: []int64{}}
+
+	for _, e := range in.store.edges {
+		if e.Item == it.ID && e.Kind != domain.EdgeOverlap && in.openLocked(org, e.Needs) {
+			c.Needs = append(c.Needs, in.store.items[e.Needs].Number)
+		}
+	}
+
+	if it.StartAt.IsZero() && len(c.Needs) == 0 {
+		return domain.ComingUp{}, false
+	}
+
+	if !it.Triage {
+		c.FromFactory, c.FromNumber = in.filedFromLocked(org, it.ID)
+	}
+
+	return c, true
+}
+
+// comingUpOrder puts items with a start first, soonest first, then the rest oldest first.
+func comingUpOrder(a, b domain.ComingUp) int {
+	x, y := a.Item, b.Item
+	if x.StartAt.IsZero() != y.StartAt.IsZero() {
+		if x.StartAt.IsZero() {
+			return 1
+		}
+
+		return -1
+	}
+
+	return cmp.Or(x.StartAt.Compare(y.StartAt), x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
 }
 
 // filedFromLocked is the factory and number of the source item of the oldest follow-up filed as
@@ -1411,19 +1426,43 @@ func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, lim
 	in.store.mu.Lock()
 	defer in.store.mu.Unlock()
 
-	q := domain.TriageQueue{Waiting: []domain.TriageSource{}}
+	q := domain.TriageQueue{Item: in.collectingLocked(org, factory)}
+
+	if q.Item != nil {
+		for _, f := range in.store.followUps {
+			if f.FiledItem == q.Item.ID && f.State == domain.FollowUpFiled && f.Target == domain.FollowUpTriage {
+				q.FollowUps++
+			}
+		}
+	}
+
+	q.Waiting = in.triageSourcesLocked(org, factory, limit)
+
+	return q, nil
+}
+
+// collectingLocked is the factory's oldest open, trusted triage item without a run; nil for none.
+// Callers hold in.store.mu.
+func (in *Intake) collectingLocked(org domain.OrgID, factory domain.FactoryID) *domain.Item {
+	var found *domain.Item
 
 	for _, it := range in.store.items {
 		if it.OrgID != org || it.FactoryID != factory || !it.Triage || it.Untrusted || !in.openLocked(org, it.ID) || in.hasRunLocked(it.ID) {
 			continue
 		}
 
-		if q.Item == nil || cmp.Or(it.CreatedAt.Compare(q.Item.CreatedAt), cmp.Compare(it.ID, q.Item.ID)) < 0 {
+		if found == nil || cmp.Or(it.CreatedAt.Compare(found.CreatedAt), cmp.Compare(it.ID, found.ID)) < 0 {
 			c := clone(it)
-			q.Item = &c
+			found = &c
 		}
 	}
 
+	return found
+}
+
+// triageSourcesLocked are at most limit of the factory's trusted items with waiting triage
+// follow-ups, oldest first by their first one. Callers hold in.store.mu.
+func (in *Intake) triageSourcesLocked(org domain.OrgID, factory domain.FactoryID, limit int) []domain.TriageSource {
 	type source struct {
 		ts    domain.TriageSource
 		first domain.FollowUp
@@ -1432,12 +1471,12 @@ func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, lim
 	sources := map[domain.ItemID]*source{}
 
 	for _, f := range in.store.followUps {
-		if q.Item != nil && f.FiledItem == q.Item.ID && f.State == domain.FollowUpFiled && f.Target == domain.FollowUpTriage {
-			q.FollowUps++
+		if f.FactoryID != factory || f.State != domain.FollowUpWaiting || f.Target != domain.FollowUpTriage {
+			continue
 		}
 
 		src, ok := in.store.visible(f.ItemID, org)
-		if !ok || f.FactoryID != factory || f.State != domain.FollowUpWaiting || f.Target != domain.FollowUpTriage || src.Untrusted {
+		if !ok || src.Untrusted {
 			continue
 		}
 
@@ -1455,11 +1494,12 @@ func (in *Intake) TriageQueue(ctx context.Context, factory domain.FactoryID, lim
 		return cmp.Or(a.first.CreatedAt.Compare(b.first.CreatedAt), cmp.Compare(a.ts.ID, b.ts.ID))
 	})
 
+	out := []domain.TriageSource{}
 	for _, s := range all[:min(len(all), max(limit, 0))] {
-		q.Waiting = append(q.Waiting, s.ts)
+		out = append(out, s.ts)
 	}
 
-	return q, nil
+	return out
 }
 
 // hasRunLocked reports whether item has a run. Callers hold in.store.mu.

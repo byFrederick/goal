@@ -8040,32 +8040,37 @@ components:
       required: [item, waiting]
       properties:
         item:
-          type: object
           nullable: true
           description: >-
             The collecting triage item: open, with no run yet; null when there is none, and the
             next item that lands with triage follow-ups files one
-          required: [id, ref, title, station, follow_ups]
-          properties:
-            id: { type: string }
-            ref: { type: string }
-            title: { type: string }
-            station: { type: string }
-            follow_ups: { type: integer, description: How many follow-ups have joined it }
+          allOf: [{ $ref: "#/components/schemas/IntakeTriageItem" }]
         waiting:
           type: array
           description: >-
             Each item of the factory with waiting triage follow-ups, oldest first, which join the
             collecting item when the item (or its assembly) lands. An untrusted item's are left
             out: they go to a paused triage item of their own
-          items:
-            type: object
-            required: [id, ref, title, follow_ups]
-            properties:
-              id: { type: string }
-              ref: { type: string }
-              title: { type: string }
-              follow_ups: { type: integer }
+          items: { $ref: "#/components/schemas/IntakeTriageSource" }
+    IntakeTriageItem:
+      type: object
+      description: A factory's collecting triage item
+      required: [id, ref, title, station, follow_ups]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        station: { type: string }
+        follow_ups: { type: integer, description: How many follow-ups have joined it }
+    IntakeTriageSource:
+      type: object
+      description: An item whose waiting triage follow-ups join the collecting triage item when it lands
+      required: [id, ref, title, follow_ups]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        follow_ups: { type: integer }
     IntakeWebhook:
       type: object
       description: An organization webhook open to the factory
