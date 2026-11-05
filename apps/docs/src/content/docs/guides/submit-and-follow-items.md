@@ -70,9 +70,44 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line.
 
+The Start control sets when the item may start:
+
+- **Now** sends no start. The item is released as soon as the first station can take it.
+- **Later** takes a date and a time, and the button becomes Schedule. A date and time are read in your notification time zone, or UTC when you saved none.
+- **After items** takes the refs of items of the same factory, such as `goal#2, goal#3`. The item waits until they are done.
+
+If Goal refuses the start, for example a time more than 365 days ahead or an item that is cancelled, the reason shows under the Start control and nothing is created.
+
+## See what has not started
+
+An item with a start time or after items waits at the first station and is marked everywhere it appears:
+
+- The Board's first column lists it under **Later**, below the items that can start, soonest first, with its start date where the others show their age.
+- Items shows "Starts Nov 19" in its status column.
+- Intake lists it under **Coming up**, soonest first, with where it came from. **Start now** there, or in the item's banner, clears the start time; the item is released on the next tick. An item that waits only for other items has no Start now, because those items still hold it. See [Intake](../intake/).
+- The item's page shows a banner, "Starts Thu, Nov 19 at 09:00", with **Start now** and **Change**. Change sets another time or other items; choosing Now in it starts the item.
+
+Once the item has left the first station, its start cannot change, and the banner is gone.
+
+## Read where an item came from, and its follow-ups
+
+An agent that notices work outside its item records a follow-up. The item's page shows them on the Timeline tab, in **Follow-ups**, each with where it went:
+
+- A **note** goes to the open item it names, right away. It reaches that item's next run after its brief.
+- A **start** follow-up becomes an item of its own, in this item's factory or another, when this item's work lands. It can wait a number of days or for other items first.
+- A follow-up with neither is for the architect: it joins the factory's triage item when this item lands. Intake lists the items whose follow-ups wait for triage.
+
+A waiting follow-up has **Drop**, which stops it from ever being delivered or filed. A dropped follow-up, or one whose triage item was closed, has **File**. File opens New item with the follow-up's text and files it in this item's factory, with its origin recorded as a follow-up.
+
+The rest of the page tells how the item came to be:
+
+- **Came from**, in Details, says whether a person filed it (and through New item, the CLI or the API), it is a part of an assembly, a trigger filed it, or a follow-up did.
+- **Notes from other items** lists the notes that other items' agents, and trigger checks, left on this item, with their source. They are not a person's touch.
+- When an agent closed the item with a reason, the page says **Closed by** that agent, with the reason. Closing is not a person's Cancel; the item is cancelled all the same.
+
 ## Create items from events and schedules
 
-A factory can also create items on its own, from an event or a schedule. Those triggers are set in the factory definition (`board.triggers`) and listed on the factory's Intake page at `/o/<org>/f/<factory>/intake`.
+A factory can also create items on its own, from an event or a schedule. Those triggers are set in the factory definition (`board.triggers`) and listed on the factory's Intake page at `/o/<org>/f/<factory>/intake`, which [Intake](../intake/) describes.
 
 On that page you can:
 

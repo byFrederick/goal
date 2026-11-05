@@ -45,11 +45,7 @@ function Where({ followUp, source }: { followUp: FollowUp; source: string }) {
     case 'dropped':
       return <>Dropped{followUp.reason ? `: ${followUp.reason}` : ''}</>;
     case 'delivered':
-      return (
-        <>
-          Note on {followUp.for ? <RefLink item={followUp.for} /> : 'another item'}, delivered
-        </>
-      );
+      return <>Note on {followUp.for ? <RefLink item={followUp.for} /> : 'another item'}, delivered</>;
     case 'filed':
       return followUp.target === 'triage' ? (
         <>In the triage item {filed ?? 'for the architect'}</>
@@ -89,7 +85,8 @@ export function FollowUpsCard({ item }: { item: Item }) {
         <span className="inline-flex items-center gap-1">
           Follow-ups
           <InfoTip about="follow-ups">
-            Written by this item's agents. A note goes to the item it names now; the rest are filed when this item lands. Drop one before then if it is wrong.
+            Written by this item's agents. A note goes to the item it names now; the rest are filed when this item
+            lands. Drop one before then if it is wrong.
           </InfoTip>
         </span>
       }
@@ -112,7 +109,8 @@ function FollowUpRow({ item, followUp }: { item: Item; followUp: FollowUp }) {
   const drop = useMutation({
     mutationFn: () => dropFollowUp(org.id, item.id, followUp.id),
     onSuccess: () => client.invalidateQueries({ queryKey: ['org', org.id, 'item'] }),
-    onError: (err) => toast.error('Could not drop the follow-up', { description: err instanceof ApiError ? err.message : '' }),
+    onError: (err) =>
+      toast.error('Could not drop the follow-up', { description: err instanceof ApiError ? err.message : '' }),
   });
   // A follow-up in a triage item can be filed once a person closed that item.
   const triage = useQuery({
@@ -125,7 +123,13 @@ function FollowUpRow({ item, followUp }: { item: Item; followUp: FollowUp }) {
   let action: ReactNode = null;
   if (followUp.state === 'waiting' && canOperate) {
     action = (
-      <Button variant="secondary" size="sm" disabled={drop.isPending} onClick={() => drop.mutate()} aria-label={`Drop: ${followUp.text}`}>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={drop.isPending}
+        onClick={() => drop.mutate()}
+        aria-label={`Drop: ${followUp.text}`}
+      >
         Drop
       </Button>
     );
@@ -167,7 +171,8 @@ export function NotesCard({ notes }: { notes: readonly ItemNoteFrom[] }) {
         <span className="inline-flex items-center gap-1">
           Notes from other items
           <InfoTip about="notes from other items">
-            Agents' notes from other items, and the notes a trigger's check left. They reach this item's next run, after its brief, and are not a person's touch.
+            Agents' notes from other items, and the notes a trigger's check left. They reach this item's next run, after
+            its brief, and are not a person's touch.
           </InfoTip>
         </span>
       }

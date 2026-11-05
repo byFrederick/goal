@@ -327,7 +327,13 @@ describe('Items filters in the URL', () => {
 
   it('says "Starts <date>" for an item that has not started', async () => {
     renderItems([
-      item({ id: 'later', ref: 'sre#561', title: 'Add the migration', state: 'queued', start: { at: '2026-11-19T09:00:00Z' } }),
+      item({
+        id: 'later',
+        ref: 'sre#561',
+        title: 'Add the migration',
+        state: 'queued',
+        start: { at: '2026-11-19T09:00:00Z' },
+      }),
       item({ id: 'now', ref: 'sre#562', title: 'Plain item', state: 'queued' }),
     ]);
 

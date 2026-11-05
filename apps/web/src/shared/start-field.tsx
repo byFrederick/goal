@@ -23,13 +23,20 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** Tomorrow at 09:00, where Later starts. */
 export function defaultStart(now = new Date()): StartChoice {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  return { mode: 'now', date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: '09:00', after: '' };
+  return {
+    mode: 'now',
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: '09:00',
+    after: '',
+  };
 }
 
 /** The request's `start` for a choice: none for Now, or what to tell the person is missing. */
 export function startOf(choice: StartChoice): { start?: StartRequest; missing?: string } {
   if (choice.mode === 'later') {
-    return choice.date && choice.time ? { start: { at: `${choice.date}T${choice.time}` } } : { missing: 'Pick a date and a time.' };
+    return choice.date && choice.time
+      ? { start: { at: `${choice.date}T${choice.time}` } }
+      : { missing: 'Pick a date and a time.' };
   }
   if (choice.mode === 'after') {
     const refs = choice.after.split(/[\s,]+/).filter(Boolean);
@@ -66,7 +73,8 @@ export function StartField({
       <div className="flex items-center gap-1 text-sm text-muted">
         Start
         <InfoTip about="Start" side="top">
-          Later waits in the inbox under Coming up. After items waits until they are done. A date and time are read in your notification time zone, or UTC when you have not set one.
+          Later waits in the inbox under Coming up. After items waits until they are done. A date and time are read in
+          your notification time zone, or UTC when you have not set one.
         </InfoTip>
       </div>
       <SegmentedControl

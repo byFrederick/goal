@@ -50,7 +50,7 @@ export function WebhooksCard({ webhooks }: { webhooks: readonly IntakeWebhook[] 
                 </span>
                 <span className="flex min-w-0 items-center gap-2 text-secondary text-muted">
                   <CornerDownRight size={12} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
-                  <span className="truncate font-mono text-meta">{webhook.sender}</span>
+                  <span className="break-all font-mono text-meta">{webhook.sender}</span>
                 </span>
               </span>
               <span className="inline-flex flex-none items-center gap-2 text-secondary font-medium motion-safe:transition-colors">

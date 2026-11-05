@@ -17,16 +17,20 @@ import { Button } from '../../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../../ui/dialog';
 
 /** The agent and reason of an item an agent closed, from its cancelled event; none for a person's cancel. */
-export function closedBy(item: Pick<Item, 'state'>, events: readonly ItemEvent[]): { agent: string; reason: string } | null {
+export function closedBy(
+  item: Pick<Item, 'state'>,
+  events: readonly ItemEvent[],
+): { agent: string; reason: string } | null {
   if (item.state !== 'cancelled') return null;
   const event = events.findLast((e) => e.kind === 'cancelled');
-  if (!event || event.data.closed !== true) return null;
+  if (event?.data.closed !== true) return null;
   const agent = typeof event.data.agent === 'string' ? event.data.agent : event.actor;
   const reason = typeof event.data.reason === 'string' ? event.data.reason : '';
   return { agent, reason };
 }
 
-const banner = 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-line bg-panel px-4 py-3 text-body';
+const banner =
+  'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-line bg-panel px-4 py-3 text-body';
 
 export function ClosedBanner({ closed }: { closed: { agent: string; reason: string } }) {
   return (

@@ -69,7 +69,7 @@ function Sub({ children }: { children: ReactNode }) {
   return (
     <span className="flex min-w-0 items-center gap-2 text-secondary text-muted">
       <CornerDownRight size={12} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
-      <span className="min-w-0 truncate">{children}</span>
+      <span className="min-w-0 break-words">{children}</span>
     </span>
   );
 }

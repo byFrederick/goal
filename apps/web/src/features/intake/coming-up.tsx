@@ -77,7 +77,7 @@ function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean
             </Link>
             <span className="flex min-w-0 items-center gap-2 text-secondary text-muted">
               <CornerDownRight size={12} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 break-words">
                 <CameFrom item={item} />
                 {when && item.needs.length > 0 ? `, then waits for ${plural(item.needs.length, 'open item')}` : null}
               </span>

@@ -85,11 +85,21 @@ describe('StartBanner', () => {
 
 describe('Closed by', () => {
   const cancelled = (data: Record<string, unknown>): ItemEvent =>
-    ({ id: 9, item_id: 'item-1', at: '2026-11-01T10:00:00Z', kind: 'cancelled', station: 'spec', actor: 'agent:architect', data }) as ItemEvent;
+    ({
+      id: 9,
+      item_id: 'item-1',
+      at: '2026-11-01T10:00:00Z',
+      kind: 'cancelled',
+      station: 'spec',
+      actor: 'agent:architect',
+      data,
+    }) as ItemEvent;
 
   it('reads the agent and reason of an item an agent closed', () => {
     expect(
-      closedBy({ state: 'cancelled' }, [cancelled({ closed: true, agent: 'architect', reason: 'Nothing here is work.' })]),
+      closedBy({ state: 'cancelled' }, [
+        cancelled({ closed: true, agent: 'architect', reason: 'Nothing here is work.' }),
+      ]),
     ).toEqual({ agent: 'architect', reason: 'Nothing here is work.' });
   });
 

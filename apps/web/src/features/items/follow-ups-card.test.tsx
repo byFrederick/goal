@@ -124,11 +124,14 @@ describe('FollowUpsCard', () => {
     expect(title.value).toBe('Follow-up 4');
     fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
 
-    await waitFor(() => expect(fileFollowUp).toHaveBeenCalledWith('org-1', 'item-519', 'fu-4', { title: 'Follow-up 4' }));
+    await waitFor(() =>
+      expect(fileFollowUp).toHaveBeenCalledWith('org-1', 'item-519', 'fu-4', { title: 'Follow-up 4' }),
+    );
   });
 
   it('has File on a triage follow-up only once its triage item is closed', async () => {
-    const triage = (state: Item['state']) => [[itemQuery('org-1', 'triage-1').queryKey, item({ id: 'triage-1', state })]] as never;
+    const triage = (state: Item['state']) =>
+      [[itemQuery('org-1', 'triage-1').queryKey, item({ id: 'triage-1', state })]] as never;
 
     render(item({ follow_ups: [follow[4] as FollowUp] }), triage('cancelled'));
     const closed = await screen.findByRole('region', { name: /Follow-ups/ });
@@ -153,8 +156,21 @@ describe('NotesCard', () => {
       page: () => (
         <NotesCard
           notes={[
-            { id: 1, text: 'Confirm the brief deletes internal/connkind.', from_item: 'software#517', agent: 'backend-engineer', station: 'build', at: '2026-11-01T10:00:00Z' },
-            { id: 2, text: '<b>Check</b> found a stale ticket.', trigger: 'jira', agent: 'jira-checker', at: '2026-11-02T10:00:00Z' },
+            {
+              id: 1,
+              text: 'Confirm the brief deletes internal/connkind.',
+              from_item: 'software#517',
+              agent: 'backend-engineer',
+              station: 'build',
+              at: '2026-11-01T10:00:00Z',
+            },
+            {
+              id: 2,
+              text: '<b>Check</b> found a stale ticket.',
+              trigger: 'jira',
+              agent: 'jira-checker',
+              at: '2026-11-02T10:00:00Z',
+            },
           ]}
         />
       ),
