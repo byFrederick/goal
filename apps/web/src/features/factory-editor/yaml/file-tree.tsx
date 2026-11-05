@@ -98,17 +98,15 @@ export function FileTree({
         <button
           type="button"
           aria-current={selected ? 'true' : undefined}
-          // An sr-only span would be read with a space before the comma, so the name is set whole.
-          aria-label={
-            changed.has(file.path) || errors > 0
-              ? `${file.name}${errors > 0 ? `, ${plural(errors, 'error')}` : ''}${changed.has(file.path) ? ', changed' : ''}`
-              : undefined
-          }
           onClick={() => onOpen(file.path)}
           className={cn(rowBase, selected && 'bg-hover font-control text-ink')}
         >
           <File size={14} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-muted" />
-          <span className="truncate font-mono text-meta">{file.name}</span>
+          <span className="truncate font-mono text-meta">
+            {file.name}
+            {errors > 0 ? <span className="sr-only">, {plural(errors, 'error')}</span> : null}
+            {changed.has(file.path) ? <span className="sr-only">, changed</span> : null}
+          </span>
           <ErrorCount count={errors} />
           <ChangedMark on={changed.has(file.path)} words={false} />
         </button>
