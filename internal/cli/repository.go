@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 
@@ -21,15 +22,24 @@ func repositoryCommand(ctx context.Context, out *printer, getenv func(string) st
 	return repositoryTest(ctx, out, getenv, args[1:])
 }
 
-// repositoryTest runs goal repository test <url> --secret <name>. It exits 1 when a check failed
-// or the host gave no answer.
+// repositoryTest runs goal repository test <url> --secret <name> [--factory <factory> [--access
+// read|write]]: with --factory on the factory's route (ADR 0041 decision 8), for the access its
+// entry asks (write, the runtime.repository shorthand's, by default), and goald keeps the result;
+// without it on the organization's route. It exits 1 when a check failed or the host gave no
+// answer.
 func repositoryTest(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("repository test")
 	orgFlag := addOrgFlag(fs)
 	secret := fs.String("secret", "", "the secret that holds the token")
+	factoryRef := fs.String("factory", "", "test for this factory, which keeps the result")
+	access := fs.String("access", "", "the access the factory's entry asks: read or write (default write)")
 
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) != 1 || *secret == "" {
+		return errUsage
+	}
+
+	if *access != "" && (*factoryRef == "" || !gen.FactoryRepositoryTestRequestAccess(*access).Valid()) {
 		return errUsage
 	}
 
@@ -38,7 +48,18 @@ func repositoryTest(ctx context.Context, out *printer, getenv func(string) strin
 		return err
 	}
 
-	res, err := c.TestRepositoryWithResponse(ctx, c.org, gen.RepositoryTestRequest{Url: pos[0], Secret: *secret})
+	if *factoryRef != "" {
+		return factoryRepositoryTest(ctx, out, c, *factoryRef, gen.FactoryRepositoryTestRequest{
+			Url: pos[0], Secret: *secret, Access: gen.FactoryRepositoryTestRequestAccess(cmp.Or(*access, accessWrite)),
+		})
+	}
+
+	return orgRepositoryTest(ctx, out, c, pos[0], *secret)
+}
+
+// orgRepositoryTest tests url with secret on the organization's route and prints both checks.
+func orgRepositoryTest(ctx context.Context, out *printer, c orgClient, url, secret string) error {
+	res, err := c.TestRepositoryWithResponse(ctx, c.org, gen.RepositoryTestRequest{Url: url, Secret: secret})
 	if err != nil {
 		return apiDown(err)
 	}
@@ -49,7 +70,7 @@ func repositoryTest(ctx context.Context, out *printer, getenv func(string) strin
 
 	r := *res.JSON200
 
-	out.printf("%s with secret %s\n", pos[0], *secret)
+	out.printf("%s with secret %s\n", url, secret)
 	out.printf("  %s read: %s\n", mark(r.Read.Ok), r.Read.Reason)
 	out.printf("  %s push: %s\n", mark(r.Push.Ok), r.Push.Reason)
 
@@ -58,6 +79,47 @@ func repositoryTest(ctx context.Context, out *printer, getenv func(string) strin
 	}
 
 	return nil
+}
+
+// accessWrite is the access a factory repository test asks for without --access.
+const accessWrite = "write"
+
+// factoryRepositoryTest tests body on the factory's route and prints the result: the summary,
+// its warning or note, then both checks. It exits 1 when the token can't do what the access asks.
+func factoryRepositoryTest(ctx context.Context, out *printer, c orgClient, ref string, body gen.FactoryRepositoryTestRequest) error {
+	res, err := c.TestFactoryRepositoryWithResponse(ctx, c.org, ref, body)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	r := *res.JSON200
+
+	out.printf("%s with secret %s for %s (%s)\n", body.Url, body.Secret, ref, body.Access)
+	out.printf("  %s %s\n", mark(r.Tested && r.Ok), r.Summary)
+	printTestNotes(out, "    ", r)
+	out.printf("  %s read: %s\n", mark(r.Read.Ok), r.Read.Reason)
+	out.printf("  %s push: %s\n", mark(r.Push.Ok), r.Push.Reason)
+
+	if !r.Tested || !r.Ok {
+		return errRepositoryTestFailed
+	}
+
+	return nil
+}
+
+// printTestNotes prints a kept repository test's warning and note, when it has them.
+func printTestNotes(out *printer, indent string, r gen.FactoryRepositoryTest) {
+	if r.Warning != nil {
+		out.printf("%swarning: %s\n", indent, *r.Warning)
+	}
+
+	if r.Note != nil {
+		out.printf("%snote: %s\n", indent, *r.Note)
+	}
 }
 
 // mark is ✓ for a check that passed, ✗ for one that did not.

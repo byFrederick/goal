@@ -255,6 +255,14 @@ the factories: current version, open draft, paused (--archived: only the archive
 
 Flags: `--validate`, `--archived`.
 
+## goal factory show
+
+```text
+goal factory show <factory>
+```
+
+the factory as goal factory list shows it, then each repository of its current version with its access (\* the default) and the test goald kept for it, or not tested; kept tests of no repository come after
+
 ## goal factory versions
 
 ```text
@@ -493,12 +501,12 @@ Flags: `--server <name>`, `--version draft|current|N`.
 ## goal repository test
 
 ```text
-goal repository test <url> --secret <name>
+goal repository test <url> --secret <name> [--factory <factory> [--access read|write]]
 ```
 
-whether the secret's token can read the repository and push to it (github.com and gitlab.com), asked of the code host by goald with the secret opened there (owners and admins; exit 1 when a check fails)
+whether the secret's token can read the repository and push to it (github.com and gitlab.com), asked of the code host by goald with the secret opened there (owners and admins; exit 1 when a check fails). --factory tests for the factory, for the access its entry asks (default write), and goald keeps the result (goal factory show lists it); the url may be an owner pattern, https://github.com/acme/\*
 
-Flags: `--secret <name>`.
+Flags: `--secret <name>`, `--factory <factory>`, `--access read|write`.
 
 ## goal access
 
