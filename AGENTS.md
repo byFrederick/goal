@@ -60,5 +60,5 @@ Other docs cite these as "AGENTS.md rule N", so the numbers stay fixed.
 - Run `task hooks:install` once per clone. The pre-push hook then runs `task check` before every push.
 - When you change SQL or an adapter, `task test-integration` passes too.
 - When you change `db/migrations/` or `apps/auth/`, `task migrate-check` passes too.
-- CI (`.github/workflows/ci.yml`) gates every pull request the same way. Never push with `--no-verify` without saying so in the pull request.
+- CI (`.github/workflows/ci.yml`) gates every pull request into main the same way. On one into an assembly branch, and on every push to main, it runs the e2e job (`task web:e2e`, the Playwright suite); the job is skipped on pull requests into main until software#685 fixes the suite: [testing.md](docs/engineering/testing.md#required-checks). Never push with `--no-verify` without saying so in the pull request.
 - A pull request states which acceptance criteria it meets and how each was verified.

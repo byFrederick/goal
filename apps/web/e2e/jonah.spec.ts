@@ -157,7 +157,9 @@ const jonahPages = [
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [1440, 1024, 768, 390]) {
     for (const [name, url, tab] of jonahPages) {
-      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({ page }) => {
+      test(`${name} at ${width} px in ${scheme}: current tab, no sideways scroll, screenshot`, async ({
+        page,
+      }, testInfo) => {
         await page.setViewportSize({ width, height: 900 });
         await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
         await page.goto(url);
@@ -165,7 +167,10 @@ for (const scheme of ['light', 'dark'] as const) {
         await expect(tabs.locator('[aria-current="page"]')).toHaveCount(1);
         await expect(tabs.getByRole('link', { name: new RegExp(tab) })).toHaveAttribute('aria-current', 'page');
         await expectNoHorizontalScroll(page);
-        await expect(page).toHaveScreenshot(`jonah-${name}-${width}-${scheme}.png`);
+        // The viewport is set above, so the three projects draw the same picture: one keeps its baselines.
+        if (testInfo.project.name === 'desktop-1440') {
+          await expect(page).toHaveScreenshot(`jonah-${name}-${width}-${scheme}.png`);
+        }
       });
     }
   }

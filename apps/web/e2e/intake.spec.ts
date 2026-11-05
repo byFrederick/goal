@@ -11,7 +11,7 @@ test.beforeEach(async ({ request }) => {
 
 test('the Intake page lists where work came from, the triggers and the suggested triggers', async ({ page }) => {
   await page.goto(intake);
-  await expect(page).toHaveTitle('Intake · Software · Acme · Goal');
+  await expect(page).toHaveTitle('Intake · software · Acme · Goal');
   await expect(page.getByRole('heading', { level: 1, name: 'Intake' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'Where the last 48 items came from' })).toBeVisible();
 

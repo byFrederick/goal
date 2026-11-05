@@ -161,8 +161,8 @@ test('the builder lists the organization’s sources to tick for the factory', a
   await fits(page);
 });
 
-// The pictures of the list, a source and New source at 1440 and 390 px in both themes. The Playwright
-// suite cannot run in the build box, so the baselines are made by the first CI run with --update-snapshots.
+// The pictures of the list, a source and New source at 1440 and 390 px in both themes. The baselines are
+// made on the CI runner (the e2e job uploads them), since another machine's fonts draw other pixels.
 for (const theme of ['light', 'dark'] as const) {
   for (const width of [1440, 390]) {
     const screens = [
@@ -172,7 +172,9 @@ for (const theme of ['light', 'dark'] as const) {
       { name: 'new-confluence', path: '/o/acme/knowledge/new?kind=confluence', heading: 'New source' },
     ];
     for (const { name, path, heading } of screens) {
-      test(`knowledge ${name} screenshot, ${theme}, ${width} px`, async ({ page }) => {
+      test(`knowledge ${name} screenshot, ${theme}, ${width} px`, async ({ page }, testInfo) => {
+        // The viewport is set below, so the three projects draw the same picture: one keeps its baselines.
+        test.skip(testInfo.project.name !== 'desktop-1440', 'one project keeps the baselines');
         await page.addInitScript((value) => window.localStorage.setItem('goal-theme', value), theme);
         await page.setViewportSize({ width, height: 900 });
         await page.goto(path);

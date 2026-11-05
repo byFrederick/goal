@@ -1,20 +1,39 @@
-# The same gate as the local pre-push hook (.githooks/pre-push), only on pull requests whose base is
+# The same gate as the local pre-push hook (.githooks/pre-push) on pull requests whose base is
 # main: `task check`, and `task migrate-check` when db/migrations/ or apps/auth/ changed against the
 # pull request's base; plus `task test-integration` on PostgreSQL 18,
-# RustFS and Mailpit from compose.yaml. The tools come from .mise.toml, as on a laptop, and so does
+# RustFS and Mailpit from compose.yaml; plus the web app's Playwright suite (`task web:e2e`'s
+# `playwright test`) at 375, 768 and 1440 px against vite preview and the mock API, when apps/web/,
+# packages/api-client/, contracts/ or this workflow changed against the base (otherwise each shard succeeds
+# without running it, so it always reports). The e2e job is a matrix of 12 Playwright shards
+# (`playwright test --shard=<i>/12`, fail-fast off), so each finishes well inside its timeout.
+# The tools come from .mise.toml, as on a laptop, and so does
 # how they install (its [settings]: npm: tools such as pnpm install with npm, not aube).
 # If the workflow shows as disabled on GitHub, a person re-enables it: `gh workflow enable ci.yml`.
-# Pull requests into an assembly's integration branch (goal/a<number>-...) run no ci: each part's
-# merged-tree checks (task check:changed) gate its merge there, and the landing pull request into
-# main runs ci. Nothing runs on a push to main; deploy.yml is dispatched by hand.
+# Pull requests into an assembly's integration branch (goal/a<number>-..., matched by goal/a*) run
+# only the e2e shards, and they are informational there: check and integration carry
+# `github.base_ref == 'main'`, because each part's merged-tree checks (task check:changed) gate its
+# merge there, and the landing pull request into main runs all of ci. A push to main runs only the
+# e2e shards, always the whole suite; check and integration already ran on the pull request.
+# The e2e job is skipped on pull requests into main for now: the suite still fails there (software#685
+# fixes it), so a red e2e would block every pull request into main that touches apps/web/,
+# packages/api-client/ or contracts/. It runs on pull requests into goal/a* branches, where
+# software#685's parts need its results, and on pushes to main, where it is informational.
+# software#685's last part turns it back on for pull requests into main, by removing the
+# `github.base_ref != 'main'` condition on the e2e job.
+# deploy.yml is dispatched by hand. The e2e job is not a required check. A shard that fails uploads
+# its HTML report and traces as the artifact e2e-report-<i> (7 days), one per shard.
 # Hardening (github-actions-hardening skill): a read-only token no job widens, actions pinned to
 # commit SHAs, only the pull_request trigger for pull requests, no secrets (pull requests from
-# forks get none, and none are needed), no ${{ }} expressions inside run scripts.
-# Concurrency: one group per pull request; a newer push to it cancels its run in flight.
+# forks get none, and none are needed), no ${{ }} expressions inside run scripts (the shard index
+# reaches the script through env).
+# Concurrency: one group per pull request, and one for main; a newer push to either cancels its
+# run in flight, so a newer merge into main cancels the e2e run of the one before it.
 name: ci
 
 on:
   pull_request:
+    branches: [main, 'goal/a*']
+  push:
     branches: [main]
 
 permissions:
@@ -27,6 +46,7 @@ concurrency:
 jobs:
   check:
     name: task check
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -60,6 +80,7 @@ jobs:
 
   integration:
     name: task test-integration
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -75,3 +96,65 @@ jobs:
           checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
       - name: Integration tests on PostgreSQL 18, RustFS and Mailpit (compose.yaml)
         run: task test-integration
+
+  e2e:
+    name: task web:e2e (${{ matrix.shard }}/12)
+    # Skipped on pull requests into main until software#685 makes the suite pass (see the header).
+    if: github.event_name == 'push' || github.base_ref != 'main'
+    runs-on: ubuntu-latest
+    # About 3459 tests on one worker at up to ~3 s each while failing: a twelfth is ~15 minutes,
+    # plus a vite build per shard.
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the pull request's base commit, for the web diff
+      - name: Did apps/web/, packages/api-client/, contracts/ or this workflow change
+        id: web
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$(git diff --name-only "$BASE_SHA"...HEAD -- apps/web/ packages/api-client/ contracts/ .github/workflows/ci.yml)" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing under apps/web/, packages/api-client/, contracts/ or ci.yml changed: the suite does not run."
+          fi
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        if: steps.web.outputs.run == 'true' || github.event_name == 'push'
+        with:
+          version: 2026.10.3
+      - uses: go-task/setup-task@a00fbb05ce67b35648be3c78cbc9fd85354c757e # v2.2.0
+        if: steps.web.outputs.run == 'true' || github.event_name == 'push'
+        with:
+          version: 3.46.1
+          checksum: 8220f1b4563a5bed932348b7350aafba66e1100e90bd411e4bcda4fe80de08f1 # task_linux_amd64.tar.gz
+      # task web:e2e installs the Chromium build only; the runner also needs its OS libraries.
+      - name: Chromium and its OS dependencies
+        if: steps.web.outputs.run == 'true' || github.event_name == 'push'
+        run: |
+          task web:install
+          pnpm --dir apps/web exec playwright install --with-deps chromium
+      # task web:e2e's `playwright test`, one shard of it (the browser is installed above).
+      - name: Playwright at 375, 768 and 1440 px against vite preview and the mock API, one shard
+        if: steps.web.outputs.run == 'true' || github.event_name == 'push'
+        working-directory: apps/web
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: pnpm exec playwright test --shard="$SHARD/12"
+      - name: Upload the HTML report and the traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-report-${{ matrix.shard }}
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            apps/web/e2e/*.spec.ts-snapshots/
+          retention-days: 7
+          if-no-files-found: ignore
