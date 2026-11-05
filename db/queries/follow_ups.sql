@@ -25,6 +25,19 @@ LEFT JOIN work_items w ON w.id = f.filed_item_id
 WHERE f.item_id = sqlc.arg(item_id)
 ORDER BY f.created_at, f.id;
 
+-- name: ItemFiledFrom :many
+-- The follow-ups filed as or onto an item (follow_ups_filed_item_idx), its sources, oldest first,
+-- each with its source item and the item whose landing filed it: the source, or its assembly for
+-- a part, as ClaimLandedFollowUp takes it. The joins are under row-level security, so another
+-- organization's row or item never resolves.
+SELECT f.id, f.station, f.agent, s.id AS source_id, s.factory_id AS source_factory_id, s.number AS source_number,
+       l.id AS landed_id, l.factory_id AS landed_factory_id, l.number AS landed_number
+FROM follow_ups f
+JOIN work_items s ON s.id = f.item_id
+JOIN work_items l ON l.id = COALESCE(s.parent_id, s.id)
+WHERE f.filed_item_id = sqlc.arg(item_id)
+ORDER BY f.created_at, f.id;
+
 -- name: ClaimNote :one
 -- The oldest waiting note whose source item is trusted (follow_ups_waiting_notes_idx), with its
 -- source's number, locked for the delivering transaction; a note another instance holds is
