@@ -15,7 +15,8 @@ const path = '/o/acme/settings';
 const longHost = 'git.a-very-long-subdomain.example.com';
 
 test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset');
+  // Remove and the Add form need org:code_hosts, which is the owner's after a fresh sign-in.
+  await request.post('/__mock/reset', { data: { auth: { mode: 'session', signed_in: 'fresh' } } });
 });
 
 for (const size of sizes) {
@@ -27,7 +28,7 @@ for (const size of sizes) {
       await page.goto(path);
       const hosts = page.getByRole('region', { name: 'Code hosts' });
       await expect(hosts.getByText('github.com', { exact: true })).toBeVisible();
-      await expect(hosts.getByText(longHost)).toBeVisible();
+      await expect(hosts.getByText(longHost, { exact: true })).toBeVisible();
 
       await expectNoHorizontalScroll(page);
       await expectNoClippedElements(page);
