@@ -304,6 +304,36 @@ func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]dom
 	return out, nil
 }
 
+// OpenItemRepositories implements ports.Store.
+func (s *Store) OpenItemRepositories(ctx context.Context, factory domain.FactoryID) ([]domain.RepositoryUse, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []domain.RepositoryUse
+
+	for id, rows := range s.repos {
+		it, ok := s.visible(id, org)
+		if !ok || it.FactoryID != factory || it.State == domain.StateDone || it.State == domain.StateCancelled {
+			continue
+		}
+
+		for _, r := range rows {
+			out = append(out, domain.RepositoryUse{Repo: r.Repo, Item: id, Number: it.Number})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.RepositoryUse) int {
+		return cmp.Or(cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.Number, b.Number))
+	})
+
+	return out, nil
+}
+
 // boolRank orders false before true.
 func boolRank(b bool) int {
 	if b {

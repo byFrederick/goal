@@ -91,6 +91,11 @@ type Store interface {
 	// entry (domain.ResolveItemRepositories).
 	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 
+	// OpenItemRepositories returns the repositories the factory's open items (not done, not
+	// cancelled) use, one per item and repository, by repository then item number. Publish
+	// reads it to refuse a version that drops the entry such an item needs.
+	OpenItemRepositories(ctx context.Context, factory domain.FactoryID) ([]domain.RepositoryUse, error)
+
 	// FollowUps returns the follow-ups kept for an item (Transition.FollowUps), oldest first and
 	// in output order within a run, each filed one with the factory and number of the item it was
 	// filed as or onto (FiledFactory, FiledNumber), another factory's included, in the same read.
