@@ -1,10 +1,12 @@
 package storetest
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +25,7 @@ var repositoriesTests = []struct {
 	{"ItemRepositories_PartsWrittenWithTheirs", testPartsWrittenWithTheirRepositories},
 	{"ItemRepositories_StartFollowUpTakesItsSources", testStartFollowUpTakesItsSourcesRepositories},
 	{"ItemRepositories_TriageGainsJoiningSourcesUpToTheCap", testTriageGainsJoiningSourcesRepositories},
+	{"ItemRepositories_TriageJoinsWhileTheItemJoins", testTriageJoinsWhileTheItemJoins},
 	{"OpenItemRepositories_OnlyOpenItems", testOpenItemRepositoriesOnlyOpenItems},
 	{"ItemRepositories_JoinAppendsUpToTheCap", testJoinItemRepositoriesAppendsUpToTheCap},
 	{"ItemRepositories_PushedJoinAtFinish", testPushedRepositoriesJoinAtFinish},
@@ -311,6 +314,83 @@ func testTriageGainsJoiningSourcesRepositories(f *fixture) {
 	for i, r := range rows {
 		if r.Ordinal != i || r.Joined != domain.JoinedFiling || (i > 0 && !r.JoinedAt.Equal(tSweep)) {
 			t.Errorf("row %d = %+v; want ordinal %d joined filing, at the sweep after the first", i, r, i)
+		}
+	}
+}
+
+// Sweeps whose landed sources bring repositories into an open triage item, at the same time as
+// JoinItemRepositories calls on it, all succeed and leave its ordinals 0..n-1, in any row order: the triage item's
+// lock serializes both joins.
+func testTriageJoinsWhileTheItemJoins(f *fixture) {
+	t := f.t
+	lines := []domain.Line{repoLineOf(f.factory, nameDev)}
+
+	first := f.create(t, domain.NewItem{Title: "first", Repositories: filed(repoWeb)})
+	f.keepNotes(t, first, triageFollowUp("From first"))
+	f.land(t, first, domain.StateDone, tLanded)
+	f.sweep(t, lines, 10)
+
+	tri := f.triageItems(t, f.factory)
+	if len(tri) != 1 {
+		t.Fatalf("triage items = %+v; want one", tri)
+	}
+
+	const n = 4
+
+	for i := range n {
+		src := f.create(t, domain.NewItem{Title: fmt.Sprintf("src %d", i), Repositories: filed(fmt.Sprintf("github.com/acme/s%d", i))})
+		f.keepNotes(t, src, triageFollowUp(fmt.Sprintf("From src %d", i)))
+		f.land(t, src, domain.StateDone, tLanded)
+	}
+
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []error
+	)
+
+	keep := func(err error) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		errs = append(errs, err)
+	}
+
+	for i := range n {
+		wg.Go(func() {
+			_, err := f.Store.FileFollowUps(f.ctx(t), lines, tSweep, 1)
+			keep(err)
+		})
+		wg.Go(func() {
+			keep(f.Store.JoinItemRepositories(f.ctx(t), tri[0].ID, domain.JoinedDefault, []string{fmt.Sprintf("github.com/acme/j%d", i)}, tSweep))
+		})
+	}
+
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		t.Fatalf("concurrent sweeps and joins: %v", err)
+	}
+
+	f.sweep(t, lines, 10)
+
+	rows := f.itemRepositories(t, tri[0].ID)
+	if len(rows) != 1+2*n {
+		t.Errorf("triage repositories = %v; want %d", domain.ItemRepositoryKeys(rows), 1+2*n)
+	}
+
+	ords := make([]int, len(rows))
+	for i, r := range rows {
+		ords[i] = r.Ordinal
+	}
+
+	slices.Sort(ords)
+
+	for i, o := range ords {
+		if o != i {
+			t.Errorf("triage ordinals = %v; want 0..%d with no gap or repeat", ords, len(rows)-1)
+
+			break
 		}
 	}
 }
