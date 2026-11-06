@@ -299,6 +299,36 @@ describe('the item layout', () => {
   });
 });
 
+describe('a blocked item', () => {
+  const blocked = (data: Record<string, unknown>): ItemEvent => ({
+    id: 2,
+    item_id: 'item-147',
+    at: '2026-10-25T08:50:00Z',
+    kind: 'blocked',
+    station: 'spec',
+    actor: 'engine',
+    data,
+  });
+
+  it('says a missing model key in plain words, links to Settings and keeps the reason behind the ⓘ', async () => {
+    renderPage(item(), [approval, blocked({ reason: 'names no runtime.modelKey', code: 'model_key_missing' })]);
+
+    const link = await screen.findByRole('link', { name: 'Settings' });
+    expect(link.getAttribute('href')).toMatch(/\/settings#runtime$/);
+    expect(link.parentElement?.textContent).toContain('Agents need a model key: add one in Settings');
+    expect(screen.getByRole('button', { name: 'About Why it is blocked' })).toBeTruthy();
+    expect(screen.queryByText(/“names no runtime.modelKey”/)).toBeNull();
+  });
+
+  it('shows Blocked with its quoted reason when the event has no code', async () => {
+    renderPage(item(), [approval, blocked({ reason: 'tests fail' })]);
+
+    expect(await screen.findByText('“tests fail”')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'About Why it is blocked' })).toBeNull();
+  });
+});
+
 describe('the item decisions at each width', () => {
   // The top bar holds the decisions from 768 px; a phone has them in a card under the title. Never both.
   function stubWidth(phone: boolean) {

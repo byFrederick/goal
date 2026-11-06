@@ -9,6 +9,8 @@ import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
+import { BlockedSentence } from '../../shared/blocked-sentence';
+import { blockedWords } from '../../shared/blocked-words';
 import { refParam } from '../../shared/factory';
 import { formatAge, formatClock, formatPercent, formatUsd, humanize } from '../../shared/format';
 import { useOrg } from '../../shared/org';
@@ -16,6 +18,7 @@ import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { InfoTip } from '../../ui/info-tip';
 import { NotAvailable } from '../../ui/not-available';
 import { SuccessLabel } from '../../ui/success-label';
 import { QuestionCard } from '../items/question-card';
@@ -170,6 +173,8 @@ function alertSummary(entry: InboxEntry, station: string): string {
   if (entry.kind === 'watch_worse') return 'Its number got worse after it was published.';
   if (entry.kind === 'andon') return entry.andon?.reason ?? 'The andon cord is pulled.';
   if (entry.kind === 'blocked') {
+    const words = blockedWords(entry.blocked?.code);
+    if (words) return `${words.sentence}.`;
     return entry.blocked?.reason ?? (entry.blocked?.paused ? 'A person paused it.' : 'It is blocked.');
   }
   if (entry.kind === 'rework_warning') return `Rework is rising at ${station || 'its gate'}.`;
@@ -405,6 +410,7 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
     );
   }
   if (entry.kind === 'blocked') {
+    const words = blockedWords(entry.blocked?.code);
     return (
       <section
         aria-label="Why it is blocked"
@@ -414,7 +420,16 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
           {entry.blocked?.paused ? 'A person paused it' : 'It is blocked'}
           {station ? ` at ${station}` : ''}.
         </p>
-        <p className="m-0 text-secondary text-muted">{entry.blocked?.reason ?? 'No reason was recorded.'}</p>
+        {words ? (
+          <p className="m-0 flex items-center gap-1 text-secondary text-muted">
+            <span>
+              <BlockedSentence words={words} org={org.slug} factory={entry.factory.name} />
+            </span>
+            {entry.blocked?.reason ? <InfoTip about="Why it is blocked">{entry.blocked.reason}</InfoTip> : null}
+          </p>
+        ) : (
+          <p className="m-0 text-secondary text-muted">{entry.blocked?.reason ?? 'No reason was recorded.'}</p>
+        )}
       </section>
     );
   }

@@ -205,6 +205,34 @@ describe('step 8, watch your first item', () => {
     expect(screen.queryByText(/repository/)).toBeNull();
   });
 
+  it('says a missing model key in plain words with a link to Settings, and keeps Blocked words without a code', async () => {
+    const blockedAt = (id: number, data: Record<string, unknown>) =>
+      ({
+        id,
+        item_id: 'item-1',
+        at: new Date(created + 300_000 + id).toISOString(),
+        kind: 'blocked',
+        station: 'build',
+        actor: 'engine',
+        data,
+      }) as ItemEvent;
+    vi.mocked(listItemEvents).mockImplementation(
+      async () =>
+        ({
+          events: [...events, blockedAt(10, { reason: 'names no runtime.modelKey', code: 'model_key_missing' })],
+          next_after: null,
+        }) as never,
+    );
+    renderStep();
+
+    const timeline = await screen.findByRole('list', { name: 'Timeline' });
+    expect(timeline.textContent).toContain('Agents need a model key: add one in Settings');
+    expect(within(timeline).getByRole('link', { name: 'Settings' }).getAttribute('href')).toMatch(
+      /\/f\/software-delivery\/settings#runtime$/,
+    );
+    expect(timeline.textContent).not.toContain('runtime.modelKey');
+  });
+
   it('says nothing about pull requests when the factory only reads code', async () => {
     renderStep(undefined, '&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=acme-token');
 

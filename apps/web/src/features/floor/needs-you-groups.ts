@@ -3,6 +3,7 @@
 // Expedite entries wait on no person and the board already shows them, so they are left out; a kind
 // this build does not know is an Open row under Needs a decision.
 import type { InboxEntry, ItemCard } from '../../api/types';
+import { blockedWords } from '../../shared/blocked-words';
 import { humanize } from '../../shared/format';
 
 export type InboxGroupId = 'ready' | 'decide' | 'blocked';
@@ -64,7 +65,8 @@ function place(e: InboxEntry): Placed | null {
         to: 'item',
       };
     case 'blocked': {
-      const reason = e.blocked?.reason ? `: ${e.blocked.reason}` : '';
+      const words = blockedWords(e.blocked?.code);
+      const reason = words ? `: ${words.sentence}` : e.blocked?.reason ? `: ${e.blocked.reason}` : '';
       const why = `${e.blocked?.paused ? 'Paused' : 'Blocked'} at ${station}${reason}`;
       return item
         ? { group: 'blocked', action: 'retry', status: 'waiting', why, to: 'item' }
