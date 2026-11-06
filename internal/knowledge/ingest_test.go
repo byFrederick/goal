@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -1160,4 +1161,46 @@ func TestIngest_SyncOpensTheSecretForTheFactoriesListingIt(t *testing.T) {
 	defer secrets.mu.Unlock()
 
 	w.want("the audited uses", secrets.uses, secrets.uses[alphaBeta].Factory == beta, secrets.uses[docsToken] == domain.SecretUse{})
+}
+
+// A synced source that still names a connection and no secret fails ingest, naming the source and
+// its connection, and its reader lists nothing: goald no longer reads connections (ADR 0037).
+func TestIngest_ConnectionOnlySourceFails(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	ctx := w.ctx()
+
+	const githubKind = "github"
+
+	platform, err := connkind.Platform()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.conns.SyncPlatformKinds(t.Context(), platform); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.conns.Create(ctx, domain.NewConnection{Name: "acme-wiki", Kind: githubKind, Secrets: map[string]string{"token": "test-token"}}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.kb.CreateSource(ctx, domain.NewKnowledgeSource{
+		Name: "docs", Title: "Docs", Kind: domain.SourceSynced, Connection: "acme-wiki",
+	}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
+	w.syncDue(w.ingestor(nil))
+
+	src := w.source("docs")
+	w.want("a source on a connection only", src, src.Status == domain.SyncFailed,
+		strings.Contains(src.LastError, "source docs"), strings.Contains(src.LastError, "acme-wiki"),
+		strings.Contains(src.LastError, "give it a secret"))
+
+	if got := w.files("docs"); len(got) != 0 {
+		t.Errorf("files of docs = %v, want none", got)
+	}
 }

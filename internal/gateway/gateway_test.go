@@ -304,7 +304,6 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	h.gw, err = New(Deps{
 		Definitions:   defs,
 		Items:         h.store,
-		Connections:   h.connections,
 		StandingRules: h.rules,
 		Events:        h.store,
 		Clock:         h.clock,
@@ -665,7 +664,7 @@ func TestNew_RequiresPolicies(t *testing.T) {
 	_, conns, _ := newConnections(t, clock)
 
 	_, err := New(Deps{
-		Definitions: definitions{}, Items: store, Connections: conns, StandingRules: porttest.NewStandingRules(conns), Events: store,
+		Definitions: definitions{}, Items: store, StandingRules: porttest.NewStandingRules(conns), Events: store,
 		Clock: clock, Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{},
 	}, Config{Key: []byte("gateway-test-key")})
 	if err == nil || !strings.Contains(err.Error(), "Policies") {

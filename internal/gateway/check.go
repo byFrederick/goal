@@ -34,7 +34,7 @@ var editTools = []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "
 // checkBundle is a check's bundle (ADR 0040 decision 19; apps/worker/README.md, "Check mode"):
 // the check's agent's prompt and skills, the fixed answer contract as its output schema, the
 // trigger's check brief as the brief and its input as spec.check. Its tools are the agent's but
-// the built-ins that edit or run, which are denied; its environment or connections are the
+// the built-ins that edit or run, which are denied; its environment is the
 // agent's, with every ask tool off, as no person can answer one; check.maxUsd is its max_usd. Its
 // code is a reader's whatever its agent's (domain.Line.CheckCode, ADR 0041 decision 3): a login
 // per entry with a token, every entry's prefix read only and nothing to clone. It has no item,
@@ -83,7 +83,7 @@ func (g *Gateway) checkBundle(ctx context.Context, c domain.TaskClaims) (runBund
 			Skills: make([]string, 0, len(agent.Skills)), ToolsAllow: readOnly(agent.ToolsAllow),
 			ToolsDeny: withDenied(append(slices.Clone(agent.ToolsDeny), editTools...), c.DeniedCommands), Purpose: line.Purpose,
 			Brief: t.Check.Brief, MaxTurns: maxTurns, MaxUSD: t.Check.MaxUSD,
-			Connections: []bundleConnection{}, Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
+			Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
 			Check: &bundleCheck{Trigger: t.Name, Input: in},
 		},
 		Files: make(map[string][]byte, len(agentFiles)+1),
@@ -109,17 +109,14 @@ func (g *Gateway) checkBundle(ctx context.Context, c domain.TaskClaims) (runBund
 	return b, nil
 }
 
-// checkReach adds the agent's environment on secrets, or its connections, to b, with every ask
-// tool off.
+// checkReach adds the agent's environment on secrets to b, with every ask tool off; a version not
+// on secrets gets none.
 func (g *Gateway) checkReach(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
-	var err error
-	if line.OnSecrets() {
-		err = g.addEnvironment(ctx, c, line, agent, b)
-	} else {
-		err = g.addConnections(ctx, c, line, agent, b)
+	if !line.OnSecrets() {
+		return nil
 	}
 
-	if err != nil {
+	if err := g.addEnvironment(ctx, c, line, agent, b); err != nil {
 		return err
 	}
 
@@ -142,20 +139,9 @@ func readOnly(allow []string) []string {
 	return out
 }
 
-// askOff serves every ask tool of b's connections and environment servers as off: a check has
-// no item for a person to answer on (ADR 0040 decision 19).
+// askOff serves every ask tool of b's environment servers as off: a check has no item for a
+// person to answer on (ADR 0040 decision 19).
 func askOff(b *runBundle) {
-	for i := range b.Spec.Connections {
-		c := &b.Spec.Connections[i]
-		for tool, mode := range c.ToolModes {
-			if mode == domain.ToolModeAsk {
-				c.ToolModes[tool] = domain.ToolModeOff
-			}
-		}
-
-		c.AlwaysAllowOffered = []string{}
-	}
-
 	if b.Spec.Environment == nil {
 		return
 	}
