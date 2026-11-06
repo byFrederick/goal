@@ -285,7 +285,7 @@ describe('Needs you: deciding a Decision', () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(button.querySelector('svg')?.getAttribute('class')).toContain('animate-success-check'));
-    expect(button.textContent).toBe('Approved');
+    expect(button.querySelector('[data-slot="idle"]')?.textContent).toBe('Approved');
     expect(within(button).getByRole('status').textContent).toBe('Approved');
     expect(button.isConnected).toBe(true);
   });
@@ -299,8 +299,23 @@ describe('Needs you: deciding a Decision', () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(approveItem).toHaveBeenCalled());
-    await waitFor(() => expect(button.textContent).toBe('ApproveA'), { timeout: 3000 });
+    await waitFor(() => expect(button.querySelector('[data-slot="idle"]')?.textContent).toBe('ApproveA'), {
+      timeout: 3000,
+    });
     expect(button.querySelector('svg')).toBeNull();
+  });
+
+  it('shows Approve as busy, not disabled, while the approval is pending', async () => {
+    vi.mocked(approveItem).mockReturnValue(new Promise(() => {}));
+    renderPage();
+
+    const button = await screen.findByRole('button', { name: /^Approve/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(button.querySelector('[data-slot="busy"]')?.textContent).toBe('Approving…');
   });
 
   it('approves the selected Decision with approveItem', async () => {
@@ -323,7 +338,7 @@ describe('Needs you: deciding a Decision', () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(button.querySelector('svg')?.getAttribute('class')).toContain('animate-success-check'));
-    expect(button.textContent).toBe('Merged');
+    expect(button.querySelector('[data-slot="idle"]')?.textContent).toBe('Merged');
     expect(within(button).getByRole('status').textContent).toBe('Merged');
   });
 

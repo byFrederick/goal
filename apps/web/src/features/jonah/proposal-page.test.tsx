@@ -437,10 +437,68 @@ describe('the decisions', () => {
     vi.mocked(approveProposal).mockRejectedValue(refusal('draft-open'));
     renderProposal();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve and publish v22' }));
+    const approve = await screen.findByRole('button', { name: 'Approve and publish v22' });
+    approve.focus();
+    fireEvent.click(approve);
 
     expect(await screen.findByText(/The definition already has an open draft/)).toBeTruthy();
     expect(approveProposal).toHaveBeenCalledWith('org-1', 'factory-1', 7);
+    const again = screen.getByRole('button', { name: 'Approve and publish v22' });
+    expect(again.getAttribute('aria-busy')).toBeNull();
+    expect(document.activeElement).toBe(again);
+  });
+
+  it('Approve shows Publishing while pending, is not disabled and ignores a second click', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue(proposal7);
+    vi.mocked(approveProposal).mockReturnValue(new Promise(() => {}));
+    renderProposal();
+
+    const button = await screen.findByRole('button', { name: 'Approve and publish v22' });
+    button.focus();
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(await screen.findByText('Publishing v22…', {}, { timeout: 1000 })).toBeTruthy();
+    fireEvent.click(button);
+    expect(approveProposal).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('Edit shows Saving while pending and ignores a second click', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue(proposal7);
+    vi.mocked(editProposal).mockReturnValue(new Promise(() => {}));
+    renderProposal();
+
+    const button = await screen.findByRole('button', { name: 'Edit' });
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(await screen.findByText('Saving…', {}, { timeout: 1000 })).toBeTruthy();
+    fireEvent.click(button);
+    expect(editProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it('Reject proposal shows Rejecting while pending and ignores a second click', async () => {
+    vi.mocked(getJonahOverview).mockResolvedValue(overview);
+    vi.mocked(getProposal).mockResolvedValue(proposal7);
+    vi.mocked(rejectProposal).mockReturnValue(new Promise(() => {}));
+    renderProposal();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject with a reason' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Reason' }), { target: { value: 'No.' } });
+    const submit = within(dialog).getByRole('button', { name: 'Reject proposal' });
+    fireEvent.click(submit);
+    await waitFor(() => expect(submit.getAttribute('aria-busy')).toBe('true'));
+    expect(submit.getAttribute('aria-disabled')).toBe('true');
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    expect(await within(dialog).findByText('Rejecting…', {}, { timeout: 1000 })).toBeTruthy();
+    fireEvent.click(submit);
+    expect(rejectProposal).toHaveBeenCalledTimes(1);
   });
 
   it('Approve swaps its label to a check', async () => {
@@ -455,7 +513,9 @@ describe('the decisions', () => {
 
     const done = await screen.findByRole('button', { name: 'Published' });
     expect(done.querySelector('svg')).toBeTruthy();
-    expect((done as HTMLButtonElement).disabled).toBe(true);
+    expect((done as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(done);
+    expect(approveProposal).toHaveBeenCalledTimes(1);
   });
 
   it('Edit shows the draft-conflict message when the draft changed the same files', async () => {

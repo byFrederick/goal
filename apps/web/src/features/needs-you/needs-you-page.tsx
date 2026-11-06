@@ -247,7 +247,7 @@ export function NeedsYouPage() {
           entry={selected}
           factory={factoryOf(selected)}
           phone
-          pending={decide.isPending || approvedId === selected.id}
+          pending={decide.isPending}
           approved={approvedId === selected.id}
           allowAlways={allowAlways}
           alwaysAllow={alwaysAllow}
@@ -293,7 +293,7 @@ export function NeedsYouPage() {
               <Detail
                 entry={selected}
                 factory={factoryOf(selected)}
-                pending={decide.isPending || approvedId === selected.id}
+                pending={decide.isPending}
                 approved={approvedId === selected.id}
                 allowAlways={allowAlways}
                 alwaysAllow={alwaysAllow}

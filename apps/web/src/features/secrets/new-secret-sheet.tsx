@@ -160,9 +160,10 @@ function NewSecretForm({
           type="submit"
           variant="action"
           className="order-1 h-11 max-md:w-full md:order-2 md:h-10"
-          disabled={create.isPending}
+          busy={create.isPending}
+          busyLabel="Adding…"
         >
-          {create.isPending ? 'Adding…' : 'Add secret'}
+          Add secret
         </Button>
       </div>
     </form>

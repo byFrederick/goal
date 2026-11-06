@@ -137,7 +137,7 @@ function NameDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Saving…">
               {action}
             </Button>
           </div>

@@ -168,7 +168,9 @@ export function CodeHostsSection() {
                 variant="action"
                 size="md"
                 className="max-sm:w-full"
-                disabled={!host.trim() || save.isPending || leavingNow}
+                busy={save.isPending}
+                busyLabel="Adding…"
+                disabled={!host.trim() || leavingNow}
               >
                 Add
               </Button>

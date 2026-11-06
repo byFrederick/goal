@@ -150,7 +150,8 @@ test('step 4 shapes the line of the factory made in step 2', async ({ page }) =>
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Not available yet' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('link', { name: 'Continue' })).toHaveAttribute('href', /\/get-started\/budget\?factory=/);
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add a station here' }).first()).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
@@ -172,7 +173,7 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await connectCode(page);
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
 
-  await page.getByRole('link', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/budget\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Set budgets and targets' })).toBeVisible();
   await expect(page.getByRole('slider', { name: 'A day' })).toHaveValue('150');

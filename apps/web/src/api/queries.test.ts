@@ -1,13 +1,17 @@
 import { QueryClient, QueryObserver, queryOptions } from '@tanstack/react-query';
 import { describe, expect, test, vi } from 'vitest';
-import { defKeys, ensureFound, keys, searchQuery, validationQuery } from './queries';
+import { ApiError } from './client';
+import { defKeys, ensureFound, environmentTextQuery, keys, searchQuery, validationQuery } from './queries';
 import type { Validation } from './types';
 
 // goald validates the draft as it is when the request arrives, which may be a later revision than
 // the one the editor asked about.
-const goald = vi.hoisted(() => ({ revision: 42 }));
+const goald = vi.hoisted(() => ({ revision: 42, fileStatus: 404 }));
 vi.mock(import('./definitions'), async (original) => ({
   ...(await original()),
+  getDraftFile: async () => {
+    throw new ApiError({ title: 'Failed', status: goald.fileStatus });
+  },
   validateDraft: async () => ({ revision: goald.revision, ok: true, problems: [] }) as unknown as Validation,
 }));
 
@@ -88,5 +92,20 @@ describe('the shell search', () => {
     );
     // A different limit is a different answer, so it is a different entry.
     expect(keys.search('org-1', { q: 'spend', limit: 3 })).not.toEqual(keys.search('org-1', { q: 'spend', limit: 5 }));
+  });
+});
+
+describe('environmentTextQuery', () => {
+  const factory = { id: 'f1', draft: { id: 'd1' }, current: null } as never;
+  const read = () => new QueryClient().fetchQuery({ ...environmentTextQuery('o', factory, 'research'), retry: false });
+
+  test('a missing environment file (404) is an empty file', async () => {
+    goald.fileStatus = 404;
+    await expect(read()).resolves.toEqual({ text: '', sha256: '' });
+  });
+
+  test('any other failure rejects, so the page shows its error state', async () => {
+    goald.fileStatus = 500;
+    await expect(read()).rejects.toMatchObject({ status: 500 });
   });
 });

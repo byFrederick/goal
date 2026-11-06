@@ -14,8 +14,9 @@ import (
 
 // FileFollowUps implements ports.Store: one transaction per landed root, which locks the root's
 // waiting follow-ups (ClaimLandedFollowUp, LandedFollowUps), then a receiving factory's cap lock
-// (LockFollowUpCap), then the items it files or rewrites; it never locks a source item, so it
-// cannot deadlock with a transition or a note's delivery.
+// (LockFollowUpCap), then the items it files or rewrites, among them the collecting triage item
+// (CollectingTriageItem); it never locks a source item, so it cannot deadlock with a transition
+// or a note's delivery.
 func (s *Store) FileFollowUps(ctx context.Context, lines []domain.Line, at time.Time, limit int) ([]domain.FollowUp, error) {
 	factories := make([]uuid.UUID, 0, len(lines))
 
@@ -563,7 +564,9 @@ func (l *lander) rewriteTriage(ctx context.Context, ln domain.Line, tri uuid.UUI
 
 // joinRepositories adds to the open triage item tri the repositories of rows' sources it lacks,
 // joined filing at l.at with the next ordinal, until it has domain.MaxItemRepositories
-// (domain.JoinRepositories). The factory's lock, which joinTriage holds, serializes the joins.
+// (domain.JoinRepositories). The triage item's row lock, which CollectingTriageItem takes (FOR NO
+// KEY UPDATE, the lock LockItem takes) after joinTriage's cap lock, serializes these joins with
+// FinishRun's and JoinItemRepositories', so no two of them give out the same ordinal.
 func (l *lander) joinRepositories(ctx context.Context, ln domain.Line, tri uuid.UUID, rows []db.FollowUp) error {
 	have, err := l.q.ItemRepositories(ctx, tri)
 	if err != nil {

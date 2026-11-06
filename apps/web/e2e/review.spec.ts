@@ -45,7 +45,7 @@ test('Review is accessible and fits the screen; the copy says runs finish on v8'
   await expect(page.getByRole('heading', { name: 'Publish v9' })).toBeVisible();
   await expect(page.getByText('3 changes', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Changes to factory.yaml' })).toContainText('@@ Line: build station');
-  await expect(publishButton(page)).toHaveText('Publish v9');
+  await expect(publishButton(page)).toHaveAccessibleName('Publish v9');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText(
     'You can roll back to any earlier version later.',
   );
@@ -94,6 +94,28 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await expect(versionRow(page, 9)).toContainText('Build also runs pnpm test');
   await expect(versionRow(page, 9)).toContainText('Live');
   await expect(status(page)).toContainText('v9 runs now.');
+});
+
+test('Publish shows a busy button while the server waits, keeps its width, then the check', async ({ page }) => {
+  await openReview(page);
+  await settled(page);
+  // The mock answers every request after this one 1.5 s late, so the busy state holds long enough to read.
+  await page.setExtraHTTPHeaders({ 'X-Mock-Latency-Ms': '1500' });
+  const button = publishButton(page);
+  const before = await button.boundingBox();
+  expect(before).not.toBeNull();
+
+  await button.click();
+  const busy = page.getByRole('button', { name: /^Publishing v9…$/ });
+  await expect(busy).toHaveAttribute('aria-busy', 'true');
+  await expect(busy).not.toHaveAttribute('disabled');
+  await expect(busy.locator('[data-slot="spinner"]')).toBeVisible();
+  const during = await busy.boundingBox();
+  expect(Math.abs((during?.width ?? 0) - (before?.width ?? 0))).toBeLessThanOrEqual(1);
+
+  const region = page.getByRole('region', { name: 'Publish' });
+  await expect(region.getByRole('button', { name: 'Published' })).toBeVisible();
+  await expect(region).toContainText('v9 is published and running.');
 });
 
 test('after a publish the editor reads no draft that is gone', async ({ page }) => {

@@ -150,8 +150,14 @@ export function TryModelButton({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={!est || confirm.isPending}>
-              {confirm.isPending ? 'Making the proposal…' : 'Make the proposal'}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!est}
+              busy={confirm.isPending}
+              busyLabel="Making the proposal…"
+            >
+              Make the proposal
             </Button>
           </div>
         </form>

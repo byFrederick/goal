@@ -52,7 +52,7 @@ export function NoteComposer({ itemKey, factory, state, compact = false, fieldRe
 
   const send = () => {
     const t = text.trim();
-    if (t) note.mutate(t);
+    if (t && !note.isPending) note.mutate(t);
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -90,7 +90,9 @@ export function NoteComposer({ itemKey, factory, state, compact = false, fieldRe
             variant="primary"
             aria-label="Send note"
             className="size-11 flex-none rounded-full p-0"
-            disabled={note.isPending || text.trim() === ''}
+            disabled={text.trim() === ''}
+            busy={note.isPending}
+            busyLabel=""
           >
             <ArrowUp size={18} strokeWidth={1.75} aria-hidden="true" />
           </Button>
@@ -132,7 +134,9 @@ export function NoteComposer({ itemKey, factory, state, compact = false, fieldRe
           type="submit"
           variant="primary"
           className={cn('ml-auto px-4', compact ? 'h-12 text-body' : 'h-11 text-body')}
-          disabled={note.isPending || text.trim() === ''}
+          disabled={text.trim() === ''}
+          busy={note.isPending}
+          busyLabel="Sending…"
         >
           {compact ? 'Send' : 'Send note'}
         </Button>

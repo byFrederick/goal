@@ -3,10 +3,22 @@
 // may take, binary content, and the lines a file adds or changes against the version the draft is
 // based on (the change gutter).
 import { diffLines } from 'diff';
-import type { FileInfo } from '../../../api/types';
+import type { DefinitionProblem, FileInfo } from '../../../api/types';
+import { cleanPath } from '../../../shared/definition/place';
 import { plural } from '../../../shared/format';
 
 export const factoryFile = 'factory.yaml';
+
+/** Problems of severity 'error' per file (a problem without a file belongs to `defaultFile`); warnings and infos do not count. */
+export function errorCounts(problems: readonly DefinitionProblem[], defaultFile: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const p of problems) {
+    if (p.severity !== 'error') continue;
+    const file = cleanPath(p.file ?? defaultFile);
+    counts.set(file, (counts.get(file) ?? 0) + 1);
+  }
+  return counts;
+}
 
 /** A file of the tree, named by its last segment. */
 export interface TreeFile {

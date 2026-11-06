@@ -220,8 +220,8 @@ export function EditWebhookDialog({
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save'}
+            <Button type="submit" variant="primary" busy={save.isPending} busyLabel="Saving…">
+              Save
             </Button>
           </div>
         </form>

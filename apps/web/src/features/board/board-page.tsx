@@ -74,15 +74,20 @@ function Columns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsP
   );
 }
 
-/** From 768 px: the stations side by side, each a StationColumn on a shared row grid, each with its own Expedite box in a shared row; from 1280 px every station fits. */
+/** From 768 px: the stations side by side, each a StationColumn on a shared row grid, each with its own Expedite box in a shared row; each column keeps at least 200 px, and when the stations don't fit the board scrolls sideways in its own box, reachable by keyboard. */
 function DesktopColumns({ board, onMove, decides, finishedThisWeek, arrived }: ColumnsProps) {
   const showExpedite = drawsExpedite(board);
-  // 144 px a station, 128 px from 1280 px, where a board of seven stations fits without scrolling.
-  const tracks = `repeat(${board.stations.length}, minmax(var(--col-min), 1fr))`;
+  // 200 px a station at least, as in the design; more stations than fit scroll sideways, never squeeze.
+  const tracks = `repeat(${board.stations.length}, minmax(200px, 1fr))`;
   return (
-    <section aria-label="Stations" className="-mx-1 hidden min-w-0 overflow-x-auto px-1 pb-2 md:block">
+    <section
+      aria-label="Stations"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll box takes focus so the keyboard can scroll it
+      tabIndex={0}
+      className="-mx-1 hidden min-w-0 overflow-x-auto px-1 pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run md:block"
+    >
       <div
-        className="grid gap-x-3 gap-y-2 [--col-min:144px] xl:[--col-min:128px]"
+        className="grid gap-x-3 gap-y-2"
         style={{
           gridTemplateColumns: tracks,
           gridTemplateRows: showExpedite ? 'auto auto 1fr' : 'auto 1fr',
@@ -353,6 +358,7 @@ export function BoardPage() {
     navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
+  const movedId = useRef<string | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
   const role = factoryRoleNote(factory.role, factory.name);
   // A phone keeps its filters row behind the top bar's Filter button; from 768 px the top bar holds Pull andon and New item.
@@ -457,7 +463,18 @@ export function BoardPage() {
             if (!open) setMoving(null);
           }}
           initialTo={moving.to}
-          onMoved={(updated) => focusCard(updated.id)}
+          onMoved={(updated) => {
+            movedId.current = updated.id;
+            focusCard(updated.id);
+          }}
+          // Radix would refocus the old card, which left its column; the moved card gets focus
+          // after the dialog has unmounted, whatever the busy submit button held before.
+          onCloseAutoFocus={(event) => {
+            if (!movedId.current) return;
+            event.preventDefault();
+            focusCard(movedId.current);
+            movedId.current = null;
+          }}
         />
       ) : null}
     </>

@@ -161,6 +161,18 @@ describe('step 7, invite people', () => {
     expect(await screen.findByText('Step first-item')).toBeTruthy();
   });
 
+  it('shows the button as busy while the invitations are sent', async () => {
+    vi.mocked(invite).mockReturnValue(new Promise(() => {}));
+    renderStep(url);
+    await screen.findByRole('heading', { level: 1, name: 'Invite people' });
+    addAddress('alex@example.com');
+    fireEvent.click(screen.getByRole('button', { name: 'Send 1 invite' }));
+    const button = await screen.findByRole('button', { name: 'Sending 1 invite…' });
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+  });
+
   it('names a refused address and keeps it in the list, and sends nothing on to step 8', async () => {
     vi.mocked(invite).mockImplementation(async (request) => {
       if (request.email === 'alex@example.com') {

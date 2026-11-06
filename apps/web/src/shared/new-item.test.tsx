@@ -186,6 +186,25 @@ describe('the sidebar’s New item picker', () => {
   });
 });
 
+describe('Create item while submitItem is pending', () => {
+  it('shows the submit button as busy, not disabled, saying Creating…', async () => {
+    vi.mocked(submitItem).mockReset();
+    vi.mocked(submitItem).mockReturnValue(new Promise(() => {}));
+    renderPicker(writable);
+    fireEvent.click(await newItemButton());
+    fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Factory' }), { key: 'Enter' });
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'goal' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Check the budget' } });
+    const submit = screen.getByRole('button', { name: 'Create item' });
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(submit.getAttribute('aria-busy')).toBe('true'));
+    expect(submit.getAttribute('aria-disabled')).toBe('true');
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+    expect(submit.querySelector('[data-slot="busy"]')?.textContent).toBe('Creating…');
+  });
+});
+
 describe('the Start control', () => {
   const created = { ref: 'goal#9', station: 'intake', start: undefined };
 
