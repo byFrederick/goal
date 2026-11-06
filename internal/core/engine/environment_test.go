@@ -858,7 +858,7 @@ func TestAdmit_LineOnSecretsWithoutModelKeyBlocksWithCode(t *testing.T) {
 	noKey.Runtime.ModelKey = ""
 
 	removed := lineOf(agentStation(stWork, agWorker, 1, 1))
-	removed.Removed = []string{"spec.runtime.repository.token (env-reference-removed)"}
+	removed.Removed = []string{"spec.agents[0].env (env-reference-removed)"}
 
 	tests := map[string]struct {
 		line domain.Line

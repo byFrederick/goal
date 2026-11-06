@@ -143,6 +143,18 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 	checkQuestionEntry(t, entryOf(got, seeded.question.ID), seeded.question)
 	checkToolApprovalEntry(t, entryOf(got, seeded.toolApproval.ID), seeded.toolApproval)
 
+	checkBlockedEntries(t, got, seeded)
+
+	if e := entryOf(got, seeded.expedite.ID); e.Kind != gen.InboxEntryKindExpedite || !e.Since.Equal(seeded.expedite.CreatedAt) {
+		t.Errorf("expedite entry = %+v; want the hotfix since it was created", e)
+	}
+}
+
+// checkBlockedEntries checks the blocked entries: a failure without a code, a refusal with its
+// code, and a pause with neither.
+func checkBlockedEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
+	t.Helper()
+
 	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Code != nil || b.Paused {
 		t.Errorf("blocked entry = %+v; want its failure without a code", b)
 	}
@@ -153,10 +165,6 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 
 	if b := entryOf(got, seeded.paused.ID).Blocked; b == nil || b.Reason != nil || b.Code != nil || !b.Paused {
 		t.Errorf("paused entry = %+v; want paused without a reason or code", b)
-	}
-
-	if e := entryOf(got, seeded.expedite.ID); e.Kind != gen.InboxEntryKindExpedite || !e.Since.Equal(seeded.expedite.CreatedAt) {
-		t.Errorf("expedite entry = %+v; want the hotfix since it was created", e)
 	}
 }
 
