@@ -371,6 +371,17 @@ describe('saving', () => {
     expect(saveButton().hasAttribute('disabled')).toBe(true);
   });
 
+  it('shows the save as busy, not disabled, while the write is pending', async () => {
+    mocked.putDraftFile.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findByRole('heading', { level: 1 });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Items a day' }), { target: { value: '5' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(saveButton().getAttribute('aria-busy')).toBe('true'));
+    expect(saveButton().getAttribute('aria-disabled')).toBe('true');
+    expect(saveButton().hasAttribute('disabled')).toBe(false);
+  });
+
   it('keeps the typed edits and says so when the definition changed under the save (412)', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1 });

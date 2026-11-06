@@ -322,11 +322,17 @@ function TriggerEditor({ org, factory, text, saved, raw, blank, board, detail }:
           <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </NotAvailable>
-      <Button variant="primary" disabled={!dirty || busy || blocked || hasErrors || !valid} onClick={() => void save()}>
+      <Button
+        variant="primary"
+        disabled={!dirty || blocked || hasErrors || !valid}
+        busy={busy}
+        busyLabel="Saving…"
+        onClick={() => void save()}
+      >
         {notice?.tone === 'ok' && !dirty && !busy ? (
           <Check size={16} strokeWidth={1.5} aria-hidden="true" className="motion-safe:animate-success-check" />
         ) : null}
-        {busy ? 'Saving…' : 'Save changes'}
+        Save changes
       </Button>
     </>
   );

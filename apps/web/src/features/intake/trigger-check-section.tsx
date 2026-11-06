@@ -132,12 +132,13 @@ function Remembers({
             <Button
               variant="ghost"
               size="sm"
-              disabled={busy}
+              busy={busy}
+              busyLabel="Clearing…"
               onClick={() => void clear()}
               aria-label="Clear what it remembers"
               className="h-auto px-0 text-run-ink"
             >
-              {busy ? 'Clearing…' : 'Clear'}
+              Clear
             </Button>
           ) : null}
         </p>
