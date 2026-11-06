@@ -348,3 +348,20 @@ describe('Models and policies', () => {
     expect(save().hasAttribute('disabled')).toBe(true);
   });
 });
+
+describe('Models and policies while a save is pending', () => {
+  it('shows Save changes as busy, not disabled', async () => {
+    api.putOrgPolicy.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Models agents may use' });
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Allow Claude Fable 5.1' }));
+    fireEvent.click(save());
+
+    const busy = await screen.findByRole('button', { name: /Saving…/ });
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(busy);
+    expect(api.putOrgPolicy).toHaveBeenCalledTimes(1);
+  });
+});

@@ -227,6 +227,21 @@ describe('step 3, pick a template', () => {
     expect(screen.getByRole('button', { name: 'Not available yet' }).getAttribute('aria-disabled')).toBe('true');
   });
 
+  it('shows Use as busy while the factory is created, and a second click sends nothing', async () => {
+    const { createFactory } = await import('../../api/definitions');
+    vi.mocked(createFactory).mockImplementationOnce(() => new Promise(() => {}));
+    renderStep();
+    await screen.findByRole('radio', { name: /Incident response/ });
+    fireEvent.click(screen.getByRole('radio', { name: /Incident response/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Incident response' }));
+    const use = () => screen.getByRole('button', { name: /Use Incident response|Creating/ }) as HTMLButtonElement;
+    await waitFor(() => expect(use().getAttribute('aria-busy')).toBe('true'));
+    expect(use().getAttribute('aria-disabled')).toBe('true');
+    expect(use().disabled).toBe(false);
+    fireEvent.click(use());
+    expect(createFactory).toHaveBeenCalledTimes(1);
+  });
+
   it('creates the factory from the chosen template and goes to step 4 with its id', async () => {
     const router = renderStep();
     await screen.findByRole('radio', { name: /Incident response/ });

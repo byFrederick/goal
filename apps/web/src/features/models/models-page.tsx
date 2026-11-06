@@ -104,7 +104,13 @@ function Ready({ load, org }: { load: PolicyLoad; org: string }) {
     <ReadOnly when={!mayManage}>
       <TopBarSlot
         actions={
-          <Button variant="action" disabled={!mayManage || !dirty || save.isPending} onClick={() => save.mutate(form)}>
+          <Button
+            variant="action"
+            disabled={!mayManage || !dirty}
+            busy={save.isPending}
+            busyLabel="Saving…"
+            onClick={() => save.mutate(form)}
+          >
             Save changes
           </Button>
         }
