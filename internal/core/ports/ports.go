@@ -469,12 +469,12 @@ type Store interface {
 	// organization already polls that host, repository and sha, in one transaction under the
 	// item's lock. It returns the wait with a new id. An unknown item is ErrNotFound, and an open
 	// wait of the same item, station, visit and repository is ErrConflict.
-	OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWait, error)
+	OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWaitRecord, error)
 
 	// ReplaceCIWaitSHA follows a moved head: it ends the open wait id as domain.CISuperseded at
 	// `at` and opens one like it on sha (and prURL, when set) started at `at`, in the same visit
 	// and round, in one transaction. It returns the new wait; ErrNotFound when id is not open.
-	ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWait, error)
+	ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWaitRecord, error)
 
 	// LeaseDueCIPolls leases to owner until now+lease up to limit of the organization's polls
 	// due by now (NextPollAt) that have an open wait and no live lease, earliest due first
@@ -488,7 +488,7 @@ type Store interface {
 
 	// OpenCIWaits returns the item's open CI waits by start, each with its poll's latest state.
 	// An unknown item has none.
-	OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWait, error)
+	OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWaitRecord, error)
 
 	// EndCIWaits ends the open waits among ids with outcome at `at` and returns how many it
 	// ended; waits already ended and unknown ids are left out.

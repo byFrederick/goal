@@ -41,7 +41,7 @@ func ciWait(item domain.ItemID, sha string) domain.NewCIWait {
 }
 
 // openCIWait opens n or fails the test, and checks the wait is open with an id and n's fields.
-func (f *fixture) openCIWait(t *testing.T, n domain.NewCIWait) domain.CIWait {
+func (f *fixture) openCIWait(t *testing.T, n domain.NewCIWait) domain.CIWaitRecord {
 	t.Helper()
 
 	w, err := f.Store.OpenCIWait(f.ctx(t), n)
@@ -69,7 +69,7 @@ func (f *fixture) leaseCIPolls(t *testing.T, now time.Time, owner string) []doma
 }
 
 // openCIWaits reads the item's open waits or fails the test.
-func (f *fixture) openCIWaits(t *testing.T, item domain.ItemID) []domain.CIWait {
+func (f *fixture) openCIWaits(t *testing.T, item domain.ItemID) []domain.CIWaitRecord {
 	t.Helper()
 
 	ws, err := f.Store.OpenCIWaits(f.ctx(t), item)

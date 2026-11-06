@@ -21,7 +21,7 @@ type ciPollID struct {
 // ciWaitRecord is one CI wait of an organization.
 type ciWaitRecord struct {
 	org  domain.OrgID
-	wait domain.CIWait
+	wait domain.CIWaitRecord
 }
 
 // ciRows are the store's CI waits, in the order they were opened, and their polls.
@@ -41,11 +41,11 @@ func (c *ciRows) purge(org domain.OrgID, gone map[domain.ItemID]bool) {
 }
 
 // openCIWait opens n, creating its poll when org has none. Callers hold s.mu and checked n.
-func (s *Store) openCIWait(org domain.OrgID, n domain.NewCIWait) (domain.CIWait, error) {
+func (s *Store) openCIWait(org domain.OrgID, n domain.NewCIWait) (domain.CIWaitRecord, error) {
 	for _, r := range s.ci.waits {
 		w := r.wait
 		if r.org == org && w.Open() && w.Item == n.Item && w.Station == n.Station && w.Visit == n.Visit && w.Repo == n.Repo {
-			return domain.CIWait{}, fmt.Errorf("open ci wait of item %s at %s on %s: %w", n.Item, n.Station, n.Repo, ports.ErrConflict)
+			return domain.CIWaitRecord{}, fmt.Errorf("open ci wait of item %s at %s on %s: %w", n.Item, n.Station, n.Repo, ports.ErrConflict)
 		}
 	}
 
@@ -54,7 +54,7 @@ func (s *Store) openCIWait(org domain.OrgID, n domain.NewCIWait) (domain.CIWait,
 		s.ci.polls[id] = &domain.CIPoll{CIPollKey: id.key, NextPollAt: n.StartedAt, Interval: domain.CIPollMinInterval}
 	}
 
-	w := domain.CIWait{ID: domain.CIWaitID(s.newID()), NewCIWait: n}
+	w := domain.CIWaitRecord{ID: domain.CIWaitID(s.newID()), NewCIWait: n}
 	w.Held = slices.Clone(n.Held)
 	s.ci.waits = append(s.ci.waits, ciWaitRecord{org: org, wait: w})
 
@@ -62,31 +62,31 @@ func (s *Store) openCIWait(org domain.OrgID, n domain.NewCIWait) (domain.CIWait,
 }
 
 // OpenCIWait implements ports.Store.
-func (s *Store) OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWait, error) {
+func (s *Store) OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWaitRecord, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
 	if err := n.Check(); err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.visible(n.Item, org); !ok {
-		return domain.CIWait{}, fmt.Errorf("item %s: %w", n.Item, ports.ErrNotFound)
+		return domain.CIWaitRecord{}, fmt.Errorf("item %s: %w", n.Item, ports.ErrNotFound)
 	}
 
 	return s.openCIWait(org, n)
 }
 
 // ReplaceCIWaitSHA implements ports.Store.
-func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWait, error) {
+func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWaitRecord, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
 	s.mu.Lock()
@@ -94,7 +94,7 @@ func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, p
 
 	i := slices.IndexFunc(s.ci.waits, func(r ciWaitRecord) bool { return r.org == org && r.wait.ID == id && r.wait.Open() })
 	if i < 0 {
-		return domain.CIWait{}, fmt.Errorf("open ci wait %s: %w", id, ports.ErrNotFound)
+		return domain.CIWaitRecord{}, fmt.Errorf("open ci wait %s: %w", id, ports.ErrNotFound)
 	}
 
 	n := s.ci.waits[i].wait.NewCIWait
@@ -105,7 +105,7 @@ func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, p
 	}
 
 	if err := n.Check(); err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
 	s.ci.waits[i].wait.EndedAt, s.ci.waits[i].wait.Outcome = at, domain.CISuperseded
@@ -195,7 +195,7 @@ func (s *Store) RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner st
 }
 
 // OpenCIWaits implements ports.Store.
-func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWait, error) {
+func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWaitRecord, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var out []domain.CIWait
+	var out []domain.CIWaitRecord
 
 	for _, r := range s.ci.waits {
 		if r.org == org && r.wait.Item == item && r.wait.Open() {
@@ -214,7 +214,7 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 		}
 	}
 
-	slices.SortStableFunc(out, func(a, b domain.CIWait) int {
+	slices.SortStableFunc(out, func(a, b domain.CIWaitRecord) int {
 		return cmp.Or(a.StartedAt.Compare(b.StartedAt), cmp.Compare(a.Station, b.Station), cmp.Compare(a.Visit, b.Visit), cmp.Compare(a.Repo, b.Repo))
 	})
 

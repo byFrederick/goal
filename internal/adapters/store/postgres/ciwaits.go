@@ -16,17 +16,17 @@ import (
 )
 
 // OpenCIWait implements ports.Store: the item's lock first, then the poll and the wait.
-func (s *Store) OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWait, error) {
+func (s *Store) OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWaitRecord, error) {
 	if err := n.Check(); err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
 	item, err := parseID("item", string(n.Item))
 	if err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
-	var out domain.CIWait
+	var out domain.CIWaitRecord
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		if _, err := q.LockItem(ctx, item); notFound(err) {
@@ -40,7 +40,7 @@ func (s *Store) OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWa
 		return err
 	})
 	if err != nil {
-		return domain.CIWait{}, fmt.Errorf("open ci wait of %s on %s: %w", n.Item, n.Repo, err)
+		return domain.CIWaitRecord{}, fmt.Errorf("open ci wait of %s on %s: %w", n.Item, n.Repo, err)
 	}
 
 	return out, nil
@@ -48,16 +48,16 @@ func (s *Store) OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWa
 
 // openCIWait creates n's poll when the organization has none and inserts the wait; the caller
 // locked the item.
-func openCIWait(ctx context.Context, q *db.Queries, item uuid.UUID, n domain.NewCIWait) (domain.CIWait, error) {
+func openCIWait(ctx context.Context, q *db.Queries, item uuid.UUID, n domain.NewCIWait) (domain.CIWaitRecord, error) {
 	key := n.PollKey()
 
 	if err := q.UpsertCIPoll(ctx, db.UpsertCIPollParams{Host: key.Host, Repo: key.Repo, Sha: key.SHA, NextPollAt: n.StartedAt}); err != nil {
-		return domain.CIWait{}, fmt.Errorf("upsert ci poll: %w", err)
+		return domain.CIWaitRecord{}, fmt.Errorf("upsert ci poll: %w", err)
 	}
 
 	id, err := newID()
 	if err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
 	var held []byte
@@ -74,9 +74,9 @@ func openCIWait(ctx context.Context, q *db.Queries, item uuid.UUID, n domain.New
 
 	switch {
 	case errors.As(err, &pg) && pg.Code == uniqueViolation:
-		return domain.CIWait{}, fmt.Errorf("open ci wait of the visit: %w", ports.ErrConflict)
+		return domain.CIWaitRecord{}, fmt.Errorf("open ci wait of the visit: %w", ports.ErrConflict)
 	case err != nil:
-		return domain.CIWait{}, fmt.Errorf("insert ci wait: %w", err)
+		return domain.CIWaitRecord{}, fmt.Errorf("insert ci wait: %w", err)
 	}
 
 	return ciWaitFrom(row), nil
@@ -85,13 +85,13 @@ func openCIWait(ctx context.Context, q *db.Queries, item uuid.UUID, n domain.New
 // ReplaceCIWaitSHA implements ports.Store: the item's lock first, as OpenCIWait takes it, then
 // the end and the new wait in one transaction, so the partial unique key never sees two open
 // waits and the item is never left without one.
-func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWait, error) {
+func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWaitRecord, error) {
 	wid, err := parseID("ci wait", string(id))
 	if err != nil {
-		return domain.CIWait{}, err
+		return domain.CIWaitRecord{}, err
 	}
 
-	var out domain.CIWait
+	var out domain.CIWaitRecord
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		item, err := q.CIWaitItem(ctx, wid)
@@ -129,7 +129,7 @@ func (s *Store) ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, p
 		return err
 	})
 	if err != nil {
-		return domain.CIWait{}, fmt.Errorf("replace sha of ci wait %s: %w", id, err)
+		return domain.CIWaitRecord{}, fmt.Errorf("replace sha of ci wait %s: %w", id, err)
 	}
 
 	return out, nil
@@ -191,7 +191,7 @@ func (s *Store) RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner st
 }
 
 // OpenCIWaits implements ports.Store.
-func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWait, error) {
+func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWaitRecord, error) {
 	if !isUUID(string(item)) {
 		return nil, nil // an id that is not a UUID names no item, which has none
 	}
@@ -203,7 +203,7 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 		return nil, fmt.Errorf("open ci waits of %s: %w", item, err)
 	}
 
-	out := make([]domain.CIWait, 0, len(rows))
+	out := make([]domain.CIWaitRecord, 0, len(rows))
 
 	for _, r := range rows {
 		w := ciWaitFrom(r.CiWait)
@@ -247,8 +247,8 @@ func (s *Store) CIRounds(ctx context.Context, item domain.ItemID, station, visit
 }
 
 // ciWaitFrom is one row of ci_waits.
-func ciWaitFrom(r db.CiWait) domain.CIWait {
-	w := domain.CIWait{
+func ciWaitFrom(r db.CiWait) domain.CIWaitRecord {
+	w := domain.CIWaitRecord{
 		ID: domain.CIWaitID(r.ID.String()),
 		NewCIWait: domain.NewCIWait{
 			Item: domain.ItemID(r.ItemID.String()), Station: r.Station, Visit: r.Visit, Repo: r.Repo, SHA: r.Sha, PRURL: deref(r.PrUrl),

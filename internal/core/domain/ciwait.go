@@ -158,8 +158,8 @@ func (n NewCIWait) PollKey() CIPollKey {
 	return CIPollKey{Host: host, Repo: n.Repo, SHA: n.SHA}
 }
 
-// CIWait is one CI wait as stored: open while EndedAt is zero, else ended with Outcome.
-type CIWait struct {
+// CIWaitRecord is one CI wait as stored (the station setting is CIWait, in line.go): open while EndedAt is zero, else ended with Outcome.
+type CIWaitRecord struct {
 	ID CIWaitID
 	NewCIWait
 
@@ -170,4 +170,4 @@ type CIWait struct {
 }
 
 // Open reports whether the wait has not ended.
-func (w CIWait) Open() bool { return w.EndedAt.IsZero() }
+func (w CIWaitRecord) Open() bool { return w.EndedAt.IsZero() }
