@@ -253,8 +253,8 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	}
 
 	var n int
-	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_uploads) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
-		t.Errorf("%d knowledge and connection rows left, %v; want none", n, err)
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_uploads)`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d knowledge rows left, %v; want none", n, err)
 	}
 }
 

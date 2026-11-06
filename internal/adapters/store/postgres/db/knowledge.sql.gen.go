@@ -71,7 +71,7 @@ func (q *Queries) ClaimKnowledgeSource(ctx context.Context, arg ClaimKnowledgeSo
 
 const convertKnowledgeSource = `-- name: ConvertKnowledgeSource :exec
 UPDATE knowledge_sources
-SET kind = $1, connection_id = NULL, config = $2::jsonb, next_sync_at = now(), updated_at = now()
+SET kind = $1, config = $2::jsonb, next_sync_at = now(), updated_at = now()
 WHERE id = $3 AND kind = 'synced' AND secret_id IS NOT NULL
 `
 
@@ -81,8 +81,8 @@ type ConvertKnowledgeSourceParams struct {
 	ID     uuid.UUID
 }
 
-// Moves a synced source over to its kind (ports.Knowledge.ConvertSource): off its connection,
-// with the config it keeps, due at once.
+// Moves a synced source over to its kind (ports.Knowledge.ConvertSource), with the config it
+// keeps, due at once.
 func (q *Queries) ConvertKnowledgeSource(ctx context.Context, arg ConvertKnowledgeSourceParams) error {
 	_, err := q.db.Exec(ctx, convertKnowledgeSource, arg.Kind, arg.Config, arg.ID)
 	return err
@@ -322,12 +322,12 @@ func (q *Queries) InsertKnowledgeSnapshot(ctx context.Context, arg InsertKnowled
 }
 
 const insertKnowledgeSource = `-- name: InsertKnowledgeSource :exec
-INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, read_when, sync_every, next_sync_at, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7,
-        $8,
-        CASE WHEN $9::bigint = 0 THEN NULL
-             ELSE make_interval(secs => $9::bigint) END,
-        CASE WHEN $4::text = 'live' THEN NULL ELSE now() END, $10)
+INSERT INTO knowledge_sources (id, name, title, kind, secret_id, config, read_when, sync_every, next_sync_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7,
+        CASE WHEN $8::bigint = 0 THEN NULL
+             ELSE make_interval(secs => $8::bigint) END,
+        CASE WHEN $4::text = 'live' THEN NULL ELSE now() END, $9)
 `
 
 type InsertKnowledgeSourceParams struct {
@@ -335,7 +335,6 @@ type InsertKnowledgeSourceParams struct {
 	Name             string
 	Title            string
 	Kind             string
-	ConnectionID     *uuid.UUID
 	SecretID         *uuid.UUID
 	Config           []byte
 	ReadWhen         string
@@ -351,7 +350,6 @@ func (q *Queries) InsertKnowledgeSource(ctx context.Context, arg InsertKnowledge
 		arg.Name,
 		arg.Title,
 		arg.Kind,
-		arg.ConnectionID,
 		arg.SecretID,
 		arg.Config,
 		arg.ReadWhen,
@@ -359,25 +357,6 @@ func (q *Queries) InsertKnowledgeSource(ctx context.Context, arg InsertKnowledge
 		arg.CreatedBy,
 	)
 	return err
-}
-
-const knowledgeConnection = `-- name: KnowledgeConnection :one
-SELECT c.id, coalesce(k.spec->'spec'->>'sync', '')::text AS sync
-FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
-WHERE c.name = $1
-`
-
-type KnowledgeConnectionRow struct {
-	ID   uuid.UUID
-	Sync string
-}
-
-// A connection a source may read: its id and its kind's sync adapter (” when it cannot sync).
-func (q *Queries) KnowledgeConnection(ctx context.Context, name string) (KnowledgeConnectionRow, error) {
-	row := q.db.QueryRow(ctx, knowledgeConnection, name)
-	var i KnowledgeConnectionRow
-	err := row.Scan(&i.ID, &i.Sync)
-	return i, err
 }
 
 const knowledgeFileReads = `-- name: KnowledgeFileReads :many
@@ -564,11 +543,10 @@ func (q *Queries) KnowledgeSourceKind(ctx context.Context, id uuid.UUID) (string
 
 const knowledgeSources = `-- name: KnowledgeSources :many
 
-SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
+SELECT s.id, s.name, s.title, s.kind, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
        coalesce(extract(epoch FROM s.sync_every), 0)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at
 FROM knowledge_sources s
-LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
 LEFT JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
 WHERE ($1::text IS NULL OR s.name = $1::text)
   AND ($2::uuid IS NULL OR s.id = $2::uuid)
@@ -585,7 +563,6 @@ type KnowledgeSourcesRow struct {
 	Name              string
 	Title             string
 	Kind              string
-	Connection        *string
 	Secret            *string
 	Config            []byte
 	ReadWhen          string
@@ -619,7 +596,6 @@ func (q *Queries) KnowledgeSources(ctx context.Context, arg KnowledgeSourcesPara
 			&i.Name,
 			&i.Title,
 			&i.Kind,
-			&i.Connection,
 			&i.Secret,
 			&i.Config,
 			&i.ReadWhen,

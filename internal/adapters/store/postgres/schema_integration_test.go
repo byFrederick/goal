@@ -19,17 +19,16 @@ import (
 // orgTables are the tables 00006 gave org_id, then those later phases added with theirs.
 var orgTables = []string{
 	"factories", "work_items", "leases", "agent_runs", "item_events", "andon_pulls", "audit_log", "item_spans", "lease_spans",
-	"factory_roles", "connection_kinds", "connections", "item_touch_labels", "secrets", "org_policies", "org_notification_settings",
+	"factory_roles", "item_touch_labels", "secrets", "org_policies", "org_notification_settings",
 	"webhook_endpoints", "webhook_deliveries", "trigger_firings", "knowledge_uploads", "standing_rules",
 	"org_signup_domains", "draft_requests", "environment_tests", "knowledge_snapshots", "knowledge_files", "knowledge_reads",
 	"jonah_reviews", "jonah_proposals", "jonah_observations", "follow_ups", "code_hosts", "code_hosts_seeded", "repository_tests",
 }
 
 // withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;
-// every organization reads those rows, only definers write them.
-var withPlatformRows = map[string]string{
-	"connection_kinds": "the platform's kinds (00051), written by goal_sync_platform_kinds at goald's start",
-}
+// every organization reads those rows, only definers write them. None has since 00133 dropped
+// connection_kinds.
+var withPlatformRows = map[string]string{}
 
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
 // org_id adds it here in the same pull request, with its reason.
@@ -325,11 +324,6 @@ func TestRLS_RawSQLWithoutOrgFails(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-
-	// goald syncs the platform's connection kinds at its start, so that table always has rows; even
-	// those every organization reads need one bound (00051's platform_kinds policy).
-	execSQL(t, db.owner, `INSERT INTO connection_kinds (id, org_id, name, spec, spec_sha256, created_by)
-		VALUES (gen_random_uuid(), NULL, 'acme-docs', '{}', repeat('a', 64), 'system:goald')`)
 
 	for _, table := range orgTables {
 		var n int

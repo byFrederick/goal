@@ -13,19 +13,18 @@ import (
 
 // The audit data keys of standing rules.
 const (
-	auditRuleConnection   = "connection"
-	auditRuleConnectionID = "connection_id"
-	auditRuleTool         = "tool"
-	auditRuleAgent        = "agent"
-	auditRuleItem         = "item_id"
-	auditRuleFactoryID    = "factory_id"
-	auditRuleEnvironment  = "environment"
-	auditRuleServer       = "server"
+	auditRuleTool        = "tool"
+	auditRuleAgent       = "agent"
+	auditRuleItem        = "item_id"
+	auditRuleFactoryID   = "factory_id"
+	auditRuleEnvironment = "environment"
+	auditRuleServer      = "server"
 )
 
 var _ ports.StandingRules = (*StandingRules)(nil)
 
-// StandingRules are the standing rules in 00075's standing_rules (ports.StandingRules).
+// StandingRules are the standing rules in 00075's standing_rules, keyed by server since 00133
+// (ports.StandingRules).
 type StandingRules struct {
 	s *Store
 }
@@ -81,12 +80,12 @@ func (c *StandingRules) CreateServerStandingRule(ctx context.Context, n domain.N
 
 	err = c.s.inTx(ctx, func(q *db.Queries) error {
 		at, err := q.InsertServerStandingRule(ctx, db.InsertServerStandingRuleParams{
-			ID: id, FactoryID: &factory, Environment: &n.Environment, Server: &n.Server, Tool: n.Tool, Agent: n.Agent,
+			ID: id, FactoryID: factory, Environment: n.Environment, Server: n.Server, Tool: n.Tool, Agent: n.Agent,
 			CreatedBy: by.Ref(), ItemID: item,
 		})
 		if notFound(err) {
 			active, err := q.ActiveServerStandingRule(ctx, db.ActiveServerStandingRuleParams{
-				FactoryID: &factory, Environment: &n.Environment, Server: &n.Server, Tool: n.Tool, Agent: n.Agent,
+				FactoryID: factory, Environment: n.Environment, Server: n.Server, Tool: n.Tool, Agent: n.Agent,
 			})
 			if err != nil {
 				return err
@@ -159,14 +158,11 @@ func (c *StandingRules) RevokeStandingRule(ctx context.Context, id domain.Standi
 	return out, nil
 }
 
-// ruleAudit appends action on standing rule r: its connection's id and name, or its factory,
-// environment and server.
+// ruleAudit appends action on standing rule r with its factory, environment and server.
 func ruleAudit(ctx context.Context, q *db.Queries, by domain.Actor, action string, r domain.StandingRule) error {
-	data := map[string]any{auditRuleTool: r.Tool, auditRuleAgent: r.Agent, auditRuleItem: string(r.ItemID)}
-	if r.ConnectionID != "" {
-		data[auditRuleConnection], data[auditRuleConnectionID] = r.Connection, string(r.ConnectionID)
-	} else {
-		data[auditRuleFactoryID], data[auditRuleEnvironment], data[auditRuleServer] = string(r.Factory), r.Environment, r.Server
+	data := map[string]any{
+		auditRuleTool: r.Tool, auditRuleAgent: r.Agent, auditRuleItem: string(r.ItemID),
+		auditRuleFactoryID: string(r.Factory), auditRuleEnvironment: r.Environment, auditRuleServer: r.Server,
 	}
 
 	return appendAudit(ctx, q, domain.AuditEntry{
@@ -176,17 +172,9 @@ func ruleAudit(ctx context.Context, q *db.Queries, by domain.Actor, action strin
 
 func standingRuleFrom(r db.StandingRulesRow) domain.StandingRule {
 	out := domain.StandingRule{
-		ID: domain.StandingRuleID(r.ID.String()), Connection: deref(r.Connection), Environment: deref(r.Environment), Server: deref(r.Server),
-		Tool: r.Tool, Agent: r.Agent, CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(), ItemID: domain.ItemID(r.ItemID.String()),
-		RevokedAt: utc(r.RevokedAt),
-	}
-
-	if r.ConnectionID != nil {
-		out.ConnectionID = domain.ConnectionID(r.ConnectionID.String())
-	}
-
-	if r.FactoryID != nil {
-		out.Factory = domain.FactoryID(r.FactoryID.String())
+		ID: domain.StandingRuleID(r.ID.String()), Factory: domain.FactoryID(r.FactoryID.String()), Environment: r.Environment,
+		Server: r.Server, Tool: r.Tool, Agent: r.Agent, CreatedBy: namedActor(r.CreatedBy, ""), CreatedAt: r.CreatedAt.UTC(),
+		ItemID: domain.ItemID(r.ItemID.String()), RevokedAt: utc(r.RevokedAt),
 	}
 
 	if r.RevokedBy != nil {
