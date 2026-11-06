@@ -1018,10 +1018,13 @@ type CodeHost interface {
 	// errors.ErrUnsupported. It only reads.
 	Repositories(ctx context.Context, host domain.CodeHost, token, owner string) (RepositoryList, error)
 
-	// RepositoryAccess reports what token can do in repo: whether it can read the repository and
-	// whether it can push to it, each with a one-line reason from the host. A refusal the host
-	// answers (an unknown repository, a bad token, no push) is in the result; err is a host that
-	// gave no answer it could read. It only reads.
+	// RepositoryAccess reports what token can do in repo: whether it can read the repository,
+	// whether it can push to it and whether it can read the repository's CI (ADR 0044, decision
+	// 10), each with a one-line reason from the host. A refusal the host answers (an unknown
+	// repository, a bad token, no push, no CI read) is in the result; err is a host that gave no
+	// answer it could read. A failed CI check never changes Read or Push: only a factory that
+	// waits for CI needs it. When Read fails, Push and CI are not checked and fail too. It only
+	// reads.
 	RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (RepositoryAccess, error)
 
 	// OwnerAccess reports what token can do in the repositories of owner on host (one of the
@@ -1064,6 +1067,10 @@ const MaxOwnerRepositories = 1000
 // RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
 type RepositoryAccess struct {
 	Read, Push AccessCheck
+	// CI is whether the token can read the CI of the repository's default branch head (check runs
+	// and commit statuses, or pipelines), as CodeHost.Checks needs. It is independent of Read
+	// and Push: a failed CI check leaves both as they are.
+	CI AccessCheck
 }
 
 // AccessCheck is one check of RepositoryAccess: whether it passed, and the host's one-line reason.

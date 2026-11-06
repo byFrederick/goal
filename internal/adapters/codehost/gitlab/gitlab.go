@@ -568,7 +568,7 @@ const pushLevel = 30
 // RepositoryAccess implements ports.CodeHost with GET /projects/:id: a project GitLab shows the
 // token can be read, and it can be pushed to when the higher of its project and group access
 // levels is Developer (30) or more. A refusal (401, 403, 404) is a failed read with GitLab's
-// message; a 5xx or no answer is an error.
+// message; a 5xx or no answer is an error. CI is ciCheck, with the answer's builds_access_level.
 func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (ports.RepositoryAccess, error) {
 	mr, err := cl.check(repo, token)
 	if err != nil {
@@ -586,6 +586,7 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 			Project *access `json:"project_access"`
 			Group   *access `json:"group_access"`
 		} `json:"permissions"`
+		BuildsAccessLevel string `json:"builds_access_level"`
 	}
 
 	status, msg, err := cl.call(ctx, mr, http.MethodGet, mr.path(""), nil, &p)
@@ -599,6 +600,7 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 		return ports.RepositoryAccess{
 			Read: ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitLab answered %d: %s", status, msg))},
 			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + project},
+			CI:   ports.AccessCheck{Reason: "not checked: the token cannot read " + project},
 		}, nil
 	}
 
@@ -613,7 +615,85 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 	return ports.RepositoryAccess{
 		Read: ports.AccessCheck{OK: true, Reason: "GitLab shows " + project + " to the token"},
 		Push: pushCheck(level, project),
+		CI:   cl.ciCheck(ctx, mr, project, p.BuildsAccessLevel),
 	}, nil
+}
+
+// ciCheck is whether the token can read project's pipelines: GraphQL's project.jobsEnabled
+// (needs read_api, and a role that can see pipelines) answering true passes. Any other answer
+// (false, no project, a refusal, none at all) leaves builds, the REST answer's
+// builds_access_level, to decide: "disabled" is CI that is off, which passes; any other value,
+// none included, fails. It never returns an error: CI is a check of its own, beside Read and Push.
+func (cl *Client) ciCheck(ctx context.Context, m mergeRequest, project, builds string) ports.AccessCheck {
+	enabled, why := cl.jobsEnabled(ctx, m, project)
+
+	switch {
+	case enabled:
+		return ports.AccessCheck{OK: true, Reason: "GitLab shows the token the pipelines of " + project}
+	case builds == buildsDisabled:
+		return ports.AccessCheck{OK: true, Reason: "CI is off for this project"}
+	default:
+		return ports.AccessCheck{Reason: fmt.Sprintf("GitLab shows the token no pipelines of %s (%s): the token needs read_api and a role that can see pipelines", project, why)}
+	}
+}
+
+// ciQuery asks GraphQL whether a project's jobs are enabled for the token.
+const ciQuery = `query($fullPath: ID!) { project(fullPath: $fullPath) { jobsEnabled } }`
+
+// jobsEnabled is GraphQL's project.jobsEnabled for project, from the host's /api/graphql beside
+// the REST API m reaches, with the token as a Bearer token. When it is not true, why says what
+// GraphQL answered instead, scrubbed of the token.
+func (cl *Client) jobsEnabled(ctx context.Context, m mergeRequest, project string) (bool, string) {
+	scrub := func(s string) string { return strings.ReplaceAll(s, m.token, "[redacted]") }
+
+	b, err := json.Marshal(map[string]any{"query": ciQuery, "variables": map[string]string{"fullPath": project}})
+	if err != nil {
+		return false, "the GraphQL query did not encode"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(m.api, "/api/v4")+"/api/graphql", bytes.NewReader(b))
+	if err != nil {
+		return false, scrub("GraphQL request: " + err.Error())
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+m.token)
+	req.Header.Set("User-Agent", "goald")
+
+	res, err := cl.http.Do(req)
+	if err != nil {
+		return false, scrub("GraphQL gave no answer: " + err.Error())
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBodyBytes))
+	if err != nil {
+		return false, "GraphQL's answer did not read"
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return false, scrub(strings.TrimSpace(fmt.Sprintf("GraphQL answered %d: %s", res.StatusCode, problem(raw))))
+	}
+
+	var answer struct {
+		Data struct {
+			Project *struct {
+				JobsEnabled bool `json:"jobsEnabled"`
+			} `json:"project"`
+		} `json:"data"`
+	}
+
+	switch {
+	case json.Unmarshal(raw, &answer) != nil:
+		return false, "GraphQL's answer was not JSON"
+	case answer.Data.Project == nil:
+		return false, "GraphQL shows no such project"
+	case !answer.Data.Project.JobsEnabled:
+		return false, "jobsEnabled is false"
+	}
+
+	return true, ""
 }
 
 // pushCheck is whether access level can push to project: Developer (30) or more.

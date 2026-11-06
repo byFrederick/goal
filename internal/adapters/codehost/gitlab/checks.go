@@ -15,6 +15,9 @@ import (
 // ciPermission is what a token needs to see a project's pipelines.
 const ciPermission = "the read_api scope and a role in the project that can see its pipelines"
 
+// buildsDisabled is the builds_access_level GitLab gives a project whose CI is off.
+const buildsDisabled = "disabled"
+
 // rateLimitWait is the wait after a 429 that names no time.
 const rateLimitWait = time.Minute
 
@@ -228,7 +231,7 @@ func (cl *Client) ciVisible(ctx context.Context, m mergeRequest) error {
 		return fmt.Errorf("CI access level: GitLab answered 404: %s: %w", msg, ports.ErrNotFound)
 	case status != http.StatusOK:
 		return fmt.Errorf("CI access level: GitLab answered %d: %s", status, msg)
-	case p.BuildsAccessLevel != nil && *p.BuildsAccessLevel == "disabled":
+	case p.BuildsAccessLevel != nil && *p.BuildsAccessLevel == buildsDisabled:
 		return nil
 	default:
 		return &ports.CINotReadableError{Permission: ciPermission}

@@ -131,6 +131,8 @@ func (m *Mover) repository(ctx context.Context, r config.Repository, open enviro
 
 	var problems []string
 
+	// access.CI is not a problem: only a factory that waits for CI needs it, and its CI wait
+	// blocks on its own (ADR 0044, decision 10).
 	for _, c := range []struct {
 		what  string
 		check ports.AccessCheck

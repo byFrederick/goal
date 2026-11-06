@@ -889,6 +889,7 @@ func messageOf(raw []byte) (string, error) {
 // true. For a fine-grained token that is the token's own grant; for a classic one it is the
 // account's role, which a token without the repo scope cannot use, so push ok can be optimistic.
 // A refusal (401, 403, 404) is a failed read with GitHub's message; a 5xx or no answer is an error.
+// CI is ciCheck on the answer's default_branch.
 func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (ports.RepositoryAccess, error) {
 	p, err := cl.check(repo, token)
 	if err != nil {
@@ -898,7 +899,8 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 	full := p.owner + "/" + p.repo
 
 	var answer struct {
-		Permissions struct {
+		DefaultBranch string `json:"default_branch"`
+		Permissions   struct {
 			Pull bool `json:"pull"`
 			Push bool `json:"push"`
 		} `json:"permissions"`
@@ -915,12 +917,14 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 		return ports.RepositoryAccess{
 			Read: ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitHub answered %d: %s", status, msg))},
 			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + full},
+			CI:   ports.AccessCheck{Reason: "not checked: the token cannot read " + full},
 		}, nil
 	}
 
 	out := ports.RepositoryAccess{
 		Read: ports.AccessCheck{OK: true, Reason: "GitHub shows " + full + " to the token"},
 		Push: ports.AccessCheck{OK: answer.Permissions.Push, Reason: "GitHub grants the token push to " + full},
+		CI:   cl.ciCheck(ctx, p, full, answer.DefaultBranch),
 	}
 
 	if !answer.Permissions.Push {
@@ -928,6 +932,33 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 	}
 
 	return out, nil
+}
+
+// ciCheck is whether the token can read the CI of branch's head in the repository full: GET
+// .../commits/{branch}/check-runs?per_page=1 and GET .../commits/{branch}/status both answering
+// 200. A 403 from either is a fine-grained token without read access to Checks or Commit
+// statuses; any other answer, a 5xx, a redirect or none at all, fails the check with GitHub's
+// status and message. It never returns an error: CI is a check of its own, beside Read and Push.
+func (cl *Client) ciCheck(ctx context.Context, p pull, full, branch string) ports.AccessCheck {
+	if branch == "" || strings.Contains(branch, "..") {
+		return ports.AccessCheck{Reason: "GitHub named no default branch of " + full + ", so its CI could not be read"}
+	}
+
+	for _, probe := range []string{"/check-runs?per_page=1", "/status"} {
+		status, msg, _, err := cl.exchange(ctx, p, http.MethodGet, p.repoPath("/commits/"+refPath(branch)+probe), nil, nil, maxBodyBytes)
+
+		switch {
+		case err != nil:
+			return ports.AccessCheck{Reason: fmt.Sprintf("GitHub gave no answer to a read of the CI of %s: %v", full, err)}
+		case status == http.StatusForbidden:
+			return ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf(
+				"GitHub answered 403: %s. A fine-grained token needs read access to Checks and Commit statuses of %s", strings.TrimRight(msg, ". "), full))}
+		case status != http.StatusOK:
+			return ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitHub answered %d: %s", status, msg))}
+		}
+	}
+
+	return ports.AccessCheck{OK: true, Reason: "GitHub shows the token the check runs and commit statuses of " + full}
 }
 
 // OwnerAccess implements ports.CodeHost with GET /user/repos for every affiliation (owner,
