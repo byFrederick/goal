@@ -1,6 +1,6 @@
 // What every flow checks: axe at WCAG 2.2 AA, no horizontal scroll, nothing clipped past the right edge, which chrome the width shows.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, type Locator, type Page } from '@playwright/test';
+import { type APIRequestContext, expect, type Locator, type Page } from '@playwright/test';
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 0) < 768;
 
@@ -260,4 +260,23 @@ export async function lengthenTitles(page: Page, url: RegExp) {
     if (!response.headers()['content-type']?.includes('json')) return route.fulfill({ response });
     return route.fulfill({ response, json: grow(await response.json()) });
   });
+}
+
+/** Noon UTC of the current UTC date: the instant the mock seeds from. */
+export function noonUtc(): Date {
+  return new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+}
+
+/**
+ * Pins the clock so the time of day cannot change what a page counts by day or week. The mock seeds its
+ * items minutes before its now and CI runs in UTC, so just after 00:00 UTC they fall on yesterday. The mock
+ * is reset at noon UTC; the browser's Date.now is fixed at `at`, a time of the same UTC day ("00:30"),
+ * noon by default. Timers keep running.
+ */
+export async function pinClock(page: Page, request: APIRequestContext, at = '12:00'): Promise<Date> {
+  const noon = noonUtc();
+  await request.post('/__mock/reset', { data: { now: noon.toISOString() } });
+  const browser = new Date(`${noon.toISOString().slice(0, 10)}T${at}:00Z`);
+  await page.clock.setFixedTime(browser);
+  return noon;
 }

@@ -1,16 +1,15 @@
 // The Floor over a range (E4): throughput against the range before and the target, the last 12
 // weeks, the header's window control writing the URL, and the line and the flow tiles of the top.
 import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, noonUtc, pinClock } from './support';
 
 // One instant for the test, the mock and the page: noon UTC of the day the file loads, so the days
 // this test expects are the days goald and the page count from, even when the run crosses UTC
 // midnight.
-const now = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+const now = noonUtc();
 
 test.beforeEach(async ({ page, request }) => {
-  await request.post('/__mock/reset', { data: { now: now.toISOString() } });
-  await page.clock.setFixedTime(now);
+  await pinClock(page, request);
 });
 
 const dayMs = 86_400_000;

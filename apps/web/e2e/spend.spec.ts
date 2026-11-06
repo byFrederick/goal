@@ -2,10 +2,10 @@
 // control is kept in the URL, a budget row shows, Export CSV downloads the window's CSV, and the sidebar's
 // "Spend this week" card links here. Not run in the box (no browser here): see the pull request.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, pinClock } from './support';
 
-test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset');
+test.beforeEach(async ({ page, request }) => {
+  await pinClock(page, request);
 });
 
 const heading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Spend and billing' });
