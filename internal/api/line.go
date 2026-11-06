@@ -57,15 +57,60 @@ func (s *server) boardLine(
 		return line, nil
 	}
 
-	spent, err := s.items.SpendSince(ctx, l.FactoryID, domain.BudgetSince(now))
+	b, used, err := s.weeklyBudget(ctx, l, now)
 	if err != nil {
 		return gen.BoardLine{}, err
 	}
 
-	b := l.Runtime.WeeklyBudget(spent, now)
 	line.Budget = &gen.LineBudget{WeeklyUsd: b.WeeklyUSD, SpentUsd: b.SpentUSD, Exhausted: b.Exhausted}
+	if used != nil {
+		line.Budget.Since, line.Budget.ResumesAt = &used.since, &used.resumesAt
+	}
 
 	return line, nil
+}
+
+// usedUp is a used-up weekly budget: since when, and when the window's spend falls below the cap.
+type usedUp struct {
+	since, resumesAt time.Time
+}
+
+// weeklyBudget measures l's weekly budget at now against the cap of the version l is, so a raised
+// cap has room at once, before the engine's next tick forgets the used-up row. While it is used up,
+// used says since when, as the engine recorded it (now when it has not yet), and when it resumes.
+func (s *server) weeklyBudget(ctx context.Context, l domain.Line, now time.Time) (domain.BudgetStatus, *usedUp, error) {
+	spent, err := s.items.SpendSince(ctx, l.FactoryID, domain.BudgetSince(now))
+	if err != nil {
+		return domain.BudgetStatus{}, nil, err
+	}
+
+	b := l.Runtime.WeeklyBudget(spent, now)
+	if !b.Exhausted {
+		return b, nil, nil
+	}
+
+	since, marked, err := s.items.BudgetExhaustedSince(ctx, l.FactoryID)
+	if err != nil {
+		return domain.BudgetStatus{}, nil, err
+	}
+
+	if !marked {
+		since = now
+	}
+
+	runs, err := s.items.RunCostsSince(ctx, l.FactoryID, b.Since)
+	if err != nil {
+		return domain.BudgetStatus{}, nil, err
+	}
+
+	// A run that changes between the two reads can leave runs below the cap: the window's end
+	// is then the latest the budget resumes.
+	resumes, ok := domain.BudgetResumesAt(runs, l.Runtime.WeeklyUSD, now)
+	if !ok {
+		resumes = now.Add(domain.BudgetWindow)
+	}
+
+	return b, &usedUp{since: since, resumesAt: resumes}, nil
 }
 
 // lineWIP counts the items in progress or waiting on a person at the stations with a wip limit,
