@@ -443,15 +443,31 @@ test('seven stations at 1280 px: wide columns, one-line chips, no overlapping te
     const region = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
     const columns = Array.from(region?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
     const textBoxes = (column: HTMLElement) => {
-      const out: { name: string; rect: DOMRect }[] = [];
+      const out: { name: string; node: Node; rect: { left: number; right: number; top: number; bottom: number } }[] =
+        [];
       const walker = document.createTreeWalker(column, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         const parent = n.parentElement;
         if (!parent || parent.closest('.sr-only') || !n.textContent?.trim()) continue;
         const range = document.createRange();
         range.selectNodeContents(n);
-        const rects = Array.from(range.getClientRects()).filter((x) => x.width > 0);
-        for (const rect of rects) out.push({ name: n.textContent.trim().slice(0, 30), rect });
+        // Keep only the part of each line that is drawn: an ellipsis, a line clamp or overflow:hidden hides the rest.
+        const clips: DOMRect[] = [];
+        for (let el: HTMLElement | null = parent; el && el !== column.parentElement; el = el.parentElement) {
+          const cs = getComputedStyle(el);
+          if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') clips.push(el.getBoundingClientRect());
+        }
+        for (const x of Array.from(range.getClientRects())) {
+          const rect = {
+            left: Math.max(x.left, ...clips.map((c) => c.left)),
+            right: Math.min(x.right, ...clips.map((c) => c.right)),
+            top: Math.max(x.top, ...clips.map((c) => c.top)),
+            bottom: Math.min(x.bottom, ...clips.map((c) => c.bottom)),
+          };
+          if (rect.right - rect.left > 0 && rect.bottom - rect.top > 0) {
+            out.push({ name: n.textContent.trim().slice(0, 30), node: n, rect });
+          }
+        }
       }
       return out;
     };
@@ -467,7 +483,7 @@ test('seven stations at 1280 px: wide columns, one-line chips, no overlapping te
         for (let j = i + 1; j < boxes.length; j++) {
           const a = boxes[i]?.rect;
           const b = boxes[j]?.rect;
-          if (!a || !b) continue;
+          if (!a || !b || boxes[i]?.node === boxes[j]?.node) continue;
           const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
           const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
           if (w > 1 && h > 2) overlaps.push(`${boxes[i]?.name} / ${boxes[j]?.name}`);
