@@ -38,10 +38,11 @@ On a phone or a tablet (below 1024 px), Needs you shows the list first. Choosing
 
 ## Fix an alert about a source or a conversion
 
-Two alerts on the Alerts tab of Needs you are about a factory, not an item.
+These alerts on the Alerts tab of Needs you are about a factory, not an item.
 
 - **A source does not sync.** The title reads "product-specs, which Software reads, does not sync", with the factory's title or else its name. The second line is the source's last error and the number of failed syncs, such as "Confluence refused the token 3 times". The time on the row is how long ago the source last changed, not the time of its last good sync. The detail has **Open product-specs**, which opens the source's page.
 - **A factory could not move to secrets.** The title reads "Software could not move to secrets", and the second line says why. The detail lists each problem to fix, one per line, and says the factory keeps running on its current version until a version on secrets is published. **Open the definition** opens the factory's definition editor.
+- **A factory's weekly budget is used up.** Its line starts no new agent work. The alert shows the spend of the last 7 days against the weekly cap, since when the budget is used up, and when the line resumes on its own: the moment the oldest runs leave the 7-day window and the spend falls below the cap. To resume sooner, raise `runtime.budget.weeklyUsd` and publish; the alert clears as soon as the new version is current.
 
 ## Send back
 

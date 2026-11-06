@@ -334,6 +334,7 @@ func TestInbox_Budget(t *testing.T) {
 	expectBudgetEntry(t, "once recorded", budgetEntries(h.inbox(t, "")), want)
 
 	h.as(acmeMember(domain.FactoryEditor)) // sees acme only
+
 	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 {
 		t.Errorf("budget entries of a member who cannot see line = %+v; want none", got)
 	}
