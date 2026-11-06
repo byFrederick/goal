@@ -114,6 +114,19 @@ describe('Step 2, Connect your code', () => {
     expect(JSON.stringify(router.state.location)).not.toContain('test-token');
   });
 
+  it('shows Continue as busy while the token is tested, and a second click sends nothing', async () => {
+    vi.mocked(testRepository).mockImplementation(() => new Promise(() => {}));
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+    await waitFor(() => expect(next().getAttribute('aria-busy')).toBe('true'));
+    expect(next().getAttribute('aria-disabled')).toBe('true');
+    expect((next() as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(next());
+    expect(createSecret).toHaveBeenCalledTimes(1);
+    expect(testRepository).toHaveBeenCalledTimes(1);
+  });
+
   it('replaces the value when the secret name is already taken', async () => {
     vi.mocked(createSecret).mockRejectedValue(
       new ApiError({ title: 'Taken', status: 409, code: 'secret-name-taken' } as ConstructorParameters<

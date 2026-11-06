@@ -270,12 +270,14 @@ function CreateFactory({
           type="button"
           size="lg"
           variant="primary"
-          disabled={!ready || create.isPending}
+          busy={create.isPending}
+          busyLabel="Creating…"
+          disabled={!ready}
           onClick={() => {
             if (ready) create.mutate();
           }}
         >
-          {create.isPending ? 'Creating…' : `Use ${pickedTitle}`}
+          Use {pickedTitle}
         </Button>
       }
       preview={panel(trimmed, purpose)}

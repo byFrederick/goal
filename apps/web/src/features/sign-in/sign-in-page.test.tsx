@@ -109,6 +109,22 @@ describe('the sign-in page', () => {
     expect(await screen.findByText('Code page')).toBeTruthy();
   });
 
+  it('shows the send button as busy while the code is being sent, and sends once', async () => {
+    sendCode.mockImplementation(() => new Promise(() => {}));
+    renderSignIn(both);
+    await typeEmail('you@example.com');
+    fireEvent.click(await screen.findByRole('button', { name: 'Email me a sign-in code' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Email me a sign-in code/ }).getAttribute('aria-busy')).toBe('true'),
+    );
+    const button = screen.getByRole('button', { name: /Email me a sign-in code/ }) as HTMLButtonElement;
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(sendCode).toHaveBeenCalledTimes(1);
+  });
+
   it('says how long to wait after a rate limit, and keeps the button off until then', async () => {
     sendCode.mockRejectedValue(new AuthFailure('rate-limited', 120));
     renderSignIn(both);
