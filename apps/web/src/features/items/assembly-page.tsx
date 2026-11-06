@@ -181,7 +181,7 @@ function PartsTable({
   const link = usePartLink();
   return (
     <SectionCard title="Parts" className={className}>
-      <div className="@container -mx-4 overflow-x-auto px-4 md:-mx-5 md:px-5">
+      <div className="@container relative -mx-4 overflow-x-auto px-4 md:-mx-5 md:px-5">
         <table className="w-full min-w-[320px] border-collapse text-[15px]">
           <caption className="sr-only">Parts of {item}, in plan order</caption>
           <thead>
@@ -195,10 +195,10 @@ function PartsTable({
               <th scope="col" className="py-2 pr-3 font-normal">
                 Title
               </th>
-              <th scope="col" className={cn('py-2 pr-3 font-normal whitespace-nowrap', partsColumn)}>
+              <th scope="col" className={cn('min-w-20 py-2 pr-3 font-normal whitespace-nowrap', partsColumn)}>
                 Station
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
+              <th scope="col" className="min-w-[4.5rem] py-2 pr-3 font-normal whitespace-nowrap">
                 State
               </th>
               <th scope="col" className={cn('py-2 pr-3 text-right font-normal whitespace-nowrap', partsColumn)}>

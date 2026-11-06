@@ -364,7 +364,7 @@ export function ItemsPage() {
         <p className="m-0 text-body text-muted">No items match these filters. Try another view or filter.</p>
       ) : (
         <>
-          <div className="@container overflow-x-auto rounded-card border border-line bg-card">
+          <div className="@container relative overflow-x-auto rounded-card border border-line bg-card">
             <table
               aria-label="Items"
               className="w-full min-w-max border-collapse text-body whitespace-nowrap lg:min-w-0 lg:table-fixed"
