@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports/porttest/standingruletest"
 )
 
 // Migration 00091 keys standing rules by server too: a rule keyed by its connection before it
@@ -35,7 +36,7 @@ func TestMigrate_StandingRulesServerKey(t *testing.T) {
 
 	migrate(t, db.owner)
 
-	got, err := NewConnections(store, testKey(t, "k1")).StandingRules(domain.WithOrg(t.Context(), org), false)
+	got, err := NewStandingRules(store).StandingRules(domain.WithOrg(t.Context(), org), false)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("StandingRules after 00091 = %+v, %v; want the old rule", got, err)
 	}
@@ -62,4 +63,22 @@ func TestMigrate_StandingRulesServerKey(t *testing.T) {
 			t.Errorf("a row with %s: %v; want standing_rules_key_check to refuse it", name, err)
 		}
 	}
+}
+
+func TestStandingRules_Conformance(t *testing.T) {
+	t.Parallel()
+
+	standingruletest.Run(t, func(t *testing.T) standingruletest.Harness {
+		t.Helper()
+
+		db := newTestDB(t, OwnerRole)
+		migrate(t, db.owner)
+		store := New(openPool(t, db.app))
+
+		return standingruletest.Harness{
+			StandingRules: NewStandingRules(store),
+			Audit:         store,
+			NewOrg:        func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, store) },
+		}
+	})
 }

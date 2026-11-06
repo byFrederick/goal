@@ -25,21 +25,33 @@ func toolNames(tools []string) []string {
 	return slices.Compact(out)
 }
 
-// StandingRules implements ports.Connections.
-func (c *Connections) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+var _ ports.StandingRules = (*StandingRules)(nil)
+
+// StandingRules are standing rules kept in memory (ports.StandingRules). They share their
+// Connections' data, so a rule CreateStandingRule makes is listed here and Connections.Delete
+// revokes a connection's rules, as the database's one standing_rules table does.
+type StandingRules struct {
+	c *Connections
+}
+
+// NewStandingRules returns the standing rules of c's data, audited as c is.
+func NewStandingRules(c *Connections) *StandingRules { return &StandingRules{c: c} }
+
+// StandingRules implements ports.StandingRules.
+func (s *StandingRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return nil, domain.ErrNoOrg
 	}
 
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
+	s.c.d.mu.Lock()
+	defer s.c.d.mu.Unlock()
 
 	out := []domain.StandingRule{}
 
-	for _, r := range c.d.rules[org] {
+	for _, r := range s.c.d.rules[org] {
 		if includeRevoked || r.Active() {
-			out = append(out, c.d.ruleLocked(org, r))
+			out = append(out, s.c.d.ruleLocked(org, r))
 		}
 	}
 
@@ -90,8 +102,8 @@ func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandi
 	return c.d.ruleLocked(org, r), nil
 }
 
-// CreateServerStandingRule implements ports.Connections.
-func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
+// CreateServerStandingRule implements ports.StandingRules.
+func (s *StandingRules) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg
@@ -101,13 +113,13 @@ func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.New
 		return domain.StandingRule{}, fmt.Errorf("create standing rule: %w", err)
 	}
 
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
+	s.c.d.mu.Lock()
+	defer s.c.d.mu.Unlock()
 
-	for _, r := range c.d.rules[org] {
+	for _, r := range s.c.d.rules[org] {
 		if r.Active() && r.ConnectionID == "" && r.Factory == n.Factory && r.Environment == n.Environment && r.Server == n.Server &&
 			r.Tool == n.Tool && r.Agent == n.Agent {
-			return c.d.ruleLocked(org, r), nil
+			return s.c.d.ruleLocked(org, r), nil
 		}
 	}
 
@@ -121,44 +133,44 @@ func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.New
 		Agent: n.Agent, CreatedBy: by, CreatedAt: time.Now().UTC().Truncate(time.Microsecond), ItemID: n.Item,
 	}
 
-	if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleCreated, *r, ""); err != nil {
+	if err := s.c.ruleAudit(ctx, by, domain.AuditStandingRuleCreated, *r, ""); err != nil {
 		return domain.StandingRule{}, err
 	}
 
-	c.d.rules[org] = append(c.d.rules[org], r)
+	s.c.d.rules[org] = append(s.c.d.rules[org], r)
 
-	return c.d.ruleLocked(org, r), nil
+	return s.c.d.ruleLocked(org, r), nil
 }
 
-// RevokeStandingRule implements ports.Connections.
-func (c *Connections) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
+// RevokeStandingRule implements ports.StandingRules.
+func (s *StandingRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg
 	}
 
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
+	s.c.d.mu.Lock()
+	defer s.c.d.mu.Unlock()
 
-	i := slices.IndexFunc(c.d.rules[org], func(r *domain.StandingRule) bool { return r.ID == id })
+	i := slices.IndexFunc(s.c.d.rules[org], func(r *domain.StandingRule) bool { return r.ID == id })
 	if i < 0 {
 		return domain.StandingRule{}, fmt.Errorf("standing rule %s: %w", id, ports.ErrNotFound)
 	}
 
-	r := c.d.rules[org][i]
+	r := s.c.d.rules[org][i]
 	if !r.Active() {
 		return domain.StandingRule{}, fmt.Errorf("standing rule %s is revoked already: %w", id, ports.ErrConflict)
 	}
 
-	out := c.d.ruleLocked(org, r)
-	if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleRevoked, out, out.Connection); err != nil {
+	out := s.c.d.ruleLocked(org, r)
+	if err := s.c.ruleAudit(ctx, by, domain.AuditStandingRuleRevoked, out, out.Connection); err != nil {
 		return domain.StandingRule{}, err
 	}
 
 	now, revoker := time.Now().UTC().Truncate(time.Microsecond), by
 	r.RevokedBy, r.RevokedAt = &revoker, &now
 
-	return c.d.ruleLocked(org, r), nil
+	return s.c.d.ruleLocked(org, r), nil
 }
 
 // ruleLocked is a copy of r with its connection's name, "" once the connection is deleted.
