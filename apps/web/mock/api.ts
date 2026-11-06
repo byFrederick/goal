@@ -1929,15 +1929,15 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     }
 
     if (rest === '/runs' && method === 'GET') {
-      const result = orgRunsOf(state, org.id, url.searchParams);
+      const result = orgRunsOf(state, org.id, url.searchParams, clock());
       return 'body' in result ? json(res, 200, result.body) : problem(res, result.status, result.title, result.detail);
     }
 
     // GET …/runs/export: the list's filters as CSV (ADR 0020, decision 3), with the file's name in Content-Disposition.
     if (rest === '/runs/export' && method === 'GET') {
-      const result = runsCsvOf(state, org.id, url.searchParams);
+      const result = runsCsvOf(state, org.id, url.searchParams, clock());
       if (!('csv' in result)) return problem(res, result.status, result.title, result.detail);
-      const day = new Date().toISOString().slice(0, 10);
+      const day = new Date(clock()).toISOString().slice(0, 10);
       res.writeHead(200, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="runs-${day}.csv"`,

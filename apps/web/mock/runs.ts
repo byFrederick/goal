@@ -31,13 +31,18 @@ function itemNamed(q: string): { factory?: string | undefined; number: number } 
 }
 
 /** The CSV export of the list (ADR 0020, decision 3): every run the list would list, over its pages, one row each. */
-export function runsCsvOf(state: MockState, org: string, params: URLSearchParams): { csv: string } | OrgRunsError {
+export function runsCsvOf(
+  state: MockState,
+  org: string,
+  params: URLSearchParams,
+  now = Date.now(),
+): { csv: string } | OrgRunsError {
   const next = new URLSearchParams(params);
   next.delete('cursor');
   next.set('limit', '200');
   const runs: OrgRun[] = [];
   for (;;) {
-    const result = orgRunsOf(state, org, next);
+    const result = orgRunsOf(state, org, next, now);
     if (!('body' in result)) return result;
     runs.push(...result.body.runs);
     if (result.body.next_cursor === null) break;
@@ -69,14 +74,14 @@ export function runsCsvOf(state: MockState, org: string, params: URLSearchParams
   return { csv: `${[header, ...lines].join('\n')}\n` };
 }
 
-export function orgRunsOf(state: MockState, org: string, params: URLSearchParams): OrgRunsResult {
+/** `now` is the mock's clock: with no since or until, the window is the UTC day it falls on. */
+export function orgRunsOf(state: MockState, org: string, params: URLSearchParams, now = Date.now()): OrgRunsResult {
   const factories = state.factories.filter((f) => f.org_id === org);
   const key = params.get('factory');
   const only = key ? factories.find((f) => f.id === key || f.name === key) : undefined;
   if (key && !only) return { status: 404, title: 'Factory not found', detail: key };
   const inOrg = only ? [only] : factories;
 
-  const now = Date.now();
   const today = Math.floor(now / dayMs) * dayMs;
   const since = instant(params.get('since')) ?? today;
   const until = instant(params.get('until')) ?? today + dayMs;

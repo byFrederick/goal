@@ -7,7 +7,7 @@
 // horizontal scroller (expectNoClippedElements): the shell clips overflow, so scrollWidth alone misses cut-off content. Each visit attaches a screenshot. Not run in the box (no browser): the
 // pull request says so.
 import { expect, type Page, test } from '@playwright/test';
-import { expectNoClippedElements, expectNoHorizontalScroll } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll, pinClock } from './support';
 
 const widths = [
   { width: 1440, height: 1000 },
@@ -268,8 +268,8 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
   },
 ];
 
-test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset');
+test.beforeEach(async ({ page, request }) => {
+  await pinClock(page, request);
 });
 
 for (const scheme of ['light', 'dark'] as const) {

@@ -1,10 +1,10 @@
 // Home (/o/acme) against the mock: the compact line, Needs you first and Spend this week, screenshot at 1440 and
 // 390 in both themes. Not run in the box (no browser): CI runs it with the mock server.
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll } from './support';
+import { expectNoHorizontalScroll, pinClock } from './support';
 
-test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset');
+test.beforeEach(async ({ page, request }) => {
+  await pinClock(page, request);
 });
 
 const sizes = [
