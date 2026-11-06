@@ -182,19 +182,19 @@ function PartsTable({
               <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
                 Part
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal max-xl:hidden">
+              <th scope="col" className="py-2 pr-3 font-normal max-lg:hidden">
                 Ref
               </th>
               <th scope="col" className="py-2 pr-3 font-normal">
                 Title
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap max-xl:hidden">
+              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap max-lg:hidden">
                 Station
               </th>
               <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
                 State
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-normal whitespace-nowrap max-xl:hidden">
+              <th scope="col" className="py-2 pr-3 text-right font-normal whitespace-nowrap max-lg:hidden">
                 Cost
               </th>
               <th scope="col" className="py-2 font-normal whitespace-nowrap max-md:hidden">
@@ -208,7 +208,7 @@ function PartsTable({
                 <td className="py-2.5 pr-3 whitespace-nowrap text-muted tabular-nums">
                   {part.index} of {total}
                 </td>
-                <td className="py-2.5 pr-3 whitespace-nowrap text-muted max-xl:hidden">{part.ref}</td>
+                <td className="py-2.5 pr-3 whitespace-nowrap text-muted max-lg:hidden">{part.ref}</td>
                 <td className="w-full max-w-0 min-w-24 py-2.5 pr-3">
                   <Link
                     to="/o/$org/f/$factory/items/$ref"
@@ -219,9 +219,9 @@ function PartsTable({
                     {part.title}
                   </Link>
                 </td>
-                <td className="py-2.5 pr-3 whitespace-nowrap max-xl:hidden">{humanize(part.station)}</td>
+                <td className="py-2.5 pr-3 whitespace-nowrap max-lg:hidden">{humanize(part.station)}</td>
                 <td className="py-2.5 pr-3 whitespace-nowrap">{stateNames[part.state]}</td>
-                <td className="py-2.5 pr-3 text-right whitespace-nowrap tabular-nums max-xl:hidden">
+                <td className="py-2.5 pr-3 text-right whitespace-nowrap tabular-nums max-lg:hidden">
                   {formatUsd(part.cost_usd)}
                 </td>
                 <td className="py-2.5 whitespace-nowrap max-md:hidden">
@@ -353,12 +353,10 @@ export function AssemblyPage() {
       </header>
 
       <div className="flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:items-start">
-        <div className="flex min-w-0 flex-col gap-4">
-          <ProgressCard item={item} assembly={assembly} />
-          <PartsTable parts={assembly.parts} total={assembly.total} item={item.ref} />
-        </div>
+        <ProgressCard item={item} assembly={assembly} />
         <PlanCard parts={assembly.parts} lanes={lanes} />
       </div>
+      <PartsTable parts={assembly.parts} total={assembly.total} item={item.ref} />
     </>
   );
 }
