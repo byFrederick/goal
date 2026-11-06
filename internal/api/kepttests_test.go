@@ -208,7 +208,7 @@ func (d tryLines) ProposedLine(ctx context.Context, v domain.DefinitionVersionID
 		return factorymodel.Snapshot{Manifest: m, Files: config.Files(files)}
 	}
 
-	return p.Line(), factorymodel.StationsReached(snap(before), snap(after)), nil
+	return onSecrets(p.Line()), factorymodel.StationsReached(snap(before), snap(after)), nil
 }
 
 func (d tryLines) ValidateProposed(ctx context.Context, v domain.DefinitionVersionID, edits []domain.ProposalEdit, contract string,

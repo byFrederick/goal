@@ -137,7 +137,7 @@ func TestChecks_RunInTheSandboxWithoutCredentials(t *testing.T) {
 		t.Errorf("check = %q in %q with env %v; want sh -c in /workspace of the run's sandbox, CI=true", c.Argv, c.Dir, keys(c.Env))
 	}
 
-	for _, name := range []string{envModelKey, "GOAL_GATEWAY_TOKEN", envCodeToken} {
+	for _, name := range []string{domain.EnvAnthropicAPIKey, "GOAL_GATEWAY_TOKEN", domain.RepositoryTokenEnv} {
 		if _, ok := c.Env[name]; ok {
 			t.Errorf("the check got %s", name)
 		}
