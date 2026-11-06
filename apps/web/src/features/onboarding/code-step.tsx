@@ -14,6 +14,7 @@ import { getDraftFile, openDraft, putDraftFile } from '../../api/definitions';
 import { defKeys, keys, templatesQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret } from '../../api/secrets';
+import { sessionHandlers } from '../../api/session';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -161,6 +162,7 @@ function CodeForm({
   /** The secret and token the last save made, so a retest with the same token does not create it twice. */
   const [saved, setSaved] = useState<{ name: string; token: string }>();
   const [answer, setAnswer] = useState<Answer>();
+  const [signingIn, setSigningIn] = useState(false);
   const host = window.location.host;
 
   const wantsCode = access !== 'none';
@@ -247,6 +249,17 @@ function CodeForm({
     if (passed) return write.mutate();
     if (!urlsValid || validUrls.length === 0 || !hasToken || failed || clash) return;
     run.mutate('create');
+  };
+
+  /** The save was refused for a fresh sign-in and the dialog was cancelled: sign in from here, then save again. */
+  const signInAgain = async () => {
+    if (signingIn) return;
+    setSigningIn(true);
+    try {
+      if (await sessionHandlers.reauth()) run.mutate(run.variables ?? 'create');
+    } finally {
+      setSigningIn(false);
+    }
   };
 
   const chooseExisting = () => run.mutate('existing');
@@ -513,8 +526,25 @@ function CodeForm({
                 </p>
               ) : null}
               {run.isError && !clash ? (
-                <div className="animate-fade-in">
-                  <Callout tone="rework">{`Couldn’t save and test the token. ${run.error.message}`.trim()}</Callout>
+                <div className="flex animate-fade-in flex-col items-start gap-2">
+                  {run.error instanceof ApiError && run.error.code === 'reauth-required' ? (
+                    <>
+                      <Callout tone="rework">
+                        Couldn’t save and test the token because Goal needs you to sign in again.
+                      </Callout>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        busy={signingIn || run.isPending}
+                        busyLabel="Signing in…"
+                        onClick={() => void signInAgain()}
+                      >
+                        Sign in again
+                      </Button>
+                    </>
+                  ) : (
+                    <Callout tone="rework">{`Couldn’t save and test the token. ${run.error.message}`.trim()}</Callout>
+                  )}
                 </div>
               ) : null}
               {write.isError ? (
