@@ -21,7 +21,7 @@ A source has a name, a kind, a read-when line and the settings of its kind.
 | Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host must be one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts), and the kind it is listed as picks the API goald reads it through. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
 | Confluence | The pages of one or more spaces of a Confluence Cloud site, or only one page and the pages under it, at the path of their page tree: Paging under Runbooks in space ENG is `ENG/runbooks/paging-<id>.md`. A page you move is fetched again at its new path. It reads with the site, the account's email and a secret that holds the API token. |
 
-Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to all factories, because a source belongs to the organization, not to one factory ([Access and secrets](../access-and-secrets/)). You can't delete a secret while a source reads with it: the error names the source.
+Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to every factory that lists the source, or to all factories while no factory lists it ([Access and secrets](../access-and-secrets/), [A synced source's secret and config](#a-synced-sources-secret-and-config)). You can't delete a secret while a source reads with it: the error names the source.
 
 ## Sync, snapshots and limits
 
@@ -45,7 +45,7 @@ When you upgrade to knowledge as files, goald converts each source once, at its 
 
 ### A synced source's secret and config
 
-A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to all factories, because a source belongs to the organization, not to one factory. Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to every factory that lists the source in its current version; archived factories don't count. A source that no factory lists syncs only with a secret open to every factory. If one factory that lists the source is outside the secret's scope, the sync fails and its error names the secret and that factory. The `secret.used` audit entry names no factory for a secret open to every factory, and otherwise the first factory, by name, that lists the source. Publishing a factory that lists a source whose secret leaves it out is refused (`knowledge-secret-not-in-scope`). Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
 
 | Reader | Config | The secret holds |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ goal knowledge add runbooks --kind synced --secret docs-token \
   --config reader=gitdocs --config repository=https://github.com/acme/docs
 ```
 
-Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why: for example, when that secret is open to some factories only, since a source syncs only with a secret open to every factory.
+Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why: for example, when that secret is open to some factories only, since goald moves a source only onto a secret open to every factory.
 
 ## What runs get
 
@@ -103,6 +103,8 @@ Goal counts how often runs read each file and search each folder under `/knowled
 ## Adding a source to a factory
 
 A factory reads a source when its definition lists it under `spec.knowledge.sources`. Ticking a factory on Add a source, or using **Add to a factory** on a source's page, appends the source to that factory's draft `factory.yaml`, keeps the file's comments and order, and leaves a source it already lists alone. Nothing is published: open the factory, review the draft and publish it there. `goal knowledge add --factories a,b` does the same from the CLI.
+
+A factory with exactly one repository (`runtime.repository`, or one entry of `runtime.repositories` that is not an owner pattern such as `https://github.com/acme/*`) gets the `knowledge-copies-checkout` warning when it lists a Repository source of that repository: its runs already have those files on the item's branch. A factory with two or more repositories gets no such warning. The warning doesn't block publishing.
 
 ## From the CLI
 

@@ -192,7 +192,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-
 	// The engine is built after the definitions it reads and the gateway; the load hook and the
 	// gateway's questions reach it through eng when they are called.
 	var eng *engine.Engine
@@ -201,7 +200,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
-	// Knowledge sync opens a source's secret for the factories the definitions list it in.
 	kb := openKnowledge(s, store, connections, orgSecrets, defs, objects, clock, engineConfig(s, "").LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a

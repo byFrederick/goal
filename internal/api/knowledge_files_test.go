@@ -245,6 +245,43 @@ func TestKnowledge_Check(t *testing.T) {
 		http.StatusNotFound, "factory-not-found")
 }
 
+// A Check of a source of the factory's repository warns of the copy while that is its only one,
+// an entry of runtime.repositories included, and not once the factory has two.
+func TestKnowledge_CheckWarnsOfACopyOnlyWithOneRepository(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: "docs-token", Value: "test-token", Scope: domain.SecretScope{All: true}}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	copying := `{"name":"guides","kind":"repository","secret":"docs-token","config":{"repository":"https://github.com/acme/guides"},` +
+		`"factories":["` + acmeSlug + `"]}`
+	guides := `{ name: guides, url: "https://github.com/acme/guides", token: "{{` + repoSecret + `}}", access: write }`
+	docs := `{ name: docs, url: "https://github.com/acme/docs", token: "{{` + repoSecret + `}}", access: read }`
+
+	h.createRepoSecret(t)
+
+	for _, c := range []struct {
+		entries string
+		warns   bool
+	}{{guides, true}, {guides + ", " + docs, false}} {
+		h.openDraft(t)
+		h.saveYAML(t, strings.Replace(acme, `runtime: { modelKey: "{{claude-key}}" }`,
+			`runtime: { modelKey: "{{claude-key}}", repositories: [`+c.entries+`] }`, 1))
+		h.publish(t, "Work on acme's repositories")
+		h.refreshVersions(t)
+
+		got := decode[gen.KnowledgeCheck](t, h.request(t, http.MethodPost, knowledgePath+"/check", copying, nil), http.StatusOK)
+		copies := slices.ContainsFunc(got.Warnings, func(w gen.KnowledgeCheckWarning) bool { return w.Code == "knowledge-copies-checkout" })
+
+		if copies != c.warns {
+			t.Errorf("check of a source of acme's repository with repositories [%s] = %s; want the copy warning %t", c.entries, asJSON(t, got), c.warns)
+		}
+	}
+}
+
 // A Check with a secret a picked factory is outside of warns for that factory, and never answers
 // the secret's value.
 func TestKnowledge_CheckWarnsOfASecretsScope(t *testing.T) {

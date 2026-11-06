@@ -22,6 +22,13 @@ import (
 
 var admin = domain.Actor{Kind: domain.ActorUser, ID: "00000000-0000-7000-8000-000000000001", Name: "Ada"}
 
+// docsToken is the secret open to every factory the repository sources read with; alphaBeta is
+// open to two factories only.
+const (
+	docsToken = "docs-token"
+	alphaBeta = "alpha-beta"
+)
+
 // repoConfig is the config of the repository sources the tests make.
 var repoConfig = map[string]string{domain.SourceRepositoryKey: "https://git.example.com/acme/docs"}
 
@@ -226,12 +233,12 @@ func newWorld(t *testing.T) *world {
 		t.Fatal(err)
 	}
 
-	if _, err := w.secrets.Create(ctx, domain.NewSecret{Name: "docs-token", Value: "s3cret", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+	if _, err := w.secrets.Create(ctx, domain.NewSecret{Name: docsToken, Value: "s3cret", Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, n := range []domain.NewKnowledgeSource{
-		{Name: srcRunbooks, Title: runbooksTitle, Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
+		{Name: srcRunbooks, Title: runbooksTitle, Kind: domain.SourceRepository, Secret: docsToken, Config: repoConfig},
 		{Name: "handbook", Title: "Handbook", Kind: domain.SourceUpload},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
@@ -981,7 +988,7 @@ func (w *world) replaceRunbooks(repository string, sources ...domain.NewKnowledg
 	}
 
 	for _, n := range sources {
-		n.Secret, n.Config = "docs-token", maps.Clone(n.Config)
+		n.Secret, n.Config = docsToken, maps.Clone(n.Config)
 		if n.Config == nil {
 			n.Config = map[string]string{}
 		}
@@ -1107,7 +1114,7 @@ func TestIngest_SyncOpensTheSecretForTheFactoriesListingIt(t *testing.T) {
 	ctx := w.ctx()
 
 	if _, err := w.secrets.Create(ctx, domain.NewSecret{
-		Name: "alpha-beta", Value: "test-token-ab", Scope: domain.SecretScope{Factories: []domain.FactoryID{alpha, beta}},
+		Name: alphaBeta, Value: "test-token-ab", Scope: domain.SecretScope{Factories: []domain.FactoryID{alpha, beta}},
 	}, admin); err != nil {
 		t.Fatal(err)
 	}
@@ -1117,11 +1124,11 @@ func TestIngest_SyncOpensTheSecretForTheFactoriesListingIt(t *testing.T) {
 	}
 
 	for _, n := range []domain.NewKnowledgeSource{
-		{Name: "both-listed", Title: "Both", Kind: domain.SourceRepository, Secret: "alpha-beta", Config: repoConfig},
-		{Name: "one-out", Title: "One out", Kind: domain.SourceRepository, Secret: "alpha-beta", Config: repoConfig},
-		{Name: "unlisted", Title: "Unlisted", Kind: domain.SourceRepository, Secret: "alpha-beta", Config: repoConfig},
-		{Name: "open", Title: "Open", Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
-		{Name: "open-unlisted", Title: "Open, unlisted", Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
+		{Name: "both-listed", Title: "Both", Kind: domain.SourceRepository, Secret: alphaBeta, Config: repoConfig},
+		{Name: "one-out", Title: "One out", Kind: domain.SourceRepository, Secret: alphaBeta, Config: repoConfig},
+		{Name: "unlisted", Title: "Unlisted", Kind: domain.SourceRepository, Secret: alphaBeta, Config: repoConfig},
+		{Name: "open", Title: "Open", Kind: domain.SourceRepository, Secret: docsToken, Config: repoConfig},
+		{Name: "open-unlisted", Title: "Open, unlisted", Kind: domain.SourceRepository, Secret: docsToken, Config: repoConfig},
 	} {
 		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
 			t.Fatal(err)
@@ -1143,14 +1150,14 @@ func TestIngest_SyncOpensTheSecretForTheFactoriesListingIt(t *testing.T) {
 
 	oneOut := w.source("one-out")
 	w.want("a source a factory outside the secret's scope lists", oneOut, oneOut.Status == domain.SyncFailed,
-		strings.Contains(oneOut.LastError, "alpha-beta"), strings.Contains(oneOut.LastError, string(gamma)))
+		strings.Contains(oneOut.LastError, alphaBeta), strings.Contains(oneOut.LastError, string(gamma)))
 
 	unlisted := w.source("unlisted")
 	w.want("a source no factory lists, on a scoped secret", unlisted, unlisted.Status == domain.SyncFailed,
-		strings.Contains(unlisted.LastError, "alpha-beta"))
+		strings.Contains(unlisted.LastError, alphaBeta))
 
 	secrets.mu.Lock()
 	defer secrets.mu.Unlock()
 
-	w.want("the audited uses", secrets.uses, secrets.uses["alpha-beta"].Factory == beta, secrets.uses["docs-token"] == domain.SecretUse{})
+	w.want("the audited uses", secrets.uses, secrets.uses[alphaBeta].Factory == beta, secrets.uses[docsToken] == domain.SecretUse{})
 }
