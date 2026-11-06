@@ -14,6 +14,7 @@ func TestWaitingFor(t *testing.T) {
 	overWeb := OpenNeed{Kind: EdgeOverlap, Item: "d", Number: 4, Paths: []string{"web/**", "db/queries/items.sql"}}
 	titled := OpenNeed{Kind: EdgeLinked, Item: "e", Number: 5, Title: "Move terraform", Paths: []string{"terraform/**"}}
 	titledOver := OpenNeed{Kind: EdgeOverlap, Item: "f", Number: 6, Title: "The API", Paths: []string{"internal/api/board.go"}}
+	turn := OpenNeed{Kind: EdgeTurn, Item: "g", Number: 7, Title: "The holder", Paths: []string{"cmd/goald/main.go"}}
 
 	queued := Item{
 		State: StateQueued,
@@ -22,8 +23,9 @@ func TestWaitingFor(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		item  Item
-		needs []OpenNeed
+		item   Item
+		needs  []OpenNeed
+		target string
 		want  Waiting
 		ok    bool
 	}{
@@ -53,13 +55,32 @@ func TestWaitingFor(t *testing.T) {
 			name: "files keeps each need's title and paths", item: queued, needs: []OpenNeed{titledOver},
 			want: Waiting{Kind: WaitingFiles, Items: []OpenNeed{titledOver}, Files: []string{"internal/api/**"}}, ok: true,
 		},
+		{
+			name: "turn only, on an integration branch", item: queued, needs: []OpenNeed{turn}, target: "goal/a7-x",
+			want: Waiting{Kind: WaitingTurn, Items: []OpenNeed{turn}, Target: "goal/a7-x"}, ok: true,
+		},
+		{
+			name: "turn only, on the default branch", item: Item{State: StateReady}, needs: []OpenNeed{turn},
+			want: Waiting{Kind: WaitingTurn, Items: []OpenNeed{turn}}, ok: true,
+		},
+		{
+			name: "after wins over turn", item: queued, needs: []OpenNeed{turn, planned}, target: "goal/a7-x",
+			want: Waiting{Kind: WaitingAfter, Items: []OpenNeed{planned}}, ok: true,
+		},
+		{
+			name: "files wins over turn", item: queued, needs: []OpenNeed{turn, overSQL}, target: "goal/a7-x",
+			want: Waiting{
+				Kind: WaitingFiles, Items: []OpenNeed{overSQL}, Files: []string{"db/queries/items.sql", "db/queries/*.sql"},
+			},
+			ok: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := WaitingFor(tt.item, tt.needs)
+			got, ok := WaitingFor(tt.item, tt.needs, tt.target)
 			if ok != tt.ok || !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("WaitingFor = %+v, %v; want %+v, %v", got, ok, tt.want, tt.ok)
 			}

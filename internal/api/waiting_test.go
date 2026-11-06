@@ -13,7 +13,8 @@ import (
 // A waiting item's card on the board and the list, and getItem, say what holds it: after the
 // items it needs (planned or linked) or, held only by overlap needs, files with its own paths
 // that overlap theirs. An item with no open need waits on nothing. The page's open needs are
-// read once.
+// read once. A part held only by a turn edge waits for its turn, on its assembly's integration
+// branch.
 // openAPIPath is a file a plan says its parts change.
 const openAPIPath = "contracts/api/openapi.yaml"
 
@@ -25,9 +26,17 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{openAPIPath, "web/**"}},
 		domain.NewPart{Key: "client", Title: "the client", Paths: []string{"web/src/a.ts"}, Needs: []string{"contract"}},
 		domain.NewPart{Key: "docs", Title: "the docs", Paths: []string{"docs/a.md", "contracts/api/*.yaml"}},
+		domain.NewPart{Key: "server", Title: "the server", Paths: []string{"cmd/goald/main.go"}},
 	)
-	contract, client, docs := parts[0], parts[1], parts[2]
+	contract, client, docs, server := parts[0], parts[1], parts[2], parts[3]
 	h.edge(t, docs, contract, domain.EdgeOverlap)
+	h.edge(t, server, contract, domain.EdgeTurn)
+
+	const branch = "goal/a1-the-assembly"
+	target := branch
+	if _, err := h.store.SetIntegrationBranch(inOrg(t), asm.ID, branch, stBuild, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	need := h.seed(t, stBuild, domain.StateQueued, t0)
 	linked := h.seed(t, stBuild, domain.StateQueued, t0)
@@ -42,7 +51,7 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 
 	contractNeed := gen.ItemWaitingNeed{Ref: contractRef, Title: "the contract", Paths: []string{openAPIPath, "web/**"}}
 	asmNeed := gen.ItemWaitingNeed{Ref: asmRef, Title: asm.Title, Paths: []string{
-		openAPIPath, "web/**", "web/src/a.ts", "docs/a.md", "contracts/api/*.yaml",
+		openAPIPath, "web/**", "web/src/a.ts", "docs/a.md", "contracts/api/*.yaml", "cmd/goald/main.go",
 	}}
 
 	tests := []struct {
@@ -62,6 +71,10 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 		}},
 		{"assembly need", onAssembly, &gen.ItemWaiting{
 			Kind: gen.WaitingAfter, Items: []string{asmRef}, Files: []string{}, Needs: []gen.ItemWaitingNeed{asmNeed},
+		}},
+		{"turn need", server, &gen.ItemWaiting{
+			Kind: gen.WaitingTurn, Items: []string{contractRef}, Files: []string{}, Needs: []gen.ItemWaitingNeed{contractNeed},
+			Target: &target,
 		}},
 		{"no open need", need, nil},
 	}

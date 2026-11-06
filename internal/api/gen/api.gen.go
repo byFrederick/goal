@@ -1154,6 +1154,7 @@ const (
 	Linked  ItemLinkKind = "linked"
 	Overlap ItemLinkKind = "overlap"
 	Planned ItemLinkKind = "planned"
+	Turn    ItemLinkKind = "turn"
 )
 
 // Valid indicates whether the value is a known member of the ItemLinkKind enum.
@@ -1164,6 +1165,8 @@ func (e ItemLinkKind) Valid() bool {
 	case Overlap:
 		return true
 	case Planned:
+		return true
+	case Turn:
 		return true
 	default:
 		return false
@@ -1234,6 +1237,7 @@ func (e ItemState) Valid() bool {
 const (
 	WaitingAfter ItemWaitingKind = "after"
 	WaitingFiles ItemWaitingKind = "files"
+	WaitingTurn  ItemWaitingKind = "turn"
 )
 
 // Valid indicates whether the value is a known member of the ItemWaitingKind enum.
@@ -1242,6 +1246,8 @@ func (e ItemWaitingKind) Valid() bool {
 	case WaitingAfter:
 		return true
 	case WaitingFiles:
+		return true
+	case WaitingTurn:
 		return true
 	default:
 		return false
@@ -5258,7 +5264,7 @@ type ItemLink struct {
 	// Id The other item's id
 	Id string `json:"id"`
 
-	// Kind planned by whoever split the work, linked by a person, or overlap (their files overlap)
+	// Kind planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)
 	Kind ItemLinkKind `json:"kind"`
 
 	// Ref The other item's <factory name>#<number>
@@ -5268,7 +5274,7 @@ type ItemLink struct {
 	State ItemState `json:"state"`
 }
 
-// ItemLinkKind planned by whoever split the work, linked by a person, or overlap (their files overlap)
+// ItemLinkKind planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)
 type ItemLinkKind string
 
 // ItemNoteFrom A note another item's agent, or a trigger's check, left on the item (an item_note event); it reaches the item's next run after its brief
@@ -5373,7 +5379,7 @@ type ItemTouches struct {
 	Unplanned int `json:"unplanned"`
 }
 
-// ItemWaiting Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones
+// ItemWaiting Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones
 type ItemWaiting struct {
 	// Files For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after
 	Files []string `json:"files"`
@@ -5381,14 +5387,17 @@ type ItemWaiting struct {
 	// Items Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first
 	Items []string `json:"items"`
 
-	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
 	Kind ItemWaitingKind `json:"kind"`
 
 	// Needs The open needs of that kind, oldest edge first, the same ones as items
 	Needs []ItemWaitingNeed `json:"needs"`
+
+	// Target For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files
+	Target *string `json:"target,omitempty"`
 }
 
-// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
 type ItemWaitingKind string
 
 // ItemWaitingNeed One open need that holds a waiting item

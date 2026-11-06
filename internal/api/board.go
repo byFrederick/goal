@@ -565,7 +565,8 @@ func ageSeconds(it domain.Item, now time.Time) int64 {
 
 // waiting reads, in one call, the open needs of the waiting ones of items of factory f and
 // derives what holds each of them, by item, with their needs written by ref; no entry for an
-// item that waits on nothing.
+// item that waits on nothing. A part held by a turn edge waits on its root's integration branch,
+// read once per root; every other item waits on the default branch.
 func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain.Item, ref func(number int64) string) (map[domain.ItemID]*gen.ItemWaiting, error) {
 	ids := make([]domain.ItemID, 0, len(items))
 	for _, it := range items {
@@ -580,9 +581,15 @@ func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain
 	}
 
 	out := map[domain.ItemID]*gen.ItemWaiting{}
+	branches := map[domain.ItemID]string{}
 
 	for _, it := range items {
-		if w, ok := domain.WaitingFor(it, needs[it.ID]); ok {
+		target, err := s.turnTarget(ctx, it, needs[it.ID], branches)
+		if err != nil {
+			return nil, err
+		}
+
+		if w, ok := domain.WaitingFor(it, needs[it.ID], target); ok {
 			out[it.ID] = waitingOf(w, ref)
 		}
 	}
@@ -590,11 +597,36 @@ func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain
 	return out, nil
 }
 
+// turnTarget is the branch whose turn it waits for: for a part with a turn need, its root's
+// integration branch ("" in mode trunk), read once into branches by root; "" for every other
+// item, which lands on the default branch.
+func (s *server) turnTarget(ctx context.Context, it domain.Item, needs []domain.OpenNeed, branches map[domain.ItemID]string) (string, error) {
+	if it.ParentID == "" || !slices.ContainsFunc(needs, func(n domain.OpenNeed) bool { return n.Kind == domain.EdgeTurn }) {
+		return "", nil
+	}
+
+	if b, ok := branches[it.ParentID]; ok {
+		return b, nil
+	}
+
+	root, err := s.items.Item(ctx, it.ParentID)
+	if err != nil {
+		return "", fmt.Errorf("item %s: root %s: %w", it.ID, it.ParentID, err)
+	}
+
+	branches[it.ParentID] = root.IntegrationBranch
+
+	return root.IntegrationBranch, nil
+}
+
 // waitingOf is w as the API shows it, its items written with ref and named in needs.
 func waitingOf(w domain.Waiting, ref func(number int64) string) *gen.ItemWaiting {
 	out := &gen.ItemWaiting{
 		Kind: gen.ItemWaitingKind(w.Kind), Items: make([]string, 0, len(w.Items)), Files: append([]string{}, w.Files...),
 		Needs: make([]gen.ItemWaitingNeed, 0, len(w.Items)),
+	}
+	if w.Target != "" {
+		out.Target = &w.Target
 	}
 	for _, n := range w.Items {
 		out.Items = append(out.Items, ref(n.Number))
