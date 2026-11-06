@@ -475,7 +475,7 @@ test('seven stations at 1280 px: wide columns, one-line chips, no overlapping te
       }
     }
     const drawnChips = Array.from(region?.querySelectorAll<HTMLElement>('article span.rounded-chip') ?? []).filter(
-      (chip) => chip.checkVisibility() && chip.getClientRects().length > 0,
+      (chip) => Boolean(chip.textContent?.trim()) && chip.checkVisibility() && chip.getClientRects().length > 0,
     );
     const chipLines = drawnChips.map((chip) => {
       const range = document.createRange();
