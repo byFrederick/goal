@@ -178,6 +178,12 @@ describe('BoardCard as the screen draws it', () => {
     expect(within(card_).getByText('builder')).toBeTruthy();
     expect(within(card_).getByText('$0.70')).toBeTruthy();
     expect(within(card_).getByText('Needs your OK')).toBeTruthy();
+    // The chip stays on one line and truncates, with its full text as a title.
+    const chip = within(card_).getByText('Needs your OK').closest('[title]') as HTMLElement;
+    expect(chip.getAttribute('title')).toBe('Needs your OK');
+    expect(chip.className).toContain('whitespace-nowrap');
+    expect(chip.className).toContain('[&>span]:truncate');
+    expect(chip.className).not.toContain('whitespace-normal');
     expect(card_.textContent).not.toMatch(/copy/i);
     // 12 px padding, as the design's card.
     expect(card_.classList).toContain('p-3');
