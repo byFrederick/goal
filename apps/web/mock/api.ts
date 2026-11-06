@@ -1226,11 +1226,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { summary: summary || null, facts, pull_request: it.pr_url, spend_usd: it.cost_usd };
   };
 
-  /** Why a blocked item is blocked: its latest blocked or paused event. */
+  /** Why a blocked item is blocked: its latest blocked or paused event's reason and code. */
   const blockerOf = (it: MockItem): InboxEntry['blocked'] => {
     const last = state.events.findLast((e) => e.item_id === it.id && (e.kind === 'blocked' || e.kind === 'paused'));
     const reason = typeof last?.data.reason === 'string' && last.data.reason ? last.data.reason : null;
-    return { reason, paused: last?.kind === 'paused' };
+    const code = typeof last?.data.code === 'string' && last.data.code ? last.data.code : null;
+    return { reason, code, paused: last?.kind === 'paused' };
   };
 
   /**

@@ -847,3 +847,57 @@ func (h *harness) notReported(t *testing.T, it domain.Item, value string) {
 		}
 	}
 }
+
+// A line on secrets that names no runtime.modelKey blocks its item before any run, with the
+// refusal as the reason and the code model_key_missing; a refusal without a code, a form
+// connections replaced, blocks with the reason alone.
+func TestAdmit_LineOnSecretsWithoutModelKeyBlocksWithCode(t *testing.T) {
+	t.Parallel()
+
+	noKey := secretsLine()
+	noKey.Runtime.ModelKey = ""
+
+	removed := lineOf(agentStation(stWork, agWorker, 1, 1))
+	removed.Removed = []string{"spec.agents[0].env (env-reference-removed)"}
+
+	tests := map[string]struct {
+		line domain.Line
+		code any // data.code; nil for no key
+	}{
+		"on secrets without a model key": {noKey, domain.BlockModelKeyMissing},
+		"a removed form":                 {removed, nil},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, tt.line, porttest.Succeed(`{}`))
+			it := h.submit(t, domain.NewItem{})
+
+			h.step(t)
+
+			if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+				t.Fatalf("item %s, want blocked", got.State)
+			}
+
+			blocked := h.eventsOf(it.ID, domain.EventBlocked)
+			if len(blocked) != 1 {
+				t.Fatalf("%d blocked events, want 1", len(blocked))
+			}
+
+			if reason := blocked[0].Data["reason"]; reason != tt.line.Refusal() {
+				t.Errorf("reason %q, want the refusal %q", reason, tt.line.Refusal())
+			}
+
+			code, ok := blocked[0].Data["code"]
+			if code != tt.code || ok != (tt.code != nil) {
+				t.Errorf("data.code %v (present %v), want %v", code, ok, tt.code)
+			}
+
+			if runs := h.worker.Runs(); len(runs) != 0 {
+				t.Errorf("%d runs started, want none", len(runs))
+			}
+		})
+	}
+}

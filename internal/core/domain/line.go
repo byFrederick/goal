@@ -180,6 +180,21 @@ func (l Line) Refusal() string {
 	}
 }
 
+// BlockModelKeyMissing is the code of a block whose line is on secrets and names no
+// runtime.modelKey (Line.RefusalCode): the blocked event's data.code, which callers branch on
+// instead of the reason's words.
+const BlockModelKeyMissing = "model_key_missing"
+
+// RefusalCode is the stable code of the line's Refusal, "" when the refusal has none or runs can
+// start: BlockModelKeyMissing for a line on secrets without runtime.modelKey.
+func (l Line) RefusalCode() string {
+	if len(l.Removed) == 0 && l.OnSecrets() && l.Runtime.ModelKey == "" {
+		return BlockModelKeyMissing
+	}
+
+	return ""
+}
+
 // MergeConnections are the connections the line's merges may use (spec 4 §4.7): its
 // organization connections and its repository's, each once; those whose kind has a code host
 // serve the pull requests on the host of their git login.

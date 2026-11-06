@@ -8754,7 +8754,11 @@ components:
         kind:
           type: string
           description: >-
-            What happened, as in submitted, moved, note or lease_taken. question_asked: the
+            What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped
+            at its station until a person retries it (data reason, the technical detail as
+            written then; code, a stable code to branch on, only when the block has one:
+            model_key_missing when the line is on environment files and secrets but names no
+            runtime.modelKey). question_asked: the
             item's agent asked a person (data question, choices, agent as the role name, run_id);
             the run ends and the item waits at its station. question_answered: a person answered
             (data answer, the picked choice's text or their words; choice_index only when a
@@ -9477,12 +9481,18 @@ components:
         spend_usd: { type: number, format: double }
     InboxBlocked:
       type: object
-      required: [reason, paused]
+      required: [reason, code, paused]
       properties:
         reason:
           type: string
           nullable: true
           description: The reason of the item's latest blocked or paused event, as written then; null without one
+        code:
+          type: string
+          nullable: true
+          description: >-
+            The code of the item's latest blocked event (model_key_missing: the line names no
+            runtime.modelKey); null without one
         paused: { type: boolean, description: A person paused it (goal retry resumes it) }
     ReworkWarning:
       type: object
