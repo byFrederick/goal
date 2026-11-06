@@ -240,6 +240,20 @@ The line carries it as `domain.Station.Merges`, and `Station.TakesTurns` reports
 
 Nothing reads the setting yet: the engine holds items for their target's turn in a later part of the same assembly.
 
+## CI waits: a station's `waitFor`
+
+`waitFor` on a station makes goald wait for CI on the item's pushed commits ([ADR 0044](../adr/0044-goald-waits-for-ci.md)). The short form is `waitFor: ci`; the long form is `waitFor: {ci: {grace, max, rounds}}`, and a field left out takes its default.
+
+| Field | Values | Default | Meaning |
+| --- | --- | --- | --- |
+| `grace` | a positive whole number of `s`, `m` or `h` | `5m` | How long after the run ended a first check may take to appear. |
+| `max` | the same | `60m` | The longest goald waits on one commit. |
+| `rounds` | integer, 1 or more | `3` | CI rounds in one visit to the station before the item blocks. |
+
+The schema refuses any other shape, an unknown key, a duration of another form and rounds below 1. The line carries the setting as `domain.Station.WaitFor`, a `domain.CIWait` with every default filled in, and `Station.WaitsForCI` reports whether the station sets it. The checks report `wait-for-max-not-above-grace` when `max`, a default counted, is not above `grace`; the message names the station.
+
+Nothing reads the setting yet: the poller and the engine's waits follow in later parts of the same assembly.
+
 ## Repositories: `runtime.repositories` and an agent's code
 
 The task guides are [Connect code to a factory](../../apps/docs/src/content/docs/guides/connect-code.md) and [Connect GitHub](../../apps/docs/src/content/docs/guides/connect-github.md), served at `/docs/guides/connect-code/` and `/docs/guides/connect-github/`.
