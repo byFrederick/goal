@@ -62,6 +62,31 @@ test('Approve publishes proposal 7 and opens the definition at its versions', as
   await expect(page).toHaveURL(/\/definition\/versions/);
 });
 
+// The approve POST alone is delayed with the mock's latency header, so the busy state stays on screen.
+// Runs in each Playwright project (375, 768, 1440 px) and in both colour schemes. Not run in the box: CI-verified.
+for (const scheme of ['light', 'dark'] as const) {
+  test(`Approve shows Publishing v22 while it waits, then the Published check (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.route('**/proposals/7/approve', (route) =>
+      route.continue({ headers: { ...route.request().headers(), 'x-mock-latency-ms': '1500' } }),
+    );
+    await page.goto('/o/acme/f/software/jonah/proposals/7');
+    const button = page.getByRole('button', { name: 'Approve and publish v22' });
+    await expect(button).toBeVisible();
+    const before = (await button.boundingBox())?.width ?? 0;
+
+    await button.click();
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+    await expect(button.getByText('Publishing v22…')).toBeVisible();
+    await expect(button.locator('svg')).toBeVisible();
+    const during = (await button.boundingBox())?.width ?? 0;
+    expect(Math.abs(during - before)).toBeLessThanOrEqual(1);
+
+    await expect(page.getByText('Published', { exact: true }).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/definition\/versions/);
+  });
+}
+
 test('Approve shows the draft-open message on the flagged proposal 8', async ({ page }) => {
   await page.goto('/o/acme/f/software/jonah/proposals/8');
   await page.getByRole('button', { name: 'Approve and publish v22' }).click();
