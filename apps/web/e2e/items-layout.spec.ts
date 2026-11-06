@@ -1,8 +1,8 @@
-// Items against the mock: every column shows at 1440, the view tabs stay on one line at 768, and the
+// Items against the mock: Title gets the leftover width at 1024 to 1440, the view tabs stay on one line at 768, and the
 // pictures for the pull request.
 import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, lengthenTitles } from './support';
-import { expectNoOverlap, expectTarget44 } from './support-boxes';
+import { cutRefs, expectNoOverlap, expectTarget44, shownTitleCharacters } from './support-boxes';
 
 const items = '/o/acme/f/goal/items';
 
@@ -11,13 +11,13 @@ test.beforeEach(async ({ request }) => {
 });
 
 test.describe('desktop', () => {
-  test('shows State, Agent, Age and Cost inside the table box at 1440', async ({ page }, testInfo) => {
+  test('shows State and Cost inside the table box at 1440', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'the 1440 project');
     await page.goto(items);
     const table = page.getByRole('table', { name: 'Items' });
     await expect(table).toBeVisible();
     const box = await table.locator('xpath=..').boundingBox();
-    for (const name of ['State', 'Agent', 'Age', 'Cost']) {
+    for (const name of ['State', 'Cost']) {
       const header = table.getByRole('columnheader', { name, exact: true });
       await expect(header).toBeVisible();
       const at = await header.boundingBox();
@@ -33,12 +33,13 @@ for (const { width, height } of [
   { width: 1280, height: 900 },
   { width: 1440, height: 1000 },
 ]) {
-  test(`shows every column without sideways scroll at ${width} px with long titles`, async ({ page }) => {
+  test(`gives Title the leftover width without sideways scroll at ${width} px with long titles`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
     await page.goto(items);
     const table = page.getByRole('table', { name: 'Items' });
-    for (const name of ['Title', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost']) {
+    // Type, Lane, Agent and Age leave the columns when the table's box is narrow (below).
+    for (const name of ['Title', 'Station', 'State', 'Cost']) {
       await expect(table.getByRole('columnheader', { name, exact: true })).toBeVisible();
     }
     // The title link stays inside its cell: its box does not run under the Type or Lane cell.
@@ -50,8 +51,39 @@ for (const { width, height } of [
     const headers = await table.locator('thead th').allInnerTexts();
     const at = (name: string) => headers.findIndex((h) => h.trim().startsWith(name));
     const link = row.locator('td').nth(at('Title')).getByRole('link').first();
-    await expectNoOverlap(link, row.locator('td').nth(at('Type')), 'the title link and the Type cell');
-    await expectNoOverlap(link, row.locator('td').nth(at('Lane')), 'the title link and the Lane cell');
+    if (await table.getByRole('columnheader', { name: 'Type', exact: true }).isVisible()) {
+      await expectNoOverlap(link, row.locator('td').nth(at('Type')), 'the title link and the Type cell');
+      await expectNoOverlap(link, row.locator('td').nth(at('Lane')), 'the title link and the Lane cell');
+    }
+    // Title takes the leftover width: 30 characters of every title show, no ref is cut, and no
+    // column is narrower than its minimum (a narrow table puts Type, Lane, Agent and Age under the title).
+    const titles = await shownTitleCharacters(table, '[data-cell="title"]');
+    expect(titles.length).toBeGreaterThan(0);
+    for (const t of titles) expect(t.shown, `"${t.text}" shows ${t.shown} characters`).toBeGreaterThanOrEqual(t.needed);
+    const refs = await cutRefs(table);
+    expect(refs.count).toBeGreaterThan(0);
+    expect(refs.cut).toEqual([]);
+    const minimum: Record<string, number> = {
+      Ref: 90,
+      Title: 240,
+      Type: 70,
+      Lane: 80,
+      Station: 80,
+      State: 110,
+      Agent: 100,
+      Age: 56,
+      Cost: 70,
+    };
+    for (const [name, least] of Object.entries(minimum)) {
+      const header = table.getByRole('columnheader', { name, exact: true });
+      if (!(await header.isVisible())) continue;
+      const at = await header.boundingBox();
+      expect(at?.width ?? 0, `the ${name} column`).toBeGreaterThanOrEqual(least);
+    }
+    // A hidden column's values show on a second line under the title, so no value is lost.
+    if (!(await table.getByRole('columnheader', { name: 'Lane', exact: true }).isVisible())) {
+      await expect(row.getByText('Lane:')).toBeAttached();
+    }
     const fits = await table.evaluate((t) => {
       const box = t.parentElement as HTMLElement;
       return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;

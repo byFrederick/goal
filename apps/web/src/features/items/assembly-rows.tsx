@@ -97,10 +97,18 @@ export function SelectBox({
 }
 
 /** The table cell's padding, shared by every row. */
-const cell = 'px-3 py-2 align-middle lg:overflow-clip lg:max-xl:px-1';
+const cell = 'px-3 py-2 align-middle lg:overflow-clip';
 
 /** Columns that give way below 1024 px, where the table scrolls in its own box; from lg every column shows. */
 export const hideBelowLg = 'hidden lg:table-cell';
+
+/**
+ * Type, Lane, Agent and Age are their own columns only while the table's box (a container, not the
+ * viewport) is at least `minorWidth` wide; below it they sit on a second line under the title, so the
+ * title keeps the leftover width. The two classes below must name the same width.
+ */
+export const minorColumn = 'hidden @min-[1150px]:table-cell';
+export const minorLine = '@min-[1150px]:hidden';
 
 /** The ref as the design shows it: the number after the factory prefix, with the hash kept. */
 export function shortRef(ref: string): string {
@@ -151,8 +159,8 @@ export function ItemTableRow({
       <td className={cn(cell, 'w-px')}>
         <SelectBox label={`Select ${item.ref}`} checked={selected} onChange={() => onSelect(item.id)} />
       </td>
-      <td className={cn(cell, 'whitespace-nowrap')}>
-        <span className={refClass} title={item.ref}>
+      <td className={cn(cell, 'whitespace-nowrap lg:overflow-visible')}>
+        <span className={refClass} data-cell="ref" title={item.ref}>
           {shortRef(item.ref)}
         </span>
       </td>
@@ -161,6 +169,7 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
+          data-cell="title"
           className={cn(
             touchLink,
             'line-clamp-2 min-h-6 max-w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap',
@@ -169,14 +178,39 @@ export function ItemTableRow({
           {item.title}
         </Link>
         {showRepositories ? <ItemRepositories item={item} className="mt-1 max-w-full 2xl:hidden" /> : null}
+        <div
+          className={cn(
+            'mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-normal text-secondary text-ink-soft',
+            minorLine,
+          )}
+        >
+          {item.type ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="sr-only">Type: </span>
+              <Chip tone="plain">{item.type}</Chip>
+            </span>
+          ) : null}
+          <span className="inline-flex items-center gap-1">
+            <span className="sr-only">Lane: </span>
+            {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="sr-only">Agent: </span>
+            {item.agent ?? <span className="text-muted">None yet</span>}
+          </span>
+          <span className="inline-flex items-center gap-1 tabular-nums">
+            <span className="sr-only">Age: </span>
+            <span className="text-muted">{formatAge(item.age_seconds)}</span>
+          </span>
+        </div>
       </td>
       {showRepositories ? (
         <td className={cn(cell, 'hidden 2xl:table-cell 2xl:max-w-48')}>
           <ItemRepositories item={item} className="max-w-48" />
         </td>
       ) : null}
-      <td className={cell}>{item.type ? <Chip tone="plain">{item.type}</Chip> : null}</td>
-      <td className={cn(cell, hideBelowLg)}>
+      <td className={cn(cell, minorColumn)}>{item.type ? <Chip tone="plain">{item.type}</Chip> : null}</td>
+      <td className={cn(cell, minorColumn)}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
       <td className={cn(cell, 'whitespace-nowrap lg:truncate')} title={humanize(item.station)}>
@@ -192,19 +226,19 @@ export function ItemTableRow({
             title={label.text}
           >
             {status ? <StatusIcon status={status} /> : null}
-            <span className="min-w-0 lg:max-xl:truncate" title={label.text}>
+            <span className="min-w-0 lg:truncate" title={label.text}>
               {label.text}
             </span>
           </span>
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap', hideBelowLg)}>
+      <td className={cn(cell, 'whitespace-nowrap', minorColumn)}>
         {item.agent ? (
           <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft">
             <span
               aria-hidden="true"
-              className="grid size-6 flex-none place-items-center max-xl:lg:hidden rounded-full bg-run-tint text-meta font-semibold text-run-ink"
+              className="grid size-6 flex-none place-items-center rounded-full bg-run-tint text-meta font-semibold text-run-ink"
             >
               {monogram(item.agent)}
             </span>
@@ -216,7 +250,7 @@ export function ItemTableRow({
           <span className="text-muted">None yet</span>
         )}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap text-right text-muted tabular-nums', hideBelowLg)}>
+      <td className={cn(cell, 'whitespace-nowrap text-right text-muted tabular-nums', minorColumn)}>
         {formatAge(item.age_seconds)}
       </td>
       <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
@@ -270,7 +304,7 @@ export function AssemblyTableRow({
             onChange={() => onSelect(parts.map((part) => part.id))}
           />
         </td>
-        <td className={cn(cell, 'whitespace-nowrap')}>
+        <td className={cn(cell, 'whitespace-nowrap lg:overflow-visible')}>
           <span className="inline-flex items-center gap-2">
             <button
               type="button"
@@ -286,29 +320,28 @@ export function AssemblyTableRow({
                 className={cn('transition-transform duration-200', !open && '-rotate-90')}
               />
             </button>
-            <span className={refClass} title={ref}>
+            <span className={refClass} data-cell="ref" title={ref}>
               {shortRef(ref)}
             </span>
           </span>
         </td>
-        <td colSpan={2} className={cell}>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-            <Link
-              to="/o/$org/f/$factory/items/$ref"
-              params={{ ...params, ref: refParam(ref) }}
-              className={cn(
-                'inline-flex min-w-0 items-center gap-2 max-md:min-h-11 font-semibold text-ink no-underline hover:text-run-ink',
-              )}
+        <td className={cell}>
+          <Link
+            to="/o/$org/f/$factory/items/$ref"
+            params={{ ...params, ref: refParam(ref) }}
+            className="flex min-w-0 items-center gap-2 max-md:min-h-11 font-semibold text-ink no-underline hover:text-run-ink"
+          >
+            <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />
+            <span className="sr-only">Assembly, </span>
+            <span
+              className="min-w-0 line-clamp-2 max-w-64 whitespace-normal break-words lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
+              data-cell="title"
+              title={title}
             >
-              <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />
-              <span className="sr-only">Assembly, </span>
-              <span
-                className="line-clamp-2 max-w-64 whitespace-normal break-words lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
-                title={title}
-              >
-                {title}
-              </span>
-            </Link>
+              {title}
+            </span>
+          </Link>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 whitespace-normal">
             {stations ? (
               <span className="text-secondary text-muted" title={stations}>
                 {stations}
@@ -331,11 +364,12 @@ export function AssemblyTableRow({
           </div>
         </td>
         {showRepositories ? <td aria-hidden="true" className="hidden 2xl:table-cell" /> : null}
-        <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
+        <td className={cn(cell, minorColumn)} aria-hidden="true" />
+        <td className={cn(cell, minorColumn)} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
-        <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
-        <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
+        <td className={cn(cell, minorColumn)} aria-hidden="true" />
+        <td className={cn(cell, minorColumn)} aria-hidden="true" />
         <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
           {formatUsd(cost)}
         </td>
