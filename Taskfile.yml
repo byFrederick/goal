@@ -375,6 +375,18 @@ tasks:
     cmds:
       - bin/goal storage init
 
+  catalog:templates:push:
+    desc: Push every starter template (deploy/catalog/templates/<name>/<version>/) into the bucket GOAL_S3_* names (the local RustFS by default); a version already held unchanged is not an error, so it can be repeated
+    deps: [build]
+    cmds:
+      - |
+        set -eu
+        for d in deploy/catalog/templates/*/*/; do
+          v="$(basename "$d")"
+          n="$(basename "$(dirname "$d")")"
+          bin/goal catalog templates push "$d" --name "$n" --version "$v"
+        done
+
   factory:validate:
     desc: Validate every factory in the working copy (GOAL_FACTORIES_DIR) through goald
     cmds:
