@@ -36,7 +36,7 @@ Tests and helpers that run git must not inherit the GIT_* repository variables (
 task test               # unit tests with -race
 task test-integration   # starts PostgreSQL 18 and RustFS via compose, runs integration-tagged tests
 task check              # everything the pre-push hook and CI (pull requests into main) run
-task web:e2e            # the web Playwright suite; CI runs it in the e2e job, in 12 shards, on pull requests into an assembly branch (goal/a*) that change apps/web/, packages/api-client/, contracts/ or `.github/workflows/ci.yml`, and on every push to main
+task web:e2e            # the web Playwright suite; CI runs it in the e2e job, in 12 shards, on pull requests into main; a shard runs the suite only when the pull request changes apps/web/, packages/api-client/, contracts/ or `.github/workflows/ci.yml`
 task check:changed      # only the checks of the parts this branch changed since origin/main (README, Development)
 task e2e:secrets        # a run on secrets against a private repository, the check before deploying main (below)
 ```
@@ -51,7 +51,7 @@ Branch protection is not managed in code: `deploy/terraform` has no GitHub provi
 
 The e2e job is a matrix of 12 shards, `task web:e2e (<i>/12)`, each running `playwright test --shard=<i>/12` in `apps/web` with fail-fast off, so one shard's failures never cancel the others. A shard that fails uploads its HTML report and traces as the artifact `e2e-report-<i>`, kept 7 days; read the failing tests from the failed shards' artifacts.
 
-The e2e job runs on pull requests into main and into an assembly's integration branch (`goal/a<number>-...`), and on every push to main (the whole suite). On an assembly branch it runs the whole suite, so a part is judged by its own specs in the report, not by a green job. The `task check` and `task test-integration` jobs run only when the pull request's base is main (`github.base_ref == 'main'`); a part's merge into its assembly branch is gated by `task check:changed` instead, and the landing pull request into main runs `task check` and `task test-integration`. Builders name the Playwright specs they could not run ([goal-deliver](../../.claude/skills/goal-deliver/SKILL.md) step 4), and reviewers read the e2e job where it runs before approving ([web rule](../../.claude/rules/web.md#review)).
+ci runs only on pull requests into main, and every job runs on each of them. A part's merge into its assembly's integration branch is gated by `task check:changed` instead, and the landing pull request into main runs all of ci. Builders name the Playwright specs they could not run ([goal-deliver](../../.claude/skills/goal-deliver/SKILL.md) step 4), and reviewers read the e2e job before approving ([web rule](../../.claude/rules/web.md#review)).
 
 ### A run on secrets end to end
 
