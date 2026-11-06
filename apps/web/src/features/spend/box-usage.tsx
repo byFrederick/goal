@@ -79,9 +79,9 @@ export function BoxUsage({ spend, factoryNames }: { spend: OrgSpend; factoryName
             {rows.map((r) => (
               <tr
                 key={`${r.factory_id}/${nameOf(r)}/${r.box_size ?? ''}`}
-                className="border-t border-line max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:gap-y-1 max-md:py-3 md:[&>td]:py-2.5"
+                className="border-t border-line max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:gap-y-1 max-md:py-3"
               >
-                <td className="min-w-0 pr-3 max-md:col-span-2 max-md:p-0">
+                <td className="min-w-0 py-3 pr-3 max-md:col-span-2 max-md:p-0">
                   <b className="font-semibold break-words text-ink">{nameOf(r)}</b>
                   {many ? (
                     <span className="block text-meta text-muted">{factoryNames.get(r.factory_id) ?? r.factory_id}</span>
@@ -108,7 +108,7 @@ export function BoxUsage({ spend, factoryNames }: { spend: OrgSpend; factoryName
 function Cell({ label, left, children }: { label: string; left?: boolean; children: React.ReactNode }) {
   return (
     <td
-      className={`pl-3 tabular-nums whitespace-nowrap max-md:flex max-md:justify-between max-md:p-0 ${left ? 'text-left md:pl-0' : 'text-right'}`}
+      className={`py-3 pl-3 tabular-nums whitespace-nowrap max-md:flex max-md:justify-between max-md:p-0 ${left ? 'text-left md:pl-0' : 'text-right'}`}
     >
       <span className="text-meta text-muted md:hidden" aria-hidden="true">
         {label}
