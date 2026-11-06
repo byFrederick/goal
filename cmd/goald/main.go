@@ -40,7 +40,6 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/directmessage/slack"
 	"github.com/byFrederick/goal/internal/adapters/mailer/smtp"
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
-	"github.com/byFrederick/goal/internal/adapters/minter/awssts"
 	"github.com/byFrederick/goal/internal/adapters/objectstore/s3"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/docker"
@@ -55,7 +54,6 @@ import (
 	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -186,11 +184,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// Connections and their kinds (spec 4): definitions are validated against them, the API serves
-	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) and
-	// the organizations' secrets (ADR 0037, the same table) are sealed under the same master keys,
-	// and so are webhook endpoints' signing secrets (ADR 0026).
-	_, credentials, orgSecrets, intake, err := openConnections(ctx, store, os.Getenv, log)
+	// Credentials (ADR 0017) and the organizations' secrets (ADR 0037, the same table) are sealed
+	// under the platform's master keys, and so are webhook endpoints' signing secrets (ADR 0026).
+	credentials, orgSecrets, intake, err := openSealed(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
 	}
@@ -257,7 +253,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
 		Contracts: defs, Secrets: secrets, StandingRules: rules, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
-		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
+		Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err
@@ -427,63 +423,43 @@ func openKnowledge(s settings, store *postgres.Store, secrets *postgres.Secrets,
 	}
 }
 
-// openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
+// openSealed loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
 // refuses to start while a secret, connection or webhook endpoint is sealed under a key id they
-// lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), makes the kinds goald ships the platform's, and returns the
-// connections, the credentials, the secrets and the intake state sealed with those keys. Without a master key goald serves
-// everything but connections with secrets and credentials' values, and says so.
-func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
-) (*postgres.Connections, *postgres.Credentials, *postgres.Secrets, *postgres.Intake, error) {
+// lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), and returns the credentials,
+// the secrets and the intake state sealed with those keys. Without a master key goald serves
+// everything but secrets' and credentials' values, and says so.
+func openSealed(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
+) (*postgres.Credentials, *postgres.Secrets, *postgres.Intake, error) {
 	keys, err := masterkey.Load(getenv)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	sealed, err := postgres.ConnectionKeyIDs(ctx, store)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	have := keys.IDs()
 
 	if missing := slices.DeleteFunc(sealed, func(id string) bool { return slices.Contains(have, id) }); len(missing) > 0 {
-		return nil, nil, nil, nil, fmt.Errorf("secrets or connections are sealed under master key %s, which %s and %s do not hold: "+
+		return nil, nil, nil, fmt.Errorf("secrets or connections are sealed under master key %s, which %s and %s do not hold: "+
 			"give goald every key a secret or connection is sealed under (goal db rekey reseals them under the active one, "+
 			"after which an old key can go)", strings.Join(missing, ", "), masterkey.KeysEnv, masterkey.FileEnv)
 	}
 
 	if len(have) == 0 {
-		log.WarnContext(ctx, "no master key: connections with secrets and credentials are unavailable until one is set; add "+
+		log.WarnContext(ctx, "no master key: secrets and credentials are unavailable until one is set; add "+
 			masterkey.KeysEnv+"=k1:<the output of openssl rand -base64 32> to .env and keep a copy offline")
 	} else {
 		log.InfoContext(ctx, "master keys loaded", slog.String("active", keys.Active()), slog.Int("count", len(have)))
 	}
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	connections := postgres.NewConnections(store, keys)
-	if err := connections.SyncPlatformKinds(ctx, kinds); err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	log.InfoContext(ctx, "connection kinds synced", slog.Int("platform", len(kinds)))
-
-	return connections, postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store, keys), nil
+	return postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store, keys), nil
 }
 
-// minters are the minters by the name connection kinds give them (mint): AWS STS for the aws and
-// bedrock kinds, over the connection transport.
-func minters(s settings) map[string]ports.Minter {
-	return map[string]ports.Minter{
-		"aws-sts": awssts.New(awssts.Config{HTTPClient: &http.Client{Transport: connectionTransport(s.AllowPrivateUpstreams)}}),
-	}
-}
-
-// connectionTransport carries every request goald makes for a connection (its test, STS, merges,
-// sync and conversions): to public addresses only (egress.PublicDialer, threat row 4), unless
+// connectionTransport carries every request goald makes to an organization's upstreams (merges,
+// sync, tool listing and conversions): to public addresses only (egress.PublicDialer, threat row 4), unless
 // GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
 // proxy variable cannot route around the address check.
 func connectionTransport(allowPrivate bool) *http.Transport {

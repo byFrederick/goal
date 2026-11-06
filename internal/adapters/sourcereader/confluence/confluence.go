@@ -1,11 +1,10 @@
-// Package confluence implements ports.SourceReader for the knowledge base's synced sources whose
-// connection's kind syncs with confluence (spec 4 §4.8, §5.6): the pages of one or more spaces of
-// a Confluence Cloud site, read through its REST API v2 with the connection's Atlassian account.
+// Package confluence implements ports.SourceReader for the knowledge base's synced sources that
+// sync with confluence (spec 4 §4.8, §5.6): the pages of one or more spaces of a Confluence Cloud
+// site, read through its REST API v2 with the source's Atlassian account.
 //
 // A source on a secret (ADR 0037 decision 14) names the site (site: its host, such as
 // acme.atlassian.net) and the account's email (email) in its config, and its secret holds the
-// API token; a source still on a connection takes all three from the connection's fields (the
-// platform kind confluence's). They are sent with basic authentication. A source's config names
+// API token. They are sent with basic authentication. A source's config names
 // the spaces (spaces: space keys separated by commas or new lines, such as ENG, SUP).
 //
 // A listing is every current page of the spaces (GET /wiki/api/v2/spaces/{id}/pages, 250 a
@@ -31,7 +30,7 @@
 // in storage format (GET /wiki/api/v2/pages/{id}?body-format=storage), at most an upload's size
 // (domain.DefaultMaxUpload), and turns it into Markdown.
 //
-// Every request goes to the connection's site: a next link only lends its cursor, redirects are
+// Every request goes to the source's site: a next link only lends its cursor, redirects are
 // not followed and no error carries the token. goald gives it a transport that dials public
 // addresses only (egress.PublicDialer).
 package confluence
@@ -109,7 +108,7 @@ func New(cfg Config) *Reader {
 
 	return &Reader{http: &http.Client{
 		Timeout: cfg.Timeout, Transport: cfg.Transport,
-		// A credentialed request is never sent anywhere but the connection's site.
+		// A credentialed request is never sent anywhere but the source's site.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }
@@ -185,7 +184,7 @@ func (r *Reader) list(ctx context.Context, s domain.SyncSpec) ([]domain.SourceIt
 
 	// A root page not found would list nothing, which would delete every file.
 	if src.root != "" && !root {
-		return nil, fmt.Errorf("root page %s is not a current page of the spaces %s, or the connection's account cannot see it", src.root, strings.Join(src.keys, ", "))
+		return nil, fmt.Errorf("root page %s is not a current page of the spaces %s, or the source's account cannot see it", src.root, strings.Join(src.keys, ", "))
 	}
 
 	return items, nil
@@ -282,7 +281,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 	return domain.SourceDoc{SourceItem: item, Body: []byte(text)}, nil
 }
 
-// source is a confluence source opened: the connection's site and account, the keys of the
+// source is a confluence source opened: the source's site and account, the keys of the
 // spaces it reads and its root page's id ("": none).
 type source struct {
 	// site is the host every request goes to.
@@ -292,8 +291,8 @@ type source struct {
 	root         string
 }
 
-// open reads s: the site and account (the source's config and its secret's value, or the
-// connection's fields), and the source's spaces.
+// open reads s: the site and account (the source's config and its secret's value), and the
+// source's spaces.
 func open(s domain.SyncSpec) (source, error) {
 	var values map[string]string
 
@@ -303,10 +302,8 @@ func open(s domain.SyncSpec) (source, error) {
 	case s.Secret != nil:
 		values = map[string]string{fieldSite: s.Source.Config[fieldSite], fieldEmail: s.Source.Config[fieldEmail], fieldToken: s.Secret.Value}
 		owner = "source " + s.Source.Name
-	case s.Connection != nil:
-		values, owner = s.Connection.Values, "connection "+s.Connection.Connection.Name
 	default:
-		return source{}, fmt.Errorf("source %s has no secret or connection to read with: %w", s.Source.Name, domain.ErrInvalid)
+		return source{}, fmt.Errorf("source %s has no secret to read with: %w", s.Source.Name, domain.ErrInvalid)
 	}
 
 	site, err := siteHost(values[fieldSite])
@@ -445,7 +442,7 @@ func (r *Reader) spaces(ctx context.Context, s source) ([]space, error) {
 	for _, k := range s.keys {
 		i := slices.IndexFunc(found, func(sp space) bool { return strings.EqualFold(sp.Key, k) })
 		if i < 0 {
-			return nil, fmt.Errorf("space %s is not on %s, or the connection's account cannot see it", k, s.site)
+			return nil, fmt.Errorf("space %s is not on %s, or the source's account cannot see it", k, s.site)
 		}
 
 		out = append(out, found[i])
@@ -508,7 +505,7 @@ type statusError struct {
 func (e *statusError) Error() string {
 	msg := fmt.Sprintf("Confluence answered %d", e.status)
 	if e.status == http.StatusNotFound {
-		msg += " (not found, or the connection's account cannot see it)"
+		msg += " (not found, or the source's account cannot see it)"
 	}
 
 	if e.message != "" {

@@ -11,7 +11,7 @@ goal/
   go.mod                       Go module (goald, goal CLI, engine, adapters)
   cmd/  internal/  db/          Go code, and db/migrations/, db/queries/, db/sqlc.yaml
   contracts/api/openapi.yaml   THE contract between goald and every TypeScript client (incl. the SSE StreamEvent)
-  contracts/definitions/       factory.schema.json, connection-kind.schema.json, environment.schema.json, memory.schema.json
+  contracts/definitions/       factory.schema.json, environment.schema.json, memory.schema.json
   package.json                 private root: pnpm only, no app code
   pnpm-workspace.yaml          the apps (auth, docs, web, worker) and packages/*; the catalog pins better-auth once
   apps/
@@ -39,7 +39,7 @@ Rules:
 - Go: `oapi-codegen` generates a strict server interface that `internal/adapters/http` implements. Handlers call the engine through ports, as everywhere else.
 - TypeScript: `openapi-typescript` generates types into `packages/contracts`; `openapi-fetch` gives a typed client with no hand-written fetch code.
 - Realtime: `GET /v1/orgs/{org}/stream?factory=` streams one organization's Server-Sent Events: `event: item` (data: the `StreamEvent` schema in `contracts/api/openapi.yaml`, `id:` the event id) and `event: resync` (data `{}`: events may have been missed). There is no replay, so a client re-reads what it shows after a reconnect or a resync. The client turns each event into a TanStack Query cache invalidation, so screens update without polling.
-- Factory and connection-kind files keep their JSON Schemas in `contracts/definitions/`; the same schemas drive Go validation, TS types and the YAML editor's autocompletion.
+- Factory, environment and memory files keep their JSON Schemas in `contracts/definitions/`; the same schemas drive Go validation, TS types and the YAML editor's autocompletion.
 
 ## The design revamp
 

@@ -29,8 +29,13 @@ const (
 	foreignKeyViolation = "23503"
 )
 
-// auditName is the audit data key of a factory's name.
-const auditName = "name"
+// The audit data keys of a factory's, a secret's or a knowledge source's name, its kind and the
+// name it was renamed from.
+const (
+	auditName        = "name"
+	auditKind        = "kind"
+	auditRenamedFrom = "from"
+)
 
 // Definitions implements ports.DefinitionStore: blob content in the bucket through
 // ports.ObjectStore (written once with PutIfAbsent, at domain.BlobKey), and the blob index,
@@ -616,6 +621,13 @@ func knownBlobs(ctx context.Context, q *db.Queries, m domain.Manifest) error {
 	}
 
 	return nil
+}
+
+// isForeignKeyViolation is whether err is PostgreSQL refusing a row whose reference is gone.
+func isForeignKeyViolation(err error) bool {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+
+	return ok && pgErr.Code == foreignKeyViolation
 }
 
 // factoryRuleError maps a rejected factory row: its id taken (in any organization) is

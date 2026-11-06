@@ -93,9 +93,7 @@ describe('the mock connections', () => {
   });
 
   it("serves goald's own platform kinds", async () => {
-    const files = readdirSync(new URL('../../../internal/connkind/kinds/', import.meta.url)).filter((f) =>
-      f.endsWith('.yaml'),
-    );
+    const files = readdirSync(new URL('./kinds/', import.meta.url)).filter((f) => f.endsWith('.yaml'));
     const { body } = await call<ConnectionKindList>('/v1/orgs/acme/connection-kinds');
     expect(body.kinds.map((k) => k.name).sort()).toEqual(files.map((f) => f.replace(/\.yaml$/, '')).sort());
     const github = body.kinds.find((k) => k.name === 'github');

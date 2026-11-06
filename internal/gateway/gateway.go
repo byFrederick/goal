@@ -1,6 +1,6 @@
 // Package gateway is Goal's MCP server for runs (spec 4 §5.9): the run bundle (GET /run) and one
 // MCP endpoint (streamable HTTP) for Goal's own tools, authorized by the run's task token. It
-// proxies no connection and adds no credential: a run uses its organization connections directly
+// proxies no upstream and adds no credential: a run uses its environment's upstreams directly
 // from its box, MCP servers included, with the env the engine gave it.
 //
 // # Auth
@@ -16,13 +16,12 @@
 //
 // ServeRun answers GET /run with the bundle of the run in the token, which goal-agent prepare
 // writes to /goal in the run's sandbox: the task (spec.json: brief, earlier outputs, model, tool
-// rules, limits, the agent's connections), the agent's prompt, skills and output schema from the
+// rules, limits), the agent's prompt, skills and output schema from the
 // definition version the run started on, the repository and the item's branch to check out, the
 // git credentials to configure, each naming the environment variable that holds its password,
-// and the tools to install. It describes the run's organization connections from what anyone may
-// see of them (domain.ConnectionKind.Outline): env names, MCP servers whose headers name env
-// variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
-// bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
+// and the tools to install. It describes the agent's environment file as the engine resolved it:
+// variable names, MCP servers whose headers name env variables (${NAME}, expanded by Claude Code
+// in the box), files, setup and tools. The bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
 // Its rules are the factory rules of the run's version that apply to its agent, station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
 // rule file and the file the worker writes; the first bundle served to a run that any rule
 // applies to appends domain.EventRulesApplied with their names and hashes, and a bundle fetched

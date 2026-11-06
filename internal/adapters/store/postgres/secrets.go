@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -641,4 +642,17 @@ func resealRows(key ports.MasterKey, kind string, rows []db.StaleSealedSecretsRo
 	}
 
 	return len(rows), nil
+}
+
+// uniqueNames are names without repeats, in their first order.
+func uniqueNames(names []string) []string {
+	out := make([]string, 0, len(names))
+
+	for _, n := range names {
+		if !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+
+	return out
 }

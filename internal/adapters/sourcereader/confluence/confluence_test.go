@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/sourcereader/confluence"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -87,7 +86,7 @@ func newSite(t *testing.T, pages ...page) *site {
 	return s
 }
 
-// host is the site's host, which the connections name.
+// host is the site's host, which the sources name.
 func (s *site) host() string { return s.srv.Listener.Addr().String() }
 
 // set adds or replaces pages.
@@ -272,26 +271,15 @@ func (s *site) reader() *confluence.Reader {
 	return confluence.New(confluence.Config{Transport: s.transport(true)})
 }
 
-// spec is a source reading spaces with a connection of the platform kind confluence on the site.
+// spec is a source reading spaces of the site with a secret.
 func (s *site) spec(t *testing.T, spaces string) domain.SyncSpec {
 	t.Helper()
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	i := slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == kindConfluence })
-	if i < 0 {
-		t.Fatal("no platform kind confluence")
-	}
-
 	return domain.SyncSpec{
-		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Connection: nameWiki, Config: map[string]string{cfgSpaces: spaces}},
-		Connection: &domain.ResolvedConnection{
-			Connection: domain.Connection{Name: nameWiki, Kind: kindConfluence}, Kind: kinds[i],
-			Values: map[string]string{fieldSite: s.host(), fieldEmail: email, "token": token},
-		},
+		Source: domain.KnowledgeSource{Name: nameWiki, Kind: domain.SourceSynced, Secret: wikiToken, Config: map[string]string{
+			cfgSpaces: spaces, fieldSite: s.host(), fieldEmail: email,
+		}},
+		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: wikiToken}, Value: token},
 	}
 }
 
@@ -589,12 +577,12 @@ func TestReader_Refusals(t *testing.T) {
 		{name: "no spaces", edit: func(_ *site, s *domain.SyncSpec) { s.Source.Config[cfgSpaces] = " ,\n" }, want: "spaces"},
 		{name: "a space key that is not one", edit: func(_ *site, s *domain.SyncSpec) { s.Source.Config[cfgSpaces] = "ENG, a/b" }, want: `"a/b"`},
 		{name: "a space the site has not", edit: func(_ *site, s *domain.SyncSpec) { s.Source.Config[cfgSpaces] = "ENG, NOPE" }, want: "NOPE"},
-		{name: "no connection", edit: func(_ *site, s *domain.SyncSpec) { s.Connection = nil }, want: "connection"},
-		{name: "a site with a scheme", edit: func(c *site, s *domain.SyncSpec) { s.Connection.Values[fieldSite] = "https://" + c.host() }, want: fieldSite},
-		{name: "a site with a path", edit: func(c *site, s *domain.SyncSpec) { s.Connection.Values[fieldSite] = c.host() + "/wiki" }, want: fieldSite},
-		{name: "a site with credentials", edit: func(c *site, s *domain.SyncSpec) { s.Connection.Values[fieldSite] = "a@" + c.host() }, want: fieldSite},
-		{name: "no email", edit: func(_ *site, s *domain.SyncSpec) { delete(s.Connection.Values, "email") }, want: "email"},
-		{name: "a token the site refuses", edit: func(_ *site, s *domain.SyncSpec) { s.Connection.Values["token"] = token + "-revoked" }, want: "401"},
+		{name: "no secret", edit: func(_ *site, s *domain.SyncSpec) { s.Secret = nil }, want: "secret"},
+		{name: "a site with a scheme", edit: func(c *site, s *domain.SyncSpec) { s.Source.Config[fieldSite] = "https://" + c.host() }, want: fieldSite},
+		{name: "a site with a path", edit: func(c *site, s *domain.SyncSpec) { s.Source.Config[fieldSite] = c.host() + "/wiki" }, want: fieldSite},
+		{name: "a site with credentials", edit: func(c *site, s *domain.SyncSpec) { s.Source.Config[fieldSite] = "a@" + c.host() }, want: fieldSite},
+		{name: "no email", edit: func(_ *site, s *domain.SyncSpec) { delete(s.Source.Config, fieldEmail) }, want: "email"},
+		{name: "a token the site refuses", edit: func(_ *site, s *domain.SyncSpec) { s.Secret.Value = token + "-revoked" }, want: "401"},
 		{name: "next links that repeat their cursor", edit: func(c *site, _ *domain.SyncSpec) { c.stuck = true }, want: "cursor"},
 		{name: "a redirect, not followed", edit: func(c *site, _ *domain.SyncSpec) { c.redirect = true }, want: "302"},
 		{name: "a root page not in the spaces", edit: func(_ *site, s *domain.SyncSpec) { s.Source.Config[cfgRootPage] = "999" }, want: "999"},

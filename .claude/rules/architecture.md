@@ -15,7 +15,7 @@ The design and its reasons are in [architecture.md](../../docs/engineering/archi
 - Add a new system as an adapter behind an existing or new port, since a new import in the engine breaks the boundary for every target.
 - Keep each package within its row of the import table in architecture.md ("Hexagonal core"), because depguard checks exactly that table.
 - Treat depguard in `.golangci.yml` as the guard and never silence it with `//nolint`; a depguard finding means the design is wrong, not the linter.
-- Model a provider as a connection kind (data in `internal/connkind/kinds/`), never as code in the engine, so adding a provider needs no deploy of engine logic.
+- Reach a provider through what the factory definition names (its environment's MCP servers, variables and secrets), never as code in the engine, so adding a provider needs no deploy of engine logic.
 
 ## Config-driven
 
