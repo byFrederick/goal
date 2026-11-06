@@ -21,6 +21,7 @@ var ciWaitsTests = []struct {
 	{"CIWaits_CountRounds", testCIWaitsCountRounds},
 	{"CIWaits_OneOpenPerVisitAndRepository", testCIWaitsOneOpen},
 	{"CIWaits_EndedWaitsLeaveThePollUnleased", testCIWaitsEnded},
+	{"CIWaits_OpenOnPoll", testCIWaitsOpenOnPoll},
 }
 
 // The repository, commits and stations the CI wait cases use.
@@ -307,6 +308,52 @@ func testCIWaitsEnded(f *fixture) {
 
 	if ws := f.openCIWaits(t, it.ID); len(ws) != 0 {
 		t.Errorf("OpenCIWaits after the end = %+v; want none", ws)
+	}
+}
+
+// OpenCIWaitsOnPoll returns the organization's open waits on one commit by start, never another
+// organization's, another commit's or an ended one.
+func testCIWaitsOpenOnPoll(f *fixture) {
+	t := f.t
+
+	a, b, c := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+
+	later := ciWait(a.ID, ciSHA)
+	later.StartedAt = t1.Add(time.Minute)
+	wantA := f.openCIWait(t, later)
+	wantB := f.openCIWait(t, ciWait(b.ID, ciSHA))
+	f.openCIWait(t, ciWait(c.ID, ciNewSHA))
+
+	ended := ciWait(c.ID, ciSHA)
+	ended.Visit = "visit-2"
+	gone := f.openCIWait(t, ended)
+
+	if n, err := f.Store.EndCIWaits(f.ctx(t), []domain.CIWaitID{gone.ID}, domain.CIPassed, t1); err != nil || n != 1 {
+		t.Fatalf("EndCIWaits = %d, %v; want 1, nil", n, err)
+	}
+
+	other := f.otherOrg(t)
+	theirs := other.create(t, domain.NewItem{})
+	other.openCIWait(t, ciWait(theirs.ID, ciSHA))
+
+	key := domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: ciSHA}
+
+	ws, err := f.Store.OpenCIWaitsOnPoll(f.ctx(t), key)
+	if err != nil {
+		t.Fatalf("OpenCIWaitsOnPoll = %v", err)
+	}
+
+	if len(ws) != 2 || ws[0].ID != wantB.ID || ws[1].ID != wantA.ID {
+		t.Fatalf("OpenCIWaitsOnPoll = %+v; want the waits of %s then %s", ws, b.ID, a.ID)
+	}
+
+	if w := ws[1]; !w.Open() || w.Item != a.ID || w.Station != ciStation || w.Visit != ciVisit || w.SHA != ciSHA ||
+		w.Phase != domain.CIPhaseBefore || w.Round != 1 || !w.StartedAt.Equal(later.StartedAt) {
+		t.Errorf("OpenCIWaitsOnPoll's wait = %+v; want the fields of %+v", w, later)
+	}
+
+	if ws, err := f.Store.OpenCIWaitsOnPoll(f.ctx(t), domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: "c0ffee99"}); err != nil || len(ws) != 0 {
+		t.Errorf("OpenCIWaitsOnPoll of a commit with no wait = %+v, %v; want none", ws, err)
 	}
 }
 
