@@ -8837,6 +8837,8 @@ export interface components {
             note?: string;
             read: components["schemas"]["RepositoryCheck"];
             push: components["schemas"]["RepositoryCheck"];
+            /** @description Whether the token can read the commit checks (GitHub) or the pipelines (GitLab) that a station with waitFor: ci waits on, with the host's reason. Absent for a test kept before goald checked CI, until the repository is tested again, and for an owner pattern. It never changes ok: only a factory with a waitFor: ci station needs it. */
+            ci?: components["schemas"]["RepositoryCheck"];
             /** @description For an owner pattern: how many of the owner's repositories the token can read */
             readable?: number;
             /** @description For an owner pattern: how many of them it can push to */
