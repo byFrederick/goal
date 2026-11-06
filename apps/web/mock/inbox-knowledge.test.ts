@@ -82,8 +82,16 @@ describe('a used-up weekly budget', () => {
       body: JSON.stringify({ usedUpBudget: 'sre' }),
       headers: { 'content-type': 'application/json' },
     });
+    const attention = await call<{
+      waiting_on_you: number;
+      factories: { factory_id: string; waiting_on_you: number }[];
+    }>('/v1/orgs/acme/attention');
     const inbox = await call<Inbox>('/v1/orgs/acme/inbox');
     const entry = inbox.body.entries.find((e) => e.kind === 'budget');
+    expect(attention.body.waiting_on_you).toBeGreaterThanOrEqual(1);
+    expect(
+      attention.body.factories.find((f) => `budget:${f.factory_id}` === entry?.id)?.waiting_on_you,
+    ).toBeGreaterThanOrEqual(1);
     expect(entry?.id).toMatch(/^budget:/);
     expect(entry?.budget?.spent_usd).toBeGreaterThanOrEqual(entry?.budget?.weekly_usd ?? Infinity);
     expect(Date.parse(entry?.budget?.resumes_at ?? '')).toBeGreaterThan(Date.now());

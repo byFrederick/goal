@@ -1129,7 +1129,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const attentionOf = (f: Factory): FactoryAttention => ({
     factory_id: f.id,
-    waiting_on_you: decisionsOf(f).length,
+    // A used-up weekly budget is one entry of Needs you, so it counts as waiting on you.
+    waiting_on_you: decisionsOf(f).length + (budgetOf(f)?.exhausted ? 1 : 0),
     blocked_items: inState(f, 'blocked').length,
     andon: openAndon(f),
     connections_blocked: 0,
