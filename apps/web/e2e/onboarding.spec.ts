@@ -242,6 +242,19 @@ for (const size of [
   });
 }
 
+for (const width of [375, 768, 1440]) {
+  test(`step 3's preview keeps the picked template's line at ${width} px`, async ({ page }) => {
+    await signIn(page.request);
+    await page.setViewportSize({ width, height: 900 });
+    await makeFactory(page);
+
+    const preview = page.getByRole('complementary', { name: 'Preview of your factory' });
+    await expect(preview.getByRole('region', { name: 'Your factory' })).toBeVisible();
+    await expect(preview.getByRole('list', { name: 'The line' }).getByRole('listitem').first()).toBeVisible();
+    await expect(preview.getByText('The line appears when you pick a template')).toHaveCount(0);
+  });
+}
+
 test('Back from the Line step keeps Read and write on the Code step, also after a reload', async ({ page }) => {
   await signIn(page.request);
   await makeFactory(page);
