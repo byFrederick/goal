@@ -202,7 +202,7 @@ func (e *Engine) runDefinitionAgent(ctx context.Context, log *slog.Logger, sb po
 // definitionResult is the result fin reports, scrubbed of the run's secrets. A changed file that
 // holds a secret value fails the result: its content cannot be scrubbed without changing it.
 func definitionResult(fin *domain.WorkerFinished, scrub scrubber) ports.DefinitionResult {
-	run := fin.Result("")
+	run := fin.Result()
 	res := ports.DefinitionResult{Status: run.Status, CostUSD: run.CostUSD, Turns: run.Turns, Error: scrub.string(run.Error)}
 
 	var out definitionOutput

@@ -16,7 +16,7 @@ The data model and its reasons: [architecture.md](../../docs/engineering/archite
 - Never edit an applied migration; fix it with the next file, because every database that ran it keeps the old one.
 - Take the highest number in `db/migrations/` plus one, and never a retired number below it, because goose refuses a number below one already applied ([architecture.md](../../docs/engineering/architecture.md), "Migrations and tenancy").
 - Keep each migration safe in one transaction, and add a large table's new constraint `NOT VALID` then validate it, so deploys do not lock tables.
-- Run `task migrate-check` after a change to `db/migrations/`, because it applies every file to a fresh PostgreSQL 18 with pgvector.
+- Run `task migrate-check` after a change to `db/migrations/`, because it applies every file to a fresh PostgreSQL 18.
 
 ## Tenancy
 

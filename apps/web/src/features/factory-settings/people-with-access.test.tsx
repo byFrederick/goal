@@ -157,6 +157,23 @@ describe('People with access', () => {
     await waitFor(() => expect(setFactoryRole).toHaveBeenCalledWith('org-1', 'u-Lee Park', 'factory-1', 'approver'));
   });
 
+  it('shows Add as busy, not disabled, while the request is pending', async () => {
+    vi.mocked(setFactoryRole).mockReturnValueOnce(new Promise(() => {}));
+    const people = await renderPeople({ can: manage, members: [...roster, member('Lee Park', 'member')] });
+
+    fireEvent.click(within(people).getByRole('button', { name: 'Add people' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add people' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    const button = within(dialog).getByRole('button', { name: 'Add' });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(button);
+    expect(setFactoryRole).toHaveBeenCalledTimes(1);
+  });
+
   it('does not offer owners or admins in Add people, since they hold every role', async () => {
     const people = await renderPeople({
       can: manage,

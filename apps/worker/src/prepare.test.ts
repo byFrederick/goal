@@ -526,10 +526,26 @@ describe('prepare', () => {
     const prepared = await prepare(depsWith(fake, exec));
 
     const pushed = git(bare, 'rev-parse', `refs/heads/${branch}`);
-    expect(prepared).toMatchObject({ branch_head: pushed, base_head: git(bare, 'rev-parse', 'refs/heads/main') });
+    expect(prepared.repositories).toEqual([
+      { repo: url, base_commit: git(bare, 'rev-parse', 'refs/heads/main'), branch_head: pushed },
+    ]);
+    expect(prepared).not.toHaveProperty('branch_head');
+    expect(prepared).not.toHaveProperty('base_head');
     // The rebase moved the branch past the head it reports.
     expect(git(dirs.workspace, 'rev-parse', 'HEAD')).not.toBe(pushed);
-    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toMatchObject({ branch });
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toMatchObject({
+      branch,
+      repositories: [
+        {
+          url,
+          path: '/workspace',
+          branch,
+          write: true,
+          base_commit: git(bare, 'rev-parse', 'refs/heads/main'),
+          branch_head: pushed,
+        },
+      ],
+    });
   });
 
   it("reports a new branch's head as the default branch's", async () => {
@@ -540,7 +556,7 @@ describe('prepare', () => {
     const prepared = await prepare(depsWith(fake, exec));
 
     const main = git(join(root, 'origin.git'), 'rev-parse', 'refs/heads/main');
-    expect(prepared).toMatchObject({ branch_head: main, base_head: main });
+    expect(prepared.repositories).toEqual([{ repo: url, base_commit: main, branch_head: main }]);
   });
 
   it('merges the default branch when fresh_base is merge', async () => {
@@ -605,7 +621,7 @@ describe('prepare', () => {
       expect(() => git(ws, 'merge-base', '--is-ancestor', 'origin/main', 'HEAD')).toThrow();
     });
 
-    it("reports the base branch's head as base_head", async () => {
+    it("reports the base branch's head as the entry's base_commit", async () => {
       const url = await origin(undefined, { moved: { 'main.txt': 'from main\n' }, base });
       const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/21-part', base } });
       const { exec } = recorder();
@@ -614,7 +630,7 @@ describe('prepare', () => {
 
       const head = git(bare(), 'rev-parse', `refs/heads/${base}`);
       expect(head).not.toBe(git(bare(), 'rev-parse', 'refs/heads/main'));
-      expect(prepared).toMatchObject({ branch_head: head, base_head: head });
+      expect(prepared.repositories).toEqual([{ repo: url, base_commit: head, branch_head: head }]);
     });
 
     it('rebases an existing branch on the base branch', async () => {
@@ -1022,7 +1038,13 @@ describe('prepare: a try of a past item', () => {
 
     const prepared = await prepare(depsWith(fake, exec));
 
-    expect(prepared).toMatchObject({ branch, branch_head: commit, base_head: base, fresh_base: 'rebase' });
+    expect(prepared).toMatchObject({ branch, fresh_base: 'rebase' });
+    expect(prepared).not.toHaveProperty('branch_head');
+    expect(prepared).not.toHaveProperty('base_head');
+    expect(prepared.repositories).toEqual([{ repo: url, base_commit: base, branch_head: commit }]);
+    expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).repositories).toEqual([
+      { url, path: '/workspace', branch, write: false, base_commit: base, branch_head: commit },
+    ]);
     const clone = calls.find((c) => c.args[0] === 'clone');
     expect(clone?.args).not.toContain('--filter=blob:none');
     expect(calls).toContainEqual({
@@ -1142,8 +1164,10 @@ describe("prepare: the item's repositories", () => {
     const libHead = git(libDir, 'rev-parse', 'HEAD');
     const libBase = git(libDir, 'rev-parse', 'origin/HEAD');
     expect(prepared).toMatchObject({ branch, branch_existed: true, fresh_base: 'merge' });
+    const appBase = git(dirs.workspace, 'rev-parse', 'origin/HEAD');
+    const appHead = git(dirs.workspace, 'rev-parse', `origin/${branch}`);
     expect(prepared.repositories).toEqual([
-      { repo: app, base_commit: prepared.base_head, branch_head: prepared.branch_head },
+      { repo: app, base_commit: appBase, branch_head: appHead },
       { repo: lib, base_commit: libBase, branch_head: libHead },
     ]);
     const written = JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'));
@@ -1154,8 +1178,8 @@ describe("prepare: the item's repositories", () => {
         path: '/workspace',
         branch,
         write: true,
-        base_commit: prepared.base_head,
-        branch_head: prepared.branch_head,
+        base_commit: appBase,
+        branch_head: appHead,
       },
       { url: lib, path: '/repos/acme/lib', branch, write: false, base_commit: libBase, branch_head: libHead },
     ]);

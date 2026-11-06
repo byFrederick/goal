@@ -48,6 +48,7 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
   const [refused, setRefused] = useState<string[]>([]);
   const emailsRef = useRef<HTMLTextAreaElement>(null);
   const ids = useId();
+  const count = parseEmails(text).emails.length;
 
   const reset = () => {
     setText('');
@@ -170,8 +171,13 @@ export function InviteDialog({ open, onOpenChange, org, role, factories, invite 
             <DialogClose asChild>
               <Button variant="white">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={invite.isPending}>
-              {invite.isPending ? 'Sending…' : 'Send invitations'}
+            <Button
+              type="submit"
+              variant="primary"
+              busy={invite.isPending}
+              busyLabel={count === 1 ? 'Sending 1 invite…' : `Sending ${count} invites…`}
+            >
+              Send invitations
             </Button>
           </div>
         </form>

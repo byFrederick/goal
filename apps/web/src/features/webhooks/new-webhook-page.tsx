@@ -307,8 +307,8 @@ export function NewWebhookPage() {
                   Cancel
                 </Link>
               </Button>
-              <Button type="submit" variant="primary" disabled={create.isPending}>
-                {create.isPending ? 'Creating…' : 'Create webhook'}
+              <Button type="submit" variant="primary" busy={create.isPending} busyLabel="Creating…">
+                Create webhook
               </Button>
             </div>
           </div>

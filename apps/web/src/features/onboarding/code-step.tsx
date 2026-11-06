@@ -17,13 +17,11 @@ import { createSecret, getSecret, patchSecret } from '../../api/secrets';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
 import { InfoTip } from '../../ui/info-tip';
 import { RadioCards, type RadioOption } from '../../ui/radio-cards';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
-import { Spinner } from '../../ui/spinner';
 import { touchLink } from '../../ui/touch-target';
 import { nameProblem } from '../secrets/words';
 import {
@@ -149,7 +147,9 @@ function CodeForm({
 }) {
   const navigate = useNavigate();
   const client = useQueryClient();
-  const [access, setAccess] = useState<CodeAccess>(startAccess[code]);
+  const [access, setAccess] = useState<CodeAccess>(
+    search.access && disabledReason(code, search.access) === undefined ? search.access : startAccess[code],
+  );
   const [scope, setScope] = useState<Scope>('some');
   const [owner, setOwner] = useState('');
   const [addresses, setAddresses] = useState<string[]>([search.url && !search.url.endsWith('/*') ? search.url : '']);
@@ -214,7 +214,7 @@ function CodeForm({
     void navigate({
       to: '/o/$org/get-started/$step',
       params: { org: org.slug, step: 'line' },
-      search: { ...entry, template: search.template, factory },
+      search: { ...entry, template: search.template, factory, access },
     });
 
   const write = useMutation({
@@ -312,18 +312,14 @@ function CodeForm({
           form="code-form"
           size="lg"
           variant="primary"
-          disabled={
-            wantsCode && (failed || clash || busy || (!passed && (!urlsValid || validUrls.length === 0 || !hasToken)))
+          busy={busy}
+          busyLabel="Testing the token…"
+          // aria-disabled, not disabled: a disabled button drops focus to <body> when the answer shows. `submit` refuses.
+          aria-disabled={
+            wantsCode && (failed || clash || (!passed && (!urlsValid || validUrls.length === 0 || !hasToken)))
           }
         >
-          {run.isPending ? (
-            <>
-              <Spinner />
-              Testing the token
-            </>
-          ) : (
-            'Continue'
-          )}
+          Continue
         </Button>
       }
       preview={{ organization: organizationCard(org, host), second: preview }}
@@ -470,7 +466,7 @@ function CodeForm({
                   {`A secret named ${name} already exists. Goal never replaces a secret’s value. Use it, or pick a new name for this token.`}
                 </Callout>
                 <div className="flex flex-wrap items-end gap-3">
-                  <Button type="button" variant="secondary" onClick={chooseExisting} disabled={busy}>
+                  <Button type="button" variant="secondary" onClick={chooseExisting} busy={busy} busyLabel="Using…">
                     Use the existing secret
                   </Button>
                   <Field label="New secret name" error={newName !== '' ? nameProblem(newName) : undefined}>
@@ -488,7 +484,9 @@ function CodeForm({
                     type="button"
                     variant="secondary"
                     onClick={chooseNewName}
-                    disabled={busy || nameProblem(newName) !== undefined || token === ''}
+                    busy={busy}
+                    busyLabel="Using…"
+                    disabled={nameProblem(newName) !== undefined || token === ''}
                   >
                     Use this name
                   </Button>
@@ -496,11 +494,7 @@ function CodeForm({
               </div>
             ) : null}
 
-            <div
-              role="status"
-              aria-live="polite"
-              className={cn('flex flex-col gap-2', !answer && !run.isError && !write.isError && 'hidden')}
-            >
+            <div role="status" aria-live="polite" className="flex flex-col gap-2 empty:sr-only">
               {answer && (passed || failed)
                 ? answer.results.map((r, i) => {
                     const label = repositoryLabel(answer.urls[i] ?? r.url);

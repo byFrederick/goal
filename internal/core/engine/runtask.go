@@ -192,7 +192,7 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 		agentEnv[envFeedback] = feedback
 	}
 
-	e.recordInput(ctx, t, runID, line, scrub.string(joinParts(t.work, feedback)))
+	e.recordInput(ctx, runID, line, scrub.string(joinParts(t.work, feedback)))
 
 	res, lost := e.agent(ctx, t, runID, agentEnv, scrub)
 
@@ -250,7 +250,7 @@ func (e *Engine) agent(ctx context.Context, t runTask, runID domain.RunID, env m
 	)
 
 	if fin != nil {
-		res = fin.Result(t.Repository.URL)
+		res = fin.Result()
 	}
 
 	switch {
@@ -519,14 +519,12 @@ func (e *Engine) heartbeat(ctx context.Context, lease domain.Lease, stopTask con
 // recordInput records what the run was given, for a later try to rerun it (ADR 0039, decision
 // 8): brief, joined as the worker's prompt joins the bundle's brief and GOAL_FEEDBACK, and, when
 // this run prepared the box, the repositories prepare reported with their heads (ADR 0041
-// decision 5); a prepare that reports only the single heads reports them on the task's
-// repository. A retry in its claim's box (line nil) records none. A failure is logged and the
+// decision 5). A retry in its claim's box (line nil) records none. A failure is logged and the
 // run goes on.
-func (e *Engine) recordInput(ctx context.Context, t runTask, runID domain.RunID, line *prepared, brief string) {
+func (e *Engine) recordInput(ctx context.Context, runID domain.RunID, line *prepared, brief string) {
 	in := domain.RunInput{Brief: brief}
 	if line != nil {
-		in.Repositories = domain.RunRepositories(line.Repositories, t.Repository.URL,
-			domain.WorkerRepository{BaseCommit: line.BaseHead, BranchHead: line.BranchHead})
+		in.Repositories = domain.RunRepositories(line.Repositories)
 	}
 
 	if err := e.store.RecordRunInput(ctx, runID, in); err != nil && ctx.Err() == nil {

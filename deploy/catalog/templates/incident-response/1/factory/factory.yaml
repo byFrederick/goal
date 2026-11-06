@@ -1,0 +1,44 @@
+# Starter template (ADR 0042): alerts become investigations, fixes and postmortems.
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 00000000-0000-0000-0000-000000000000
+  name: incident-response
+  title: Incident response
+starter:
+  item:
+    title: Checkout page returns errors for some visitors
+    type: incident
+    body: >-
+      Since this morning, some visitors to https://shop.example.com/checkout see an error
+      page. Sort it by severity, find the likely cause and propose a fix.
+spec:
+  runtime: {}
+  agents:
+    - name: triager
+      description: Sorts alerts by severity.
+      prompt: ./agents/triager.md
+    - name: investigator
+      description: Finds the cause.
+      prompt: ./agents/investigator.md
+    - name: fixer
+      description: Proposes the fix and writes the postmortem.
+      prompt: ./agents/fixer.md
+  board:
+    workTypes: [incident]
+    triggers:
+      - name: daily-alert-review
+        enabled: false
+        on: schedule
+        cron: "0 8 * * *"
+        create:
+          type: incident
+          station: inbox
+          title: Review yesterday's open alerts
+    stations:
+      - { id: inbox, name: Inbox, kind: queue }
+      - { id: triage, name: Triage, kind: agent, agent: triager, wip: 4 }
+      - { id: investigate, name: Investigate, kind: agent, agent: investigator, wip: 2 }
+      - { id: fix, name: Fix, kind: agent, agent: fixer, wip: 1 }
+      - { id: review, name: Review, kind: human }
+      - { id: done, name: Done, kind: done }

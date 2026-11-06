@@ -233,7 +233,7 @@ const builtinKeys = ['read', 'edit', 'run', 'web', 'subagents'];
 /** The catalog template a blank factory starts from when there is one (B's `blank`). */
 const blankTemplate = 'blank';
 
-/** goald's blank skeleton (authoring.skeleton): apiVersion, kind, metadata and the runtime only. */
+/** goald's blank skeleton (authoring.skeleton): the runtime, one agent station named Work, Done and one agent. */
 const blankSkeleton = `apiVersion: goal/v1
 kind: Factory
 metadata:
@@ -241,7 +241,15 @@ metadata:
   name: new-factory
 spec:
   runtime: { size: medium }
+  agents:
+    - name: worker
+      prompt: ./agents/worker.md
+  board:
+    stations:
+      - { id: work, name: Work, kind: agent, agent: worker, wip: 1 }
+      - { id: done, name: Done, kind: done }
 `;
+const blankAgentPrompt = '# worker\n\nDo the work the item asks for.\n';
 
 function validate(
   t: Tree,
@@ -360,7 +368,6 @@ function validate(
       replaceFix(`Use ${best}`, 'basics', '/size', best),
     ]);
   }
-  // A blank skeleton has neither until the Line and Agents sections add them.
   if (stations.length === 0)
     add('schema-required', 'error', 'schema', '/line/stations', 'spec.board.stations is required');
   if (agents.length === 0)
@@ -1200,8 +1207,11 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
             ? versions.find((v) => v.version === start.version)
             : versions.sort((a, b) => b.version - a.version)[0];
         if (!t && start.kind === 'blank') {
-          // goald's skeleton when the catalog has no blank template: no station or agent names.
-          files = new Map([[yamlFile, encode(blankSkeleton)]]);
+          // goald's skeleton when the catalog has no blank template: one Work station and one agent.
+          files = new Map([
+            [yamlFile, encode(blankSkeleton)],
+            ['agents/worker.md', encode(blankAgentPrompt)],
+          ]);
           source = { kind: 'blank' };
           break;
         }

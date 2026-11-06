@@ -286,6 +286,21 @@ describe('saving General and Slots', () => {
     await waitFor(() => expect(api.patchOrgSettings).toHaveBeenCalledWith(org.id, { name: 'Acme Robotics' }));
   });
 
+  it('shows Save changes as busy while the save is pending, and sends nothing on a second click', async () => {
+    api.patchOrgSettings.mockImplementation(() => new Promise(() => {}));
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Acme Robotics' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Save changes/ }).getAttribute('aria-busy')).toBe('true'),
+    );
+    const save = screen.getByRole('button', { name: /Save changes/ }) as HTMLButtonElement;
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    expect(api.patchOrgSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('warns that old links stop working when the address changes, and moves the page to the new one', async () => {
     renderPage();
     fireEvent.change(screen.getByLabelText('Address'), { target: { value: 'acme-co' } });

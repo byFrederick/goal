@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../api/client';
+import { getVersionFile } from '../../api/definitions';
 import { intakeKeys, keys, orgQuery, webhooksQuery } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
 import { setTriggerEnabled } from './set-trigger-enabled';
+
+vi.mock('../../api/definitions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/definitions')>()),
+  getVersionFile: vi.fn(),
+}));
 
 vi.mock('./set-trigger-enabled', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./set-trigger-enabled')>()),
@@ -248,6 +255,18 @@ describe('New trigger picker', () => {
     );
   });
 
+  it('marks a suggestion button busy, not disabled, while its publish is pending', async () => {
+    vi.mocked(setTriggerEnabled).mockReturnValueOnce(new Promise(() => {}));
+    renderPicker([], [suggestion('nightly-review', 'review')]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    const row = screen.getByText('Nightly review').parentElement as HTMLElement;
+    const turnOn = within(row).getByRole('button', { name: 'Turn on' });
+    fireEvent.click(turnOn);
+    await waitFor(() => expect(turnOn.getAttribute('aria-busy')).toBe('true'));
+    expect(turnOn.getAttribute('aria-disabled')).toBe('true');
+    expect(turnOn.hasAttribute('disabled')).toBe(false);
+  });
+
   it('shows no suggestions block when the API has none', async () => {
     renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
@@ -268,6 +287,34 @@ describe('New trigger picker', () => {
     expect(screen.getByRole('button', { name: 'Jira' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'GitHub' })).toBeNull();
     expect(screen.queryByRole('heading', { level: 3, name: 'Built in' })).toBeNull();
+  });
+});
+
+describe('New trigger when an environment file cannot be read', () => {
+  it('says so with Retry, keeps the servers that loaded, and refetches on Retry', async () => {
+    const read = vi.mocked(getVersionFile);
+    read.mockRejectedValueOnce(new ApiError({ title: 'Internal Server Error', status: 500 }));
+    read.mockResolvedValue({ text: environments.research, sha256: 'b' });
+    renderFactoryPage({
+      page: () => <NewTriggerDialog />,
+      path: 'intake/new',
+      org,
+      factory: withDefinition,
+      seed: [
+        [orgQuery(org.id).queryKey, { ...org, can: ['webhook:read'] }],
+        [webhooksQuery(org.id).queryKey, [webhookOf('github')]],
+        [intakeKeys.definition(org.id, factory.id, 'v1'), { text: definition, sha256: 'sha' }],
+        [intakeKeys.environment(org.id, factory.id, 'v1', 'default'), { text: environments.default, sha256: 'a' }],
+        [keys.intake(org.id, factory.id), intakeFixture([])],
+      ],
+    });
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain("Couldn't read the agents' environments.");
+    expect(within(alert.parentElement as HTMLElement).getByRole('button', { name: /^GitHub/ })).toBeTruthy();
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(read).toHaveBeenCalledTimes(2);
   });
 });
 

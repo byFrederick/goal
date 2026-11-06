@@ -114,9 +114,12 @@ describe('QuestionCard', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'The whole organization' }));
 
-    await waitFor(() =>
-      expect((screen.getByRole('button', { name: 'Only this factory' }) as HTMLButtonElement).disabled).toBe(true),
-    );
+    const other = screen.getByRole('button', { name: 'Only this factory' }) as HTMLButtonElement;
+    await waitFor(() => expect(other.getAttribute('aria-disabled')).toBe('true'));
+    expect(other.disabled).toBe(false);
+    const sent = screen.getByRole('button', { name: 'The whole organization' }) as HTMLButtonElement;
+    expect(sent.getAttribute('aria-busy')).toBe('true');
+    expect(sent.disabled).toBe(false);
   });
 
   it('shows a refusal from goald inline, as its problem detail', async () => {

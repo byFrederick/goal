@@ -126,7 +126,8 @@ function FollowUpRow({ item, followUp }: { item: Item; followUp: FollowUp }) {
       <Button
         variant="secondary"
         size="sm"
-        disabled={drop.isPending}
+        busy={drop.isPending}
+        busyLabel="Dropping…"
         onClick={() => drop.mutate()}
         aria-label={`Drop: ${followUp.text}`}
       >

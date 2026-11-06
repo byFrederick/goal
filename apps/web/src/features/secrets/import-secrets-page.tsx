@@ -233,12 +233,14 @@ export function ImportSecretsPage() {
                 <Button
                   variant="action"
                   className="h-11 md:h-10"
-                  disabled={count === 0 || run.isPending}
+                  disabled={count === 0}
+                  busy={run.isPending}
+                  busyLabel="Importing…"
                   onClick={() =>
                     run.mutate({ format: importFormat(text), text, on_conflict: onConflict, dry_run: false })
                   }
                 >
-                  {run.isPending ? 'Importing…' : `Import ${count}`}
+                  {`Import ${count}`}
                 </Button>
               </div>
             </div>

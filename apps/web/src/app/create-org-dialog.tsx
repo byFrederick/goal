@@ -127,8 +127,8 @@ function CreateOrgForm({ onDone, returnFocus }: { onDone: () => void; returnFocu
           <DialogClose asChild>
             <Button variant="secondary">Cancel</Button>
           </DialogClose>
-          <Button type="submit" variant="primary" disabled={create.isPending}>
-            {create.isPending ? 'Creating…' : 'Create organization'}
+          <Button type="submit" variant="primary" busy={create.isPending} busyLabel="Creating…">
+            Create organization
           </Button>
         </div>
       </form>

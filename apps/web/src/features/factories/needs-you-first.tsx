@@ -15,6 +15,7 @@ import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { NumberRoll } from '../../ui/number-roll';
+import { touchLinkWide } from '../../ui/touch-target';
 import { useEntryDecision } from '../needs-you/actions';
 import { typeLabel, typeOf } from '../needs-you/types';
 
@@ -52,7 +53,7 @@ export function NeedsYouFirst({
         <Link
           to="/o/$org/needs-you"
           params={{ org: org.slug }}
-          className="ml-auto text-secondary font-control text-run-ink no-underline hover:underline"
+          className={cn(touchLinkWide, 'ml-auto text-secondary font-control text-run-ink no-underline hover:underline')}
         >
           Open all
         </Link>
@@ -155,12 +156,14 @@ function Decision({
       <Button
         variant="approve"
         size="sm"
-        disabled={!canDecide || pending}
+        busy={pending}
+        busyLabel="Approving…"
+        disabled={!canDecide}
         aria-describedby={canDecide ? undefined : reasonId}
         title={canDecide ? undefined : reasons.decide(factory.name)}
         onClick={() => decide.mutate({ kind: 'approve' })}
       >
-        {pending ? 'Approving…' : 'Approve'}
+        Approve
       </Button>
       {canDecide ? null : (
         <span id={reasonId} className="sr-only">
@@ -175,6 +178,9 @@ function Decision({
 function ToolApproval({ entry, canDecide }: { entry: InboxEntry & { item: ItemCard }; canDecide: boolean }) {
   const decide = useEntryDecision();
   const pending = decide.isPending;
+  // One request at a time: the clicked button is busy, its sibling is disabled until it ends.
+  const denying = pending && decide.variables?.decision.kind === 'tool_deny';
+  const approving = pending && !denying;
   const reasonId = useId();
   const reason = reasons.decide(entry.factory.name);
 
@@ -182,7 +188,9 @@ function ToolApproval({ entry, canDecide }: { entry: InboxEntry & { item: ItemCa
     <>
       <Button
         size="sm"
-        disabled={!canDecide || pending}
+        busy={denying}
+        busyLabel="Denying…"
+        disabled={!canDecide || approving}
         aria-describedby={canDecide ? undefined : reasonId}
         onClick={() => decide.mutate({ entry, decision: { kind: 'tool_deny', reason: '' } })}
       >
@@ -191,12 +199,14 @@ function ToolApproval({ entry, canDecide }: { entry: InboxEntry & { item: ItemCa
       <Button
         variant="approve"
         size="sm"
-        disabled={!canDecide || pending}
+        busy={approving}
+        busyLabel="Approving…"
+        disabled={!canDecide || denying}
         aria-describedby={canDecide ? undefined : reasonId}
         title={canDecide ? undefined : reason}
         onClick={() => decide.mutate({ entry, decision: { kind: 'tool_approve', always_allow: false } })}
       >
-        {pending ? 'Approving…' : 'Approve'}
+        Approve
       </Button>
       {canDecide ? null : (
         <span id={reasonId} className="sr-only">

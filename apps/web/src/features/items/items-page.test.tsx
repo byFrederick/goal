@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listItems, moveItem, pauseItem, setItemLane } from '../../api/client';
 import { boardQuery, versionModelQuery } from '../../api/queries';
 import type { Board, Factory, Item, ItemCard, OrgSummary, Station } from '../../api/types';
+import { expectBusyOnClick } from '../../test/busy';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { touchLink } from '../../ui/touch-target';
@@ -638,6 +639,20 @@ describe('Items list bulk actions', () => {
     await waitFor(() => expect(pauseItem).toHaveBeenCalledTimes(2));
     expect(pauseItem).toHaveBeenCalledWith('org-1', 'sre#1');
     expect(pauseItem).toHaveBeenCalledWith('org-1', 'sre#2');
+  });
+
+  it('shows the bulk Pause as busy while its requests are pending and sends them once', async () => {
+    vi.mocked(pauseItem)
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockImplementationOnce(() => new Promise(() => {}));
+    renderItems(twoItems());
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select sre#1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select sre#2' }));
+    const bar = await screen.findByRole('region', { name: 'Bulk actions' });
+    await expectBusyOnClick(within(bar).getByRole('button', { name: 'Pause' }), 'Pausing…');
+
+    expect(pauseItem).toHaveBeenCalledTimes(2);
   });
 
   it('moves each checked item to the station the Move menu chose', async () => {

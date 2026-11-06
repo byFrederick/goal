@@ -13,9 +13,9 @@ import (
 
 // The knowledge base (spec 4 §4.8): one per organization, made of sources. An upload source holds
 // files people upload (originals in the bucket at KnowledgeKey); a synced source reads a
-// connection whose kind can sync (KindSpec.Sync) into documents; a live source is a connection
-// whose own tools search, which nothing indexes. A document's text is split into chunks, each
-// indexed for keyword search and, with an embedding model, for nearest-neighbour search.
+// connection whose kind can sync (KindSpec.Sync) into snapshots of its files; a live source is a
+// connection whose own tools search, which nothing indexes. Knowledge is files (ADR 0038): agents
+// read them as files, with no chunks or embeddings.
 
 // KnowledgeSourceID is a knowledge source's id (a UUID).
 type KnowledgeSourceID string

@@ -280,8 +280,8 @@ export function NewKeyDialog({ org, factories, onClose, onCreated }: NewKeyDialo
             <Button variant="white" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create key'}
+            <Button type="submit" variant="primary" busy={create.isPending} busyLabel="Creating…">
+              Create key
             </Button>
           </div>
         </form>

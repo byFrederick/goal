@@ -124,3 +124,19 @@ describe('the New secret sheet', () => {
     expect(screen.queryByRole('dialog', { name: 'New secret' })).toBeNull();
   });
 });
+
+describe('the New secret sheet while the request is pending', () => {
+  it('shows Add secret as busy, not disabled, and keeps it from sending twice', async () => {
+    vi.mocked(createSecret).mockReturnValue(new Promise(() => undefined));
+    const { sheet } = await openSheet();
+    fireEvent.change(within(sheet).getByLabelText('Name'), { target: { value: 'sentry-token' } });
+    fireEvent.change(within(sheet).getByLabelText('Value'), { target: { value: VALUE } });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Add secret' }));
+
+    const busy = await within(sheet).findByRole('button', { name: /Adding…/ });
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(busy);
+    expect(createSecret).toHaveBeenCalledTimes(1);
+  });
+});

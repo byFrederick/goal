@@ -127,7 +127,7 @@ for (const scheme of schemes) {
         await expect(page.getByRole('heading', { name: 'The box' })).toBeVisible();
         await page.getByRole('button', { name: 'Test servers' }).click();
         const again = page.getByRole('button', { name: 'Test linear' });
-        await expect(again).toHaveText('Test again');
+        await expect(again.locator('[data-slot="idle"]')).toHaveText('Test again');
         await expectNoHorizontalScroll(page);
         await expectNoClippedElements(page);
       });
