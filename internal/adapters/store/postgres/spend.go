@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -13,7 +14,7 @@ import (
 
 var _ ports.Spend = (*Store)(nil)
 
-// OrgSpend implements ports.Spend: five reads of one snapshot (db/queries/spend.sql), laid out
+// OrgSpend implements ports.Spend: seven reads of one snapshot (db/queries/spend.sql), laid out
 // by domain.NewOrgSpend.
 func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error) {
 	if err := w.Check(); err != nil {
@@ -57,6 +58,10 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 			f.ByModel = append(f.ByModel, domain.ModelSpend{Model: m.Model, USD: m.SpendUsd})
 		}
 
+		if err := readUsage(ctx, q, since, until, &f); err != nil {
+			return err
+		}
+
 		if f.ReworkUSD, err = q.OrgReworkSpend(ctx, db.OrgReworkSpendParams{Since: since, Until: until}); err != nil {
 			return fmt.Errorf("rework: %w", err)
 		}
@@ -77,6 +82,47 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 	}
 
 	return domain.NewOrgSpend(w, f), nil
+}
+
+// readUsage reads the usage of the runs started in [since, until) into f, by agent and by station.
+func readUsage(ctx context.Context, q *db.Queries, since, until time.Time, f *domain.SpendFacts) error {
+	byAgent, err := q.OrgUsageByAgent(ctx, db.OrgUsageByAgentParams{Since: since, Until: until})
+	if err != nil {
+		return fmt.Errorf("usage by agent: %w", err)
+	}
+
+	for _, u := range byAgent {
+		f.UsageByAgent = append(f.UsageByAgent, runUsage(db.OrgUsageByStationRow(u)))
+	}
+
+	byStation, err := q.OrgUsageByStation(ctx, db.OrgUsageByStationParams{Since: since, Until: until})
+	if err != nil {
+		return fmt.Errorf("usage by station: %w", err)
+	}
+
+	for _, u := range byStation {
+		f.UsageByStation = append(f.UsageByStation, runUsage(u))
+	}
+
+	return nil
+}
+
+// runUsage is a usage row of OrgUsageByAgent or OrgUsageByStation: its percentiles are nil when
+// none of its runs reported the value.
+func runUsage(u db.OrgUsageByStationRow) domain.RunUsage {
+	some := func(n int64, v float64) *float64 {
+		if n == 0 {
+			return nil
+		}
+
+		return &v
+	}
+
+	return domain.RunUsage{
+		FactoryID: domain.FactoryID(u.FactoryID.String()), Name: u.Name, BoxSize: domain.SandboxSize(deref(u.BoxSize)), Runs: int(u.Runs),
+		CPUSecondsP50: some(u.CpuRuns, u.CpuSecondsP50), CPUSecondsP90: some(u.CpuRuns, u.CpuSecondsP90),
+		PeakMemoryBytesP50: some(u.MemoryRuns, u.PeakMemoryBytesP50), PeakMemoryBytesP90: some(u.MemoryRuns, u.PeakMemoryBytesP90),
+	}
 }
 
 // EachAgentModelSpend implements ports.Spend: in one read-only repeatable-read transaction, so

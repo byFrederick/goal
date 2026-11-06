@@ -55,6 +55,7 @@ export function spendFixture(patch: Partial<OrgSpend> = {}): OrgSpend {
     })),
     rework_usd: 61,
     rework_share: 0.12,
+    usage: { by_agent: [], by_station: [] },
     budgets: [
       {
         factory: software,

@@ -2016,6 +2016,9 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           ended_at: status === 'running' ? null : new Date(Math.round(at)).toISOString(),
           definition_version_id: version?.id ?? null,
           definition_version: version?.number ?? null,
+          cpu_seconds: null,
+          peak_memory_bytes: null,
+          box_size: null,
         });
         if (status !== 'running') {
           push('run_finished', agent, { status, error: step.error ?? '', cost_usd: step.cost, turns: step.turns }, run);

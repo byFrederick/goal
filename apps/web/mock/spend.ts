@@ -184,6 +184,7 @@ export function createSpend(options: SpendOptions) {
       rework_usd: rework,
       rework_share: total > 0 ? 0.12 : 0,
       budgets,
+      usage: { by_agent: [], by_station: [] },
     };
   }
 

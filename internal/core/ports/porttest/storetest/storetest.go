@@ -127,6 +127,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"FinishLostRuns_OnlyTheCurrentOrg", testFinishLostRunsOneOrg},
 		{"SpendSince_OnlyTheCurrentOrg", testSpendSinceOneOrg},
 		{"OrgSpend", testOrgSpend},
+		{"OrgSpend_UsageByAgentAndStationAndBoxSize", testOrgSpendUsage},
 		{"EachAgentModelSpend_ByFactoryAgentAndModelUpToMax", testEachAgentModelSpend},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
 		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
