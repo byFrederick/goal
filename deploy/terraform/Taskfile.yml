@@ -160,3 +160,20 @@ tasks:
         export GOAL_DATABASE_ADMIN_URL GOAL_MIGRATE_DATABASE_URL GOAL_PG_OWNER_PASSWORD GOAL_PG_APP_PASSWORD GOAL_PG_AUTH_PASSWORD GOAL_MASTER_KEYS
         cd ../..
         go run ./cmd/goal db {{.CLI_ARGS}}
+
+  catalog:production:
+    desc: "task catalog:templates:push into the Cloudflare install's bucket: the bucket, its endpoint and goald's R2 keys from the Terraform state, never printed. Run after the first deploy and after merging a new template version; safe to repeat"
+    deps: [tf:credentials]
+    cmds:
+      - |
+        cd deploy/terraform
+        {{.TF_ONLINE}}
+        out() { terraform output -raw "$1"; }
+        GOAL_S3_BUCKET="$(out bucket)"
+        GOAL_S3_ENDPOINT="$(out s3_endpoint)"
+        GOAL_S3_ACCESS_KEY="$(out goal_s3_access_key)"
+        GOAL_S3_SECRET_KEY="$(out goal_s3_secret_key)"
+        export GOAL_S3_BUCKET GOAL_S3_ENDPOINT GOAL_S3_ACCESS_KEY GOAL_S3_SECRET_KEY
+        cd ../..
+        # A new task process: the root env: takes GOAL_S3_* from this environment over its local defaults.
+        "{{.TASK_EXE}}" catalog:templates:push
