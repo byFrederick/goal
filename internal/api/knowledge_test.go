@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"slices"
@@ -278,14 +279,14 @@ func (h *harness) syncedOnASecret(t *testing.T) {
 	}
 }
 
-// Requests the source rules refuse answer their codes; a source reading a connection is listed
-// in the connection's used_by.
+// Requests the source rules refuse answer their codes; a connection a source reads is not
+// deleted.
 func TestKnowledge_SourceRefusals(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	h.createHandbook(t)
-	h.createGitHub(t)
+	h.createGitHub(t, kindGitHub, "ghp_test")
 	h.createRepoSecret(t)
 
 	for _, tc := range []struct {
@@ -315,12 +316,9 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 		http.StatusBadRequest, "")
 	refused(t, "patch to an unknown secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"gone"}`, nil), http.StatusNotFound, "secret-not-found")
 
-	conn := decode[gen.Connection](t, h.request(t, http.MethodGet, githubPath, "", nil), http.StatusOK)
-	if !slices.Equal(conn.UsedBy.KnowledgeSources, []string{"repo-search"}) {
-		t.Errorf("github's used_by = %+v; want the live source that reads it", conn.UsedBy)
+	if err := h.conns.Delete(inOrg(t), kindGitHub, domain.LocalUser); !errors.Is(err, ports.ErrConflict) {
+		t.Errorf("delete of a connection a source reads = %v; want ports.ErrConflict", err)
 	}
-
-	refused(t, "delete of a connection a source reads", h.request(t, http.MethodDelete, githubPath, "", nil), http.StatusConflict, "connection-in-use")
 }
 
 // Uploads the knowledge base refuses answer their codes, and a refused file stores none of the

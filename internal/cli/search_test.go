@@ -69,7 +69,7 @@ func goalSearch(t *testing.T, api string, args ...string) (string, error) {
 	return buf.String(), err
 }
 
-// The groups print in the order Items, Agents, Factories, Connections, an empty one left out
+// The groups print in the order Items, Agents, Factories, an empty one left out
 // (Factories here); q and --limit reach goald.
 func TestSearch_TextGroupsInOrder(t *testing.T) {
 	t.Parallel()
@@ -79,9 +79,8 @@ func TestSearch_TextGroupsInOrder(t *testing.T) {
 			{FactoryId: "f1", FactoryName: searchFactory, Id: "i1", Number: 2, State: gen.ItemStateInProgress, Station: "build", Title: "Fix the login page"},
 			{FactoryId: "f1", FactoryName: searchFactory, Id: "i2", Number: 14, State: gen.ItemStateDone, Station: "done", Title: "Log in with a key"},
 		},
-		Agents:      []gen.AgentHit{{FactoryId: "f1", FactoryName: searchFactory, Name: "login-coder", Stations: []string{"build", "rework"}}},
-		Factories:   []gen.FactoryHit{},
-		Connections: []gen.ConnectionHit{{Kind: "github", Name: "login-bot"}},
+		Agents:    []gen.AgentHit{{FactoryId: "f1", FactoryName: searchFactory, Name: "login-coder", Stations: []string{"build", "rework"}}},
+		Factories: []gen.FactoryHit{},
 	}))
 
 	out, err := goalSearch(t, srv.URL, "login", "--limit", "3")
@@ -109,7 +108,7 @@ func TestSearch_NoResults(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := searchGoald(t, http.StatusOK, "application/json", searchJSON(t, gen.OrgSearch{
-		Items: []gen.SearchItem{}, Agents: []gen.AgentHit{}, Factories: []gen.FactoryHit{}, Connections: []gen.ConnectionHit{},
+		Items: []gen.SearchItem{}, Agents: []gen.AgentHit{}, Factories: []gen.FactoryHit{},
 	}))
 
 	if out, err := goalSearch(t, srv.URL, "nothing"); err != nil || out != "No results\n" {
@@ -122,7 +121,7 @@ func TestSearch_JSONAsSent(t *testing.T) {
 	t.Parallel()
 
 	body := []byte(`{"items": [], "agents":[{"name":"coder","factory_id":"f1","factory_name":"ops","stations":["build"]}],
- "factories":[],"connections":[]}`)
+ "factories":[]}`)
 	srv, _ := searchGoald(t, http.StatusOK, "application/json", body)
 
 	if out, err := goalSearch(t, srv.URL, "coder", "--json"); err != nil || out != string(body) {

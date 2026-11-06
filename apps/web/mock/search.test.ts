@@ -19,7 +19,6 @@ describe('search ranking', () => {
   const source = {
     items: [item(3, 'Spend tests for the tracker'), item(147, 'Show this week’s spend'), item(9, 'spend')],
     agents: [{ name: 'builder', stations: ['build'], factory_id: 'goal-id', factory_name: 'goal' }],
-    connections: [{ name: 'spendwise', kind: 'github' }],
     secrets: [
       { name: 'old-spend-key', scope: { all_factories: true, factories: [] }, expires_at: null },
       {
@@ -34,7 +33,6 @@ describe('search ranking', () => {
   it('ranks an exact match first, then a prefix, then the rest of a substring match', () => {
     const found = search(source, 'spend', 5);
     expect(found.items.map((i) => i.number)).toEqual([9, 3, 147]);
-    expect(found.connections.map((c) => c.name)).toEqual(['spendwise']);
     expect(found.secrets.map((s) => s.name)).toEqual(['spend-key', 'old-spend-key']);
   });
 
