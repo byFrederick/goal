@@ -176,7 +176,7 @@ test.describe('the New item row at 390 px', () => {
 
   test('is a 44 px target', async ({ page }) => {
     // Research has no item yet, so How work gets in shows, and its role may create items (support's may not).
-    await page.goto('/o/labs/f/research');
+    await page.goto('/o/goal/f/research');
     const ways = page.getByRole('region', { name: 'How work gets in' });
     const button = ways.getByRole('button', { name: /New item/ });
     await expect(button).toBeVisible();
