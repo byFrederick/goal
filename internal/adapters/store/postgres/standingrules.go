@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/google/uuid"
 
@@ -173,19 +172,6 @@ func ruleAudit(ctx context.Context, q *db.Queries, by domain.Actor, action strin
 	return appendAudit(ctx, q, domain.AuditEntry{
 		Actor: by, Action: action, TargetKind: domain.AuditTargetStandingRule, TargetID: string(r.ID), Data: data,
 	})
-}
-
-// toolNames are a test's tool names sorted without repeats; nil for none, as the column holds
-// NULL.
-func toolNames(tools []string) []string {
-	if len(tools) == 0 {
-		return nil
-	}
-
-	out := slices.Clone(tools)
-	slices.Sort(out)
-
-	return slices.Compact(out)
 }
 
 func standingRuleFrom(r db.StandingRulesRow) domain.StandingRule {

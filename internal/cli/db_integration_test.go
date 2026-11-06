@@ -323,6 +323,7 @@ func TestDB_Rekey(t *testing.T) {
 	}
 
 	ctx := domain.WithOrg(t.Context(), org.ID)
+
 	secret := domain.NewSecret{Name: orgAcme, Value: "s3cret", Scope: domain.SecretScope{All: true}}
 	if _, err := postgres.NewSecrets(store, old).Create(ctx, secret, domain.LocalUser); err != nil {
 		t.Fatal(err)

@@ -331,7 +331,7 @@ func (h *codeHost) spec(t *testing.T, kind string, config map[string]string) dom
 	t.Helper()
 
 	config = maps.Clone(config)
-	config[domain.SourceReaderKey], config[domain.SourceCodeHostKey] = "gitdocs", kind
+	config[domain.SourceCodeHostKey] = kind
 
 	return domain.SyncSpec{
 		Source: domain.KnowledgeSource{Name: "docs", Kind: domain.SourceSynced, Secret: docsToken, Config: config},
