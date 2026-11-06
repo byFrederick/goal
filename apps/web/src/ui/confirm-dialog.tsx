@@ -93,9 +93,9 @@ export function ConfirmDialog({
             <Button
               type="submit"
               variant={tone === 'danger' ? 'rework' : 'primary'}
-              busy={pending}
-              busyLabel={pendingLabel}
               disabled={!confirmed || disabled}
+              busy={pending}
+              busyLabel={pendingLabel ?? confirmLabel}
             >
               {confirmLabel}
             </Button>

@@ -279,11 +279,13 @@ function ContinueButton({
   const button = (
     <Button
       variant="primary"
-      aria-disabled={reason || pending ? true : undefined}
+      aria-disabled={reason ? true : undefined}
       aria-describedby={reason ? reasonId : undefined}
-      onClick={() => (reason || pending ? undefined : onClick())}
+      busy={pending}
+      busyLabel="Creating…"
+      onClick={() => (reason ? undefined : onClick())}
     >
-      {pending ? 'Creating…' : 'Continue to Basics'}
+      Continue to Basics
       <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
       {reason ? (
         <span id={reasonId} className="sr-only">

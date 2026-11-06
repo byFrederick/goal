@@ -134,8 +134,8 @@ function SettingsForm({
         <Button type="button" variant="secondary" className="h-11 md:h-10" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" className="h-11 md:h-10" disabled={save.isPending}>
-          {save.isPending ? 'Saving…' : 'Save'}
+        <Button type="submit" variant="primary" className="h-11 md:h-10" busy={save.isPending} busyLabel="Saving…">
+          Save
         </Button>
       </div>
     </form>

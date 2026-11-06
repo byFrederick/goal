@@ -120,8 +120,8 @@ function NameDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? 'Saving…' : submitLabel}
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Saving…">
+              {submitLabel}
             </Button>
           </div>
         </form>
@@ -451,8 +451,14 @@ export function CopyAgentButton() {
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button variant="primary" disabled={!picked || pending} onClick={() => void copy()}>
-                {pending ? 'Copying…' : 'Copy'}
+              <Button
+                variant="primary"
+                disabled={!picked}
+                busy={pending}
+                busyLabel="Copying…"
+                onClick={() => void copy()}
+              >
+                Copy
               </Button>
             </div>
           </div>
