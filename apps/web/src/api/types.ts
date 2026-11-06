@@ -251,10 +251,6 @@ export type CodeHostKind = Schemas['CodeHostKind'];
 export type NotificationTestResult = Schemas['NotificationTestResult'];
 export type NotificationEvents = Schemas['NotificationEvents'];
 export type NotificationChannels = Schemas['NotificationChannels'];
-// Still read by the mock server, which serves the endpoint until the API part removes it.
-export type RepositoryList = Schemas['RepositoryList'];
-export type RepositoryOwner = Schemas['RepositoryOwner'];
-export type Repository = Schemas['Repository'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];

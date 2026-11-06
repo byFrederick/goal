@@ -43,7 +43,6 @@ describe('what a personal token can do', () => {
       [
         'access:read',
         'andon:manage',
-        'connection:browse',
         'connection:read',
         'secret:read',
         'factory:read',

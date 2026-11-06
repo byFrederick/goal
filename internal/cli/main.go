@@ -215,8 +215,8 @@ const usage = `usage:
                                                   (--from: the items it came from, comma-separated;
                                                   --publish: publish the draft after it)
   goal memory rm <factory> <n>                    remove the n-th fact from the draft's memory.yaml
-  goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
-                                                  and connections, by group, best first (--limit: per
+  goal search "<query>" [--limit N] [--json]      search the organization's items, agents and
+                                                  factories, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
                                                   it came)
   goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--limit N] [--cursor C] [--json]

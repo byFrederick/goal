@@ -9,7 +9,7 @@ import (
 )
 
 // search is goal search <query>: what the organization's search finds among its items, agents,
-// factories and connections, by group; --json writes goald's answer as it came.
+// factories, by group; --json writes goald's answer as it came.
 func search(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("search")
 	orgFlag := addOrgFlag(fs)
@@ -52,7 +52,7 @@ func search(ctx context.Context, out *printer, getenv func(string) string, args 
 }
 
 // printSearch prints each group that found something under its heading, in the order Items,
-// Agents, Factories, Connections, or "No results" when none did.
+// Agents, Factories, or "No results" when none did.
 func printSearch(out *printer, r *gen.OrgSearch) {
 	var groups []string
 
@@ -69,7 +69,6 @@ func printSearch(out *printer, r *gen.OrgSearch) {
 		return []string{h.Name, strings.Join(h.Stations, ","), h.FactoryName}
 	}))
 	group("Factories", hitLines(r.Factories, func(h gen.FactoryHit) []string { return []string{h.Name, h.Title} }))
-	group("Connections", hitLines(r.Connections, func(h gen.ConnectionHit) []string { return []string{h.Name, h.Kind} }))
 
 	if len(groups) == 0 {
 		out.printf("No results\n")
