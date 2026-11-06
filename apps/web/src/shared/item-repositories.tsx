@@ -44,7 +44,7 @@ export function ItemRepositories({
         {repoName(first.repo)}
       </span>
       {more > 0 ? <span className="shrink-0 tabular-nums">+{more}</span> : null}
-      <InfoTip about={`${item.ref} repositories`} className="-my-1 size-5">
+      <InfoTip about={`${item.ref} repositories`} className="-my-1">
         {full}
       </InfoTip>
     </span>

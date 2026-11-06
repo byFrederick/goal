@@ -1,6 +1,6 @@
 import { Check, ChevronRight } from 'lucide-react';
 import { DropdownMenu as M } from 'radix-ui';
-import type { ComponentProps } from 'react';
+import { type ComponentProps, useRef } from 'react';
 import { cn } from './cn';
 
 // A menu of actions or links on Radix DropdownMenu (C §10.11): role="menu", arrow keys and
@@ -25,15 +25,29 @@ export function MenuContent({
   side = 'right',
   align = 'start',
   sideOffset = 6,
+  onInteractOutside,
+  ref,
   ...props
 }: ComponentProps<typeof M.Content>) {
+  const node = useRef<HTMLDivElement | null>(null);
   return (
     <M.Portal>
       <M.Content
+        ref={(el) => {
+          node.current = el;
+          if (typeof ref === 'function') ref(el);
+          else if (ref) ref.current = el;
+        }}
         side={side}
         align={align}
         sideOffset={sideOffset}
         collisionPadding={8}
+        // A menu closing for its exit still listens for outside presses. A press on the trigger then reopens it and
+        // is also read as an outside press that closes it again, so it would flicker shut (MOTION.md rule 7).
+        onInteractOutside={(event) => {
+          if (node.current?.dataset.state === 'closed') event.preventDefault();
+          else onInteractOutside?.(event);
+        }}
         className={cn(
           'motion-panel motion-menu z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card bg-card p-1 text-ink shadow-pop outline-none',
           'max-h-[var(--radix-dropdown-menu-content-available-height)]',

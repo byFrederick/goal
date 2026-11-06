@@ -129,101 +129,102 @@ function EntryRow({
   const pick = (name: string) => patch({ token: `{{${name}}}` });
 
   return (
-    <li
-      className={cn(
-        'flex min-w-0 flex-col gap-3 rounded-control border border-line bg-card p-3',
-        // A row added to the draft fades in and rises 4px (MOTION.md, A new item appears in a list or column).
-        'motion-safe:animate-item-in motion-reduce:animate-fade-in',
-      )}
-    >
-      <div className="grid grid-cols-1 gap-2 @[640px]:grid-cols-[180px_minmax(0,1fr)]">
-        <Field label="Name" error={nameProblem}>
-          <Input
-            value={entry.name}
-            aria-label={`Name of repository ${entry.name}`}
-            readOnly={readOnly}
-            autoComplete="off"
-            spellCheck={false}
-            className="font-mono"
-            onChange={(e) => patch({ name: e.target.value }, `${at}/name`)}
-          />
-        </Field>
-        <Field label="URL" error={urlProblem}>
-          <Input
-            type="url"
-            inputMode="url"
-            value={entry.url}
-            aria-label={`URL of repository ${entry.name}`}
-            readOnly={readOnly}
-            aria-describedby={help}
-            placeholder="https://github.com/acme/app"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => patch({ url: e.target.value }, `${at}/url`)}
-          />
-        </Field>
-      </div>
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-        <div className="flex min-w-0 flex-col gap-2">
-          <span aria-hidden="true" className="text-sm font-medium">
-            Access
-          </span>
-          <SegmentedControl
-            label={`Access of ${entry.name}`}
-            options={access}
-            value={entry.access}
-            readOnly={readOnly}
-            onChange={(a) => patch({ access: a })}
-          />
-        </div>
-        <div className="flex min-w-0 flex-1 basis-[220px] flex-col gap-2">
-          <span className="text-sm font-medium">Token</span>
-          <SecretSelect
-            label={`Token of ${entry.name}`}
-            value={token}
-            onChange={pick}
-            disabled={readOnly}
-            placeholder={entry.access === 'write' ? 'Pick a secret' : 'Public, no token'}
-            withNew={() => newSecret.open(pick)}
-            className="w-full"
-          />
-        </div>
-        <span className="flex min-h-8 items-center gap-1">
-          <Checkbox
-            label="Default"
-            checked={entry.default === true || (only && !owner)}
-            disabled={readOnly || owner || only}
-            onCheckedChange={(on) => patch({ default: on })}
-          />
-          <InfoTip about="Default">
-            The repository an item uses when it names none. The only repository is the default; an owner’s every
-            repository (ending in /*) cannot be.
-          </InfoTip>
-        </span>
-        {readOnly ? null : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            aria-label={`Remove repository ${entry.name}`}
-            onClick={() =>
-              onChange(
-                entries.filter((_, i) => i !== index),
-                undefined,
-              )
-            }
-          >
-            <X size={14} strokeWidth={1.5} aria-hidden="true" />
-            Remove
-          </Button>
+    <li>
+      <fieldset
+        aria-label={entry.name ? `Repository ${entry.name}` : 'New repository'}
+        className={cn(
+          'flex min-w-0 flex-col gap-3 rounded-control border border-line bg-card p-3',
+          // A row added to the draft fades in and rises 4px (MOTION.md, A new item appears in a list or column).
+          'motion-safe:animate-item-in motion-reduce:animate-fade-in',
         )}
-      </div>
-      {newSecret.sheet}
-      <p id={help} className="sr-only">
-        An https clone URL without credentials, or an owner’s every repository ending in /*.
-      </p>
-      <ProblemFixes pointer={`${at}/token`} />
-      <ProblemFixes pointer={`${at}/access`} />
+      >
+        <div className="grid grid-cols-1 gap-2 @[640px]:grid-cols-[180px_minmax(0,1fr)]">
+          <Field label="Name" error={nameProblem}>
+            <Input
+              value={entry.name}
+              readOnly={readOnly}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono"
+              onChange={(e) => patch({ name: e.target.value }, `${at}/name`)}
+            />
+          </Field>
+          <Field label="URL" error={urlProblem}>
+            <Input
+              type="url"
+              inputMode="url"
+              value={entry.url}
+              readOnly={readOnly}
+              aria-describedby={help}
+              placeholder="https://github.com/acme/app"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => patch({ url: e.target.value }, `${at}/url`)}
+            />
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+          <div className="flex min-w-0 flex-col gap-2">
+            <span aria-hidden="true" className="text-sm font-medium">
+              Access
+            </span>
+            <SegmentedControl
+              label={`Access of ${entry.name}`}
+              options={access}
+              value={entry.access}
+              readOnly={readOnly}
+              onChange={(a) => patch({ access: a })}
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 basis-[220px] flex-col gap-2">
+            <span className="text-sm font-medium">Token</span>
+            <SecretSelect
+              label={`Token of ${entry.name}`}
+              value={token}
+              onChange={pick}
+              disabled={readOnly}
+              placeholder={entry.access === 'write' ? 'Pick a secret' : 'Public, no token'}
+              withNew={() => newSecret.open(pick)}
+              className="w-full"
+            />
+          </div>
+          <span className="flex min-h-8 items-center gap-1">
+            <Checkbox
+              label="Default"
+              checked={entry.default === true || (only && !owner)}
+              disabled={readOnly || owner || only}
+              onCheckedChange={(on) => patch({ default: on })}
+            />
+            <InfoTip about="Default">
+              The repository an item uses when it names none. The only repository is the default; an owner’s every
+              repository (ending in /*) cannot be.
+            </InfoTip>
+          </span>
+          {readOnly ? null : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              aria-label={`Remove repository ${entry.name}`}
+              onClick={() =>
+                onChange(
+                  entries.filter((_, i) => i !== index),
+                  undefined,
+                )
+              }
+            >
+              <X size={14} strokeWidth={1.5} aria-hidden="true" />
+              Remove
+            </Button>
+          )}
+        </div>
+        {newSecret.sheet}
+        <p id={help} className="sr-only">
+          An https clone URL without credentials, or an owner’s every repository ending in /*.
+        </p>
+        <ProblemFixes pointer={`${at}/token`} />
+        <ProblemFixes pointer={`${at}/access`} />
+      </fieldset>
     </li>
   );
 }

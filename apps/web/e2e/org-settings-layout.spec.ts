@@ -57,7 +57,17 @@ test('the Code hosts ⓘ is 44 px on a phone and its tip stays inside the viewpo
   await page.evaluate(
     () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
   );
-  await tip.click();
+  // Click at the box centre with the mouse: Playwright's own retry scrolls the trigger again, and Radix closes on that scroll.
+  const at = await tip.boundingBox();
+  if (!at) throw new Error('About Code hosts has no box');
+  const cx = at.x + at.width / 2;
+  const cy = at.y + at.height / 2;
+  const hit = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label') ?? '',
+    { x: cx, y: cy },
+  );
+  expect(hit).toBe('About Code hosts');
+  await page.mouse.click(cx, cy);
   await expect(tip).toHaveAttribute('data-state', /open/);
   const tipBox = page
     .locator('[data-radix-popper-content-wrapper]')

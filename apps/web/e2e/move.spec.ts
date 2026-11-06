@@ -194,6 +194,17 @@ test('Escape from Move, opened from More actions, puts focus back on the More ac
   await expect(more).toBeFocused();
 });
 
+test('pressing More actions while the menu is still closing leaves it open', async ({ page }) => {
+  await page.goto('/o/acme/f/goal/items/12');
+  const more = page.getByRole('button', { name: 'More actions', exact: true });
+  await more.click();
+  await expect(page.getByRole('menuitem', { name: 'Move', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await more.click();
+  await page.waitForTimeout(400);
+  await expect(page.getByRole('menuitem', { name: 'Move', exact: true })).toBeVisible();
+});
+
 test('a station a publish adds is a Move choice on the open Item page, without navigating', async ({
   page,
   request,
