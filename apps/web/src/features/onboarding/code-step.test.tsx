@@ -8,10 +8,10 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import { getDraftFile, listTemplates, openDraft, putDraftFile } from '../../api/definitions';
+import { getDraftFile, getDraftModel, getFactory, listTemplates, openDraft, putDraftFile } from '../../api/definitions';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret, replaceSecretValue } from '../../api/secrets';
 import { setSessionHandlers } from '../../api/session';
@@ -36,6 +36,8 @@ vi.mock('../../api/definitions', async (original) => ({
   listTemplates: vi.fn(),
   openDraft: vi.fn(),
   getDraftFile: vi.fn(),
+  getDraftModel: vi.fn(),
+  getFactory: vi.fn(),
   putDraftFile: vi.fn(),
 }));
 
@@ -80,6 +82,18 @@ beforeEach(() => {
   vi.mocked(openDraft).mockResolvedValue({} as never);
   vi.mocked(getDraftFile).mockResolvedValue({ text: factoryYaml, sha256: 'abc' });
   vi.mocked(putDraftFile).mockResolvedValue({} as never);
+  vi.mocked(getFactory).mockResolvedValue({ id: factory, name: 'Acme delivery' } as never);
+  vi.mocked(getDraftModel).mockResolvedValue({
+    model: {
+      basics: { purpose: 'Ship changes' },
+      line: {
+        stations: [
+          { id: 'build', kind: 'agent', name: 'Build' },
+          { id: 'done', kind: 'done', name: 'Done' },
+        ],
+      },
+    },
+  } as never);
 });
 
 afterEach(() => {
@@ -124,6 +138,23 @@ const fill = async (url: string, token: string) => {
 };
 const next = () => screen.getByRole('button', { name: /Continue|Testing/ }) as HTMLButtonElement;
 const radio = async (name: RegExp) => (await screen.findByRole('radio', { name })) as HTMLInputElement;
+
+describe('Step 3, Connect your code: the preview', () => {
+  it('keeps the picked template’s factory card and its stations, not the placeholder', async () => {
+    renderStep();
+    const card = await screen.findByRole('region', { name: 'Your factory' });
+    expect(await within(card).findByText('Acme delivery')).toBeTruthy();
+    expect(within(card).getByRole('list', { name: 'The line' }).textContent).toContain('Build');
+    expect(screen.queryByText('The line appears when you pick a template')).toBeNull();
+  });
+
+  it('shows the card’s skeleton while the factory loads, never the placeholder', async () => {
+    vi.mocked(getFactory).mockReturnValue(new Promise(() => {}));
+    renderStep();
+    expect((await screen.findAllByText('Loading')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('The line appears when you pick a template')).toBeNull();
+  });
+});
 
 describe('Step 3, Connect your code: the choices', () => {
   it('shows a skeleton while the template loads', async () => {
