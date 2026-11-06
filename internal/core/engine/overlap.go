@@ -333,6 +333,12 @@ func (p *progress) stale(ctx context.Context, it domain.Item, n domain.OpenNeed,
 // removeOverlap removes it's overlap edge on needs for reason. An edge already gone (another
 // instance removed it) is skipped.
 func (e *Engine) removeOverlap(ctx context.Context, it domain.Item, needs domain.ItemID, reason string) error {
+	return e.removeHeld(ctx, it, needs, reason, "overlap released")
+}
+
+// removeHeld removes it's edge on needs that the engine wrote, for reason, logging event. An edge
+// already gone (another instance removed it) is skipped.
+func (e *Engine) removeHeld(ctx context.Context, it domain.Item, needs domain.ItemID, reason, event string) error {
 	err := e.store.RemoveEdge(ctx, it.ID, needs, domain.EngineActor, e.clock.Now(), reason)
 
 	switch {
@@ -342,7 +348,7 @@ func (e *Engine) removeOverlap(ctx context.Context, it domain.Item, needs domain
 		return fmt.Errorf("item %s no longer needs %s: %w", it.ID, needs, err)
 	}
 
-	e.log.InfoContext(ctx, "overlap released", slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)),
+	e.log.InfoContext(ctx, event, slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)),
 		slog.String("needs", string(needs)), slog.String("reason", reason))
 
 	return nil

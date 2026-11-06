@@ -57,6 +57,8 @@ const (
 	codeRouteOverAgents = "route-agents-exceed-station"
 	codeCheckRunMissing = "check-run-missing"
 	codeBufferOffDrum   = "buffer-not-at-constraint"
+	// codeMergesWithoutMergeAction: merges on a station whose action is not merge.
+	codeMergesWithoutMergeAction = "merges-without-merge-action"
 
 	codeIntegrationLandAtNotMerge = "integration-land-at-not-merge"
 	codeIntegrationWithoutMerge   = "integration-without-merge-station"
@@ -531,6 +533,10 @@ func (c *checker) station(i int, s Station) {
 		if ch.Kind == CheckCommand && strings.TrimSpace(ch.Run) == "" {
 			c.errorf(checkLine, codeCheckRunMissing, append(base, "checks", strconv.Itoa(j)), "station %s: a command check needs run", s.ID)
 		}
+	}
+
+	if s.Merges != "" && s.Action != string(domain.ActionMerge) {
+		c.errorf(checkLine, codeMergesWithoutMergeAction, append(base, "merges"), "station %s: merges needs action merge", s.ID)
 	}
 
 	c.gate(i, s)
