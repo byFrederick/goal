@@ -149,7 +149,7 @@ test('fits the top bar at 768 with New item inside the viewport', async ({ page 
 });
 
 // Every column has its own Expedite box: the same top and height in every column, headers of one height, and
-// from 1280 px every station fits without the board scrolling. Nothing outside the board's scroller passes the edge.
+// no column is narrower than 200 px. Nothing outside the board's scroller passes the edge.
 for (const width of [1440, 1280, 1024, 768]) {
   test(`the expedite boxes line up across the columns at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
@@ -165,6 +165,7 @@ for (const width of [1440, 1280, 1024, 768]) {
         scrollWidth: stations?.scrollWidth ?? 0,
         clientWidth: stations?.clientWidth ?? 0,
         lastRight,
+        widths: columns.map((c) => c.getBoundingClientRect().width),
         sectionRight: stations?.getBoundingClientRect().right ?? 0,
         boxes: columns.map((column) => {
           const box = column.querySelector('[data-zone="expedite"]')?.getBoundingClientRect();
@@ -190,10 +191,10 @@ for (const width of [1440, 1280, 1024, 768]) {
       expect(Math.abs((box?.height ?? 0) - (geometry.boxes[0]?.height ?? 0))).toBeLessThanOrEqual(1);
     }
     for (const height of geometry.headers) expect(Math.abs(height - (geometry.headers[0] ?? 0))).toBeLessThanOrEqual(1);
-    if (width >= 1280) {
-      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
-      expect(geometry.lastRight).toBeLessThanOrEqual(geometry.sectionRight + 1);
-    }
+    for (const w of geometry.widths) expect(w).toBeGreaterThanOrEqual(199);
+    expect(geometry.lastRight).toBeLessThanOrEqual(
+      geometry.sectionRight + geometry.scrollWidth - geometry.clientWidth + 1,
+    );
     expect(geometry.pastColumn).toEqual([]);
     expect(geometry.overflowing).toEqual([]);
   });
@@ -315,7 +316,7 @@ test('on a phone the crowded station stacks its expedite cards inside the lane',
 
 // A Done card with a long assembly title (mock item 21's parts) must truncate inside its column.
 for (const width of [1280, 1440]) {
-  test(`every card stays inside its column and the board does not scroll sideways at ${width} px`, async ({ page }) => {
+  test(`every card stays inside its column and the page does not scroll sideways at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/o/acme/f/goal/board');
     // A phone shows the picked station's own region; the desktop shows all of them under 'Stations'.
@@ -326,8 +327,6 @@ for (const width of [1280, 1440]) {
       const region = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
       const columns = Array.from(region?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
       return {
-        scrollWidth: region?.scrollWidth ?? 0,
-        clientWidth: region?.clientWidth ?? 0,
         overflowing: columns.flatMap((column) =>
           Array.from(column.querySelectorAll<HTMLElement>('*'))
             .filter((el) => !el.closest('.sr-only'))
@@ -343,7 +342,7 @@ for (const width of [1280, 1440]) {
     expect(result.longTitle, 'the mock has a Done card with a long assembly title').toBe(true);
     expect(result.ages, 'the mock has a card whose age reads 23 min').toBe(true);
     expect(result.overflowing).toEqual([]);
-    expect(result.scrollWidth).toBeLessThanOrEqual(result.clientWidth);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }
 
@@ -429,4 +428,96 @@ test('a station with a WIP limit of 50 and a lane with 50 slots fit their column
     return out;
   });
   expect(overflowing).toEqual([]);
+});
+
+// At 1280 px the goal factory's 7 stations scroll sideways in their own box; no column is narrower than
+// 200 px, chips take one line, and no text box crosses its column or lies over a sibling.
+test('seven stations at 1280 px: wide columns, one-line chips, no overlapping text', async ({ page }) => {
+  test.skip(isPhone(page), 'the stations are side by side from 768 px');
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.goto('/o/acme/f/goal/board');
+  await expect(page.getByRole('region', { name: 'Stations', exact: true })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+
+  const r = await page.evaluate(() => {
+    const region = document.querySelector<HTMLElement>('section[aria-label="Stations"]');
+    const columns = Array.from(region?.querySelectorAll<HTMLElement>(':scope > div > section') ?? []);
+    const textBoxes = (column: HTMLElement) => {
+      const out: { name: string; node: Node; rect: { left: number; right: number; top: number; bottom: number } }[] =
+        [];
+      const walker = document.createTreeWalker(column, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const parent = n.parentElement;
+        if (!parent || parent.closest('.sr-only') || !n.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        // Keep only the part of each line that is drawn: an ellipsis, a line clamp or overflow:hidden hides the rest.
+        const clips: DOMRect[] = [];
+        for (let el: HTMLElement | null = parent; el && el !== column.parentElement; el = el.parentElement) {
+          const cs = getComputedStyle(el);
+          if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') clips.push(el.getBoundingClientRect());
+        }
+        for (const x of Array.from(range.getClientRects())) {
+          const rect = {
+            left: Math.max(x.left, ...clips.map((c) => c.left)),
+            right: Math.min(x.right, ...clips.map((c) => c.right)),
+            top: Math.max(x.top, ...clips.map((c) => c.top)),
+            bottom: Math.min(x.bottom, ...clips.map((c) => c.bottom)),
+          };
+          if (rect.right - rect.left > 0 && rect.bottom - rect.top > 0) {
+            out.push({ name: n.textContent.trim().slice(0, 30), node: n, rect });
+          }
+        }
+      }
+      return out;
+    };
+    const crossing: string[] = [];
+    const overlaps: string[] = [];
+    for (const column of columns) {
+      const edge = column.getBoundingClientRect();
+      const boxes = textBoxes(column);
+      for (const b of boxes) {
+        if (b.rect.right > edge.right + 1 || b.rect.left < edge.left - 1) crossing.push(b.name);
+      }
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i]?.rect;
+          const b = boxes[j]?.rect;
+          if (!a || !b || boxes[i]?.node === boxes[j]?.node) continue;
+          const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (w > 1 && h > 2) overlaps.push(`${boxes[i]?.name} / ${boxes[j]?.name}`);
+        }
+      }
+    }
+    const drawnChips = Array.from(region?.querySelectorAll<HTMLElement>('article span.rounded-chip') ?? []).filter(
+      (chip) => Boolean(chip.textContent?.trim()) && chip.checkVisibility() && chip.getClientRects().length > 0,
+    );
+    const chipLines = drawnChips.map((chip) => {
+      const range = document.createRange();
+      range.selectNodeContents(chip);
+      const tops = new Set(
+        Array.from(range.getClientRects())
+          .filter((x) => x.width > 0)
+          .map((x) => Math.round(x.top)),
+      );
+      return tops.size;
+    });
+    return {
+      count: columns.length,
+      scrolls: (region?.scrollWidth ?? 0) > (region?.clientWidth ?? 0),
+      widths: columns.map((c) => c.getBoundingClientRect().width),
+      crossing,
+      overlaps,
+      chipLines,
+    };
+  });
+  expect(r.count).toBe(7);
+  expect(r.scrolls).toBe(true);
+  for (const w of r.widths) expect(w).toBeGreaterThanOrEqual(199);
+  expect(r.chipLines.length).toBeGreaterThan(0);
+  for (const lines of r.chipLines) expect(lines).toBe(1);
+  expect(r.crossing).toEqual([]);
+  expect(r.overlaps).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

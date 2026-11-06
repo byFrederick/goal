@@ -121,11 +121,13 @@ function ColumnHeader({
         </span>
       </div>
       <WipMeter station={station} />
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-meta text-muted">
-        <span className="min-w-0 max-w-full truncate" title={left}>
+      <div className="flex min-w-0 items-baseline justify-between gap-x-2 text-meta text-muted">
+        <span className="min-w-0 truncate" title={left}>
           {left}
         </span>
-        <span className="min-w-0 max-w-full whitespace-nowrap tabular-nums">{right}</span>
+        <span className="min-w-0 max-w-[50%] truncate whitespace-nowrap tabular-nums" title={right}>
+          {right}
+        </span>
       </div>
     </header>
   );
