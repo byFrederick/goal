@@ -87,8 +87,14 @@ export function SecretReplaceDialog<Saved>({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={value === '' || replace.isPending}>
-              {replace.isPending ? pendingLabel : actionLabel}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={value === ''}
+              busy={replace.isPending}
+              busyLabel={pendingLabel}
+            >
+              {actionLabel}
             </Button>
           </div>
         </form>
