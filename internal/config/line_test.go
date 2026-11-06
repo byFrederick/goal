@@ -375,6 +375,56 @@ func TestLoad_RefusesUnknownOverlapPolicy(t *testing.T) {
 	}
 }
 
+// A merge station's merges reaches the domain station: allow does not take turns, serialize and
+// the default do, and a station without action merge never does.
+func TestLine_CarriesStationMerges(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, merges string
+		want         bool
+	}{
+		{name: "allow", merges: "        merges: allow\n", want: false},
+		{name: "serialize", merges: "        merges: serialize\n", want: true},
+		{name: "default", want: true},
+	} {
+		doc := strings.Replace(mergeLine, "        action: merge\n", "        action: merge\n"+tt.merges, 1)
+
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("%s: load: %v", tt.name, err)
+		}
+
+		stations := f.Line().Stations
+
+		land := stations[slices.IndexFunc(stations, func(s domain.Station) bool { return s.ID == "land" })]
+		if got := land.TakesTurns(); got != tt.want {
+			t.Errorf("%s: land takes turns = %v (merges %q), want %v", tt.name, got, land.Merges, tt.want)
+		}
+
+		if slices.ContainsFunc(stations, func(s domain.Station) bool { return s.ID != "land" && s.TakesTurns() }) {
+			t.Errorf("%s: a station without action merge takes turns: %+v", tt.name, stations)
+		}
+	}
+}
+
+func TestLoad_RefusesUnknownStationMerges(t *testing.T) {
+	t.Parallel()
+
+	for _, merges := range []string{"sometimes", "''", "1", "[allow]"} {
+		doc := strings.Replace(mergeLine, "        action: merge\n", "        action: merge\n        merges: "+merges+"\n", 1)
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("merges %s: problems %+v, want a schema problem", merges, problems)
+		}
+
+		if _, err := Load(checkTree(doc, nil)); err == nil {
+			t.Errorf("merges %s loaded, want it refused", merges)
+		}
+	}
+}
+
 func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 	t.Parallel()
 

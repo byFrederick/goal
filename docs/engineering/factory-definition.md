@@ -225,6 +225,19 @@ A definition without the block is trunk, `onLand`, 0 and no `landAt`. The checks
 
 Nothing reads the settings yet: the store, the engine and the worker follow in the parts of the assembly ADR 0033 describes.
 
+## Merge turns: a station's `merges`
+
+`merges` on a station with `action: merge` says how many items it integrates into the same merge target at once. A merge target is the branch an item's pull request merges into: the default branch for a standalone item or an assembly's landing, and the assembly's integration branch for a part.
+
+| Value | Meaning |
+| --- | --- |
+| `serialize` (the default) | One item per merge target at a time. |
+| `allow` | Several items at once. |
+
+The line carries it as `domain.Station.Merges`, and `Station.TakesTurns` reports true for a station with `action: merge` whose `merges` is not `allow`, and false for every other station. The checks report `merges-without-merge-action` when a station sets `merges` without `action: merge`; the message names the station.
+
+Nothing reads the setting yet: the engine holds items for their target's turn in a later part of the same assembly.
+
 ## Repositories: `runtime.repositories` and an agent's code
 
 The task guides are [Connect code to a factory](../../apps/docs/src/content/docs/guides/connect-code.md) and [Connect GitHub](../../apps/docs/src/content/docs/guides/connect-github.md), served at `/docs/guides/connect-code/` and `/docs/guides/connect-github/`.
