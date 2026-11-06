@@ -229,7 +229,7 @@ function StationCards() {
       aria-label="Stations"
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must be reachable by keyboard (axe scrollable-region-focusable).
       tabIndex={0}
-      className="overflow-x-auto pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
+      className="relative overflow-x-auto pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
     >
       <ol aria-label="The stations" className="m-0 flex list-none gap-1 w-max min-w-full p-0">
         {editor.viewOnly ? null : addControl(undefined, 'add-first')}
