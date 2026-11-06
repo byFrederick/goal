@@ -24,8 +24,19 @@ const (
 	auditRuleServer       = "server"
 )
 
-// StandingRules implements ports.Connections over 00075's standing_rules.
-func (c *Connections) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+var _ ports.StandingRules = (*StandingRules)(nil)
+
+// StandingRules are the standing rules in 00075's standing_rules (ports.StandingRules). The
+// connection-keyed rules Connections.CreateStandingRule writes are in the same table.
+type StandingRules struct {
+	s *Store
+}
+
+// NewStandingRules returns the standing rules on s's pool.
+func NewStandingRules(s *Store) *StandingRules { return &StandingRules{s: s} }
+
+// StandingRules implements ports.StandingRules.
+func (c *StandingRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
 	rows, err := fetch(ctx, c.s.read, func(q *db.Queries) ([]db.StandingRulesRow, error) { return q.StandingRules(ctx, includeRevoked) })
 	if err != nil {
 		return nil, fmt.Errorf("standing rules: %w", err)
@@ -108,9 +119,9 @@ func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandi
 	return out, nil
 }
 
-// CreateServerStandingRule implements ports.Connections. A concurrent create of the same key
+// CreateServerStandingRule implements ports.StandingRules. A concurrent create of the same key
 // loses to 00091's partial unique index and returns the rule that won.
-func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
+func (c *StandingRules) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg
 	}
@@ -173,8 +184,8 @@ func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.New
 	return out, nil
 }
 
-// RevokeStandingRule implements ports.Connections.
-func (c *Connections) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
+// RevokeStandingRule implements ports.StandingRules.
+func (c *StandingRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg
 	}

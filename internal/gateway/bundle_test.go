@@ -794,7 +794,7 @@ func TestBundle_ToolModesAndAlwaysAllowOffered(t *testing.T) {
 		}
 
 		if rule.Tool == toolEdit {
-			if _, err := h.connections.RevokeStandingRule(ctx, r.ID, domain.LocalUser); err != nil {
+			if _, err := h.rules.RevokeStandingRule(ctx, r.ID, domain.LocalUser); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1735,7 +1735,7 @@ func environmentBundleOf(
 
 	for _, r := range rules {
 		r.Item = it.ID
-		if _, err := h.connections.CreateServerStandingRule(ctx, r, domain.LocalUser); err != nil {
+		if _, err := h.rules.CreateServerStandingRule(ctx, r, domain.LocalUser); err != nil {
 			t.Fatal(err)
 		}
 	}

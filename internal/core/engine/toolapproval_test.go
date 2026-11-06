@@ -256,7 +256,7 @@ func TestDecideToolApproval_ApproveResumesWithoutRework(t *testing.T) {
 		t.Error("the approval is still open after its approval")
 	}
 
-	if rules, err := h.connections.StandingRules(inOrg(t), true); err != nil || len(rules) != 0 {
+	if rules, err := h.rules.StandingRules(inOrg(t), true); err != nil || len(rules) != 0 {
 		t.Errorf("standing rules %+v, %v; want none without Always allow", rules, err)
 	}
 
@@ -482,7 +482,7 @@ func TestDecideToolApproval_AlwaysAllowOnSecretsKeysByServer(t *testing.T) {
 func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string) {
 	t.Helper()
 
-	rules, err := h.connections.StandingRules(inOrg(t), true)
+	rules, err := h.rules.StandingRules(inOrg(t), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +532,7 @@ func TestDecideToolApproval_AlwaysAllowRefusedWhenNotOffered(t *testing.T) {
 		t.Errorf("Always allow = %v; want ErrAlwaysAllowNotOffered", err)
 	}
 
-	if rules, _ := h.connections.StandingRules(inOrg(t), true); len(rules) != 0 {
+	if rules, _ := h.rules.StandingRules(inOrg(t), true); len(rules) != 0 {
 		t.Errorf("standing rules %+v; want none", rules)
 	}
 }
@@ -547,7 +547,7 @@ func TestRevokeStandingRule_EndsTheRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := h.connections.StandingRules(inOrg(t), false)
+	rules, err := h.rules.StandingRules(inOrg(t), false)
 	if err != nil || len(rules) != 1 {
 		t.Fatalf("standing rules %+v, %v; want one", rules, err)
 	}
@@ -561,7 +561,7 @@ func TestRevokeStandingRule_EndsTheRule(t *testing.T) {
 		t.Errorf("revoked rule %+v; want it ended by the person", got)
 	}
 
-	if active, _ := h.connections.StandingRules(inOrg(t), false); len(active) != 0 {
+	if active, _ := h.rules.StandingRules(inOrg(t), false); len(active) != 0 {
 		t.Errorf("active rules %+v; want none", active)
 	}
 

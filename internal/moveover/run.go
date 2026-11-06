@@ -38,7 +38,10 @@ type Endpoints interface {
 type Deps struct {
 	Orgs        Orgs
 	Connections ports.Connections
-	Secrets     ports.OrgSecrets
+	// StandingRules are the organization's standing rules, which a converted factory's are
+	// re-keyed onto.
+	StandingRules ports.StandingRules
+	Secrets       ports.OrgSecrets
 	// Settings is the organization's notification setting, pointed at its oldest Slack
 	// connection's secret.
 	Settings  ports.NotificationSettings
@@ -691,9 +694,9 @@ func (m *Mover) factory(ctx context.Context, rec ports.FactoryRecord, conns []do
 // f whose converted file has a server named after the connection (servers, Result.Servers): the
 // same tool and agent role, made by Goal with the item the rule was approved on (ADR 0037
 // decision 19, step 4). The rules stay as they are. A copy made before is found instead of made
-// again (ports.Connections.CreateServerStandingRule), so re-keying twice copies nothing.
+// again (ports.StandingRules.CreateServerStandingRule), so re-keying twice copies nothing.
 func (m *Mover) rekey(ctx context.Context, f domain.FactoryID, servers map[string][]string) error {
-	rules, err := m.d.Connections.StandingRules(ctx, false)
+	rules, err := m.d.StandingRules.StandingRules(ctx, false)
 	if err != nil {
 		return fmt.Errorf("list standing rules: %w", err)
 	}
@@ -709,7 +712,7 @@ func (m *Mover) rekey(ctx context.Context, f domain.FactoryID, servers map[strin
 			}
 
 			n := domain.NewServerStandingRule{Factory: f, Environment: env, Server: r.Connection, Tool: r.Tool, Agent: r.Agent, Item: r.ItemID}
-			if _, err := m.d.Connections.CreateServerStandingRule(ctx, n, Actor); err != nil {
+			if _, err := m.d.StandingRules.CreateServerStandingRule(ctx, n, Actor); err != nil {
 				return fmt.Errorf("re-key standing rule %s onto environment %s: %w", r.ID, env, err)
 			}
 		}
