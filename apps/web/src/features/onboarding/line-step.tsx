@@ -123,7 +123,13 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
           <Link
             to="/o/$org/get-started/$step"
             params={{ org: org.slug, step: 'code' }}
-            search={{ url: search.url, secret: search.secret, template: search.template, factory }}
+            search={{
+              url: search.url,
+              secret: search.secret,
+              template: search.template,
+              factory,
+              access: search.access,
+            }}
           >
             Back
           </Link>

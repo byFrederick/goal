@@ -29,6 +29,7 @@ test.describe('desktop', () => {
 });
 
 for (const { width, height } of [
+  { width: 1024, height: 800 },
   { width: 1280, height: 900 },
   { width: 1440, height: 1000 },
 ]) {
@@ -37,7 +38,20 @@ for (const { width, height } of [
     await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items(\?|$)/);
     await page.goto(items);
     const table = page.getByRole('table', { name: 'Items' });
-    await expect(table.getByRole('columnheader', { name: 'Cost' })).toBeVisible();
+    for (const name of ['Title', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost']) {
+      await expect(table.getByRole('columnheader', { name, exact: true })).toBeVisible();
+    }
+    // The title link stays inside its cell: its box does not run under the Type or Lane cell.
+    const row = table
+      .locator('tbody tr')
+      .filter({ has: page.getByRole('link') })
+      .first();
+    // Cells are found by their header's index: a Repositories cell may sit after Title.
+    const headers = await table.locator('thead th').allInnerTexts();
+    const at = (name: string) => headers.findIndex((h) => h.trim().startsWith(name));
+    const link = row.locator('td').nth(at('Title')).getByRole('link').first();
+    await expectNoOverlap(link, row.locator('td').nth(at('Type')), 'the title link and the Type cell');
+    await expectNoOverlap(link, row.locator('td').nth(at('Lane')), 'the title link and the Lane cell');
     const fits = await table.evaluate((t) => {
       const box = t.parentElement as HTMLElement;
       return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;

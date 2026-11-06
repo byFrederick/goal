@@ -319,11 +319,12 @@ func readTemplate(dir, name string, version int) (authoring.TemplateUpload, erro
 	return authoring.TemplateUpload{Name: name, Version: version, Meta: meta, Files: files}, nil
 }
 
-// pushTemplate adds one template version to the catalog, printing what keeps it out.
+// pushTemplate adds one template version to the catalog, printing what keeps it out; a version
+// the catalog holds unchanged is not an error.
 func pushTemplate(
 	ctx context.Context, out *printer, catalog *authoring.TemplateCatalog, dir string, t authoring.TemplateUpload, bucket string,
 ) error {
-	err := catalog.Push(ctx, t)
+	added, err := catalog.Push(ctx, t)
 
 	if invalid, ok := errors.AsType[*authoring.TemplateInvalidError](err); ok {
 		for _, p := range invalid.Problems {
@@ -340,6 +341,12 @@ func pushTemplate(
 
 	if err != nil {
 		return err
+	}
+
+	if !added {
+		out.printf("%s v%d is in the catalog already, unchanged\n", t.Name, t.Version)
+
+		return nil
 	}
 
 	out.printf("✓ added %s v%d (%d files) to s3://%s/%s%s/%d/\n", t.Name, t.Version, len(t.Files), bucket,
