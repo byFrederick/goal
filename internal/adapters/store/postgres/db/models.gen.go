@@ -329,6 +329,8 @@ type RepositoryTest struct {
 	Readable   int32
 	Pushable   int32
 	Truncated  bool
+	CiOk       *bool
+	CiReason   *string
 }
 
 type SavedView struct {

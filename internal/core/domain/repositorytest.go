@@ -21,7 +21,10 @@ const (
 // URL is the repository's RepositoryKey, or host/owner/* in lower case for an owner pattern.
 // Tested is false when the host gave no answer. Read and Push are the host's two checks; for an
 // owner pattern, Readable and Pushable count the repositories the token can read and push to, and
-// Truncated says the count stopped. Every text is scrubbed of the token before it is kept.
+// Truncated says the count stopped. CITested says the test has a CI check (ADR 0044 decision 10):
+// whether the token can read the CI a station that waits for CI reads, in CIOK and CIReason. A
+// test kept before goald checked CI, and an owner pattern's, have none. The CI check never changes
+// OK. Every text is scrubbed of the token before it is kept.
 type RepositoryTest struct {
 	Factory            FactoryID
 	URL                string
@@ -35,10 +38,13 @@ type RepositoryTest struct {
 	PushReason         string
 	Readable, Pushable int
 	Truncated          bool
+	CITested, CIOK     bool
+	CIReason           string
 }
 
 // Check refuses a test without a factory, a URL, a secret or a time, with an access other than
-// read or write, an untested one that passed, a negative count or a text over
+// read or write, an untested one that passed, a CI check that passed without being tested, a
+// negative count or a text over
 // MaxRepositoryTestText characters. The error wraps ErrInvalid.
 func (t RepositoryTest) Check() error {
 	switch {
@@ -48,11 +54,13 @@ func (t RepositoryTest) Check() error {
 		return fmt.Errorf("a repository test's access is read or write, not %q: %w", t.Access, ErrInvalid)
 	case !t.Tested && t.OK:
 		return fmt.Errorf("a repository test the host didn't answer can't pass: %w", ErrInvalid)
+	case !t.CITested && t.CIOK:
+		return fmt.Errorf("a repository test without a CI check can't pass it: %w", ErrInvalid)
 	case t.Readable < 0 || t.Pushable < 0:
 		return fmt.Errorf("a repository test's counts are not negative: %w", ErrInvalid)
 	}
 
-	for _, s := range []string{t.Summary, t.Warning, t.ReadReason, t.PushReason} {
+	for _, s := range []string{t.Summary, t.Warning, t.ReadReason, t.PushReason, t.CIReason} {
 		if utf8.RuneCountInString(s) > MaxRepositoryTestText {
 			return fmt.Errorf("a repository test's texts have at most %d characters: %w", MaxRepositoryTestText, ErrInvalid)
 		}
