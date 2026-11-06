@@ -33,7 +33,9 @@ func TestAPI_WaitingSaysWhatHoldsAnItem(t *testing.T) {
 	h.edge(t, server, contract, domain.EdgeTurn)
 
 	const branch = "goal/a1-the-assembly"
+
 	target := branch
+
 	if _, err := h.store.SetIntegrationBranch(inOrg(t), asm.ID, branch, stBuild, h.clock.Now()); err != nil {
 		t.Fatal(err)
 	}

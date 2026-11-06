@@ -44,7 +44,7 @@ func WaitingFor(it Item, needs []OpenNeed, target string) (Waiting, bool) {
 			overlap = append(overlap, n)
 		case EdgeTurn:
 			turn = append(turn, n)
-		default:
+		case EdgePlanned, EdgeLinked:
 			after = append(after, n)
 		}
 	}

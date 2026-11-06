@@ -628,6 +628,7 @@ func waitingOf(w domain.Waiting, ref func(number int64) string) *gen.ItemWaiting
 	if w.Target != "" {
 		out.Target = &w.Target
 	}
+
 	for _, n := range w.Items {
 		out.Items = append(out.Items, ref(n.Number))
 		out.Needs = append(out.Needs, gen.ItemWaitingNeed{Ref: ref(n.Number), Title: n.Title, Paths: append([]string{}, n.Paths...)})
