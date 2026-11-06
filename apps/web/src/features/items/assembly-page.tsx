@@ -202,7 +202,10 @@ function PartsTable({
               <th scope="col" className="min-w-[4.5rem] py-2 pr-3 font-normal whitespace-nowrap">
                 State
               </th>
-              <th scope="col" className={cn('min-w-[3.75rem] py-2 pr-3 text-right font-normal whitespace-nowrap', partsColumn)}>
+              <th
+                scope="col"
+                className={cn('min-w-[3.75rem] py-2 pr-3 text-right font-normal whitespace-nowrap', partsColumn)}
+              >
                 Cost
               </th>
               <th scope="col" className="py-2 font-normal whitespace-nowrap max-md:hidden">
