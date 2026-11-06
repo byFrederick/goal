@@ -217,8 +217,9 @@ func (s *Service) cloneStart(ctx context.Context, st Start) (starting, error) {
 // skeleton is the blank definition when the catalog has no blank template, the smallest one
 // that publishes as it is: factory.yaml with apiVersion, kind, metadata, an empty runtime, one
 // agent (worker, its prompt in agents/worker.md) and a line of an agent station titled Work
-// that runs it and the done station the line must end at; and the default environment with its
-// size only (ADR 0037). The names are this default tree's alone: no code reads them.
+// that runs it and the done station titled Done the line must end at; and the default
+// environment with its size only (ADR 0037). The names are this default tree's alone: no code
+// reads them.
 func skeleton() map[string][]byte {
 	return map[string][]byte{
 		config.FileName: []byte("apiVersion: goal/v1\nkind: Factory\nmetadata:\n  id: " + nilFactoryID + "\n  name: new-factory\n" +
@@ -226,7 +227,7 @@ func skeleton() map[string][]byte {
 			"  agents:\n    - name: worker\n      prompt: ./agents/worker.md\n" +
 			"  board:\n    stations:\n" +
 			"      - { id: work, name: Work, kind: agent, agent: worker }\n" +
-			"      - { id: done, kind: done }\n"),
+			"      - { id: done, name: Done, kind: done }\n"),
 		"agents/worker.md": []byte("Do the work the item describes, then summarize what you did.\n"),
 		path.Join(config.EnvironmentsDir, config.DefaultEnvironment+".yaml"): []byte(
 			"apiVersion: goal/v1\nkind: Environment\nspec:\n  size: " + string(domain.SandboxMedium) + "\n"),

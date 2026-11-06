@@ -24,7 +24,7 @@ import type { Factory, Intake, IntakeTrigger, OrgSummary } from '../../api/types
 import { OrgContext } from '../../shared/org';
 import { TooltipProvider } from '../../ui/tooltip';
 import { onboardingSearch } from './code-search';
-import { IntakeStep } from './intake-step';
+import { IntakeCard, IntakeStep } from './intake-step';
 
 vi.mock('../../api/intake', () => ({ getIntake: vi.fn() }));
 vi.mock('../../api/definitions', async (importOriginal) => ({
@@ -363,10 +363,18 @@ describe('step 6, choose where work comes from', () => {
     vi.mocked(getIntake).mockResolvedValue(intakeOf([trigger({ name: 'weekly-dependency-audit' }), issues]));
     renderStep(url);
     const card = await screen.findByRole('region', { name: 'Intake' });
-    expect(within(card).queryByText('weekly-dependency-audit')).toBeNull();
+    expect(within(card).queryByText(/weekly-dependency-audit/)).toBeNull();
+    expect(within(card).getByText('New item, CLI and API')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
-    await waitFor(() => expect(within(card).getByText('weekly-dependency-audit')).toBeTruthy());
-    expect(within(card).getByText('And New item, CLI, API')).toBeTruthy();
+    await waitFor(() => expect(within(card).getByText('weekly-dependency-audit, New item, CLI and API')).toBeTruthy());
+  });
+
+  it('writes the Intake card as one sentence with no trigger and with two', () => {
+    const { unmount } = render(<IntakeCard names={[]} />);
+    expect(screen.getByText('New item, CLI and API')).toBeTruthy();
+    unmount();
+    render(<IntakeCard names={['Issues labeled factory', 'Dependency audit']} />);
+    expect(screen.getByText('Issues labeled factory, Dependency audit, New item, CLI and API')).toBeTruthy();
   });
 });

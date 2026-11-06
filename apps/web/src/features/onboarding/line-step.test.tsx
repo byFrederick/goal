@@ -240,6 +240,24 @@ describe('step 4, shape the line', () => {
     expect(within(review).getByText('Approval merges; rejects go back to Build, at most 2 times.')).toBeTruthy();
   });
 
+  it('says "No limit" in the WIP field of a station with no wip, and + sets it to 1', async () => {
+    setDraft({
+      line: {
+        stations: [
+          { id: 'work', name: 'Work', kind: 'agent', agent: 'worker' },
+          { id: 'done', name: 'Done', kind: 'done' },
+        ],
+      },
+    });
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const work = await screen.findByRole('region', { name: 'Work' });
+    const field = within(work).getByRole('textbox', { name: 'WIP limit of Work' }) as HTMLInputElement;
+    expect(field.placeholder).toBe('No limit');
+    expect(field.value).toBe('');
+    fireEvent.click(within(work).getByRole('button', { name: 'Raise the WIP limit of Work' }));
+    await waitFor(() => expect(field.value).toBe('1'));
+  });
+
   it('saves a station’s agent through the draft', async () => {
     renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
     const spec = await screen.findByRole('region', { name: 'Spec' });
