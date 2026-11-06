@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { factoryRepositoryTestsQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
 import type { FactoryRepositoryTest } from '../../api/types';
+import { CiAccessLine, waitsForCi } from '../../shared/ci-access-line';
 import type { BasicsSection, RepositoryEntry } from '../../shared/definition/model';
 import { useFactory, useFactoryParams } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
@@ -67,12 +68,14 @@ function EntryRow({
   shorthand,
   kept,
   loading,
+  waitsCi,
   onRemove,
 }: {
   entry: RepositoryEntry;
   shorthand: boolean;
   kept: FactoryRepositoryTest | undefined;
   loading: boolean;
+  waitsCi: boolean;
   onRemove: () => void;
 }) {
   const org = useOrg();
@@ -102,13 +105,16 @@ function EntryRow({
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
             <Skeleton ready={!loading} placeholder={<div className="h-5.5 w-40 rounded-control bg-shell" />}>
               {result ? (
-                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-                  <ResultChip result={result} />
-                  {result.warning || result.note ? (
-                    <span className="min-w-0 break-words text-secondary text-muted">
-                      {result.warning ?? result.note}
-                    </span>
-                  ) : null}
+                <div className="flex min-w-0 flex-col gap-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <ResultChip result={result} />
+                    {result.warning || result.note ? (
+                      <span className="min-w-0 break-words text-secondary text-muted">
+                        {result.warning ?? result.note}
+                      </span>
+                    ) : null}
+                  </div>
+                  <CiAccessLine ci={result.ci} waitsForCi={waitsCi} />
                 </div>
               ) : (
                 <Chip tone="quiet">Not tested</Chip>
@@ -172,6 +178,7 @@ export function CodeSection() {
   const kept = useQuery({ ...factoryRepositoryTestsQuery(org.id, factory.id), enabled: entries.length > 0 });
   const keptByUrl = new Map((kept.data ?? []).map((t) => [keptUrl(t.url), t]));
   const loading = entries.length > 0 && kept.isPending;
+  const waitsCi = waitsForCi(useSection('line'));
   const who = writers(entries, agents);
   const stored = basics.repositories ?? [];
   const edit = (next: RepositoryEntry[]) =>
@@ -267,6 +274,7 @@ export function CodeSection() {
                     shorthand={shorthand}
                     kept={keptByUrl.get(keptUrl(entry.url))}
                     loading={loading}
+                    waitsCi={waitsCi}
                     onRemove={() => edit(stored.filter((e) => e !== stored.find((s) => s.name === entry.name)))}
                   />
                 ))}

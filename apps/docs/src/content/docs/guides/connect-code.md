@@ -25,7 +25,7 @@ goal repository test https://github.com/acme/app --secret github-acme-read --fac
 
 The test also checks whether the token can read the repository's CI, on its own `ci` line. A failed `ci` check doesn't fail the test, because only a station that waits for CI needs it; for such a factory, give the token the permission the line names. An owner pattern has no `ci` line, and neither does an answer Goal kept before it checked CI, until you test the repository again.
 
-The same test is in the web app, in factory settings' Repository section. Goal keeps the answer, and `goal factory show acme-line` lists it with each repository.
+The same test is in the web app, on the Code step of onboarding and in Settings > Code. Both show the `ci` line under the summary, with the host's reason when it fails. The line is a warning only when a station of the factory sets `waitFor: ci`, and quiet otherwise. Goal keeps the answer, and `goal factory show acme-line` lists it with each repository.
 
 ## List one repository
 
