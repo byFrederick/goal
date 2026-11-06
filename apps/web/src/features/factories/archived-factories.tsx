@@ -42,10 +42,11 @@ function ArchivedRow({ org, factory, mayRestore }: { org: OrgSummary; factory: F
           <Button
             variant="raised"
             className="border border-line shadow-none"
-            disabled={restore.isPending}
+            busy={restore.isPending}
+            busyLabel="Restoring…"
             onClick={() => restore.mutate()}
           >
-            {restore.isPending ? 'Restoring…' : `Restore ${factory.name}`}
+            Restore {factory.name}
           </Button>
         ) : null}
       </div>

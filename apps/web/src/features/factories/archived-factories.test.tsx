@@ -117,6 +117,21 @@ describe('the Archived filter on the Factories home', () => {
     expect(screen.queryByRole('link', { name: 'SRE' })).toBeNull();
   });
 
+  it('shows Restore as busy, not disabled, while the request is pending', async () => {
+    vi.mocked(restoreFactory).mockReturnValueOnce(new Promise(() => {}));
+    renderHome({ can: ['factory:archive'], archivedList: [archived], showArchived: true });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore sre' }));
+
+    const button = await screen.findByRole('button', { name: 'Restore sre' });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(button);
+    expect(restoreFactory).toHaveBeenCalledTimes(1);
+  });
+
   it('offers no Restore without factory:archive', async () => {
     renderHome({ can: [], archivedList: [archived], showArchived: true });
 
