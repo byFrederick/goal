@@ -46,7 +46,9 @@ type Store struct {
 	joined  []domain.FollowUpID // follow-ups in the order they joined a triage item
 	views   map[domain.SavedViewID]savedViewRecord
 	jonah   jonahRows
-	ids     int
+	// exhausted holds since when each factory's weekly budget is used up (MarkBudgetExhausted).
+	exhausted map[domain.FactoryID]time.Time
+	ids       int
 	changes changes
 }
 
@@ -73,6 +75,7 @@ func NewStore() *Store {
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 		views:     map[domain.SavedViewID]savedViewRecord{},
 		jonah:     jonahRows{runKinds: map[domain.RunID]domain.RunKind{}},
+		exhausted: map[domain.FactoryID]time.Time{},
 	}
 }
 
@@ -153,6 +156,7 @@ func (s *Store) purge(org domain.OrgID) {
 			delete(s.factories, id)
 			delete(s.numbers, id)
 			delete(s.factCaps, id)
+			delete(s.exhausted, id)
 		}
 	}
 
