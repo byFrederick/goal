@@ -4,7 +4,7 @@
 // removes while items wait there asks where they go before the publish.
 import { expect, type Page, test } from '@playwright/test';
 import { definition, openYaml, problems, replaceLine, status } from './editor';
-import { expectAccessible, expectNoHorizontalScroll, expectToast, recordToasts } from './support';
+import { expectAccessible, expectNoHorizontalScroll, expectToast, expectViewLoaded, recordToasts } from './support';
 
 test.beforeEach(async ({ page, request }) => {
   await request.post('/__mock/reset');
@@ -35,6 +35,7 @@ async function settled(page: Page) {
 
 async function openReview(page: Page, search = '') {
   await page.goto(`${definition}/review${search}`);
+  await expectViewLoaded(page);
   await expect(page.getByRole('region', { name: 'Checks' })).toBeVisible();
 }
 
