@@ -19,8 +19,7 @@ func TestSecrets_Conformance(t *testing.T) {
 	secrettest.Run(t, func(*testing.T) secrettest.Harness {
 		tn := porttest.NewTenancy(time.Now)
 		keys := porttest.NewMasterKeys()
-		conns := porttest.NewConnections(keys.Key(), tn)
-		secrets := porttest.NewOrgSecrets(keys.Key(), tn, conns)
+		secrets := porttest.NewOrgSecrets(keys.Key(), tn)
 		store := porttest.NewStore()
 		intake := porttest.NewIntake(keys.Key(), store)
 		intake.UseSecrets(secrets)
@@ -29,7 +28,6 @@ func TestSecrets_Conformance(t *testing.T) {
 
 		return secrettest.Harness{
 			Secrets:     func(key ports.MasterKey) ports.OrgSecrets { return secrets.WithKey(key) },
-			Connections: func(key ports.MasterKey) ports.Connections { return conns.WithKey(key) },
 			Key:         keys.Key,
 			CopySealed: func(t *testing.T, fromOrg domain.OrgID, from string, toOrg domain.OrgID, to string) {
 				t.Helper()

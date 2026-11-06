@@ -33,7 +33,7 @@ func TestRunEnv_MCPHeaderRendersSecretVariable(t *testing.T) {
 	}
 
 	ctx := domain.WithOrg(t.Context(), o.ID)
-	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 
 	for name, value := range map[string]string{"tickets-key": ticketsValue, "github-token": ghValue, "npm-config": npmValue} {
 		if _, err := secrets.Create(ctx, domain.NewSecret{Name: name, Value: value, Scope: domain.SecretScope{All: true}}, domain.LocalUser); err != nil {

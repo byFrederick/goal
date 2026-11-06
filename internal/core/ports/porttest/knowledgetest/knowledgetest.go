@@ -1,6 +1,6 @@
 // Package knowledgetest is the conformance suite for ports.Knowledge (spec 4 §5.6). The in-memory
 // fake in porttest and the PostgreSQL adapter run it, so tests on the fake hold for the
-// database's rules: sources and their connections, leases that end so another goald takes the
+// database's rules: sources and the secrets they read with, leases that end so another goald takes the
 // sync over, documents replaced with their chunks, unseen documents deleted, uploads, the one
 // hybrid ranking and its sources filter, organizations kept apart, knowledge use and verdicts
 // (uses.go), and ADR 0038's snapshots, current files and daily read counts (files.go).
@@ -23,8 +23,6 @@ import (
 // Harness is one Knowledge under test.
 type Harness struct {
 	Knowledge ports.Knowledge
-	// Connections are the connections sources read; the suite syncs its platform kinds.
-	Connections ports.Connections
 	// Secrets are the secrets synced sources read with.
 	Secrets ports.OrgSecrets
 	Audit   ports.Audit
@@ -46,7 +44,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}{
 		{"Sources_CreateUpdateDeleteAudited", testSources},
 		{"CreateSource_RulesRefused", testSourceRules},
-		{"ConnectionReadBySource_DeleteIsAConflict", testConnectionInUse},
 		{"SecretReadBySource_KeptByIDAndDeleteIsAConflict", testSecretSources},
 		{"Claim_LeaseEndsAndAnotherTakesOver", testClaimLease},
 		{"Claim_TakenOverLeaseChangesNothing", testClaimFenced},
@@ -82,10 +79,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 
 // Names the suite uses.
 const (
-	syncKind = "kb-docs"
-	liveKind = "kb-chat"
-	docsConn = "docs"
-	chatConn = "chat"
+	// syncSecret is the secret every org's synced sources read with (setUp).
+	syncSecret = "sync-token"
 	// docsSecret is the secret synced sources read with, and readerGitDocs their reader.
 	docsSecret    = "docs-token"
 	readerGitDocs = "gitdocs"
@@ -104,29 +99,13 @@ func (f *fixture) in(org domain.OrgID) context.Context { return domain.WithOrg(f
 
 func (f *fixture) ctx() context.Context { return f.in(f.org) }
 
-// setUp gives org a connection that syncs (docs) and one that does not (chat).
+// setUp gives org the secret its synced sources read with (syncSecret).
 func (f *fixture) setUp(org domain.OrgID) {
 	f.t.Helper()
 
-	err := f.Connections.SyncPlatformKinds(f.t.Context(), []domain.ConnectionKind{
-		{Name: syncKind, Title: "Acme docs", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{{Name: "repo", Title: "Repository", Required: true}}, Sync: "gitdocs",
-		}},
-		{Name: liveKind, Title: "Acme chat", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{{Name: "url", Title: "URL", Required: true}}, MCP: &domain.KindMCP{URL: "{{url}}"},
-		}},
-	})
-	if err != nil {
-		f.t.Fatalf("SyncPlatformKinds: %v", err)
-	}
-
-	for _, c := range []domain.NewConnection{
-		{Name: docsConn, Kind: syncKind, Fields: map[string]string{"repo": "https://git.example.com/acme/docs"}},
-		{Name: chatConn, Kind: liveKind, Fields: map[string]string{"url": "https://chat.example.com/mcp"}},
-	} {
-		if _, err := f.Connections.Create(f.in(org), c, admin); err != nil {
-			f.t.Fatalf("Create connection %s: %v", c.Name, err)
-		}
+	n := domain.NewSecret{Name: syncSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}
+	if _, err := f.Secrets.Create(f.in(org), n, admin); err != nil {
+		f.t.Fatalf("Create secret %s: %v", syncSecret, err)
 	}
 }
 
@@ -155,8 +134,8 @@ func (f *fixture) synced(org domain.OrgID, name string) domain.KnowledgeSource {
 	f.t.Helper()
 
 	return f.source(org, domain.NewKnowledgeSource{
-		Name: name, Kind: domain.SourceSynced, Connection: docsConn,
-		Config: map[string]string{"paths": "docs/**/*.md"},
+		Name: name, Kind: domain.SourceSynced, Secret: syncSecret,
+		Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "paths": "docs/**/*.md"},
 	})
 }
 
@@ -193,11 +172,10 @@ func (f *fixture) refused(what string, err, want error) {
 
 // Names of the sources, texts and types the tests use.
 const (
-	handbook   = "handbook"
-	runbooks   = "runbooks"
-	chatSearch = "chat-search"
-	plainText  = "text/plain"
-	newName    = "syn"
+	handbook  = "handbook"
+	runbooks  = "runbooks"
+	plainText = "text/plain"
+	newName   = "syn"
 )
 
 // want fails the test with what and got unless every condition holds.
@@ -225,8 +203,7 @@ func (f *fixture) must(err error) {
 // equalTime reports whether t is set and at want.
 func equalTime(t *time.Time, want time.Time) bool { return t != nil && t.Equal(want) }
 
-// testSources: sources are created due (not a live one), listed by name, changed and deleted,
-// each audited.
+// testSources: sources are created due, listed by name, changed and deleted, each audited.
 func testSources(f *fixture) {
 	ctx := f.ctx()
 	before := time.Now().Add(-time.Minute)
@@ -236,13 +213,11 @@ func testSources(f *fixture) {
 		up.NextSyncAt != nil && !up.NextSyncAt.Before(before), up.Connection == "", up.CreatedBy.Ref() == admin.Ref())
 
 	synced := f.source(f.org, domain.NewKnowledgeSource{
-		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Connection: docsConn,
-		Config: map[string]string{"branch": "main"}, SyncEvery: new(30 * time.Minute),
+		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Secret: syncSecret,
+		Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "branch": "main"}, SyncEvery: new(30 * time.Minute),
 	})
-	f.want("synced source", synced, synced.Connection == docsConn, synced.SyncEvery == 30*time.Minute, synced.Config["branch"] == "main")
-
-	live := f.source(f.org, domain.NewKnowledgeSource{Name: chatSearch, Kind: domain.SourceLive, Connection: chatConn})
-	f.want("live source (never syncs)", live, live.NextSyncAt == nil, live.Connection == chatConn)
+	f.want("synced source", synced, synced.Secret == syncSecret, synced.Connection == "", synced.SyncEvery == 30*time.Minute,
+		synced.Config["branch"] == "main")
 
 	all, err := f.Knowledge.Sources(ctx)
 	f.must(err)
@@ -252,12 +227,12 @@ func testSources(f *fixture) {
 		names = append(names, s.Name)
 	}
 
-	f.want("Sources", names, slices.Equal(names, []string{chatSearch, handbook, runbooks}))
+	f.want("Sources", names, slices.Equal(names, []string{handbook, runbooks}))
 
 	title, every := "Run books", 2*time.Hour
 
 	got, err := f.Knowledge.UpdateSource(ctx, runbooks, domain.KnowledgeSourcePatch{
-		Title: &title, Config: map[string]string{"branch": "trunk"}, SyncEvery: &every,
+		Title: &title, Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "branch": "trunk"}, SyncEvery: &every,
 	}, admin)
 	f.must(err)
 	f.want("UpdateSource", got, got.Title == title, got.Config["branch"] == "trunk", got.SyncEvery == every)
@@ -265,14 +240,14 @@ func testSources(f *fixture) {
 	g := f.get(f.org, runbooks)
 	f.want("Source after the update", g, g.Title == title, g.SyncEvery == every)
 
-	err = f.Knowledge.DeleteSource(ctx, chatSearch, admin, nil)
+	err = f.Knowledge.DeleteSource(ctx, handbook, admin, nil)
 	f.must(err)
 
-	_, err = f.Knowledge.Source(ctx, chatSearch)
+	_, err = f.Knowledge.Source(ctx, handbook)
 	f.refused("Source after DeleteSource", err, ports.ErrNotFound)
 
 	for action, n := range map[string]int{
-		domain.AuditKnowledgeSourceCreated: 3, domain.AuditKnowledgeSourceUpdated: 1, domain.AuditKnowledgeSourceDeleted: 1,
+		domain.AuditKnowledgeSourceCreated: 2, domain.AuditKnowledgeSourceUpdated: 1, domain.AuditKnowledgeSourceDeleted: 1,
 	} {
 		got := f.audit(f.org, action)
 		f.want("audit "+action, got, len(got) == n, len(got) > 0 && got[0].Actor.Ref() == admin.Ref(),
@@ -293,12 +268,16 @@ func testSourceRules(f *fixture) {
 		"bad name":           {domain.NewKnowledgeSource{Name: "Hand Book", Title: "x", Kind: domain.SourceUpload}, domain.ErrInvalid},
 		"no title":           {domain.NewKnowledgeSource{Name: "notitle", Kind: domain.SourceUpload}, domain.ErrInvalid},
 		"bad kind":           {domain.NewKnowledgeSource{Name: "odd", Title: "x", Kind: "pushed"}, domain.ErrInvalid},
-		"upload connection":  {domain.NewKnowledgeSource{Name: "upl", Title: "x", Kind: domain.SourceUpload, Connection: docsConn}, domain.ErrInvalid},
+		"upload connection":  {domain.NewKnowledgeSource{Name: "upl", Title: "x", Kind: domain.SourceUpload, Connection: "docs"}, domain.ErrInvalid},
 		"synced without one": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced}, domain.ErrInvalid},
-		"cannot sync":        {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: chatConn}, domain.ErrConnectionCannotSync},
-		"unknown connection": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: "nope"}, ports.ErrNotFound},
+		// No connection is left (ADR 0037), so every one a source names is unknown.
+		"synced connection": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: "docs"}, ports.ErrNotFound},
+		"live connection":   {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceLive, Connection: "chat"}, ports.ErrNotFound},
 		"too often": {
-			domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: docsConn, SyncEvery: new(time.Minute)},
+			domain.NewKnowledgeSource{
+				Name: newName, Title: "x", Kind: domain.SourceSynced, Secret: syncSecret,
+				Config: map[string]string{domain.SourceReaderKey: readerGitDocs}, SyncEvery: new(time.Minute),
+			},
 			domain.ErrInvalid,
 		},
 	} {
@@ -317,25 +296,10 @@ func testSourceRules(f *fixture) {
 	err = f.Knowledge.DeleteSource(ctx, "nope", admin, nil)
 	f.refused("DeleteSource unknown", err, ports.ErrNotFound)
 
-	f.source(f.org, domain.NewKnowledgeSource{Name: chatSearch, Kind: domain.SourceLive, Connection: chatConn})
-	f.refused("SyncNow live", f.Knowledge.SyncNow(ctx, chatSearch), domain.ErrInvalid)
 	f.refused("SyncNow unknown", f.Knowledge.SyncNow(ctx, "nope"), ports.ErrNotFound)
 
 	created := f.audit(f.org, domain.AuditKnowledgeSourceCreated)
-	f.want("sources created (refusals write nothing)", len(created), len(created) == 2)
-}
-
-// testConnectionInUse: a connection a source reads cannot be deleted; once the source is gone it
-// can.
-func testConnectionInUse(f *fixture) {
-	ctx := f.ctx()
-	f.synced(f.org, runbooks)
-
-	f.refused("Delete a connection a source reads", f.Connections.Delete(ctx, docsConn, admin), ports.ErrConflict)
-
-	err := f.Knowledge.DeleteSource(ctx, runbooks, admin, nil)
-	f.must(err)
-	f.must(f.Connections.Delete(ctx, docsConn, admin))
+	f.want("sources created (refusals write nothing)", len(created), len(created) == 1)
 }
 
 func testSecretSources(f *fixture) {
@@ -383,14 +347,14 @@ func testSecretSources(f *fixture) {
 
 	f.refused("Delete a secret a source reads with", f.Secrets.Delete(ctx, renamed, admin), ports.ErrConflict)
 
-	// A synced source on its connection moves over to a secret; another kind takes none.
+	// A synced source moves over to another secret; another kind takes none.
 	f.synced(f.org, handbook)
 
 	moved, err := f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{
 		Secret: &renamed, Config: map[string]string{domain.SourceReaderKey: readerGitDocs},
 	}, admin)
-	if err != nil || moved.Secret != renamed || moved.Connection != docsConn {
-		f.t.Errorf("move over = %+v, %v; want the secret and the connection it keeps", moved, err)
+	if err != nil || moved.Secret != renamed || moved.Connection != "" {
+		f.t.Errorf("move over = %+v, %v; want it on the secret", moved, err)
 	}
 
 	_, err = f.Knowledge.UpdateSource(ctx, runbooks, domain.KnowledgeSourcePatch{Config: map[string]string{}}, admin)
@@ -454,7 +418,6 @@ func (f *fixture) finish(c domain.SourceClaim, at time.Time, errText string) {
 func testClaimLease(f *fixture) {
 	ctx := f.ctx()
 	src := f.upload(handbook)
-	f.source(f.org, domain.NewKnowledgeSource{Name: chatSearch, Kind: domain.SourceLive, Connection: chatConn})
 
 	t0 := time.Now().UTC().Add(time.Minute).Truncate(time.Millisecond)
 	lease := 10 * time.Minute
@@ -463,7 +426,7 @@ func testClaimLease(f *fixture) {
 	f.want("claimed", first, first.Org == f.org, first.Source.ID == src.ID, first.Source.Status == domain.SyncSyncing,
 		equalTime(first.Source.LeaseUntil, t0.Add(lease)), first.Lease.Source == src.ID, first.Lease.Token != "")
 
-	f.none("while leased (live sources never)", t0.Add(5*time.Minute))
+	f.none("while leased", t0.Add(5*time.Minute))
 	f.must(f.Knowledge.RenewSource(ctx, first.Lease, t0.Add(5*time.Minute), t0.Add(15*time.Minute)))
 
 	// The holder dies: nothing renews the lease, which ends at t0+15m.
@@ -716,8 +679,7 @@ func testNoOrg(f *fixture) {
 }
 
 // Moving over (ADR 0038 decision 16) turns a synced source on a secret into its kind: gitdocs's a
-// repository source off its connection, which no source reads any more, confluence's a
-// Confluence source; each keeps its secret and its config but the reader, is due at once and is
+// repository source, confluence's a Confluence source; each keeps its secret and its config but the reader, is due at once and is
 // audited. Nothing else converts.
 func testConvertSource(f *fixture) {
 	ctx := f.ctx()
@@ -738,7 +700,6 @@ func testConvertSource(f *fixture) {
 	wiki := f.source(f.org, domain.NewKnowledgeSource{
 		Name: "wiki", Kind: domain.SourceSynced, Secret: docsSecret, Config: map[string]string{domain.SourceReaderKey: "confluence", "spaces": "ENG"},
 	})
-	f.synced(f.org, runbooks)
 	f.upload("notes")
 
 	before := len(f.audit(f.org, domain.AuditKnowledgeSourceUpdated))
@@ -748,7 +709,6 @@ func testConvertSource(f *fixture) {
 		kind       domain.KnowledgeSourceKind
 		want       error
 	}{
-		{"a synced source on its connection", runbooks, domain.SourceRepository, domain.ErrInvalid},
 		{"an upload source", "notes", domain.SourceRepository, domain.ErrInvalid},
 		{"a gitdocs source into Confluence", handbook, domain.SourceConfluence, domain.ErrInvalid},
 		{"a source into synced", handbook, domain.SourceSynced, domain.ErrInvalid},
@@ -776,10 +736,6 @@ func testConvertSource(f *fixture) {
 	if len(entries) != before+2 || entries[0].Data["kind"] != string(domain.SourceConfluence) || entries[1].Data["kind"] != string(domain.SourceRepository) {
 		f.t.Errorf("updated entries %+v; want one a conversion, with its kind", entries)
 	}
-
-	// Only runbooks reads the connection now.
-	f.must(f.Knowledge.DeleteSource(ctx, runbooks, admin, nil))
-	f.must(f.Connections.Delete(ctx, docsConn, admin))
 }
 
 // uploadFile uploads content h as name to source.

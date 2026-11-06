@@ -418,7 +418,7 @@ func newSlackSenderOpening(t *testing.T, mailer bool, opened Secrets) slackHarne
 
 	clock := porttest.NewClock(start)
 	tenancy := porttest.NewTenancy(clock.Now)
-	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 	settings := porttest.NewNotificationSettings(secrets, tenancy)
 
 	o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
@@ -557,7 +557,7 @@ func TestSender_SlackMissingSecretFails(t *testing.T) {
 	t.Parallel()
 
 	// The sender opens secrets from a store that lacks the one the setting names.
-	empty := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), porttest.NewTenancy(porttest.NewClock(start).Now), nil)
+	empty := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), porttest.NewTenancy(porttest.NewClock(start).Now))
 	h := newSlackSenderOpening(t, false, empty)
 	h.useSlackSecret(t, "slack-bot", "xoxb-test-token")
 
