@@ -14,6 +14,7 @@ import { ApiError } from '../../api/client';
 import { getDraftFile, getDraftModel, getFactory, listTemplates, openDraft, putDraftFile } from '../../api/definitions';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret, replaceSecretValue } from '../../api/secrets';
+import { setSessionHandlers } from '../../api/session';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode, TemplateSummary } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { onboardingSearch } from './code-search';
@@ -279,6 +280,30 @@ describe('Step 3, Connect your code: saving and testing', () => {
     expect(text).not.toContain('repository:');
     expect(router.state.location.search).toMatchObject({ factory, secret: 'github-acme' });
     expect(JSON.stringify(router.state.location)).not.toContain('test-token');
+  });
+
+  it('says a refused save needs a fresh sign-in, offers Sign in again, and saves again after it', async () => {
+    const problem = new ApiError({
+      title: 'Sign in again to do this',
+      status: 403,
+      code: 'reauth-required',
+    } as ConstructorParameters<typeof ApiError>[0]);
+    vi.mocked(createSecret).mockRejectedValueOnce(problem);
+    const reauth = vi.fn(async () => true);
+    setSessionHandlers({ reauth });
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+
+    expect(
+      await screen.findByText('Couldn’t save and test the token because Goal needs you to sign in again.'),
+    ).toBeTruthy();
+    expect(reauth).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
+    expect(await screen.findByText('acme/app: Can read and push')).toBeTruthy();
+    expect(reauth).toHaveBeenCalledTimes(1);
+    expect(createSecret).toHaveBeenCalledTimes(2);
+    setSessionHandlers({ reauth: async () => false });
   });
 
   it('tests every repository and writes one entry per URL, with no default', async () => {
