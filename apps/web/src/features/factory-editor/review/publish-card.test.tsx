@@ -130,7 +130,7 @@ describe('PublishCard', () => {
     expect(publishDraft).toHaveBeenCalledOnce();
   });
 
-  it('labels the wizard\'s first publish Publishing v1…', async () => {
+  it("labels the wizard's first publish Publishing v1…", async () => {
     state.current = null;
     state.next = 1;
     publishDraft.mockImplementationOnce(() => new Promise(() => {}) as never);
