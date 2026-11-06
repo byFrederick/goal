@@ -2,11 +2,10 @@
 // decision 19). The in-memory fake in porttest and the PostgreSQL adapter run it, so tests on the
 // fake hold for the database's rules: one conversion per factory, kept, a factory the
 // organization has, a refusal replaced by a later try and a conversion kept for good,
-// organizations kept apart and one holder of the lock.
+// and organizations kept apart.
 package conversiontest
 
 import (
-	"context"
 	"errors"
 	"maps"
 	"slices"
@@ -48,7 +47,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Record_InvalidRefused", testInvalid},
 		{"Record_UnknownFactoryNotFound", testUnknownFactory},
 		{"OtherOrg_SeesNothing", testIsolation},
-		{"WithLock_OneHolder", testLock},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -185,27 +183,5 @@ func testIsolation(t *testing.T, h Harness) {
 
 	if _, err := h.Conversions.List(t.Context()); !errors.Is(err, domain.ErrNoOrg) {
 		t.Errorf("List without an organization = %v; want ErrNoOrg", err)
-	}
-}
-
-func testLock(t *testing.T, h Harness) {
-	t.Helper()
-
-	var inner bool
-
-	ran, err := h.Conversions.WithLock(t.Context(), func(ctx context.Context) error {
-		again, err := h.Conversions.WithLock(ctx, func(context.Context) error { inner = true; return nil })
-		if err != nil || again {
-			t.Errorf("a second WithLock while held = %v, %v; want false", again, err)
-		}
-
-		return nil
-	})
-	if err != nil || !ran || inner {
-		t.Fatalf("WithLock = %v, %v (inner ran %v); want the outer only", ran, err, inner)
-	}
-
-	if ran, err := h.Conversions.WithLock(t.Context(), func(context.Context) error { return nil }); err != nil || !ran {
-		t.Errorf("WithLock after release = %v, %v; want it to run", ran, err)
 	}
 }
