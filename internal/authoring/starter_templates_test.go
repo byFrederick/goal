@@ -137,7 +137,8 @@ func pushStarter(t *testing.T, catalog *authoring.TemplateCatalog, dir, name, ve
 		t.Fatalf("%s: the definition does not load", dir)
 	}
 
-	if err := catalog.Push(t.Context(), authoring.TemplateUpload{Name: name, Version: v, Meta: meta, Files: files}); err != nil {
+	added, err := catalog.Push(t.Context(), authoring.TemplateUpload{Name: name, Version: v, Meta: meta, Files: files})
+	if err != nil {
 		if invalid, ok := errors.AsType[*authoring.TemplateInvalidError](err); ok {
 			for _, p := range invalid.Problems {
 				t.Errorf("%s: %s: %s (%s)", dir, p.File, p.Message, p.Code)
@@ -145,6 +146,10 @@ func pushStarter(t *testing.T, catalog *authoring.TemplateCatalog, dir, name, ve
 		}
 
 		t.Fatalf("push %s: %v", dir, err)
+	}
+
+	if !added {
+		t.Fatalf("push %s: the empty catalog already held this version", dir)
 	}
 
 	return f
