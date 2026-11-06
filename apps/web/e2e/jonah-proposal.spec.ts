@@ -71,18 +71,19 @@ for (const scheme of ['light', 'dark'] as const) {
       route.continue({ headers: { ...route.request().headers(), 'x-mock-latency-ms': '1500' } }),
     );
     await page.goto('/o/acme/f/software/jonah/proposals/7');
-    const button = page.getByRole('button', { name: 'Approve and publish v22' });
-    await expect(button).toBeVisible();
+    // The accessible name changes with the state (idle, busy, done), so one locator matches all three.
+    const button = page.getByRole('button', { name: /^(Approve and publish v22|Publishing v22…|Published)$/ });
+    await expect(button).toHaveAccessibleName('Approve and publish v22');
     const before = (await button.boundingBox())?.width ?? 0;
 
     await button.click();
     await expect(button).toHaveAttribute('aria-busy', 'true');
-    await expect(button.getByText('Publishing v22…')).toBeVisible();
-    await expect(button.locator('svg')).toBeVisible();
+    await expect(button).toHaveAccessibleName('Publishing v22…');
+    await expect(button.locator('[data-slot="busy"] .animate-spin')).toBeVisible();
     const during = (await button.boundingBox())?.width ?? 0;
     expect(Math.abs(during - before)).toBeLessThanOrEqual(1);
 
-    await expect(page.getByText('Published', { exact: true }).first()).toBeVisible();
+    await expect(button).toHaveAccessibleName('Published');
     await expect(page).toHaveURL(/\/definition\/versions/);
   });
 }
