@@ -18,12 +18,14 @@ import (
 // starterTemplates is where the install's starter templates are committed (ADR 0042).
 const starterTemplates = "../../deploy/catalog/templates"
 
-// starterStation is a station of a starter template's line as the test expects it.
-type starterStation struct {
-	name  string
-	kind  string
-	merge bool
-}
+// Station kinds of the starter templates' lines.
+const (
+	agentKind = "agent"
+	humanKind = "human"
+)
+
+// starterStation is a work station of a starter template's line: its name and kind.
+type starterStation struct{ name, kind string }
 
 // TestStarterTemplates_PushCleanly pushes every committed starter template into an in-memory
 // catalog: none may be refused or warned about, and each lists as onboarding shows it.
@@ -36,15 +38,15 @@ func TestStarterTemplates_PushCleanly(t *testing.T) {
 	}{
 		"software-delivery": {
 			title: "Software delivery", summary: "Requests become small pull requests a reviewer merges.", code: authoring.CodeRead,
-			work: []starterStation{{"Spec", "agent", false}, {"Build", "agent", false}, {"Review", "human", false}},
+			work: []starterStation{{"Spec", agentKind}, {"Build", agentKind}, {"Review", humanKind}},
 		},
 		"incident-response": {
 			title: "Incident response", summary: "Alerts become investigations, fixes and postmortems.", code: authoring.CodeNone,
-			work: []starterStation{{"Triage", "agent", false}, {"Investigate", "agent", false}, {"Fix", "agent", false}, {"Review", "human", false}},
+			work: []starterStation{{"Triage", agentKind}, {"Investigate", agentKind}, {"Fix", agentKind}, {"Review", humanKind}},
 		},
 		"support-replies": {
 			title: "Support replies", summary: "Tickets get drafted answers a person approves.", code: authoring.CodeNone,
-			work: []starterStation{{"Triage", "agent", false}, {"Draft", "agent", false}, {"Approve", "human", false}, {"Send", "agent", false}},
+			work: []starterStation{{"Triage", agentKind}, {"Draft", agentKind}, {"Approve", humanKind}, {"Send", agentKind}},
 		},
 	}
 
@@ -105,7 +107,7 @@ func pushStarter(t *testing.T, catalog *authoring.TemplateCatalog, dir, name, ve
 		t.Fatalf("%s: a version folder is a number: %v", dir, err)
 	}
 
-	meta, err := os.ReadFile(filepath.Join(dir, "template.yaml"))
+	meta, err := fs.ReadFile(os.DirFS(dir), "template.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,17 +166,12 @@ func lineOf(f *config.Factory) []string {
 	return out
 }
 
-// wantLine is an Inbox queue, the work stations and Done, described as lineOf does.
+// wantLine is an Inbox queue, the work stations and Done, described as lineOf does: none merges.
 func wantLine(work []starterStation) []string {
 	out := []string{"Inbox/queue"}
 
 	for _, s := range work {
-		d := s.name + "/" + s.kind
-		if s.merge {
-			d += "/merge"
-		}
-
-		out = append(out, d)
+		out = append(out, s.name+"/"+s.kind)
 	}
 
 	return append(out, "Done/done")
