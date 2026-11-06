@@ -105,8 +105,9 @@ export function QuickFixes({
           variant="white"
           size="sm"
           className={dense ? 'h-6 px-2 text-meta' : undefined}
-          disabled={pending !== null}
-          aria-busy={pending === f ? true : undefined}
+          disabled={pending !== null && pending !== f}
+          busy={pending === f}
+          busyLabel="Applying…"
           onClick={() => void apply(f)}
         >
           {f.label}

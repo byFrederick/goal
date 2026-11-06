@@ -224,8 +224,8 @@ function ProfileSection({
 /** Save changes is in the top bar; it submits this form by its id. */
 function SaveChanges({ pending }: { pending: boolean }) {
   return (
-    <Button type="submit" form={profileForm} variant="action" disabled={pending}>
-      {pending ? 'Saving…' : 'Save changes'}
+    <Button type="submit" form={profileForm} variant="action" busy={pending} busyLabel="Saving…">
+      Save changes
     </Button>
   );
 }

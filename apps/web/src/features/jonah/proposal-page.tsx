@@ -5,7 +5,6 @@
 // the reason Jonah reads (proposal-actions.tsx). A decided proposal shows its state and no actions.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { ApiError } from '../../api/client';
 import { jonahOverviewQuery, proposalQuery } from '../../api/queries';
@@ -20,11 +19,11 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Chip, type ChipTone } from '../../ui/chip';
-import { cn } from '../../ui/cn';
 import { Disclosure } from '../../ui/disclosure';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
 import { type Stat, StatStrip } from '../../ui/stat-strip';
+import { SuccessLabel } from '../../ui/success-label';
 import { DiffView } from '../factory-editor/review/changes-card';
 import { hunksOf } from '../factory-editor/review/review';
 import { InfoTip } from './info-tip';
@@ -94,33 +93,34 @@ function proposalActions(p: Proposal, can: readonly string[], decisions: Proposa
     <Button
       key="edit"
       variant="secondary"
-      disabled={!canEdit || decisions.edit.isPending}
+      disabled={!canEdit}
+      busy={decisions.edit.isPending}
+      busyLabel="Saving…"
       onClick={() => decisions.edit.mutate()}
     >
       Edit
     </Button>,
-    <RejectDialog key="reject" disabled={!canEdit} onReject={(reason) => decisions.reject.mutateAsync(reason)} />,
+    <RejectDialog
+      key="reject"
+      disabled={!canEdit}
+      busy={decisions.reject.isPending}
+      onReject={(reason) => decisions.reject.mutateAsync(reason)}
+    />,
+    // After success the button stays at full opacity to show the check, and ignores clicks without `disabled`.
     <Button
       key="approve"
       variant="primary"
-      className="relative"
-      disabled={!canPublish || decisions.approve.isPending || decisions.approve.isSuccess}
-      onClick={() => decisions.approve.mutate()}
+      disabled={!canPublish}
+      busy={decisions.approve.isPending}
+      busyLabel={`Publishing v${p.publishes_as_version}…`}
       {...(decisions.approve.isSuccess ? { 'aria-label': 'Published' } : {})}
+      onClick={() => {
+        if (!decisions.approve.isSuccess) decisions.approve.mutate();
+      }}
     >
-      <span
-        className={cn('transition-opacity duration-(--duration-quick)', decisions.approve.isSuccess && 'opacity-0')}
-      >
+      <SuccessLabel done={decisions.approve.isSuccess} doneLabel="Published">
         Approve and publish v{p.publishes_as_version}
-      </span>
-      {decisions.approve.isSuccess ? (
-        <Check
-          size={16}
-          strokeWidth={1.5}
-          aria-hidden="true"
-          className="absolute inset-0 m-auto motion-safe:animate-success-check"
-        />
-      ) : null}
+      </SuccessLabel>
     </Button>,
   ];
 }

@@ -171,8 +171,8 @@ function AddPersonDialog({
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button type="submit" variant="primary" disabled={pending}>
-                {pending ? 'Saving…' : 'Add'}
+              <Button type="submit" variant="primary" busy={pending} busyLabel="Adding…">
+                Add
               </Button>
             </div>
           </form>
@@ -198,17 +198,17 @@ function RoleDialog({
 }) {
   const current = member.factory_roles.find((g) => g.factory_id === factory.id)?.role ?? 'viewer';
   const [role, setRole] = useState<FactoryRole>(current);
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<'remove' | 'save' | null>(null);
 
   const run = async (to: FactoryRole | null) => {
-    setPending(true);
+    setPending(to === null ? 'remove' : 'save');
     try {
       await onChange(member, to);
       onClose();
     } catch {
       // The refusal is a toast (usePeopleChanges); the dialog stays open to try again.
     } finally {
-      setPending(false);
+      setPending(null);
     }
   };
 
@@ -235,15 +235,29 @@ function RoleDialog({
             </NativeSelect>
           </Field>
           <div className="flex flex-wrap justify-between gap-2">
-            <Button type="button" variant="secondary" disabled={pending} onClick={() => void run(null)}>
+            {/* One request at a time: the clicked button is busy, its sibling is disabled until it ends. */}
+            <Button
+              type="button"
+              variant="secondary"
+              busy={pending === 'remove'}
+              busyLabel="Removing…"
+              disabled={pending === 'save'}
+              onClick={() => void run(null)}
+            >
               Remove from factory
             </Button>
             <div className="flex flex-wrap gap-2">
               <DialogClose asChild>
                 <Button variant="secondary">Cancel</Button>
               </DialogClose>
-              <Button type="submit" variant="primary" disabled={pending}>
-                {pending ? 'Saving…' : 'Save'}
+              <Button
+                type="submit"
+                variant="primary"
+                busy={pending === 'save'}
+                busyLabel="Saving…"
+                disabled={pending === 'remove'}
+              >
+                Save
               </Button>
             </div>
           </div>

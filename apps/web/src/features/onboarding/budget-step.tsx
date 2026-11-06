@@ -231,8 +231,8 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
           type="button"
           size="lg"
           variant="primary"
-          disabled={pending}
-          aria-busy={pending || undefined}
+          busy={pending}
+          busyLabel="Publishing…"
           onClick={() => void publish()}
         >
           Continue

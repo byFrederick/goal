@@ -99,6 +99,17 @@ describe('the banner of an archived factory', () => {
     await waitFor(() => expect(screen.queryByText(/It takes no work/)).toBeNull());
   });
 
+  it('shows Restore as busy, not disabled, while the request is pending', async () => {
+    vi.mocked(restoreFactory).mockReturnValueOnce(new Promise(() => {}));
+    renderPage(archived, ['factory:archive']);
+
+    const button = await screen.findByRole('button', { name: 'Restore' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('offers no Restore without factory:archive', async () => {
     renderPage(archived, []);
 

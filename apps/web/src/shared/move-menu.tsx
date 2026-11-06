@@ -254,8 +254,8 @@ function MoveForm({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={move.isPending}>
-              {move.isPending ? 'Moving…' : `Move to ${choice ? humanize(choice.id) : '…'}`}
+            <Button type="submit" variant="primary" busy={move.isPending} busyLabel="Moving…">
+              {`Move to ${choice ? humanize(choice.id) : '…'}`}
             </Button>
           </div>
         </form>

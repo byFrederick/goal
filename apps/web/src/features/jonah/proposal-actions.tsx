@@ -126,9 +126,12 @@ export type ProposalDecisions = ReturnType<typeof useProposalDecisions>;
 /** The reject dialog: a required reason, and Reject stays disabled until one that is not blank is typed. */
 export function RejectDialog({
   disabled,
+  busy,
   onReject,
 }: {
   disabled: boolean;
+  /** The reject request is pending. */
+  busy: boolean;
   onReject: (reason: string) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
@@ -175,7 +178,7 @@ export function RejectDialog({
             <Button variant="white" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="danger-fill" disabled={blank}>
+            <Button type="submit" variant="danger-fill" disabled={blank} busy={busy} busyLabel="Rejecting…">
               Reject proposal
             </Button>
           </div>

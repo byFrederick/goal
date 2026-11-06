@@ -53,7 +53,9 @@ export function StartNowButton({
       size="sm"
       className={className}
       aria-label={done ? undefined : `Start now: ${label}`}
-      disabled={pending || done}
+      disabled={done}
+      busy={pending}
+      busyLabel="Starting…"
       onClick={start}
     >
       <SuccessLabel done={done} doneLabel="Started">

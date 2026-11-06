@@ -418,8 +418,14 @@ function Composer({ open, onOpenChange, factory, picker, trigger, initialTitle, 
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={submit.isPending || picker?.status === 'loading'}>
-              {submit.isPending ? 'Creating…' : start.mode === 'later' ? 'Schedule' : 'Create item'}
+            <Button
+              type="submit"
+              variant="primary"
+              busy={submit.isPending}
+              busyLabel={start.mode === 'later' ? 'Scheduling…' : 'Creating…'}
+              disabled={picker?.status === 'loading'}
+            >
+              {start.mode === 'later' ? 'Schedule' : 'Create item'}
             </Button>
           </div>
         </form>

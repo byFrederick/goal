@@ -13,6 +13,12 @@ vi.mock('../../api/definitions', () => ({
   putDraftFile: draft.put,
   openDraft: vi.fn(async () => ({})),
 }));
+const knowledgeApi = vi.hoisted(() => ({ sync: vi.fn(), update: vi.fn() }));
+vi.mock('../../api/knowledge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/knowledge')>()),
+  syncKnowledgeSource: knowledgeApi.sync,
+  updateKnowledgeSource: knowledgeApi.update,
+}));
 vi.mock('../../app/top-bar', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../app/top-bar')>()),
   TopBarSlot: ({ actions }: { actions?: React.ReactNode }) => <section aria-label="Top bar">{actions}</section>,
@@ -154,6 +160,48 @@ describe('the knowledge source page', () => {
     await waitFor(() => expect(draft.put).toHaveBeenCalledTimes(1));
     expect(draft.put.mock.calls[0]?.slice(0, 3)).toEqual(['org-1', 'f-support', 'factory.yaml']);
     expect(draft.put.mock.calls[0]?.[3]).toContain('runbooks');
+  });
+
+  it('shows Add to drafts as busy, not disabled, while the draft is written', async () => {
+    draft.get.mockResolvedValue({ text: 'spec:\n  knowledge:\n    sources: []\n', sha256: 'abc' });
+    draft.put.mockReturnValue(new Promise(() => {}));
+    renderSource();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to a factory' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /Support/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add to drafts' }));
+
+    const button = await screen.findByRole('button', { name: /Add to drafts/ });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('shows Save changes as busy while the source saves', async () => {
+    knowledgeApi.update.mockReturnValue(new Promise(() => {}));
+    renderSource();
+    const every = (await screen.findByLabelText('Sync every')) as HTMLSelectElement;
+    await userEvent.selectOptions(every, 'Only when someone presses Sync');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    const button = await screen.findByRole('button', { name: /Save changes/ });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('shows Sync now as busy while the request is pending and sends it once', async () => {
+    knowledgeApi.sync.mockReturnValue(new Promise(() => {}));
+    renderSource();
+
+    const button = await screen.findByRole('button', { name: /Sync now, / });
+    await userEvent.click(button);
+    const busy = await screen.findByRole('button', { name: /Sync now, / });
+    await waitFor(() => expect(busy.getAttribute('aria-busy')).toBe('true'));
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    expect(busy.hasAttribute('disabled')).toBe(false);
+    expect(knowledgeApi.sync).toHaveBeenCalledTimes(1);
+    await userEvent.click(busy);
+    expect(knowledgeApi.sync).toHaveBeenCalledTimes(1);
   });
 
   it('hides Add to a factory from someone who cannot manage knowledge', async () => {

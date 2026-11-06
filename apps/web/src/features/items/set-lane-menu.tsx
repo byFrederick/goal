@@ -92,7 +92,7 @@ function SetLaneForm({ items, factory, onDone }: { items: Movable[]; factory: Fa
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!selected) return;
+    if (!selected || setLane.isPending) return;
     setLane.mutate(selected);
   };
 
@@ -148,8 +148,14 @@ function SetLaneForm({ items, factory, onDone }: { items: Movable[]; factory: Fa
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={!selected || setLane.isPending}>
-              {setLane.isPending ? 'Setting…' : `Set lane to ${selected ? humanize(selected) : '…'}`}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!selected}
+              busy={setLane.isPending}
+              busyLabel="Setting lane…"
+            >
+              {`Set lane to ${selected ? humanize(selected) : '…'}`}
             </Button>
           </div>
         </form>

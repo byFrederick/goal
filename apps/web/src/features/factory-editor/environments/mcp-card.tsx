@@ -283,7 +283,14 @@ function ServerRow({
         )}
         {loading ? <RulesPlaceholder /> : null}
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="white" size="sm" onClick={testServer} disabled={testing} aria-label={`Test ${name}`}>
+          <Button
+            variant="white"
+            size="sm"
+            onClick={testServer}
+            busy={testing}
+            busyLabel="Testing…"
+            aria-label={`Test ${name}`}
+          >
             {test ? 'Test again' : 'Test'}
           </Button>
           {readOnly ? null : (

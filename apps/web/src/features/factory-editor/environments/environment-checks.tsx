@@ -198,7 +198,7 @@ export function ChecksCard({
               )
             }
             action={
-              <Button variant="white" size="sm" onClick={testAll} disabled={testing}>
+              <Button variant="white" size="sm" onClick={testAll} busy={testing} busyLabel="Testing…">
                 {tested ? 'Test again' : 'Test servers'}
               </Button>
             }

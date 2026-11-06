@@ -158,8 +158,14 @@ function TransferDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="rework" disabled={typed !== name || transfer.isPending}>
-              {transfer.isPending ? 'Transferring…' : 'Transfer ownership'}
+            <Button
+              type="submit"
+              variant="rework"
+              busy={transfer.isPending}
+              busyLabel="Transferring…"
+              disabled={typed !== name}
+            >
+              Transfer ownership
             </Button>
           </div>
         </form>

@@ -5,6 +5,7 @@ export function Spinner({ tone = 'light', className }: { tone?: 'light' | 'dark'
   return (
     <span
       aria-hidden="true"
+      data-slot="spinner"
       className={cn(
         'size-4 shrink-0 animate-spin rounded-full border-2',
         tone === 'light' ? 'border-action-ink/35 border-t-action-ink' : 'border-ink/20 border-t-ink',
