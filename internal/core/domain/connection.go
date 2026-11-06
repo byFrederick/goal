@@ -82,12 +82,6 @@ func ConnectionAAD(org OrgID, id ConnectionID, keyID string) []byte {
 	return []byte("goal/connection/v1|" + string(org) + "|" + string(id) + "|" + keyID)
 }
 
-// Audit actions of connections (spec 4 §12), which the audit log still holds.
-const (
-	AuditConnectionCreated        = "connection.created"
-	AuditConnectionUpdated        = "connection.updated"
-	AuditConnectionSecretReplaced = "connection.secret_replaced"
-	AuditConnectionDeleted        = "connection.deleted"
-	AuditConnectionTested         = "connection.tested"
-	AuditConnectionUsed           = "connection.used"
-)
+// AuditConnectionUsed is the audit action of a connection's use by a run (spec 4 §12), which the
+// audit log still holds and no run writes any more.
+const AuditConnectionUsed = "connection.used"

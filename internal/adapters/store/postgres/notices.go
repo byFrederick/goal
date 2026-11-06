@@ -171,9 +171,8 @@ var errNothingToReadBack = errors.New("the notice names nothing")
 // orgEventReaders read each organization event goald sends back from its rows, by event name.
 // An event without a reader is dropped; a phase that adds one adds its reader.
 var orgEventReaders = map[string]func(context.Context, *db.Queries, ports.ItemNotice) (ports.ItemNotice, error){
-	"factory":    readFactoryEvent,
-	"connection": readConnectionEvent,
-	"knowledge":  readKnowledgeEvent,
+	"factory":   readFactoryEvent,
+	"knowledge": readKnowledgeEvent,
 }
 
 // knowledgeEvent is a knowledge event's data (spec 4 §8.3): a source's sync started or ended.
@@ -205,52 +204,6 @@ func readKnowledgeEvent(ctx context.Context, q *db.Queries, n ports.ItemNotice) 
 	data, err := json.Marshal(knowledgeEvent{SourceID: claim.SourceID, Name: r.Name, Status: r.Status})
 	if err != nil {
 		return ports.ItemNotice{}, fmt.Errorf("encode knowledge event: %w", err)
-	}
-
-	return ports.ItemNotice{OrgID: n.OrgID, Org: &ports.OrgEvent{Name: n.Org.Name, Data: data}}, nil
-}
-
-// connectionEvent is a connection event's data (spec 4 §8.3).
-type connectionEvent struct {
-	ConnectionID string `json:"connection_id"`
-	Name         string `json:"name"`
-	Change       string `json:"change"`
-}
-
-// connectionChangeActions are the audit actions each change of a connection event (spec 4 §8.3)
-// is read back from.
-var connectionChangeActions = map[string][]string{
-	"created": {domain.AuditConnectionCreated},
-	"updated": {domain.AuditConnectionUpdated, domain.AuditConnectionSecretReplaced},
-	"deleted": {domain.AuditConnectionDeleted},
-	"tested":  {domain.AuditConnectionTested},
-}
-
-// readConnectionEvent reads a connection notice back from the audit entry of its change: the
-// organization's connection must have one, and the event names it as that entry does.
-func readConnectionEvent(ctx context.Context, q *db.Queries, n ports.ItemNotice) (ports.ItemNotice, error) {
-	var claim connectionEvent
-	if err := json.Unmarshal(n.Org.Data, &claim); err != nil {
-		return ports.ItemNotice{}, errNothingToReadBack
-	}
-
-	actions, ok := connectionChangeActions[claim.Change]
-	if !ok || claim.ConnectionID == "" {
-		return ports.ItemNotice{}, errNothingToReadBack
-	}
-
-	name, err := q.NoticeConnection(ctx, db.NoticeConnectionParams{TargetID: claim.ConnectionID, Actions: actions})
-	if err != nil {
-		return ports.ItemNotice{}, err
-	}
-
-	if name == "" {
-		return ports.ItemNotice{}, errNothingToReadBack
-	}
-
-	data, err := json.Marshal(connectionEvent{ConnectionID: claim.ConnectionID, Name: name, Change: claim.Change})
-	if err != nil {
-		return ports.ItemNotice{}, fmt.Errorf("encode connection event: %w", err)
 	}
 
 	return ports.ItemNotice{OrgID: n.OrgID, Org: &ports.OrgEvent{Name: n.Org.Name, Data: data}}, nil

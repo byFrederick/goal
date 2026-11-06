@@ -90,23 +90,12 @@ func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string) 
 	}
 }
 
-func syncingKind(t *testing.T, d connectionsDB) {
-	t.Helper()
-
-	if err := NewConnections(d.store, testKey(t, "k1")).SyncPlatformKinds(t.Context(), []domain.ConnectionKind{{
-		Name: "kb-docs", Title: "Docs", Platform: true, Spec: domain.KindSpec{Sync: "gitdocs"},
-	}}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks; nor does it see A's
 // sources or documents, or write into them.
 func TestKnowledge_RLSAcrossOrgs(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
-	syncingKind(t, d)
 
 	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
 	knowledgeDoc(t, d, acme, "acme's secret runbook")
@@ -250,7 +239,6 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
-	syncingKind(t, d)
 
 	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 	org := newOrgID(t, d.store)
