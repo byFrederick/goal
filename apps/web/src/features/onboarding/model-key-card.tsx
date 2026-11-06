@@ -12,6 +12,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { SectionCard } from '../../ui/card';
 import { Field, Input } from '../../ui/field';
+import { Skeleton } from '../../ui/skeleton';
 import { modelKeyOf } from '../factory-editor/basics/model-key';
 import { useDraftSession } from '../factory-editor/draft/use-draft';
 import { useFileText } from '../factory-editor/environments/use-environments';
@@ -95,90 +96,104 @@ export function ModelKeyCard({ org, factory }: { org: string; factory: string })
       title="Model key"
       description="Every agent runs on this key. Paste a Claude subscription token or an Anthropic API key."
     >
-      {current !== undefined && !changing ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="m-0 text-secondary text-ink-soft">{`Saved as the secret ${current}, open to this factory.`}</p>
-          <Button type="button" size="sm" variant="secondary" onClick={() => setChanging(true)}>
-            Change the key
-          </Button>
-        </div>
-      ) : null}
-
-      {showForm ? (
-        <form onSubmit={submit} noValidate className="flex flex-col gap-3">
-          <Field label="Model key" error={emptyError} help="Goal saves it as a secret, open to this factory only.">
-            <SecretInput
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onBlur={() => setTouched(true)}
-              placeholder="Paste the key"
-            />
-          </Field>
-
-          {clash ? (
-            <div role="alert" className="flex animate-fade-in flex-col gap-3">
-              <Callout tone="rework">
-                {`A secret named ${name} already exists. Goal never replaces a secret’s value. Use it, or pick a new name for this key.`}
-              </Callout>
-              <div className="flex flex-wrap items-end gap-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  busy={save.isPending}
-                  busyLabel="Using…"
-                  onClick={() => save.mutate({ kind: 'existing', name })}
-                >
-                  Use the existing secret
-                </Button>
-                <Field label="New secret name" error={newName !== '' ? nameProblem(newName) : undefined}>
-                  <Input
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    autoComplete="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    translate="no"
-                    className="font-mono md:text-sm"
-                  />
-                </Field>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  busy={save.isPending}
-                  busyLabel="Saving…"
-                  disabled={nameProblem(newName) !== undefined || value === ''}
-                  onClick={chooseNewName}
-                >
-                  Use this name
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          {save.isError && !clash ? (
-            <div role="alert" className="animate-fade-in">
-              <Callout tone="rework">{`Couldn’t save the key. ${save.error.message}`.trim()}</Callout>
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="submit"
-              variant="primary"
-              busy={save.isPending}
-              busyLabel="Saving…"
-              aria-disabled={clash || undefined}
-            >
-              Save the key
-            </Button>
-            {changing ? (
-              <Button type="button" variant="ghost" onClick={() => setChanging(false)}>
-                Cancel
-              </Button>
-            ) : null}
+      <Skeleton
+        ready={ready}
+        placeholder={
+          <div className="flex flex-col gap-3">
+            <div className="h-5 w-24 rounded-control bg-hover" />
+            <div className="h-11 rounded-control bg-hover" />
+            <div className="h-11 w-32 rounded-control bg-hover" />
           </div>
-        </form>
-      ) : null}
+        }
+      >
+        {current !== undefined && !changing ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p
+              key={current}
+              className="m-0 text-secondary text-ink-soft motion-safe:animate-text-states-swap motion-reduce:animate-fade-in"
+            >{`Saved as the secret ${current}, open to this factory.`}</p>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setChanging(true)}>
+              Change the key
+            </Button>
+          </div>
+        ) : null}
+
+        {showForm ? (
+          <form onSubmit={submit} noValidate className="flex animate-fade-in flex-col gap-3">
+            <Field label="Model key" error={emptyError} help="Goal saves it as a secret, open to this factory only.">
+              <SecretInput
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={() => setTouched(true)}
+                placeholder="Paste the key"
+              />
+            </Field>
+
+            {clash ? (
+              <div role="alert" className="flex animate-fade-in flex-col gap-3">
+                <Callout tone="rework">
+                  {`A secret named ${name} already exists. Goal never replaces a secret’s value. Use it, or pick a new name for this key.`}
+                </Callout>
+                <div className="flex flex-wrap items-end gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    busy={save.isPending}
+                    busyLabel="Using…"
+                    onClick={() => save.mutate({ kind: 'existing', name })}
+                  >
+                    Use the existing secret
+                  </Button>
+                  <Field label="New secret name" error={newName !== '' ? nameProblem(newName) : undefined}>
+                    <Input
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      autoComplete="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      translate="no"
+                      className="font-mono md:text-sm"
+                    />
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    busy={save.isPending}
+                    busyLabel="Saving…"
+                    disabled={nameProblem(newName) !== undefined || value === ''}
+                    onClick={chooseNewName}
+                  >
+                    Use this name
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {save.isError && !clash ? (
+              <div role="alert" className="animate-fade-in">
+                <Callout tone="rework">{`Couldn’t save the key. ${save.error.message}`.trim()}</Callout>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="submit"
+                variant="primary"
+                busy={save.isPending}
+                busyLabel="Saving…"
+                aria-disabled={clash || undefined}
+              >
+                Save the key
+              </Button>
+              {changing ? (
+                <Button type="button" variant="ghost" onClick={() => setChanging(false)}>
+                  Cancel
+                </Button>
+              ) : null}
+            </div>
+          </form>
+        ) : null}
+      </Skeleton>
     </SectionCard>
   );
 }
