@@ -272,17 +272,24 @@ export function ItemDecisions({
   const backTo = controls?.reworkTarget ? `Send back to ${humanize(controls.reworkTarget)}` : sendBackLabel;
   const resume = controls?.paused ?? false;
   // A decision the caller may not make stays in view, disabled and focusable, saying who decides.
-  const decision = (act: () => void) =>
+  // The button that sent the request is busy; its siblings stay disabled until it settles.
+  const decision = (act: () => void, kind?: typeof pending) =>
     mayDecide
-      ? { disabled: decide.isPending, onClick: act }
+      ? { busy: kind !== undefined && pending === kind, disabled: decide.isPending && pending !== kind, onClick: act }
       : { 'aria-disabled': true, 'aria-describedby': reasonId, onClick: undefined };
 
   return (
     <div className={cn('flex gap-2', layout === 'stack' ? 'flex-col' : 'flex-wrap items-center', className)}>
       {split !== 'controls' && can.merge ? (
-        <Button variant="primary" size={s} className={btn} {...decision(() => setOpen('merge'))}>
+        <Button
+          variant="primary"
+          size={s}
+          className={btn}
+          busyLabel="Merging…"
+          {...decision(() => setOpen('merge'), 'merge')}
+        >
           <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'merge' ? 'Merging…' : 'Merge'}
+          Merge
         </Button>
       ) : null}
       {split !== 'controls' && can.approve ? (
@@ -290,26 +297,33 @@ export function ItemDecisions({
           variant="primary"
           size={s}
           className={btn}
-          {...decision(() => decide.mutate({ kind: 'approve' }, { onSuccess: () => setHeld('approve') }))}
-          disabled={mayDecide ? decide.isPending || held === 'approve' : undefined}
+          busyLabel="Approving…"
+          {...decision(() => decide.mutate({ kind: 'approve' }, { onSuccess: () => setHeld('approve') }), 'approve')}
+          disabled={mayDecide ? (decide.isPending && pending !== 'approve') || held === 'approve' : undefined}
           aria-label={
             layout === 'row' && size === 'md' ? `${held === 'approve' ? 'Approved' : 'Approve'} ${item.ref}` : undefined
           }
         >
           <SuccessLabel done={held === 'approve'} doneLabel="Approved">
             <Check size={16} strokeWidth={1.75} aria-hidden="true" />
-            {pending === 'approve' ? 'Approving…' : 'Approve'}
+            Approve
           </SuccessLabel>
         </Button>
       ) : null}
       {split !== 'controls' && can.retry ? (
-        <Button variant="primary" size={s} className={btn} {...decision(() => decide.mutate({ kind: 'retry' }))}>
+        <Button
+          variant="primary"
+          size={s}
+          className={btn}
+          busyLabel={resume ? 'Resuming…' : 'Retrying…'}
+          {...decision(() => decide.mutate({ kind: 'retry' }), 'retry')}
+        >
           {resume ? (
             <Play size={16} strokeWidth={1.75} aria-hidden="true" />
           ) : (
             <RotateCcw size={16} strokeWidth={1.75} aria-hidden="true" />
           )}
-          {pending === 'retry' ? (resume ? 'Resuming…' : 'Retrying…') : resume ? 'Resume' : 'Retry'}
+          {resume ? 'Resume' : 'Retry'}
         </Button>
       ) : null}
       {split === undefined && ctl.pause ? (
@@ -317,17 +331,25 @@ export function ItemDecisions({
           variant="secondary"
           size={s}
           className={btn}
-          disabled={decide.isPending}
+          busy={pending === 'pause'}
+          busyLabel="Pausing…"
+          disabled={decide.isPending && pending !== 'pause'}
           onClick={() => setOpen('pause')}
         >
           <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'pause' ? 'Pausing…' : 'Pause'}
+          Pause
         </Button>
       ) : null}
       {split === undefined && reject ? (
-        <Button variant="rework" size={s} className={btn} {...decision(() => setOpen('reject'))}>
+        <Button
+          variant="rework"
+          size={s}
+          className={btn}
+          busyLabel="Sending back…"
+          {...decision(() => setOpen('reject'), 'reject')}
+        >
           <Undo2 size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'reject' ? 'Sending back…' : backTo}
+          {backTo}
         </Button>
       ) : null}
       {split === undefined && ctl.move && controls && !moveInMenu ? (
@@ -601,8 +623,8 @@ export function RejectDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? 'Sending back…' : 'Send back'}
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Sending back…">
+              Send back
             </Button>
           </div>
         </form>
@@ -646,9 +668,9 @@ function PauseDialog({ item, open, onOpenChange, onConfirm, pending, onCloseAuto
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Pausing…">
               <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
-              {pending ? 'Pausing…' : 'Pause'}
+              Pause
             </Button>
           </div>
         </form>
@@ -730,10 +752,10 @@ export function MergeDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending || done}>
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Merging…" disabled={done}>
               <SuccessLabel done={done} doneLabel="Merged">
                 <GitMerge size={16} strokeWidth={1.75} aria-hidden="true" />
-                {pending ? 'Merging…' : refusal ? 'Merge again' : 'Squash and merge'}
+                {refusal ? 'Merge again' : 'Squash and merge'}
               </SuccessLabel>
             </Button>
           </div>
