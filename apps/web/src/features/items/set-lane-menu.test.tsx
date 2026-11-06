@@ -5,6 +5,7 @@ import { setItemLane } from '../../api/client';
 import { versionModelQuery } from '../../api/queries';
 import type { Factory, Item, OrgSummary, VersionModel } from '../../api/types';
 import type { Movable } from '../../shared/move-menu';
+import { expectBusyOnClick } from '../../test/busy';
 import { renderFactoryPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { SetLaneDialog } from './set-lane-menu';
@@ -152,5 +153,16 @@ describe('Set lane menu', () => {
 
     expect(await screen.findByRole('radio', { name: 'Backend' })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Set lane to …' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows the submit as busy while the lane is being set and sends it once', async () => {
+    model.value = routedLine;
+    vi.mocked(setItemLane).mockImplementationOnce(() => new Promise(() => {}));
+    renderMenu([movable('sre#1')]);
+
+    fireEvent.click(await screen.findByRole('radio', { name: 'Frontend' }));
+    await expectBusyOnClick(screen.getByRole('button', { name: 'Set lane to Frontend' }), 'Setting lane…');
+
+    expect(setItemLane).toHaveBeenCalledTimes(1);
   });
 });

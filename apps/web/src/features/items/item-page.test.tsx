@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, cancelItem } from '../../api/client';
+import { ApiError, cancelItem, noteItem } from '../../api/client';
 import { keys } from '../../api/queries';
 import type { Factory, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
@@ -15,6 +15,7 @@ import { ItemPage } from './item-page';
 vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
   cancelItem: vi.fn(async () => item({ state: 'cancelled' })),
+  noteItem: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -395,6 +396,24 @@ describe('the item decisions at each width', () => {
     const field = await screen.findAllByRole('textbox', { name: 'Note for the agent' });
     expect(field.length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Send note' }).length).toBeGreaterThan(0);
+  });
+
+  it('sends a note once when it is submitted again while the request is pending', async () => {
+    stubWidth(true);
+    vi.mocked(noteItem).mockClear();
+    vi.mocked(noteItem).mockReturnValue(new Promise(() => {}));
+    renderPage(item());
+
+    const [field] = await screen.findAllByRole('textbox', { name: 'Note for the agent' });
+    fireEvent.change(field as HTMLElement, { target: { value: 'Use the staging key' } });
+    const form = (field as HTMLElement).closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => expect(noteItem).toHaveBeenCalledTimes(1));
+    fireEvent.submit(form);
+    fireEvent.keyDown(field as HTMLElement, { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(noteItem).toHaveBeenCalledTimes(1);
   });
 });
 
