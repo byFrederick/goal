@@ -420,14 +420,6 @@ goal key revoke <name|id>
 
 revoke a key: anything using it stops working at once
 
-## goal connection
-
-```text
-goal connection ...
-```
-
-moved to goal access, goal secret and environment files; prints where and exits 2
-
 ## goal secret list
 
 ```text
@@ -479,14 +471,6 @@ goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dr
 import a .env file or a YAML file's credentials: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
 
 Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
-
-## goal credential
-
-```text
-goal credential ...
-```
-
-moved to goal secret; prints where and exits 2
 
 ## goal env test
 
