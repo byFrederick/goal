@@ -161,7 +161,12 @@ describe('the try', () => {
     runTry();
     expect(await screen.findByText('Trying the event')).toBeTruthy();
     expect(screen.getByText('Loading')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Trying…' }).hasAttribute('disabled')).toBe(true);
+    const button = screen.getByRole('button', { name: /Run the try|Trying…/ });
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(button);
+    expect(tryIntakeTrigger).toHaveBeenCalledTimes(1);
   });
 
   it('shows the problem detail when the try fails', async () => {
