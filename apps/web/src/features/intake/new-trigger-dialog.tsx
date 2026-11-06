@@ -153,7 +153,7 @@ export function NewTriggerDialog() {
                   </div>
                 );
               })}
-              {servers.loading || shownServers.length > 0 ? (
+              {servers.loading || servers.failed || shownServers.length > 0 ? (
                 <div className="flex flex-col gap-1">
                   <h3 className="m-0 px-2 pt-2 pb-1 text-meta font-semibold text-muted">Check with an agent</h3>
                   <Skeleton
@@ -169,6 +169,14 @@ export function NewTriggerDialog() {
                     }
                   >
                     <div className="flex flex-col gap-1">
+                      {servers.failed ? (
+                        <div role="alert" className="flex items-center gap-2 px-2 text-meta text-rework-ink">
+                          <span className="min-w-0 flex-1">Couldn't read the agents' environments.</span>
+                          <Button variant="ghost" size="sm" onClick={servers.retry}>
+                            Retry
+                          </Button>
+                        </div>
+                      ) : null}
                       {shownServers.map((t) => (
                         <button
                           key={t.name}
@@ -263,7 +271,7 @@ interface CheckServer {
 function useCheckServers(
   text: string,
   agents: readonly { name: string }[],
-): { servers: CheckServer[]; loading: boolean } {
+): { servers: CheckServer[]; loading: boolean; failed: boolean; retry: () => void } {
   const org = useOrg();
   const factory = useFactory();
   const byAgent = agentEnvironments(text);
@@ -271,6 +279,10 @@ function useCheckServers(
   const names = [...new Set(agents.map((a) => envOf(a.name)))];
   const files = useQueries({ queries: names.map((name) => environmentTextQuery(org.id, factory, name)) });
   const loading = files.some((f) => f.data === undefined && !f.isError);
+  const failed = files.some((f) => f.isError);
+  const retry = () => {
+    for (const f of files) if (f.isError) void f.refetch();
+  };
   const mcp = new Map(names.map((name, i) => [name, Object.keys(readEnv(files[i]?.data?.text ?? '').mcp)]));
   const servers: CheckServer[] = [];
   for (const agent of agents) {
@@ -279,7 +291,7 @@ function useCheckServers(
       servers.push({ name, label: pickerSources.find((s) => s.key === name)?.label ?? name, agent: agent.name });
     }
   }
-  return { servers, loading };
+  return { servers, loading, failed, retry };
 }
 
 /** The trigger's event key for a choice; null when the source has none to choose here (a webhook is chosen later). */
