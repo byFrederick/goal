@@ -140,6 +140,7 @@ function EntryRow({
         <Field label="Name" error={nameProblem}>
           <Input
             value={entry.name}
+            aria-label={`Name of repository ${entry.name}`}
             readOnly={readOnly}
             autoComplete="off"
             spellCheck={false}
@@ -152,6 +153,7 @@ function EntryRow({
             type="url"
             inputMode="url"
             value={entry.url}
+            aria-label={`URL of repository ${entry.name}`}
             readOnly={readOnly}
             aria-describedby={help}
             placeholder="https://github.com/acme/app"
