@@ -74,3 +74,23 @@ describe('the inbox entries about knowledge and conversion', () => {
     expect(entry?.conversion?.reason).toBe(problems.map((p) => `${p.charAt(0).toUpperCase()}${p.slice(1)}.`).join(' '));
   });
 });
+
+describe('a used-up weekly budget', () => {
+  it('shows as a budget entry after the andon sort slot, and on the board line, with since and resumes_at', async () => {
+    await fetch(`${base}/__mock/reset`, {
+      method: 'POST',
+      body: JSON.stringify({ usedUpBudget: 'sre' }),
+      headers: { 'content-type': 'application/json' },
+    });
+    const inbox = await call<Inbox>('/v1/orgs/acme/inbox');
+    const entry = inbox.body.entries.find((e) => e.kind === 'budget');
+    expect(entry?.id).toMatch(/^budget:/);
+    expect(entry?.budget?.spent_usd).toBeGreaterThanOrEqual(entry?.budget?.weekly_usd ?? Infinity);
+    expect(Date.parse(entry?.budget?.resumes_at ?? '')).toBeGreaterThan(Date.now());
+    const board = await call<{ line: { budget?: { exhausted: boolean; since?: string; resumes_at?: string } } }>(
+      '/v1/orgs/acme/factories/sre/board',
+    );
+    expect(board.body.line.budget?.exhausted).toBe(true);
+    expect(board.body.line.budget?.resumes_at).toBe(entry?.budget?.resumes_at);
+  });
+});
