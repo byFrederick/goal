@@ -495,6 +495,7 @@ export function WipStepper({
       <input
         inputMode="numeric"
         value={wip ?? ''}
+        placeholder={noun === 'WIP limit' ? 'No limit' : undefined}
         aria-label={`${noun} of ${label}`}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
@@ -506,7 +507,8 @@ export function WipStepper({
         readOnly={readOnly}
         autoComplete="off"
         className={cn(
-          'h-11 w-12 rounded-control border border-rule bg-card text-center text-base text-ink tabular-nums transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
+          'h-11 rounded-control border border-rule bg-card text-center text-base text-ink tabular-nums transition-colors duration-(--duration-quick) placeholder:text-muted hover:border-muted aria-[invalid=true]:border-rework md:h-9 md:text-[15px]',
+          noun === 'WIP limit' && wip === undefined ? 'w-20' : 'w-12',
           readOnlyControl,
         )}
       />
