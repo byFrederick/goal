@@ -4,23 +4,28 @@
 // saved through the line editor and the draft (LineEditorProvider, the draft ops), as the wizard's Line step
 // does. Nothing is published here: step 5 publishes (ADR 0032 decision 4).
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { type ReactNode, useId, useRef } from 'react';
 import { factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
 import type { ModelStation } from '../../shared/definition/model';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
+import { cn } from '../../ui/cn';
 import { Field, Input, NativeSelect } from '../../ui/field';
+import { Leaving, useLeaving } from '../../ui/leaving';
 import { NotAvailable } from '../../ui/not-available';
-import { setStationField, setStationName } from '../factory-editor/draft/ops';
+import { addStation, moveStation, removeStation, setStationField, setStationName } from '../factory-editor/draft/ops';
 import { DraftSessionProvider, useDraft, useSection } from '../factory-editor/draft/use-draft';
+import { useValidation } from '../factory-editor/frame/use-editor';
 import { stationLabel } from '../factory-editor/line/labels';
 import { LineEditorProvider, useLineEditor } from '../factory-editor/line/line-editor';
 import { ModelsBox } from '../factory-editor/line/models-box';
+import { type Direction, stepTarget } from '../factory-editor/line/reorder';
 import { WipStepper } from '../factory-editor/line/station-row';
 import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, type PreviewStation, previewSlots } from './factory-preview';
+import { AddHere, CardControls, useCardFlip } from './line-step-controls';
 import { OnboardingLayout } from './onboarding-layout';
 
 export function LineStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
@@ -124,13 +129,7 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
           </Link>
         </Button>
       }
-      action={
-        <Button asChild size="lg" variant="primary">
-          <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'budget' }} search={{ factory }}>
-            Continue
-          </Link>
-        </Button>
-      }
+      action={<Continue org={org} factory={factory} />}
       preview={previewSlots({
         organization: organizationCard(org, host),
         code: codeCard(repoOf(search.url), search.secret),
@@ -157,9 +156,74 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
   );
 }
 
-/** The stations in order, one card each. Stations that run an agent show its copies and WIP limit. */
+/**
+ * Continue goes to Budget, which publishes. It is held while the line has no station that runs an agent and while
+ * the draft's validation reports an error or has not answered yet, with one sentence saying what is missing.
+ */
+function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
+  const editor = useLineEditor();
+  const navigate = useNavigate();
+  const validation = useValidation();
+  const sentenceId = useId();
+  const noAgent = !editor.stations.some((s) => s.kind === 'agent');
+  const invalid = validation?.problems.some((p) => p.severity === 'error') ?? false;
+  const sentence = noAgent
+    ? 'Add a station that runs an agent, then continue.'
+    : invalid
+      ? 'Fix the problems in this line, then continue.'
+      : undefined;
+  const held = sentence !== undefined || validation === undefined;
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-3">
+      {sentence ? (
+        <p id={sentenceId} className="m-0 text-secondary text-muted motion-safe:animate-fade-in">
+          {sentence}
+        </p>
+      ) : null}
+      <Button
+        type="button"
+        size="lg"
+        variant="primary"
+        disabled={held}
+        aria-describedby={sentence ? sentenceId : undefined}
+        className="[transition-duration:var(--duration-quick),var(--duration-quick),var(--duration-quick),var(--duration-quick),var(--duration-micro)] [transition-property:color,background-color,border-color,opacity,transform]"
+        onClick={() =>
+          void navigate({
+            to: '/o/$org/get-started/$step',
+            params: { org: org.slug, step: 'budget' },
+            search: { factory },
+          })
+        }
+      >
+        Continue
+      </Button>
+    </div>
+  );
+}
+
+/** The stations in order, one card each, with "Add a station here" before the first and after each but Done. */
 function StationCards() {
   const editor = useLineEditor();
+  const flip = useCardFlip();
+  // The cards on screen when the step opened do not enter; a card added later does.
+  const opened = useRef(new Set(editor.stations.map((s) => editor.keyOf(s.id))));
+
+  const addAt = (after: string | undefined) => {
+    const { edit, station } = addStation(editor.line, 'agent', { name: 'New station', ...(after ? { after } : {}) });
+    editor.insert(edit, station, after ? undefined : (line) => moveStation(line, station.id, 0));
+  };
+  const step = (id: string, dir: Direction, pointer: boolean) => {
+    const to = stepTarget(editor.stations, id, dir);
+    if (to === undefined) return;
+    if (pointer) flip.mark();
+    editor.move(id, to);
+  };
+  const addControl = (after: string | undefined, key: string) => (
+    <li key={key} className="flex w-6 shrink-0 items-center justify-center">
+      <AddHere onAdd={() => addAt(after)} />
+    </li>
+  );
+
   return (
     <section
       aria-label="Stations"
@@ -167,19 +231,46 @@ function StationCards() {
       tabIndex={0}
       className="overflow-x-auto pb-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-run"
     >
-      <ol aria-label="The stations" className="m-0 flex list-none gap-3 w-max min-w-full p-0">
-        {editor.stations.map((station) => (
-          <li key={editor.keyOf(station.id)} className="flex w-52 shrink-0 flex-col">
-            <StationCardBody station={station} />
-          </li>
-        ))}
+      <ol aria-label="The stations" className="m-0 flex list-none gap-1 w-max min-w-full p-0">
+        {editor.viewOnly ? null : addControl(undefined, 'add-first')}
+        {editor.stations.flatMap((station) => {
+          const key = editor.keyOf(station.id);
+          const card = (
+            <li
+              key={key}
+              ref={flip.ref(key)}
+              className={cn(
+                'flex w-52 shrink-0 flex-col',
+                !opened.current.has(key) && 'motion-safe:animate-row-in motion-reduce:animate-fade-in',
+              )}
+            >
+              <StationCardBody station={station} onStep={(dir, pointer) => step(station.id, dir, pointer)} />
+            </li>
+          );
+          return station.kind === 'done' || editor.viewOnly ? [card] : [card, addControl(station.id, `add-${key}`)];
+        })}
       </ol>
+      <p role="status" aria-live="polite" className="sr-only">
+        {editor.announcement}
+      </p>
     </section>
   );
 }
 
-function StationCardBody({ station }: { station: ModelStation }) {
+function StationCardBody({
+  station,
+  onStep,
+}: {
+  station: ModelStation;
+  onStep: (dir: Direction, pointer: boolean) => void;
+}) {
   const editor = useLineEditor();
+  const { leaving, leave } = useLeaving(() => {
+    editor.edit(removeStation(editor.line, station.id));
+    editor.flush();
+    editor.announce(`${stationLabel(station)} removed`);
+    document.querySelector<HTMLElement>('section[aria-label="Stations"]')?.focus();
+  });
   const { line } = editor;
   const label = stationLabel(station);
   const index = editor.stations.findIndex((s) => s.id === station.id);
@@ -205,90 +296,96 @@ function StationCardBody({ station }: { station: ModelStation }) {
   const lanes = Object.entries(station.route ?? {});
 
   return (
-    <section
-      aria-label={label}
-      data-station={station.id}
-      className="flex min-h-full flex-col gap-3 rounded-card border border-line bg-card p-4"
-    >
-      <Field label="Name">
-        <Input
-          data-station-name
-          value={station.name ?? ''}
-          placeholder={station.id}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => editor.flush()}
-          autoComplete="off"
-        />
-      </Field>
-      {station.description ? <p className="m-0 text-secondary text-muted">{station.description}</p> : null}
+    <Leaving leaving={leaving} className="min-h-full flex-1 [&>div]:flex [&>div]:flex-col">
+      <section
+        aria-label={label}
+        data-station={station.id}
+        className="flex min-h-full flex-1 flex-col gap-3 rounded-card border border-line bg-card p-4"
+      >
+        <Field label="Name">
+          <Input
+            data-station-name
+            value={station.name ?? ''}
+            placeholder={station.id}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => editor.flush()}
+            autoComplete="off"
+          />
+        </Field>
+        {station.description ? <p className="m-0 text-secondary text-muted">{station.description}</p> : null}
 
-      {runsAgent ? (
-        <>
-          <Field label="Agent">
-            <NativeSelect
-              aria-label={`Agent of ${label}`}
-              value={station.agent ?? ''}
-              onChange={(e) => setAgent(e.target.value)}
-            >
-              <option value="">Choose an agent</option>
-              {editor.agents.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
+        {runsAgent ? (
+          <>
+            <Field label="Agent">
+              <NativeSelect
+                aria-label={`Agent of ${label}`}
+                value={station.agent ?? ''}
+                onChange={(e) => setAgent(e.target.value)}
+              >
+                <option value="">Choose an agent</option>
+                {editor.agents.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <div className="flex flex-wrap gap-4">
+              <Count label="Copies">
+                <WipStepper
+                  label={label}
+                  noun="copies"
+                  wip={station.agents ?? 1}
+                  onChange={setCopies}
+                  onBlur={() => editor.flush()}
+                  invalid={false}
+                  describedBy={undefined}
+                  readOnly={editor.viewOnly}
+                />
+              </Count>
+              <Count label="WIP">
+                <WipStepper
+                  label={label}
+                  wip={station.wip}
+                  onChange={setWip}
+                  onBlur={() => editor.flush()}
+                  invalid={false}
+                  describedBy={undefined}
+                  readOnly={editor.viewOnly}
+                />
+              </Count>
+            </div>
+          </>
+        ) : (
+          <p className="m-0 text-secondary text-muted">{kindSentence(station.kind)}</p>
+        )}
+
+        {lanes.length > 0 ? (
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <span className="text-meta text-muted">Lanes</span>
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              {lanes.map(([lane, agent]) => (
+                <li key={lane} className="flex flex-col">
+                  <span className="font-control text-secondary">{lane}</span>
+                  <span className="text-secondary text-muted">{agent}</span>
+                </li>
               ))}
-            </NativeSelect>
-          </Field>
-          <div className="flex flex-wrap gap-4">
-            <Count label="Copies">
-              <WipStepper
-                label={label}
-                noun="copies"
-                wip={station.agents ?? 1}
-                onChange={setCopies}
-                onBlur={() => editor.flush()}
-                invalid={false}
-                describedBy={undefined}
-                readOnly={editor.viewOnly}
-              />
-            </Count>
-            <Count label="WIP">
-              <WipStepper
-                label={label}
-                wip={station.wip}
-                onChange={setWip}
-                onBlur={() => editor.flush()}
-                invalid={false}
-                describedBy={undefined}
-                readOnly={editor.viewOnly}
-              />
-            </Count>
+            </ul>
           </div>
-        </>
-      ) : (
-        <p className="m-0 text-secondary text-muted">{kindSentence(station.kind)}</p>
-      )}
+        ) : null}
 
-      {lanes.length > 0 ? (
-        <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <span className="text-meta text-muted">Lanes</span>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {lanes.map(([lane, agent]) => (
-              <li key={lane} className="flex flex-col">
-                <span className="font-control text-secondary">{lane}</span>
-                <span className="text-secondary text-muted">{agent}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+        {station.gate ? (
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <span className="text-meta text-muted">Gate</span>
+            <p className="m-0 text-secondary text-ink-soft">{gateSentence(station, editor.stations)}</p>
+          </div>
+        ) : null}
 
-      {station.gate ? (
-        <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <span className="text-meta text-muted">Gate</span>
-          <p className="m-0 text-secondary text-ink-soft">{gateSentence(station, editor.stations)}</p>
-        </div>
-      ) : null}
-    </section>
+        {editor.viewOnly ? null : (
+          <CardControls station={station} stations={editor.stations} label={label} onStep={onStep} onRemove={leave} />
+        )}
+      </section>
+    </Leaving>
   );
 }
 
