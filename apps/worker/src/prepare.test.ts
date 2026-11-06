@@ -262,6 +262,40 @@ async function mode(path: string): Promise<number> {
   return (await stat(path)).mode & 0o777;
 }
 
+describe("prepare: the box's starting CPU reading", () => {
+  const bundle = { spec, files: {}, git_credentials: [] };
+
+  it('saves cpu.stat usage_usec beside spec.json when given a cgroup root', async () => {
+    const cgroup = join(root, 'cgroup');
+    await mkdir(cgroup);
+    await writeFile(join(cgroup, 'cpu.stat'), 'usage_usec 3141592\nuser_usec 1\nsystem_usec 2\n');
+    const lines: string[] = [];
+    const { fake } = gatewayServing(bundle);
+
+    const prepared = await prepare({ ...depsWith(fake, recorder().exec), cgroup, log: (l) => lines.push(l) });
+
+    expect(await readFile(join(dirs.goal, 'cpu-start-usec'), 'utf8')).toBe('3141592');
+    expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
+    expect(lines).toEqual([]);
+  });
+
+  it('saves nothing without a cgroup root, and succeeds with one line when the counter is unreadable', async () => {
+    const { fake } = gatewayServing(bundle);
+    await prepare(depsWith(fake, recorder().exec));
+    expect(existsSync(join(dirs.goal, 'cpu-start-usec'))).toBe(false);
+
+    const lines: string[] = [];
+    const prepared = await prepare({
+      ...depsWith(gatewayServing(bundle).fake, recorder().exec),
+      cgroup: join(root, 'no-cgroup'),
+      log: (l) => lines.push(l),
+    });
+    expect(existsSync(join(dirs.goal, 'cpu-start-usec'))).toBe(false);
+    expect(prepared).toEqual({ type: 'prepared', at: later.toISOString(), seconds: 12.3, tools: 0 });
+    expect(lines).toHaveLength(1);
+  });
+});
+
 describe('prepare: knowledge', () => {
   it('downloads every snapshot while the repository clones and unpacks each read-only into /knowledge/<source>/', async () => {
     const bundle = {
