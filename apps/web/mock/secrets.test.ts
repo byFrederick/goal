@@ -62,6 +62,42 @@ describe('the mock repository test', () => {
   });
 });
 
+describe('the mock repository tests list', () => {
+  const list = (m: ReturnType<typeof mock>, factory = 'f-software') =>
+    m.call(`/factories/${factory}/repositories/tests`, 'GET');
+
+  it('starts with one result for the software factory, sorted by url', async () => {
+    const { status, answer } = await list(mock());
+    expect(status).toBe(200);
+    const tests = answer.tests as { url: string }[];
+    expect(tests.length).toBeGreaterThanOrEqual(1);
+    expect(tests.map((t) => t.url)).toEqual([...tests.map((t) => t.url)].sort());
+  });
+
+  it('shows a test as the latest result for its url', async () => {
+    const m = mock();
+    await m.call('/factories/f-software/repositories/test', 'POST', {
+      url: 'https://github.com/acme/zeta-readonly',
+      secret: 'github-token',
+      access: 'write',
+    });
+    await m.call('/factories/f-software/repositories/test', 'POST', {
+      url: 'https://github.com/acme/zeta-readonly',
+      secret: 'github-token',
+      access: 'read',
+    });
+    const tests = (await list(m)).answer.tests as { url: string; access: string; ok: boolean }[];
+    const mine = tests.filter((t) => t.url === 'github.com/acme/zeta-readonly');
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ access: 'read', ok: true });
+    expect(tests.map((t) => t.url)).toEqual([...tests.map((t) => t.url)].sort());
+  });
+
+  it('answers factory-not-found for an unknown factory', async () => {
+    expect(await list(mock(), 'f-nope')).toMatchObject({ status: 404, answer: { code: 'factory-not-found' } });
+  });
+});
+
 describe('the mock secrets', () => {
   it('lists the eleven secrets (the nine of the picture, slack-bot and confluence-token), with no value', async () => {
     const { answer } = await mock().call('/secrets', 'GET');
