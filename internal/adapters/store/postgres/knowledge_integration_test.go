@@ -300,10 +300,13 @@ func TestMigrate_KnowledgeWithTheVectorExtensionDropsItsEmbeddings(t *testing.T)
 	if err := admin.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector')`).Scan(&available); err != nil {
 		t.Fatal(err)
 	}
+
 	if !available {
 		t.Skip("this PostgreSQL has no vector extension to install; compose.yaml's has none")
 	}
+
 	execSQL(t, db.admin, "CREATE EXTENSION vector")
+
 	embeddings := func() (column, check, index string) {
 		t.Helper()
 

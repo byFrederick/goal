@@ -6,9 +6,10 @@
 # Ports bind to 127.0.0.1 only. Credentials come from .env (see .env.example) with dev-only defaults.
 services:
   # The official PostgreSQL 18 image on Debian trixie: Goal needs no extension (ADR 0038). An
-  # install that ran the pgvector image (PostgreSQL 18 on trixie) keeps its data on the same goal-pg
-  # volume, with the same data directory and glibc collations; drop the vector extension before the
-  # switch (README.md). The first goal up after it recreates this container once on that volume.
+  # install that ran the earlier image, PostgreSQL 18 on trixie with the vector extension, keeps its
+  # data on the same goal-pg volume, with the same data directory and glibc collations; drop the
+  # extension before the switch (README.md). The first goal up after it recreates this container
+  # once on that volume.
   # init: docker-init is PID 1 and reaps strays: the postmaster as PID 1 would inherit every orphan
   # in the container and restart the server when one exits non-zero, as an untracked child. The
   # healthcheck runs pg_isready without a shell to orphan it, and Docker waits past pg_isready's
