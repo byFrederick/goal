@@ -123,7 +123,7 @@ describe('the stations table', () => {
     expect(row.querySelector('[class*="@[940px]:grid-cols"]')).toBeTruthy();
     expect(within(row).getByRole('group', { name: 'Kind of Build' })).toBeTruthy();
     expect(within(row).getByRole('textbox', { name: 'WIP limit of Build' })).toBeTruthy();
-    expect(within(row).getByRole('combobox', { name: 'Who works at Build' })).toBeTruthy();
+    expect(within(row).getByRole('combobox', { name: 'Who works here at Build' })).toBeTruthy();
     expect(within(row).getByRole('button', { name: 'Move Build up' })).toBeTruthy();
   });
 

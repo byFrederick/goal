@@ -59,7 +59,7 @@ test('the line is accessible and fits the screen', async ({ page }) => {
   await expect(row(page, 'Build')).toHaveAccessibleName('4. Build, agent station');
   await expect(row(page, 'Build').getByRole('radio', { name: 'Agent' })).toBeChecked();
   await expect(row(page, 'Build').getByText('Constraint', { exact: false })).toBeVisible();
-  await expect(row(page, 'Build').getByRole('combobox', { name: 'Who works at Build' })).toContainText(
+  await expect(row(page, 'Build').getByRole('combobox', { name: 'Who works here at Build' })).toContainText(
     'routed by lane',
   );
   await expect(row(page, 'Review').getByRole('combobox', { name: 'If rejected, send back to' })).toHaveText('Build');
@@ -254,7 +254,7 @@ for (const width of [1024, 1280, 1440]) {
         clipped: names.filter((n) => n.scrollWidth > n.clientWidth).length,
         nameWidth: width('[data-station-name]'),
         kindWidth: width('fieldset[class*="w-full"]'),
-        whoWidth: width('[aria-label^="Who works at"]'),
+        whoWidth: width('[aria-label^="Who works here at"]'),
         headerOverlap,
         sameLineOverlap,
         inside: cells.every((c) => rect(c).right <= right + 1),
