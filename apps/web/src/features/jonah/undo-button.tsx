@@ -49,7 +49,7 @@ export function UndoThisChange({
     onError: (err) => toast.error(undoFailure(err)),
   });
   return (
-    <Button variant="secondary" size={size} disabled={undo.isPending} onClick={() => undo.mutate()}>
+    <Button variant="secondary" size={size} busy={undo.isPending} busyLabel="Undoing…" onClick={() => undo.mutate()}>
       Undo this change<span className="sr-only"> of proposal {number}</span>
     </Button>
   );
