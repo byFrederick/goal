@@ -58,7 +58,7 @@ type MarkBudgetExhaustedParams struct {
 	Since     time.Time
 }
 
-// Weekly budgets used up (ports.Store; migration 00133), under row-level security: every
+// Weekly budgets used up (ports.Store; migration 00134), under row-level security: every
 // statement sees the transaction's organization only.
 // org_id comes from its default, goal_org(); the first since is kept. A factory the organization
 // does not have violates the foreign key.

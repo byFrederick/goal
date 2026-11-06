@@ -10,7 +10,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// MarkBudgetExhausted implements ports.Store over 00133's factory_budget_exhaustions: the first
+// MarkBudgetExhausted implements ports.Store over 00134's factory_budget_exhaustions: the first
 // since is kept (ON CONFLICT DO NOTHING).
 func (s *Store) MarkBudgetExhausted(ctx context.Context, factory domain.FactoryID, since time.Time) error {
 	fid, err := parseID("factory", string(factory))

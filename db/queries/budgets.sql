@@ -1,4 +1,4 @@
--- Weekly budgets used up (ports.Store; migration 00133), under row-level security: every
+-- Weekly budgets used up (ports.Store; migration 00134), under row-level security: every
 -- statement sees the transaction's organization only.
 
 -- name: MarkBudgetExhausted :exec
