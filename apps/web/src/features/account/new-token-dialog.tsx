@@ -202,8 +202,8 @@ export function NewTokenDialog({ org, orgCan, factories, onClose, onCreated }: N
             <Button variant="white" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create token'}
+            <Button type="submit" variant="primary" busy={create.isPending} busyLabel="Creating…">
+              Create token
             </Button>
           </div>
         </form>
