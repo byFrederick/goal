@@ -161,7 +161,7 @@
         },
         "repositories": {
           "type": "array",
-          "description": "The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other. Until Goal starts and merges runs in several repositories, publish refuses a second entry and access read.",
+          "description": "The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other.",
           "items": { "$ref": "#/$defs/repositoryEntry" }
         },
         "runner": { "enum": ["docker", "ecs"], "description": "Removed in phase 4 (field-removed): the platform chooses the sandbox backend." },
@@ -346,7 +346,7 @@
             "deny": { "type": "array", "items": { "type": "string" } }
           }
         },
-        "code": { "enum": ["write", "read"], "description": "Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise. Until Goal supports it, publish refuses read." },
+        "code": { "enum": ["write", "read"], "description": "Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise." },
         "builtins": {
           "type": "object",
           "description": "Built-in tools by group, each off, ask or allowed; an omitted group is off. ask is served as off until tool approvals cover built-in tools.",
