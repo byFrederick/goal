@@ -13,6 +13,7 @@ import { itemKey } from '../../shared/factory';
 import { factoryWorkInvalidations } from '../../shared/invalidation';
 import { type Movable, MoveDialog } from '../../shared/move-menu';
 import { useOrg } from '../../shared/org';
+import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { SetLaneDialog } from './set-lane-menu';
 
@@ -94,10 +95,16 @@ export function BulkActions({
             <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
             Move
           </button>
-          <button type="button" className={barButton} disabled={pause.isPending} onClick={() => pause.mutate(movable)}>
+          <Button
+            variant="secondary"
+            className={barButton}
+            busy={pause.isPending}
+            busyLabel="Pausing…"
+            onClick={() => pause.mutate(movable)}
+          >
             <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
             Pause
-          </button>
+          </Button>
           <button type="button" className={barButton} onClick={() => setSettingLane(true)}>
             Set lane
           </button>
