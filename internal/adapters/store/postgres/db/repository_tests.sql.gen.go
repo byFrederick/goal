@@ -140,7 +140,7 @@ type UpsertRepositoryTestParams struct {
 // Repository tests (ports.RepositoryTests; migration 00131), under row-level security: every
 // statement sees the transaction's organization only.
 // org_id comes from its default, goal_org(); a factory the organization does not have violates
-// the foreign key. ci_ok and ci_reason are NULL for a test without a CI check (migration 00134).
+// the foreign key. ci_ok and ci_reason are NULL for a test without a CI check (migration 00135).
 func (q *Queries) UpsertRepositoryTest(ctx context.Context, arg UpsertRepositoryTestParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertRepositoryTest,
 		arg.FactoryID,

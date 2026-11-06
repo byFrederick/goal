@@ -12,7 +12,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// A repository test kept before migration 00134 has no CI answer: after the migration it reads
+// A repository test kept before migration 00135 has no CI answer: after the migration it reads
 // with no CI check, never a failed one, and the next test of the repository records one.
 func TestMigrate_RepositoryTestsCIAbsentBeforeMigration(t *testing.T) {
 	t.Parallel()
