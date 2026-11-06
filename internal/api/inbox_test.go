@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
@@ -185,7 +188,8 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 			}
 		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval, gen.InboxEntryKindBlocked,
 			gen.InboxEntryKindExpedite, gen.InboxEntryKindConversion, gen.InboxEntryKindKnowledgeSource,
-			gen.InboxEntryKindCheckFailing, gen.InboxEntryKindCheckLimit: // TestInbox_CheckEntries checks these
+			gen.InboxEntryKindCheckFailing, gen.InboxEntryKindCheckLimit, // TestInbox_CheckEntries checks these
+			gen.InboxEntryKindBudget: // and TestInbox_Budget these
 		}
 	}
 }
@@ -288,5 +292,124 @@ func expectLimitEntry(t *testing.T, l []gen.InboxEntry, day time.Time) {
 	if len(l) != 1 || l[0].Id != "check_limit:"+acmeID+":"+incidentsName+":"+day.Format(time.DateOnly) ||
 		l[0].TriggerCheck == nil || l[0].TriggerCheck.Trigger != incidentsName || !l[0].Since.Equal(day.Add(time.Hour+time.Minute)) {
 		t.Errorf("limit entries = %+v; want one for today, since the first check over the limit", l)
+	}
+}
+
+// A factory whose weekly budget is used up is one budget entry, measured against its current
+// version's cap and since when the engine recorded it (now before it has); a factory with room or
+// without a budget has none, and only the people who see the factory get it.
+func TestInbox_Budget(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.seed(t, stInbox, domain.StateQueued, t0)
+	h.spend(t, it.ID, t0.Add(-2*24*time.Hour), 30)
+
+	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 { // line has room, acme has no budget
+		t.Fatalf("budget entries with room = %+v; want none", got)
+	}
+
+	h.spend(t, it.ID, t0.Add(-time.Hour), 40) // $70 of $70
+	now := h.clock.Now()
+
+	runs, err := h.store.RunCostsSince(inOrg(t), lineID, domain.BudgetSince(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resumes, ok := domain.BudgetResumesAt(runs, 70, now)
+	if !ok || !resumes.Equal(t0.Add(5*24*time.Hour)) {
+		t.Fatalf("resumes at %v %v; want when the $30 run leaves the window", resumes, ok)
+	}
+
+	want := gen.InboxBudget{SpentUsd: 70, WeeklyUsd: 70, Since: now, ResumesAt: resumes}
+	expectBudgetEntry(t, "before the engine records it", budgetEntries(h.inbox(t, "")), want)
+
+	since := t0.Add(-30 * time.Minute)
+	if err := h.store.MarkBudgetExhausted(inOrg(t), lineID, since); err != nil {
+		t.Fatal(err)
+	}
+
+	want.Since = since
+	expectBudgetEntry(t, "once recorded", budgetEntries(h.inbox(t, "")), want)
+
+	h.as(acmeMember(domain.FactoryEditor)) // sees acme only
+
+	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 {
+		t.Errorf("budget entries of a member who cannot see line = %+v; want none", got)
+	}
+
+	h.seam.deny(nil)
+	h.raiseLineCap(t, 100)
+
+	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 {
+		t.Errorf("budget entries after the cap rose = %+v; want none", got)
+	}
+
+	if _, marked, err := h.store.BudgetExhaustedSince(inOrg(t), lineID); err != nil || !marked {
+		t.Fatalf("exhausted since marked %v (%v); want the row kept until the engine's tick", marked, err)
+	}
+}
+
+// budgetEntries are the inbox's budget entries.
+func budgetEntries(in gen.Inbox) []gen.InboxEntry {
+	var out []gen.InboxEntry
+
+	for _, e := range in.Entries {
+		if e.Kind == gen.InboxEntryKindBudget {
+			out = append(out, e)
+		}
+	}
+
+	return out
+}
+
+// expectBudgetEntry checks that got is line's one budget entry, about no item, with want.
+func expectBudgetEntry(t *testing.T, what string, got []gen.InboxEntry, want gen.InboxBudget) {
+	t.Helper()
+
+	if len(got) != 1 {
+		t.Fatalf("budget entries %s = %+v; want line's only", what, got)
+	}
+
+	e := got[0]
+	if e.Id != "budget:"+lineID || e.Factory.Id != lineID || e.Item != nil || e.Station != nil || !e.Since.Equal(want.Since) || e.Budget == nil {
+		t.Fatalf("budget entry %s = %+v; want budget:%s since %v, about no item or station", what, e, lineID, want.Since)
+	}
+
+	b := *e.Budget
+	if b.SpentUsd != want.SpentUsd || b.WeeklyUsd != want.WeeklyUsd || !b.Since.Equal(want.Since) || !b.ResumesAt.Equal(want.ResumesAt) {
+		t.Errorf("budget %s = %+v; want %+v", what, b, want)
+	}
+}
+
+// raiseLineCap publishes a version of line whose weekly budget is usd.
+func (h *harness) raiseLineCap(t *testing.T, usd int) {
+	t.Helper()
+
+	authors, ctx := h.authors(t)
+
+	view, _, err := authors.OpenDraft(ctx, lineID, authoring.OpenDraftRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := strings.Replace(line, "weeklyUsd: 70", "weeklyUsd: "+strconv.Itoa(usd), 1)
+
+	saved, err := authors.PutFile(ctx, lineID, authoring.FileWrite{Path: yamlFile, Content: []byte(doc)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// In the store, as the fixtures are published: line runs on the path before ADR 0037.
+	if _, err := h.defs.Publish(ctx, ports.Publish{
+		Factory: lineID, DraftRevision: saved.Revision, ExpectedCurrent: view.Current.ID, Name: lineSlug,
+		Message: "Raise the cap", By: domain.LocalUser, At: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.versions.Refresh(t.Context()); err != nil { // as the definitions cache does on a change
+		t.Fatal(err)
 	}
 }
