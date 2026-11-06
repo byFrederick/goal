@@ -12,8 +12,12 @@ import (
 // says which.
 var errRepositoryTestFailed = errors.New("the repository test did not pass")
 
+// errFactoryRequired is goal repository test without --factory: repository tests are per factory
+// (ADR 0041 decision 8).
+var errFactoryRequired = errors.New("goal repository test needs --factory <factory>: a repository is tested for the factory that uses it")
+
 // repositoryCommand runs goal repository test: whether a secret's token can read a repository and
-// push to it (ADR 0037 decision 14), asked by goald of the code host with the secret opened there.
+// push to it, asked by goald of the code host with the secret opened for a factory.
 func repositoryCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 || args[0] != "test" {
 		return errUsage
@@ -22,11 +26,10 @@ func repositoryCommand(ctx context.Context, out *printer, getenv func(string) st
 	return repositoryTest(ctx, out, getenv, args[1:])
 }
 
-// repositoryTest runs goal repository test <url> --secret <name> [--factory <factory> [--access
-// read|write]]: with --factory on the factory's route (ADR 0041 decision 8), for the access its
-// entry asks (write, the runtime.repository shorthand's, by default), and goald keeps the result;
-// without it on the organization's route. It exits 1 when a check failed or the host gave no
-// answer.
+// repositoryTest runs goal repository test <url> --secret <name> --factory <factory> [--access
+// read|write] on the factory's route (ADR 0041 decision 8), for the access its entry asks (write,
+// the runtime.repository shorthand's, by default), and goald keeps the result. Without --factory
+// it fails before it calls goald. It exits 1 when a check failed or the host gave no answer.
 func repositoryTest(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs := newFlags("repository test")
 	orgFlag := addOrgFlag(fs)
@@ -39,8 +42,12 @@ func repositoryTest(ctx context.Context, out *printer, getenv func(string) strin
 		return errUsage
 	}
 
-	if *access != "" && (*factoryRef == "" || !gen.FactoryRepositoryTestRequestAccess(*access).Valid()) {
+	if *access != "" && !gen.FactoryRepositoryTestRequestAccess(*access).Valid() {
 		return errUsage
+	}
+
+	if *factoryRef == "" {
+		return errFactoryRequired
 	}
 
 	c, err := connect(ctx, getenv, *orgFlag)
@@ -48,37 +55,9 @@ func repositoryTest(ctx context.Context, out *printer, getenv func(string) strin
 		return err
 	}
 
-	if *factoryRef != "" {
-		return factoryRepositoryTest(ctx, out, c, *factoryRef, gen.FactoryRepositoryTestRequest{
-			Url: pos[0], Secret: *secret, Access: gen.FactoryRepositoryTestRequestAccess(cmp.Or(*access, accessWrite)),
-		})
-	}
-
-	return orgRepositoryTest(ctx, out, c, pos[0], *secret)
-}
-
-// orgRepositoryTest tests url with secret on the organization's route and prints both checks.
-func orgRepositoryTest(ctx context.Context, out *printer, c orgClient, url, secret string) error {
-	res, err := c.TestRepositoryWithResponse(ctx, c.org, gen.RepositoryTestRequest{Url: url, Secret: secret})
-	if err != nil {
-		return apiDown(err)
-	}
-
-	if res.JSON200 == nil {
-		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
-	}
-
-	r := *res.JSON200
-
-	out.printf("%s with secret %s\n", url, secret)
-	out.printf("  %s read: %s\n", mark(r.Read.Ok), r.Read.Reason)
-	out.printf("  %s push: %s\n", mark(r.Push.Ok), r.Push.Reason)
-
-	if !r.Tested || !r.Read.Ok || !r.Push.Ok {
-		return errRepositoryTestFailed
-	}
-
-	return nil
+	return factoryRepositoryTest(ctx, out, c, *factoryRef, gen.FactoryRepositoryTestRequest{
+		Url: pos[0], Secret: *secret, Access: gen.FactoryRepositoryTestRequestAccess(cmp.Or(*access, accessWrite)),
+	})
 }
 
 // accessWrite is the access a factory repository test asks for without --access.

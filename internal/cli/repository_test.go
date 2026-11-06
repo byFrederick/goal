@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -16,37 +17,23 @@ const (
 	cmdRepository = "repository"
 )
 
-// goal repository test prints the read and push checks with the host's reasons, exits 1 when one
-// failed, and no output holds the token; an unknown secret is goald's 404.
+// goal repository test without --factory says --factory is required and exits non-zero before it
+// calls goald: the goald it would call is not listening. A command line without a url or secret
+// is a usage error.
 func TestRepositoryTestCommand(t *testing.T) {
 	t.Parallel()
 
-	g := newDefGoald(t)
+	var buf bytes.Buffer
 
-	if out, err := g.goalIn(t, cliRepoToken+"\n", cmdSecret, verbCreate, "repo-token", "--all-factories"); err != nil {
-		t.Fatalf("create = %q, %v", out, err)
+	env := testEnv(t, "http://127.0.0.1:1", map[string]string{envOrg: orgAcme})
+
+	err := run(t.Context(), []string{cmdRepository, cmdTest, cliRepo, flagSecret, repoSecret}, &printer{w: &buf}, env, nil)
+	if !errors.Is(err, errFactoryRequired) || !strings.Contains(err.Error(), flagFactory) {
+		t.Fatalf("repository test without --factory = %v; want errFactoryRequired naming --factory\n%s", err, buf.String())
 	}
 
-	g.grantApp(false)
-
-	out, err := g.goal(t, cmdRepository, "test", cliRepo, "--secret", "repo-token")
-	if !errors.Is(err, errRepositoryTestFailed) {
-		t.Fatalf("repository test = %v; want errRepositoryTestFailed\n%s", err, out)
-	}
-
-	expectOutput(t, "read only", out, []string{"✓ read: GitHub shows acme/app", "✗ push: GitHub grants the token no push"}, cliRepoToken)
-
-	g.grantApp(true)
-
-	expectOutput(t, "read and push", g.mustGoal(t, cmdRepository, "test", cliRepo, "--secret", "repo-token"),
-		[]string{"✓ read", "✓ push"}, cliRepoToken)
-
-	if _, err := g.goal(t, cmdRepository, "test", cliRepo, "--secret", "gone"); err == nil || !strings.Contains(err.Error(), "gone") {
-		t.Errorf("an unknown secret = %v; want goald's refusal naming it", err)
-	}
-
-	for _, args := range [][]string{{cmdRepository}, {cmdRepository, "test"}, {cmdRepository, "test", cliRepo}, {cmdRepository, "check", cliRepo}} {
-		if _, err := g.goal(t, args...); !errors.Is(err, errUsage) {
+	for _, args := range [][]string{{cmdRepository}, {cmdRepository, cmdTest}, {cmdRepository, cmdTest, cliRepo}, {cmdRepository, "check", cliRepo}} {
+		if err := run(t.Context(), args, &printer{w: &buf}, env, nil); !errors.Is(err, errUsage) {
 			t.Errorf("goal %v = %v; want a usage error", args, err)
 		}
 	}
@@ -152,9 +139,11 @@ func TestRepositoryTestCommand_Factory(t *testing.T) {
 		t.Errorf("an unknown factory = %v; want goald's not found", err)
 	}
 
-	for _, args := range [][]string{{flagFactory, "x", "--access", "admin"}, {"--access", "read"}} {
-		if _, err := g.testRepo(t, cliRepo, args...); !errors.Is(err, errUsage) {
-			t.Errorf("goal repository test %v = %v; want a usage error", args, err)
-		}
+	if _, err := g.testRepo(t, cliRepo, flagFactory, "x", "--access", "admin"); !errors.Is(err, errUsage) {
+		t.Errorf("an unknown access = %v; want a usage error", err)
+	}
+
+	if _, err := g.testRepo(t, cliRepo, "--access", "read"); !errors.Is(err, errFactoryRequired) {
+		t.Errorf("--access without --factory = %v; want errFactoryRequired", err)
 	}
 }

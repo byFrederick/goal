@@ -149,7 +149,7 @@ usage:
                                                   servers (default: default) from goald, with their
                                                   secrets opened there; the draft, or the current
                                                   version while no draft is open (exit 1 when one fails)
-  goal repository test <url> --secret <name> [--factory <factory> [--access read|write]]
+  goal repository test <url> --secret <name> --factory <factory> [--access read|write]
                                                   whether the secret's token can read the repository
                                                   and push to it (github.com and gitlab.com), asked of
                                                   the code host by goald with the secret opened there
