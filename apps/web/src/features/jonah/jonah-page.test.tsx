@@ -422,6 +422,21 @@ describe('Look for improvements now', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
   });
 
+  it('shows the button as busy, not disabled, while the request is pending', async () => {
+    vi.mocked(queueJonahReview).mockReturnValue(new Promise(() => {}));
+    renderOverview();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Look for improvements now' }));
+
+    const button = screen.getByRole('button', { name: 'Look for improvements now' });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(button);
+    expect(queueJonahReview).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['review-in-flight', 'A review is already running. Its proposals appear here.'],
     ['learning-budget-exhausted', "Jonah's budget for this week is used up, so no review was started."],
