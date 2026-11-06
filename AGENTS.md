@@ -14,7 +14,7 @@ apps/           auth/ (identity service, Hono + Better Auth, reached only throug
 cmd/            binaries: goal (CLI), goald (daemon), goal-egress (egress proxy); each main.go only wires its dependencies
 contracts/      contracts/api/ (openapi.yaml, permissions.yaml, sandbox.yaml: the only contract between goald and TypeScript), contracts/definitions/ (JSON Schemas for factory, eval and connection kind files), env.yaml (every environment variable a process reads, with env.schema.json); the API generators' tasks in Taskfile.yml
 db/             the database: db/migrations/ (forward-only SQL, goose), db/queries/ (SQL for sqlc), db/sqlc.yaml and Taskfile.yml (sqlc, migrate-check)
-deploy/         deploy/cloudflare/ (the control Worker's wrangler config and deploy scripts), deploy/terraform/ (the platform's own infrastructure, one root module), each with the Taskfile.yml of its tasks
+deploy/         deploy/cloudflare/ (the control Worker's wrangler config and deploy scripts), deploy/terraform/ (the platform's own infrastructure, one root module), each with the Taskfile.yml of its tasks; deploy/catalog/templates/ (the install's starter templates, ADR 0042)
 docs/           adr/ (one file per ADR; README.md, the index, is generated), design/ (MASTER.md: the UI's design system; design/screens/: every screen's picture and HTML, binding by ADR 0016), engineering/ (change-map.md is generated from one entry file per row), history/ (history/specs/ and history/jonah/: earlier plans), reference/ (glossary.md, and environment.md generated from the contracts)
 internal/       the Go packages: core/ (domain, ports, engine), adapters/ (grouped by the port each implements), api, gateway, cli (the goal CLI's commands, which cmd/goal only wires)… (docs/engineering/architecture.md)
 packages/       shared TypeScript: api-client/ (the API client and its generated types, its tasks in Taskfile.yml), config/ (the shared Biome config and the tsconfig bases for Node, the browser and Workers)
@@ -27,7 +27,7 @@ Root files: the entry docs, `Taskfile.yml` (the cross-cutting tasks, dotenv, env
 
 Other docs cite these as "AGENTS.md rule N", so the numbers stay fixed.
 
-1. **Config-driven.** No factory, station, agent or work-type name in code, and no definition committed: [architecture rule](.claude/rules/architecture.md), [ADR 0005](docs/adr/0005-factory-definitions-in-object-storage.md).
+1. **Config-driven.** No factory, station, agent or work-type name in code, and no definition committed except the install's starter templates in `deploy/catalog/templates/`: [architecture rule](.claude/rules/architecture.md), [ADR 0005](docs/adr/0005-factory-definitions-in-object-storage.md), [ADR 0042](docs/adr/0042-starter-templates-are-committed-product-content.md).
 2. **Factories are keyed by `metadata.id` (UUID)**, never by name: [architecture rule](.claude/rules/architecture.md).
 3. **PostgreSQL is the only database**, and the bucket holds only immutable content-addressed blobs: [architecture rule](.claude/rules/architecture.md), [database rule](.claude/rules/database.md).
 4. **Stateless processes.** Leases and idempotent steps recover any instance's work: [architecture rule](.claude/rules/architecture.md), [engine rule](.claude/rules/engine.md).
