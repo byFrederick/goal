@@ -195,7 +195,7 @@ describe('Step 3, Connect your code: the choices', () => {
     fireEvent.change(url, { target: { value: 'github.com/acme/app' } });
     fireEvent.blur(url);
     expect(await screen.findByText(/https address/)).toBeTruthy();
-    expect(next().disabled).toBe(true);
+    expect(next().getAttribute('aria-disabled')).toBe('true');
   });
 });
 
@@ -324,9 +324,66 @@ describe('Step 3, Connect your code: saving and testing', () => {
     await fill('https://github.com/acme/app', 'test-token');
     fireEvent.click(next());
     expect(await screen.findByText(/Can read but not push\. The token has no write access/)).toBeTruthy();
-    expect(next().disabled).toBe(true);
+    expect(next().getAttribute('aria-disabled')).toBe('true');
     fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'another-token' } });
-    expect(next().disabled).toBe(false);
+    expect(next().getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('keeps focus on Continue when the test answers, and has the status region in the page before', async () => {
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    expect(screen.getByRole('status')).toBeTruthy();
+    next().focus();
+    fireEvent.click(next());
+    expect(await screen.findByText('acme/app: Can read and push')).toBeTruthy();
+    expect(document.activeElement).toBe(next());
+    expect(next().hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('status').textContent).toContain('Can read and push');
+  });
+
+  it('keeps focus on Continue after a token that cannot push, and does not submit again', async () => {
+    vi.mocked(testFactoryRepository).mockImplementation(async (_o, _f, req) =>
+      answer(req.url, { ok: false, summary: 'Can read but not push.', push: { ok: false, reason: 'No write.' } }),
+    );
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    next().focus();
+    fireEvent.click(next());
+    expect(await screen.findByText(/Can read but not push/)).toBeTruthy();
+    expect(document.activeElement).toBe(next());
+    expect(next().hasAttribute('disabled')).toBe(false);
+    fireEvent.click(next());
+    expect(testFactoryRepository).toHaveBeenCalledTimes(1);
+    expect(createSecret).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps focus on Continue after a Read only result', async () => {
+    templateCode = 'read';
+    renderStep();
+    fireEvent.click(await radio(/^Read only/));
+    await fill('https://github.com/acme/app', 'test-token');
+    next().focus();
+    fireEvent.click(next());
+    expect(await screen.findByText('acme/app: Can read and push')).toBeTruthy();
+    expect(document.activeElement).toBe(next());
+    expect(next().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('starts on the access in the URL when the template allows it, and passes it on to the next step', async () => {
+    templateCode = 'none';
+    const router = renderStep(`/o/acme/get-started/code?factory=${factory}&template=software&access=read`);
+    expect((await radio(/^Read only/)).checked).toBe(true);
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+    expect(await screen.findByText(/acme\/app:/)).toBeTruthy();
+    fireEvent.click(next());
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/line'));
+    expect(router.state.location.search).toMatchObject({ access: 'read' });
+  });
+
+  it('falls back to the template’s start when the URL’s access is not allowed', async () => {
+    renderStep(`/o/acme/get-started/code?factory=${factory}&template=software&access=none`);
+    expect((await radio(/^Read and write/)).checked).toBe(true);
   });
 
   it('shows the warning of a read entry whose token can also push', async () => {

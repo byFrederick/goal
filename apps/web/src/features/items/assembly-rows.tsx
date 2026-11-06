@@ -13,6 +13,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { SegmentMeter } from '../../ui/segment-meter';
 import { StatusIcon } from '../../ui/status-icon';
+import { touchLink } from '../../ui/touch-target';
 
 type PartOf = NonNullable<ItemCard['assembly']>;
 
@@ -161,7 +162,10 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
-          className="line-clamp-2 min-h-6 w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+          className={cn(
+            touchLink,
+            'line-clamp-2 min-h-6 w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap',
+          )}
         >
           {item.title}
         </Link>

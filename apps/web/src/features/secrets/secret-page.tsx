@@ -13,6 +13,7 @@ import { formatDay } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
+import { touchLink } from '../../ui/touch-target';
 import { DeleteSecretDialog, ReplaceValueDialog } from './secret-dialogs';
 import { SettingsCard } from './secret-settings';
 import { activityText, deleteReason, lastUsedText, placesCount, useKindLabels } from './words';
@@ -128,7 +129,7 @@ function UsesCard({ secret }: { secret: Secret }) {
             >
               <span className="min-w-0 break-words text-body font-medium">
                 {u.kind === 'knowledge_source' ? (
-                  <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: u.name }}>
+                  <Link to="/o/$org/knowledge/$source" params={{ org: org.slug, source: u.name }} className={touchLink}>
                     {u.name}
                   </Link>
                 ) : (
