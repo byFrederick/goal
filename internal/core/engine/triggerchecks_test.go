@@ -276,7 +276,7 @@ func TestChecks_FailedAnswerRecorded(t *testing.T) {
 func checkRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindCheck, Bundle: domain.TaskKindCheck, Trigger: incidents,
-		Agent: agWorker, Model: modelOpus, ModelConnection: connModel, Timeout: 5 * time.Minute,
+		Agent: agWorker, Model: modelOpus, ModelKey: "{{" + secModel + "}}", Timeout: 5 * time.Minute,
 	}
 }
 

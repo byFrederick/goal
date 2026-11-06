@@ -443,38 +443,12 @@ func TestDecideToolApproval_AlwaysAllowCreatesOneStandingRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := h.connections.StandingRules(inOrg(t), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(rules) != 1 || rules[0].Connection != connTracker || rules[0].Tool != askTool || rules[0].Agent != agWorker ||
-		rules[0].ItemID != it.ID || !rules[0].Active() || rules[0].CreatedBy.Ref() != human.Ref() {
-		t.Fatalf("standing rules %+v; want one active rule for the call's connection, tool and agent role", rules)
-	}
-
 	grants := h.eventsOf(it.ID, domain.EventToolApprovalGranted)
 	if len(grants) != 1 || grants[0].Data[domain.KeyAlwaysAllow] != true {
 		t.Errorf("grants %+v; want one with always_allow", grants)
 	}
 
-	h.expectRuleLiftsTheAsk(t, rules)
-}
-
-// expectRuleLiftsTheAsk checks that rules lift askTool's ask for the agent role and leave offTool
-// off.
-func (h *harness) expectRuleLiftsTheAsk(t *testing.T, rules []domain.StandingRule) {
-	t.Helper()
-
-	conn, err := h.connections.Get(inOrg(t), connTracker)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	modes := domain.EffectiveToolModes(conn.ToolModes, rules, conn.ID, agWorker)
-	if _, asks := modes.Modes[askTool]; asks || modes.Modes[offTool] != domain.ToolModeOff {
-		t.Errorf("effective modes %+v; want %s allowed and %s off", modes, askTool, offTool)
-	}
+	h.expectServerRule(t, it.ID, domain.DefaultEnvironment)
 }
 
 // On secrets, Always allow keys the rule by the item's factory, the agent's environment ("" is the

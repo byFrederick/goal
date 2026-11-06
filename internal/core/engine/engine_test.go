@@ -167,19 +167,21 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	return h
 }
 
-// addModelKey creates the secret lineOf's model key names in org, valued modelKey.
+// addModelKey creates in org the secrets lineOf's model key, repoLine's repository token and
+// mergeLine's entry tokens name, valued modelKey, codeToken and the github and gitlab tokens.
 func (h *harness) addModelKey(t *testing.T, org domain.OrgID) {
 	t.Helper()
 
-	n := domain.NewSecret{Name: secModel, Value: modelKey, Scope: domain.SecretScope{All: true}}
-	if _, err := h.orgSecrets.Create(domain.WithOrg(t.Context(), org), n, domain.LocalUser); err != nil {
-		t.Fatal(err)
+	for name, value := range map[string]string{secModel: modelKey, secRepo: codeToken, secGitHubEntry: "github-token", secGitLabEntry: "gitlab-token"} {
+		n := domain.NewSecret{Name: name, Value: value, Scope: domain.SecretScope{All: true}}
+		if _, err := h.orgSecrets.Create(domain.WithOrg(t.Context(), org), n, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
 // newOrg creates an organization and returns its id. Every organization after the first gets
-// the model key its lines run on and the model connection (the first gets all of
-// newConnections').
+// the model key its lines run on (the first gets it in newHarness, with newConnections').
 func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
 	t.Helper()
 
@@ -190,13 +192,6 @@ func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
 
 	if h.orgSecrets != nil {
 		h.addModelKey(t, o.ID)
-	}
-
-	if h.connections != nil {
-		model := domain.NewConnection{Name: connModel, Kind: "model-key", Secrets: map[string]string{"key": modelKey}}
-		if _, err := h.connections.Create(domain.WithOrg(t.Context(), o.ID), model, domain.LocalUser); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	return o.ID

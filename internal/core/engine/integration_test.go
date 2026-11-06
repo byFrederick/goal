@@ -26,7 +26,7 @@ const (
 // with a repository and flow.assemblies.integration in mode, refresh eachPart, and minParts.
 func integrationLine(mode domain.IntegrationMode, minParts int) domain.Line {
 	l := mergeLine(domain.ActionMerge)
-	l.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit}
+	l.Runtime.Repository = domain.Repository{URL: repoURL, Token: "{{" + secRepo + "}}"}
 	l.Flow.Assemblies.Integration = domain.IntegrationPolicy{Mode: mode, Refresh: domain.RefreshEachPart, MinParts: minParts}
 
 	return l
@@ -558,7 +558,7 @@ func TestRun_LandingNoteNamesTheHostsOpenCommand(t *testing.T) {
 		{
 			name: "a reader", kind: domain.CodeHostGitHub, code: domain.CodeRead,
 			want: []string{"You only read code: push nothing and open no pull request."},
-			none: []string{gh, glab, "landing the whole assembly", "push to"},
+			none: []string{gh, glab, "landing the whole assembly", "push to `" + integrationBranch + "`"},
 		},
 	}
 

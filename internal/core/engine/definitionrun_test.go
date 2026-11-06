@@ -32,7 +32,7 @@ const definitionOutput = `{"summary":"Gave review a 4th reviewer","changed":[{"p
 // draft request's box may get.
 func definitionLine() domain.Line {
 	l := lineOf(agentStation(stWork, agReviewer, 1, 1))
-	l.Runtime.Repository = domain.Repository{URL: "https://" + gitHost + "/acme/api.git", Connection: connGit}
+	l.Runtime.Repository = domain.Repository{URL: "https://" + gitHost + "/acme/api.git", Token: "{{" + secRepo + "}}"}
 	l.Connections = []string{connTracker}
 
 	for i := range l.Agents {

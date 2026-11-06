@@ -29,7 +29,7 @@ const agJonah = "jonah"
 func jonahRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindJonah, Agent: agJonah,
-		Model: "claude-opus-5-5", Brief: "Review the sent-back runs.", ModelConnection: connModel,
+		Model: "claude-opus-5-5", Brief: "Review the sent-back runs.", ModelKey: "{{" + secModel + "}}",
 		Bundle: domain.TaskKindJonah, WindowStart: t0.Add(-24 * time.Hour), WindowEnd: t0.Add(-time.Hour + 500*time.Millisecond),
 		Manual: true,
 	}
@@ -48,9 +48,6 @@ func TestRunTask_Jonah(t *testing.T) {
 		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(output), CostUSD: 0.25, Turns: 2}
 	})
 	h.store.AddFactory(testOrg, factoryID) // the factory exists before any item does
-	h.addCredential(t, domain.NewCredential{
-		Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue,
-	})
 
 	res, err := h.e.RunTask(t.Context(), jonahRequest())
 	if err != nil {
@@ -153,7 +150,7 @@ func TestRunTask_RefusesWhatAJonahRunMayNotHave(t *testing.T) {
 		"a lease":                         func(r *domain.RunRequest) { r.Lease = &domain.Lease{} },
 		"a repository":                    func(r *domain.RunRequest) { r.Repository = domain.Repository{URL: repoURL, Connection: connGit} },
 		"a connection":                    func(r *domain.RunRequest) { r.Connections = []string{connTracker} },
-		"no model":                        func(r *domain.RunRequest) { r.ModelConnection = "" },
+		"no model":                        func(r *domain.RunRequest) { r.ModelConnection, r.ModelKey = "", "" },
 		"a jonah bundle without a window": func(r *domain.RunRequest) { r.WindowStart, r.WindowEnd = time.Time{}, time.Time{} },
 		"a window ending at its start":    func(r *domain.RunRequest) { r.WindowEnd = r.WindowStart },
 		"a window on another bundle":      func(r *domain.RunRequest) { r.Bundle = domain.TaskKindTry },
@@ -190,25 +187,25 @@ func expectNoClone(t *testing.T, prepare porttest.ExecCall) {
 	}
 
 	for name, v := range prepare.Env {
-		if name == envCodeToken || strings.Contains(v, codeToken) {
+		if name == domain.RepositoryTokenEnv || strings.Contains(v, codeToken) {
 			t.Errorf("prepare got %s, the repository's git login; a Jonah run clones no repository", name)
 		}
 	}
 }
 
-// expectOnlyModelEnv fails the test unless the agent's env has the model connection's key, no
-// secret of another connection or credential, and the request's brief alone as its feedback.
+// expectOnlyModelEnv fails the test unless the agent's env has the model key, no secret of a
+// connection, and the request's brief alone as its feedback.
 func expectOnlyModelEnv(t *testing.T, env map[string]string) {
 	t.Helper()
 
-	if env[envModelKey] != modelKey {
-		t.Errorf("the agent's %s = %q; want the model connection's key", envModelKey, env[envModelKey])
+	if env[domain.EnvAnthropicAPIKey] != modelKey {
+		t.Errorf("the agent's %s = %q; want the model key", domain.EnvAnthropicAPIKey, env[domain.EnvAnthropicAPIKey])
 	}
 
-	others := []string{codeToken, trackerToken, otherToken, cloudKey, deployKeyValue}
+	others := []string{codeToken, trackerToken, otherToken}
 	for name, v := range env {
 		if slices.ContainsFunc(others, func(secret string) bool { return strings.Contains(v, secret) }) {
-			t.Errorf("the agent's %s holds a secret of a connection or credential other than the model's", name)
+			t.Errorf("the agent's %s holds a secret of a connection", name)
 		}
 	}
 
@@ -242,8 +239,8 @@ func (h *harness) expectJonahRun(t *testing.T, id domain.RunID) {
 func tryRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindTry, Station: stWork, Agent: agWorker,
-		Model: modelOpus, ModelConnection: connModel, Bundle: domain.TaskKindTry, TryOf: "try-1",
-		Commit: strings.Repeat("c", 40), Repository: domain.Repository{URL: repoURL, Connection: connGit},
+		Model: modelOpus, ModelKey: "{{" + secModel + "}}", Bundle: domain.TaskKindTry, TryOf: "try-1",
+		Commit: strings.Repeat("c", 40), Repository: domain.Repository{URL: repoURL, Token: "{{" + secRepo + "}}"},
 	}
 }
 
@@ -388,7 +385,7 @@ func (h *harness) expectTryChecks(t *testing.T, commands ...string) {
 				c.Argv, c.Dir, keys(c.Env), c.Timeout, commands[i])
 		}
 
-		for _, name := range []string{envModelKey, envTaskToken, envCodeToken} {
+		for _, name := range []string{domain.EnvAnthropicAPIKey, envTaskToken, domain.RepositoryTokenEnv} {
 			if _, ok := c.Env[name]; ok {
 				t.Errorf("check %q got %s", c.Argv, name)
 			}
@@ -433,19 +430,19 @@ func TestRunTask_TryRefused(t *testing.T) {
 	}
 }
 
-// expectNoSecretButModel fails the test unless the agent's env has the model connection's key and
-// no secret of another connection or credential.
+// expectNoSecretButModel fails the test unless the agent's env has the model key and no secret of
+// a connection.
 func expectNoSecretButModel(t *testing.T, env map[string]string) {
 	t.Helper()
 
-	if env[envModelKey] != modelKey {
-		t.Errorf("the agent's %s = %q; want the model connection's key", envModelKey, env[envModelKey])
+	if env[domain.EnvAnthropicAPIKey] != modelKey {
+		t.Errorf("the agent's %s = %q; want the model key", domain.EnvAnthropicAPIKey, env[domain.EnvAnthropicAPIKey])
 	}
 
 	for name, v := range env {
-		for _, secret := range []string{codeToken, trackerToken, otherToken, cloudKey, deployKeyValue} {
+		for _, secret := range []string{codeToken, trackerToken, otherToken} {
 			if strings.Contains(v, secret) {
-				t.Errorf("the agent's %s holds a secret of a connection or credential other than the model's", name)
+				t.Errorf("the agent's %s holds a secret of a connection", name)
 			}
 		}
 	}
@@ -457,7 +454,7 @@ func expectNoSecretButModel(t *testing.T, env map[string]string) {
 func gradeRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindTry, Station: stWork, Agent: agWorker,
-		Model: modelOpus, ModelConnection: connModel, Bundle: domain.TaskKindGrade, TryOf: "try-2", GradeOf: domain.GradeOriginal,
+		Model: modelOpus, ModelKey: "{{" + secModel + "}}", Bundle: domain.TaskKindGrade, TryOf: "try-2", GradeOf: domain.GradeOriginal,
 	}
 }
 
@@ -474,7 +471,6 @@ func TestRunTask_Grade(t *testing.T) {
 		return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(answer), CostUSD: 0.5, Turns: 1}
 	})
 	h.store.AddFactory(testOrg, factoryID)
-	h.addCredential(t, domain.NewCredential{Name: credDeploy, Scope: domain.CredentialScope{All: true}, Value: deployKeyValue})
 
 	res, err := h.e.RunTask(t.Context(), gradeRequest())
 	if err != nil {
@@ -505,7 +501,7 @@ func (h *harness) expectGradeBox(t *testing.T) {
 	}
 
 	for name, v := range prepares[0].Env {
-		if name == envCodeToken || strings.Contains(v, codeToken) {
+		if name == domain.RepositoryTokenEnv || strings.Contains(v, codeToken) {
 			t.Errorf("prepare got %s, the repository's git login; a grade clones no repository", name)
 		}
 	}
@@ -549,7 +545,7 @@ func TestRunTask_GradeOnSecrets(t *testing.T) {
 	h.addSecrets(t)
 
 	req := gradeRequest()
-	req.ModelConnection, req.ModelKey = "", "{{"+secClaude+"}}"
+	req.ModelKey = "{{" + secClaude + "}}"
 
 	if _, err := h.e.RunTask(t.Context(), req); err != nil {
 		t.Fatalf("RunTask: %v", err)

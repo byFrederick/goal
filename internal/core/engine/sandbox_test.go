@@ -17,10 +17,10 @@ import (
 
 const repoURL = "https://" + gitHost + "/acme/app.git"
 
-// repoLine is a one-station line whose runs clone repoURL with the repository connection connGit.
+// repoLine is a one-station line whose runs clone repoURL with the repository token {{repo-token}}.
 func repoLine() domain.Line {
 	line := lineOf(agentStation(stWork, agWorker, 1, 1))
-	line.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit}
+	line.Runtime.Repository = domain.Repository{URL: repoURL, Token: "{{" + secRepo + "}}"}
 
 	return line
 }
@@ -59,7 +59,7 @@ func TestRun_CreatesTheRunsSandbox(t *testing.T) {
 	t.Parallel()
 
 	line := repoLine()
-	line.Runtime.Size = domain.SandboxLarge
+	line.Environments[0].Size = domain.SandboxLarge
 	h := newHarness(t, line, porttest.Succeed(`{}`))
 	it := h.submit(t, domain.NewItem{})
 
@@ -119,22 +119,22 @@ func TestRun_EachExecGetsItsOwnEnvironment(t *testing.T) {
 	run := h.runs(t, testOrg, it.ID)[0].ID
 
 	prepare := prepares[0]
-	if !slices.Equal(prepare.Argv, []string{"goal-agent", "prepare"}) || prepare.Env[envCodeToken] != codeToken ||
+	if !slices.Equal(prepare.Argv, []string{"goal-agent", "prepare"}) || prepare.Env[domain.RepositoryTokenEnv] != codeToken ||
 		prepare.Env["GOAL_GATEWAY_URL"] != gatewayURL || h.claims(t, prepare.Env["GOAL_GATEWAY_TOKEN"]).RunID != run {
 		t.Errorf("prepare = %q with env %v; want goal-agent prepare with the repository token and the run's task token", prepare.Argv, keys(prepare.Env))
 	}
 
-	if _, ok := prepare.Env[envModelKey]; ok {
+	if _, ok := prepare.Env[domain.EnvAnthropicAPIKey]; ok {
 		t.Error("prepare got the model's access")
 	}
 
 	agent := runs[0]
-	if !slices.Equal(agent.Argv, []string{"goal-agent", "run"}) || agent.Env[envModelKey] != modelKey ||
+	if !slices.Equal(agent.Argv, []string{"goal-agent", "run"}) || agent.Env[domain.EnvAnthropicAPIKey] != modelKey ||
 		h.claims(t, agent.Env["GOAL_GATEWAY_TOKEN"]).RunID != run {
 		t.Errorf("agent = %q with env %v; want goal-agent run with the model's access and the run's task token", agent.Argv, keys(agent.Env))
 	}
 
-	if _, ok := agent.Env[envCodeToken]; ok {
+	if _, ok := agent.Env[domain.RepositoryTokenEnv]; ok {
 		t.Error("the agent got the repository token")
 	}
 }
@@ -175,7 +175,7 @@ func TestRun_AgentHearsWhatItsWorkspaceHolds(t *testing.T) {
 				}
 			}
 
-			if strings.Contains(feedback, codeToken) || strings.Contains(feedback, envCodeToken) {
+			if strings.Contains(feedback, codeToken) || strings.Contains(feedback, domain.RepositoryTokenEnv) {
 				t.Errorf("feedback %q names the repository credential", feedback)
 			}
 		})
@@ -279,7 +279,7 @@ func TestRun_NoFeedbackWhenThereIsNothingToAdd(t *testing.T) {
 		t.Errorf("GOAL_FEEDBACK = %q, want it unset", feedback)
 	}
 
-	if _, ok := h.worker.Prepares()[0].Env[envCodeToken]; ok {
+	if _, ok := h.worker.Prepares()[0].Env[domain.RepositoryTokenEnv]; ok {
 		t.Error("prepare got a repository token for a factory without a repository")
 	}
 }
@@ -457,7 +457,7 @@ func TestRun_RelaysAgentEventsScrubbed(t *testing.T) {
 		_, _ = io.WriteString(stdout, "go: downloading example.com/mod v1.0.0\n")
 		_, _ = io.WriteString(stdout, `{"type":"message","text":"`+strings.Repeat("x", 17<<20)+`"}`+"\n") // over the line limit: dropped
 		_, _ = io.WriteString(stdout, `{"type":"tool_use","at":"2026-10-23T09:00:01Z","id":"t1","tool":"Bash","input":"echo `+
-			run.Env[envModelKey]+`"}`+"\n")
+			run.Env[domain.EnvAnthropicAPIKey]+`"}`+"\n")
 		_, _ = io.WriteString(stdout, `{"type":"finished","status":"failed","permission_denials":[{"tool":"Bash","id":"t2"}]}`+"\n")
 
 		return domain.RunResult{Status: domain.RunFailed, Error: "gave up with " + run.Env["GOAL_GATEWAY_TOKEN"]}
