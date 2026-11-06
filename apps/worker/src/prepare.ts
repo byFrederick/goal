@@ -57,13 +57,6 @@ export interface Prepared {
   branch?: string;
   /** Whether that branch already existed on the remote: earlier runs of the item pushed it. */
   branch_existed?: boolean;
-  /**
-   * The branch's commit right after checkout, before it was brought up to date with its base;
-   * absent without a repository or when git cannot name it.
-   */
-  branch_head?: string;
-  /** The base's commit the branch would be brought up to date with (origin/<base>, or origin/HEAD); absent likewise. */
-  base_head?: string;
   /** How the existing branch was brought up to date with its base; absent for a new one. */
   fresh_base?: FreshBase;
   /** The files that conflicted doing so, sorted; the rebase or merge was aborted. */
@@ -78,8 +71,8 @@ export interface Prepared {
   /** How many knowledge snapshots were unpacked under /knowledge; absent for none. */
   knowledge?: number;
   /**
-   * Each repository prepare cloned from the bundle's repositories (ADR 0041 decision 5): its URL,
-   * the base's commit and the branch's head after checkout; absent for a bundle without them.
+   * Each repository prepare cloned (ADR 0041 decision 5): its URL, the base's commit and the
+   * branch's head right after checkout, before it was brought up to date; absent without a repository.
    */
   repositories?: { repo: string; base_commit?: string; branch_head?: string }[];
 }
@@ -169,27 +162,39 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   let baseBranch: string | undefined;
   const cloned: ClonedRepository[] = [];
   if (code) {
-    out.repositories = [];
     for (const c of code) {
       const entry: ClonedRepository = { ...c };
       if (c.path === paths.workspace) {
-        baseBranch = await cloneWorkspace(deps, { ...c, base: repo?.base, fresh_base: repo?.fresh_base }, out);
-        if (out.base_head) entry.base_commit = out.base_head;
-        if (out.branch_head) entry.branch_head = out.branch_head;
+        const first = await cloneWorkspace(deps, { ...c, base: repo?.base, fresh_base: repo?.fresh_base }, out);
+        baseBranch = first.conflictsWith;
+        if (first.base_head) entry.base_commit = first.base_head;
+        if (first.branch_head) entry.branch_head = first.branch_head;
       } else {
         Object.assign(entry, await cloneOther(deps, c));
       }
       cloned.push(entry);
-      out.repositories.push({
-        repo: c.url,
-        ...(entry.base_commit ? { base_commit: entry.base_commit } : {}),
-        ...(entry.branch_head ? { branch_head: entry.branch_head } : {}),
-      });
     }
   } else if (repo?.commit) {
-    await checkoutCommit(deps, repo, out);
+    // A try's repository is read-only: its agent gets no git login (ADR 0039 decision 9).
+    cloned.push(await checkoutCommit(deps, repo, out));
   } else if (repo) {
-    baseBranch = await cloneWorkspace(deps, repo, out);
+    const first = await cloneWorkspace(deps, repo, out);
+    baseBranch = first.conflictsWith;
+    cloned.push({
+      url: repo.url,
+      path: paths.workspace,
+      branch: repo.branch,
+      write: true,
+      ...(first.base_head ? { base_commit: first.base_head } : {}),
+      ...(first.branch_head ? { branch_head: first.branch_head } : {}),
+    });
+  }
+  if (code || cloned.length > 0) {
+    out.repositories = cloned.map((e) => ({
+      repo: e.url,
+      ...(e.base_commit ? { base_commit: e.base_commit } : {}),
+      ...(e.branch_head ? { branch_head: e.branch_head } : {}),
+    }));
   }
   // A try's agent gets no git login (ADR 0039 decision 9): the clone was the logins' only use.
   if (repo?.commit) await dropLogins(deps, credentials);
@@ -202,7 +207,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     ...(out.conflicts ? { base_conflicts: out.conflicts } : {}),
     ...(baseBranch ? { base_branch: baseBranch } : {}),
     ...(out.branch ? { branch: out.branch } : {}),
-    ...(code ? { repositories: cloned } : {}),
+    ...(code || cloned.length > 0 ? { repositories: cloned } : {}),
   };
   await put(join(deps.dirs.goal, 'spec.json'), JSON.stringify(spec));
 
@@ -221,13 +226,14 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
  * Clones the first repository into /workspace on the item's branch: the remote one when it exists,
  * otherwise new from its base (created from the default branch when missing), brings an existing
  * branch up to date with that base and installs the repository's own tools. It sets out's branch,
- * heads, fresh_base and conflicts, and returns the base the conflicts are with.
+ * fresh_base and conflicts, and returns the base the conflicts are with and the heads before the
+ * rebase or merge, which fill the repository's entry.
  */
 async function cloneWorkspace(
   deps: PrepareDeps,
   repo: { url: string; branch: string; base?: string | undefined; fresh_base?: FreshBase | undefined },
   out: Prepared,
-): Promise<string | undefined> {
+): Promise<{ conflictsWith: string | undefined; base_head?: string; branch_head?: string }> {
   const ws = deps.dirs.workspace;
   // An empty base is the default branch, as an absent one.
   const base = repo.base || undefined;
@@ -243,8 +249,6 @@ async function cloneWorkspace(
   // The heads before the rebase or merge, for a later try to start where this run did (ADR 0039).
   const branchHead = await commitOf(deps, ws, 'HEAD');
   const baseHead = await commitOf(deps, ws, start[0] ?? 'origin/HEAD');
-  if (branchHead) out.branch_head = branchHead;
-  if (baseHead) out.base_head = baseHead;
   let conflictsWith: string | undefined;
   if (existed) {
     out.fresh_base = repo.fresh_base ?? 'rebase';
@@ -258,7 +262,11 @@ async function cloneWorkspace(
   await must(deps, 'mise', ['install', '--yes'], ws);
   out.branch = repo.branch;
   out.branch_existed = existed;
-  return conflictsWith;
+  return {
+    conflictsWith,
+    ...(baseHead ? { base_head: baseHead } : {}),
+    ...(branchHead ? { branch_head: branchHead } : {}),
+  };
 }
 
 /**
@@ -495,7 +503,7 @@ async function checkoutCommit(
   deps: PrepareDeps,
   repo: NonNullable<Bundle['repository']>,
   out: Prepared,
-): Promise<void> {
+): Promise<ClonedRepository> {
   const ws = deps.dirs.workspace;
   const commit = repo.commit as string;
   await must(deps, 'git', ['check-ref-format', '--branch', repo.branch]);
@@ -506,9 +514,7 @@ async function checkoutCommit(
   if (fetched !== 0)
     throw new Error(`commit ${wanted.join(' or ')} is gone from the remote: git fetch exited ${fetched}`);
   await must(deps, 'git', ['checkout', '--quiet', '-B', repo.branch, commit], ws);
-  out.branch_head = commit;
   if (repo.base_commit) {
-    out.base_head = repo.base_commit;
     const behind =
       (await deps.exec('git', ['merge-base', '--is-ancestor', repo.base_commit, 'HEAD'], { cwd: ws })) !== 0;
     if (behind) {
@@ -521,6 +527,14 @@ async function checkoutCommit(
   await must(deps, 'mise', ['install', '--yes'], ws);
   out.branch = repo.branch;
   out.branch_existed = true;
+  return {
+    url: repo.url,
+    path: paths.workspace,
+    branch: repo.branch,
+    write: false,
+    ...(repo.base_commit ? { base_commit: repo.base_commit } : {}),
+    branch_head: commit,
+  };
 }
 
 /**
