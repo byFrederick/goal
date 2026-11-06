@@ -111,16 +111,16 @@ const columns = ['Ref', 'Title', 'Repositories', 'Type', 'Lane', 'Station', 'Sta
 /**
  * From lg the table lays out in fixed columns, so it always fits its box; Title takes what is left.
  * Ref is wide enough for an assembly row's chevron beside it. Type, Lane, Agent and Age are columns
- * only while the table's box is 1150 px wide (`minorColumn`): the widths below sum to 832 px, which
- * leaves Title about 318 px. In a narrower box they sit under the title.
+ * only while the table's box is 1150 px wide (`minorColumn`): the widths below sum to 800 px, which
+ * leaves Title about 350 px. In a narrower box they sit under the title.
  */
 const columnWidth: Partial<Record<(typeof columns)[number], string>> = {
   Ref: 'lg:w-24',
   Repositories: '2xl:w-48',
   Type: 'lg:w-20',
   Lane: 'lg:w-24',
-  Station: 'lg:w-28',
-  State: 'lg:w-36',
+  Station: 'lg:w-24',
+  State: 'lg:w-32',
   Agent: 'lg:w-28',
   Age: 'lg:w-16',
   Cost: 'lg:w-20',

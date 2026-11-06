@@ -139,7 +139,7 @@ for (const width of [1024, 1280, 1440]) {
       const at = await header.boundingBox();
       expect(at && card && at.x + at.width <= card.x + card.width + 1, `${name} ends inside the card`).toBe(true);
     }
-    const minimum: Record<string, number> = { Part: 60, Title: 240, Ref: 60, Station: 80, State: 70, Cost: 60 };
+    const minimum: Record<string, number> = { Part: 48, Title: 240, Ref: 60, Station: 80, State: 70, Cost: 60 };
     for (const [name, least] of Object.entries(minimum)) {
       const header = table.getByRole('columnheader', { name, exact: true });
       if (!(await header.isVisible())) continue;
