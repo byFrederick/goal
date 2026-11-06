@@ -120,6 +120,7 @@ describe('WaysInCard', () => {
 
     const button = await screen.findByRole('button', { name: /New item/ });
     expect(button.className).toContain('max-md:min-h-11');
+    expect(button.className).not.toContain('gap-x-2');
     expect(button.hasAttribute('aria-label')).toBe(false);
     expect(button.querySelector('span')?.className).toContain('pointer-coarse:hidden');
   });

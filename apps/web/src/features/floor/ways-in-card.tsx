@@ -90,13 +90,11 @@ export function WaysInCard() {
               <NewItemButton
                 factory={factory}
                 trigger={
-                  <button
-                    type="button"
-                    className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-ink max-md:min-h-11"
-                  >
+                  <button type="button" className="inline-flex items-center text-ink max-md:min-h-11">
                     New item
                     <span className="inline-flex items-center gap-x-2 pointer-coarse:hidden">
-                      , or press <Chip>C</Chip>
+                      <span>, or press</span>
+                      <Chip>C</Chip>
                     </span>
                   </button>
                 }
