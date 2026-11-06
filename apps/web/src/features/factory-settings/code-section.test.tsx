@@ -172,6 +172,10 @@ describe('Code section', () => {
       'Not available yet',
     );
     expect(within(region).getByRole('button', { name: 'About Secrets and webhooks' })).toBeTruthy();
+    // On a phone each ⓘ is 44 px and a Remove button takes the 44 px minimum of a small button.
+    for (const tip of within(region).getAllByRole('button', { name: /^About / })) {
+      expect(tip.className).toContain('max-md:size-11');
+    }
   });
 
   it('Add a repository opens the editor with a new entry', async () => {
