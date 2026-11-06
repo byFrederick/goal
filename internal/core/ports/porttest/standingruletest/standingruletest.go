@@ -1,8 +1,7 @@
 // Package standingruletest is the conformance suite for ports.StandingRules (ADR 0031 decision
 // 7, ADR 0037 decision 18). The in-memory fake in porttest and the PostgreSQL adapter run it, so
 // tests on the fake hold for the database's rules: one active rule per factory, environment,
-// server, tool and agent, revoked once, every change audited, and organizations kept apart. The
-// rules keyed by connection are tested with the connections, in connectiontest.
+// server, tool and agent, revoked once, every change audited, and organizations kept apart.
 package standingruletest
 
 import (

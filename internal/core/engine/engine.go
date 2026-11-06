@@ -15,9 +15,9 @@
 // check runs in the same sandbox, and the station's checks are commands in it whose exit codes
 // come from the runtime. The sandbox is deleted when the claim ends, however it ends. Nothing
 // runs while nothing is claimable: a station's slots are its sandboxes, from zero to its agent
-// count (capped by WIP). Each run gets its organization's connections (connections.go), each
-// command only its part: prepare the repository's git login, the agent the model's access and its
-// own connections' env, a check nothing; their secret values are scrubbed from what runs report.
+// count (capped by WIP). Each run gets what its version's secrets give it (environment.go),
+// each command only its part: prepare the repository tokens, the agent the model key and its
+// environment, a check nothing; the secret values are scrubbed from what runs report.
 //
 // Organizations. Every line belongs to one organization, and every store call the engine makes
 // for a line is bound to it (domain.WithOrg), so row-level security keeps each organization's
@@ -105,16 +105,12 @@ type Deps struct {
 	// OrgSecrets give a run of a version on secrets the values its model key and its agent's
 	// environment refer to (ADR 0037 decision 10); nil fails every such run.
 	OrgSecrets ports.OrgSecrets
-	// CodeHosts are the code host adapters by kind (domain.CodeHostKind: github, gitlab), the
-	// names connection kinds give too (KindSpec.CodeHost).
+	// CodeHosts are the code host adapters by kind (domain.CodeHostKind: github, gitlab).
 	CodeHosts map[string]ports.CodeHost
 	// Hosts are the organization's added code hosts, read on every merge and base-commit read:
 	// a repository on a host the organization doesn't list gets no token (ADR 0041 decision 1).
 	// Nil lists only the built-in ones.
 	Hosts ports.CodeHosts
-	// Minters are the minters by the name a connection kind gives (KindSpec.Mint): a run of a
-	// connection whose kind names one gets credentials minted for it; without one it cannot run.
-	Minters map[string]ports.Minter
 	// Policies is the organization policy, read at each claim's run start as a ceiling over the
 	// version (ADR 0024): the default and allowed models, the denied commands and the box time
 	// limit. Nil applies no policy.
@@ -239,7 +235,6 @@ type Engine struct {
 	orgSecrets ports.OrgSecrets
 	codehosts  map[string]ports.CodeHost
 	hosts      ports.CodeHosts
-	minters    map[string]ports.Minter
 	policies   ports.OrgPolicies
 	knowledge  KnowledgeSnapshots // nil without Deps.Knowledge
 	intake     ports.Intake
@@ -320,7 +315,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 	return &Engine{
 		events: d.Events, holder: holder,
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, rules: d.StandingRules,
-		orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }

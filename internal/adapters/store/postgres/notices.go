@@ -217,6 +217,15 @@ type connectionEvent struct {
 	Change       string `json:"change"`
 }
 
+// connectionChangeActions are the audit actions each change of a connection event (spec 4 §8.3)
+// is read back from.
+var connectionChangeActions = map[string][]string{
+	"created": {domain.AuditConnectionCreated},
+	"updated": {domain.AuditConnectionUpdated, domain.AuditConnectionSecretReplaced},
+	"deleted": {domain.AuditConnectionDeleted},
+	"tested":  {domain.AuditConnectionTested},
+}
+
 // readConnectionEvent reads a connection notice back from the audit entry of its change: the
 // organization's connection must have one, and the event names it as that entry does.
 func readConnectionEvent(ctx context.Context, q *db.Queries, n ports.ItemNotice) (ports.ItemNotice, error) {

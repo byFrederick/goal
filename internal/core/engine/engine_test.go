@@ -74,8 +74,6 @@ type harness struct {
 	rules ports.StandingRules
 	// orgSecrets hold the test organization's secrets (environment_test.go), none at first.
 	orgSecrets *porttest.OrgSecrets
-	// minter mints the credentials of connections whose kind mints with mintAWS.
-	minter *porttest.Minter
 	// policies is the organization policy (policy_test.go); nil applies none.
 	policies ports.OrgPolicies
 	// knowledge holds the test organization's knowledge snapshots (knowledge_test.go); nil pins none.
@@ -156,7 +154,6 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	h.rules = porttest.NewStandingRules(h.tenancy)
 	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy)
 	h.addModelKey(t, testOrg)
-	h.minter = porttest.NewMinter(clock.Now)
 	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)
 	h.e = h.engine(t, h.store)
 
@@ -208,7 +205,7 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
 		Secrets:       porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
 		StandingRules: h.rules, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab}, Hosts: h.tenancy,
-		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
+		Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
 		Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,

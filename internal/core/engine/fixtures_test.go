@@ -23,8 +23,6 @@ const (
 	codeToken    = "code-token-for-tests-4567"
 	trackerToken = "tracker-token-for-tests-89"
 	otherToken   = "other-token-for-tests-1011"
-	// mintAWS is the minter the harness's engines have (porttest.Minter).
-	mintAWS = "aws-sts"
 
 	// envModelKey and envTrackerToken are variables no run on secrets gets unless its
 	// environment file sets them.

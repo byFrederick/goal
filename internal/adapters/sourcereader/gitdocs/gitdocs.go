@@ -1,13 +1,12 @@
 // Package gitdocs implements ports.SourceReader for the knowledge base's synced sources that sync
 // with gitdocs (spec 4 §4.8, §5.6): the documents of one repository on GitHub or GitLab, read
-// through the code host's REST API with the token of the source's secret (ADR 0037 decision 14)
-// or, until moving over gives it one, of its connection. A source on a secret reads on its
-// repository's host, which must be one of the organization's code hosts (ADR 0041 decision 1):
+// through the code host's REST API with the token of the source's secret (ADR 0037 decision 14).
+// A source reads on its repository's host, which must be one of the organization's code hosts (ADR 0041 decision 1):
 // the ingestor refuses any other before the secret is opened, and sets code_host to the kind the
 // host is listed as (github or gitlab). Called without code_host, gitdocs reads github.com and
 // gitlab.com only.
 //
-// A source's config names the repository (repository: its https URL on the connection's git host,
+// A source's config names the repository (repository: its https URL on its code host,
 // such as https://github.com/acme/docs), the branch (branch; the repository's default branch when
 // empty) and the files (include and exclude: path globs separated by commas or new lines, include
 // **/*.md by default; a file is read when it matches an include and no exclude). In a glob, ** is
@@ -23,7 +22,7 @@
 // blob id still matches, skips links, and fails on an entry that escapes the archive's root, so
 // the sync fetches the rest file by file. GitHub's archive redirects to its download host, which
 // is followed once, over https, without the token. The token travels only in the API's own header of requests to the
-// connection's host; a repository on any other host is refused before anything is sent, redirects
+// repository's host; a repository on any other host is refused before anything is sent, redirects
 // are not followed and no error carries the token. goald gives it a transport that dials public
 // addresses only (egress.PublicDialer).
 package gitdocs
@@ -80,7 +79,7 @@ func New(cfg Config) *Reader {
 
 	return &Reader{http: &http.Client{
 		Timeout: cfg.Timeout, Transport: cfg.Transport,
-		// A credentialed request is never sent anywhere but the connection's API.
+		// A credentialed request is never sent anywhere but the code host's API.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}, maxArchive: maxArchiveBytes}
 }
@@ -143,7 +142,7 @@ func (r *Reader) Fetch(ctx context.Context, s domain.SyncSpec, id string) (domai
 	return domain.SourceDoc{SourceItem: domain.SourceItem{ID: id, MIME: mime}, Body: body}, nil
 }
 
-// source is a gitdocs source opened: its repository on its code host with the connection's token
+// source is a gitdocs source opened: its repository on its code host with the secret's token
 // and the files it reads.
 type source struct {
 	host codeHost
@@ -164,8 +163,8 @@ const cfgCodeHost = domain.SourceCodeHostKey
 // dotComHosts are the code hosts a repository's host names without code_host.
 var dotComHosts = map[string]string{githubDotCom: "github", "gitlab.com": "gitlab"}
 
-// open reads s: the code host and its login (the secret's value on the repository's host, or the
-// connection's git login), and the source's config.
+// open reads s: the code host and its login (the secret's value on the repository's host), and
+// the source's config.
 func open(s domain.SyncSpec) (source, error) {
 	login, token, hostName, owner, err := credential(s)
 	if err != nil {
@@ -209,9 +208,8 @@ func open(s domain.SyncSpec) (source, error) {
 }
 
 // credential is what s reads with: the git host, the token, the code host's name and who names
-// it. A source on a secret reads on its repository's host, whose code host its config names
-// (code_host, the listed kind) or the host is (github.com, gitlab.com); one on a connection on the host of the
-// connection's git login, whose kind names the code host.
+// it. A source reads on its repository's host, whose code host its config names (code_host, the
+// listed kind) or the host is (github.com, gitlab.com).
 func credential(s domain.SyncSpec) (login, token, host, owner string, err error) {
 	switch {
 	case s.Secret != nil:
@@ -230,21 +228,12 @@ func credential(s domain.SyncSpec) (login, token, host, owner string, err error)
 		}
 
 		return login, s.Secret.Value, host, "source " + s.Source.Name + " (" + cfgCodeHost + ", or a repository on github.com or gitlab.com)", nil
-	case s.Connection != nil:
-		c := s.Connection
-
-		login, token, err = c.GitLogin()
-		if err != nil {
-			return "", "", "", "", err
-		}
-
-		return login, token, c.Kind.Spec.CodeHost, "kind " + c.Kind.Name + " of connection " + c.Connection.Name, nil
 	default:
-		return "", "", "", "", fmt.Errorf("source %s has no secret or connection to read with: %w", s.Source.Name, domain.ErrInvalid)
+		return "", "", "", "", fmt.Errorf("source %s has no secret to read with: %w", s.Source.Name, domain.ErrInvalid)
 	}
 }
 
-// repository checks that raw is an https URL of a repository on host (the connection's git
+// repository checks that raw is an https URL of a repository on host (the source's git
 // host) and returns its web URL and path.
 func repository(raw, host string, h codeHost) (web, repo string, err error) {
 	raw = strings.TrimSpace(raw)
@@ -258,7 +247,7 @@ func repository(raw, host string, h codeHost) (web, repo string, err error) {
 	}
 
 	if !strings.EqualFold(u.Host, host) {
-		return "", "", fmt.Errorf("repository %s is not on %s, the connection's host: %w", raw, host, domain.ErrInvalid)
+		return "", "", fmt.Errorf("repository %s is not on %s, the source's host: %w", raw, host, domain.ErrInvalid)
 	}
 
 	repo = strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
@@ -322,7 +311,7 @@ type statusError struct {
 func (e *statusError) Error() string {
 	msg := fmt.Sprintf("%s answered %d", e.host, e.status)
 	if e.status == http.StatusNotFound {
-		msg += " (not found, or the connection's token cannot read it)"
+		msg += " (not found, or the secret's token cannot read it)"
 	}
 
 	if e.message != "" {
@@ -346,7 +335,7 @@ func (r *Reader) getJSON(ctx context.Context, s source, url string, out any) (ht
 	return header, nil
 }
 
-// send sends one GET with the connection's token and returns a 200's header and body of at most
+// send sends one GET with the secret's token and returns a 200's header and body of at most
 // limit bytes; any other answer is a statusError with the host's message, the token scrubbed
 // from it.
 func (r *Reader) send(ctx context.Context, s source, url, accept string, limit int64) (http.Header, []byte, error) {
