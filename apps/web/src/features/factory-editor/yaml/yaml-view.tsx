@@ -52,6 +52,7 @@ import { FileTree } from './file-tree';
 import {
   binarySentence,
   changedLines,
+  errorCounts,
   factoryFile,
   fileTree,
   isBinary,
@@ -194,15 +195,7 @@ export function YamlView({ search }: SectionViewProps) {
   const unparseable =
     path === factoryFile && (here.some((p) => p.code === 'yaml-invalid') || (!dirty && parseError !== null));
   // The file tree's marks: errors per file, and the files that differ from the base version.
-  const errorsByFile = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of problems) {
-      if (p.severity === 'info') continue;
-      const file = cleanPath(p.file ?? factoryFile);
-      counts.set(file, (counts.get(file) ?? 0) + 1);
-    }
-    return counts;
-  }, [problems]);
+  const errorsByFile = useMemo(() => errorCounts(problems, factoryFile), [problems]);
 
   // The change gutter: this file against the version the draft is based on.
   const comparisonQuery = useQuery({
