@@ -237,11 +237,13 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
           variant="primary"
           size="lg"
           className="w-full justify-center"
-          aria-disabled={blocked || pending || undefined}
+          busy={pending}
+          busyLabel={`Publishing v${next}…`}
+          aria-disabled={blocked || undefined}
           aria-describedby={why ? reason : undefined}
           onClick={() => void publish()}
         >
-          {pending ? 'Publishing…' : `Publish v${next}`}
+          {`Publish v${next}`}
         </Button>
         {why ? (
           <p id={reason} className="m-0 text-body text-rework-ink">
