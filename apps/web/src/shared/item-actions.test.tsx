@@ -2,7 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, approveItem, mergeItem } from '../api/client';
+import { ApiError, approveItem, cancelItem, mergeItem } from '../api/client';
 import { keys } from '../api/queries';
 import type { Factory, Item, OrgSummary } from '../api/types';
 import { renderFactoryPage } from '../test/route';
@@ -11,6 +11,7 @@ import { type DecidableItem, ItemDecisions } from './item-actions';
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   approveItem: vi.fn(),
+  cancelItem: vi.fn(),
   mergeItem: vi.fn(),
 }));
 
@@ -44,7 +45,7 @@ const waiting: DecidableItem = {
 };
 
 /** The item as the page holds it: a successful decision writes the updated item into the cache, as the item page reads it. */
-function Harness({ action }: { action: 'approve' | 'merge' }) {
+function Harness({ action, cancellable = false }: { action: 'approve' | 'merge'; cancellable?: boolean }) {
   const { data } = useQuery({
     queryKey: keys.item(org.id, waiting.key),
     queryFn: () => waiting,
@@ -55,6 +56,7 @@ function Harness({ action }: { action: 'approve' | 'merge' }) {
     <ItemDecisions
       item={data as DecidableItem}
       factory={factory.id}
+      cancellable={cancellable}
       station={{ kind: 'human', action: action === 'merge' ? 'merge' : null } as never}
     />
   );
@@ -62,8 +64,8 @@ function Harness({ action }: { action: 'approve' | 'merge' }) {
 
 const done = { state: 'queued', station: 'merge', pull_requests: [] } as unknown as Item;
 
-function renderActions(action: 'approve' | 'merge') {
-  renderFactoryPage({ page: () => <Harness action={action} />, path: '/', org, factory });
+function renderActions(action: 'approve' | 'merge', cancellable = false) {
+  renderFactoryPage({ page: () => <Harness action={action} cancellable={cancellable} />, path: '/', org, factory });
 }
 
 describe('Approve on an item at a human station', () => {
@@ -91,6 +93,35 @@ describe('Approve on an item at a human station', () => {
     await waitFor(() => expect(approveItem).toHaveBeenCalled());
     await waitFor(() => expect(within(button).getByText('Approve')).toBeTruthy());
     expect(button.querySelector('svg')?.getAttribute('class') ?? '').not.toContain('success-check');
+  });
+});
+
+describe('A pending decision', () => {
+  it('shows Approve as busy, not disabled, while approveItem is pending', async () => {
+    vi.mocked(approveItem).mockReturnValue(new Promise(() => {}));
+    renderActions('approve');
+
+    const button = await screen.findByRole('button', { name: /^Approve/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => expect(button.querySelector('[data-slot="busy"]')?.textContent).toBe('Approving…'));
+  });
+
+  it('shows the merge confirm as busy, not disabled, while mergeItem is pending', async () => {
+    vi.mocked(mergeItem).mockReturnValue(new Promise(() => {}));
+    renderActions('merge');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge' }));
+    const confirm = await screen.findByRole('button', { name: 'Squash and merge' });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(confirm.getAttribute('aria-busy')).toBe('true'));
+    expect(confirm.getAttribute('aria-disabled')).toBe('true');
+    expect((confirm as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => expect(confirm.querySelector('[data-slot="busy"]')?.textContent).toBe('Merging…'));
   });
 });
 
@@ -131,5 +162,23 @@ describe('Merge', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(confirm.querySelector('svg')?.getAttribute('class') ?? '').not.toContain('success-check');
+  });
+
+  it('shows Cancel item as busy, not disabled, while cancelItem is pending', async () => {
+    vi.mocked(cancelItem).mockReturnValue(new Promise(() => {}));
+    renderActions('approve', true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel item' }));
+    fireEvent.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: 'Cancel item' }));
+
+    await waitFor(() => expect(cancelItem).toHaveBeenCalled());
+    // The dialog is modal, so the opener is hidden from the accessibility tree while it is open.
+    const opener = screen
+      .getAllByRole('button', { name: /Cancel(ling)?/, hidden: true })
+      .find((b) => b.getAttribute('aria-busy') === 'true');
+    expect(opener).toBeTruthy();
+    expect(opener?.getAttribute('aria-disabled')).toBe('true');
+    expect((opener as HTMLButtonElement).disabled).toBe(false);
+    expect(opener?.querySelector('[data-slot="busy"]')?.textContent).toBe('Cancelling…');
   });
 });

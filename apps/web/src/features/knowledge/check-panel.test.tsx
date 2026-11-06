@@ -81,6 +81,20 @@ describe('the Check panel', () => {
     expect(screen.queryByText(/Limits:/)).toBeNull();
   });
 
+  it('shows Check as busy, not disabled, while the check is pending', async () => {
+    check.mockReturnValue(new Promise(() => {}));
+    renderPanel(input);
+
+    const button = screen.getByRole('button', { name: 'Check' });
+    await userEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    await userEvent.click(button);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
   it('cannot check settings that are not complete yet', async () => {
     renderPanel(null);
     expect((screen.getByRole('button', { name: 'Check' }) as HTMLButtonElement).disabled).toBe(true);

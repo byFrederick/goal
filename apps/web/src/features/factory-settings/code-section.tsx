@@ -124,8 +124,14 @@ function EntryRow({
             {viewOnly ? null : (
               <span className="ml-auto flex items-center gap-1">
                 {secret ? (
-                  <Button variant="white" size="sm" disabled={test.isPending} onClick={() => test.mutate()}>
-                    {test.isPending ? 'Testing' : 'Test'}
+                  <Button
+                    variant="white"
+                    size="sm"
+                    busy={test.isPending}
+                    busyLabel="Testing…"
+                    onClick={() => test.mutate()}
+                  >
+                    Test
                   </Button>
                 ) : null}
                 {shorthand ? null : (

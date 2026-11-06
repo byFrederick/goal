@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dropFollowUp, fileFollowUp } from '../../api/client';
 import { itemQuery } from '../../api/queries';
 import type { Factory, FollowUp, Item } from '../../api/types';
+import { expectBusyOnClick } from '../../test/busy';
 import { renderFactoryPage } from '../../test/route';
 import { FollowUpsCard, NotesCard } from './follow-ups-card';
 
@@ -184,5 +185,15 @@ describe('NotesCard', () => {
     expect(within(card).getByRole('link', { name: 'software#517' })).toBeTruthy();
     expect(within(card).getByText('<b>Check</b> found a stale ticket.')).toBeTruthy();
     expect(within(card).getByText(/From the check of jira, jira-checker/)).toBeTruthy();
+  });
+
+  it('shows Drop as busy while the request is pending and sends it once', async () => {
+    vi.mocked(dropFollowUp).mockImplementation(() => new Promise(() => {}));
+    render(item({ follow_ups: follow }));
+    const card = await screen.findByRole('region', { name: /Follow-ups/ });
+
+    await expectBusyOnClick(within(card).getByRole('button', { name: 'Drop: Follow-up 3' }), 'Dropping…');
+
+    expect(dropFollowUp).toHaveBeenCalledTimes(1);
   });
 });

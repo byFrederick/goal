@@ -12,6 +12,7 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cancelInvitation, invite } from '../../api/auth';
 import { ApiError, clearSignupDomain, setFactoryRole, setSignupDomain } from '../../api/client';
 import {
   authConfigQuery,
@@ -43,6 +44,12 @@ const served = vi.hoisted(() => ({
   settings: undefined as OrgSettings | undefined,
   fail: false,
   hang: false,
+}));
+
+vi.mock('../../api/auth', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/auth')>()),
+  invite: vi.fn(),
+  cancelInvitation: vi.fn(),
 }));
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -252,6 +259,8 @@ afterEach(() => {
   vi.mocked(setFactoryRole).mockClear();
   vi.mocked(setSignupDomain).mockClear();
   vi.mocked(clearSignupDomain).mockClear();
+  vi.mocked(invite).mockReset();
+  vi.mocked(cancelInvitation).mockReset();
 });
 
 describe('members and roles, ready', () => {
@@ -275,6 +284,27 @@ describe('members and roles, ready', () => {
       2,
     );
   });
+
+  it.each([
+    ['Resend', 'Resend the invitation to ops@example.com', invite],
+    ['Revoke', 'Revoke the invitation to ops@example.com', cancelInvitation],
+  ])(
+    'shows %s as busy while its request is pending, and sends nothing on a second click',
+    async (_label, name, call) => {
+      vi.mocked(call).mockImplementation(() => new Promise(() => {}));
+      renderMembers();
+      const waiting = await screen.findByRole('region', { name: /Waiting to join/ });
+      fireEvent.click(within(waiting).getAllByRole('button', { name })[0] as HTMLElement);
+      await waitFor(() =>
+        expect(within(waiting).getAllByRole('button', { name })[0]?.getAttribute('aria-busy')).toBe('true'),
+      );
+      const button = within(waiting).getAllByRole('button', { name })[0] as HTMLButtonElement;
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.disabled).toBe(false);
+      fireEvent.click(button);
+      expect(call).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('keeps the invite link controls disabled, says why on focus, and runs nothing', async () => {
     renderMembers();

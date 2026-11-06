@@ -12,6 +12,7 @@ import type {
   ItemFlow,
   OrgSummary,
 } from '../../api/types';
+import { expectBusyOnClick } from '../../test/busy';
 import { renderItemPage } from '../../test/route';
 import { TopBarProbe } from '../../test/top-bar-probe';
 import { AssemblyPage } from './assembly-page';
@@ -164,7 +165,7 @@ describe('AssemblyPage actions in the top bar', () => {
 
     const bar = within(screen.getByLabelText('Top bar'));
     const names = bar.getAllByRole('button').map((b) => b.textContent);
-    expect(names.at(-1)).toBe('Resume');
+    expect(names.at(-1)).toMatch(/^Resume/);
   });
 });
 
@@ -482,5 +483,14 @@ describe('AssemblyPage Add a part action', () => {
     await renderAssembly({ factory: creator, item: { ...assembly, state: 'cancelled' } });
 
     expect(screen.queryByRole('button', { name: 'Add a part' })).toBeNull();
+  });
+
+  it('shows Pause as busy while the request is pending and sends it once', async () => {
+    vi.mocked(pauseItem).mockImplementationOnce(() => new Promise(() => {}));
+    await renderAssembly();
+
+    await expectBusyOnClick(screen.getByRole('button', { name: 'Pause' }), 'Pausing…');
+
+    expect(pauseItem).toHaveBeenCalledTimes(1);
   });
 });

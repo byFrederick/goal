@@ -176,3 +176,22 @@ describe('New webhook', () => {
     expect(api.createWebhook).not.toHaveBeenCalled();
   });
 });
+
+describe('New webhook while the request is pending', () => {
+  it('shows Create webhook as busy, not disabled', async () => {
+    api.createWebhook.mockReturnValue(new Promise(() => undefined));
+    renderWebhooks({ at, secrets, list: [] });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('radio', { name: /PagerDuty/ }));
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'pd-acme');
+    await choose('Secret', 'pagerduty-signing');
+    await user.click(screen.getByRole('button', { name: 'Create webhook' }));
+
+    const busy = await screen.findByRole('button', { name: /Creating…/ });
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.hasAttribute('disabled')).toBe(false);
+    await user.click(busy);
+    expect(api.createWebhook).toHaveBeenCalledTimes(1);
+  });
+});

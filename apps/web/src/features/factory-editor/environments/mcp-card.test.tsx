@@ -147,6 +147,18 @@ describe('the standing rules of an MCP server', () => {
     await waitFor(() => expect(screen.queryByText(/Always allowed for architect/)).toBeNull());
   });
 
+  it('shows Revoke as busy, not disabled, and sends one request on a second click', async () => {
+    api.revoke.mockReturnValue(new Promise(() => undefined));
+    renderCard([rule({})]);
+    const button = await screen.findByRole('button', { name: 'Revoke create_comment for architect' });
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+    expect(api.revoke).toHaveBeenCalledTimes(1);
+  });
+
   it('read a 409 standing-rule-revoked answer in a toast and refresh the list', async () => {
     api.revoke.mockRejectedValue(
       new ApiError({
@@ -201,6 +213,32 @@ describe('a server card after a test', () => {
     );
   }
 
+  it('shows Test as busy, not disabled, while its server is tested, and ignores a click', () => {
+    const testServer = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <TooltipProvider>
+          <McpCard
+            environment="default"
+            spec={readEnv(file)}
+            change={() => undefined}
+            readOnly={false}
+            results={{}}
+            testing="linear"
+            testServer={testServer}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /linear/ }));
+    const button = screen.getByRole('button', { name: 'Test linear' }) as HTMLButtonElement;
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(testServer).not.toHaveBeenCalled();
+  });
+
   it('opens to offer Test again when its result arrives, and swaps the status in without animating at first', () => {
     api.list.mockResolvedValue([]);
     const { rerender } = render(card({}));
@@ -213,6 +251,6 @@ describe('a server card after a test', () => {
     const status = screen.getByText('3 found');
     expect(status.className).toContain('motion-safe:animate-text-states-swap');
     expect(status.className).toContain('motion-reduce:animate-fade-in');
-    expect(screen.getByRole('button', { name: 'Test linear' }).textContent).toBe('Test again');
+    expect(screen.getByRole('button', { name: 'Test linear' }).textContent).toContain('Test again');
   });
 });

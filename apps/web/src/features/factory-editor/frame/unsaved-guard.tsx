@@ -97,8 +97,8 @@ export function UnsavedGuard() {
           <Button variant="secondary" onClick={close}>
             Stay
           </Button>
-          <Button variant="primary" disabled={retrying} onClick={() => void retry()}>
-            {retrying ? 'Retrying…' : 'Retry'}
+          <Button variant="primary" busy={retrying} busyLabel="Saving…" onClick={() => void retry()}>
+            Retry
           </Button>
         </div>
       </DialogContent>

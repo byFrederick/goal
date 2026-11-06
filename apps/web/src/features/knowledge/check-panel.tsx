@@ -33,10 +33,12 @@ export function CheckPanel({ input }: { input: KnowledgeCheckInput | null }) {
           <Button
             variant="secondary"
             size="sm"
-            disabled={!input || check.isPending}
+            disabled={!input}
+            busy={check.isPending}
+            busyLabel="Checking…"
             onClick={() => input && check.mutate(input)}
           >
-            {check.isPending ? 'Checking…' : result ? 'Check again' : 'Check'}
+            {result ? 'Check again' : 'Check'}
           </Button>
         </div>
         <div aria-live="polite" className="border-t border-line">

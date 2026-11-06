@@ -79,6 +79,47 @@ describe('the notifications section', () => {
     await waitFor(() => expect(api.setOrgNotificationSettings).toHaveBeenLastCalledWith('org-acme', null));
   });
 
+  it('shows Save as busy while saving, and a second click sends nothing', async () => {
+    api.setOrgNotificationSettings.mockImplementation(() => new Promise(() => {}));
+    renderSection();
+    await select();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save/ }).getAttribute('aria-busy')).toBe('true'));
+    const save = screen.getByRole('button', { name: /Save/ }) as HTMLButtonElement;
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    expect(api.setOrgNotificationSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Turn off as busy while it runs, and a second click sends nothing', async () => {
+    api.setOrgNotificationSettings.mockImplementation(() => new Promise(() => {}));
+    renderSection({ saved: 'other' });
+    await select();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Turn off/ }).getAttribute('aria-busy')).toBe('true'),
+    );
+    const off = screen.getByRole('button', { name: /Turn off/ }) as HTMLButtonElement;
+    expect(off.getAttribute('aria-disabled')).toBe('true');
+    expect(off.disabled).toBe(false);
+    fireEvent.click(off);
+    expect(api.setOrgNotificationSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Test as busy while testing, and a second click sends nothing', async () => {
+    api.testOrgNotifications.mockImplementation(() => new Promise(() => {}));
+    renderSection();
+    await select();
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Test/ }).getAttribute('aria-busy')).toBe('true'));
+    const test = screen.getByRole('button', { name: /Test/ }) as HTMLButtonElement;
+    expect(test.getAttribute('aria-disabled')).toBe('true');
+    expect(test.disabled).toBe(false);
+    fireEvent.click(test);
+    expect(api.testOrgNotifications).toHaveBeenCalledTimes(1);
+  });
+
   it('raises a toast when the save fails', async () => {
     api.setOrgNotificationSettings.mockRejectedValue(
       new ApiError({ title: 'Bad', status: 400, detail: 'secret is limited to some factories' } as never),

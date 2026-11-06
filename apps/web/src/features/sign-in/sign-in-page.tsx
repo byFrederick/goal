@@ -14,7 +14,6 @@ import { useSecondsLeft } from '../../ui/countdown';
 import { Field, Input } from '../../ui/field';
 import { GoogleButton } from '../../ui/google-button';
 import { NotAvailable } from '../../ui/not-available';
-import { Spinner } from '../../ui/spinner';
 import { AuthHeading, AuthPage, LiveMessage } from './auth-page';
 
 const emailRule = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -139,18 +138,12 @@ export function SignInPage({ next, googleError }: SignInPageProps) {
               type="submit"
               variant="white"
               size="lg"
-              aria-busy={send.isPending || undefined}
+              busy={send.isPending}
+              busyLabel="Sending code…"
               disabled={blocked}
-              className="w-full justify-center aria-busy:cursor-progress"
+              className="w-full justify-center"
             >
-              {send.isPending ? (
-                <>
-                  <Spinner tone="dark" />
-                  Sending code…
-                </>
-              ) : (
-                'Email me a sign-in code'
-              )}
+              Email me a sign-in code
             </Button>
             <LiveMessage>{sendError ? <Callout tone="rework">{sendError}</Callout> : null}</LiveMessage>
           </form>

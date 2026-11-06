@@ -143,6 +143,21 @@ describe('Danger zone of a factory', () => {
     await screen.findByRole('button', { name: 'Archive' });
   });
 
+  it('shows Restore as busy, not disabled, while the request is pending', async () => {
+    await renderSettings(archived, archiver);
+    vi.mocked(restoreFactory).mockReturnValueOnce(new Promise(() => {}));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+
+    const button = screen.getByRole('button', { name: 'Restore' });
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(button);
+    expect(restoreFactory).toHaveBeenCalledTimes(1);
+  });
+
   it('disables Delete until archived', async () => {
     await renderSettings(paused, archiver);
 

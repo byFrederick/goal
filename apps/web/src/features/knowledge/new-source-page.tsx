@@ -335,9 +335,10 @@ function SourceForm({ kind }: { kind: NewKind }) {
               type="submit"
               variant="primary"
               className="h-11 md:h-8.5"
-              disabled={create.isPending || uploader.busy}
+              busy={create.isPending || uploader.busy}
+              busyLabel="Adding…"
             >
-              {create.isPending || uploader.busy ? 'Adding…' : 'Add source'}
+              Add source
             </Button>
           </div>
         </div>

@@ -169,6 +169,19 @@ describe('Step 3, Connect your code: the choices', () => {
     expect(router.state.location.search).toMatchObject({ factory, template: 'software' });
   });
 
+  it('shows Continue as busy while the token is tested, and a second click sends nothing', async () => {
+    vi.mocked(testFactoryRepository).mockImplementation(() => new Promise(() => {}));
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+    await waitFor(() => expect(next().getAttribute('aria-busy')).toBe('true'));
+    expect(next().getAttribute('aria-disabled')).toBe('true');
+    expect((next() as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(next());
+    expect(createSecret).toHaveBeenCalledTimes(1);
+    expect(testFactoryRepository).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the same form for Read only and Read and write', async () => {
     templateCode = 'none';
     renderStep();

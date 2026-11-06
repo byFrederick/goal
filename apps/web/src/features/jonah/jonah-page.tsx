@@ -114,7 +114,9 @@ function LookButton() {
   return (
     <Button
       variant="secondary"
-      disabled={!factory.can.includes('definition:edit') || look.isPending}
+      busy={look.isPending}
+      busyLabel={<span className="max-md:hidden">Starting a look…</span>}
+      disabled={!factory.can.includes('definition:edit')}
       aria-label="Look for improvements now"
       className="max-md:min-w-11"
       onClick={() => look.mutate()}

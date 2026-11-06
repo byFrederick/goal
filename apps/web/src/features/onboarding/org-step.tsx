@@ -100,7 +100,8 @@ export function OrgStep({ home }: { home: OrgSummary | undefined }) {
           form="org-step-form"
           size="lg"
           variant="primary"
-          aria-busy={create.isPending || undefined}
+          busy={create.isPending}
+          busyLabel="Creating…"
         >
           Continue
         </Button>

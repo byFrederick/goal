@@ -8,7 +8,8 @@ export async function expectAccessible(page: Page) {
   // Axe reads the colour a frame paints. Wait until no route still shows its skeleton (rows mount and fade in
   // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
   // Looping animations (the skeleton pulse) never finish and are left alone.
-  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  // A busy button is not a loading view: Delete organization waits behind the sign-in check's dialog.
+  await expect(page.locator('[aria-busy="true"]:not(button)')).toHaveCount(0);
   // Sonner removes a toast after 4 s, and the removal fades it to 1.03:1 (#e4e4e4 on #e0e0e0, run 42096576406's
   // trace; run 42136073943 failed the same way after a wait for "no toast leaving"). A slow runner can let that
   // timer fire while axe is scanning, after any wait has passed. Hovering a toast pauses sonner's timers, so a

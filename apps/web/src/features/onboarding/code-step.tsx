@@ -22,7 +22,6 @@ import { InfoTip } from '../../ui/info-tip';
 import { RadioCards, type RadioOption } from '../../ui/radio-cards';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
-import { Spinner } from '../../ui/spinner';
 import { touchLink } from '../../ui/touch-target';
 import { nameProblem } from '../secrets/words';
 import {
@@ -313,19 +312,14 @@ function CodeForm({
           form="code-form"
           size="lg"
           variant="primary"
+          busy={busy}
+          busyLabel="Testing the token…"
           // aria-disabled, not disabled: a disabled button drops focus to <body> when the answer shows. `submit` refuses.
           aria-disabled={
-            wantsCode && (failed || clash || busy || (!passed && (!urlsValid || validUrls.length === 0 || !hasToken)))
+            wantsCode && (failed || clash || (!passed && (!urlsValid || validUrls.length === 0 || !hasToken)))
           }
         >
-          {run.isPending ? (
-            <>
-              <Spinner />
-              Testing the token
-            </>
-          ) : (
-            'Continue'
-          )}
+          Continue
         </Button>
       }
       preview={{ organization: organizationCard(org, host), second: preview }}
@@ -472,7 +466,7 @@ function CodeForm({
                   {`A secret named ${name} already exists. Goal never replaces a secret’s value. Use it, or pick a new name for this token.`}
                 </Callout>
                 <div className="flex flex-wrap items-end gap-3">
-                  <Button type="button" variant="secondary" onClick={chooseExisting} disabled={busy}>
+                  <Button type="button" variant="secondary" onClick={chooseExisting} busy={busy} busyLabel="Using…">
                     Use the existing secret
                   </Button>
                   <Field label="New secret name" error={newName !== '' ? nameProblem(newName) : undefined}>
@@ -490,7 +484,9 @@ function CodeForm({
                     type="button"
                     variant="secondary"
                     onClick={chooseNewName}
-                    disabled={busy || nameProblem(newName) !== undefined || token === ''}
+                    busy={busy}
+                    busyLabel="Using…"
+                    disabled={nameProblem(newName) !== undefined || token === ''}
                   >
                     Use this name
                   </Button>

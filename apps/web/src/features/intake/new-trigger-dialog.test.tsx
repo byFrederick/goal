@@ -244,6 +244,18 @@ describe('New trigger picker', () => {
     );
   });
 
+  it('marks a suggestion button busy, not disabled, while its publish is pending', async () => {
+    vi.mocked(setTriggerEnabled).mockReturnValueOnce(new Promise(() => {}));
+    renderPicker([], [suggestion('nightly-review', 'review')]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+    const row = screen.getByText('Nightly review').parentElement as HTMLElement;
+    const turnOn = within(row).getByRole('button', { name: 'Turn on' });
+    fireEvent.click(turnOn);
+    await waitFor(() => expect(turnOn.getAttribute('aria-busy')).toBe('true'));
+    expect(turnOn.getAttribute('aria-disabled')).toBe('true');
+    expect(turnOn.hasAttribute('disabled')).toBe(false);
+  });
+
   it('shows no suggestions block when the API has none', async () => {
     renderPicker();
     await screen.findByRole('dialog', { name: 'New trigger' });
