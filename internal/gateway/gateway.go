@@ -163,13 +163,6 @@ type Events interface {
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 }
 
-// Connections reads an organization's connections and kinds without their secret values, for the
-// run bundle; ports.Connections satisfies it.
-type Connections interface {
-	Get(ctx context.Context, name string) (domain.Connection, error)
-	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
-}
-
 // StandingRules reads an organization's standing rules, which the run bundle offers its tools
 // that ask first; ports.StandingRules satisfies it.
 type StandingRules interface {
@@ -188,8 +181,6 @@ type Deps struct {
 	Definitions Definitions
 	// Items gives the run bundle the item's brief, earlier outputs and branch.
 	Items Items
-	// Connections describe the run's organization connections in its bundle.
-	Connections Connections
 	// StandingRules mark the bundle's tools that ask first and have a standing rule.
 	StandingRules StandingRules
 	Events        Events
@@ -266,18 +257,17 @@ var implementation = &mcp.Implementation{Name: "goal-gateway", Version: "1"}
 
 // Gateway serves the MCP endpoint. It is an http.Handler, safe for concurrent use.
 type Gateway struct {
-	defs        Definitions
-	items       Items
-	connections Connections
-	rules       StandingRules
-	policies    Policies
-	events      Events
-	clock       ports.Clock
-	log         *slog.Logger
-	knowledge   Knowledge // nil without Deps.Knowledge
-	objects     Objects   // nil without Deps.Objects
-	questions   Questions
-	approvals   ToolApprovals
+	defs      Definitions
+	items     Items
+	rules     StandingRules
+	policies  Policies
+	events    Events
+	clock     ports.Clock
+	log       *slog.Logger
+	knowledge Knowledge // nil without Deps.Knowledge
+	objects   Objects   // nil without Deps.Objects
+	questions Questions
+	approvals ToolApprovals
 	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
 	draftRequests DraftRequests
 	drafts        Drafts
@@ -294,9 +284,9 @@ type Gateway struct {
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.StandingRules == nil || d.Policies == nil || d.Events == nil || d.Clock == nil ||
+	if d.Definitions == nil || d.Items == nil || d.StandingRules == nil || d.Policies == nil || d.Events == nil || d.Clock == nil ||
 		d.Questions == nil || d.ToolApprovals == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, StandingRules, Policies, Events, Clock, Questions and ToolApprovals are required")
+		return nil, errors.New("gateway: Definitions, Items, StandingRules, Policies, Events, Clock, Questions and ToolApprovals are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -306,7 +296,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
 
 	g := &Gateway{
-		defs: d.Definitions, items: d.Items, connections: d.Connections, rules: d.StandingRules, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
+		defs: d.Definitions, items: d.Items, rules: d.StandingRules, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
 		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
 		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, checks: d.Checks, cfg: cfg,
 	}

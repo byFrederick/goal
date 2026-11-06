@@ -29,46 +29,6 @@
     "output": "change",
     "max_turns": 40,
     "max_usd": 6,
-    "connections": [
-      {
-        "name": "issues",
-        "kind": "issue-tracker",
-        "title": "Issue tracker",
-        "env": [
-          "ISSUES_SITE",
-          "ISSUES_TOKEN"
-        ],
-        "mcp": {
-          "url": "https://issues.example.com/mcp",
-          "headers": {
-            "Authorization": "Bearer ${ISSUES_TOKEN}"
-          }
-        },
-        "docs": "File and read issues with the issues CLI or its MCP tools.",
-        "tool_modes": {
-          "create_comment": "ask",
-          "delete_issue": "off"
-        },
-        "always_allow_offered": [
-          "create_comment"
-        ]
-      },
-      {
-        "name": "docs",
-        "kind": "stdio-server",
-        "title": "MCP server",
-        "env": [],
-        "mcp": {
-          "command": [
-            "sh",
-            "-c",
-            "npx -y @acme/docs-mcp@1.0.0"
-          ]
-        },
-        "tool_modes": {},
-        "always_allow_offered": []
-      }
-    ],
     "rules": [
       {
         "name": "go-errors",
@@ -90,13 +50,7 @@
     "branch": "goal/1-add-a-health-endpoint",
     "fresh_base": "merge"
   },
-  "git_credentials": [
-    {
-      "host": "github.com",
-      "username": "x-access-token",
-      "password_env": "CODE_TOKEN"
-    }
-  ],
+  "git_credentials": [],
   "repositories": [
     {
       "url": "https://github.com/acme/api",
@@ -108,7 +62,6 @@
   "repository_logins": [],
   "read_only": [],
   "tools": [
-    "task@3.46.1",
-    "npm:@acme/issues-cli@2.0.0"
+    "task@3.46.1"
   ]
 }

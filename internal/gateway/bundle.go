@@ -88,14 +88,11 @@ type bundleSpec struct {
 	Output     string                     `json:"output,omitempty"`
 	MaxTurns   int                        `json:"max_turns,omitempty"`
 	MaxUSD     float64                    `json:"max_usd,omitempty"`
-	// Connections are the agent's organization connections its token grants, in its order: the
-	// worker configures their MCP servers and tells the agent about them. None on secrets.
-	Connections []bundleConnection `json:"connections"`
 	// Knowledge is the run's Knowledge section and the snapshots prepare unpacks under
 	// /knowledge (knowledge.go); nil when it has none.
 	Knowledge *bundleKnowledge `json:"knowledge,omitempty"`
-	// Environment is the agent's environment file on a version on secrets (ADR 0037); nil on
-	// connections.
+	// Environment is the agent's environment file on a version on secrets (ADR 0037); nil on a
+	// version not on secrets.
 	Environment *bundleEnvironment `json:"environment,omitempty"`
 	// Rules are the factory rules that apply to the run (ADR 0014), in declaration order, which
 	// the worker writes to the agent's rules.
@@ -129,26 +126,6 @@ type bundleRule struct {
 	SHA256  domain.BlobHash `json:"sha256"`
 	Paths   []string        `json:"paths,omitempty"`
 	Content string          `json:"content"`
-}
-
-// bundleConnection is what the agent hears and the worker configures of one connection: the
-// names of the variables it sets in the agent's env, never their values, its MCP server and the
-// kind's docs.
-type bundleConnection struct {
-	Name  string   `json:"name"`
-	Kind  string   `json:"kind"`
-	Title string   `json:"title"`
-	Env   []string `json:"env"`
-	// MCP is a remote server (url, headers naming env variables as ${NAME}) or a stdio command
-	// the worker starts in the box; nil without one.
-	MCP  *domain.KindMCP `json:"mcp,omitempty"`
-	Docs string          `json:"docs,omitempty"`
-	// ToolModes are the connection's tools that ask first or are off for the run's agent (ADR
-	// 0031 decision 3); a tool not in it is allow.
-	ToolModes map[string]domain.ConnectionToolMode `json:"tool_modes"`
-	// AlwaysAllowOffered are the tools of ToolModes, sorted, whose ask comes from the
-	// organization connection's mode, so a person may answer it with Always allow.
-	AlwaysAllowOffered []string `json:"always_allow_offered"`
 }
 
 // bundleEnvironment is what the worker sets up and tells the agent of the agent's environment file
@@ -435,7 +412,7 @@ func (g *Gateway) definitionBundle(ctx context.Context, c domain.TaskClaims) (ru
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: req.Agent, Model: cmp.Or(c.Model, line.Runtime.Model),
 			Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: withDenied(nil, c.DeniedCommands), Purpose: line.Purpose,
 			Brief: req.Text, MaxTurns: maxTurns, MaxUSD: maxUSD,
-			Connections: []bundleConnection{}, Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
+			Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
 			DraftRequest: &bundleDraftRequest{ID: req.ID, Text: req.Text, Agent: req.Agent},
 			Knowledge:    k,
 		},
@@ -486,14 +463,11 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
+	// A version not on secrets gets no environment (ADR 0037): goald no longer reads connections.
 	if line.OnSecrets() {
-		err = g.addEnvironment(ctx, c, line, agent, &b)
-	} else {
-		err = g.addConnections(ctx, c, line, agent, &b)
-	}
-
-	if err != nil {
-		return runBundle{}, err
+		if err := g.addEnvironment(ctx, c, line, agent, &b); err != nil {
+			return runBundle{}, err
+		}
 	}
 
 	// The engine decided the run's branch and base at run start; a token from before names neither.
@@ -502,7 +476,7 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		branch, base = c.Branch, c.Base
 	}
 
-	if err := g.addRepository(ctx, line.Runtime.Repository, branch, base, line.Flow.Assemblies.FreshBase, &b); err != nil {
+	if err := addRepository(line.Runtime.Repository, branch, base, line.Flow.Assemblies.FreshBase, &b); err != nil {
 		return runBundle{}, err
 	}
 
@@ -546,7 +520,6 @@ func (g *Gateway) agentBundle(ctx context.Context, c domain.TaskClaims, run task
 			// two must match.
 			ToolsAllow: nonNil(agent.ToolsAllow), ToolsDeny: withDenied(agent.ToolsDeny, c.DeniedCommands), Purpose: line.Purpose,
 			Brief: brief, Inputs: inputs, Output: station.Output, MaxTurns: maxTurns, MaxUSD: maxUSD,
-			Connections:  []bundleConnection{},
 			Rules:        []bundleRule{},
 			GrantedCalls: []grantedCall{},
 		},
@@ -764,12 +737,9 @@ func withoutPlan(schema []byte) ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// addRepository puts the repository in b with the git login that clones it: the repository
-// token's on a version on secrets (repositoryLogin), otherwise its connection's; a public
-// repository needs none.
-func (g *Gateway) addRepository(
-	ctx context.Context, repo domain.Repository, branch, base string, fresh domain.FreshBase, b *runBundle,
-) error {
+// addRepository puts the repository in b with the git login of its token (repositoryLogin); a
+// repository without one, public or naming only a connection, gets no login.
+func addRepository(repo domain.Repository, branch, base string, fresh domain.FreshBase, b *runBundle) error {
 	if repo.URL == "" {
 		return nil
 	}
@@ -783,21 +753,6 @@ func (g *Gateway) addRepository(
 		}
 
 		b.addGit(c)
-
-		return nil
-	}
-
-	if repo.Connection == "" {
-		return nil
-	}
-
-	_, o, _, err := g.outline(ctx, repo.Connection)
-	if err != nil {
-		return err
-	}
-
-	if o.Git != nil {
-		b.addGit(gitCredentialOf(*o.Git))
 	}
 
 	return nil
@@ -946,45 +901,6 @@ func toolName(t string) string {
 	return t
 }
 
-// addConnections describes the agent's organization connections that its token grants in b, with
-// their git logins, CLI tools and the effective modes of their tools for the agent. The model
-// connection gives the agent's env only, so it is not described.
-func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line domain.Line, agent domain.AgentSpec, b *runBundle) error {
-	var rules standingRules
-
-	for _, name := range agent.Connections {
-		if !slices.Contains(line.Connections, name) || !slices.Contains(c.Connections, name) {
-			continue // one the factory does not list, or the token does not grant
-		}
-
-		conn, o, k, err := g.outline(ctx, name)
-		if err != nil {
-			return err
-		}
-
-		active, err := rules.of(ctx, g.rules, slices.Contains(slices.Collect(maps.Values(conn.ToolModes)), domain.ToolModeAsk))
-		if err != nil {
-			return err
-		}
-
-		modes := domain.EffectiveToolModes(conn.ToolModes, active, conn.ID, agent.Name)
-		b.Spec.Connections = append(b.Spec.Connections, bundleConnection{
-			Name: name, Kind: k.Name, Title: k.Title, Env: nonNil(o.Env), MCP: o.MCP, Docs: k.Spec.Docs,
-			ToolModes: modes.Modes, AlwaysAllowOffered: modes.AlwaysAllowOffered,
-		})
-
-		if o.Git != nil {
-			b.addGit(gitCredentialOf(*o.Git))
-		}
-
-		if o.CLI != "" && !slices.Contains(b.Tools, o.CLI) {
-			b.Tools = append(b.Tools, o.CLI)
-		}
-	}
-
-	return nil
-}
-
 // standingRules are the organization's active standing rules, read once for a bundle and only
 // when one of its connections or MCP servers has a tool that asks first.
 type standingRules struct {
@@ -1009,22 +925,6 @@ func (s *standingRules) of(ctx context.Context, store StandingRules, asks bool) 
 	return s.rules, nil
 }
 
-// outline is the connection name of the organization in ctx, and it as its kind renders it
-// without any secret value.
-func (g *Gateway) outline(ctx context.Context, name string) (domain.Connection, domain.ConnectionOutline, domain.ConnectionKind, error) {
-	conn, err := g.connections.Get(ctx, name)
-	if err != nil {
-		return domain.Connection{}, domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: %w", name, err)
-	}
-
-	k, err := g.connections.Kind(ctx, conn.Kind)
-	if err != nil {
-		return domain.Connection{}, domain.ConnectionOutline{}, domain.ConnectionKind{}, fmt.Errorf("connection %s: kind %s: %w", name, conn.Kind, err)
-	}
-
-	return conn, k.Outline(conn), k, nil
-}
-
 // forgeUsers are the user names a forge takes with a token as the password.
 var forgeUsers = map[string]string{"github": "x-access-token", "gitlab": "oauth2"}
 
@@ -1045,10 +945,6 @@ func repositoryLogin(repo domain.Repository) (gitCredential, error) {
 	}
 
 	return gitCredential{Host: u.Host, Username: user, PasswordEnv: domain.RepositoryTokenEnv, Store: true}, nil
-}
-
-func gitCredentialOf(g domain.KindGit) gitCredential {
-	return gitCredential{Host: g.Host, Username: g.Username, PasswordEnv: g.PasswordEnv}
 }
 
 // addGit adds a git login once.

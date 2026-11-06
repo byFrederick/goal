@@ -64,7 +64,7 @@ func (g *Gateway) gradeBundle(ctx context.Context, c domain.TaskClaims) (runBund
 	return runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Station: c.Station, Agent: c.Agent, Model: c.Model, MaxUSD: left,
-			Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: []string{}, Connections: []bundleConnection{},
+			Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: []string{},
 			Rules: []bundleRule{}, GrantedCalls: []grantedCall{},
 			Grade: &bundleGrade{Reason: m.Reason, Result: bundleGradeResult{Kind: c.GradeOf, Output: m.Output, Diff: m.Diff}},
 		},
