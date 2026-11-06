@@ -9,9 +9,9 @@ export async function expectAccessible(page: Page) {
   // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
   // Looping animations (the skeleton pulse) never finish and are left alone.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-  // While a route's view transition runs, the page is painted from snapshots and axe's elementsFromPoint can
-  // return the page behind a toast instead of the toast's own fill. A toast entering or leaving has the same
-  // effect. Toasts stay in the scan; wait until they are at rest.
+  // The failed trace (run 42096576406) shows sonner had marked the toast data-removed="true" after its 4 s, and
+  // axe measured it mid-removal at 1.03:1 (#e4e4e4 on #e0e0e0). Toasts stay in the scan; wait until none is
+  // entering or leaving. The view-transition wait is a guard: a transition paints the page from snapshots.
   await expect
     .poll(() =>
       page.evaluate(() => {
