@@ -59,15 +59,17 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
   const trimmed = text.trim();
   const sendable = trimmed !== '' && [...trimmed].length <= maxAnswer;
   // An answer the caller may not give stays in view, disabled and focusable, saying who decides.
-  const decision = (act: () => void) =>
+  // The answer that was sent is busy; the others stay in view, aria-disabled, until it settles.
+  const sent = answer.isPending ? answer.variables : undefined;
+  const decision = (act: () => void, busy = false) =>
     mayDecide
-      ? { disabled: answer.isPending, onClick: act }
+      ? { busy, 'aria-disabled': answer.isPending && !busy ? true : undefined, onClick: act }
       : { 'aria-disabled': true, 'aria-describedby': reasonId, onClick: undefined };
   const showWriter = writing || !mayDecide;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!mayDecide || !sendable) return;
+    if (!mayDecide || !sendable || answer.isPending) return;
     answer.mutate({ answer: trimmed });
   };
 
@@ -88,7 +90,8 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
             variant="secondary"
             type="button"
             className="h-auto min-h-9 max-w-full border-you/40 break-words whitespace-normal max-md:min-h-11"
-            {...decision(() => answer.mutate({ choice: index }))}
+            busyLabel="Sending…"
+            {...decision(() => answer.mutate({ choice: index }), sent?.choice === index)}
           >
             {choice}
           </Button>
@@ -123,7 +126,12 @@ export function QuestionCard({ itemKey, factory, question, className }: Props) {
               variant="primary"
               className="ml-auto h-11 px-4 text-body max-md:w-full"
               {...(mayDecide
-                ? { disabled: !sendable || answer.isPending }
+                ? {
+                    busy: sent?.answer !== undefined,
+                    busyLabel: 'Sending…',
+                    disabled: !sendable && !answer.isPending,
+                    'aria-disabled': answer.isPending && sent?.answer === undefined ? true : undefined,
+                  }
                 : { 'aria-disabled': true, 'aria-describedby': reasonId })}
             >
               Send
