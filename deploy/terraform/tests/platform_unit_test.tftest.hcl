@@ -178,6 +178,11 @@ run "r2_keys_come_from_the_bucket_scoped_token" {
   }
 
   assert {
+    condition     = output.goal_s3_access_key == local.secret_values.GOAL_S3_ACCESS_KEY && output.goal_s3_secret_key == local.secret_values.GOAL_S3_SECRET_KEY
+    error_message = "task catalog:production pushes with the very R2 keys goald reads."
+  }
+
+  assert {
     condition     = local.secret_values.GOAL_WORKERS_AI_KEY == "ai-token-value"
     error_message = "The conversion service's key is the Workers AI token."
   }

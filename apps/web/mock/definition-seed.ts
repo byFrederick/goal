@@ -5,7 +5,7 @@
 
 import type { Actor, TemplateCode, VersionSource } from '@goal/api-client';
 import { environmentFiles } from './environments.ts';
-import { reviewStarterItem, starterItem } from './starter.ts';
+import { incidentStarterItem, reviewStarterItem, starterItem, supportStarterItem } from './starter.ts';
 
 /** A definition's files by path. */
 export type Tree = Map<string, Uint8Array>;
@@ -603,7 +603,7 @@ function templateYaml(t: TemplateSpec): string {
 apiVersion: goal/v1
 kind: Factory
 metadata:
-  id: 00000000-0000-4000-8000-000000000000
+  id: 00000000-0000-0000-0000-000000000000
   name: ${t.name}
   title: ${t.title}
   purpose: ${t.purpose}
@@ -618,9 +618,9 @@ ${t.triggers ?? ''}${
   t.starter
     ? `starter:
   item:
-    title: ${t.starter.title}
+    title: ${JSON.stringify(t.starter.title)}
     type: ${t.starter.type}
-    body: ${t.starter.body}
+    body: ${JSON.stringify(t.starter.body)}
 `
     : ''
 }`;
@@ -791,16 +791,27 @@ const templateSpecs: TemplateSpec[] = [
     version: 1,
     title: 'Software delivery',
     summary: 'Requests become small pull requests a reviewer merges.',
-    description: 'A specifier writes the spec, a builder opens the pull request and a reviewer merges it.',
+    description:
+      'A specifier turns each request into a short spec, a builder makes the change and opens a pull request, and a person reviews and merges it.',
     purpose: 'Turns requests into small, reviewed pull requests.',
-    connectors: ['github'],
-    changed: '2026-10-20',
+    connectors: [],
+    changed: '2026-11-06',
     code: 'read',
     workTypes: ['feature', 'fix'],
-    connections: ['github'],
+    triggers: `    triggers:
+      - name: weekly-dependency-check
+        enabled: false
+        on: schedule
+        cron: "0 9 * * 1"
+        create: { type: fix, station: inbox, title: "Check the dependencies for updates" }
+`,
     agents: [
       { name: 'specifier', description: 'Writes the spec.', prompt: 'Write a short spec for the request.' },
-      { name: 'builder', description: 'Opens the pull request.', prompt: 'Build the change and open a pull request.' },
+      {
+        name: 'builder',
+        description: 'Makes the change and opens the pull request.',
+        prompt: 'Build the change and open a pull request.',
+      },
     ],
     stations: [
       { id: 'inbox', name: 'Inbox', kind: 'queue' },
@@ -817,16 +828,27 @@ const templateSpecs: TemplateSpec[] = [
     title: 'Incident response',
     summary: 'Alerts become investigations, fixes and postmortems.',
     description:
-      'A triager sorts each alert, an investigator finds the cause, a fixer proposes the fix and a person reviews it.',
+      'A triager sorts each alert, an investigator finds the cause, a fixer proposes the fix and writes the postmortem, and a person reviews it.',
     purpose: 'Takes alerts from triage to a reviewed fix.',
     connectors: [],
-    changed: '2026-10-21',
+    changed: '2026-11-06',
     code: 'none',
     workTypes: ['incident'],
+    triggers: `    triggers:
+      - name: daily-alert-review
+        enabled: false
+        on: schedule
+        cron: "0 8 * * *"
+        create: { type: incident, station: inbox, title: "Review yesterday's open alerts" }
+`,
     agents: [
-      { name: 'triager', description: 'Sorts alerts.', prompt: 'Sort the alert by severity.' },
+      { name: 'triager', description: 'Sorts alerts by severity.', prompt: 'Sort the alert by severity.' },
       { name: 'investigator', description: 'Finds the cause.', prompt: 'Find the cause of the incident.' },
-      { name: 'fixer', description: 'Proposes the fix.', prompt: 'Propose the smallest fix for the cause.' },
+      {
+        name: 'fixer',
+        description: 'Proposes the fix and writes the postmortem.',
+        prompt: 'Propose the smallest fix for the cause.',
+      },
     ],
     stations: [
       { id: 'inbox', name: 'Inbox', kind: 'queue' },
@@ -836,6 +858,7 @@ const templateSpecs: TemplateSpec[] = [
       { id: 'review', name: 'Review', kind: 'human' },
       { id: 'done', name: 'Done', kind: 'done' },
     ],
+    starter: incidentStarterItem,
   },
   {
     name: 'support-replies',
@@ -846,11 +869,22 @@ const templateSpecs: TemplateSpec[] = [
       'A triager sorts each ticket, a drafter writes the answer, a person approves it and the reply is sent.',
     purpose: 'Drafts support replies that a person approves before they go out.',
     connectors: [],
-    changed: '2026-10-22',
+    changed: '2026-11-06',
     code: 'none',
     workTypes: ['ticket'],
+    triggers: `    triggers:
+      - name: daily-open-tickets
+        enabled: false
+        on: schedule
+        cron: "0 7 * * 1-5"
+        create: { type: ticket, station: inbox, title: "Answer the tickets still open from yesterday" }
+`,
     agents: [
-      { name: 'triager', description: 'Sorts tickets.', prompt: 'Sort the ticket by topic and urgency.' },
+      {
+        name: 'triager',
+        description: 'Sorts tickets by topic and urgency.',
+        prompt: 'Sort the ticket by topic and urgency.',
+      },
       { name: 'drafter', description: 'Drafts the answer.', prompt: 'Draft a reply from the runbooks.' },
       { name: 'sender', description: 'Sends the approved reply.', prompt: 'Send the approved reply to the customer.' },
     ],
@@ -862,6 +896,7 @@ const templateSpecs: TemplateSpec[] = [
       { id: 'send', name: 'Send', kind: 'agent', agent: 'sender', wip: 1 },
       { id: 'done', name: 'Done', kind: 'done' },
     ],
+    starter: supportStarterItem,
   },
 ];
 

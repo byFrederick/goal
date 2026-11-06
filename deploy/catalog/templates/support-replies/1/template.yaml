@@ -1,0 +1,8 @@
+title: Support replies
+summary: Tickets get drafted answers a person approves.
+description: >-
+  A triager sorts each ticket, a drafter writes the answer, a person approves it and the
+  reply is sent.
+connectors: []
+changed: "2026-11-06"
+code: none
