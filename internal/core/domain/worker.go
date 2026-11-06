@@ -49,10 +49,6 @@ type WorkerFinished struct {
 	// Repositories are the repositories the run fetched or pushed, each with its pushed head and
 	// whether it wrote (ADR 0041 decision 5).
 	Repositories []WorkerRepository `json:"repositories"`
-	// PushedHead is the item branch's commit on the remote when the agent ended (ADR 0039,
-	// decision 8), as a worker without Repositories reports it; empty without a repository or
-	// when the worker could not read it. Accepted for one deploy, so an older worker image works.
-	PushedHead string `json:"pushed_head"`
 	// At is when the worker wrote the line.
 	At string `json:"at"`
 	// PermissionDenials are the tool calls the agent's policy refused, by tool and call id.
@@ -129,15 +125,8 @@ type WorkerRepository struct {
 
 // RunRepositories are a worker line's repositories as a run records them: each by its
 // RepositoryKey, with only the commits GitHead accepts, once (the first report of a repository
-// wins). A line without a list, from a worker image before it, reports single, one repository's
-// commits, which become one row on repo, the task's repository URL, when it has a commit. A
-// repository that is no RepositoryKey is dropped.
-func RunRepositories(reported []WorkerRepository, repo string, single WorkerRepository) []RunRepository {
-	if len(reported) == 0 {
-		single.Repo = repo
-		reported = []WorkerRepository{single}
-	}
-
+// wins). A repository that is no RepositoryKey, or reports no commit and no write, is dropped.
+func RunRepositories(reported []WorkerRepository) []RunRepository {
 	var out []RunRepository
 
 	seen := make(map[string]bool, len(reported))
@@ -165,13 +154,12 @@ func RunRepositories(reported []WorkerRepository, repo string, single WorkerRepo
 }
 
 // Result is the run's result as the worker reported it: succeeded only with an output, failed
-// with the worker's reason otherwise. repo is the task's repository URL, which a report with only
-// today's single pushed head is on. How the process ended (killed, timed out, crashed) is the
-// caller's to apply on top.
-func (f *WorkerFinished) Result(repo string) RunResult {
+// with the worker's reason otherwise, with the repositories it reported. How the process ended
+// (killed, timed out, crashed) is the caller's to apply on top.
+func (f *WorkerFinished) Result() RunResult {
 	res := RunResult{
 		CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
-		Repositories: RunRepositories(f.Repositories, repo, WorkerRepository{PushedHead: f.PushedHead}),
+		Repositories: RunRepositories(f.Repositories),
 	}
 
 	switch {
