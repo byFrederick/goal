@@ -66,7 +66,8 @@ test('Approve publishes proposal 7 and opens the definition at its versions', as
 // Runs in each Playwright project (375, 768, 1440 px) and in both colour schemes. Not run in the box: CI-verified.
 for (const scheme of ['light', 'dark'] as const) {
   test(`Approve shows Publishing v22 while it waits, then the Published check (${scheme})`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: scheme });
+    // The config sets reducedMotion: 'reduce', which makes the check's hold time 0 and the page navigates at once.
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: 'no-preference' });
     await page.route('**/proposals/7/approve', (route) =>
       route.continue({ headers: { ...route.request().headers(), 'x-mock-latency-ms': '1500' } }),
     );

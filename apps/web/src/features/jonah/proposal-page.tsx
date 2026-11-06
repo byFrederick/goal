@@ -113,6 +113,7 @@ function proposalActions(p: Proposal, can: readonly string[], decisions: Proposa
       disabled={!canPublish}
       busy={decisions.approve.isPending}
       busyLabel={`Publishing v${p.publishes_as_version}…`}
+      {...(decisions.approve.isSuccess ? { 'aria-label': 'Published' } : {})}
       onClick={() => {
         if (!decisions.approve.isSuccess) decisions.approve.mutate();
       }}
