@@ -152,8 +152,10 @@ type harness struct {
 	// org is the organization of the tasks; connections hold its connections (bundle_test.go).
 	org         domain.OrgID
 	connections *porttest.Connections
-	clock       *porttest.Clock
-	key         []byte
+	// rules are the standing rules of connections' data.
+	rules *porttest.StandingRules
+	clock *porttest.Clock
+	key   []byte
 	// questions stand in for the engine behind question__ask (question_test.go).
 	questions *fakeQuestions
 	// approvals stand in for the engine behind POST /run/tool-approval (toolapproval_test.go).
@@ -257,7 +259,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		questions: &fakeQuestions{}, approvals: &fakeToolApprovals{}, logs: &syncBuffer{},
 	}
 	org, conns, tenancy := newConnections(t, h.clock)
-	h.org, h.connections = org, conns
+	h.org, h.connections, h.rules = org, conns, porttest.NewStandingRules(conns)
 	h.drafts = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Now: h.clock.Now})
 	h.requests = porttest.NewDraftRequests(porttest.NewTenancy(h.clock.Now), h.clock.Now)
 
@@ -303,6 +305,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Definitions:   defs,
 		Items:         h.store,
 		Connections:   h.connections,
+		StandingRules: h.rules,
 		Events:        h.store,
 		Clock:         h.clock,
 		Questions:     h.questions,
@@ -662,8 +665,8 @@ func TestNew_RequiresPolicies(t *testing.T) {
 	_, conns, _ := newConnections(t, clock)
 
 	_, err := New(Deps{
-		Definitions: definitions{}, Items: store, Connections: conns, Events: store, Clock: clock,
-		Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{},
+		Definitions: definitions{}, Items: store, Connections: conns, StandingRules: porttest.NewStandingRules(conns), Events: store,
+		Clock: clock, Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{},
 	}, Config{Key: []byte("gateway-test-key")})
 	if err == nil || !strings.Contains(err.Error(), "Policies") {
 		t.Errorf("New without Policies = %v; want an error naming Policies", err)

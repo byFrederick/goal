@@ -25,9 +25,10 @@ func TestConnections_Conformance(t *testing.T) {
 		var orgs atomic.Int64
 
 		return connectiontest.Harness{
-			Connections: func(key ports.MasterKey) ports.Connections { return conns.WithKey(key) },
-			Key:         keys.Key,
-			Audit:       tn,
+			Connections:   func(key ports.MasterKey) ports.Connections { return conns.WithKey(key) },
+			Key:           keys.Key,
+			Audit:         tn,
+			StandingRules: porttest.NewStandingRules(conns),
 			NewOrg: func(t *testing.T) domain.OrgID {
 				t.Helper()
 

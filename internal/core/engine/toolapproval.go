@@ -176,7 +176,7 @@ func (e *Engine) alwaysAllow(ctx context.Context, it domain.Item, l domain.Line,
 		env = spec.Environment
 	}
 
-	_, err := e.connections.CreateServerStandingRule(ctx, domain.NewServerStandingRule{
+	_, err := e.rules.CreateServerStandingRule(ctx, domain.NewServerStandingRule{
 		Factory: it.FactoryID, Environment: env, Server: a.Connection, Tool: a.Tool, Agent: a.Agent, Item: it.ID,
 	}, by)
 
@@ -248,7 +248,7 @@ func toolDecisionEvent(it domain.Item, a domain.ToolApproval, at time.Time, by d
 // from its next run. ports.ErrNotFound for an unknown rule, ErrStandingRuleRevoked for one
 // revoked already.
 func (e *Engine) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
-	r, err := e.connections.RevokeStandingRule(ctx, id, by)
+	r, err := e.rules.RevokeStandingRule(ctx, id, by)
 	if errors.Is(err, ports.ErrConflict) {
 		return domain.StandingRule{}, fmt.Errorf("revoke standing rule %s: %w", id, errors.Join(ErrStandingRuleRevoked, err))
 	}

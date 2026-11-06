@@ -192,6 +192,7 @@ type harness struct {
 	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
 	// servers) allowed unless publicOnly is set.
 	conns         *porttest.Connections
+	standingRules *porttest.StandingRules // the standing rules of conns' data
 	publicOnly    atomic.Bool
 	connTransport *http.Transport
 	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
@@ -511,7 +512,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost}, Hosts: tenancy,
-		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
+		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h}, StandingRules: sharedStandingRules{h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
@@ -560,7 +561,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, Connections: h.conns, StandingRules: h.standingRules, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, UploadMaxBytes: testUploadMax, Clock: h.clock, KnowledgeObjects: h.kbRanges, KnowledgeCheck: h.ingestor,
@@ -648,16 +649,24 @@ type sharedRules struct {
 	h *harness
 }
 
-func (c sharedRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
-	return c.h.conns.StandingRules(ctx, includeRevoked)
-}
-
 func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
 	return c.h.conns.CreateStandingRule(ctx, n, by)
 }
 
-func (c sharedRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
-	return c.h.conns.RevokeStandingRule(ctx, id, by)
+// sharedStandingRules are the engine's standing rules, the API's (h.standingRules), which the harness
+// makes after the engine.
+type sharedStandingRules struct{ h *harness }
+
+func (r sharedStandingRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+	return r.h.standingRules.StandingRules(ctx, includeRevoked)
+}
+
+func (r sharedStandingRules) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
+	return r.h.standingRules.CreateServerStandingRule(ctx, n, by)
+}
+
+func (r sharedStandingRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
+	return r.h.standingRules.RevokeStandingRule(ctx, id, by)
 }
 
 // engineConnections are the connections the engine's runs and merges get: acme's model connection
@@ -694,6 +703,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
 	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
+	h.standingRules = porttest.NewStandingRules(h.conns)
 	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
 	h.notifySettings, h.slack = porttest.NewNotificationSettings(h.secrets, audit), porttest.NewDirectMessenger()
