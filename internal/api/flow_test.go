@@ -527,8 +527,15 @@ func TestAPI_BoardLine(t *testing.T) {
 
 	h.spend(t, queued.ID, t0.Add(-time.Hour), 45)
 
-	if got := board().Line.Budget; got == nil || got.SpentUsd != 75 || !got.Exhausted {
-		t.Errorf("budget after $45 more = %+v, want $75 spent, exhausted", got)
+	// Used up: since now until the engine records it, resuming when the $30 run leaves the window.
+	since, resumes := t0.Add(-30*time.Minute), t0.Add(5*24*time.Hour)
+	if err := h.store.MarkBudgetExhausted(inOrg(t), lineID, since); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := board().Line.Budget; got == nil || got.SpentUsd != 75 || !got.Exhausted || got.Since == nil || !got.Since.Equal(since) ||
+		got.ResumesAt == nil || !got.ResumesAt.Equal(resumes) {
+		t.Errorf("budget after $45 more = %+v, want $75 spent, exhausted since %v, resuming at %v", got, since, resumes)
 	}
 }
 
