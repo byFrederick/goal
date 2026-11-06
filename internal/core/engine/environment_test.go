@@ -22,6 +22,8 @@ const (
 
 	secGitHubEntry = "github-entry"
 	secGitLabEntry = "gitlab-entry"
+	secGHEEntry    = "ghe-entry"
+	gheTokenValue  = "ghe-token-for-tests-3435" //nolint:gosec // a test value
 	secGitHub      = "github-token"
 	secDB          = "db-pass"
 	secTickets     = "tickets-key"

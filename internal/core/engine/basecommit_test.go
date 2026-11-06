@@ -173,10 +173,10 @@ func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
 
 	for _, listed := range []bool{false, true} {
 		line := changedSinceLine()
-		line.Runtime.Repository = domain.Repository{URL: gheRepo, Token: "{{ghe-entry}}"}
+		line.Runtime.Repository = domain.Repository{URL: gheRepo, Token: "{{" + secGHEEntry + "}}"}
 
 		h := newHarness(t, line, porttest.Succeed(touchesStore))
-		h.addSecret(t, "ghe-entry", "ghe-token")
+		h.addSecret(t, secGHEEntry, gheTokenValue)
 		h.codehost.SetBranchHead(gheRepo, "", base)
 
 		if listed {
@@ -191,7 +191,7 @@ func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
 		switch {
 		case !listed && (got != "" || len(calls) != 0 || !strings.Contains(h.logs.String(), "base commit not recorded")):
 			t.Errorf("unlisted: base commit %q after %d code host calls; want no base commit, no call and the log saying why", got, len(calls))
-		case listed && (got != base || !slices.Equal(calls, []string{"ghe-token"})):
+		case listed && (got != base || !slices.Equal(calls, []string{gheTokenValue})):
 			t.Errorf("listed: base commit %q with tokens %d; want %s read once with the repository token", got, len(calls), base)
 		}
 	}

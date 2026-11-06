@@ -591,19 +591,15 @@ func expectConflictEvent(t *testing.T, events []domain.Event, station string) {
 func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
 	t.Parallel()
 
-	const (
-		ghePR    = "https://ghe.example.com/acme/app/pull/4"
-		secGHE   = "ghe-entry"
-		gheToken = "ghe-token-for-tests-3435"
-	)
+	const ghePR = "https://ghe.example.com/acme/app/pull/4"
 
 	line := mergeLine(domain.ActionMerge)
 	line.Runtime.Repositories = []domain.RepositoryEntry{
-		{Name: connGHE, URL: "https://ghe.example.com/acme/*", Token: "{{" + secGHE + "}}", Access: domain.AccessWrite},
+		{Name: connGHE, URL: "https://ghe.example.com/acme/*", Token: "{{" + secGHEEntry + "}}", Access: domain.AccessWrite},
 	}
 
 	h := newHarness(t, line, porttest.Succeed(`{"pull_request":"`+ghePR+`"}`))
-	h.addSecret(t, secGHE, gheToken)
+	h.addSecret(t, secGHEEntry, gheTokenValue)
 	h.codehost.Add(openPR(ghePR))
 
 	it := h.atMerge(t)
@@ -627,7 +623,7 @@ func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
 		t.Fatalf("Merge once the host is listed = %v", err)
 	}
 
-	if merges := h.codehost.Merges(); len(merges) != 1 || merges[0].URL != ghePR || merges[0].Token != gheToken {
+	if merges := h.codehost.Merges(); len(merges) != 1 || merges[0].URL != ghePR || merges[0].Token != gheTokenValue {
 		t.Errorf("merges %+v; want %s with the ghe entry's token", merges, ghePR)
 	}
 }

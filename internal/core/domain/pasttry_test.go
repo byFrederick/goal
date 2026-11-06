@@ -278,16 +278,16 @@ func TestLine_TriableAgent(t *testing.T) {
 		want bool
 	}{
 		{name: "env only", line: onSecrets(Environment{Name: DefaultEnvironment, Env: map[string]string{"CI": "1"}}), want: true},
-		{name: "an MCP server", line: onSecrets(Environment{Name: DefaultEnvironment, MCP: map[string]MCPServer{"docs": {URL: "https://example.com/mcp"}}})},
+		{name: "an MCP server", line: onSecrets(Environment{Name: DefaultEnvironment, MCP: map[string]MCPServer{docsName: {URL: "https://example.com/mcp"}}})},
 		{name: "a file", line: onSecrets(Environment{Name: DefaultEnvironment, Files: map[string]string{"~/.npmrc": "x"}})},
-		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}, Agents: []AgentSpec{{Name: agent}}}},
+		{name: "a version on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}, Agents: []AgentSpec{{Name: agent}}}},
 		{name: "no such agent", line: onSecrets(Environment{Name: DefaultEnvironment})},
 	}
 
 	for _, tt := range tests {
 		name := agent
 		if tt.name == "no such agent" {
-			name = "frontend"
+			name = "spec-writer"
 		}
 
 		if got := tt.line.TriableAgent(name); got != tt.want {

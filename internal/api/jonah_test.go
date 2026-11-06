@@ -625,6 +625,7 @@ type modelLines struct {
 func (m modelLines) Line(ctx context.Context, id domain.DefinitionVersionID) (domain.Line, error) {
 	l, err := m.Cache.Line(ctx, id)
 	l = onSecrets(l)
+
 	if err == nil && m.h.modelLine != nil {
 		l.Agents = slices.Clone(l.Agents)
 		m.h.modelLine(&l)
