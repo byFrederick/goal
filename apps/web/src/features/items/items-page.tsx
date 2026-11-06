@@ -353,7 +353,7 @@ export function ItemsPage() {
             >
               <thead className="bg-panel text-secondary font-medium text-muted">
                 <tr>
-                  <th scope="col" className="w-px px-3 py-2 text-left">
+                  <th scope="col" className="w-px px-3 py-2 text-left lg:max-xl:px-1.5">
                     <span className="sr-only">Select</span>
                   </th>
                   {columns
@@ -363,7 +363,7 @@ export function ItemsPage() {
                         key={column}
                         scope="col"
                         className={cn(
-                          'px-3 py-2 text-left font-medium whitespace-nowrap lg:max-xl:px-2',
+                          'px-3 py-2 text-left font-medium whitespace-nowrap lg:max-xl:px-1.5',
                           column === 'Repositories' && 'hidden 2xl:table-cell',
                           column === 'Cost' && 'text-right',
                           (column === 'Lane' || column === 'Agent' || column === 'Age' || column === 'Cost') &&

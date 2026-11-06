@@ -97,7 +97,7 @@ export function SelectBox({
 }
 
 /** The table cell's padding, shared by every row. */
-const cell = 'px-3 py-2 align-middle lg:max-xl:px-2';
+const cell = 'px-3 py-2 align-middle lg:max-xl:px-1.5';
 
 /** Columns that give way below 1024 px, where the table scrolls in its own box; from lg every column shows. */
 export const hideBelowLg = 'hidden lg:table-cell';
@@ -179,11 +179,14 @@ export function ItemTableRow({
       <td className={cn(cell, hideBelowLg)}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap lg:max-w-24 lg:truncate')} title={humanize(item.station)}>
+      <td
+        className={cn(cell, 'whitespace-nowrap lg:max-xl:max-w-20 lg:max-w-24 lg:truncate')}
+        title={humanize(item.station)}
+      >
         {humanize(item.station)}
       </td>
-      <td className={cell}>
-        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <td className={cn(cell, 'lg:max-xl:max-w-28')}>
+        <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
           <span
             className={cn(
               'inline-flex min-w-0 items-center gap-2 whitespace-nowrap text-secondary font-medium',
@@ -192,17 +195,17 @@ export function ItemTableRow({
             title={label.text}
           >
             {status ? <StatusIcon status={status} /> : null}
-            <span>{label.text}</span>
+            <span className="min-w-0 lg:max-xl:truncate">{label.text}</span>
           </span>
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap lg:max-w-24', hideBelowLg)}>
+      <td className={cn(cell, 'whitespace-nowrap lg:max-xl:max-w-20 lg:max-w-24', hideBelowLg)}>
         {item.agent ? (
           <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft" title={item.agent}>
             <span
               aria-hidden="true"
-              className="grid size-6 flex-none place-items-center rounded-full bg-run-tint text-meta font-semibold text-run-ink"
+              className="grid size-6 flex-none place-items-center max-xl:lg:hidden rounded-full bg-run-tint text-meta font-semibold text-run-ink"
             >
               {monogram(item.agent)}
             </span>
