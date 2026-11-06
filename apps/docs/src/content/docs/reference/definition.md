@@ -197,6 +197,7 @@ object, required.
       - `min`: integer.
       - `run`: string.
     - `action`: one of `"merge"`. On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull\_request and pull\_requests fields of each station's latest output, the gate's own included), each through the factory's code host connection for its host; at a gate goald merges as the engine, and a refused merge blocks the item at the gate.
+    - `merges`: one of `"serialize"`, `"allow"`. Only on a station with action merge: how many items it integrates into the same merge target at once. A merge target is the branch an item's pull request merges into: the default branch for a standalone item or an assembly's landing, and the assembly's integration branch for a part. serialize (the default): one item per merge target at a time; allow: several at once.
     - `context`: array of one of `"inflight"`. What goald preloads into the feedback of every run at this station. inflight: an In flight section listing up to 30 of the factory's open items and assemblies with the paths each expects to change, ranked by overlap with the item.
     - `gate`: object.
       - `onReject`: string, required.

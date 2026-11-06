@@ -9,7 +9,8 @@ import (
 var ErrCycle = errors.New("dependency cycle")
 
 // EdgeKind says why an item needs another: planned by whoever split the work, linked by a
-// person, or overlap (their files overlap).
+// person, overlap (their files overlap), or turn (both wait at a merge station that takes turns
+// for the same merge target, and the needed item holds the turn; ADR 0043).
 type EdgeKind string
 
 // Edge kinds.
@@ -17,12 +18,13 @@ const (
 	EdgePlanned EdgeKind = "planned"
 	EdgeLinked  EdgeKind = "linked"
 	EdgeOverlap EdgeKind = "overlap"
+	EdgeTurn    EdgeKind = "turn"
 )
 
 // Valid reports whether k is a known edge kind.
 func (k EdgeKind) Valid() bool {
 	switch k {
-	case EdgePlanned, EdgeLinked, EdgeOverlap:
+	case EdgePlanned, EdgeLinked, EdgeOverlap, EdgeTurn:
 		return true
 	default:
 		return false

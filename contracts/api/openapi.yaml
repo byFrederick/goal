@@ -6681,14 +6681,14 @@ components:
       description: >-
         Why a queued or ready item is not claimed yet, derived from its open needs (those neither
         done nor cancelled) on every read and never stored. Planned and linked needs win over
-        overlap ones
+        overlap ones, and overlap ones over turn ones
       required: [kind, items, files, needs]
       properties:
         kind:
           type: string
-          enum: [after, files]
-          x-enum-varnames: [WaitingAfter, WaitingFiles]
-          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)"
+          enum: [after, files, turn]
+          x-enum-varnames: [WaitingAfter, WaitingFiles, WaitingTurn]
+          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)"
         items:
           type: array
           description: "Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first"
@@ -6701,6 +6701,10 @@ components:
           type: array
           description: The open needs of that kind, oldest edge first, the same ones as items
           items: { $ref: "#/components/schemas/ItemWaitingNeed" }
+        target:
+          type: string
+          nullable: true
+          description: "For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files"
     ItemWaitingNeed:
       type: object
       description: One open need that holds a waiting item
@@ -6727,7 +6731,7 @@ components:
       properties:
         id: { type: string, description: The other item's id }
         ref: { type: string, description: "The other item's <factory name>#<number>" }
-        kind: { type: string, enum: [planned, linked, overlap], description: "planned by whoever split the work, linked by a person, or overlap (their files overlap)" }
+        kind: { type: string, enum: [planned, linked, overlap, turn], description: "planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)" }
         state: { $ref: "#/components/schemas/ItemState" }
         by: { type: string, description: "The edge's author, as an actor ref (<kind>:<id>, as in user:<id> or agent:<id>)" }
         at: { type: string, format: date-time, description: When the edge was added }

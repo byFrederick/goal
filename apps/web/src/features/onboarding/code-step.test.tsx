@@ -8,12 +8,13 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import { getDraftFile, listTemplates, openDraft, putDraftFile } from '../../api/definitions';
+import { getDraftFile, getDraftModel, getFactory, listTemplates, openDraft, putDraftFile } from '../../api/definitions';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret, replaceSecretValue } from '../../api/secrets';
+import { setSessionHandlers } from '../../api/session';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode, TemplateSummary } from '../../api/types';
 import { TooltipProvider } from '../../ui/tooltip';
 import { onboardingSearch } from './code-search';
@@ -35,6 +36,8 @@ vi.mock('../../api/definitions', async (original) => ({
   listTemplates: vi.fn(),
   openDraft: vi.fn(),
   getDraftFile: vi.fn(),
+  getDraftModel: vi.fn(),
+  getFactory: vi.fn(),
   putDraftFile: vi.fn(),
 }));
 
@@ -79,6 +82,18 @@ beforeEach(() => {
   vi.mocked(openDraft).mockResolvedValue({} as never);
   vi.mocked(getDraftFile).mockResolvedValue({ text: factoryYaml, sha256: 'abc' });
   vi.mocked(putDraftFile).mockResolvedValue({} as never);
+  vi.mocked(getFactory).mockResolvedValue({ id: factory, name: 'Acme delivery' } as never);
+  vi.mocked(getDraftModel).mockResolvedValue({
+    model: {
+      basics: { purpose: 'Ship changes' },
+      line: {
+        stations: [
+          { id: 'build', kind: 'agent', name: 'Build' },
+          { id: 'done', kind: 'done', name: 'Done' },
+        ],
+      },
+    },
+  } as never);
 });
 
 afterEach(() => {
@@ -123,6 +138,23 @@ const fill = async (url: string, token: string) => {
 };
 const next = () => screen.getByRole('button', { name: /Continue|Testing/ }) as HTMLButtonElement;
 const radio = async (name: RegExp) => (await screen.findByRole('radio', { name })) as HTMLInputElement;
+
+describe('Step 3, Connect your code: the preview', () => {
+  it('keeps the picked template’s factory card and its stations, not the placeholder', async () => {
+    renderStep();
+    const card = await screen.findByRole('region', { name: 'Your factory' });
+    expect(await within(card).findByText('Acme delivery')).toBeTruthy();
+    expect(within(card).getByRole('list', { name: 'The line' }).textContent).toContain('Build');
+    expect(screen.queryByText('The line appears when you pick a template')).toBeNull();
+  });
+
+  it('shows the card’s skeleton while the factory loads, never the placeholder', async () => {
+    vi.mocked(getFactory).mockReturnValue(new Promise(() => {}));
+    renderStep();
+    expect((await screen.findAllByText('Loading')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('The line appears when you pick a template')).toBeNull();
+  });
+});
 
 describe('Step 3, Connect your code: the choices', () => {
   it('shows a skeleton while the template loads', async () => {
@@ -248,6 +280,30 @@ describe('Step 3, Connect your code: saving and testing', () => {
     expect(text).not.toContain('repository:');
     expect(router.state.location.search).toMatchObject({ factory, secret: 'github-acme' });
     expect(JSON.stringify(router.state.location)).not.toContain('test-token');
+  });
+
+  it('says a refused save needs a fresh sign-in, offers Sign in again, and saves again after it', async () => {
+    const problem = new ApiError({
+      title: 'Sign in again to do this',
+      status: 403,
+      code: 'reauth-required',
+    } as ConstructorParameters<typeof ApiError>[0]);
+    vi.mocked(createSecret).mockRejectedValueOnce(problem);
+    const reauth = vi.fn(async () => true);
+    setSessionHandlers({ reauth });
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+
+    expect(
+      await screen.findByText('Couldn’t save and test the token because Goal needs you to sign in again.'),
+    ).toBeTruthy();
+    expect(reauth).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
+    expect(await screen.findByText('acme/app: Can read and push')).toBeTruthy();
+    expect(reauth).toHaveBeenCalledTimes(1);
+    expect(createSecret).toHaveBeenCalledTimes(2);
+    setSessionHandlers({ reauth: async () => false });
   });
 
   it('tests every repository and writes one entry per URL, with no default', async () => {

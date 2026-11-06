@@ -62,6 +62,47 @@ describe('WaitingFor', () => {
     expect(within(section).queryByText(/Shared files/)).toBeNull();
   });
 
+  it('words a turn wait with its branch, a linked ref and an ⓘ, and no ⓘ for other waits', async () => {
+    const turn: ItemWaiting = {
+      kind: 'turn',
+      items: ['goal#16'],
+      files: [],
+      target: 'goal/a7-x',
+      needs: [{ ref: 'goal#16', title: 'Retry the sync', paths: [] }],
+    };
+    renderFactoryPage({ page: () => <WaitingFor waiting={turn} />, path: 'board', org, factory });
+
+    const section = await screen.findByRole('region', { name: 'Waiting' });
+    expect(section.textContent).toContain('Waiting for goal#16 to land on goal/a7-x Retry the sync');
+    expect(within(section).getByRole('link', { name: 'goal#16' }).getAttribute('href')).toBe('/o/acme/f/goal/items/16');
+    const tip = within(section).getByRole('button', { name: 'About Waiting' });
+    expect(tip.getAttribute('aria-describedby')).toBeTruthy();
+    expect(
+      within(section).getByText(
+        /This station merges one item into a branch at a time, so each pull request is tested against the latest branch\. This item starts when the one ahead is merged or sent back\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says the default branch when a turn wait has no target', async () => {
+    const turn: ItemWaiting = {
+      kind: 'turn',
+      items: ['goal#16'],
+      files: [],
+      target: null,
+      needs: [{ ref: 'goal#16', title: 'Retry the sync', paths: [] }],
+    };
+    renderFactoryPage({ page: () => <WaitingFor waiting={turn} />, path: 'board', org, factory });
+    const section = await screen.findByRole('region', { name: 'Waiting' });
+    expect(section.textContent).toContain('to land on the default branch');
+  });
+
+  it('shows no ⓘ for a files wait', async () => {
+    renderFactoryPage({ page: () => <WaitingFor waiting={files} />, path: 'board', org, factory });
+    await screen.findByRole('region', { name: 'Waiting' });
+    expect(screen.queryByRole('button', { name: 'About Waiting' })).toBeNull();
+  });
+
   it('renders nothing for an item that does not wait', async () => {
     renderFactoryPage({
       page: () => (

@@ -121,7 +121,7 @@ export function setupRows(input: SetupInput): SetupRow[] {
     },
     {
       id: 'first-item',
-      text: 'First item merged',
+      text: 'First item done',
       hint: 'Send one item through the line',
       done: input.finishedItems > 0,
     },

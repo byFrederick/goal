@@ -2,13 +2,17 @@
 // organization and code cards from steps 1 and 2, then the factory card with its line. The line is the
 // andon station nodes joined by a rule, each with its WIP slots as small squares. The factory card reads
 // the draft (step 4) or the picked template (step 3, before the factory exists).
+import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { draftModelQuery, factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
-import type { StationKind } from '../../shared/definition/model';
+import { modelOf, type StationKind } from '../../shared/definition/model';
 import { formatUsd } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { GitHubMark } from '../../ui/github-mark';
+import { Skeleton } from '../../ui/skeleton';
 import { StationNode, type StationNodeTone } from '../../ui/station-node';
+import { stationLabel } from '../factory-editor/line/labels';
 import { PreviewCard, type PreviewSlots } from './onboarding-layout';
 
 /** A station as the panel draws it: its name, its kind (Done shows a check) and its WIP limit. */
@@ -188,5 +192,39 @@ export function RunningItemCard({
         </span>
       </div>
     </section>
+  );
+}
+
+/**
+ * The factory card of a step before the line is open for editing (the Code step): the factory's name and the
+ * stations of its draft. Until both load it shows the card as muted blocks; without a draft, the card has no stations.
+ */
+export function FactoryCardOf({ org, factory }: { org: string; factory: string }) {
+  const detail = useQuery(factoryQuery(org, factory));
+  const model = useQuery(draftModelQuery(org, factory));
+  const ready = !detail.isPending && !model.isPending;
+  const { line, basics } = model.data ? modelOf(model.data.model) : { line: undefined, basics: undefined };
+  const stations: PreviewStation[] = (line?.stations ?? []).map((s) => ({
+    id: s.id,
+    label: stationLabel(s),
+    kind: s.kind,
+    wip: s.wip,
+  }));
+  return (
+    <Skeleton ready={ready} placeholder={<FactoryCardPlaceholder />}>
+      <FactoryCard name={detail.data?.name ?? ''} purpose={basics?.purpose ?? ''} stations={stations} />
+    </Skeleton>
+  );
+}
+
+function FactoryCardPlaceholder() {
+  return (
+    <div className="flex min-h-42 flex-col gap-5 rounded-card border border-line bg-hover p-4 md:p-5">
+      <div className="flex items-center gap-3">
+        <div className="size-9 rounded-control bg-line" />
+        <div className="h-4 w-2/5 rounded-control bg-line" />
+      </div>
+      <div className="h-8 rounded-control bg-line" />
+    </div>
   );
 }

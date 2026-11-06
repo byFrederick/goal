@@ -207,11 +207,11 @@ The end of onboarding is the Floor's two cards for a new factory, shown only unt
 - The line, N stations: the published version's stations, not counting the Done station (`versionModelQuery`, `modelOf`). The picture's "4 stations" is Intake, Spec, Build and Review.
 - Budgets and targets: `review.budget` sets a cap, or `line.flow.targets` sets a target. To do links to the Review section of the definition.
 - N triggers: every trigger in `intakeQuery`, switched on or off. Done when there is one. To do links to the factory's intake.
-- First item merged: an item of the factory in state `done` (`itemsQuery`, one item). To do offers New item.
+- First item done: an item of the factory in state `done` (`itemsQuery`, one item). To do offers New item.
 
 The count reads "N of 9 done" beside a ring (`role=img`). Closing the card (Hide setup) writes `goal.setup-hidden.<factory id>` to localStorage, so it stays closed in that browser only; the card renders nothing when all nine are done. Its loading, error (with Retry, which reads only the failed queries) and ready states are the Floor cards' own.
 
-**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. There is no "Label an issue" row: nothing implements it. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`). "goal run" copies the CLI command. With no triggers, a line says so under the rows.
+**How work gets in** (`ways-in-card.tsx`) lists the ways an item arrives. There is no "Label an issue" row: nothing implements it. "Mention @<factory> in Slack" offers Connect only while the organization has no slack connection. "New item, or press C" opens the new-item composer (not drawn without `item:create`); on a phone it is at least 44 px tall (`max-md:min-h-11`), and on touch devices (`pointer-coarse`) the ", or press C" hint is hidden, since a touch phone has no keyboard shortcut. "goal run" copies the CLI command. With no triggers, a line says so under the rows.
 
 **Came from** (`shared/origin.tsx`, the item page's Details card) says where an item came from, from `getItem`'s `came_from`. A follow-up reads "A follow-up by <agent> on <source item>, filed when <item> landed", one line per follow-up, with both refs linked (another factory's included). A check's item reads "The check <name>, <key>" (no key: "The check <name>"), and a schedule's or webhook's reads the trigger's name. A person's reads "<name>, the CLI"; a part's reads "Part of <assembly ref> <title>". Intake's Coming up rows carry no `came_from`, so they keep "Follow-up from <ref>".
 
@@ -319,7 +319,7 @@ The Floor (`features/floor/floor-page.tsx`) is the header, the line and the stat
   - **Throughput by week** (`weekly-card.tsx`, `ui/bars.tsx`): `weeklyQuery`, a solid bar for every week (the rule colour, the current week in ink, a zero week a stub) with the dashed target line; the target's label sits above the chart, clear of the bars.
   - **Activity** (`activity-card.tsx`): `activityQuery` (`listFactoryActivity`, five rows, the "Live" chip), one line per event from `activity-words.ts` (a 44 px mono time, a 6 px dot coloured by `activityTone`, the sentence truncating with its full text in the title), with the actor named by role (`actorRole` drops a copy number). The key sits under the factory's prefix, so a stream item event refetches it; nothing polls.
   - Each card has its own loading (aria-busy with an sr-only "Loading"), empty and error states (`card-states.tsx`, with Retry).
-  - **New factory row** (`NewFactoryRow` in `floor-page.tsx`): the setup checklist and How work gets in sit in two columns (stacked on a phone) between the stat strip and the cards, only while no item has merged (the "First item merged" row of `setup-progress.ts`). Once one has, neither renders and the line keeps the full width. Nothing renders until the done-items query answers, so the row does not push the cards down.
+  - **New factory row** (`NewFactoryRow` in `floor-page.tsx`): the setup checklist and How work gets in sit in two columns (stacked on a phone) between the stat strip and the cards, only while no item is done (the "First item done" row of `setup-progress.ts`). Once one is, neither renders and the line keeps the full width. Nothing renders until the done-items query answers, so the row does not push the cards down.
   - The human touches panel is not on the Floor; the item page keeps its own (`features/items/touches-card.tsx`).
 
 ### Phone Board
