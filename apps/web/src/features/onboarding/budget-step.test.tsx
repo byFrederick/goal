@@ -254,6 +254,19 @@ describe('step 5, set budgets and targets', () => {
     expect(router.state.location.search).toMatchObject({ factory: factoryId });
   });
 
+  it('shows Continue as busy, not disabled, while the publish waits', async () => {
+    let done: (v: never) => void = () => {};
+    vi.mocked(publishDraft).mockImplementationOnce(() => new Promise((r) => (done = r)));
+    renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const button = await screen.findByRole('button', { name: 'Continue' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(await screen.findByText('Publishing…')).toBeTruthy();
+    done({ id: 'version-1', number: 1 } as never);
+  });
+
   it('shows the problems a publish refuses and stays on the step', async () => {
     vi.mocked(publishDraft).mockRejectedValueOnce(
       new ApiError({
