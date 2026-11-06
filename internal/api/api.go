@@ -314,7 +314,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, RepositoryTests, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
+			"Connections, StandingRules, Credentials, OrgSecrets, EnvironmentTests, ToolLister, RepositoryTests, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, and Jonah, when set, needs Store and Decisions")
 	}
 
