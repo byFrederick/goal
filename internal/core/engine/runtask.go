@@ -114,7 +114,7 @@ type runTask struct {
 func (e *Engine) runTask(ctx context.Context, t runTask) (domain.RunResult, error) {
 	runID, err := e.store.StartRun(ctx, ports.NewRun{
 		FactoryID: t.FactoryID, DefinitionVersionID: t.Version, ItemID: t.Item, Station: t.Station,
-		Agent: t.Agent, Model: t.Model, StartedAt: e.clock.Now(), Kind: t.Kind,
+		Agent: t.Agent, Model: t.Model, StartedAt: e.clock.Now(), Kind: t.Kind, Size: cmp.Or(t.Size, domain.SandboxMedium),
 	})
 	if err != nil {
 		return domain.RunResult{}, fmt.Errorf("record run: %w", err)
