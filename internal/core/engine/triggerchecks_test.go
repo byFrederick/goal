@@ -210,6 +210,27 @@ func TestChecks_ExpiredLeaseFails(t *testing.T) {
 	}
 }
 
+// A check on a version on connections fails with the refusal that tells the person to publish a
+// version on secrets, and prepares no box.
+func TestChecks_RefusesVersionOnConnections(t *testing.T) {
+	t.Parallel()
+
+	h := checkHarness(t, onConnections(lineOf(agentStation(stWork, agWorker, 1, 1))), porttest.Succeed(`{}`), checkTrigger(incidents))
+
+	h.fireAt(t, t0.Add(2*time.Minute))
+	h.tick(t)
+	h.wait(t, h.e)
+
+	f := h.firing(t, incidents, at0900)
+	if f.CheckState != domain.CheckFailed || !strings.Contains(f.Reason, "publish a version on environment files and secrets (ADR 0037)") {
+		t.Errorf("check = %+v; want failed with the refusal of a version on connections", f)
+	}
+
+	if n := len(h.worker.Prepares()); n != 0 {
+		t.Errorf("%d prepares; a check on a version on connections prepares no box", n)
+	}
+}
+
 // A budget stop cancels a running check, which is failed with the cause.
 func TestChecks_BudgetStopCancels(t *testing.T) {
 	t.Parallel()
@@ -276,7 +297,7 @@ func TestChecks_FailedAnswerRecorded(t *testing.T) {
 func checkRequest() domain.RunRequest {
 	return domain.RunRequest{
 		OrgID: testOrg, FactoryID: factoryID, Version: v1, Kind: domain.RunKindCheck, Bundle: domain.TaskKindCheck, Trigger: incidents,
-		Agent: agWorker, Model: modelOpus, ModelConnection: connModel, Timeout: 5 * time.Minute,
+		Agent: agWorker, Model: modelOpus, ModelKey: "{{" + secModel + "}}", Timeout: 5 * time.Minute,
 	}
 }
 

@@ -16,9 +16,10 @@ func TestTries_RequestFromRecordedRepositories(t *testing.T) {
 	const agent, station = "engineer", "build"
 
 	line := domain.Line{
-		Runtime:  domain.Runtime{Repository: domain.Repository{URL: "https://github.com/acme/app.git"}},
-		Agents:   []domain.AgentSpec{{Name: agent}},
-		Stations: []domain.Station{{ID: station, Kind: domain.KindAgent, Agent: agent}},
+		Runtime:      domain.Runtime{ModelKey: "{{claude-key}}", Repository: domain.Repository{URL: "https://github.com/acme/app.git"}},
+		Environments: []domain.Environment{{Name: domain.DefaultEnvironment}},
+		Agents:       []domain.AgentSpec{{Name: agent}},
+		Stations:     []domain.Station{{ID: station, Kind: domain.KindAgent, Agent: agent}},
 	}
 	try := domain.PastTry{Station: station, Model: "claude-sonnet-5-5"}
 	head, other := strings.Repeat("c", 40), strings.Repeat("d", 40)
