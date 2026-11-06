@@ -27,7 +27,7 @@ var orgTables = []string{
 
 // withPlatformRows are the org tables whose org_id may be NULL for the platform's rows, and why;
 // every organization reads those rows, only definers write them. None has since 00133 dropped
-// connection_kinds.
+// the platform's connection kinds.
 var withPlatformRows = map[string]string{}
 
 // withoutOrgID are the tables that carry no org_id, and why. A phase that adds a table without
