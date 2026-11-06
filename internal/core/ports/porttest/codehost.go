@@ -1,6 +1,7 @@
 package porttest
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -40,6 +41,42 @@ type CodeHost struct {
 	tokens   []string                          // the tokens RepositoryAccess was given, in order
 	owners   map[string]ports.OwnerAccess      // host/owner + " " + token → what OwnerAccess answers
 	logins   []string                          // the tokens of the other calls, in order
+	checks   map[string][]ChecksAnswer         // repo + " " + sha → what Checks answers next, the last repeating
+	checked  []ChecksCall                      // the Checks calls it accepted, in order
+}
+
+// ChecksAnswer is one answer SetChecks scripts for Checks: Checks, or Err when it is set. An empty
+// Checks.Head is the sha asked about; another one is a pull request head that moved.
+type ChecksAnswer struct {
+	Checks ports.CommitChecks
+	Err    error
+}
+
+// ChecksCall is one Checks call the fake accepted.
+type ChecksCall struct {
+	Repo            domain.CodeRepository
+	SHA, URL, Token string
+}
+
+// SetChecks scripts what Checks answers for sha in the repository at repo: answers in order, one per
+// call, the last one repeating. A sha with no script answers no checks, with Head the sha.
+func (c *CodeHost) SetChecks(repo, sha string, answers ...ChecksAnswer) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.checks == nil {
+		c.checks = map[string][]ChecksAnswer{}
+	}
+
+	c.checks[repoKey(repo)+" "+sha] = slices.Clone(answers)
+}
+
+// ChecksCalls returns the Checks calls the fake accepted, in order.
+func (c *CodeHost) ChecksCalls() []ChecksCall {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.Clone(c.checked)
 }
 
 // SetAccess makes a what RepositoryAccess answers for token in the repository at repo. Any other
@@ -500,6 +537,46 @@ func (c *CodeHost) OwnerAccess(_ context.Context, host domain.CodeHost, token, o
 	}
 
 	return a, nil
+}
+
+// Checks implements ports.CodeHost from SetChecks. Like the adapters, it refuses an empty sha.
+func (c *CodeHost) Checks(_ context.Context, repo domain.CodeRepository, token, sha, url string) (ports.CommitChecks, error) {
+	if err := c.inRepository(repo, token, url); err != nil {
+		return ports.CommitChecks{}, err
+	}
+
+	if sha == "" {
+		return ports.CommitChecks{}, fmt.Errorf("checks of %s: no commit: %w", repo, domain.ErrInvalid)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.checked = append(c.checked, ChecksCall{Repo: repo, SHA: sha, URL: url, Token: token})
+
+	key := repo.Key() + " " + sha
+
+	answers := c.checks[key]
+	if len(answers) == 0 {
+		return ports.CommitChecks{Head: sha}, nil
+	}
+
+	a := answers[0]
+	if len(answers) > 1 {
+		c.checks[key] = answers[1:]
+	}
+
+	if a.Err != nil {
+		return ports.CommitChecks{}, a.Err
+	}
+
+	out := ports.CommitChecks{Head: cmp.Or(a.Checks.Head, sha)}
+	for _, ch := range a.Checks.Checks {
+		ch.FailedJobs = slices.Clone(ch.FailedJobs)
+		out.Checks = append(out.Checks, ch)
+	}
+
+	return out, nil
 }
 
 // ownerKey is the lower-case host/owner of an owner's repositories.

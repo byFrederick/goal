@@ -1036,6 +1036,16 @@ type CodeHost interface {
 	// anything is sent. The token goes only to the host's domain.CodeHostAPIBase, redirects are
 	// not followed, and it only reads.
 	OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (OwnerAccess, error)
+
+	// Checks returns what CI says about commit sha in repo (ADR 0044, decision 6): each check with
+	// its state, its result once finished, a link and a few failed job names where the host gives
+	// them. When url, a pull request of repo, is set, it reads the pull request's current head and
+	// returns that head's checks with it in CommitChecks.Head; else Head is sha. No checks with a
+	// nil error means no CI is configured or none has registered yet. A token that cannot see CI
+	// is an error wrapping ErrCINotReadable (a *CINotReadableError naming the permission it
+	// needs), never no checks; a rate limit is a *RateLimitedError saying when to retry. It only
+	// reads.
+	Checks(ctx context.Context, repo domain.CodeRepository, token, sha, url string) (CommitChecks, error)
 }
 
 // OwnerAccess is what CodeHost.OwnerAccess found a token can do in an owner's repositories.
