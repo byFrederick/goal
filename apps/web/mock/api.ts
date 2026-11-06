@@ -84,6 +84,7 @@ import { createJonah } from './jonah.ts';
 import { createKeys } from './keys.ts';
 import { createKnowledge } from './knowledge.ts';
 import { createOrgNotifications } from './org-notifications.ts';
+import { createOrgWebhooks } from './org-webhooks.ts';
 import { directory, membersFor, orgCanOf } from './people.ts';
 import { createPolicy } from './policy.ts';
 import { type Grants, grantsOf, levelsOf, readSources, roleSetting, scopeOf } from './roles.ts';
@@ -370,6 +371,11 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     clock,
     caller: (req) => auth.who(req)?.person.id ?? directory.owner.id,
     factory: (org, key) => findFactory(key, org),
+  });
+  const orgWebhooks = createOrgWebhooks({
+    clock,
+    factories: (org) => state.factories.filter((f) => f.org_id === org),
+    acme: acmeOrg,
   });
   const webhooks = createWebhooks({
     clock,
@@ -1868,6 +1874,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
+    if (orgWebhooks.handle(org.id, rest, method, res)) return;
     if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
@@ -2334,7 +2341,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     m = rest.match(
       /^\/items\/([^/]+)(?:\/(events|runs|teardown|parts|notes|approve|reject|merge|retry|move|pause|lane|cancel|answer|tool-approval))?$/,
     );
-    if (!m) return problem(res, 404, 'Not found', path);
+    if (!m) return problem(res, 404, 'Not found', path, 'mock-unserved');
 
     const it = findItem(decodeURIComponent(m[1] ?? ''), org.id);
     if (!it) return problem(res, 404, 'Item not found', decodeURIComponent(m[1] ?? ''));
@@ -2636,7 +2643,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       return json(res, 200, full(it));
     }
 
-    return problem(res, 404, 'Not found', path);
+    return problem(res, 404, 'Not found', path, 'mock-unserved');
   }
 
   // Live mode: running agents keep calling tools so the stream has something to say.
