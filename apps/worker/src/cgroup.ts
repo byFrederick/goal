@@ -78,6 +78,8 @@ export interface MeterOptions {
   sampleMs?: number;
   /** Where the one line about a counter that could not be read goes; stderr when absent. */
   log?: (line: string) => void;
+  /** Reads memory.current under root for a sample; readMemory when absent. Tests wrap it to await each read. */
+  readCurrent?: (root: string) => Promise<number | undefined>;
 }
 
 /** A run's measurement: stop ends the sampling and returns the usage; every call returns the same. */
@@ -94,8 +96,9 @@ export interface ResourceMeter {
  */
 export function startMeter(opts: MeterOptions): ResourceMeter {
   let largest: number | undefined;
+  const readCurrent = opts.readCurrent ?? ((root: string) => readMemory(root, 'memory.current'));
   const sample = async () => {
-    const current = await readMemory(opts.root, 'memory.current');
+    const current = await readCurrent(opts.root).catch(() => undefined);
     if (current !== undefined && (largest === undefined || current > largest)) largest = current;
   };
   void sample();

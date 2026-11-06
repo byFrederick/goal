@@ -73,11 +73,21 @@ describe('saveCpuStart and startMeter', () => {
     await saveCpuStart(root, startFile, log);
     await counter('memory.current', '100\n');
 
-    const meter = startMeter({ root, startFile, sampleMs: 5_000, log });
+    // The reads are real file I/O, which fake timers do not wait for: keep the last one to await it.
+    let lastRead: Promise<unknown> = Promise.resolve();
+    const readCurrent = (r: string) => {
+      const read = readMemory(r, 'memory.current');
+      lastRead = read;
+      return read;
+    };
+    const meter = startMeter({ root, startFile, sampleMs: 5_000, log, readCurrent });
+    await lastRead;
     await counter('memory.current', '900\n');
     await vi.advanceTimersByTimeAsync(5_000);
+    await lastRead;
     await counter('memory.current', '300\n');
     await vi.advanceTimersByTimeAsync(5_000);
+    await lastRead;
     await cpuStat(500_000);
 
     expect(await meter.stop()).toEqual({ cpu_seconds: 0.5, peak_memory_bytes: 900 });
