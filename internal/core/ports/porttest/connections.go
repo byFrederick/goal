@@ -110,11 +110,8 @@ type connectionData struct {
 	platform map[string]domain.ConnectionKind
 	orgKinds map[domain.OrgID]map[string]domain.ConnectionKind
 	conns    map[domain.OrgID]map[string]*connectionRow
-	// rules are each organization's standing rules, oldest first; none is ever removed.
-	rules map[domain.OrgID][]*domain.StandingRule
-	// readBy reports whether a knowledge source reads a connection (NewKnowledge sets it), which
-	// then cannot be deleted, as the database's foreign key refuses.
-	readBy func(domain.OrgID, domain.ConnectionID) bool
+	// rules are the standing rules of both keys, as the database's one standing_rules table.
+	rules *StandingRules
 }
 
 type connectionRow struct {
@@ -132,9 +129,13 @@ func NewConnections(key ports.MasterKey, audit ports.Audit) *Connections {
 		platform: map[string]domain.ConnectionKind{},
 		orgKinds: map[domain.OrgID]map[string]domain.ConnectionKind{},
 		conns:    map[domain.OrgID]map[string]*connectionRow{},
-		rules:    map[domain.OrgID][]*domain.StandingRule{},
+		rules:    NewStandingRules(audit),
 	}}
 }
+
+// StandingRules are the standing rules of c's data: those CreateStandingRule makes, which Delete
+// revokes with their connection, and the server-keyed ones.
+func (c *Connections) StandingRules() *StandingRules { return c.d.rules }
 
 // WithKey returns a view of c's data sealed with key.
 func (c *Connections) WithKey(key ports.MasterKey) *Connections {
@@ -559,28 +560,6 @@ func secretFields(sealed, refs map[string]string) []string {
 	return slices.Compact(names)
 }
 
-// referrers are the names of org's connections that refer to credential name, sorted.
-func (c *Connections) referrers(org domain.OrgID, name string) []string {
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
-
-	out := []string{}
-
-	for _, r := range c.d.conns[org] {
-		for _, cred := range r.conn.SecretRefs {
-			if cred == name {
-				out = append(out, r.conn.Name)
-
-				break
-			}
-		}
-	}
-
-	slices.Sort(out)
-
-	return out
-}
-
 func (c *Connections) updateAudits(ctx context.Context, by domain.Actor, from string, conn domain.Connection, p domain.ConnectionPatch) error {
 	if p.Name != nil || p.Description != nil || p.Fields != nil || p.ToolModes != nil {
 		data := map[string]any{auditName: conn.Name}
@@ -624,29 +603,14 @@ func (c *Connections) Delete(ctx context.Context, name string, by domain.Actor) 
 		return fmt.Errorf("connection %q: %w", name, ports.ErrNotFound)
 	}
 
-	if c.d.readBy != nil && c.d.readBy(org, r.conn.ID) {
-		return fmt.Errorf("knowledge sources use it: %w", ports.ErrConflict)
-	}
-
 	err := c.appendAudit(ctx, by, domain.AuditConnectionDeleted, domain.AuditTargetConnection, string(r.conn.ID),
 		map[string]any{auditName: name, "kind": r.conn.Kind})
 	if err != nil {
 		return err
 	}
 
-	now := time.Now().UTC().Truncate(time.Microsecond)
-
-	for _, rule := range c.d.rules[org] {
-		if rule.ConnectionID != r.conn.ID || !rule.Active() {
-			continue
-		}
-
-		if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleRevoked, *rule, name); err != nil {
-			return err
-		}
-
-		revoker := by
-		rule.RevokedBy, rule.RevokedAt = &revoker, &now
+	if err := c.d.rules.revokeConnection(ctx, org, r.conn.ID, by); err != nil {
+		return err
 	}
 
 	delete(c.d.conns[org], name)

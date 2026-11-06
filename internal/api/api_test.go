@@ -23,7 +23,6 @@ import (
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -153,19 +152,8 @@ func inOrg(t *testing.T) context.Context {
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
-// kindGitHub is the platform's github connection kind, and the name of acme's github connection.
+// kindGitHub is the name of the github MCP server the environment tests list.
 const kindGitHub = "github"
-
-// createGitHub adds acme's connection name, of the github kind, whose token is secret.
-func (h *harness) createGitHub(t *testing.T, name, secret string) {
-	t.Helper()
-
-	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
-		Name: name, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: secret},
-	}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-}
 
 // testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
 // address (GOAL_EGRESS_ADDRESSES).
@@ -208,16 +196,15 @@ type harness struct {
 	platform *porttest.Platform
 	// notifications keeps each person's notification preferences.
 	notifications *porttest.NotificationPreferences
-	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
-	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
-	// servers) allowed unless publicOnly is set.
-	conns         *porttest.Connections
-	standingRules *porttest.StandingRules // the standing rules of conns' data
+	// standingRules keeps the organizations' standing rules. Environment tests dial through
+	// connTransport (egress.PublicDialer), private addresses (the tests' servers) allowed unless
+	// publicOnly is set.
+	standingRules *porttest.StandingRules
 	publicOnly    atomic.Bool
 	connTransport *http.Transport
-	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
+	// creds keeps the organizations' credentials, sealed under key k1.
 	creds *porttest.Credentials
-	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
+	// secrets keeps the organizations' secrets, sealed under key k1.
 	secrets *porttest.OrgSecrets
 	// notifySettings keeps the organizations' notification settings, naming secrets' secrets;
 	// slack checks a Slack bot token.
@@ -527,7 +514,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	}
 
 	h.catalog, h.tenancy = templates, tenancy
-	connections := h.connections(t, tenancy)
+	connections := h.stores(t, tenancy)
 
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
@@ -661,17 +648,17 @@ func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
 	return d
 }
 
-// connections makes h's connections, with goald's platform kinds, the secrets, the notification
-// settings naming them, and the knowledge base whose sources read them, and returns the transport their tests dial through.
-func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
+// stores makes h's standing rules, credentials, secrets, the notification settings naming them and
+// the knowledge base whose sources read them, and returns the transport environment tests dial
+// through.
+func (h *harness) stores(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
-	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
-	h.standingRules = porttest.NewStandingRules(h.conns)
-	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
-	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
+	h.standingRules = porttest.NewStandingRules(audit)
+	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit)
+	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit)
 	h.notifySettings, h.slack = porttest.NewNotificationSettings(h.secrets, audit), porttest.NewDirectMessenger()
-	kb := porttest.NewKnowledge(h.conns, audit)
+	kb := porttest.NewKnowledge(audit)
 	kb.ReadSecrets(h.secrets)
 	h.kb, h.kbObjects = kb, porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
@@ -680,15 +667,6 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 		Knowledge: h.kb, Secrets: h.secrets, Hosts: h.tenancy, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
 		Objects: h.kbObjects, Clock: h.clock, TempDir: t.TempDir(),
 	})
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := h.conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
 
 	tr := &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return egress.PublicDialer{AllowPrivate: !h.publicOnly.Load()}.DialContext(ctx, network, addr)

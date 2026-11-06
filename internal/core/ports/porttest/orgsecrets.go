@@ -21,14 +21,12 @@ var _ ports.OrgSecrets = (*OrgSecrets)(nil)
 // organization, each value sealed with the master key under domain.SecretAAD and returned only by
 // Resolve, the factory scope enforced there, and an audit entry through audit for every change and
 // use. Views made with WithKey share the data, as goalds with different keys share one database.
-// The connections given to NewOrgSecrets are the ones that refer to secrets as {{name}}: Delete
-// refuses while one does, and while a knowledge source (Knowledge.ReadSecrets) or the Slack
-// notification setting (NewNotificationSettings) uses the secret.
+// Delete refuses while a knowledge source (Knowledge.ReadSecrets) or the Slack notification
+// setting (NewNotificationSettings) uses the secret.
 type OrgSecrets struct {
 	d     *secretData
 	key   ports.MasterKey
 	audit ports.Audit
-	conns *Connections
 }
 
 type secretData struct {
@@ -64,14 +62,14 @@ type previousValue struct {
 }
 
 // NewOrgSecrets returns secrets sealed with key and audited through audit (a Tenancy that knows
-// the organizations), referred to by conns' connections; nil conns has none.
-func NewOrgSecrets(key ports.MasterKey, audit ports.Audit, conns *Connections) *OrgSecrets {
-	return &OrgSecrets{key: key, audit: audit, conns: conns, d: &secretData{rows: map[domain.OrgID]map[string]*secretRow{}}}
+// the organizations).
+func NewOrgSecrets(key ports.MasterKey, audit ports.Audit) *OrgSecrets {
+	return &OrgSecrets{key: key, audit: audit, d: &secretData{rows: map[domain.OrgID]map[string]*secretRow{}}}
 }
 
 // WithKey returns a view of s's data sealed with key.
 func (s *OrgSecrets) WithKey(key ports.MasterKey) *OrgSecrets {
-	return &OrgSecrets{d: s.d, key: key, audit: s.audit, conns: s.conns}
+	return &OrgSecrets{d: s.d, key: key, audit: s.audit}
 }
 
 // CopySealed copies the sealed value of secret from of fromOrg onto secret to of toOrg, as
@@ -246,12 +244,6 @@ func (s *OrgSecrets) Delete(ctx context.Context, name string, by domain.Actor) e
 	r, err := s.rowLocked(org, name)
 	if err != nil {
 		return err
-	}
-
-	if s.conns != nil {
-		if users := s.conns.referrers(org, name); len(users) > 0 {
-			return fmt.Errorf("secret %q is used by connections %s: %w", name, strings.Join(users, ", "), ports.ErrConflict)
-		}
 	}
 
 	if s.d.readBy != nil {

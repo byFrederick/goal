@@ -22,9 +22,8 @@ func TestSecrets_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return secrettest.Harness{
-			Secrets:     func(key ports.MasterKey) ports.OrgSecrets { return NewSecrets(d.store, key) },
-			Connections: func(key ports.MasterKey) ports.Connections { return NewConnections(d.store, key) },
-			Key:         func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
+			Secrets: func(key ports.MasterKey) ports.OrgSecrets { return NewSecrets(d.store, key) },
+			Key:     func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
 			CopySealed: func(t *testing.T, fromOrg domain.OrgID, from string, toOrg domain.OrgID, to string) {
 				t.Helper()
 

@@ -28,7 +28,7 @@ func TestConnections_Conformance(t *testing.T) {
 			Connections:   func(key ports.MasterKey) ports.Connections { return conns.WithKey(key) },
 			Key:           keys.Key,
 			Audit:         tn,
-			StandingRules: porttest.NewStandingRules(conns),
+			StandingRules: conns.StandingRules(),
 			NewOrg: func(t *testing.T) domain.OrgID {
 				t.Helper()
 

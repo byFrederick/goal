@@ -19,7 +19,6 @@ import (
 	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/builder"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -73,8 +72,6 @@ type defGoald struct {
 	orgID   domain.OrgID
 	// keys holds the organization's API keys.
 	keys *porttest.Identity
-	// conns holds the organization's connections, with goald's platform kinds.
-	conns *porttest.Connections
 	// secrets holds the organization's secrets, which its connections may refer to.
 	secrets *porttest.OrgSecrets
 	// kb is the organization's knowledge base; sync indexes what is due in it, as goald's loop.
@@ -110,13 +107,11 @@ func newDefGoald(t *testing.T) *defGoald {
 	objects := porttest.NewObjectStore()
 	authors := authoring.New(authoring.Deps{Store: defs, Loads: store, Templates: objects, Clock: clock})
 
-	engineConns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
-
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: clock,
 		CodeHosts:     map[string]ports.CodeHost{},
-		StandingRules: porttest.NewStandingRules(engineConns),
+		StandingRules: porttest.NewStandingRules(tenancy),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -128,20 +123,9 @@ func newDefGoald(t *testing.T) *defGoald {
 	keys := porttest.NewIdentity(clock.Now)
 	keys.AddOrg(o)
 
-	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	kb := porttest.NewKnowledge(conns, tenancy)
-	creds := porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
-	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
+	kb := porttest.NewKnowledge(tenancy)
+	creds := porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 	kbObjects := porttest.NewObjectStore()
 	uploads := knowledge.NewUploads(kb, kbObjects, 0)
 
@@ -164,7 +148,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
-		Builder: builder.New(objects, clock, builder.Config{}), StandingRules: porttest.NewStandingRules(conns),
+		Builder: builder.New(objects, clock, builder.Config{}), StandingRules: porttest.NewStandingRules(tenancy),
 		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, RepositoryTests: repoTests, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
 		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads,
 		KnowledgeObjects: kbObjects, KnowledgeCheck: knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Secrets: secrets, Uploads: uploads, Objects: kbObjects, Clock: clock}),
@@ -176,7 +160,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		t.Fatal(err)
 	}
 
-	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, conns: conns, secrets: secrets, kb: kb, tools: tools, codehost: codehost}
+	g := &defGoald{authors: authors, cache: cache, orgID: o.ID, keys: keys, secrets: secrets, kb: kb, tools: tools, codehost: codehost}
 	g.sync = func(t *testing.T) {
 		t.Helper()
 

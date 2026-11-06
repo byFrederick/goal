@@ -18,12 +18,11 @@ func TestStandingRules_Conformance(t *testing.T) {
 
 	standingruletest.Run(t, func(*testing.T) standingruletest.Harness {
 		tn := porttest.NewTenancy(time.Now)
-		conns := porttest.NewConnections(porttest.NewMasterKeys().Key(), tn)
 
 		var orgs atomic.Int64
 
 		return standingruletest.Harness{
-			StandingRules: porttest.NewStandingRules(conns),
+			StandingRules: porttest.NewStandingRules(tn),
 			Audit:         tn,
 			NewOrg: func(t *testing.T) domain.OrgID {
 				t.Helper()

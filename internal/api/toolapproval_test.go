@@ -18,8 +18,6 @@ const (
 	approvalConnection = "repo"
 	approvalTool       = "create_comment"
 	approvalInput      = `{"body":"LGTM","issue":7}`
-	// githubTokenField is the github kind's secret field.
-	githubTokenField = "token"
 	// freshOwnerSession is the owner's session signed in just now.
 	freshOwnerSession = "fresh-owner-now"
 )
@@ -42,17 +40,6 @@ func (h *harness) toolAsked(t *testing.T, offered bool) domain.Item {
 			},
 		}}
 	})
-}
-
-// withRepo adds the organization connection repo, whose tool the agent asked to call.
-func (h *harness) withRepo(t *testing.T) {
-	t.Helper()
-
-	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
-		Name: approvalConnection, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: "ghp_test"},
-	}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func toolApprovalPath(it domain.Item) string {
@@ -171,7 +158,6 @@ func TestAPI_ToolApprovalDecides(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t)
-			h.withRepo(t)
 			it := h.toolAsked(t, true)
 
 			got := decode[gen.Item](t, h.request(t, http.MethodPost, toolApprovalPath(it), tt.body, nil), http.StatusOK)
@@ -197,7 +183,6 @@ func TestAPI_ToolApprovalRefusals(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	h.withRepo(t)
 	open := h.toolAsked(t, true)
 	notOffered := h.toolAsked(t, false)
 	none := h.seed(t, stBuild, domain.StateWaitingHuman, t0)
@@ -257,7 +242,6 @@ func TestAPI_ToolApprovalAlwaysAllowNeedsConnectionManage(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.withRepo(t)
 	must(t, h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer))
 
 	it := h.toolAsked(t, true)
@@ -351,7 +335,6 @@ func TestAPI_StandingRulesListAndRevoke(t *testing.T) {
 		t.Errorf("rules before any = %+v; want an empty list", list.Rules)
 	}
 
-	h.withRepo(t)
 	rule := h.alwaysAllowed(t, nil)
 
 	checkListedRule(t, rule)
@@ -407,7 +390,6 @@ func TestAPI_StandingRulesRefusals(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.withRepo(t)
 	h.signInOwnerNow()
 	rule := h.alwaysAllowed(t, cookie(freshOwnerToken))
 

@@ -70,10 +70,7 @@ type harness struct {
 	contracts *porttest.Contracts
 	codehost  *porttest.CodeHost // the github code host
 	gitlab    *porttest.CodeHost // the gitlab code host
-	// backing is the store the porttest standing rules, secrets and knowledge base keep their
-	// rows in; it holds no connection, and the engine never gets it.
-	backing *porttest.Connections
-	// rules are the standing rules of backing's store.
+	// rules are the organizations' standing rules, none at first.
 	rules ports.StandingRules
 	// orgSecrets hold the test organization's secrets (environment_test.go), none at first.
 	orgSecrets *porttest.OrgSecrets
@@ -156,9 +153,8 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		t.Fatalf("the first organization is %s, want %s", org, testOrg)
 	}
 
-	h.backing = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), h.tenancy)
-	h.rules = porttest.NewStandingRules(h.backing)
-	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy, h.backing)
+	h.rules = porttest.NewStandingRules(h.tenancy)
+	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy)
 	h.addModelKey(t, testOrg)
 	h.minter = porttest.NewMinter(clock.Now)
 	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)

@@ -31,7 +31,7 @@ type knowledgeBase struct {
 func (h *harness) knowledgeBase(t *testing.T) *knowledgeBase {
 	t.Helper()
 
-	kb := &knowledgeBase{kb: porttest.NewKnowledge(h.backing, h.tenancy), at: time.Now().UTC().Add(time.Hour)}
+	kb := &knowledgeBase{kb: porttest.NewKnowledge(h.tenancy), at: time.Now().UTC().Add(time.Hour)}
 	h.knowledge = kb.kb
 
 	return kb

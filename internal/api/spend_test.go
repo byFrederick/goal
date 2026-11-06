@@ -131,10 +131,6 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 	h.seedSpend(t)
 	h.pullAndon(t)
 
-	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-test"}}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-
 	for _, c := range []struct{ query, want string }{
 		{"", "week 2026-10-19T00:00:00Z..2026-10-23T09:00:00Z complete=true days=5 total=3.00 month=6.00 last=4.00 merged=1 per=3.00 rework=0.00/0.00 weeks=8"},
 		{"?window=week", "week 2026-10-19T00:00:00Z..2026-10-23T09:00:00Z complete=true days=5 total=3.00 month=6.00 last=4.00 merged=1 per=3.00 rework=0.00/0.00 weeks=8"},

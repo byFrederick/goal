@@ -21,11 +21,9 @@ var _ ports.Knowledge = (*Knowledge)(nil)
 const auditKind = "kind"
 
 // Knowledge keeps knowledge bases in memory with the database's rules: names unique per
-// organization, sources reading their organization's connections (a synced one only through a
-// kind that syncs; a connection a source reads cannot be deleted), leases claimed by time, an
-// audit entry for every change people make, and the files uploaded to upload sources.
+// organization, no source on a connection (none exists any more, ADR 0037), leases claimed by
+// time, an audit entry for every change people make, and the files uploaded to upload sources.
 type Knowledge struct {
-	conns *Connections
 	audit ports.Audit
 	// secrets are the ones sources read with, once ReadSecrets set them; until then any name is one.
 	secrets *OrgSecrets
@@ -41,9 +39,8 @@ type knowledgeOrg struct {
 }
 
 type fakeSource struct {
-	src    domain.KnowledgeSource
-	connID domain.ConnectionID
-	token  string // the lease's, "" when none holds it
+	src   domain.KnowledgeSource
+	token string // the lease's, "" when none holds it
 	// snapshots (oldest first), the current files by path and the read counts go with the
 	// source, as 00090's cascade takes them.
 	snapshots []domain.KnowledgeSnapshot
@@ -53,16 +50,10 @@ type fakeSource struct {
 	uploads map[string]domain.KnowledgeUpload
 }
 
-// NewKnowledge returns an empty knowledge base whose sources read conns' connections, audited
-// through audit (a Tenancy that knows the organizations).
-func NewKnowledge(conns *Connections, audit ports.Audit) *Knowledge {
-	k := &Knowledge{conns: conns, audit: audit, orgs: map[domain.OrgID]*knowledgeOrg{}}
-
-	conns.d.mu.Lock()
-	conns.d.readBy = k.readsConnection
-	conns.d.mu.Unlock()
-
-	return k
+// NewKnowledge returns an empty knowledge base audited through audit (a Tenancy that knows the
+// organizations).
+func NewKnowledge(audit ports.Audit) *Knowledge {
+	return &Knowledge{audit: audit, orgs: map[domain.OrgID]*knowledgeOrg{}}
 }
 
 // ReadSecrets makes secrets the ones sources read with, as the database's foreign key does: a
@@ -117,20 +108,6 @@ func (k *Knowledge) secret(ctx context.Context, name string) error {
 	}
 
 	return nil
-}
-
-// readsConnection reports whether one of org's sources reads the connection id.
-func (k *Knowledge) readsConnection(org domain.OrgID, id domain.ConnectionID) bool {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-
-	for _, s := range k.org(org).sources {
-		if s.connID == id {
-			return true
-		}
-	}
-
-	return false
 }
 
 // org is org's knowledge base, made on first use. k.mu is held.
@@ -204,9 +181,9 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
 
-	connID, err := k.connection(ctx, n)
-	if err != nil {
-		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
+	if n.Connection != "" {
+		// No connection rows exist any more, so the database's foreign key refuses every name.
+		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: connection %q: %w", n.Connection, ports.ErrNotFound)
 	}
 
 	if err := k.secret(ctx, n.Secret); err != nil {
@@ -215,7 +192,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 	var out domain.KnowledgeSource
 
-	err = k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
+	err := k.locked(ctx, func(_ domain.OrgID, o *knowledgeOrg) error {
 		if _, taken := o.sources[n.Name]; taken {
 			return fmt.Errorf("knowledge source %q: %w", n.Name, ports.ErrNameTaken)
 		}
@@ -240,7 +217,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 			return err
 		}
 
-		o.sources[n.Name] = &fakeSource{src: s, connID: connID}
+		o.sources[n.Name] = &fakeSource{src: s}
 		out = o.view(o.sources[n.Name])
 
 		return nil
@@ -250,29 +227,6 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 	}
 
 	return out, nil
-}
-
-// connection is the connection a new source reads ("" for uploads), checked as the database does.
-func (k *Knowledge) connection(ctx context.Context, n domain.NewKnowledgeSource) (domain.ConnectionID, error) {
-	if n.Connection == "" {
-		return "", nil
-	}
-
-	c, err := k.conns.Get(ctx, n.Connection)
-	if err != nil {
-		return "", err
-	}
-
-	kind, err := k.conns.Kind(ctx, c.Kind)
-	if err != nil {
-		return "", err
-	}
-
-	if n.Kind == domain.SourceSynced && kind.Spec.Sync == "" {
-		return "", fmt.Errorf("connection %q: %w", n.Connection, domain.ErrConnectionCannotSync)
-	}
-
-	return c.ID, nil
 }
 
 // UpdateSource implements ports.Knowledge.
@@ -368,7 +322,7 @@ func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.
 		}
 
 		now := time.Now().UTC()
-		s.src.Kind, s.src.Connection, s.connID = kind, "", ""
+		s.src.Kind, s.src.Connection = kind, ""
 		s.src.Config = s.src.ConvertedConfig()
 		s.src.NextSyncAt, s.src.UpdatedAt = &now, now
 		out = o.view(s)
