@@ -114,4 +114,13 @@ describe('WaysInCard', () => {
     expect(await screen.findByText(/This factory has no triggers yet/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /New item, or press/ })).toBeTruthy();
   });
+
+  it('makes the New item row a phone target and hides the shortcut hint on touch', async () => {
+    renderWays({ triggers: [] });
+
+    const button = await screen.findByRole('button', { name: /New item/ });
+    expect(button.className).toContain('max-md:min-h-11');
+    expect(button.hasAttribute('aria-label')).toBe(false);
+    expect(button.querySelector('span')?.className).toContain('pointer-coarse:hidden');
+  });
 });
