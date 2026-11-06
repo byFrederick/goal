@@ -29,6 +29,9 @@ type Harness struct {
 	// call. With no ids it has none (ports.ErrNoMasterKey).
 	Key   func(ids ...string) ports.MasterKey
 	Audit ports.Audit
+	// StandingRules lists and revokes the standing rules of the connections' store, as the one
+	// standing_rules table holds the rules of both keys.
+	StandingRules ports.StandingRules
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// Rekey reseals every organization's connections under key's active key, as goal db rekey
@@ -69,11 +72,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"CreateStandingRule_OneActivePerKey", testCreateStandingRule},
 		{"CreateStandingRule_Refused", testCreateStandingRuleRefused},
 		{"RevokeStandingRule_OnceAndAudited", testRevokeStandingRule},
-		{"StandingRules_ActiveUnlessRevoked", testStandingRulesActiveUnlessRevoked},
 		{"Delete_RevokesStandingRules", testDeleteRevokesStandingRules},
-		{"StandingRules_OtherOrgSeesNothing", testStandingRulesIsolation},
-		{"CreateServerStandingRule_OneActivePerKey", testCreateServerStandingRule},
-		{"RevokeStandingRule_ServerKey", testRevokeServerStandingRule},
+		{"Delete_KeepsServerStandingRules", testDeleteKeepsServerStandingRules},
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"NoMasterKey_SecretsUnavailable", testNoKey},
 		{"Rekey_ResealsEveryOrg", testRekey},
@@ -85,7 +85,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 			t.Parallel()
 
 			h := newHarness(t)
-			f := &fixture{Harness: h, t: t, c: h.Connections(h.Key("k1"))}
+			f := &fixture{Harness: h, t: t, c: h.Connections(h.Key("k1")), r: h.StandingRules}
 			f.syncKinds(gitKind(), docsKind(), cloudKind())
 			tc.test(f)
 		})
@@ -179,6 +179,7 @@ type fixture struct {
 
 	t *testing.T
 	c ports.Connections
+	r ports.StandingRules
 }
 
 func (f *fixture) in(org domain.OrgID) context.Context { return domain.WithOrg(f.t.Context(), org) }
@@ -970,12 +971,6 @@ func testNoOrg(f *fixture) {
 	_, err = f.c.Resolve(ctx, []string{connDocs}, forRun)
 	f.refused("Resolve", err, domain.ErrNoOrg)
 	f.refused("PutKind", f.c.PutKind(ctx, ownKind(""), admin), domain.ErrNoOrg)
-	_, err = f.c.StandingRules(ctx, true)
-	f.refused("StandingRules", err, domain.ErrNoOrg)
 	_, err = f.c.CreateStandingRule(ctx, domain.NewStandingRule{Connection: connDocs, Tool: toolComment, Agent: architect, Item: approvedOn}, admin)
 	f.refused("CreateStandingRule", err, domain.ErrNoOrg)
-	_, err = f.c.CreateServerStandingRule(ctx, serverRule(domain.DefaultEnvironment, connDocs, toolComment, architect), admin)
-	f.refused("CreateServerStandingRule", err, domain.ErrNoOrg)
-	_, err = f.c.RevokeStandingRule(ctx, "00000000-0000-7000-8000-0000000000cc", admin)
-	f.refused("RevokeStandingRule", err, domain.ErrNoOrg)
 }

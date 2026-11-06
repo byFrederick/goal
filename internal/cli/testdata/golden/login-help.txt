@@ -124,8 +124,6 @@ usage:
                                                   --expires 1d to 90d, default 90d). The secret is printed
                                                   once, alone on stdout: store it as GOAL_API_KEY
   goal key revoke <name|id>                       revoke a key: anything using it stops working at once
-  goal connection ...                             moved to goal access, goal secret and environment files;
-                                                  prints where and exits 2
   goal secret list                                the organization's secrets: factories, what uses them,
                                                   last use and expiry (never a value)
   goal secret show <name>                         one secret: source, description, factories, what uses
@@ -143,7 +141,6 @@ usage:
                                                   open to no factory, a name that exists is skipped
                                                   unless --on-conflict replace); prints each name as new
                                                   or exists (--dry-run) or what was done with it
-  goal credential ...                             moved to goal secret; prints where and exits 2
   goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
                                                   call tools/list on the environment's remote MCP
                                                   servers (default: default) from goald, with their

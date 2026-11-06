@@ -62,23 +62,36 @@ const (
 )
 
 // mergeLine is work (an agent that reports pull requests) → merge (human, action merge) → done,
-// with the organization's github and gitlab connections. It has no repository: the pull
-// requests' URLs say where they are.
+// whose runtime.repositories give write entries for github.com/acme and gitlab.com/acme, named
+// connGitHub and connGitLab, with the tokens {{github-entry}} and {{gitlab-entry}}. It has no
+// repository: the pull requests' URLs say where they are.
 func mergeLine(action domain.StationAction) domain.Line {
 	l := lineOf(agentStation(stWork, agWorker, 1, 1), domain.Station{ID: stMerge, Kind: domain.KindHuman, Action: action})
-	l.Connections = []string{connGitHub, connGitLab}
+	l.Runtime.Repositories = mergeEntries()
 
 	return l
 }
 
-// expectMergeUsed fails unless the merges of item opened exactly conn, for the person's merge:
-// the connection.used row names the person and the item, and no run.
-func (h *harness) expectMergeUsed(t *testing.T, item domain.ItemID, conn string) {
+// mergeEntries are the write entries of github.com/acme and gitlab.com/acme, named connGitHub
+// and connGitLab, with the tokens {{github-entry}} and {{gitlab-entry}}.
+func mergeEntries() []domain.RepositoryEntry {
+	return []domain.RepositoryEntry{
+		{Name: connGitHub, URL: "https://github.com/acme/*", Token: "{{" + secGitHubEntry + "}}", Access: domain.AccessWrite},
+		{Name: connGitLab, URL: "https://gitlab.com/acme/*", Token: "{{" + secGitLabEntry + "}}", Access: domain.AccessWrite},
+	}
+}
+
+// expectMergeUsed fails unless the merges opened exactly secret, the token of the entry that
+// covers their pull requests, outside any run, and no connection for item.
+func (h *harness) expectMergeUsed(t *testing.T, item domain.ItemID, secret string) {
 	t.Helper()
 
-	if used := h.mergesUsed(t, item); len(used) != 1 || used[0].Data["name"] != conn || used[0].Actor.ID != human.ID ||
-		used[0].Data["run_id"] != nil {
-		t.Errorf("connection.used of the merge %+v; want %s only, by the person, naming no run", used, conn)
+	if used := h.secretsUsedOutsideRuns(t); !slices.Equal(used, []string{secret}) {
+		t.Errorf("secrets used outside runs %v; want %s alone", used, secret)
+	}
+
+	if used := h.mergesUsed(t, item); len(used) != 0 {
+		t.Errorf("connection.used of the merge %+v; want none", used)
 	}
 }
 
@@ -228,7 +241,7 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 			// A merge at a merge station is a decision the line requires.
 			plannedAll(t, append(merged, h.eventsOf(it.ID, domain.EventApproved)...))
 
-			h.expectMergeUsed(t, it.ID, connGitHub)
+			h.expectMergeUsed(t, it.ID, secGitHubEntry)
 		})
 	}
 }
@@ -343,8 +356,8 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 		name    string
 		action  domain.StationAction
 		output  string
-		conns   []string // the line's connections; nil: mergeLine's github and gitlab
-		removed bool     // the line is of a version with a form connections replaced
+		entries []domain.RepositoryEntry // the line's runtime.repositories; nil: mergeEntries
+		removed bool                     // the line is of a version with a form connections replaced
 		pr      func(*ports.PullRequest)
 		early   bool // ask before the item reaches the merge station
 		wantErr error
@@ -366,26 +379,17 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 		},
 		{
 			// Refused before anything merges, the github pull request included.
-			name: "a host no connection serves", action: domain.ActionMerge,
+			name: "a host no entry covers", action: domain.ActionMerge,
 			output: `{"pull_request":"` + prURL + `","pull_requests":["` + elsewhere + `"]}`, wantErr: engine.ErrNoCodeHost,
 		},
-		{name: "no connection at all", action: domain.ActionMerge, conns: []string{}, wantErr: engine.ErrNoCodeHost},
 		{
 			// A version published before the cutover merged with the install's token, which is gone.
-			name: "a version with a removed form and no connection", action: domain.ActionMerge, conns: []string{}, removed: true,
-			wantErr: engine.ErrNoCodeHost,
+			name: "a version with a removed form and a host no entry covers", action: domain.ActionMerge, removed: true,
+			output: `{"pull_request":"` + elsewhere + `"}`, wantErr: engine.ErrNoCodeHost,
 		},
 		{
-			name: "a connection for the host whose kind names no code host", action: domain.ActionMerge,
-			conns: []string{connPlain}, wantErr: engine.ErrNoCodeHost,
-		},
-		{
-			name: "a connection for the host whose code host goald lacks", action: domain.ActionMerge,
-			conns: []string{connBitbucket}, wantErr: engine.ErrNoCodeHost,
-		},
-		{
-			name: "a connection for another host", action: domain.ActionMerge,
-			conns: []string{connGHE}, wantErr: engine.ErrNoCodeHost,
+			name: "no entry covers the repository", action: domain.ActionMerge, entries: mergeEntries()[1:],
+			wantErr: engine.ErrNoWriteEntry, says: "no entry of runtime.repositories covers",
 		},
 	}
 
@@ -399,8 +403,8 @@ func TestMerge_RefusesAndChangesNothing(t *testing.T) {
 			}
 
 			line := mergeLine(tt.action)
-			if tt.conns != nil {
-				line.Connections = tt.conns
+			if tt.entries != nil {
+				line.Runtime.Repositories = tt.entries
 			}
 
 			h := newHarness(t, line, porttest.Succeed(output))
@@ -581,18 +585,21 @@ func expectConflictEvent(t *testing.T, events []domain.Event, station string) {
 	}
 }
 
-// A pull request on a host the organization doesn't list is refused before any connection is
-// opened or the code host is called, though a connection of the factory signs git in to that host;
-// once an owner lists the host, the same merge goes through with that connection's token.
+// A pull request on a host the organization doesn't list is refused before any secret is opened
+// or the code host is called, though an entry of the factory covers it; once an owner lists the
+// host, the same merge goes through with that entry's token.
 func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
 	t.Parallel()
 
 	const ghePR = "https://ghe.example.com/acme/app/pull/4"
 
 	line := mergeLine(domain.ActionMerge)
-	line.Connections = []string{connGHE}
+	line.Runtime.Repositories = []domain.RepositoryEntry{
+		{Name: connGHE, URL: "https://ghe.example.com/acme/*", Token: "{{" + secGHEEntry + "}}", Access: domain.AccessWrite},
+	}
 
 	h := newHarness(t, line, porttest.Succeed(`{"pull_request":"`+ghePR+`"}`))
+	h.addSecret(t, secGHEEntry, gheTokenValue)
 	h.codehost.Add(openPR(ghePR))
 
 	it := h.atMerge(t)
@@ -606,7 +613,9 @@ func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
 		t.Errorf("the code host got %d calls; want none", len(calls))
 	}
 
-	h.expectRefusedMerge(t, it.ID, err, false)
+	if used := h.secretsUsedOutsideRuns(t); len(used) != 0 {
+		t.Errorf("secrets used outside runs %v; want none opened", used)
+	}
 
 	h.listHost(t, "ghe.example.com", domain.CodeHostGitHub)
 
@@ -614,8 +623,8 @@ func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
 		t.Fatalf("Merge once the host is listed = %v", err)
 	}
 
-	if merges := h.codehost.Merges(); len(merges) != 1 || merges[0].URL != ghePR || merges[0].Token != "ghe-token" {
-		t.Errorf("merges %+v; want %s with the ghe connection's token", merges, ghePR)
+	if merges := h.codehost.Merges(); len(merges) != 1 || merges[0].URL != ghePR || merges[0].Token != gheTokenValue {
+		t.Errorf("merges %+v; want %s with the ghe entry's token", merges, ghePR)
 	}
 }
 
@@ -627,10 +636,11 @@ const (
 )
 
 // onSecrets makes l a version on secrets whose model key is {{claude-key}} and whose repository
-// is repo. Its organization connections stay, leftovers a version on secrets never opens.
+// is repo, with no runtime.repositories. Its organization connections stay, leftovers a version on
+// secrets never opens.
 func onSecrets(l domain.Line, repo domain.Repository) domain.Line {
-	l.Runtime.ModelConnection, l.Runtime.ModelKey = "", "{{"+secClaude+"}}"
-	l.Runtime.Repository = repo
+	l.Runtime.ModelKey = "{{" + secClaude + "}}"
+	l.Runtime.Repository, l.Runtime.Repositories = repo, nil
 	l.Environments = []domain.Environment{{Name: domain.DefaultEnvironment}}
 
 	return l

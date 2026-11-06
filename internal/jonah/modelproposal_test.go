@@ -85,8 +85,8 @@ func newModelWorld(t *testing.T) *modelWorld {
 		defs: &reviewDefs{
 			line: domain.Line{
 				OrgID: decideOrg, FactoryID: factory, VersionID: modelVer, Number: 1, Jonah: policy,
-				Runtime: domain.Runtime{ModelConnection: modelConn, Model: modelOld},
-				Agents:  []domain.AgentSpec{{Name: modelAgent}, {Name: agentReviewer, Model: modelOld}},
+				Runtime: domain.Runtime{ModelKey: modelKeyRef, Model: modelOld}, Environments: []domain.Environment{{Name: domain.DefaultEnvironment}},
+				Agents: []domain.AgentSpec{{Name: modelAgent}, {Name: agentReviewer, Model: modelOld}},
 				Stations: []domain.Station{
 					{ID: stBuild, Kind: domain.KindAgent, Agent: modelAgent},
 					{ID: stReview, Kind: domain.KindAgent, Agent: agentReviewer},

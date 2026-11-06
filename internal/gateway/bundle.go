@@ -897,7 +897,7 @@ func (g *Gateway) addEnvironment(ctx context.Context, c domain.TaskClaims, line 
 		s := env.MCP[name].Rendered()
 		file := s.ToolModes()
 
-		active, err := rules.of(ctx, g.connections, slices.Contains(slices.Collect(maps.Values(file)), domain.ToolModeAsk))
+		active, err := rules.of(ctx, g.rules, slices.Contains(slices.Collect(maps.Values(file)), domain.ToolModeAsk))
 		if err != nil {
 			return err
 		}
@@ -962,7 +962,7 @@ func (g *Gateway) addConnections(ctx context.Context, c domain.TaskClaims, line 
 			return err
 		}
 
-		active, err := rules.of(ctx, g.connections, slices.Contains(slices.Collect(maps.Values(conn.ToolModes)), domain.ToolModeAsk))
+		active, err := rules.of(ctx, g.rules, slices.Contains(slices.Collect(maps.Values(conn.ToolModes)), domain.ToolModeAsk))
 		if err != nil {
 			return err
 		}
@@ -994,12 +994,12 @@ type standingRules struct {
 
 // of returns the active rules when asks, a connection or server having a tool that asks first,
 // and none otherwise.
-func (s *standingRules) of(ctx context.Context, connections Connections, asks bool) ([]domain.StandingRule, error) {
+func (s *standingRules) of(ctx context.Context, store StandingRules, asks bool) ([]domain.StandingRule, error) {
 	if s.loaded || !asks {
 		return s.rules, nil
 	}
 
-	rules, err := connections.StandingRules(ctx, false)
+	rules, err := store.StandingRules(ctx, false)
 	if err != nil {
 		return nil, fmt.Errorf("standing rules: %w", err)
 	}

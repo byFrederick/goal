@@ -95,45 +95,19 @@ func (e *Engine) RunDefinition(ctx context.Context, t ports.DefinitionTask) (por
 	return res, nil
 }
 
-// modelEnv resolves the line's model connection alone for the run, its use audited as
-// connection.used, with the credentials its secret fields refer to; on secrets, its model key
-// alone, audited as secret.used.
+// modelEnv opens the line's model key alone for the run, audited as secret.used. A line not on
+// secrets is of a version on connections, which no run reads any more (ADR 0037 decision 19): it
+// fails with domain.ErrNotOnSecrets, opening no connection or credential.
 func (e *Engine) modelEnv(ctx context.Context, l domain.Line, run domain.RunID) (runEnv, error) {
-	if l.OnSecrets() {
-		if l.Runtime.ModelKey == "" {
-			return runEnv{}, fmt.Errorf("factory %s has no runtime.modelKey", l.FactoryID)
-		}
-
-		return e.secretEnv(ctx, domain.SecretUse{Factory: l.FactoryID, Run: run}, l.Runtime.ModelKey, domain.Environment{}, domain.Repository{}, domain.RunCode{})
+	if !l.OnSecrets() {
+		return runEnv{}, fmt.Errorf("version %d: %w", l.Number, domain.ErrNotOnSecrets)
 	}
 
-	model := l.Runtime.ModelConnection
-	if model == "" {
-		return runEnv{}, fmt.Errorf("factory %s has no runtime.modelConnection", l.FactoryID)
+	if l.Runtime.ModelKey == "" {
+		return runEnv{}, fmt.Errorf("factory %s has no runtime.modelKey", l.FactoryID)
 	}
 
-	// No agent: a credential listed for an agent is not the model connection's.
-	conns, opened, err := e.resolve(ctx, []string{model}, domain.CredentialUse{Factory: l.FactoryID, Run: run})
-	if err != nil {
-		return runEnv{}, err
-	}
-
-	env := runEnv{gitHosts: map[string]string{}}
-	env.secrets = append(env.secrets, conns[model].secrets...)
-
-	for _, rc := range opened {
-		if rc.Value != "" {
-			env.secrets = append(env.secrets, rc.Value)
-		}
-	}
-
-	if err := agentEnv(model, nil, conns, &env); err != nil {
-		return runEnv{}, err
-	}
-
-	e.log.InfoContext(ctx, "connection used", slog.String("run", string(run)), slog.Any("connections", []string{model}))
-
-	return env, nil
+	return e.secretEnv(ctx, domain.SecretUse{Factory: l.FactoryID, Run: run}, l.Runtime.ModelKey, domain.Environment{}, domain.Repository{}, domain.RunCode{})
 }
 
 // definitionToken signs the request's task token: of kind draft request, for the line's version,

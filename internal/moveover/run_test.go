@@ -63,6 +63,7 @@ type world struct {
 	tenancy     *porttest.Tenancy
 	key         ports.MasterKey
 	conns       *porttest.Connections
+	rules       *porttest.StandingRules // the standing rules of conns' data
 	secrets     *porttest.OrgSecrets
 	kb          *porttest.Knowledge
 	intake      *porttest.Intake
@@ -99,6 +100,7 @@ func newWorld(t *testing.T) *world {
 
 	w.org = o.ID
 	w.conns = porttest.NewConnections(w.key, w.tenancy)
+	w.rules = porttest.NewStandingRules(w.conns)
 	w.secrets = porttest.NewOrgSecrets(w.key, w.tenancy, w.conns)
 	w.settings = porttest.NewNotificationSettings(w.secrets, w.tenancy)
 	w.kb = porttest.NewKnowledge(w.conns, w.tenancy)
@@ -160,7 +162,7 @@ func newWorld(t *testing.T) *world {
 	})
 
 	w.mover = moveover.New(moveover.Deps{
-		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Settings: w.settings, Knowledge: w.kb, Webhooks: w.intake, Definitions: w.defs, Publisher: authors,
+		Orgs: w.tenancy, Connections: w.conns, StandingRules: w.rules, Secrets: w.secrets, Settings: w.settings, Knowledge: w.kb, Webhooks: w.intake, Definitions: w.defs, Publisher: authors,
 		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Hosts: w.tenancy, Tools: w.tools,
 		Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
@@ -489,7 +491,7 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 
 	e, err := engine.New(engine.Deps{
 		Store: w.store, Orgs: w.tenancy, Sandboxes: porttest.NewSandboxes(worker.Exec), Contracts: porttest.NewContracts(), Clock: w.clock,
-		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"}, Connections: w.conns, Credentials: porttest.NewCredentials(w.key, w.tenancy, w.conns),
+		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"}, Connections: w.conns, StandingRules: w.rules, Credentials: porttest.NewCredentials(w.key, w.tenancy, w.conns),
 		OrgSecrets: w.secrets, CodeHosts: map[string]ports.CodeHost{connGitHub: porttest.NewCodeHost()},
 		Audit: w.tenancy, NotificationOutbox: porttest.NewNotificationOutbox(), Logger: slog.New(slog.NewJSONHandler(logs, nil)),
 	}, engine.Config{
@@ -1008,7 +1010,7 @@ func TestRun_ReKeysStandingRulesOnce(t *testing.T) {
 		t.Errorf("server rules after a second run = %v; want %v unchanged", got, want)
 	}
 
-	all, err := w.conns.StandingRules(ctx, false)
+	all, err := w.rules.StandingRules(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1022,7 +1024,7 @@ func TestRun_ReKeysStandingRulesOnce(t *testing.T) {
 func (w *world) revokeRule(t *testing.T, tool string) {
 	t.Helper()
 
-	rules, err := w.conns.StandingRules(w.ctx(t), false)
+	rules, err := w.rules.StandingRules(w.ctx(t), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1032,7 +1034,7 @@ func (w *world) revokeRule(t *testing.T, tool string) {
 		t.Fatalf("no rule for %s", tool)
 	}
 
-	if _, err := w.conns.RevokeStandingRule(w.ctx(t), rules[i].ID, person); err != nil {
+	if _, err := w.rules.RevokeStandingRule(w.ctx(t), rules[i].ID, person); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1042,7 +1044,7 @@ func (w *world) revokeRule(t *testing.T, tool string) {
 func (w *world) serverRules(t *testing.T) []string {
 	t.Helper()
 
-	rules, err := w.conns.StandingRules(w.ctx(t), false)
+	rules, err := w.rules.StandingRules(w.ctx(t), false)
 	if err != nil {
 		t.Fatal(err)
 	}
