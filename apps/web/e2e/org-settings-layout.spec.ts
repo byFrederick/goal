@@ -53,7 +53,11 @@ test('the Code hosts ⓘ is 44 px on a phone and its tip stays inside the viewpo
   await expectTarget44(tip, 'About Code hosts');
   await expectTarget44(hosts.getByRole('button', { name: `Remove ${longHost}` }), 'Remove the added host');
   await tip.click();
-  const box = await page.getByRole('tooltip').first().boundingBox();
+  const tipBox = page
+    .locator('[data-radix-popper-content-wrapper]')
+    .getByText('Tokens go only to these hosts', { exact: false });
+  await expect(tipBox).toBeVisible();
+  const box = await tipBox.boundingBox();
   expect(box).not.toBeNull();
   expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
   expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
