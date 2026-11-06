@@ -159,7 +159,7 @@ describe('the merge step without a repository', () => {
   it('cannot be turned on, and says where the repository is set', async () => {
     const { edit } = renderRules(human, { hasRepository: false });
     expect(await screen.findByRole('link', { name: 'Basics' })).toBeDefined();
-    expect(screen.getByText(/Set a repository in/)).toBeDefined();
+    expect(screen.getByText(/repository with write access/)).toBeDefined();
 
     const off = mergeSwitch(/merge step/i);
     expect(off.getAttribute('aria-disabled')).toBe('true');

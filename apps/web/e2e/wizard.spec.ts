@@ -79,6 +79,8 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await addType.fill('finding');
   await addType.press('Enter');
   await page.getByRole('button', { name: 'Add a repository' }).click();
+  // Write access is a choice (ADR 0041 decision 3), and the merge step below needs it.
+  await page.getByRole('radio', { name: 'Read and write' }).check();
   await page.getByRole('textbox', { name: 'URL', exact: true }).fill('https://github.com/acme/infra');
   await page.getByRole('textbox', { name: 'URL', exact: true }).blur();
   await expect(saved(page)).toBeVisible();

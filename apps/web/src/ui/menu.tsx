@@ -42,10 +42,14 @@ export function MenuContent({
         align={align}
         sideOffset={sideOffset}
         collisionPadding={8}
-        // A menu closing for its exit still listens for outside presses. A press on the trigger then reopens it and
-        // is also read as an outside press that closes it again, so it would flicker shut (MOTION.md rule 7).
+        // A press on the menu's own trigger is never an outside press: React re-renders the menu open before the
+        // document's pointerdown listener runs, so the trigger's toggle would be followed by a dismiss. The trigger
+        // opens or closes the menu itself (MOTION.md rule 7).
         onInteractOutside={(event) => {
-          if (node.current?.dataset.state === 'closed') event.preventDefault();
+          const trigger = props['aria-labelledby'] ?? node.current?.getAttribute('aria-labelledby');
+          const target = event.target instanceof Element ? event.target : null;
+          if (trigger && target?.closest(`[id="${CSS.escape(trigger)}"]`)) event.preventDefault();
+          else if (node.current?.dataset.state === 'closed') event.preventDefault();
           else onInteractOutside?.(event);
         }}
         className={cn(

@@ -409,7 +409,7 @@ function MergeStep({
       ? 'Approving the gate merges the pull request (no person)'
       : 'A person merges the pull request'
     : blocked
-      ? 'Set a repository in Basics first'
+      ? 'Needs a repository with write access, set in Basics'
       : gated
         ? 'Approving the gate leaves the pull request open'
         : 'People approve here; nothing is merged';
@@ -430,7 +430,7 @@ function MergeStep({
       <span id={`${id}-what`} className="text-muted">
         {blocked ? (
           <>
-            Set a repository in <BasicsLink>Basics</BasicsLink> first
+            Needs a repository with write access, set in <BasicsLink>Basics</BasicsLink>
           </>
         ) : (
           what

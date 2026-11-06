@@ -161,7 +161,7 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
-          className="line-clamp-2 w-64 whitespace-normal break-words font-medium text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+          className="line-clamp-2 min-h-6 w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
         >
           {item.title}
         </Link>
