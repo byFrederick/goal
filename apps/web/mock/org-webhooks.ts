@@ -2,7 +2,7 @@
 // screen and Intake → Webhooks read it. acme starts with two: acme-deploys (github, open to the software
 // factory, with the trigger "Deploy failed") and uptime (standard, open to nothing yet). Any other
 // organization has none. No answer carries a secret's value, only the secret's name. The rest of the
-// organization's webhook family is not served (see `unserved` in coverage.test.ts).
+// organization's webhook family is not served (see `unserved` in unserved.ts).
 import type { ServerResponse } from 'node:http';
 import type { components, Factory } from '@goal/api-client';
 
