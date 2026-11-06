@@ -16,7 +16,7 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. A server that fails its test keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as its repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. It also tests again each kept repository test whose token is the secret ([Testing a repository's token](#testing-a-repositorys-token)). A test that fails keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as a repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 
@@ -44,24 +44,79 @@ spec:
       tools: {create_comment: ask, "delete_*": off}
 ```
 
-The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists, signs no webhook and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
+The `{{name}}` placeholder names a secret. It is valid in an environment file's `env`, `files` and `mcp`, in `runtime.repository.token`, in a `runtime.repositories` entry's `token`, in `runtime.modelKey` and in a trigger's `modelAgrees.key`, and nowhere else. Publishing checks that each secret exists, signs no webhook and is open to the factory. Each MCP server's name is 3 to 40 lowercase letters, digits and hyphens, starting with a letter and ending with a letter or digit, so `playwright` publishes and `play_wright` does not. Each MCP server's tools are `allow`, `ask` or `off`; a tool with no mode is `allow`, and the most specific match wins. See [skills and rules](../skills-and-rules/#tools-that-ask-first).
 
 An environment can set `image` to run its box from an image of your own. A box on Cloudflare runs only the Worker's own images, so a run there fails on it. Publishing shows a warning at `image` and still publishes, since a box on Docker Compose runs it.
 
-In the Definition, the **Environments** section has a tab per environment, and **Add a tool** adds an MCP server, a command-line tool or an API from a catalog, or a custom one, to the draft. You pick a secret or create one in place, and the page shows the lines it adds before you add them. The same file is under `environments/` in the YAML view. Remote MCP servers are tested with the draft's secrets, and the result is shown, never required to publish.
+In the Definition, the **Environments** section has a tab per environment, and **Add a tool** adds an MCP server, a command-line tool or an API from a catalog, or a custom one, to the draft. You pick a secret or create one in place, and the page shows the lines it adds before you add them. The same file is under `environments/` in the YAML view. MCP servers are tested with the draft's secrets, and the result is shown, never required to publish. A stdio server is tested only when its command is exactly one the catalog ships, such as `github-mcp-server stdio`; goald never runs any other command, and reports such a server as untested. Each URL in its env, including one a secret holds, must also be on a host listed in **Code hosts**; otherwise the server is reported as untested and the error names the host, or the variable when a secret holds the URL.
+
+The catalog has two GitHub templates. Each adds `gh`, the token as `GH_TOKEN`, GitHub's MCP server as `github` and a test of the token against `https://api.github.com/user`:
+
+- **`github-read`** is for agents that only read. It runs the MCP server in its read-only mode (the `X-MCP-Readonly: true` header) and suggests a read-only fine-grained token, `github-read-token`.
+- **`github`** keeps every tool of the MCP server, with `merge_pull_request` and `delete_*` set to `ask`, so a merge asks first. It suggests `github-token`.
+
+Both take a `host` parameter, `github.com` by default. A GitHub Enterprise Server host, such as `ghe.example.com`, swaps the lines: `GH_HOST` is the host and the token is `GH_ENTERPRISE_TOKEN` instead of `GH_TOKEN`; the MCP server is the local `github-mcp-server stdio` (with `--read-only` for `github-read`) with `GITHUB_HOST=https://ghe.example.com`; and the test asks `https://ghe.example.com/api/v3/user`. A host takes only letters, digits, dots, hyphens and a `:port`. `GET /v1/catalog` lists each template's parameters, and an environment test of a template takes their values as `parameters`. Add a tool writes the `github.com` lines for now. The environment test starts the local server inside goald to list its tools, but only when the host is one of your organization's code hosts; otherwise it reports the server as untested and says to add the host.
+
+Publishing warns when an agent whose `code` is `read`, or any check's agent, can call GitHub MCP tools that write. Goal judges each tool by what the server said about it in the environment's last passing test: a tool the server didn't mark read-only (`readOnlyHint`), and that the environment's `tools` set to `allow`, is named in a `github-tools-not-read-only` warning with the test's date. Setting those tools to `ask` or `off`, or using `github-read`, clears it. A GitHub server that was never tested, or whose last test failed, gets `github-tools-unknown`: its tools' access is unknown until you test the environment. Goal recognizes GitHub's server by its address, `api.githubcopilot.com`, or its command, `github-mcp-server`; a server it doesn't recognize gets no such warning. The warnings read the environment file only, not the organization policy, and say nothing about `gh` or a token in `env`.
+
+A token an environment file names, such as `GH_TOKEN`, is the environment's: every run of an agent in that environment gets it, and Goal can't narrow what the token may do. The repository token is separate. It reaches git's credential store only, and never the agent's environment unless an environment file names it.
 
 ## The repository and the model
 
-Two secrets are named in the factory's runtime, not in an environment file:
+Two kinds of secret are named in the factory's runtime, not in an environment file:
 
-- `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab. Any other host needs `forge: github` or `forge: gitlab`; publishing refuses a version without it, and so does a merge.
+- `runtime.repository` is `{url, token}`. The token clones, pushes and reads and merges pull requests. There is no app to install: the token's own scope is the limit, so a fine-grained token for one repository is the right choice. The host picks the code host: `github.com` is GitHub and `gitlab.com` is GitLab. An entry of `runtime.repositories` has no `forge`: the organization's code hosts give each host its kind. Only the shorthand keeps `forge`, and on any other host it needs `forge: github` or `forge: gitlab`; publishing refuses a version without it, and so does a merge.
+- `runtime.repositories` is the list form, described below. Each entry's `token` is a secret.
 - `runtime.modelKey` is the secret that gives every run its model. A value that starts with `sk-ant-oat` is a Claude subscription token and a run gets it as `CLAUDE_CODE_OAUTH_TOKEN`. Any other value is an Anthropic API key and becomes `ANTHROPIC_API_KEY`.
 
-Neither reaches the agent's environment unless an environment file names it, for example as `GH_TOKEN` for `gh`. Both are set on the factory's Settings page (see [Factory settings](../../guides/factory-settings/)).
+None of them reaches the agent's environment unless an environment file names it, for example as `GH_TOKEN` for `gh`. The shorthand and the model key are set on the factory's Settings page; `runtime.repositories` is edited in the YAML view (see [Factory settings](../../guides/factory-settings/)).
 
 The repository token signs git in to the repository's host for three things: the clone, the push of a new base branch (an assembly's integration branch), and the agent's own `git push`. Git signs in as `x-access-token` on GitHub and as `oauth2` on GitLab, with the token as the password. Goal keeps the token in git's credential store inside the run's box, outside the workspace, so the agent's push works without the token in its environment. The box and its store are thrown away after the run. The agent's prompt says that git signs in with the repository token. A public repository needs no token: it clones without a login.
 
-goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request on a host other than the repository's is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run.
+goald reads and merges pull requests with the same token: a person's merge, a gate's merge on approval, the landing pull request of an integration branch, and the reads of a part's pull request base and of the default branch's head and history that an item's base commit and its "changed since your plan" note come from. A pull request in a repository the entry doesn't cover is refused before the token is opened, and so is a merge for a repository with no token. Each of these opens the token and writes one `secret.used` audit entry for the factory, with no run. With several entries, each repository uses its own entry's token, as the next section says.
+
+### Repositories and what agents may write
+
+To set this up step by step, follow [Connect code to a factory](/docs/guides/connect-code/).
+
+`runtime.repositories` lists the repositories a factory's runs may open. A factory with none has no code.
+
+```yaml
+runtime:
+  repositories:
+    - name: app
+      url: https://github.com/acme/app
+      token: "{{github-acme}}"
+      access: write
+```
+
+- `name` is 3 to 40 lowercase letters, digits and hyphens, unique in the factory.
+- `url` is one repository, or an owner's every repository written as `https://github.com/acme/*`.
+- `access` is `read` or `write`. A `write` entry needs a `token`.
+- `default: true` marks the entry an item uses when it names none. Only one entry may have it, and it must name one repository. The only entry is the default when it names one repository.
+- The URL's host must be `github.com`, `gitlab.com` or one of the organization's code hosts. Publishing refuses any other host, so no token goes to a host nobody listed.
+
+`runtime.repository` is the shorthand for one `write` entry that is the default, named after the URL's last segment (`repo` when that isn't a valid name). A definition has one form or the other, never both.
+
+An agent's `code` says whether it writes: `write` or `read`, next to its `builtins`. An agent without `code` writes when the factory has a `write` entry, so existing factories keep working. A line that merges, with a merge station or integration branches, needs a `write` entry and an agent that writes.
+
+For each repository, the most specific entry that covers it gives the token: one repository before an owner pattern. An agent that only reads takes a `read` entry's token whenever one covers the repository. Publishing warns with `reader-write-token` when an agent that only reads would get a `write` entry's token because no `read` entry covers it.
+
+goald never pushes, creates branches, opens pull requests or merges in a repository whose entry only reads, or for an agent that only reads. A merge takes each pull request in its own repository with the token of the most specific entry that covers it. When that entry is a `read` entry, or no entry covers the repository, the merge is refused before goald updates a branch, merges or deletes one, and the reason names the repository and says an entry with `access: write` must cover it. Reads, such as an item's base commits and its "changed since your plan" note, take a `read` entry's token first.
+
+### Testing a repository's token
+
+A repository test tells you what a token can do for one of the factory's entries, and Goal keeps the answer so pages show it without asking the host again. `POST /v1/orgs/{org}/factories/{factory}/repositories/test` takes the entry's `url` (one repository, or an owner pattern such as `https://github.com/acme/*`), its secret and its `access`. It needs `definition:edit`. Goal opens the secret for that factory, so a secret limited to other factories is refused with `secret-not-allowed`, and asks the host's API, never git. A host the organization doesn't list is refused before the secret is opened.
+
+The answers:
+
+- **A `read` entry** answers "Can read". For an owner pattern it counts the repositories the token can read: "Can read 48 repositories in acme", or "at least 1000" when there are more than Goal counts. When the token can also push, the answer warns: "Goal won't push, but agents could. Use a read-only token."
+- **A `write` entry** answers "Can read and push", or says which of the two fails with the host's reason. The host reports no pull-request permission, so Goal can't check it, and the answer notes that. For a classic GitHub token, push reflects the account's role rather than the token's scopes; a fine-grained token answers its own grant.
+- **A host that doesn't answer** within 10 seconds gives "couldn't test".
+
+Each answer is kept per factory and URL, the newest replacing the one before, and `GET /v1/orgs/{org}/factories/{factory}/repositories/tests` lists them for anyone who can read the factory. A test runs again when someone clicks Test, and when the secret's value is replaced. No answer holds the token.
+
+From the CLI, `goal repository test <url> --secret <name> --factory <factory> [--access read|write]` runs the same test and keeps the answer; `--access` defaults to `write`, the access of the `runtime.repository` shorthand. It prints the answer, its warning or note, and the read and push checks, and exits 1 when the token can't do what the access asks. `goal factory show <factory>` lists the repositories of the factory's current version, each with its access, the default marked `*` and its kept answer or "not tested", then the kept answers that match no repository. It only reads kept answers and never tests.
 
 ## Webhook secrets
 
@@ -69,7 +124,7 @@ An organization webhook is signed by one of the organization's secrets, which no
 
 The webhook refers to the secret by id, so renaming the secret keeps the webhook signed by it. The secret can't be deleted while a webhook uses it, and its uses list the webhook.
 
-Publishing refuses a version whose environment file, `runtime.repository.token`, `runtime.modelKey` or trigger key names a secret that signs a webhook (`secret-signs-webhook`), even when the secret is open to the factory. A run that held the value could sign deliveries of its own.
+Publishing refuses a version whose environment file, repository token, `runtime.modelKey` or trigger key names a secret that signs a webhook (`secret-signs-webhook`), even when the secret is open to the factory. A run that held the value could sign deliveries of its own.
 
 A factory's webhook endpoint made before organization webhooks is converted once when goald starts. Its signing secret becomes an organization secret named `webhook-<name>`, open to no factory, holding the value the endpoint showed when it was made. The endpoint becomes the organization's webhook with the same address, the `github` sender for a `github` endpoint and `standard` for a `generic` one, and is open to its factory for every repository. An endpoint keeps its name unless the name is reserved (a sender name, `schedule` or `webhook`) or an older endpoint of another factory has it; then it takes the first free suffix, such as `github-2`, cut to fit 40 characters. A secret name that is taken gets a suffix the same way. goald logs each rename as `webhook renamed` with the factory and both names: a published trigger that named the endpoint by its old name needs its `on` changed.
 
@@ -138,7 +193,7 @@ Access also shows the secret the organization's Slack notifications use, when th
 ## From the command line
 
 - `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets. A value comes only from stdin or the import file and is never shown. `goal credential` and `goal connection` moved: each prints where its commands went and exits 2.
-- `goal repository test <url> --secret <name>` checks, before any factory exists, whether the secret's token can read a repository on github.com or gitlab.com and push to it. goald asks the code host's API, never git, and prints each check with the host's reason. A host that gives no answer within 10 seconds answers "couldn't test". For a classic GitHub token, push ok reflects the account's role rather than the token's scopes; a fine-grained token answers its own grant. Owners and admins can run it, and the secret must be open to all factories. The API route is `POST /v1/orgs/{org}/repositories/test`.
+- `goal repository test <url> --secret <name> --factory <factory>` tests a token for one of the factory's entries and keeps the answer ([Testing a repository's token](#testing-a-repositorys-token)). Without `--factory` it says the flag is required and exits 1 without calling goald.
 
 Flags and output are in the [CLI reference](../../reference/).
 
@@ -160,6 +215,6 @@ It also points each synced knowledge source still on a connection at the secret 
 
 When the organization's Slack notification setting names no secret and it has a Slack connection, it points the setting at the secret that connection's token became. With several Slack connections it uses the oldest, the one Slack notifications were sent with. A setting that already names a secret is left as it is. A Slack connection whose secret does not exist gets a `slack setting not moved over` line with the connection's name and the reason, and Slack stays off until an admin picks a secret.
 
-Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused, how many secrets it created, how many knowledge sources it moved and whether it set the Slack notification setting (`slack`). A knowledge source it can't move gets its own `knowledge source not moved over` line with the reason. Running it again changes nothing for a factory it converted.
+Running items keep the version they started on. goald logs one `moved over` line per organization, with how many factories it converted and refused, how many secrets it created, how many knowledge sources it moved, whether it set the Slack notification setting (`slack`) and how many code hosts it added to the organization's list (`hosts`, [Code hosts](/docs/getting-started/organizations/#code-hosts)). A knowledge source it can't move gets its own `knowledge source not moved over` line with the reason. Running it again changes nothing for a factory it converted.
 
 A factory Goal cannot convert keeps its version and runs on connections. Needs you shows a conversion entry for it that names each problem, for example "connection aws-prod uses the aws kind, which Goal no longer converts: remove it from the factory". Goal refuses connections of the `aws` and `bedrock` kinds, and custom kinds that start a command with no fields. A converted version that fails its test is refused the same way, and its entry names what to fix: the repository and whether the token can't read it or can't push to it, with the host's reason, or the environment file, the MCP server and its error. No problem shows a secret's value. Each time goald starts, it tries a refused factory again, so fixing the token's access or the server is enough: the next start publishes the converted version once. The entry goes away once the factory publishes a version with environment files.

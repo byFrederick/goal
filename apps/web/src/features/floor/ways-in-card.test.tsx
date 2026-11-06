@@ -3,9 +3,8 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { connectionsQuery, intakeQuery, versionModelQuery } from '../../api/queries';
 import type { Connection, Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
-import { modelOf } from '../../shared/definition/model';
 import { renderFactoryPage } from '../../test/route';
-import { labelRows, WaysInCard } from './ways-in-card';
+import { WaysInCard } from './ways-in-card';
 
 afterEach(() => {
   cleanup();
@@ -73,28 +72,9 @@ function renderWays({
   });
 }
 
-describe('labelRows', () => {
-  it('reads the label of each enabled GitHub label trigger from its published entry', () => {
-    const rows = labelRows([labelTrigger, { ...labelTrigger, name: 'off', enabled: false }], modelOf(published.model));
-    expect(rows).toEqual([{ name: 'factory-label', label: 'factory' }]);
-  });
-});
-
 describe('WaysInCard', () => {
-  it('shows the label row for an enabled label trigger, and Copy writes the label', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  it('draws no label row, even with an enabled label trigger', async () => {
     renderWays();
-
-    expect(await screen.findByRole('heading', { name: 'How work gets in' })).toBeTruthy();
-    expect(screen.getByText('Label an issue')).toBeTruthy();
-    expect(screen.getByText('factory')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Copy label factory' }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('factory'));
-  });
-
-  it('has no label row when no enabled label trigger exists', async () => {
-    renderWays({ triggers: [{ ...labelTrigger, enabled: false }] });
 
     await screen.findByRole('heading', { name: 'How work gets in' });
     expect(screen.queryByText('Label an issue')).toBeNull();

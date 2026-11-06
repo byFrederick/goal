@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createContext, type ReactNode, use, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { boardQuery, draftQuery, settingsQuery, versionModelQuery } from '../../../api/queries';
 import type { Board } from '../../../api/types';
-import { type LineSection, type ModelStation, modelOf } from '../../../shared/definition/model';
+import { type BasicsSection, type LineSection, type ModelStation, modelOf } from '../../../shared/definition/model';
 import { type SlotCap, slotCap } from '../../../shared/definition/slots';
 import type { AnyEdit, Edit } from '../draft/ops';
 import { moveStation } from '../draft/ops';
@@ -16,6 +16,15 @@ import type { EditOptions } from '../draft/session';
 import { useDraft, useDraftOpen, useDraftSession, useSection } from '../draft/use-draft';
 import { stationLabel } from './labels';
 import { movedMessage } from './reorder';
+
+/** A line that merges needs a repository that writes: the shorthand, or an entry whose access is write (the default). */
+export function hasWritingRepository(basics: Pick<BasicsSection, 'repository' | 'repositories'>): boolean {
+  const repository = basics.repository;
+  return Boolean(
+    (repository && (repository.url || repository.connection)) ||
+      basics.repositories?.some((entry) => entry.url && (entry.access ?? 'write') === 'write'),
+  );
+}
 
 export interface LineEditor {
   place: 'definition' | 'wizard';
@@ -169,8 +178,7 @@ export function LineEditorProvider({ place, children }: { place: 'definition' | 
     if (target) target.scrollIntoView({ block: 'nearest' });
   });
 
-  const repository = basics.repository;
-  const hasRepository = Boolean(repository && (repository.url || repository.connection));
+  const hasRepository = hasWritingRepository(basics);
   const constraintNow = board?.constraint ?? undefined;
   const constraint = line.flow?.constraint ?? constraintNow;
 

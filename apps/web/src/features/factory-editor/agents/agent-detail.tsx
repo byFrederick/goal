@@ -8,12 +8,14 @@ import { ChevronRight } from 'lucide-react';
 import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { builderMetaQuery } from '../../../api/queries';
-import type { ModelAgent } from '../../../shared/definition/model';
+import type { BasicsSection, ModelAgent } from '../../../shared/definition/model';
 import { whereLabel } from '../../../shared/definition/where';
 import { useFactoryParams } from '../../../shared/factory';
 import { formatClock } from '../../../shared/format';
 import { Button } from '../../../ui/button';
 import { Field, Input, NativeSelect } from '../../../ui/field';
+import { InfoTip } from '../../../ui/info-tip';
+import { SegmentedControl } from '../../../ui/segmented-control';
 import { duplicateAgent, setAgentField } from '../draft/ops';
 import { useDraft, useDraftSession, useSection, useViewOnly } from '../draft/use-draft';
 import { EditedMark } from '../frame/section-shell';
@@ -113,6 +115,7 @@ export function AgentDetail({ agent, place, openPicker }: AgentDetailProps) {
           />
         </Field>
         <ModelField agent={agent} at={at} />
+        <CodeField agent={agent} at={at} />
         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
           <NumberField
             label="Max turns"
@@ -156,6 +159,46 @@ function AgentPageLink({ agent }: { agent: string }) {
         <ChevronRight size={14} strokeWidth={1.5} aria-hidden="true" />
       </Link>
     </Button>
+  );
+}
+
+/** What `code` is when the agent sets none: write when a repository writes (the shorthand always does), else read. */
+export function defaultCode(basics: BasicsSection): 'write' | 'read' {
+  if (basics.repository) return 'write';
+  return (basics.repositories ?? []).some((r) => r.access === 'write') ? 'write' : 'read';
+}
+
+const codeOptions = [
+  { value: 'write', label: 'Write' },
+  { value: 'read', label: 'Read' },
+] as const;
+
+export function CodeField({ agent, at }: { agent: ModelAgent; at: string }) {
+  const session = useDraftSession();
+  const viewOnly = useViewOnly();
+  const agents = useSection('agents');
+  const basics = useSection('basics');
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex items-center gap-1 text-sm font-medium">
+          <span aria-hidden="true">Code</span>
+          <InfoTip about="Code">
+            Write lets the agent push, open pull requests and merge in repositories whose access is write. Read only
+            lets it read the code.
+          </InfoTip>
+        </span>
+        <EditedMark section="agents" pointer={`${at}/code`} label={`the code access of ${agent.name}`} />
+      </div>
+      <SegmentedControl
+        label="Code"
+        options={codeOptions}
+        value={agent.code ?? defaultCode(basics)}
+        readOnly={viewOnly}
+        onChange={(code) => session.edit(setAgentField(agents, agent.name, 'code', code))}
+        className="self-start"
+      />
+    </div>
   );
 }
 

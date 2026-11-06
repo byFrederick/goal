@@ -68,7 +68,7 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 	template := strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1)
 	dir := filepath.Join(t.TempDir(), "acme-review")
 	writeFiles(t, dir, map[string]string{
-		"template.yaml": "title: Acme review\nsummary: Write, then approve\n", "factory/factory.yaml": template,
+		"template.yaml": "title: Acme review\nsummary: Write, then approve\ncode: none\n", "factory/factory.yaml": template,
 		"factory/agents/writer.md": "# writer\n", "factory/.DS_Store": "junk",
 		"factory/" + envPath: workingCopy()[envPath],
 	})
@@ -110,6 +110,30 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err == nil ||
 		!strings.Contains(buf.String(), filepath.Join(dir, "factory", "factory.yaml")+":3:") || !strings.Contains(buf.String(), "template-id") {
 		t.Errorf("push of a template with an id = %v\n%s", err, buf.String())
+	}
+}
+
+func TestCatalogTemplates_PushRefusesTemplateWithoutCode(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join(t.TempDir(), "acme-review")
+	writeFiles(t, dir, map[string]string{
+		"template.yaml":        "title: Acme review\n",
+		"factory/factory.yaml": strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
+		"factory/" + envPath:   workingCopy()[envPath],
+	})
+
+	up, err := readTemplate(dir, "acme-review", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+
+	catalog := authoring.NewTemplateCatalog(porttest.NewObjectStore(), porttest.NewClock(time.Now()))
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err == nil ||
+		!strings.Contains(buf.String(), "template-meta-invalid") || !strings.Contains(buf.String(), "code is none or read") {
+		t.Errorf("push of a template without code = %v\n%s", err, buf.String())
 	}
 }
 

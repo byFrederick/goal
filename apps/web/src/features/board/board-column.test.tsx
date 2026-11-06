@@ -60,6 +60,7 @@ const item = (n: number, over: Partial<ItemCard> = {}): ItemCard => ({
   agent: null,
   pr_url: null,
   pull_requests: [],
+  repositories: [],
   slot: null,
   turn: null,
   summary: null,
@@ -140,7 +141,7 @@ describe('the Done column header', () => {
       factory,
       board: {
         ...base,
-        stations: [done],
+        stations: [{ ...buildStation([]), id: 'merge', kind: 'human', action: 'merge' }, done],
         constraint: null,
         line: { ...base.line, touches: { ...base.line.touches, finished: 281 } },
       },

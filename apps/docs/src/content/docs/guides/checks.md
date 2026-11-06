@@ -24,7 +24,7 @@ board:
       limits: { perCheck: 5, perDay: 20, pauseOnBudget: true }
 ```
 
-- `agent` is any agent of the factory. The check runs with its environment: its tools, secrets and model. Give it read-only tools; publishing warns when the agent may use tools that are not read-only. A check only reads, whatever the agent's `code` setting, and it clones nothing.
+- `agent` is any agent of the factory. The check runs with its environment: its tools, secrets and model. Give it read-only tools; publishing warns when the agent may use tools that are not read-only. For GitHub's MCP server, the warning names the tools the environment's last test found not read-only, or says their access is unknown when the server hasn't passed a test ([Access and secrets](/docs/concepts/access-and-secrets/)). A check only reads, whatever the agent's `code` setting, and it clones nothing.
 - `brief` says what to look for and what is worth an item. It can name a Markdown file of the definition (`./triggers/<name>.md`).
 - `maxUsd` is the most one check may spend (default 0.10), and `timeout` its time limit (default `5m`, at most `1h`).
 - `create` holds the defaults for the items the check files. `create.trusted` applies to them as it does to a delivery's items.
@@ -47,6 +47,8 @@ It answers in a fixed shape:
 
 - **Keys.** A `file` whose key already has an open item becomes a note on it. A key whose item closed is filed again only with `reopen`, linked to the old item; otherwise it is skipped with "closed on <date>: <reason>", so a source that stays open is not filed and closed on every check. A key takes at most one note an hour, and a repeated note is dropped.
 - **Limits.** `limits.perCheck` (default 5) is the most items one check files. `limits.perDay` counts the items the trigger filed, not its firings. What is over either is recorded as skipped, "over the limit", and Needs you shows that once a day.
+- **Repositories.** A `file` entry's `repositories` are matched against the factory's `runtime.repositories` as a trigger's `create.repositories` are ([Repositories of an item](../intake/#repositories-of-an-item)). An entry that names none gets the default entry. An entry that names a repository the factory doesn't have is skipped with "can't file it: acme/legacy is not one of SRE's repositories", and the other entries are still filed.
+- **Reading code.** A check may open any repository the factory's `runtime.repositories` cover. Its run signs in to each with a `read` entry's token wherever one matches, and otherwise with the entry's own token, and it can never push to any repository, whatever its agent's `code`. It clones nothing at start; the end of its brief lists the entries and says to clone one with git into `/repos/<owner>/<name>`. Checks have no `Bash`, so an agent that has only the built-in tools reads code through its environment's tools instead.
 - **The door.** Each item is filed with origin `trigger`, the check's run as its filer, and untrusted unless the trigger has `create.trusted`: what the agent read is outside text, so a person merges what its items build.
 - **One at a time.** A firing while the trigger's check is queued or running is skipped, "still checking". No check is queued while the factory's line is paused.
 - **Failures.** An error, a timeout or an answer that breaks the fixed shape is recorded with its reason and files nothing. Three in a row show in Needs you.

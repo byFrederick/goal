@@ -157,7 +157,7 @@ var (
 	agentShape = &shape{
 		kind: agentItem,
 		order: []string{
-			keyName, keyDescription, "prompt", "model", "maxTurns", "perItemUsd", keySkills, keyConnections, keyTools,
+			keyName, keyDescription, "code", "prompt", "model", "maxTurns", "perItemUsd", keySkills, keyConnections, keyTools,
 			"builtins",
 		},
 		fields: map[string]*shape{
@@ -196,6 +196,12 @@ var (
 
 	budgetShape     = &shape{order: []string{"dailyUsd", "weeklyUsd", "onExhausted", "perItemUsd", "maxTurnsPerTask"}}
 	repositoryShape = &shape{verbatim: true, order: []string{"url", "connection", "token"}}
+
+	// repositoriesShape is spec.runtime.repositories: each entry by name.
+	repositoriesShape = &shape{
+		elem:     &shape{verbatim: true, order: []string{keyName, "url", "token", "access", "default"}},
+		identity: agentIdentity, identityOf: agentIdentityOf,
+	}
 )
 
 // connectionIdentity is a connection's name: an organization connection's is the item itself,
@@ -231,7 +237,7 @@ var containerOrder = map[string][]string{
 	"spec": {
 		keyRuntime, "knowledgeBase", "secrets", keyConnections, keyKnowledge, keySkills, keyRules, "contracts", keyAgents, keyBoard, keyLearning,
 	},
-	"spec.runtime":   {"runner", keyImage, "auth", "model", "modelConnection", "size", keyTools, "repository", "budget"},
+	"spec.runtime":   {"runner", keyImage, "auth", "model", "modelConnection", "size", keyTools, "repository", "repositories", "budget"},
 	"spec.knowledge": {"sources"},
 	"spec.board":     {"workTypes", "intake", keyStations, keyFlow},
 }

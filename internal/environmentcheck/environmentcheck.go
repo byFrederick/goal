@@ -1,6 +1,6 @@
-// Package environmentcheck tests a remote MCP server of an environment file (ADR 0037 decision 9):
-// it opens the secrets the server's headers name, calls tools/list with them and scrubs every
-// error of the opened values. The environment test route (internal/api) and the conversion at
+// Package environmentcheck tests an MCP server of an environment file (ADR 0037 decision 9): it
+// opens the secrets a remote server's headers or a stdio server's env name, calls tools/list with
+// them and scrubs every error of the opened values. The environment test route (internal/api) and the conversion at
 // goald's start (internal/moveover, decision 19) both test servers with it. Opened values reach
 // the ToolLister only.
 package environmentcheck
@@ -51,23 +51,38 @@ func Opens(secrets Resolver, use domain.SecretUse) Opener {
 	}
 }
 
-// Result is one server's test: OK with its tools, or Error, scrubbed of every value and cut to
+// Result is one server's test: OK with its tools' names and the names of those the server marked
+// read-only (annotations.readOnlyHint), both sorted, or Error, scrubbed of every value and cut to
 // domain.MaxEnvironmentTestError characters.
 type Result struct {
-	OK    bool
-	Tools []string
-	Error string
+	OK       bool
+	Tools    []string
+	ReadOnly []string
+	Error    string
+
+	// Refused is why refuse would not let the server start, scrubbed and cut like Error: the
+	// server is then untested, and nothing was listed.
+	Refused string
 }
 
-// Server tests the remote MCP server at url: it opens the secrets headers refer to with open (or
-// takes slots' values, when slots is not nil), and lists its tools with the headers rendered. A
-// secret that does not exist or is not open to the use fails the test; err is any other refusal
-// to open, such as a missing master key, and nothing is tested then.
-func Server(ctx context.Context, tools ports.ToolLister, open Opener, url string, headers, slots map[string]string) (Result, error) {
+// Refuser is why the server e, with its secrets rendered, may not start, or "". err is a failure
+// to decide.
+type Refuser func(ctx context.Context, e ports.MCPEndpoint) (reason string, err error)
+
+// Server tests the MCP server e, as its file has it: remote at e.URL, or stdio from e.Command,
+// which the caller checked is one the tool catalog ships. It opens the secrets e's headers and env
+// refer to with open (or takes slots' values, when slots is not nil), and lists its tools with
+// them rendered. refuse, when not nil, sees the endpoint as it will be started, after rendering,
+// so a value a secret holds is checked too. A secret that does not exist or is not open to the use
+// fails the test; err is any other refusal to open, such as a missing master key, or refuse's
+// error, and nothing is tested then.
+func Server(ctx context.Context, tools ports.ToolLister, open Opener, e ports.MCPEndpoint, slots map[string]string, refuse Refuser) (Result, error) {
 	values := slots
 	if values == nil {
+		names := slices.Sorted(slices.Values(append(Referenced(e.Headers), Referenced(e.Env)...)))
+
 		var err error
-		if values, err = open(ctx, Referenced(headers)); err != nil {
+		if values, err = open(ctx, slices.Compact(names)); err != nil {
 			if !errors.Is(err, ports.ErrNotFound) && !errors.Is(err, ports.ErrSecretNotAllowed) {
 				return Result{}, err
 			}
@@ -76,12 +91,34 @@ func Server(ctx context.Context, tools ports.ToolLister, open Opener, url string
 		}
 	}
 
-	names, err := tools.ListTools(ctx, ports.MCPEndpoint{URL: url, Headers: Render(headers, values)})
+	e.Headers, e.Env = Render(e.Headers, values), Render(e.Env, values)
+
+	if refuse != nil {
+		reason, err := refuse(ctx, e)
+		if err != nil {
+			return Result{}, err
+		}
+
+		if reason != "" {
+			return Result{Refused: Scrub(reason, values)}, nil
+		}
+	}
+
+	listed, err := tools.ListTools(ctx, e)
 	if err != nil {
 		return Result{Error: Scrub(err.Error(), values)}, nil
 	}
 
-	return Result{OK: true, Tools: names}, nil
+	r := Result{OK: true, Tools: make([]string, 0, len(listed))}
+
+	for _, t := range listed {
+		r.Tools = append(r.Tools, t.Name)
+		if t.ReadOnly {
+			r.ReadOnly = append(r.ReadOnly, t.Name)
+		}
+	}
+
+	return r, nil
 }
 
 // Referenced are the secrets values refer to, sorted, each once.

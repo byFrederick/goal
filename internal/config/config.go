@@ -90,9 +90,13 @@ type Runtime struct {
 	ModelConnection string   `json:"modelConnection,omitempty"`
 	Size            string   `json:"size,omitempty"`
 	Tools           []string `json:"tools,omitempty"`
-	// Repository is the git repository runs work on; nil means an empty workspace.
+	// Repository is the shorthand for one write entry of Repositories (RepositoryEntries); a
+	// definition has one form or the other, and neither is a factory with no code.
 	Repository *Repository `json:"repository,omitempty"`
-	Budget     *Budget     `json:"budget,omitempty"`
+	// Repositories are the repositories the factory's runs may open, each with its access (ADR
+	// 0041 decision 2).
+	Repositories []RepositoryEntry `json:"repositories,omitempty"`
+	Budget       *Budget           `json:"budget,omitempty"`
 }
 
 // Repository is the git repository cloned into every run: a URL, the {{secret}} token that clones
@@ -274,6 +278,9 @@ type Agent struct {
 		Deny  []string `json:"deny,omitempty"`
 	} `json:"tools,omitempty"`
 	Builtins *Builtins `json:"builtins,omitempty"`
+	// Code is write or read: whether the agent may push, open pull requests and merge (ADR 0041
+	// decision 3). "" is Factory.AgentCode's default.
+	Code string `json:"code,omitempty"`
 }
 
 // Built-in tool modes.
@@ -428,6 +435,9 @@ type TriggerCreate struct {
 	Expedite bool   `json:"expedite,omitempty"`
 	Title    string `json:"title,omitempty"`
 	Brief    string `json:"brief,omitempty"`
+	// Repositories are the item's repositories, each a template like Title or an entry's name
+	// (ADR 0041 decision 13).
+	Repositories []string `json:"repositories,omitempty"`
 	// Trusted files a delivery's item trusted (ADR 0040 decision 21).
 	Trusted bool `json:"trusted,omitempty"`
 }
@@ -570,10 +580,12 @@ type Flow struct {
 
 // Outputs names the output fields goald reads besides a contract's own: FollowUps the one that
 // holds follow-ups (ADR 0040 decision 5), Close the one that closes a trigger's or a follow-up's
-// item (decision 11). An unset key maps no field.
+// item (decision 11), Repositories the one whose repositories join the item (ADR 0041 decision
+// 4). An unset key maps no field.
 type Outputs struct {
-	FollowUps string `json:"followUps,omitempty"`
-	Close     string `json:"close,omitempty"`
+	FollowUps    string `json:"followUps,omitempty"`
+	Close        string `json:"close,omitempty"`
+	Repositories string `json:"repositories,omitempty"`
 }
 
 // Dependencies names the output fields that set an item's dependencies: After the one listing
@@ -653,7 +665,9 @@ func LoadDir(dir string) (*Factory, error) {
 // moved. A version published before the cutover may have the forms; it loads, so its items stay
 // visible, and its line names them (domain.Line.Removed), so the engine refuses to run it. A
 // version published before ADR 0037 has the moved keys and no environments folder; it loads
-// without the environment checks and runs on the old path until Goal converts it. Referenced
+// without the environment checks and runs on the old path until Goal converts it. The
+// repositories check is publish's (ADR 0041), so a version published before it keeps running.
+// Referenced
 // paths resolve inside files only; a path that leaves it is not found.
 func Load(files fs.FS) (*Factory, error) {
 	f, problems := Check(files)
@@ -662,7 +676,7 @@ func Load(files fs.FS) (*Factory, error) {
 	var errs []error
 
 	for _, p := range problems {
-		skipped := p.Check == checkRemoved || p.Check == checkMoved || p.Check == CheckDeliveries || oldPath && p.Check == checkEnvironments
+		skipped := p.Check == checkRemoved || p.Check == checkMoved || p.Check == CheckDeliveries || p.Check == checkRepositories || oldPath && p.Check == checkEnvironments
 		if p.Blocking() && !skipped {
 			errs = append(errs, problemError(p))
 		}

@@ -274,7 +274,7 @@ func ServerToolModes(
 
 	for _, r := range rules {
 		if r.Active() && r.ConnectionID == "" && r.Factory == factory && r.Environment == environment && r.Server == server &&
-			r.Agent == agent && resolveToolMode(file, r.Tool) == ToolModeAsk {
+			r.Agent == agent && ResolveToolMode(file, r.Tool) == ToolModeAsk {
 			lifted[r.Tool] = true
 		}
 	}
@@ -318,7 +318,7 @@ func modeFor(modes map[string]ConnectionToolMode, later []string, p string) Conn
 	}
 
 	if !IsToolGlob(p) {
-		return resolveToolMode(modes, p)
+		return ResolveToolMode(modes, p)
 	}
 
 	mode := ToolModeAllow
@@ -332,9 +332,9 @@ func modeFor(modes map[string]ConnectionToolMode, later []string, p string) Conn
 	return mode
 }
 
-// resolveToolMode is tool's mode in modes: its most specific matching pattern's, and allow when
-// none matches.
-func resolveToolMode(modes map[string]ConnectionToolMode, tool string) ConnectionToolMode {
+// ResolveToolMode is tool's mode in modes, an environment file's mcp.<server>.tools: its most
+// specific matching pattern's (CompareToolPatterns), and allow when none matches.
+func ResolveToolMode(modes map[string]ConnectionToolMode, tool string) ConnectionToolMode {
 	patterns := slices.SortedFunc(maps.Keys(modes), CompareToolPatterns)
 	for _, p := range patterns {
 		if ok, err := path.Match(p, tool); err == nil && ok {

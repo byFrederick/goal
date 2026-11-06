@@ -1,23 +1,26 @@
-// The Code step's URL state (frontend.md: a selection lives in the URL, so a linked step shows the same
-// choice): the repository's https URL and the name of the secret that holds its token. The token itself
-// is never in the URL. Malformed values are dropped, never thrown on. Steps 3 and 4 read the same search,
-// and from step 3 on the factory created there (`factory`, its id) rides along.
+// The onboarding steps' URL state (frontend.md: a selection lives in the URL, so a linked step shows the same
+// choice). From step 2 on the factory made there (`factory`, its id) and its template ride along. After the
+// Code step, `url` (the first repository, or an owner pattern) and `secret` (the token's name) name the code
+// the preview shows; the token itself is never in the URL. Malformed values are dropped, never thrown on.
 import { secretNamePattern } from '../secrets/words';
 
 export interface CodeSearch {
-  /** The repository's https URL, such as https://github.com/acme/app. */
+  /** The first repository's https URL, such as https://github.com/acme/app, or an owner pattern: the later steps' card names it. */
   url?: string | undefined;
   /** The secret that holds the token, by name. */
   secret?: string | undefined;
 }
 
 export interface OnboardingSearch extends CodeSearch {
-  /** The factory step 3 created, by id: steps 4 and on work on it. */
+  /** The factory step 2 created, by id: every later step works on it. */
   factory?: string | undefined;
+  /** The template it came from, by name: the Code step reads the code its line needs. Absent for a blank start. */
+  template?: string | undefined;
 }
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const maxUrl = 300;
+const maxTemplate = 100;
 
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
 
@@ -35,12 +38,12 @@ export function repositoryUrl(value: string | undefined): string | undefined {
   }
 }
 
-/** "acme/app" from https://github.com/acme/app(.git); undefined when the path has no owner and name. */
+/** "acme/app" from https://github.com/acme/app(.git), "acme/*" from an owner pattern; undefined when the path has no owner and name. */
 export function repoOf(url: string | undefined): string | undefined {
   const valid = repositoryUrl(url);
   if (!valid) return undefined;
   const [owner, name] = new URL(valid).pathname.split('/').filter(Boolean);
-  const repo = name?.replace(/\.git$/, '');
+  const repo = name === '*' ? '*' : name?.replace(/\.git$/, '');
   return owner && repo ? `${owner}/${repo}` : undefined;
 }
 
@@ -54,5 +57,10 @@ export function codeSearch(search: Record<string, unknown>): CodeSearch {
 /** The URL state of every onboarding step: the Code step's choice and the factory, when there is one. */
 export function onboardingSearch(search: Record<string, unknown>): OnboardingSearch {
   const factory = text(search.factory);
-  return { ...codeSearch(search), factory: factory && idPattern.test(factory) ? factory : undefined };
+  const template = text(search.template);
+  return {
+    ...codeSearch(search),
+    factory: factory && idPattern.test(factory) ? factory : undefined,
+    template: template && template.length <= maxTemplate ? template : undefined,
+  };
 }

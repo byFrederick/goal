@@ -84,6 +84,7 @@ const item = (over: Partial<ItemCard>): ItemCard => ({
   agent: null,
   pr_url: null,
   pull_requests: [],
+  repositories: [],
   slot: null,
   turn: null,
   summary: null,
@@ -536,6 +537,7 @@ describe('the desktop Board, as the screen draws it', () => {
 
   it('heads the Done column with Merged pull requests and the week’s count', async () => {
     const done = board();
+    done.stations.push(station({ id: 'merge', kind: 'human', action: 'merge', items: [] }));
     done.stations.push(station({ id: 'done', kind: 'done', items: [] }));
     renderBoardPage({
       page: ShellBoard,
@@ -551,6 +553,27 @@ describe('the desktop Board, as the screen draws it', () => {
     const doneColumn = within(columns).getByRole('region', { name: 'Done' });
     expect(within(doneColumn).getByText('Merged pull requests')).toBeTruthy();
     expect(within(doneColumn).getByText('53 this week')).toBeTruthy();
+  });
+
+  it('heads the Done column with Finished items when no station merges', async () => {
+    const noMerge = board();
+    noMerge.stations.push(station({ id: 'done', kind: 'done', items: [] }));
+    renderBoardPage({ page: ShellBoard, org, factory, board: noMerge });
+    const columns = await screen.findByRole('region', { name: 'Stations' });
+    const doneColumn = within(columns).getByRole('region', { name: 'Done' });
+    expect(within(doneColumn).getByText('Finished items')).toBeTruthy();
+    expect(within(doneColumn).queryByText('Merged pull requests')).toBeNull();
+  });
+
+  it('shows repositories on the cards only when the board names several', async () => {
+    const several = board();
+    const [first, second] = [several.stations[0]?.items[0], several.stations[1]?.items[0]];
+    if (first) first.repositories = [{ repo: 'github.com/acme/api', joined: 'default' }];
+    if (second) second.repositories = [{ repo: 'github.com/acme/docs', joined: 'filing' }];
+    renderBoardPage({ page: ShellBoard, org, factory, board: several });
+    await screen.findByRole('region', { name: 'Stations' });
+    expect(screen.getAllByText('acme/api').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('acme/docs').length).toBeGreaterThan(0);
   });
 
   it('shows the drum’s Ready buffer with Next in, and In progress below it, with the constraint chip', async () => {

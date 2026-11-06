@@ -1,4 +1,4 @@
-// Package tenancytest is the conformance suite for ports.Tenancy and ports.Audit. The in-memory
+// Package tenancytest is the conformance suite for ports.Tenancy, ports.Audit and ports.CodeHosts. The in-memory
 // fake in porttest and the PostgreSQL adapter run it, so tests on the fake hold for the
 // database's rules: unique and reserved slugs, soft delete, purge, and an audit entry in the
 // same transaction as every change.
@@ -22,6 +22,8 @@ import (
 type Harness struct {
 	Tenancy ports.Tenancy
 	Audit   ports.Audit
+	// CodeHosts are the organizations' added code hosts.
+	CodeHosts ports.CodeHosts
 	// NewFactory returns a new factory of org, for the slot caps.
 	NewFactory func(t *testing.T, org domain.OrgID) domain.FactoryID
 }
@@ -49,6 +51,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"UpdateOrg_SlotCapRulesRefused", testSlotCapRules},
 		{"PurgeOrg_OneOrgAtATime", testPurgeHook},
 		{"PurgeOrg_NothingThatIsNotDue", testPurgeRefused},
+		{"CodeHosts_ReplacedReadAndIsolated", testCodeHosts},
+		{"CodeHosts_SeededOnce", testCodeHostsSeededOnce},
 	}
 
 	for _, tc := range tests {

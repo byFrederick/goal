@@ -7,6 +7,7 @@ import { Zap } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { Board, BoardStation, ItemCard, PartsSummary } from '../../api/types';
 import { formatDuration, humanize, plural } from '../../shared/format';
+import { usesSeveralRepositories } from '../../shared/item-repositories';
 import { waitingOnYou } from '../../shared/item-state';
 import { cn } from '../../ui/cn';
 import { SegmentMeter } from '../../ui/segment-meter';
@@ -22,6 +23,7 @@ function ColumnCard({
   assemblyParts,
   arrived,
   dimmed = false,
+  showRepositories,
 }: {
   item: ItemCard;
   onMove: ((item: ItemCard) => void) | undefined;
@@ -29,6 +31,7 @@ function ColumnCard({
   assemblyParts: PartsSummary | undefined;
   arrived: boolean;
   dimmed?: boolean;
+  showRepositories: boolean;
 }) {
   const card = (drag: CardDrag | undefined) => (
     <BoardCard
@@ -38,6 +41,7 @@ function ColumnCard({
       assemblyParts={assemblyParts}
       arrived={arrived}
       dimmed={dimmed}
+      showRepositories={showRepositories}
     />
   );
   return draggable ? <DraggableCard item={item}>{card}</DraggableCard> : card(undefined);
@@ -66,7 +70,7 @@ function WipMeter({ station }: { station: BoardStation }) {
 }
 
 /** The header card's two meta lines: what the station holds, what it says of its load. */
-function meta(station: BoardStation, decides: boolean, finishedThisWeek: number): [string, string] {
+function meta(station: BoardStation, decides: boolean, finishedThisWeek: number, merges: boolean): [string, string] {
   switch (station.kind) {
     case 'queue':
       return [
@@ -76,7 +80,7 @@ function meta(station: BoardStation, decides: boolean, finishedThisWeek: number)
         'No limit',
       ];
     case 'done':
-      return ['Merged pull requests', `${finishedThisWeek} this week`];
+      return [merges ? 'Merged pull requests' : 'Finished items', `${finishedThisWeek} this week`];
     case 'agent':
       return [plural(station.agents.length, 'agent'), stationNote(station, decides)];
     case 'human':
@@ -90,13 +94,16 @@ function ColumnHeader({
   constraint,
   decides,
   finishedThisWeek,
+  merges,
 }: {
   station: BoardStation;
   constraint: boolean;
   decides: boolean;
   finishedThisWeek: number;
+  /** The line has a station that merges pull requests. */
+  merges: boolean;
 }) {
-  const [left, right] = meta(station, decides, finishedThisWeek);
+  const [left, right] = meta(station, decides, finishedThisWeek, merges);
   return (
     <header className="flex flex-col gap-2 px-1">
       <div className="flex min-h-6 items-center gap-2">
@@ -180,6 +187,8 @@ export function StationColumn({
   arrived,
 }: StationColumnProps) {
   const constraint = station.id === board.constraint;
+  const merges = board.stations.some((s) => s.action === 'merge');
+  const showRepositories = usesSeveralRepositories(board.stations.flatMap((s) => s.items));
   const partsOf = (id: string | undefined) => board.assemblies.find((a) => a.id === id)?.parts ?? undefined;
   const card = (item: ItemCard, dimmed = false) => (
     <ColumnCard
@@ -190,6 +199,7 @@ export function StationColumn({
       assemblyParts={partsOf(item.assembly?.id)}
       arrived={arrived?.(item.id) ?? false}
       dimmed={dimmed}
+      showRepositories={showRepositories}
     />
   );
 
@@ -215,7 +225,13 @@ export function StationColumn({
         ? { style: { gridColumn: inBoard, gridRow: `1 / span ${showExpedite ? 3 : 2}` } }
         : {})}
     >
-      <ColumnHeader station={station} constraint={constraint} decides={decides} finishedThisWeek={finishedThisWeek} />
+      <ColumnHeader
+        station={station}
+        constraint={constraint}
+        decides={decides}
+        finishedThisWeek={finishedThisWeek}
+        merges={merges}
+      />
       {showExpedite ? (
         <fieldset
           data-zone="expedite"

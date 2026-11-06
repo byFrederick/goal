@@ -68,7 +68,8 @@ func (e *Engine) DropFollowUp(ctx context.Context, item domain.ItemID, id domain
 
 // FileFollowUp files r, a person's item, for follow-up id of item through domain.File on the
 // source's line (ADR 0040 decision 10): origin follow-up, a generation one above the source's and
-// the source's untrusted. Only a dropped follow-up, or one in a triage item that is done or
+// the source's untrusted, and the repositories r names, else the follow-up's start.repositories,
+// else the source's (ADR 0041 decision 4). Only a dropped follow-up, or one in a triage item that is done or
 // cancelled, may be filed (ports.ErrConflict otherwise); an unknown one is ports.ErrNotFound, and
 // what the line does not take domain.ErrInvalid.
 func (e *Engine) FileFollowUp(ctx context.Context, item domain.ItemID, id domain.FollowUpID, r domain.FileRequest) (domain.Item, error) {
@@ -82,8 +83,17 @@ func (e *Engine) FileFollowUp(ctx context.Context, item domain.ItemID, id domain
 		return domain.Item{}, fmt.Errorf("file follow-up: %w", err)
 	}
 
-	if !slices.ContainsFunc(fs, func(f domain.FollowUp) bool { return f.ID == id }) {
+	i := slices.IndexFunc(fs, func(f domain.FollowUp) bool { return f.ID == id })
+	if i < 0 {
 		return domain.Item{}, fmt.Errorf("file follow-up %s of item %s: %w", id, item, ports.ErrNotFound)
+	}
+
+	if len(r.Repositories) == 0 && fs[i].Start != nil {
+		r.Repositories = fs[i].Start.Repositories
+	}
+
+	if r.Inherited, err = e.repositoryKeys(ctx, item); err != nil {
+		return domain.Item{}, fmt.Errorf("file follow-up: %w", err)
 	}
 
 	l, err := e.lineIn(ctx, src.FactoryID)

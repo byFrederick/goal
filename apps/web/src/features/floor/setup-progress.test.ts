@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Connection, IntakeTrigger, KnowledgeSource, Member } from '../../api/types';
+import type { IntakeTrigger, KnowledgeSource, Member } from '../../api/types';
 import type { Model } from '../../shared/definition/model';
 import { doneCount, type SetupInput, type SetupRow, setupRows } from './setup-progress';
 
 const member = { member_id: 'm-1' } as Member;
-const connection = (kind: string) => ({ id: `c-${kind}`, name: kind, kind }) as Connection;
 const source = { id: 'k-1', name: 'handbook' } as KnowledgeSource;
 const trigger = (enabled: boolean) => ({ name: 't', enabled }) as IntakeTrigger;
 
@@ -27,7 +26,6 @@ const model = {
 const empty: SetupInput = {
   members: [member],
   invitations: [],
-  connections: [],
   slackSet: false,
   knowledge: [],
   model: { basics: {}, line: { stations: [] }, review: {} } as unknown as Model,
@@ -39,7 +37,6 @@ const empty: SetupInput = {
 const withAll: SetupInput = {
   members: [member, { member_id: 'm-2' } as Member],
   invitations: [],
-  connections: [connection('github')],
   slackSet: true,
   knowledge: [source],
   model,
@@ -61,7 +58,7 @@ describe('setupRows', () => {
       'slack',
       'knowledge',
       'organization',
-      'github',
+      'code',
       'line',
       'budget',
       'triggers',
@@ -75,8 +72,8 @@ describe('setupRows', () => {
     expect(rows.every((r) => r.done)).toBe(true);
   });
 
-  it('starts at one of nine: the organization is always done and nothing else is', () => {
-    expect(doneCount(setupRows(empty))).toBe(1);
+  it('starts at two of nine: the organization and the code choice are always done', () => {
+    expect(doneCount(setupRows(empty))).toBe(2);
   });
 
   it('counts invited people as done, with a second member or a pending invitation', () => {
@@ -88,7 +85,7 @@ describe('setupRows', () => {
   });
 
   it('marks Set up Slack notifications done only when the setting is set', () => {
-    expect(row(setupRows({ ...empty, connections: [connection('slack')] }), 'slack').done).toBe(false);
+    expect(row(setupRows(empty), 'slack').done).toBe(false);
     const set = row(setupRows({ ...empty, slackSet: true }), 'slack');
     expect(set.done).toBe(true);
     expect(set.text).toBe('Set up Slack notifications');
@@ -99,14 +96,18 @@ describe('setupRows', () => {
     expect(row(setupRows({ ...empty, knowledge: [source] }), 'knowledge').done).toBe(true);
   });
 
-  it('reads GitHub from a github connection and counts the repository the definition names', () => {
-    const connected = setupRows({ ...empty, connections: [connection('github')], model });
-    expect(row(connected, 'github')).toMatchObject({ done: true, text: 'GitHub, 1 repository' });
-    expect(row(setupRows({ ...empty, model: { basics: {} } as unknown as Model }), 'github').text).toBe(
-      'GitHub, 0 repositories',
+  it("names the factory's code choice", () => {
+    const text = (basics: object) => row(setupRows({ ...empty, model: { basics } as unknown as Model }), 'code');
+    const entry = (access: 'read' | 'write') => ({ name: 'app', url: 'https://github.com/acme/app', access });
+    expect(text({})).toMatchObject({ done: true, text: 'No code' });
+    expect(text({ repositories: [entry('read')] })).toMatchObject({
+      done: true,
+      text: 'Code, read only, 1 repository',
+    });
+    expect(text({ repositories: [entry('read'), entry('write')] }).text).toBe('Code, read and write, 2 repositories');
+    expect(text({ repository: { url: 'https://github.com/acme/app' } }).text).toBe(
+      'Code, read and write, 1 repository',
     );
-    expect(row(setupRows({ ...empty, connections: [connection('github')] }), 'github').done).toBe(true);
-    expect(row(setupRows(empty), 'github').done).toBe(false);
   });
 
   it('counts the line without its Done station, and is done once a station exists', () => {

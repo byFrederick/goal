@@ -659,7 +659,7 @@ func (h *harness) doneLineItem(t *testing.T, usd, lineUSD float64) domain.Item {
 			t.Fatal(err)
 		}
 
-		if err := h.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", BranchHead: strings.Repeat("c", 40)}); err != nil {
+		if err := h.store.RecordRunInput(ctx, id, domain.RunInput{Brief: "the brief", Repositories: []domain.RunRepository{{BranchHead: strings.Repeat("c", 40)}}}); err != nil {
 			t.Fatal(err)
 		}
 

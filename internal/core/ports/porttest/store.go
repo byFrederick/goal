@@ -41,11 +41,13 @@ type Store struct {
 	andon     []andonRecord
 	edges     []domain.Edge // item needs, in the order they were added
 	followUps []domain.FollowUp
-	joined    []domain.FollowUpID // follow-ups in the order they joined a triage item
-	views     map[domain.SavedViewID]savedViewRecord
-	jonah     jonahRows
-	ids       int
-	changes   changes
+	// repos are each item's repositories, in the order they joined.
+	repos   map[domain.ItemID][]domain.ItemRepository
+	joined  []domain.FollowUpID // follow-ups in the order they joined a triage item
+	views   map[domain.SavedViewID]savedViewRecord
+	jonah   jonahRows
+	ids     int
+	changes changes
 }
 
 // andonRecord is one andon pull of a factory of an organization.
@@ -62,6 +64,7 @@ func NewStore() *Store {
 		factCaps:  map[domain.FactoryID]int{},
 		checks:    map[string]checkSlot{},
 		items:     map[domain.ItemID]*domain.Item{},
+		repos:     map[domain.ItemID][]domain.ItemRepository{},
 		numbers:   map[domain.FactoryID]int64{},
 		leases:    map[domain.ItemID]domain.Lease{},
 		runs:      map[domain.RunID]*domain.Run{},
@@ -131,6 +134,7 @@ func (s *Store) purge(org domain.OrgID) {
 			delete(s.leases, id)
 			delete(s.spans, id)
 			delete(s.leaseLog, id)
+			delete(s.repos, id)
 		}
 	}
 
@@ -273,6 +277,101 @@ func (s *Store) Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
 	}
 
 	return clone(it), nil
+}
+
+// ItemRepositories implements ports.Store: the rows in first-joined order, as the PostgreSQL
+// store sorts them.
+func (s *Store) ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(item, org); !ok {
+		return nil, nil
+	}
+
+	return s.orderedRepos(item), nil
+}
+
+// ItemsRepositories implements ports.Store: ItemRepositories of each visible item that has any.
+func (s *Store) ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make(map[domain.ItemID][]domain.ItemRepository)
+
+	for _, id := range items {
+		if _, ok := s.visible(id, org); !ok {
+			continue
+		}
+
+		if rows := s.orderedRepos(id); len(rows) > 0 {
+			out[id] = rows
+		}
+	}
+
+	return out, nil
+}
+
+// orderedRepos are item's repositories in first-joined order, as ItemRepositories reads them.
+// s.mu is held.
+func (s *Store) orderedRepos(item domain.ItemID) []domain.ItemRepository {
+	out := slices.Clone(s.repos[item])
+	slices.SortStableFunc(out, func(a, b domain.ItemRepository) int {
+		return cmp.Or(
+			cmp.Compare(boolRank(a.Joined != domain.JoinedFiling), boolRank(b.Joined != domain.JoinedFiling)),
+			a.JoinedAt.Compare(b.JoinedAt), cmp.Compare(a.Ordinal, b.Ordinal))
+	})
+
+	return out
+}
+
+// OpenItemRepositories implements ports.Store.
+func (s *Store) OpenItemRepositories(ctx context.Context, factory domain.FactoryID) ([]domain.RepositoryUse, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []domain.RepositoryUse
+
+	for id, rows := range s.repos {
+		it, ok := s.visible(id, org)
+		if !ok || it.FactoryID != factory || it.State == domain.StateDone || it.State == domain.StateCancelled {
+			continue
+		}
+
+		for _, r := range rows {
+			out = append(out, domain.RepositoryUse{Repo: r.Repo, Item: id, Number: it.Number})
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.RepositoryUse) int {
+		return cmp.Or(cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.Number, b.Number))
+	})
+
+	return out, nil
+}
+
+// boolRank orders false before true.
+func boolRank(b bool) int {
+	if b {
+		return 1
+	}
+
+	return 0
 }
 
 // Waiting implements ports.Store.
@@ -689,11 +788,15 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		return nil
 	}
 
+	rows := recordRunRepositories(r.Input.Repositories, res.Repositories, true)
 	r.Result, r.EndedAt = res, endedAt
+	r.Input.Repositories, r.Result.Repositories = rows, pushedRepositories(rows)
 
 	if r.ItemID == "" { // a Jonah run or a try: no item cost, no run_finished item event
 		return nil
 	}
+
+	s.joinRepositories(r.ItemID, domain.JoinedPush, wroteRepositories(rows), endedAt)
 
 	s.items[r.ItemID].CostUSD += res.CostUSD
 	s.append(domain.Event{
@@ -722,9 +825,65 @@ func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.R
 		return fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
 
+	rows := recordRunRepositories(r.Input.Repositories, in.Repositories, false)
 	r.Input = in
+	r.Input.Repositories, r.Result.Repositories = rows, pushedRepositories(rows)
 
 	return nil
+}
+
+// recordRunRepositories are a run's repository rows with add recorded, as agent_run_repositories
+// keeps them (00132): one row per repository in the order first recorded, a known commit kept
+// when add has none. A finish (pushed) records pushed heads; a row wrote when add says so or
+// pushed a commit other than its branch head, a row without a branch head when it pushed at all.
+func recordRunRepositories(rows, add []domain.RunRepository, pushed bool) []domain.RunRepository {
+	out := slices.Clone(rows)
+
+	for _, a := range add {
+		i := slices.IndexFunc(out, func(r domain.RunRepository) bool { return r.Repo == a.Repo })
+		if i < 0 {
+			out = append(out, domain.RunRepository{Repo: a.Repo})
+			i = len(out) - 1
+		}
+
+		r := &out[i]
+		if !pushed {
+			r.BaseCommit, r.BranchHead = cmp.Or(a.BaseCommit, r.BaseCommit), cmp.Or(a.BranchHead, r.BranchHead)
+			continue
+		}
+
+		r.PushedHead = cmp.Or(a.PushedHead, r.PushedHead)
+		r.Wrote = r.Wrote || a.Wrote || (a.PushedHead != "" && a.PushedHead != r.BranchHead)
+	}
+
+	return out
+}
+
+// pushedRepositories are the rows a run pushed or wrote, as a run's result reads them back.
+func pushedRepositories(rows []domain.RunRepository) []domain.RunRepository {
+	var out []domain.RunRepository
+
+	for _, r := range rows {
+		if r.PushedHead != "" || r.Wrote {
+			out = append(out, r)
+		}
+	}
+
+	return out
+}
+
+// wroteRepositories are the repositories of rows the run wrote to, in order; a migrated row
+// without a repository is none.
+func wroteRepositories(rows []domain.RunRepository) []string {
+	var out []string
+
+	for _, r := range rows {
+		if r.Wrote && r.Repo != "" {
+			out = append(out, r.Repo)
+		}
+	}
+
+	return out
 }
 
 // Runs implements ports.Store.
@@ -832,6 +991,16 @@ func (s *Store) checkTransition(it *domain.Item, t ports.Transition) error {
 	return nil
 }
 
+// setRepoBaseCommits sets the base commit of each of item's rows shas names with a sha, as the
+// PostgreSQL store's transition does. Callers hold s.mu.
+func (s *Store) setRepoBaseCommits(item domain.ItemID, shas map[string]string) {
+	for i, r := range s.repos[item] {
+		if sha := shas[r.Repo]; sha != "" {
+			s.repos[item][i].BaseCommit = sha
+		}
+	}
+}
+
 // move applies a guarded transition to it. Callers hold s.mu.
 func (s *Store) move(it *domain.Item, t ports.Transition) {
 	if held, ok := s.leases[t.ItemID]; ok && (t.Lease != nil || t.TakeLease) {
@@ -858,6 +1027,8 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 		it.BaseCommit = t.BaseCommit
 	}
 
+	s.setRepoBaseCommits(it.ID, t.BaseCommits)
+
 	if t.Output != nil {
 		it.Outputs[t.OutputStation] = t.Output
 	}
@@ -877,6 +1048,7 @@ func (s *Store) move(it *domain.Item, t ports.Transition) {
 	}
 
 	s.keepFollowUps(it, t.FollowUps, t.At)
+	s.joinRepositories(it.ID, domain.JoinedOutput, t.Repositories, t.At)
 }
 
 // checkLease refuses a transition that releases or takes a lease without an outcome, names both,
@@ -1143,4 +1315,29 @@ func (s *Store) RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.Run
 	}
 
 	return over, nil
+}
+
+// JoinItemRepositories implements ports.Store.
+func (s *Store) JoinItemRepositories(ctx context.Context, item domain.ItemID, joined domain.RepositoryJoin, keys []string, at time.Time) error {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(item, org); !ok {
+		return fmt.Errorf("item %s: %w", item, ports.ErrNotFound)
+	}
+
+	s.joinRepositories(item, joined, keys, at)
+
+	return nil
+}
+
+// joinRepositories appends to item's rows the keys it lacks (domain.AppendRepositories). s.mu is
+// held.
+func (s *Store) joinRepositories(item domain.ItemID, joined domain.RepositoryJoin, keys []string, at time.Time) {
+	s.repos[item] = append(s.repos[item], domain.AppendRepositories(s.repos[item], joined, keys, at)...)
 }

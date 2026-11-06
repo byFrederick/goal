@@ -60,7 +60,7 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   await expect(detail.getByRole('list', { name: 'The line of Cost review' }).getByRole('listitem')).toHaveCount(6);
   await expect(detail.getByText('Approve, a person decides')).toBeVisible();
   await expect(detail).toContainText('cost-analyst reads the cost report, proposer writes the change and reviewer');
-  await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('cost-review');
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('cost-review');
   await checkPage(page);
 
   // Continue creates the factory and opens Basics on its draft.
@@ -78,8 +78,11 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   const addType = page.getByRole('textbox', { name: 'Add a work type' });
   await addType.fill('finding');
   await addType.press('Enter');
-  await page.getByRole('textbox', { name: 'Repository URL' }).fill('https://github.com/acme/infra');
-  await page.getByRole('textbox', { name: 'Repository URL' }).blur();
+  await page.getByRole('button', { name: 'Add a repository' }).click();
+  // Write access is a choice (ADR 0041 decision 3), and the merge step below needs it.
+  await page.getByRole('radio', { name: 'Read and write' }).check();
+  await page.getByRole('textbox', { name: 'URL', exact: true }).fill('https://github.com/acme/infra');
+  await page.getByRole('textbox', { name: 'URL', exact: true }).blur();
   await expect(saved(page)).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'cloud-costs' })).toBeVisible();
   await checkPage(page);
@@ -234,7 +237,7 @@ spec:
     .getByLabel('Upload a file')
     .setInputFiles({ name: 'factory.yaml', mimeType: 'text/yaml', buffer: Buffer.from(taken) });
   await expect(page.getByText('It parses and matches the schema.')).toBeVisible();
-  const name = page.getByRole('textbox', { name: 'Name' });
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveAccessibleDescription(/Acme already has a factory with factory\.yaml’s name/);
   await expect(continueTo(page, 'Basics')).toHaveAttribute('aria-disabled', 'true');
 
@@ -244,9 +247,9 @@ spec:
 
   // goald still refuses a taken name when it creates (another tab took it): said on the field.
   await page.goto('/o/acme/new/start?from=blank');
-  await page.getByRole('textbox', { name: 'Name' }).fill('sre');
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('sre');
   await continueTo(page, 'Basics').click();
-  await expect(page.getByRole('textbox', { name: 'Name' })).toHaveAccessibleDescription(
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveAccessibleDescription(
     /Acme already has a factory named sre\. Choose another name\./,
   );
   await expect(page).toHaveURL(/\/new\/start\?from=blank$/);
@@ -256,7 +259,7 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
   await page.goto('/o/acme/new/start?from=blank');
   await expect(page.getByRole('radio', { name: /^Blank/ })).toBeChecked();
   await expect(page.getByText('An empty line. Add stations next, then the agents who work at them.')).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('new-factory');
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('new-factory');
   await continueTo(page, 'Basics').click();
   await expect(page.getByRole('heading', { level: 1, name: 'new-factory' })).toBeVisible();
   await expect(page.getByText('A blank factory.', { exact: false })).toBeVisible();
@@ -305,7 +308,7 @@ test('Cancel on Start creates nothing; a clone starts from the running version',
   await page.goto('/o/acme/new/start?from=clone');
   await expect(continueTo(page, 'Basics')).toHaveAttribute('aria-disabled', 'true');
   await page.getByRole('radio', { name: /^sre/ }).check();
-  await expect(page.getByRole('textbox', { name: 'Name' })).toHaveValue('sre-copy');
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('sre-copy');
   await checkPage(page);
   await continueTo(page, 'Basics').click();
   await expect(page.getByRole('heading', { level: 1, name: 'sre-copy' })).toBeVisible();

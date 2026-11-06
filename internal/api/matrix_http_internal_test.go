@@ -216,6 +216,14 @@ func (mxOrgs) SetSignupDomain(context.Context, domain.Actor, string, domain.Fact
 	panic(errReached)
 }
 func (mxOrgs) ClearSignupDomain(context.Context, domain.Actor) error { panic(errReached) }
+func (mxOrgs) CodeHosts(context.Context) ([]domain.CodeHost, error)  { panic(errReached) }
+func (mxOrgs) SetCodeHosts(context.Context, domain.Actor, []domain.CodeHost) ([]domain.CodeHost, error) {
+	panic(errReached)
+}
+
+func (mxOrgs) SeedCodeHosts(context.Context, domain.Actor, []domain.CodeHost) (bool, error) {
+	panic(errReached)
+}
 
 func (mxOrgs) Org(_ context.Context, ref string) (domain.Org, error) {
 	for _, o := range []domain.Org{{ID: mxAcme, Slug: "acme", Name: "Acme"}, {ID: mxOther, Slug: "other", Name: "Other"}} {
@@ -315,7 +323,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Engine: struct{ Engine }{}, Items: mxItems{}, Factories: mxFactories{}, Definitions: mxDefinitions{}, Versions: struct{ Versions }{},
 		Orgs: mxOrgs{}, Audit: mxAudit{}, Access: struct{ Access }{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
-		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: struct{ ports.EnvironmentTests }{}, ToolLister: struct{ ports.ToolLister }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{}, ParseKind: connkind.Parse,
+		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: struct{ ports.EnvironmentTests }{}, ToolLister: struct{ ports.ToolLister }{}, RepositoryTests: struct{ ports.RepositoryTests }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{}, ParseKind: connkind.Parse,
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
 		UploadMaxBytes: 1 << 20, Clock: clock,
 		KnowledgeObjects: struct{ KnowledgeObjects }{}, KnowledgeCheck: struct{ KnowledgeCheck }{},

@@ -207,7 +207,15 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, engineConfig(s, "").LongestClaim(), log)
+	// The engine is built after the definitions it reads and the gateway; the load hook and the
+	// gateway's questions reach it through eng when they are called.
+	var eng *engine.Engine
+
+	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
+		return eng.SetLines(lines)
+	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
+
+	kb := openKnowledge(s, store, connections, orgSecrets, defs, objects, clock, engineConfig(s, "").LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -215,10 +223,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Definition authoring writes versions to PostgreSQL and file content to the bucket. A
 	// definition's secret references and knowledge sources are checked against the organization's
-	// (ADR 0037), its models against the organization policy.
+	// (ADR 0037), its repositories against the code hosts it lists (ADR 0041), its models against
+	// the organization policy, and its GitHub MCP servers against their kept environment tests.
 	authors := authoring.New(authoring.Deps{
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
-		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake}, Log: log,
+		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake, Hosts: store, Tests: postgres.NewEnvironmentTests(store)}, Log: log,
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,
 	// the engine merges with them and the API lists what a connection reaches.
@@ -231,14 +240,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 	defer boxes.close()
-
-	// The engine is built after the definitions it reads and the gateway; the load hook and the
-	// gateway's questions reach it through eng when they are called.
-	var eng *engine.Engine
-
-	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
-		return eng.SetLines(lines)
-	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
 	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
 	// bundle; the engine's RunDefinition signs its token.
@@ -256,7 +257,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
@@ -287,7 +288,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
+		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
@@ -324,7 +325,7 @@ func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.
 ) {
 	err := moveover.New(moveover.Deps{
 		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
-		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Tools: tools, Clock: clock, Logger: log,
+		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Hosts: store, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
 		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
@@ -408,8 +409,10 @@ func engineConfig(s settings, gatewayURL string) engine.Config {
 // GOAL_WORKERS_AI_URL, what is neither text nor HTML is refused. A synced source is read with its secret by the
 // reader its config names, or by its connection kind's sync reader while it is still on a
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
-// confluence (the spaces of a Confluence Cloud site).
-func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, objects ports.ObjectStore,
+// confluence (the spaces of a Confluence Cloud site). A source's secret opens only when every
+// factory listings lists the source in is in its scope (ADR 0041 decision 16).
+func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
+	listings knowledge.Listings, objects ports.ObjectStore,
 	clock ports.Clock, keep time.Duration, log *slog.Logger,
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
@@ -440,7 +443,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	return knowledgeBase{
 		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
-			Knowledge: kb, Connections: connections, Secrets: secrets, Uploads: uploads,
+			Knowledge: kb, Connections: connections, Secrets: secrets, Hosts: store, Listings: listings, Uploads: uploads,
 			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers, Keep: keep,
 		}),
 	}

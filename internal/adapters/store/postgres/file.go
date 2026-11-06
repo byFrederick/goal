@@ -13,23 +13,26 @@ import (
 )
 
 // filing is one item for fileItem to write: n as domain.File checked it, with a part's key,
-// planned paths and base commit, and the items it follows, linked by afterBy.
+// planned paths and base commit, its assembly's base commits by repository, which its repository
+// rows copy, and the items it follows, linked by afterBy.
 type filing struct {
-	n          domain.NewItem
-	factory    uuid.UUID
-	parent     *uuid.UUID
-	partKey    *string
-	partPaths  []string
-	baseCommit *string
-	after      []uuid.UUID
-	afterBy    domain.Actor
+	n           domain.NewItem
+	factory     uuid.UUID
+	parent      *uuid.UUID
+	partKey     *string
+	partPaths   []string
+	baseCommit  *string
+	baseCommits map[string]string
+	after       []uuid.UUID
+	afterBy     domain.Actor
 }
 
 // fileItem writes a filed item in q's transaction (ADR 0040 decision 1): the row, with the
 // factory's next number and still its source (00112); its created event (part_created for a
 // part) by the real actor; an item.filed audit entry; and a linked edge to each of f.after with
-// its edge_added event. Every way an item is made goes through it: CreateItem, Assemble's parts
-// and AddPart.
+// its edge_added event. Its branch is domain.ItemBranch of n's factory name, number and title,
+// and its repositories, n.Repositories, are written joined at its creation (ADR 0041 decisions 4
+// and 6). Every way an item is made goes through it: CreateItem, Assemble's parts and AddPart.
 func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error) {
 	n := f.n
 
@@ -69,6 +72,7 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 		Origin: string(cmp.Or(n.Origin, domain.OriginPerson)), Via: optional(string(n.Via)), CreatedBy: createdBy,
 		Generation: int32(min(max(n.Generation, 0), maxInt32)), Untrusted: n.Untrusted,
 		StartAt: optionalTime(n.StartAt), StartedAt: optionalTime(n.StartedAt),
+		Branch: domain.ItemBranch(n.FactoryName, number, n.Title),
 	})
 	if violates(err, partKeyIndex) {
 		return db.WorkItem{}, fmt.Errorf("part key %q is taken: %w", deref(f.partKey), ports.ErrConflict)
@@ -80,6 +84,10 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 
 	it, err := itemFrom(row)
 	if err != nil {
+		return db.WorkItem{}, err
+	}
+
+	if err := insertItemRepositories(ctx, q, row, n.Repositories, f.baseCommits); err != nil {
 		return db.WorkItem{}, err
 	}
 
@@ -99,4 +107,20 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 	}
 
 	return row, nil
+}
+
+// insertItemRepositories writes an item's repositories joined at its creation, in order, each
+// with its base commit in baseCommits.
+func insertItemRepositories(ctx context.Context, q *db.Queries, item db.WorkItem, repos []domain.ItemRepository, baseCommits map[string]string) error {
+	for i, r := range repos {
+		err := q.InsertItemRepository(ctx, db.InsertItemRepositoryParams{
+			ItemID: item.ID, Repo: r.Repo, Joined: string(r.Joined), JoinedAt: item.CreatedAt, Ordinal: int32(min(i, maxInt32)),
+			BaseCommit: optional(baseCommits[r.Repo]),
+		})
+		if err != nil {
+			return fmt.Errorf("repository %s of item %d: %w", r.Repo, item.Number, err)
+		}
+	}
+
+	return nil
 }

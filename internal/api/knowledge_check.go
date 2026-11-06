@@ -158,7 +158,7 @@ func (s *server) checkFactory(ctx context.Context, ref string, src domain.Knowle
 			"%s is not in the scope of the secret %s, so listing the source would hand that token's reach to it", name, secret.Name))
 	}
 
-	if repo := f.Spec.Runtime.Repository; repo != nil && src.CopiesCheckout(repo.URL) {
+	if repo, ok := f.Spec.Runtime.OnlyRepository(); ok && src.CopiesCheckout(repo.URL) {
 		warn(authoring.CodeKnowledgeCopiesCheckout, fmt.Sprintf(
 			"%s checks out %s already: its runs have those files on the item's branch", name, repo.URL))
 	}

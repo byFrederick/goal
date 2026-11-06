@@ -33,7 +33,7 @@ Goald reads the first 10 entries of each accepted output, keeps each once per it
 | --- | --- |
 | A string, or an object with only `text` | The factory's triage item. |
 | `for: "<factory>#<number>"` | A note on that open item. |
-| `start: {title, at, in, after, type, lane, repositories, factory}` | An item of its own, filed when the work lands. `title` is required. `at`, `in` and `after` are an item's start (see [Start an item later](../submit-and-follow-items/#start-an-item-later)); `in` counts from when the work landed. |
+| `start: {title, at, in, after, type, lane, repositories, factory}` | An item of its own, filed when the work lands. `title` is required. `at`, `in` and `after` are an item's start (see [Start an item later](../submit-and-follow-items/#start-an-item-later)); `in` counts from when the work landed. `repositories` are the item's, each covered by one of the receiving factory's `runtime.repositories` entries; with none, the item takes its source item's that the receiving factory covers, else the default entry's. |
 
 With both `for` and `start`, `start` wins. The field names are in the [definition reference](/docs/reference/definition/).
 
@@ -47,7 +47,7 @@ Each tick, goald delivers waiting notes as `item_note` events and, when an item 
 
 ## Triage
 
-Follow-ups with no `for` or `start`, and those that could not go where they said, wait for the factory's triage item. It collects for 24 hours or until an agent claims it, and its title names its sources, as in "Follow-ups from software#513 and 4 more". Its brief quotes each follow-up with the station and agent that wrote it, and says they are notes from work in progress and not requests from people. The factory's first agent plans parts of at most 3, writes one spec or closes the item.
+Follow-ups with no `for` or `start`, and those that could not go where they said, wait for the factory's triage item. It collects for 24 hours or until an agent claims it, and its title names its sources, as in "Follow-ups from software#513 and 4 more". Its brief quotes each follow-up with the station and agent that wrote it, and says they are notes from work in progress and not requests from people. The factory's first agent plans parts of at most 3, writes one spec or closes the item. The triage item works on its sources' repositories, at most 10.
 
 The Intake page, `goal intake <factory>` and the intake API show the open triage item and the items whose follow-ups will join it. See [The triage item](/docs/concepts/work-items/#the-triage-item).
 
@@ -60,7 +60,7 @@ An item that a trigger or a follow-up filed, such as a triage item, can be close
 On an item, each follow-up shows where it went or will go. Through the API, a person with the matching permission can:
 
 - drop a waiting follow-up: `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/drop`. It is never delivered or filed.
-- file one from a dropped follow-up, or from one in a triage item that is done or cancelled, including one closed by its agent: `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/file`, with `{title, body, type, lane, start}` where only `title` is required. The new item has origin `follow-up` and you as its filer.
+- file one from a dropped follow-up, or from one in a triage item that is done or cancelled, including one closed by its agent: `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/file`, with `{title, body, type, lane, start}` where only `title` is required. The new item has origin `follow-up` and you as its filer. It takes the follow-up's `start.repositories`, else its source item's.
 
 [Act on an item](../act-on-an-item/#drop-or-file-a-follow-up) has the permissions and the errors. Follow-ups of an item made from a webhook delivery are never delivered or filed on their own; a person drops one and then files it, or leaves it.
 

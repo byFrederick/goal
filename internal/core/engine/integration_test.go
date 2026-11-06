@@ -410,3 +410,191 @@ func TestRun_PartHearsItsIntegrationBaseOnSecrets(t *testing.T) {
 
 	h.expectRepositoryLogin(t, parts[0].ID, h.codehost)
 }
+
+// repoAssembly makes item 1, "big request", filed naming entryAPI, an assembly at station of one
+// part per repository in repos, each part with that one repository, queued there.
+func (h *harness) repoAssembly(t *testing.T, station string, repos ...string) (domain.Item, []domain.Item) {
+	t.Helper()
+
+	it := h.submitRepos(t, assemblyTitle, entryAPI)
+	if it.Station != station {
+		it = h.at(t, it, station, domain.StateReady)
+	}
+
+	plan := make([]domain.NewPart, 0, len(repos))
+	for i, repo := range repos {
+		key := []string{keyStore, "parts-api", "parts-web"}[i]
+		plan = append(plan, domain.NewPart{
+			Key: key, Title: key, Filed: []domain.ItemRepository{{Repo: repo, Joined: domain.JoinedFiling}},
+		})
+	}
+
+	root, parts, err := h.store.Assemble(inOrg(t), ports.Assembly{
+		Transition: ports.Transition{
+			ItemID: it.ID, From: it.Position(), To: domain.Position{Station: station, State: domain.StateAssembly}, At: h.clock.Now(),
+		},
+		Parts: plan,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return root, parts.Items
+}
+
+// integrationRows are an item's repositories as key and integration branch, in first-joined order.
+func (h *harness) integrationRows(t *testing.T, id domain.ItemID) []string {
+	t.Helper()
+
+	rows, err := h.store.ItemRepositories(inOrg(t), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Repo + "@" + r.IntegrationBranch
+	}
+
+	return out
+}
+
+// Two parts in integration mode branch, one in each of two repositories: each part's run start
+// gives the assembly its integration branch, one name, in the part's repository, and both parts
+// build on it (ADR 0041 decision 5).
+func TestRun_PartsInTwoRepositoriesGiveTheAssemblyAnIntegrationBranchInEach(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, withRepositories(integrationLine(domain.IntegrationModeBranch, 2)), porttest.Succeed(`{}`))
+	root, _ := h.repoAssembly(t, stWork, keyAPI, keyWeb)
+
+	h.step(t)
+
+	if got, want := h.integrationRows(t, root.ID), []string{keyAPI + "@" + integrationBranch}; !slices.Equal(got, want) {
+		t.Errorf("after the first part's start the assembly's rows = %v; want %v", got, want)
+	}
+
+	h.step(t)
+
+	if got, want := h.integrationRows(t, root.ID), []string{keyAPI + "@" + integrationBranch, keyWeb + "@" + integrationBranch}; !slices.Equal(got, want) {
+		t.Errorf("after both parts' starts the assembly's rows = %v; want %v", got, want)
+	}
+
+	runs := h.worker.Runs()
+	if len(runs) != 2 {
+		t.Fatalf("%d runs, want 2", len(runs))
+	}
+
+	for i, run := range runs {
+		if c := h.claims(t, run.Env["GOAL_GATEWAY_TOKEN"]); c.Base != integrationBranch {
+			t.Errorf("run %d token base %q; want %q", i, c.Base, integrationBranch)
+		}
+	}
+}
+
+// When both parts are done the landing run clones the union of their repositories, the
+// assembly's rows, and works on the integration branch: a part's repository the assembly never
+// had joins at the landing.
+func TestRun_LandingClonesTheUnionOfItsPartsRepositories(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, withRepositories(landingLine()), byAgent(map[string]string{agReviewer: approveEmpty}))
+	root, parts := h.repoAssembly(t, stBuild, keyAPI, keyWeb)
+
+	if _, err := h.store.SetIntegrationBranch(inOrg(t), root.ID, integrationBranch, stReview, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range parts {
+		h.at(t, p, stDone, domain.StateDone)
+	}
+
+	if got := h.item(t, root.ID); got.Position() != (domain.Position{Station: stReview, State: domain.StateQueued}) {
+		t.Fatalf("assembly at %+v, want queued at the landing station (events %v)", got.Position(), h.kinds(root.ID))
+	}
+
+	if got, want := h.integrationRows(t, root.ID), []string{keyAPI + "@" + integrationBranch, keyWeb + "@" + integrationBranch}; !slices.Equal(got, want) {
+		t.Errorf("landing assembly's rows = %v; want %v", got, want)
+	}
+
+	h.step(t)
+
+	runs := h.worker.Runs()
+	if len(runs) != 1 {
+		t.Fatalf("%d runs, want 1", len(runs))
+	}
+
+	h.expectLandingRun(t, runs[0])
+
+	note := runs[0].Env["GOAL_FEEDBACK"]
+	if !strings.Contains(note, "in each of the item's repositories where `"+integrationBranch+"` has commits") {
+		t.Errorf("landing feedback %q does not say to land each repository", note)
+	}
+
+	for _, key := range []string{keyAPI, keyWeb} {
+		if !strings.Contains(note, "- https://"+key) {
+			t.Errorf("landing feedback %q does not list the clone of %s", note, key)
+		}
+	}
+}
+
+// The landing note names the open command of the host the organization lists the item's first
+// repository on: gh for GitHub, glab for GitLab. An agent that only reads hears to push nothing
+// and open no pull request.
+func TestRun_LandingNoteNamesTheHostsOpenCommand(t *testing.T) {
+	t.Parallel()
+
+	gh := "gh pr create --base <default branch> --head " + integrationBranch
+	glab := "glab mr create --target-branch <default branch> --source-branch " + integrationBranch
+
+	tests := []struct {
+		name       string
+		kind       domain.CodeHostKind
+		code       string
+		want, none []string
+	}{
+		{name: codeHostGitHub, kind: domain.CodeHostGitHub, want: []string{gh}, none: []string{glab}},
+		{name: "gitlab", kind: domain.CodeHostGitLab, want: []string{glab}, none: []string{gh}},
+		{
+			name: "a reader", kind: domain.CodeHostGitHub, code: domain.CodeRead,
+			want: []string{"You only read code: push nothing and open no pull request."},
+			none: []string{gh, glab, "landing the whole assembly", "push to"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := landingLine()
+			for i := range l.Agents {
+				if l.Agents[i].Name == agReviewer {
+					l.Agents[i].Code = tt.code
+				}
+			}
+
+			h := newHarness(t, l, byAgent(map[string]string{agReviewer: approveEmpty}))
+			h.listHost(t, gitHost, tt.kind)
+			h.landing(t)
+			h.step(t)
+
+			runs := h.worker.Runs()
+			if len(runs) != 1 {
+				t.Fatalf("%d runs, want 1", len(runs))
+			}
+
+			note := runs[0].Env["GOAL_FEEDBACK"]
+			for _, s := range tt.want {
+				if !strings.Contains(note, s) {
+					t.Errorf("feedback %q does not mention %q", note, s)
+				}
+			}
+
+			for _, s := range tt.none {
+				if strings.Contains(note, s) {
+					t.Errorf("feedback %q mentions %q", note, s)
+				}
+			}
+		})
+	}
+}

@@ -38,7 +38,7 @@ var triesTests = []struct {
 var head = strings.Repeat("c", 40)
 
 // pastRun records a finished station run of it at station started at at, with a branch head
-// when first (a claim's first run), and output; it returns the run.
+// when first (a claim's first run), else only a pushed head, and output; it returns the run.
 func (f *fixture) pastRun(t *testing.T, it domain.Item, station string, at time.Time, first bool, output string) domain.RunID {
 	t.Helper()
 
@@ -51,7 +51,7 @@ func (f *fixture) pastRun(t *testing.T, it domain.Item, station string, at time.
 
 	in := domain.RunInput{Brief: "brief at " + at.Format(time.TimeOnly)}
 	if first {
-		in.BranchHead, in.BaseHead = head, strings.Repeat("b", 40)
+		in.Repositories = []domain.RunRepository{{Repo: repoApp, BranchHead: head, BaseCommit: strings.Repeat("b", 40)}}
 	}
 
 	if err := f.Store.RecordRunInput(f.ctx(t), id, in); err != nil {
@@ -59,6 +59,10 @@ func (f *fixture) pastRun(t *testing.T, it domain.Item, station string, at time.
 	}
 
 	res := domain.RunResult{Status: domain.RunSucceeded, CostUSD: 1}
+	if !first {
+		res.Repositories = []domain.RunRepository{{Repo: repoApp, PushedHead: strings.Repeat("c", 40)}}
+	}
+
 	if output != "" {
 		res.Output = json.RawMessage(output)
 	}
@@ -332,12 +336,12 @@ func testTriesTarget(f *fixture) {
 		t.Fatalf("StartRun: %v", err)
 	}
 
-	if err := f.Store.RecordRunInput(f.ctx(t), running, domain.RunInput{BranchHead: head}); err != nil {
+	if err := f.Store.RecordRunInput(f.ctx(t), running, domain.RunInput{Repositories: []domain.RunRepository{{Repo: repoApp, BranchHead: head}}}); err != nil {
 		t.Fatalf("RecordRunInput: %v", err)
 	}
 
 	got, err := f.Tries.PastTryTarget(f.ctx(t), it.ID, stWork)
-	if err != nil || got.ID != want || got.Input.BranchHead != head {
+	if r, ok := got.Input.TryRepository(); err != nil || got.ID != want || !ok || r.BranchHead != head {
 		t.Errorf("PastTryTarget = %+v, %v; want run %s", got, err, want)
 	}
 
@@ -362,7 +366,8 @@ func testTriesInput(f *fixture) {
 		t.Fatalf("PastTryInput: %v", err)
 	}
 
-	if in.Run.ID != orig || in.Run.Input.Brief == "" || in.Run.Input.BranchHead != head || in.Run.Station != stWork {
+	r, _ := in.Run.Input.TryRepository()
+	if in.Run.ID != orig || in.Run.Input.Brief == "" || r.Repo != repoApp || r.BranchHead != head || in.Run.Station != stWork {
 		t.Errorf("PastTryInput run = %+v; want the original run with its brief and heads", in.Run)
 	}
 

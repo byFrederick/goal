@@ -53,7 +53,7 @@ const (
 	docsURL  = "https://github.com/acme/docs/pull/2"
 	mrURL    = "https://gitlab.com/acme/web/-/merge_requests/3"
 	headSHA  = "4b825dc6"
-	itBranch = "goal/1-an-item"
+	itBranch = "goal/acme-api/1-an-item"
 
 	codeHostGitHub = "github"
 	codeHostGitLab = "gitlab"
@@ -124,9 +124,33 @@ func openPR(url string) ports.PullRequest {
 	}
 }
 
-// squashOf is the merge of the pull request at url, at the head its branch update moved it to.
+// prFrom is openPR from it's branch.
+func prFrom(url string, it domain.Item) ports.PullRequest {
+	pr := openPR(url)
+	pr.HeadBranch = it.Branch()
+
+	return pr
+}
+
+// squashOf is the merge of the pull request at url with the token of conn (loginToken), at the
+// head its branch update moved it to.
 func squashOf(url, conn string) porttest.MergeCall {
-	return porttest.MergeCall{URL: url, Connection: conn, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
+	return porttest.MergeCall{URL: url, Token: loginToken(conn), Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
+}
+
+// loginToken is the token the code host calls of conn are made with: its connection's token
+// (newConnections), or the repository token's value for repositoryLogin.
+func loginToken(conn string) string {
+	return map[string]string{connGitHub: "github-token", connGitLab: "gitlab-token", repositoryLogin: githubTokenValue}[conn]
+}
+
+// listHost adds host, of kind, to the organization's code hosts.
+func (h *harness) listHost(t *testing.T, host string, kind domain.CodeHostKind) {
+	t.Helper()
+
+	if _, err := h.tenancy.SetCodeHosts(inOrg(t), human, []domain.CodeHost{{Host: host, Kind: kind}}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // atMerge submits an item whose work station outputs output and steps it to the merge station.
@@ -155,10 +179,6 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 		{
 			name: "open and mergeable", pr: func(*ports.PullRequest) {},
 			wantMerges: []porttest.MergeCall{squashOf(prURL, connGitHub)}, wantDeleted: []string{itBranch},
-		},
-		{
-			name: "from a fork: its branch is not ours to delete", pr: func(pr *ports.PullRequest) { pr.SameRepository = false },
-			wantMerges: []porttest.MergeCall{squashOf(prURL, connGitHub)},
 		},
 		{
 			// A merge whose approval failed is approved when merged again.
@@ -561,6 +581,44 @@ func expectConflictEvent(t *testing.T, events []domain.Event, station string) {
 	}
 }
 
+// A pull request on a host the organization doesn't list is refused before any connection is
+// opened or the code host is called, though a connection of the factory signs git in to that host;
+// once an owner lists the host, the same merge goes through with that connection's token.
+func TestMerge_RefusesAnUnlistedHost(t *testing.T) {
+	t.Parallel()
+
+	const ghePR = "https://ghe.example.com/acme/app/pull/4"
+
+	line := mergeLine(domain.ActionMerge)
+	line.Connections = []string{connGHE}
+
+	h := newHarness(t, line, porttest.Succeed(`{"pull_request":"`+ghePR+`"}`))
+	h.codehost.Add(openPR(ghePR))
+
+	it := h.atMerge(t)
+
+	_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if !errors.Is(err, engine.ErrNoCodeHost) || !errors.Is(err, domain.ErrCodeHostUnlisted) || !strings.Contains(err.Error(), "ghe.example.com") {
+		t.Fatalf("Merge = %v; want ErrNoCodeHost and ErrCodeHostUnlisted naming ghe.example.com", err)
+	}
+
+	if calls := h.codehost.LoginTokens(); len(calls) != 0 {
+		t.Errorf("the code host got %d calls; want none", len(calls))
+	}
+
+	h.expectRefusedMerge(t, it.ID, err, false)
+
+	h.listHost(t, "ghe.example.com", domain.CodeHostGitHub)
+
+	if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatalf("Merge once the host is listed = %v", err)
+	}
+
+	if merges := h.codehost.Merges(); len(merges) != 1 || merges[0].URL != ghePR || merges[0].Token != "ghe-token" {
+		t.Errorf("merges %+v; want %s with the ghe connection's token", merges, ghePR)
+	}
+}
+
 // repositoryLogin is the name the code host login of a version on secrets goes by, and
 // repositoryToken the token its tests' repositories are cloned and merged with.
 const (
@@ -661,7 +719,8 @@ func TestMerge_OnSecretsUsesTheRepositoryToken(t *testing.T) {
 	h.expectRepositoryLogin(t, it.ID, h.codehost)
 }
 
-// On secrets, runtime.repository.forge picks the adapter on a host whose name says none.
+// On secrets, the kind the organization lists a host as picks the adapter on a host whose name
+// says none; runtime.repository.forge agrees with it.
 func TestMerge_OnSecretsForgePicksTheAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -670,6 +729,7 @@ func TestMerge_OnSecretsForgePicksTheAdapter(t *testing.T) {
 	repo := domain.Repository{URL: "https://" + gitHost + "/acme/web.git", Token: repositoryToken, Forge: codeHostGitLab}
 	h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), repo), porttest.Succeed(`{"pull_request":"`+selfHosted+`"}`))
 	h.addSecrets(t)
+	h.listHost(t, gitHost, domain.CodeHostGitLab)
 	h.gitlab.Add(openPR(selfHosted))
 
 	it := h.atMerge(t)
@@ -724,8 +784,9 @@ func TestMerge_OnSecretsRefusesAnotherHost(t *testing.T) {
 	}
 }
 
-// On secrets, a repository on a host whose name says no adapter needs forge, and a repository
-// with no token cannot merge; each refusal names the key to set and opens nothing.
+// On secrets, a repository on a host the organization doesn't list, one whose forge disagrees with
+// the kind the organization lists its host as, and a repository with no token cannot merge; each
+// refusal names what to fix and opens nothing.
 func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 	t.Parallel()
 
@@ -735,10 +796,11 @@ func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 		name string
 		repo domain.Repository
 		pr   string
+		list bool // the organization lists gitHost as a GitLab host
 		want string
 	}{
-		{name: "unknown host, no forge", repo: domain.Repository{URL: repoURL, Token: repositoryToken}, pr: selfHosted, want: "runtime.repository.forge"},
-		{name: "forge goald has no adapter for", repo: domain.Repository{URL: repoURL, Token: repositoryToken, Forge: "gitea"}, pr: selfHosted, want: "gitea"},
+		{name: "a host the organization doesn't list", repo: domain.Repository{URL: repoURL, Token: repositoryToken}, pr: selfHosted, want: "Code hosts"},
+		{name: "forge goald has no adapter for", repo: domain.Repository{URL: repoURL, Token: repositoryToken, Forge: "gitea"}, pr: selfHosted, list: true, want: "gitea"},
 		{name: "public repository", repo: domain.Repository{URL: appRepo}, pr: prURL, want: "runtime.repository.token"},
 	}
 
@@ -749,6 +811,10 @@ func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 			h := newHarness(t, onSecrets(mergeLine(domain.ActionMerge), tt.repo), porttest.Succeed(`{"pull_request":"`+tt.pr+`"}`))
 			h.addSecrets(t)
 			h.codehost.Add(openPR(tt.pr))
+
+			if tt.list {
+				h.listHost(t, gitHost, domain.CodeHostGitLab)
+			}
 
 			it := h.atMerge(t)
 
@@ -763,6 +829,188 @@ func TestMerge_OnSecretsNeedsForgeOnAnUnknownHost(t *testing.T) {
 
 			if used := h.secretsUsedOutsideRuns(t); len(used) != 0 {
 				t.Errorf("secrets used outside runs %v; want none opened", used)
+			}
+		})
+	}
+}
+
+// webPR is a pull request in webRepo.
+const webPR = webRepo + "/pull/5"
+
+// withEntries gives l runtime.repositories: appRepo, the default, signed in with the github
+// token, and webRepo with the acme-read token, both writing.
+func withEntries(l domain.Line) domain.Line {
+	l.Runtime.Repositories = []domain.RepositoryEntry{
+		{Name: entryApp, URL: appRepo, Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: true},
+		{Name: entryWeb, URL: webRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessWrite},
+	}
+
+	return l
+}
+
+// entrySquash is the merge of the pull request at url with token, at the head its branch update
+// moved it to.
+func entrySquash(url, token string) porttest.MergeCall {
+	return porttest.MergeCall{URL: url, Token: token, Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
+}
+
+// On a line with runtime.repositories, each pull request merges in its own repository, in the
+// order the outputs name them, signed in with the token of the entry that covers it; no
+// connection is opened.
+func TestMerge_EachRepositoryWithItsEntrysToken(t *testing.T) {
+	t.Parallel()
+
+	output := `{"pull_requests":["` + webPR + `","` + prURL + `"]}`
+	h := newHarness(t, withEntries(mergeLine(domain.ActionMerge)), porttest.Succeed(output))
+	h.addSecrets(t)
+	h.addSecret(t, secAcmeRead, acmeReadValue)
+	h.codehost.Add(openPR(webPR))
+	h.codehost.Add(openPR(prURL))
+
+	it := h.atMerge(t)
+
+	got, err := h.e.Merge(inOrg(t), it.ID, human, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Position() != (domain.Position{Station: stDone, State: domain.StateDone}) {
+		t.Errorf("item at %+v, want done", got.Position())
+	}
+
+	want := []porttest.MergeCall{entrySquash(webPR, acmeReadValue), entrySquash(prURL, githubTokenValue)}
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, want) {
+		t.Errorf("merges %+v, want web#5 with the web entry's token, then app#7 with the app entry's", merges)
+	}
+
+	if deleted := h.codehost.DeletedBranches(); !slices.Equal(deleted, []string{itBranch, itBranch}) {
+		t.Errorf("deleted branches %v, want the item's branch in both repositories", deleted)
+	}
+
+	if used := h.mergesUsed(t, it.ID); len(used) != 0 {
+		t.Errorf("connection.used %+v; want no connection opened", used)
+	}
+
+	if used := h.secretsUsedOutsideRuns(t); !slices.Contains(used, secGitHub) || !slices.Contains(used, secAcmeRead) {
+		t.Errorf("secrets used outside runs %v; want both entries' tokens", used)
+	}
+}
+
+// A pull request whose head is a fork's, or a branch other than the item's, is refused before
+// its branch is updated, merged or deleted, naming it and its head; the ones merged before it
+// stay merged.
+func TestMerge_RefusesAPullRequestNotFromTheItemsBranch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		pr   func(*ports.PullRequest)
+		want string
+	}{
+		{name: "another branch", pr: func(pr *ports.PullRequest) { pr.HeadBranch = "feature/unchecked" }, want: "feature/unchecked"},
+		{name: "a fork", pr: func(pr *ports.PullRequest) { pr.SameRepository = false }, want: "fork"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			output := `{"pull_requests":["` + prURL + `","` + docsURL + `"]}`
+			h := newHarness(t, mergeLine(domain.ActionMerge), porttest.Succeed(output))
+			h.codehost.Add(openPR(prURL))
+
+			other := openPR(docsURL)
+			tt.pr(&other)
+			h.codehost.Add(other)
+
+			it := h.atMerge(t)
+
+			_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+			if !errors.Is(err, engine.ErrNotTheItems) || !errors.Is(err, ports.ErrNotMergeable) {
+				t.Fatalf("Merge = %v, want ErrNotTheItems", err)
+			}
+
+			if msg := err.Error(); !strings.Contains(msg, docsURL) || !strings.Contains(msg, tt.want) || !strings.Contains(msg, itBranch) {
+				t.Errorf("Merge = %q; want it to name %s, %s and the item's branch", msg, docsURL, tt.want)
+			}
+
+			if updated := h.codehost.UpdatedBranches(); !slices.Equal(updated, []string{prURL}) {
+				t.Errorf("updated branches %v, want only app#7's", updated)
+			}
+
+			if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, connGitHub)}) {
+				t.Errorf("merges %+v, want only app#7, merged before the refusal", merges)
+			}
+
+			if deleted := h.codehost.DeletedBranches(); !slices.Equal(deleted, []string{itBranch}) {
+				t.Errorf("deleted branches %v, want only app#7's", deleted)
+			}
+
+			if got := h.item(t, it.ID); got.Position() != (domain.Position{Station: stMerge, State: domain.StateWaitingHuman}) {
+				t.Errorf("item at %+v, want still waiting at the merge station", got.Position())
+			}
+		})
+	}
+}
+
+// goald never updates a branch, merges or deletes one in a repository that only a read entry
+// covers, or that no entry covers on a line with runtime.repositories: the merge is refused
+// before anything is touched, naming the repository and the write entry it needs.
+func TestMerge_RefusesARepositoryOnlyAReadEntryCovers(t *testing.T) {
+	t.Parallel()
+
+	const docsRepo = "https://github.com/acme/docs"
+
+	app := domain.RepositoryEntry{Name: entryApp, URL: appRepo, Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: true}
+
+	tests := []struct {
+		name    string
+		entries []domain.RepositoryEntry
+		want    string
+	}{
+		{
+			name:    "a read entry",
+			entries: []domain.RepositoryEntry{app, {Name: connDocs, URL: docsRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead}},
+			want:    "entry " + connDocs + ", which only reads",
+		},
+		{
+			name: "a read entry more specific than a write pattern",
+			entries: []domain.RepositoryEntry{
+				{Name: "acme", URL: "https://github.com/acme/*", Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: false},
+				{Name: connDocs, URL: docsRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead},
+			},
+			want: "entry " + connDocs + ", which only reads",
+		},
+		{name: "no entry", entries: []domain.RepositoryEntry{app}, want: "no entry of runtime.repositories covers"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := mergeLine(domain.ActionMerge)
+			l.Runtime.Repositories = tt.entries
+
+			output := `{"pull_requests":["` + prURL + `","` + docsURL + `"]}`
+			h := newHarness(t, l, porttest.Succeed(output))
+			h.addSecrets(t)
+			h.addSecret(t, secAcmeRead, acmeReadValue)
+			h.codehost.Add(openPR(prURL))
+			h.codehost.Add(openPR(docsURL))
+
+			it := h.atMerge(t)
+
+			_, err := h.e.Merge(inOrg(t), it.ID, human, "")
+			if !errors.Is(err, engine.ErrNoWriteEntry) {
+				t.Fatalf("Merge = %v, want ErrNoWriteEntry", err)
+			}
+
+			if msg := err.Error(); !strings.Contains(msg, "github.com/acme/docs") || !strings.Contains(msg, tt.want) || !strings.Contains(msg, "access write") {
+				t.Errorf("Merge = %q; want it to name the repository, %q and the write entry it needs", msg, tt.want)
+			}
+
+			if n := len(h.codehost.UpdatedBranches()) + len(h.codehost.Merges()) + len(h.codehost.DeletedBranches()); n != 0 {
+				t.Errorf("the code host got %d updates, merges and deletes; want none", n)
 			}
 		})
 	}

@@ -55,6 +55,25 @@ A file that still has the old keys `github.check_run.failed`, `github.issues.lab
 
 An item made from a webhook delivery is untrusted: its brief carries the event's text inside `<untrusted-event-data>`, which agents treat as data and never as instructions, and a person merges what the item builds. Follow-ups from an untrusted item wait instead of being delivered or filed. A trigger's `create.trusted: true` lifts this for deliveries you vouch for; publishing refuses it for the `gitlab` and `token` senders and for GitHub without `filter.authors`.
 
+### Repositories of an item
+
+A trigger's `create.repositories` names the repositories the item works on. Without it, the item gets the factory's default entry in `runtime.repositories`.
+
+```yaml
+create:
+  type: fix
+  station: triage
+  repositories: ["{{repo}}", tools]
+```
+
+Each value is rendered with the event, then matched against the factory's `runtime.repositories` entries, owner patterns included and in any case. A value can be an entry's name (`tools`), `host/owner/name`, an https URL, or `owner/name`, which is what `{{repo}}` gives. A webhook records no host, so `owner/name` takes the host of the entry that covers it; when entries on several hosts cover it, the one on the sender's own host wins (github.com for `github`, gitlab.com for `gitlab`), else the first entry. A list holds at most 10 values.
+
+- A value that renders empty adds no repository. PagerDuty's and Datadog's events have no `repo`, so their items get the default entry.
+- A value that no entry matches skips the event at the Create step with the reason "acme/legacy is not one of SRE's repositories" (the repository and the factory's name), and nothing is filed.
+- Publishing refuses a fixed value (one without a placeholder) that no entry matches, with `trigger-repository-unknown`.
+
+An event from a repository the factory doesn't have is skipped before any trigger fires, with the same reason. Every `runtime.repositories` entry counts, owner patterns included. An event that names no repository still reaches the triggers.
+
 ## Suggestions
 
 The API and `goal intake` return a definition's disabled triggers as `suggestions`.

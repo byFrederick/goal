@@ -185,6 +185,58 @@ function renderCards(card: () => ReactNode, withModel = true) {
   });
 }
 
+describe('DetailsCard repositories', () => {
+  const withEntries = () => ({ ...factory, current: { id: 'v1' } as never });
+  const render = (f: Factory, it: Item, repositories: unknown[]) =>
+    renderFactoryPage({
+      page: () => <DetailsCard item={it} factory={f} events={[]} trace={buildTrace([])} />,
+      path: 'items/$ref',
+      location: 'items/147',
+      org,
+      factory: f,
+      seed: [
+        [versionModelQuery(org.id, f.id, 'current').queryKey, { model: { basics: { repositories } }, ranges: {} }],
+      ],
+    });
+  const e = (url: string) => ({ name: 'n', url, access: 'read' });
+
+  it('lists each repository in joined order with how it joined, when the factory covers several', async () => {
+    const f = withEntries();
+    render(
+      f,
+      item({
+        repositories: [
+          { repo: 'github.com/acme/api', joined: 'filing' },
+          { repo: 'github.com/acme/web', joined: 'default' },
+          { repo: 'github.com/acme/docs', joined: 'push' },
+          { repo: 'github.com/acme/ops', joined: 'output' },
+        ],
+      }),
+      [e('https://github.com/acme/api'), e('https://github.com/acme/web')],
+    );
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(details.textContent).toContain('github.com/acme/api · Named at filing');
+    expect(details.textContent).toContain('github.com/acme/web · Default');
+    expect(details.textContent).toContain('github.com/acme/docs · An agent pushed to it');
+    expect(details.textContent).toContain("github.com/acme/ops · Named by a station's output");
+  });
+
+  it('says None yet when an owner-wide factory’s item has none', async () => {
+    render(withEntries(), item({ repositories: [] }), [e('https://github.com/acme/*')]);
+    const details = await screen.findByRole('region', { name: 'Details' });
+    await vi.waitFor(() => expect(details.textContent).toContain('RepositoriesNone yet'));
+  });
+
+  it('leaves the row out for a one-repository factory', async () => {
+    render(withEntries(), item({ repositories: [{ repo: 'github.com/acme/api', joined: 'default' }] }), [
+      e('https://github.com/acme/api'),
+    ]);
+    const details = await screen.findByRole('region', { name: 'Details' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(details.textContent).not.toContain('Repositories');
+  });
+});
+
 describe('DetailsCard', () => {
   it('shows the owner, the agent by role, its model, the station with its lane, the branch and the pull request', async () => {
     renderCards(() => <DetailsCard item={item()} factory={factory} events={events} trace={trace()} />);

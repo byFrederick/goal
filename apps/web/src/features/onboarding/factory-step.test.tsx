@@ -157,9 +157,7 @@ afterEach(() => {
 });
 
 /** Step 3 at /o/acme/get-started/factory with the URL's `search`; the other steps are stubs the links reach. */
-function renderStep(
-  url = '/o/acme/get-started/factory?url=https%3A%2F%2Fgithub.com%2Facme%2Fgoal&secret=github-token',
-) {
+function renderStep(url = '/o/acme/get-started/factory') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const root = createRootRoute({ component: Outlet });
   const step = createRoute({
@@ -190,7 +188,7 @@ function renderStep(
   return router;
 }
 
-describe('step 3, pick a template', () => {
+describe('step 2, pick a template', () => {
   it('shows the loading state while the templates load', async () => {
     api.hold = true;
     renderStep();
@@ -242,8 +240,8 @@ describe('step 3, pick a template', () => {
     expect(createFactory).toHaveBeenCalledTimes(1);
   });
 
-  it('creates the factory from the chosen template and goes to step 4 with its id', async () => {
-    const router = renderStep();
+  it('creates the factory from the chosen template and goes to the Code step with its id and template', async () => {
+    const router = renderStep('/o/acme/get-started/factory');
     await screen.findByRole('radio', { name: /Incident response/ });
     fireEvent.click(screen.getByRole('radio', { name: /Incident response/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Use Incident response' }));
@@ -252,23 +250,19 @@ describe('step 3, pick a template', () => {
       name: 'incident-response',
       start: { kind: 'template', template: 'incident-response' },
     });
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/line'), { timeout: 4000 });
-    expect(router.state.location.search).toMatchObject({
-      url: 'https://github.com/acme/goal',
-      secret: 'github-token',
-      factory: factoryId,
-    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/code'), { timeout: 4000 });
+    expect(router.state.location.search).toMatchObject({ factory: factoryId, template: 'incident-response' });
   });
 
-  it('saves the repository with its token secret and the purpose into the new draft before step 4', async () => {
-    const router = renderStep();
+  it('saves the purpose into the new draft, writes no repository, and continues to the Code step', async () => {
+    const router = renderStep('/o/acme/get-started/factory');
     await screen.findByRole('radio', { name: /Incident response/ });
     fireEvent.change(screen.getByRole('textbox', { name: 'What it does' }), { target: { value: 'Ships the app.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Use Incident response' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/line'), { timeout: 4000 });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/code'), { timeout: 4000 });
     const basics = api.saves.filter((s) => s.section === 'basics').at(-1)?.value as Record<string, unknown>;
-    expect(basics.repository).toEqual({ url: 'https://github.com/acme/goal', token: '{{github-token}}' });
     expect(basics.purpose).toBe('Ships the app.');
+    expect(basics.repository).toBeUndefined();
     expect(api.created).toHaveLength(1);
   });
 
@@ -289,9 +283,10 @@ describe('step 3, pick a template', () => {
     await waitFor(() => expect(document.activeElement).toBe(name));
   });
 
-  it('reuses the factory when Back from step 4 brings the person here again', async () => {
-    renderStep(`/o/acme/get-started/factory?factory=${factoryId}`);
-    expect(await screen.findByRole('link', { name: 'Continue' })).toBeTruthy();
+  it('reuses the factory when Back from the Code step brings the person here again', async () => {
+    renderStep(`/o/acme/get-started/factory?factory=${factoryId}&template=software`);
+    const next = await screen.findByRole('link', { name: 'Continue' });
+    expect(next.getAttribute('href')).toContain('/get-started/code');
     expect(screen.queryByRole('button', { name: /Use / })).toBeNull();
   });
 });

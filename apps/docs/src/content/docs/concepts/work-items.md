@@ -14,7 +14,7 @@ An item carries:
 - a lane, which picks the agent at stations that route by lane (see [lanes](/docs/concepts/lanes/));
 - a priority, a number that orders items of the same class;
 - a class of service, `standard` or `expedite` (see [expedite and priority](/docs/concepts/expedite-and-priority/));
-- the file paths it is expected to change, when a station says so;
+- the file paths it is expected to change, when a station says so. A path in a repository other than the item's first starts with that repository's `owner/name:`, as in `acme/web:src/**`; a path without a prefix is in the item's first repository;
 - a rework count, which is how many times a gate or a person sent it back (see [rework](/docs/concepts/rework/)).
 
 An item can also be an [assembly](/docs/concepts/assemblies-and-parts/), which is an item split into parts.
@@ -61,6 +61,22 @@ Reading one item (`GET /v1/orgs/{org}/items/{item}`) also answers `came_from` fo
 - For a trigger's item, `came_from.trigger` names the trigger and its kind: `check` for a trigger with a check, `schedule` for another schedule, `webhook` otherwise. The kind is absent when the factory's current definition no longer has the trigger. For a check, `key` is the key the check filed the item under. A check keeps only each key's last item, so an item whose key a later check filed again has no `key`.
 
 Items of any other origin have no `came_from`.
+
+## An item's repositories
+
+Every item records the repositories it works on when it is filed, at most 10. Each one must be covered by one of the factory's `runtime.repositories` entries. Where they come from depends on how the item was filed:
+
+- A person's item takes the repositories the person names: the Repositories field of New item, `goal run --repo`, or `repositories` in the API. New item starts with the default entry's repository.
+- A trigger's or a check's item takes the ones its `create.repositories` names.
+- A part takes the `repositories` its plan entry names. A part whose entry names none, and a part added to an assembly, takes its assembly's, in the assembly's order.
+- A follow-up's item takes its `start.repositories`. When the start names none, it takes its source item's repositories that the receiving factory's entries cover.
+- A triage item takes its sources' repositories, in the order its sources joined. When a source joins an open triage item, its repositories that the triage item lacks join it, until it has 10; the rest are left out.
+
+A named value that no entry covers is refused, with the value quoted: a person's request with `400 Bad Request`, a plan by blocking the item that planned it, and a follow-up's start by sending it to triage with the reason. An item that gets no repository this way takes the default entry's. A factory without a default entry gives such an item none.
+
+The item page's Details lists the repositories in the order they joined, each with how it joined: named at filing, default, an agent pushed to it, or named by a station's output. A factory that covers only one repository has no Repositories row.
+
+An item's list grows in two ways while it is open. A repository a run pushes to joins it, joined `push`. A station's output can name repositories in the field `board.flow.outputs.repositories` maps; those the item lacks join it when the output is accepted, joined `output`. An item never has more than 10: a push past 10 is left off, and an output whose names would go past 10 fails its check, so the agent tries again.
 
 ## Notes from other items
 

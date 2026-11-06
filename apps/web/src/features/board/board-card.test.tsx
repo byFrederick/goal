@@ -41,6 +41,7 @@ const card = (over: Partial<ItemCard>): ItemCard => ({
   agent: null,
   pr_url: null,
   pull_requests: [],
+  repositories: [],
   slot: null,
   turn: null,
   summary: null,
@@ -252,5 +253,30 @@ describe('BoardCard meta line', () => {
     expect(type.className).toContain('text-ellipsis');
     expect(screen.getByText('frontend').className).toContain('text-ellipsis');
     expect(screen.getByText('#123').className).toContain('shrink-0');
+  });
+});
+
+describe('BoardCard repositories', () => {
+  const repositories: ItemCard['repositories'] = [
+    { repo: 'github.com/acme/api', joined: 'default' },
+    { repo: 'github.com/acme/docs', joined: 'filing' },
+  ];
+
+  it('names the first repository and the count of the rest when the board uses several', async () => {
+    renderFactoryPage({
+      page: () => <BoardCard item={card({ repositories })} showRepositories />,
+      path: 'board',
+      org,
+      factory,
+    });
+    expect(await screen.findByText('acme/api')).toBeTruthy();
+    expect(screen.getByText('+1')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About sre#21 repositories' })).toBeTruthy();
+  });
+
+  it('says nothing about repositories when the board uses one', async () => {
+    renderCard(card({ repositories }));
+    await screen.findByText('Adjust the export handler');
+    expect(screen.queryByText('acme/api')).toBeNull();
   });
 });

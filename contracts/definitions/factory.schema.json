@@ -131,7 +131,7 @@
     "model": { "type": "string", "pattern": "^claude-[a-z0-9-]+$" },
     "secretRef": {
       "type": "string",
-      "description": "A {{secret}} reference: the name of an organization secret open to the factory, in double braces. Valid only in runtime.repository.token, runtime.modelKey and a trigger's modelAgrees.key, and in environment files."
+      "description": "A {{secret}} reference: the name of an organization secret open to the factory, in double braces. Valid only in runtime.repository.token, a runtime.repositories entry's token, runtime.modelKey and a trigger's modelAgrees.key, and in environment files."
     },
     "runtime": {
       "type": "object",
@@ -149,7 +149,7 @@
         },
         "repository": {
           "type": "object",
-          "description": "The git repository cloned into each run's box before the agent starts, on the item's branch (goal/<number>-<slug>).",
+          "description": "The shorthand for one runtime.repositories entry that writes and is the default, named after the URL's last segment (repo when that is not a slug). It is cloned into each run's box before the agent starts, on the item's branch (goal/<number>-<slug>).",
           "required": ["url"],
           "additionalProperties": false,
           "properties": {
@@ -158,6 +158,11 @@
             "forge": { "enum": ["github", "gitlab"], "description": "The code host the URL is on. github.com is github and gitlab.com is gitlab; any other host needs forge." },
             "connection": { "$ref": "#/$defs/slug", "description": "Removed by ADR 0037 (moved-to-environment): set token. Accepted so versions published before still load and run until Goal converts them." }
           }
+        },
+        "repositories": {
+          "type": "array",
+          "description": "The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other. Until Goal starts and merges runs in several repositories, publish refuses a second entry and access read.",
+          "items": { "$ref": "#/$defs/repositoryEntry" }
         },
         "runner": { "enum": ["docker", "ecs"], "description": "Removed in phase 4 (field-removed): the platform chooses the sandbox backend." },
         "image": { "type": "string", "description": "Removed in phase 4 (field-removed): set image in an environment file." },
@@ -341,6 +346,7 @@
             "deny": { "type": "array", "items": { "type": "string" } }
           }
         },
+        "code": { "enum": ["write", "read"], "description": "Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise. Until Goal supports it, publish refuses read." },
         "builtins": {
           "type": "object",
           "description": "Built-in tools by group, each off, ask or allowed; an omitted group is off. ask is served as off until tool approvals cover built-in tools.",
@@ -369,6 +375,18 @@
       "not": { "required": ["tools", "builtins"] }
     },
     "builtinMode": { "enum": ["off", "ask", "allowed"] },
+    "repositoryEntry": {
+      "type": "object",
+      "required": ["name", "url", "access"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "$ref": "#/$defs/slug", "description": "Unique in the factory." },
+        "url": { "type": "string", "pattern": "^https://[^/@]+/.+", "description": "One repository (https://github.com/acme/app) or an owner's every repository (https://github.com/acme/*), on a code host the organization lists. No credentials in the URL." },
+        "token": { "$ref": "#/$defs/secretRef", "description": "The {{secret}} that opens the repositories. Required for write; omit it for a public repository that is read." },
+        "access": { "enum": ["read", "write"], "description": "write lets agents whose code is write push, open pull requests and merge; read never does." },
+        "default": { "type": "boolean", "description": "The entry an item uses when it names no repository. At most one entry has it, and it must name one repository. The only entry is the default when it names one repository." }
+      }
+    },
     "routeEntry": {
       "description": "The agent for a lane, or { agent, agents } to keep agents of the station's slots for the lane.",
       "oneOf": [
@@ -458,6 +476,12 @@
             "expedite": { "type": "boolean", "description": "Put the item in the expedite flow." },
             "title": { "type": "string", "description": "The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.<path>}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters." },
             "brief": { "type": "string", "description": "The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/<name>.md), as an agent's prompt is; {{field}} and {{payload.<path>}} placeholders take the event's values, which reach agents only as untrusted data." },
+            "repositories": {
+              "type": "array",
+              "maxItems": 10,
+              "description": "The item's repositories, each matched against runtime.repositories, owner patterns included and in any case: an entry's name, host/owner/name, an https URL, or a template such as {{repo}} (owner/name, on the host of the entry that covers it). A value that renders empty adds none; an item that names none gets the default entry. An event whose value no entry matches is skipped at Create.",
+              "items": { "type": "string" }
+            },
             "trusted": { "type": "boolean", "description": "File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set." }
           }
         },
@@ -644,7 +668,7 @@
                 },
                 "changedSince": {
                   "type": "boolean",
-                  "description": "true: a station with context [inflight] that finishes an item records the default branch's head of runtime.repository as its base commit (a plan's parts inherit it), and every later run of the item gets a Changed since your plan section listing the commits since then that changed files its paths match. false (the default): nothing is recorded."
+                  "description": "true: a station with context [inflight] that finishes an item records the default branch's head of each of the item's repositories as that repository's base commit (a plan's parts inherit them), and every later run of the item gets a Changed since your plan section per repository listing the commits since then that changed files its paths match. false (the default): nothing is recorded."
                 },
                 "integration": {
                   "type": "object",
@@ -680,7 +704,7 @@
                 "paths": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. Items whose paths overlap wait for each other under assemblies.overlap serialize."
+                  "description": "The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. An entry may start with owner/name: to name its repository (acme/web:src/**); an entry without one is in the item's first repository. Items whose paths overlap, in the same repository, wait for each other under assemblies.overlap serialize: the same path in two repositories does not overlap."
                 },
                 "after": {
                   "type": "string",
@@ -703,6 +727,11 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "The top-level output field whose text closes the item: when an accepted output gives 10 to 500 characters there, goald cancels the item at its station with that text as the reason, the agent the actor. Only an item a trigger or a follow-up filed, and never a part, can be closed. On a person's item, a part, an output that also plans parts, or a text outside the limits, the output fails its check and the agent asks a person instead. Empty or only whitespace closes nothing."
+                },
+                "repositories": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The top-level output field whose list of repositories joins the item, recorded as joined output. Each entry is a runtime.repositories entry's name, owner/name or an https URL an entry covers, resolved as at filing. An item keeps at most 10 repositories: when the names would give it more, or one is not a repository of the factory, the output fails its check with the reason and the agent tries again. Repositories join only with an accepted output, never with a gate's rejection."
                 }
               }
             },

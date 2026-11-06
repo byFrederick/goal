@@ -23,6 +23,7 @@ const card = (number: number, state: ItemCard['state']): ItemCard => ({
   agent: null,
   pr_url: null,
   pull_requests: [],
+  repositories: [],
   slot: null,
   turn: null,
   summary: null,

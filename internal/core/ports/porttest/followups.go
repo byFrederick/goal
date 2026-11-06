@@ -460,7 +460,7 @@ func (l *fakeLander) fileStart(f *domain.FollowUp, src *domain.Item, landed time
 		return domain.ReasonFollowUpCapped
 	}
 
-	n, err := domain.File(toLine, domain.FollowUpFileRequest(to.ID, *src, l.ref(src), *f, l.after(f.Start.After), landed))
+	n, err := domain.File(toLine, domain.FollowUpFileRequest(to.ID, *src, l.ref(src), *f, l.after(f.Start.After), l.repoKeys(src.ID), landed))
 	if err != nil {
 		return domain.ReasonOf(err)
 	}
@@ -558,11 +558,18 @@ func (l *fakeLander) entry(f domain.FollowUp) domain.TriageEntry {
 
 	return domain.TriageEntry{
 		FollowUp: cloneFollowUp(f), Source: l.ref(src), Title: src.Title, Type: src.Type, Priority: src.Priority, Generation: src.Generation,
+		Repositories: l.repoKeys(src.ID),
 	}
 }
 
+// repoKeys are item's repositories as keys, in first-joined order.
+func (l *fakeLander) repoKeys(item domain.ItemID) []string {
+	return domain.ItemRepositoryKeys(l.s.orderedRepos(item))
+}
+
 // joinTriage files the follow-ups at idx onto the factory's collecting triage item, filing one
-// when there is none, and rewrites it.
+// when there is none, and rewrites it. Joining sources' repositories join the item it already
+// had (domain.JoinRepositories).
 func (l *fakeLander) joinTriage(factory domain.FactoryID, idx []int) []domain.FollowUp {
 	ln, ok := l.line(factory)
 	if !ok {
@@ -587,6 +594,11 @@ func (l *fakeLander) joinTriage(factory domain.FactoryID, idx []int) []domain.Fo
 		tri.Triage = true
 
 		l.audits = append(l.audits, audit)
+	} else {
+		for _, i := range idx {
+			l.s.repos[tri.ID] = append(l.s.repos[tri.ID],
+				domain.JoinRepositories(ln, l.s.repos[tri.ID], l.repoKeys(l.s.followUps[i].ItemID), utc(l.at))...)
+		}
 	}
 
 	out := make([]domain.FollowUp, 0, len(idx))

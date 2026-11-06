@@ -31,9 +31,6 @@ type AgentRun struct {
 	Kind                string
 	Brief               *string
 	Output              []byte
-	BranchHead          *string
-	BaseHead            *string
-	PushedHead          *string
 }
 
 type AndonPull struct {
@@ -108,14 +105,15 @@ type DraftRequest struct {
 }
 
 type EnvironmentTest struct {
-	OrgID       uuid.UUID
-	FactoryID   uuid.UUID
-	Environment string
-	Server      string
-	At          time.Time
-	Ok          bool
-	Error       string
-	Tools       []string
+	OrgID         uuid.UUID
+	FactoryID     uuid.UUID
+	Environment   string
+	Server        string
+	At            time.Time
+	Ok            bool
+	Error         string
+	Tools         []string
+	ReadOnlyTools []string
 }
 
 type FactoryConversion struct {
@@ -313,6 +311,26 @@ type Organization struct {
 	MaxSlots  *int32
 }
 
+type RepositoryTest struct {
+	OrgID      uuid.UUID
+	FactoryID  uuid.UUID
+	Url        string
+	Access     string
+	Secret     string
+	At         time.Time
+	Tested     bool
+	Ok         bool
+	Summary    string
+	Warning    string
+	ReadOk     bool
+	ReadReason string
+	PushOk     bool
+	PushReason string
+	Readable   int32
+	Pushable   int32
+	Truncated  bool
+}
+
 type SavedView struct {
 	ID        uuid.UUID
 	OrgID     uuid.UUID
@@ -409,4 +427,16 @@ type WorkItem struct {
 	StartAt           *time.Time
 	StartedAt         *time.Time
 	Triage            bool
+	Branch            *string
+}
+
+type WorkItemRepository struct {
+	OrgID             uuid.UUID
+	ItemID            uuid.UUID
+	Repo              string
+	Joined            string
+	JoinedAt          time.Time
+	Ordinal           int32
+	BaseCommit        *string
+	IntegrationBranch *string
 }

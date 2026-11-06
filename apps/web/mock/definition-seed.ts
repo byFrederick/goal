@@ -3,7 +3,7 @@
 // (catalog/templates/) and the skills.sh skills catalog (catalog/skills/). Illustrative content
 // only: goald reads real definitions from the bucket.
 
-import type { Actor, VersionSource } from '@goal/api-client';
+import type { Actor, TemplateCode, VersionSource } from '@goal/api-client';
 import { environmentFiles } from './environments.ts';
 import { reviewStarterItem, starterItem } from './starter.ts';
 
@@ -47,6 +47,8 @@ export interface MockTemplate {
   description: string;
   connectors: string[];
   changed: string;
+  /** The code access it needs, as template.yaml says; write when its line merges. */
+  code: TemplateCode;
   files: Tree;
 }
 
@@ -119,7 +121,9 @@ spec:
     modelConnection: claude
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
-    repository: { url: "https://github.com/acme/goal", connection: github }
+    repositories:
+      - { name: goal, url: "https://github.com/acme/goal", token: "{{secret.github-token}}", access: write, default: true }
+      - { name: docs, url: "https://github.com/acme/docs", token: "{{secret.github-token}}", access: write }
     budget: { weeklyUsd: 1000, perItemUsd: 12, maxTurnsPerTask: 150, onExhausted: drain }
   connections:
     # pull requests and issues of the repository
@@ -571,6 +575,8 @@ interface TemplateSpec {
   purpose: string;
   connectors: string[];
   changed: string;
+  /** template.yaml's code: none or read. */
+  code: 'none' | 'read';
   workTypes: string[];
   /** The organization connections it uses, by name. */
   connections?: string[];
@@ -629,6 +635,7 @@ function template(t: TemplateSpec): MockTemplate {
     description: t.description,
     connectors: t.connectors,
     changed: t.changed,
+    code: t.stations.some((s) => s.extra?.includes('action: merge')) ? 'write' : t.code,
     files: tree({
       'factory.yaml': templateYaml(t),
       ...Object.fromEntries(t.agents.map((a) => [`agents/${a.name}.md`, `# ${a.name}\n\n${a.prompt}\n`])),
@@ -646,6 +653,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Drafts replies to support tickets for a person to send.',
     connectors: [],
     changed: '2026-09-02',
+    code: 'none',
     workTypes: ['ticket'],
     agents: [{ name: 'drafter', description: 'Drafts the reply.', prompt: 'Draft a reply to the ticket.' }],
     stations: [
@@ -665,6 +673,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Finds cloud spend to cut and proposes infrastructure changes.',
     connectors: ['aws', 'github'],
     changed: '2026-10-09',
+    code: 'none',
     workTypes: ['cost-review'],
     connections: ['github'],
     agents: [
@@ -705,6 +714,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Reviews pull requests against the team conventions.',
     connectors: ['github'],
     changed: '2026-09-20',
+    code: 'read',
     workTypes: ['review'],
     agents: [{ name: 'reviewer', description: 'Reviews the change.', prompt: 'Review the pull request.' }],
     triggers: `    triggers:
@@ -740,6 +750,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Keeps the documentation current.',
     connectors: [],
     changed: '2026-09-28',
+    code: 'read',
     workTypes: ['page'],
     agents: [
       { name: 'writer', description: 'Drafts the page.', prompt: 'Write the page.' },
@@ -761,6 +772,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Triages alerts and investigates incidents.',
     connectors: [],
     changed: '2026-10-01',
+    code: 'none',
     workTypes: ['incident', 'toil'],
     agents: [
       { name: 'triager', description: 'Sorts alerts.', prompt: 'Sort the alert.' },
@@ -783,6 +795,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Turns requests into small, reviewed pull requests.',
     connectors: ['github'],
     changed: '2026-10-20',
+    code: 'read',
     workTypes: ['feature', 'fix'],
     connections: ['github'],
     agents: [
@@ -808,6 +821,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Takes alerts from triage to a reviewed fix.',
     connectors: [],
     changed: '2026-10-21',
+    code: 'none',
     workTypes: ['incident'],
     agents: [
       { name: 'triager', description: 'Sorts alerts.', prompt: 'Sort the alert by severity.' },
@@ -833,6 +847,7 @@ const templateSpecs: TemplateSpec[] = [
     purpose: 'Drafts support replies that a person approves before they go out.',
     connectors: [],
     changed: '2026-10-22',
+    code: 'none',
     workTypes: ['ticket'],
     agents: [
       { name: 'triager', description: 'Sorts tickets.', prompt: 'Sort the ticket by topic and urgency.' },

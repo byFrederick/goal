@@ -38,14 +38,18 @@ func (e *EnvironmentTests) Record(ctx context.Context, t domain.EnvironmentTest)
 		return err
 	}
 
-	tools := t.Tools
+	tools, readOnly := t.Tools, t.ReadOnly
 	if tools == nil {
 		tools = []string{}
 	}
 
+	if readOnly == nil {
+		readOnly = []string{}
+	}
+
 	err = e.s.inTx(ctx, func(q *db.Queries) error {
 		_, err := q.UpsertEnvironmentTest(ctx, db.UpsertEnvironmentTestParams{
-			FactoryID: factory, Environment: t.Environment, Server: t.Server, At: t.At.UTC(), Ok: t.OK, Error: t.Error, Tools: tools,
+			FactoryID: factory, Environment: t.Environment, Server: t.Server, At: t.At.UTC(), Ok: t.OK, Error: t.Error, Tools: tools, ReadOnlyTools: readOnly,
 		})
 
 		return err
@@ -87,7 +91,7 @@ func (e *EnvironmentTests) List(ctx context.Context, factory domain.FactoryID) (
 	for _, r := range rows {
 		out = append(out, domain.EnvironmentTest{
 			Factory: domain.FactoryID(r.FactoryID.String()), Environment: r.Environment, Server: r.Server,
-			At: r.At.UTC(), OK: r.Ok, Error: r.Error, Tools: r.Tools,
+			At: r.At.UTC(), OK: r.Ok, Error: r.Error, Tools: r.Tools, ReadOnly: r.ReadOnlyTools,
 		})
 	}
 

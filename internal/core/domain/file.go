@@ -68,7 +68,15 @@ type FileRequest struct {
 	Assembly *Item
 	// Start is when the item may start (ADR 0040 decision 3); nil starts it as soon as it can.
 	Start *StartRequest
-	At    time.Time
+	// Repositories are the repositories the item works on, each an entry's name, owner/name, an
+	// https URL or host/owner/name that one of the line's runtime.repositories entries covers;
+	// none gives it Inherited's, else the default entry's (ADR 0041 decision 4).
+	Repositories []string
+	// Inherited are the repositories, as keys (RepositoryKey), of the items this one comes from:
+	// its assembly's for a part, its source's for a follow-up's item, its sources' for a triage
+	// item. File uses them only when Repositories names none.
+	Inherited []string
+	At        time.Time
 }
 
 // File turns a filing request into a checked NewItem the same way for every origin (ADR 0040
@@ -80,13 +88,19 @@ type FileRequest struct {
 // the generation is never negative and 0 for a person and a trigger, a person's item is never
 // untrusted, and a part's generation and untrusted are its assembly's. A start is resolved at
 // r.At (StartRequest.Resolve): its time becomes StartAt and its open after items After. An item
-// placed at a later station than the line's first has started when it is filed. Every refusal
-// is ErrInvalid.
+// placed at a later station than the line's first has started when it is filed. Its repositories
+// are those the request names, resolved against the line's entries by entry name, URL,
+// host/owner/name or owner/name (case, .git and owner patterns included) and joined filing in the
+// order named, once each and at most MaxItemRepositories. When it names none, they are the
+// Inherited ones the line's entries cover, joined filing in order, once each and cut at
+// MaxItemRepositories; else the default entry's, joined default; none without a default entry. The
+// item's branch takes the line's name (NewItem.FactoryName). Every refusal is ErrInvalid.
 func File(l Line, r FileRequest) (NewItem, error) {
 	n := NewItem{
 		FactoryID: l.FactoryID, Lane: strings.TrimSpace(r.Lane), Title: strings.TrimSpace(r.Title), Body: r.Body,
 		Priority: r.Priority, CreatedAt: r.At, Source: r.Source, Trigger: r.Trigger,
 		Origin: r.Origin, Via: r.Via, CreatedBy: r.By, Generation: r.Generation, Untrusted: r.Untrusted,
+		FactoryName: l.Name,
 	}
 
 	if err := checkOrigin(r); err != nil {
@@ -109,6 +123,10 @@ func File(l Line, r FileRequest) (NewItem, error) {
 	}
 
 	if err != nil {
+		return NewItem{}, fmt.Errorf("file an item: %w", err)
+	}
+
+	if n.Repositories, err = fileRepositories(l, r.Repositories, r.Inherited); err != nil {
 		return NewItem{}, fmt.Errorf("file an item: %w", err)
 	}
 

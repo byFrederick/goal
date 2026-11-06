@@ -45,17 +45,18 @@ function mock() {
 const sample = 'secrets:\n  sentry-token: sntrys_example\n  linear-key: lin_example\n  github-token: gh_example\n';
 
 describe('the mock repository test', () => {
-  const test = (url: string, secret = 'github-token') => mock().call('/repositories/test', 'POST', { url, secret });
+  const test = (url: string, secret = 'github-token', access = 'write') =>
+    mock().call('/factories/f-sre/repositories/test', 'POST', { url, secret, access });
 
   it('answers read and push ok for a repository the token reaches', async () => {
     const { status, answer } = await test('https://github.com/acme/app');
     expect(status).toBe(200);
-    expect(answer).toMatchObject({ tested: true, read: { ok: true }, push: { ok: true } });
+    expect(answer).toMatchObject({ tested: true, ok: true, read: { ok: true }, push: { ok: true } });
   });
 
   it('answers a failing push with the host’s reason, and refuses an unknown secret or address', async () => {
     const { answer } = await test('https://github.com/acme/app-readonly');
-    expect(answer).toMatchObject({ read: { ok: true }, push: { ok: false } });
+    expect(answer).toMatchObject({ ok: false, read: { ok: true }, push: { ok: false } });
     expect((await test('https://github.com/acme/app', 'nope-token')).status).toBe(404);
     expect((await test('https://example.com/acme/app')).status).toBe(400);
   });

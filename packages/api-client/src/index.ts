@@ -172,6 +172,7 @@ export type Comparison = Schemas["Comparison"];
 export type FileChange = Schemas["FileChange"];
 export type Change = Schemas["Change"];
 export type TemplateSummary = Schemas["TemplateSummary"];
+export type TemplateCode = Schemas["TemplateCode"];
 export type Template = Schemas["Template"];
 export type DefinitionEvent = Schemas["DefinitionEvent"];
 // Builder (D §8): editor metadata and the skills.sh skills catalog.
@@ -212,6 +213,7 @@ export type FollowUpStart = Schemas["FollowUpStart"];
 export type ItemNoteFrom = Schemas["ItemNoteFrom"];
 export type FileFollowUpRequest = Schemas["FileFollowUpRequest"];
 export type ItemEvent = Schemas["Event"];
+export type ItemRepository = Schemas["ItemRepository"];
 export type ItemCameFrom = Schemas["ItemCameFrom"];
 export type EventPage = Schemas["EventPage"];
 export type Run = Schemas["Run"];

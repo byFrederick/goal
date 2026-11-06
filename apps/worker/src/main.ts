@@ -76,13 +76,15 @@ const output: Output = (command, args, opts = {}) =>
 const remoteHeadTimeoutMs = 60_000;
 
 /**
- * The item branch's commit on origin, from the workspace, with the run's own git login. git never
- * prompts (a missing login fails the lookup) and is stopped after remoteHeadTimeoutMs.
+ * The item branch's commit on origin, from the workspace or another clone (at.cwd), or on the
+ * repository at at.url, with the run's own git login. git never prompts (a missing login fails the
+ * lookup) and is stopped after remoteHeadTimeoutMs.
  */
-const remoteHead = (branch: string): Promise<string | undefined> =>
+const remoteHead = (branch: string, at?: { cwd: string } | { url: string }): Promise<string | undefined> =>
   new Promise((resolve, reject) => {
-    const child = spawn('git', ['ls-remote', '--', 'origin', `refs/heads/${branch}`], {
-      cwd: paths.workspace,
+    const remote = at && 'url' in at ? at.url : 'origin';
+    const child = spawn('git', ['ls-remote', '--', remote, `refs/heads/${branch}`], {
+      cwd: at && 'cwd' in at ? at.cwd : paths.workspace,
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
       stdio: ['ignore', 'pipe', 2],
       timeout: remoteHeadTimeoutMs,
@@ -149,6 +151,7 @@ async function runPrepare(): Promise<number> {
         dirs: {
           goal: paths.goal,
           workspace: paths.workspace,
+          repos: paths.repos,
           claude: paths.claudeConfig,
           home: paths.home,
           knowledge: paths.knowledge,
@@ -187,6 +190,14 @@ async function runAgent(): Promise<number> {
       abortController,
       fetch,
       remoteHead,
+      recorded: () =>
+        readFile(paths.repositoryRecord, 'utf8').then(
+          (s) => s.split('\n').filter((l) => l !== ''),
+          (err: NodeJS.ErrnoException) => {
+            if (err.code === 'ENOENT') return [];
+            throw err;
+          },
+        ),
       environment: {
         home: paths.home,
         workspace: paths.workspace,

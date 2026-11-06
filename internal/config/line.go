@@ -28,9 +28,7 @@ func (f *Factory) Line() domain.Line {
 		Agents:   make([]domain.AgentSpec, 0, len(s.Agents)),
 	}
 
-	if r := s.Runtime.Repository; r != nil {
-		l.Runtime.Repository = domain.Repository{URL: r.URL, Connection: r.Connection, Token: r.Token, Forge: r.Forge}
-	}
+	l.Runtime.Repository, l.Runtime.Repositories = s.Runtime.lineRepositories()
 
 	l.Environments = environments(f.environments)
 
@@ -65,7 +63,9 @@ func (f *Factory) Line() domain.Line {
 	}
 
 	for _, a := range s.Agents {
-		l.Agents = append(l.Agents, agent(a, sources))
+		ag := agent(a, sources)
+		ag.Code = f.AgentCode(a)
+		l.Agents = append(l.Agents, ag)
 	}
 
 	var fl Flow
@@ -181,7 +181,7 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 	}
 
 	if o := fl.Outputs; o != nil {
-		p.Outputs.FollowUps, p.Outputs.Close = o.FollowUps, o.Close
+		p.Outputs.FollowUps, p.Outputs.Close, p.Outputs.Repositories = o.FollowUps, o.Close, o.Repositories
 	}
 
 	for _, id := range fl.FollowUpsFrom {
@@ -330,7 +330,7 @@ func trigger(t Trigger) domain.Trigger {
 		Name: t.Name, Enabled: t.Enabled == nil || *t.Enabled, On: t.On, Cron: t.Cron, TimeZone: t.TimeZone,
 		Create: domain.TriggerCreate{
 			Type: t.Create.Type, Station: t.Create.Station, Lane: t.Create.Lane, Expedite: t.Create.Expedite,
-			Title: t.Create.Title, Brief: t.Create.Brief, Trusted: t.Create.Trusted,
+			Title: t.Create.Title, Brief: t.Create.Brief, Repositories: slices.Clone(t.Create.Repositories), Trusted: t.Create.Trusted,
 		},
 	}
 
@@ -465,4 +465,34 @@ func (b Builtins) rules() (allow, deny []string) {
 	}
 
 	return allow, deny
+}
+
+// lineRepositories are the line's repository and every runtime.repositories entry. The line
+// keeps one repository, the default entry, until runs start with an item's repositories
+// (ADR 0041); the shorthand keeps its connection and forge.
+func (r Runtime) lineRepositories() (domain.Repository, []domain.RepositoryEntry) {
+	var repo domain.Repository
+
+	switch short := r.Repository; {
+	case short != nil:
+		repo = domain.Repository{URL: short.URL, Connection: short.Connection, Token: short.Token, Forge: short.Forge}
+	default:
+		if e, ok := r.DefaultRepository(); ok {
+			repo = domain.Repository{URL: e.URL, Token: e.Token}
+		}
+	}
+
+	return repo, lineEntries(r.RepositoryEntries())
+}
+
+// lineEntries are entries as the line has them.
+func lineEntries(entries []RepositoryEntry) []domain.RepositoryEntry {
+	var out []domain.RepositoryEntry
+	for _, e := range entries {
+		out = append(out, domain.RepositoryEntry{
+			Name: e.Name, URL: e.URL, Token: e.Token, Access: e.Access, Default: e.Default,
+		})
+	}
+
+	return out
 }

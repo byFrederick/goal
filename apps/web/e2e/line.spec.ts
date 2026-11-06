@@ -164,7 +164,7 @@ test('the merge switch is disabled without a repository', async ({ page }) => {
   const approve = row(page, 'Approve');
   const merge = approve.getByRole('switch', { name: 'Merge step at Approve' });
   await expect(merge).toHaveAttribute('aria-disabled', 'true');
-  await expect(merge).toHaveAccessibleDescription('Set a repository in Basics first');
+  await expect(merge).toHaveAccessibleDescription('Needs a repository with write access, set in Basics');
   await merge.click({ force: true });
   await expect(merge).toHaveAttribute('aria-checked', 'false');
   await expect(approve.getByRole('link', { name: 'Basics' })).toBeVisible();

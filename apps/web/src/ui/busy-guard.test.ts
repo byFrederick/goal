@@ -12,6 +12,12 @@ const roots = ['features', 'shared', 'app'];
 type Exception = { file: string; expression: string; why: string };
 
 const exceptions: Exception[] = [
+  // Remove is locked while Add's request is pending, or another row is leaving
+  {
+    file: 'features/org-settings/code-hosts-section.tsx',
+    expression: 'leaving || busy',
+    why: "Remove is locked while Add's request is pending, or another row is leaving",
+  },
   // another fix's request is pending
   {
     file: 'features/factory-editor/frame/problem-fixes.tsx',

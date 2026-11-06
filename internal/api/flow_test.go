@@ -508,7 +508,7 @@ func TestAPI_BoardLine(t *testing.T) {
 	want := gen.BoardLine{
 		Status:   gen.BoardLineStatusRunning,
 		Wip:      gen.LineWip{InProgress: 1, Limit: &wipLimit},
-		Release:  gen.LineRelease{Policy: gen.DrumBufferRope, Enforced: false, Drum: &drum, Buffer: &buffer, InBuffer: 2},
+		Release:  gen.LineRelease{Policy: gen.LineReleasePolicyDrumBufferRope, Enforced: false, Drum: &drum, Buffer: &buffer, InBuffer: 2},
 		Expedite: &gen.LineExpedite{Limit: &limit, InUse: 1},
 		Budget:   &gen.LineBudget{WeeklyUsd: 70, SpentUsd: 30, Exhausted: false},
 	}
@@ -735,9 +735,10 @@ func TestAPI_MergeAtTheMergeStation(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	h.atMerge(t)
+	at := h.atMerge(t)
+	// Its head is the item's branch: goald merges no other.
 	h.codehost.Add(ports.PullRequest{
-		URL: prURL, Open: true, Mergeable: true, HeadSHA: "4b825dc6", HeadBranch: "goal/1-x", SameRepository: true, BaseBranch: "main",
+		URL: prURL, Open: true, Mergeable: true, HeadSHA: "4b825dc6", HeadBranch: at.Branch(), SameRepository: true, BaseBranch: "main",
 	})
 
 	if code := h.call(t, http.MethodPost, "/v1/orgs/acme/items/line%231/merge", `{"method":"rebase"}`, nil); code != http.StatusBadRequest {

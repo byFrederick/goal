@@ -187,8 +187,22 @@ func linkAfter(ctx context.Context, q *db.Queries, roots []db.WorkItem, after []
 // insertPart files one part of the assembly parent through fileItem, filed by the actor given
 // at at, with the parent's type, priority, class of service, base commit, generation and
 // untrusted, queued at the parent's station, the one that planned it, following each of after.
+// Its branch names the factory the parent's does, and each of its repositories has the parent's
+// base commit for the same repository.
 func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain.NewPart, by domain.Actor, at time.Time, after []uuid.UUID, afterBy domain.Actor) (db.WorkItem, error) {
 	key := p.Key
+
+	rows, err := q.ItemRepositories(ctx, parent.ID)
+	if err != nil {
+		return db.WorkItem{}, fmt.Errorf("repositories of assembly %d: %w", parent.Number, err)
+	}
+
+	baseCommits := make(map[string]string, len(rows))
+	for _, r := range rows {
+		if r.BaseCommit != nil {
+			baseCommits[r.Repo] = *r.BaseCommit
+		}
+	}
 
 	return fileItem(ctx, q, filing{
 		n: domain.NewItem{
@@ -196,8 +210,9 @@ func insertPart(ctx context.Context, q *db.Queries, parent db.WorkItem, p domain
 			Lane: p.Lane, Title: p.Title, Body: p.Brief, Priority: int(parent.Priority), Station: parent.Station,
 			State: domain.StateQueued, Class: domain.ClassOfService(parent.ClassOfService), CreatedAt: at,
 			Origin: domain.OriginPlan, CreatedBy: by, Generation: int(parent.Generation), Untrusted: parent.Untrusted,
+			FactoryName: domain.BranchFactory(deref(parent.Branch)), Repositories: p.Filed,
 		},
-		factory: parent.FactoryID, parent: &parent.ID, partKey: &key, partPaths: p.Paths, baseCommit: parent.BaseCommit,
+		factory: parent.FactoryID, parent: &parent.ID, partKey: &key, partPaths: p.Paths, baseCommit: parent.BaseCommit, baseCommits: baseCommits,
 		after: after, afterBy: afterBy,
 	})
 }
@@ -574,9 +589,20 @@ func finishAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db
 }
 
 // landAssembly moves parent, an assembly with an integration branch whose last part closed with
-// c.Done parts done, to its landing station, queued, with an assembly_landing event.
+// c.Done parts done, to its landing station, queued, with an assembly_landing event, and gives
+// it its integration branch in every repository of its done parts (joinIntegration), so the
+// landing covers their union. Repositories past domain.MaxItemRepositories are left out.
 func landAssembly(ctx context.Context, q *db.Queries, parent db.WorkItem, c db.PartCountsRow, at time.Time) error {
 	station := deref(parent.IntegrationLandAt)
+
+	repos, err := q.DonePartRepositories(ctx, parent.ID)
+	if err != nil {
+		return fmt.Errorf("repositories of the assembly's done parts: %w", err)
+	}
+
+	if _, err := joinIntegration(ctx, q, parent.ID, repos, *parent.IntegrationBranch, at); err != nil {
+		return err
+	}
 
 	if _, err := q.MoveItem(ctx, db.MoveItemParams{
 		ID: parent.ID, Station: station, State: string(domain.StateQueued), UpdatedAt: at,

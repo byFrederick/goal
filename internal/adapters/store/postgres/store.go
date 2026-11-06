@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -524,14 +526,90 @@ func (s *Store) Runs(ctx context.Context, item domain.ItemID, limit int) ([]doma
 		return nil, err
 	}
 
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.AgentRun, error) {
-		return q.ItemRuns(ctx, db.ItemRunsParams{ItemID: &uid, MaxRuns: int64(limit)})
+	var runs []domain.Run
+
+	err = s.read(ctx, func(q *db.Queries) error {
+		rows, err := q.ItemRuns(ctx, db.ItemRunsParams{ItemID: &uid, MaxRuns: int64(limit)})
+		if err != nil {
+			return err
+		}
+
+		runs = make([]domain.Run, len(rows))
+		for i, r := range rows {
+			runs[i] = runFrom(r)
+		}
+
+		return listWithRepositories(ctx, q, runs)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("runs of item %s: %w", item, err)
 	}
 
-	return convertAll(rows, func(r db.AgentRun) (domain.Run, error) { return runFrom(r), nil })
+	return runs, nil
+}
+
+// runWithRepositories is r with its repositories (withRepositories).
+func runWithRepositories(ctx context.Context, q *db.Queries, r db.AgentRun) (domain.Run, error) {
+	run := runFrom(r)
+	err := withRepositories(ctx, q, &run)
+
+	return run, err
+}
+
+// listWithRepositories reads every run's repositories into it (withRepositories).
+func listWithRepositories(ctx context.Context, q *db.Queries, runs []domain.Run) error {
+	ptrs := make([]*domain.Run, len(runs))
+	for i := range runs {
+		ptrs[i] = &runs[i]
+	}
+
+	return withRepositories(ctx, q, ptrs...)
+}
+
+// withRepositories reads the runs' repositories (agent_run_repositories, 00132) into each run in
+// one query: every row whole in its Input, and the rows it pushed or wrote in its Result.
+func withRepositories(ctx context.Context, q *db.Queries, runs ...*domain.Run) error {
+	if len(runs) == 0 {
+		return nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(runs))
+	for _, r := range runs {
+		id, err := uuid.Parse(string(r.ID))
+		if err != nil {
+			return fmt.Errorf("run id %q: %w", r.ID, err)
+		}
+
+		ids = append(ids, id)
+	}
+
+	rows, err := q.RunRepositories(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("run repositories: %w", err)
+	}
+
+	byRun := make(map[domain.RunID][]domain.RunRepository, len(runs))
+
+	for _, r := range rows {
+		id := domain.RunID(r.RunID.String())
+		byRun[id] = append(byRun[id], domain.RunRepository{
+			Repo: deref(r.Repo), BaseCommit: deref(r.BaseCommit), BranchHead: deref(r.BranchHead),
+			PushedHead: deref(r.PushedHead), Wrote: r.Wrote,
+		})
+	}
+
+	for _, run := range runs {
+		repos := byRun[run.ID]
+		run.Input.Repositories = repos
+
+		for _, r := range repos {
+			if r.PushedHead != "" || r.Wrote {
+				run.Result.Repositories = append(run.Result.Repositories, r)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Run implements ports.Store.
@@ -541,7 +619,18 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 		return domain.Run{}, err
 	}
 
-	row, err := fetch(ctx, s.read, func(q *db.Queries) (db.AgentRun, error) { return q.GetRun(ctx, uid) })
+	var run domain.Run
+
+	err = s.read(ctx, func(q *db.Queries) error {
+		row, err := q.GetRun(ctx, uid)
+		if err != nil {
+			return err
+		}
+
+		run, err = runWithRepositories(ctx, q, row)
+
+		return err
+	})
 	if notFound(err) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, ports.ErrNotFound)
 	}
@@ -550,7 +639,7 @@ func (s *Store) Run(ctx context.Context, id domain.RunID) (domain.Run, error) {
 		return domain.Run{}, fmt.Errorf("run %s: %w", id, err)
 	}
 
-	return runFrom(row), nil
+	return run, nil
 }
 
 // OrgRuns implements ports.Store: the page and the summary in one read-only transaction. Ids
@@ -715,7 +804,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 		row, err := q.FinishRun(ctx, db.FinishRunParams{
 			ID: run, Status: string(res.Status), SessionID: optional(res.SessionID), Turns: int64(res.Turns),
 			InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUsd: res.CostUSD,
-			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output), PushedHead: optional(res.PushedHead),
+			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output),
 		})
 		if notFound(err) {
 			return nil // already finished
@@ -725,25 +814,49 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			return err
 		}
 
+		for _, r := range res.Repositories {
+			if err := q.RecordRunRepositoryPushed(ctx, db.RecordRunRepositoryPushedParams{
+				RunID: run, Repo: optional(r.Repo), PushedHead: optional(r.PushedHead), Wrote: r.Wrote,
+			}); err != nil {
+				return fmt.Errorf("record repository %s: %w", r.Repo, err)
+			}
+		}
+
 		if item == nil {
 			return nil
 		}
 
-		if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: *item, CostUsd: res.CostUSD}); err != nil {
-			return err
-		}
-
-		return appendEvents(ctx, q, []domain.Event{{
-			FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: domain.ItemID(item.String()), RunID: id,
-			At: endedAt, Kind: domain.EventRunFinished, Station: row.Station, Actor: row.Agent,
-			Data: runFinished(res),
-		}})
+		return finishRunItem(ctx, q, id, run, *item, row, res, endedAt)
 	})
 	if err != nil {
 		return fmt.Errorf("finish run %s: %w", id, err)
 	}
 
 	return nil
+}
+
+// finishRunItem is FinishRun's part for the run's item, which the caller has locked: the
+// repositories the run wrote join the item (ADR 0041 decision 5), its cost adds to the item's and
+// a run_finished event is appended.
+func finishRunItem(ctx context.Context, q *db.Queries, id domain.RunID, run, item uuid.UUID, row db.FinishRunRow, res domain.RunResult, endedAt time.Time) error {
+	wrote, err := wroteRepositories(ctx, q, run)
+	if err == nil {
+		err = joinItemRepositories(ctx, q, item, domain.JoinedPush, wrote, endedAt)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if err := q.AddItemCost(ctx, db.AddItemCostParams{ID: item, CostUsd: res.CostUSD}); err != nil {
+		return err
+	}
+
+	return appendEvents(ctx, q, []domain.Event{{
+		FactoryID: domain.FactoryID(row.FactoryID.String()), ItemID: domain.ItemID(item.String()), RunID: id,
+		At: endedAt, Kind: domain.EventRunFinished, Station: row.Station, Actor: row.Agent,
+		Data: runFinished(res),
+	}})
 }
 
 // RecordRunInput implements ports.Store.
@@ -754,14 +867,24 @@ func (s *Store) RecordRunInput(ctx context.Context, id domain.RunID, in domain.R
 	}
 
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		n, err := q.RecordRunInput(ctx, db.RecordRunInputParams{
-			ID: run, Brief: optional(in.Brief), BranchHead: optional(in.BranchHead), BaseHead: optional(in.BaseHead),
-		})
+		n, err := q.RecordRunInput(ctx, db.RecordRunInputParams{ID: run, Brief: optional(in.Brief)})
 		if err == nil && n == 0 {
 			return ports.ErrNotFound
 		}
 
-		return err
+		if err != nil {
+			return err
+		}
+
+		for _, r := range in.Repositories {
+			if err := q.RecordRunRepositoryInput(ctx, db.RecordRunRepositoryInputParams{
+				RunID: run, Repo: optional(r.Repo), BaseCommit: optional(r.BaseCommit), BranchHead: optional(r.BranchHead),
+			}); err != nil {
+				return fmt.Errorf("record repository %s: %w", r.Repo, err)
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("record run %s input: %w", id, err)
@@ -841,11 +964,21 @@ func transition(ctx context.Context, q *db.Queries, cur db.WorkItem, t ports.Tra
 		return db.WorkItem{}, fmt.Errorf("move item: %w", err)
 	}
 
+	if err := setRepositoryBaseCommits(ctx, q, cur.ID, t.BaseCommits); err != nil {
+		return db.WorkItem{}, err
+	}
+
 	if err := appendEvents(ctx, q, t.Events); err != nil {
 		return db.WorkItem{}, err
 	}
 
 	if err := keepFollowUps(ctx, q, cur, t.FollowUps, t.At); err != nil {
+		return db.WorkItem{}, err
+	}
+
+	// The item's lock serializes this with the joins of pushes at FinishRun; one that joined
+	// since the engine counted the cap may leave a key out here.
+	if err := joinItemRepositories(ctx, q, cur.ID, domain.JoinedOutput, t.Repositories, t.At); err != nil {
 		return db.WorkItem{}, err
 	}
 
@@ -886,6 +1019,24 @@ func releaseOrTake(ctx context.Context, q *db.Queries, item uuid.UUID, t ports.T
 
 	if n == 0 {
 		return fmt.Errorf("item %s: %w", t.ItemID, ports.ErrLeaseLost)
+	}
+
+	return nil
+}
+
+// setRepositoryBaseCommits sets the base commit of each of the item's repositories shas names
+// with a sha, in key order; an empty sha and a repository the item lacks change nothing.
+func setRepositoryBaseCommits(ctx context.Context, q *db.Queries, item uuid.UUID, shas map[string]string) error {
+	for _, repo := range slices.Sorted(maps.Keys(shas)) {
+		if shas[repo] == "" {
+			continue
+		}
+
+		if err := q.SetItemRepositoryBaseCommit(ctx, db.SetItemRepositoryBaseCommitParams{
+			ItemID: item, Repo: repo, BaseCommit: shas[repo],
+		}); err != nil {
+			return fmt.Errorf("base commit of repository %s: %w", repo, err)
+		}
 	}
 
 	return nil

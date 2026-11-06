@@ -1,13 +1,15 @@
 // The Runs page (/o/acme/runs) against the mock: the pictured rows, the URL filters and the controls
 // that are not built yet. Not run in the box (no browser): run it against the mock server outside the box.
 import { expect, type Page, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, lengthenTitles } from './support';
+import { expectAccessible, expectNoHorizontalScroll, lengthenTitles, pinClock } from './support';
 import { expectTarget44 } from './support-boxes';
 
 const runs = '/o/acme/runs';
 
-test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset');
+// The mock is seeded at noon UTC; the browser's clock is the test's time, so the runs seeded hours before the
+// mock's now are on today's page whatever the time of day (software#761).
+test.beforeEach(async ({ page, request }) => {
+  await pinClock(page, request);
 });
 
 async function openRuns(page: Page, url = runs) {
@@ -16,23 +18,33 @@ async function openRuns(page: Page, url = runs) {
   await expect(page.getByRole('table')).toBeVisible();
 }
 
-test('shows the pictured rows and the four tiles', async ({ page }) => {
-  await openRuns(page);
+for (const at of ['00:30', '12:00']) {
+  test.describe(`with the browser at ${at} UTC`, () => {
+    test.beforeEach(async ({ page, request }) => {
+      await pinClock(page, request, at);
+    });
 
-  await expect(page.getByText('Every time an agent worked on an item, in all factories.')).toBeVisible();
-  await expect(page.getByRole('row', { name: /Fix flaky TestLeaseExpiry/ })).toContainText('Running');
-  await expect(page.getByRole('row', { name: /#311 Checkout API p95/ })).toContainText('Stopped');
-  await expect(page.getByText(/running now$/)).toBeVisible();
-  await expect(page.getByText(/^Showing \d+ of \d+ runs today\.$/)).toBeVisible();
-});
+    test(`shows the pictured rows and the four tiles with the browser at ${at} UTC`, async ({ page }) => {
+      await openRuns(page);
 
-test('reads the filters from the URL and writes the outcome back', async ({ page }) => {
-  await openRuns(page, `${runs}?status=failed&factory=goal`);
-  await expect(page.getByRole('button', { name: /Failed/ })).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByText('Every time an agent worked on an item, in all factories.')).toBeVisible();
+      await expect(page.getByRole('row', { name: /Fix flaky TestLeaseExpiry/ })).toContainText('Running');
+      await expect(page.getByRole('row', { name: /#311 Checkout API p95/ })).toContainText('Stopped');
+      await expect(page.getByText(/running now$/)).toBeVisible();
+      await expect(page.getByText(/^Showing \d+ of \d+ runs today\.$/)).toBeVisible();
+    });
 
-  await page.getByRole('button', { name: /^All \d+/ }).click();
-  await expect(page).toHaveURL(/\/o\/acme\/runs\?factory=goal$/);
-});
+    test(`reads the filters from the URL and writes the outcome back with the browser at ${at} UTC`, async ({
+      page,
+    }) => {
+      await openRuns(page, `${runs}?status=failed&factory=goal`);
+      await expect(page.getByRole('button', { name: /Failed/ })).toHaveAttribute('aria-pressed', 'true');
+
+      await page.getByRole('button', { name: /^All \d+/ }).click();
+      await expect(page).toHaveURL(/\/o\/acme\/runs\?factory=goal$/);
+    });
+  });
+}
 
 test('downloads the runs CSV from Export CSV, and the page stays put', async ({ page }) => {
   await openRuns(page);

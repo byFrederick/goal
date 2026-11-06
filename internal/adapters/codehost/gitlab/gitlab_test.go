@@ -3,65 +3,68 @@ package gitlab
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 const (
-	token   = "glpat-test-token-never-shown"
-	mrURL   = "https://gitlab.com/acme/platform/web/-/merge_requests/3"
-	project = "/projects/acme%2Fplatform%2Fweb"
-	headSHA = "4b825dc6"
-	branch  = "goal/3-add-x"
+	token      = "glpat-test-token-never-shown"
+	mrURL      = "https://gitlab.com/acme/platform/web/-/merge_requests/3"
+	project    = "/projects/acme%2Fplatform%2Fweb"
+	headSHA    = "4b825dc6"
+	branch     = "goal/3-add-x"
+	mainBranch = "main"
 
-	fieldToken  = "token"
 	keyState    = "state"
 	stateClosed = "closed"
 	keyStatus   = "detailed_merge_status"
 	keyMessage  = "message"
 	squashSHA   = "squash-sha"
 	cannotMerge = "Branch cannot be merged"
+	// octo is a user the stand-in GitLab knows, and acme/platform a group of the group acme.
+	octo          = "octo"
+	acmeGroup     = "acme"
+	platformGroup = "acme/platform"
+	unauthorized  = "401 Unauthorized"
 )
 
-// connection is the code host login of a connection of the platform's gitlab kind with values
-// (token and host).
-func connection(t *testing.T, values map[string]string) domain.CodeHostLogin {
+// selfManagedHost is a self-managed GitLab host.
+const selfManagedHost = "gitlab.example.com"
+
+// gitLabDotCom is gitlab.com, as the organization's list has it.
+var gitLabDotCom = domain.BuiltInCodeHosts()[1]
+
+// repoOf is the project at raw, a project's or a merge request's URL, on the built-in hosts or
+// selfManagedHost.
+func repoOf(t *testing.T, raw string) domain.CodeRepository {
 	t.Helper()
 
-	kinds, err := connkind.Platform()
+	r, err := domain.ParseCodeRepository(domain.ListedCodeHosts([]domain.CodeHost{{Host: selfManagedHost, Kind: domain.CodeHostGitLab}}), raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	i := slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == "gitlab" })
-	if i < 0 {
-		t.Fatal("the platform has no gitlab kind")
-	}
-
-	rc := domain.ResolvedConnection{Connection: domain.Connection{Name: "gitlab", Kind: "gitlab"}, Kind: kinds[i], Values: values}
-
-	login, err := rc.CodeHostLogin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return login
+	return r
 }
 
-// dotComConn is a gitlab.com login with the token.
-func dotComConn(t *testing.T) domain.CodeHostLogin {
+// webRepo is acme/platform/web on gitlab.com, the fake's project.
+func webRepo(t *testing.T) domain.CodeRepository {
 	t.Helper()
 
-	return connection(t, map[string]string{fieldToken: token})
+	return repoOf(t, mrURL)
 }
 
 // fakeGitLab is a GitLab REST API with one merge request, acme/platform/web!3, that requires the
@@ -73,13 +76,65 @@ type fakeGitLab struct {
 	rebase   func() (int, any)
 	requests []string
 	deleted  []string
+	// history is the project's commits, oldest first, each with the diffs GitLab lists for it;
+	// branches names each branch's head. seedHistory fills them.
+	history  []fakeCommit
+	branches map[string]string
+}
+
+// fakeCommit is one commit of fakeGitLab's history and the diffs GitLab lists for it.
+type fakeCommit struct {
+	sha, message string
+	diffs        []map[string]any
+	// diffStatus, when set, is GitLab's answer to a read of the commit's diff.
+	diffStatus int
+}
+
+// seedHistory gives the project n commits c1…cn on main, its default branch, each changing
+// fI.go, and a branch goal/3-add-x at headSHA.
+func (f *fakeGitLab) seedHistory(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.history = nil
+
+	for i := 1; i <= n; i++ {
+		name := "f" + strconv.Itoa(i) + ".go"
+		f.history = append(f.history, fakeCommit{
+			sha: "c" + strconv.Itoa(i), message: "  change " + name + "  \n\nWhy it changed.",
+			diffs: []map[string]any{{"old_path": name, "new_path": name, "diff": "@@ -0,0 +1 @@"}},
+		})
+	}
+
+	f.branches = map[string]string{mainBranch: "c" + strconv.Itoa(n), branch: headSHA}
+}
+
+// compare answers GitLab's compare of from...to on the linear history: the commits after from
+// up to to, oldest first, with every diff between them.
+func (f *fakeGitLab) compare(from, to string) (int, any) {
+	at := func(sha string) int {
+		return slices.IndexFunc(f.history, func(c fakeCommit) bool { return c.sha == sha })
+	}
+
+	i, j := at(from), at(to)
+	if i < 0 || j < 0 {
+		return http.StatusNotFound, map[string]any{keyMessage: "404 Ref Not Found"}
+	}
+
+	commits, diffs := []map[string]any{}, []map[string]any{}
+	for _, c := range f.history[i+1 : max(i+1, j+1)] {
+		commits = append(commits, map[string]any{"id": c.sha, "short_id": c.sha, "title": "ignored", "message": c.message})
+		diffs = append(diffs, c.diffs...)
+	}
+
+	return http.StatusOK, map[string]any{"commit": nil, "commits": commits, "diffs": diffs, "compare_timeout": false, "compare_same_ref": false}
 }
 
 func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 	t.Helper()
 
 	f := &fakeGitLab{mr: map[string]any{
-		"iid": 3, keyState: "opened", "sha": headSHA, "source_branch": branch, "target_branch": "main",
+		"iid": 3, keyState: "opened", "sha": headSHA, "source_branch": branch, "target_branch": mainBranch,
 		"source_project_id": 42, "target_project_id": 42, keyStatus: "mergeable",
 		"merge_commit_sha": nil, "squash_commit_sha": nil,
 	}}
@@ -100,6 +155,10 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 
 		if r.Header.Get("PRIVATE-TOKEN") != token {
 			f.reply(w, http.StatusUnauthorized, map[string]any{keyMessage: "401 Unauthorized"})
+			return
+		}
+
+		if f.serveHistory(t, w, r, route) {
 			return
 		}
 
@@ -137,6 +196,66 @@ func newFakeGitLab(t *testing.T) (*fakeGitLab, *Client) {
 	return f, New(Config{APIURL: srv.URL})
 }
 
+// serveHistory answers the reads of the project's history (the project, its branches, compare
+// and a commit's diff), reporting whether route was one.
+func (f *fakeGitLab) serveHistory(t *testing.T, w http.ResponseWriter, r *http.Request, route string) bool {
+	t.Helper()
+
+	switch {
+	case route == "GET "+project:
+		f.reply(w, http.StatusOK, map[string]any{"path_with_namespace": "acme/platform/web", "default_branch": mainBranch})
+	case strings.HasPrefix(route, "GET "+project+"/repository/branches/"):
+		// GitLab reads the branch as one segment: a slash in it must arrive escaped.
+		segment := strings.TrimPrefix(route, "GET "+project+"/repository/branches/")
+		name, err := url.PathUnescape(segment)
+
+		f.mu.Lock()
+		sha, ok := f.branches[name]
+		f.mu.Unlock()
+
+		if err != nil || strings.Contains(segment, "/") || !ok {
+			f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Branch Not Found"})
+			return true
+		}
+
+		f.reply(w, http.StatusOK, map[string]any{"name": "x", "commit": map[string]any{"id": sha, "short_id": sha[:min(len(sha), 8)]}})
+	case route == "GET "+project+"/repository/compare":
+		q := r.URL.Query()
+		if q.Get("straight") != "false" {
+			t.Errorf("compare query %s; want straight=false", r.URL.RawQuery)
+		}
+
+		f.mu.Lock()
+		status, res := f.compare(q.Get("from"), q.Get("to"))
+		f.mu.Unlock()
+
+		f.reply(w, status, res)
+	case strings.HasPrefix(route, "GET "+project+"/repository/commits/") && strings.HasSuffix(route, "/diff"):
+		if r.URL.Query().Get("per_page") != "100" {
+			t.Errorf("diff query %s; want per_page=100", r.URL.RawQuery)
+		}
+
+		sha := strings.TrimSuffix(strings.TrimPrefix(route, "GET "+project+"/repository/commits/"), "/diff")
+
+		f.mu.Lock()
+		i := slices.IndexFunc(f.history, func(c fakeCommit) bool { return c.sha == sha })
+		f.mu.Unlock()
+
+		switch {
+		case i < 0:
+			f.reply(w, http.StatusNotFound, map[string]any{keyMessage: "404 Commit Not Found"})
+		case f.history[i].diffStatus != 0:
+			f.reply(w, f.history[i].diffStatus, map[string]any{keyMessage: "500 Internal Server Error"})
+		default:
+			f.reply(w, http.StatusOK, f.history[i].diffs)
+		}
+	default:
+		return false
+	}
+
+	return true
+}
+
 func (f *fakeGitLab) reply(w http.ResponseWriter, status int, body any) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -153,25 +272,17 @@ func (f *fakeGitLab) sent() []string {
 	return slices.Clone(f.requests)
 }
 
-// The API is the connection's host's own, gitlab.com or a self-managed GitLab.
+// The API is the project host's own, gitlab.com or a self-managed GitLab.
 func TestClient_APIForTheConnectionsHost(t *testing.T) {
 	t.Parallel()
 
 	c := New(Config{})
 
-	tests := []struct {
-		values   map[string]string
-		url, api string
-	}{
-		{map[string]string{fieldToken: token}, mrURL, "https://gitlab.com/api/v4"},
-		{
-			map[string]string{fieldToken: token, "host": "gitlab.example.com"},
-			"https://gitlab.example.com/acme/platform/web/-/merge_requests/3", "https://gitlab.example.com/api/v4",
-		},
-	}
-
-	for _, tt := range tests {
-		m, err := c.open(connection(t, tt.values), tt.url)
+	for _, tt := range []struct{ url, api string }{
+		{mrURL, "https://gitlab.com/api/v4"},
+		{"https://" + selfManagedHost + "/acme/platform/web/-/merge_requests/3", "https://" + selfManagedHost + "/api/v4"},
+	} {
+		m, err := c.open(repoOf(t, tt.url), token, tt.url)
 		if err != nil || m.api != tt.api || m.project != "acme%2Fplatform%2Fweb" || m.iid != "3" {
 			t.Errorf("open(%s) = %+v, %v; want the API %s, project acme/platform/web and iid 3", tt.url, m, err, tt.api)
 		}
@@ -227,13 +338,13 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 			f, c := newFakeGitLab(t)
 			maps.Copy(f.mr, tt.mr)
 
-			pr, err := c.PullRequest(t.Context(), dotComConn(t), mrURL)
+			pr, err := c.PullRequest(t.Context(), webRepo(t), token, mrURL)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			want := tt.want
-			want.URL, want.HeadSHA, want.HeadBranch, want.BaseBranch = mrURL, headSHA, branch, "main"
+			want.URL, want.HeadSHA, want.HeadBranch, want.BaseBranch = mrURL, headSHA, branch, mainBranch
 			// Only the fork case moves the source project away from the target's.
 			want.SameRepository = tt.mr["source_project_id"] == nil
 
@@ -244,36 +355,47 @@ func TestPullRequest_ReadsStateHeadAndBase(t *testing.T) {
 	}
 }
 
-// A merge request on another host than the connection's, or a URL that is not a merge
-// request's, is refused before anything is sent.
+// A merge request URL outside the project it is called with (another host, another project, not
+// a merge request's), a project on a host of another kind, and an empty token are refused before
+// anything is sent.
 func TestPullRequest_OnlyOnTheConnectionsHost(t *testing.T) {
 	t.Parallel()
 
 	f, c := newFakeGitLab(t)
-	selfManaged := connection(t, map[string]string{fieldToken: token, "host": "gitlab.example.com"})
+	selfManaged := repoOf(t, "https://"+selfManagedHost+"/acme/platform/web")
+	onGitHub := domain.CodeRepository{Host: domain.BuiltInCodeHosts()[0], Owner: "acme/platform", Name: "web"}
 
 	for _, tt := range []struct {
-		conn domain.CodeHostLogin
-		url  string
+		repo  domain.CodeRepository
+		token string
+		url   string
 	}{
-		{dotComConn(t), "https://gitlab.example.com/acme/web/-/merge_requests/3"},
-		{dotComConn(t), "https://github.com/acme/web/pull/3"},
-		{selfManaged, mrURL},
-		{dotComConn(t), "http://gitlab.com/acme/web/-/merge_requests/3"},
-		{dotComConn(t), "https://gitlab.com/acme/web/-/merge_requests/3?x=1"},
-		{dotComConn(t), "https://gitlab.com/acme/web/-/issues/3"},
-		{dotComConn(t), "https://gitlab.com/web/-/merge_requests/3"},
+		{webRepo(t), token, "https://" + selfManagedHost + "/acme/platform/web/-/merge_requests/3"},
+		{webRepo(t), token, "https://github.com/acme/platform/web/pull/3"},
+		{selfManaged, token, mrURL},
+		{webRepo(t), token, "https://gitlab.com/acme/web/-/merge_requests/3"},
+		{webRepo(t), token, "http://gitlab.com/acme/platform/web/-/merge_requests/3"},
+		{webRepo(t), token, "https://gitlab.com/acme/platform/web/-/merge_requests/3?x=1"},
+		{webRepo(t), token, "https://gitlab.com/acme/platform/web/-/issues/3"},
+		{webRepo(t), token, "https://gitlab.com/web/-/merge_requests/3"},
+		{onGitHub, token, mrURL},
+		{domain.CodeRepository{}, token, mrURL},
+		{webRepo(t), "", mrURL},
 	} {
-		if _, err := c.PullRequest(t.Context(), tt.conn, tt.url); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("PullRequest(%s) = %v; want ErrNotMergeable", tt.url, err)
+		if _, err := c.PullRequest(t.Context(), tt.repo, tt.token, tt.url); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("PullRequest(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
 		}
 
-		if err := c.DeleteBranch(t.Context(), tt.conn, tt.url, branch); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("DeleteBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		if err := c.DeleteBranch(t.Context(), tt.repo, tt.token, tt.url, branch); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("DeleteBranch(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
 		}
 
-		if err := c.UpdateBranch(t.Context(), tt.conn, tt.url, headSHA); !errors.Is(err, ports.ErrNotMergeable) {
-			t.Errorf("UpdateBranch(%s) = %v; want ErrNotMergeable", tt.url, err)
+		if err := c.UpdateBranch(t.Context(), tt.repo, tt.token, tt.url, headSHA); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("UpdateBranch(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
+		}
+
+		if _, err := c.Merge(t.Context(), tt.repo, tt.token, tt.url, ports.Merge{Method: methodSquash, HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) {
+			t.Errorf("Merge(%s, %s) = %v; want ErrNotMergeable", tt.repo, tt.url, err)
 		}
 	}
 
@@ -297,7 +419,7 @@ func TestMerge_AtTheHeadItWasGiven(t *testing.T) {
 			return merge(body)
 		}
 
-		sha, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: method, HeadSHA: headSHA})
+		sha, err := c.Merge(t.Context(), webRepo(t), token, mrURL, ports.Merge{Method: method, HeadSHA: headSHA})
 		if err != nil || sha != squashSHA {
 			t.Fatalf("Merge(%s) = %q, %v; want squash-sha", method, sha, err)
 		}
@@ -309,7 +431,7 @@ func TestMerge_AtTheHeadItWasGiven(t *testing.T) {
 
 	// GitLab cannot rebase in one call: refused, nothing sent.
 	f, c := newFakeGitLab(t)
-	if _, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: "rebase", HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) ||
+	if _, err := c.Merge(t.Context(), webRepo(t), token, mrURL, ports.Merge{Method: "rebase", HeadSHA: headSHA}); !errors.Is(err, ports.ErrNotMergeable) ||
 		len(f.sent()) != 0 {
 		t.Errorf("Merge with rebase = %v after %v; want ErrNotMergeable and nothing sent", err, f.sent())
 	}
@@ -333,7 +455,7 @@ func TestMerge_GitLabRefusalsAreNotMergeable(t *testing.T) {
 		f, c := newFakeGitLab(t)
 		f.merge = func(map[string]any) (int, any) { return tt.status, tt.body }
 
-		_, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA})
+		_, err := c.Merge(t.Context(), webRepo(t), token, mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA})
 		if !errors.Is(err, ports.ErrNotMergeable) || !strings.Contains(err.Error(), tt.reason) {
 			t.Errorf("merge answered %d: err = %v; want ErrNotMergeable with GitLab's reason", tt.status, err)
 		}
@@ -350,7 +472,7 @@ func TestUpdateBranch_RebasesAtTheHeadItWasGiven(t *testing.T) {
 
 	f, c := newFakeGitLab(t)
 
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA); err != nil {
+	if err := c.UpdateBranch(t.Context(), webRepo(t), token, mrURL, headSHA); err != nil {
 		t.Fatalf("UpdateBranch = %v; want accepted", err)
 	}
 
@@ -366,13 +488,13 @@ func TestUpdateBranch_RebasesAtTheHeadItWasGiven(t *testing.T) {
 		f, c := newFakeGitLab(t)
 		change(f)
 
-		if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA); !errors.Is(err, ports.ErrNotMergeable) ||
+		if err := c.UpdateBranch(t.Context(), webRepo(t), token, mrURL, headSHA); !errors.Is(err, ports.ErrNotMergeable) ||
 			slices.Contains(f.sent(), rebase) {
 			t.Errorf("%s: UpdateBranch = %v after %v; want ErrNotMergeable and no rebase", name, err, f.sent())
 		}
 	}
 
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, ""); err == nil || len(f.sent()) != 2 {
+	if err := c.UpdateBranch(t.Context(), webRepo(t), token, mrURL, ""); err == nil || len(f.sent()) != 2 {
 		t.Errorf("UpdateBranch without a head = %v after %v; want refused before sending", err, f.sent())
 	}
 }
@@ -395,7 +517,7 @@ func TestUpdateBranch_GitLabRefusals(t *testing.T) {
 		f, c := newFakeGitLab(t)
 		f.rebase = func() (int, any) { return tt.status, map[string]any{keyMessage: tt.message} }
 
-		err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA)
+		err := c.UpdateBranch(t.Context(), webRepo(t), token, mrURL, headSHA)
 
 		var mc *ports.MergeConflictError
 		if tt.conflict && (!errors.Is(err, ports.ErrMergeConflict) || !errors.As(err, &mc) || errors.Is(err, ports.ErrNotMergeable)) {
@@ -417,7 +539,7 @@ func TestDeleteBranch_DeletesTheBranchAndToleratesAGoneOne(t *testing.T) {
 
 	f, c := newFakeGitLab(t)
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), mrURL, branch); err != nil {
+	if err := c.DeleteBranch(t.Context(), webRepo(t), token, mrURL, branch); err != nil {
 		t.Fatal(err)
 	}
 
@@ -425,11 +547,11 @@ func TestDeleteBranch_DeletesTheBranchAndToleratesAGoneOne(t *testing.T) {
 		t.Errorf("deleted %v; want goal/3-add-x, encoded as one path segment", f.deleted)
 	}
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), "https://gitlab.com/acme/platform/web/-/merge_requests/9", branch); err != nil {
+	if err := c.DeleteBranch(t.Context(), webRepo(t), token, "https://gitlab.com/acme/platform/web/-/merge_requests/9", branch); err != nil {
 		t.Errorf("deleting on a project path the fake does not know (404) = %v; want nil", err)
 	}
 
-	if err := c.DeleteBranch(t.Context(), dotComConn(t), mrURL, "../main"); err == nil {
+	if err := c.DeleteBranch(t.Context(), webRepo(t), token, mrURL, "../main"); err == nil {
 		t.Error("deleting ../main succeeded; want refused")
 	}
 }
@@ -444,14 +566,14 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 		return http.StatusInternalServerError, map[string]any{keyMessage: "bad token " + token}
 	}
 
-	if _, err := c.Merge(t.Context(), dotComConn(t), mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA}); err == nil ||
+	if _, err := c.Merge(t.Context(), webRepo(t), token, mrURL, ports.Merge{Method: methodSquash, HeadSHA: headSHA}); err == nil ||
 		strings.Contains(err.Error(), token) {
 		t.Errorf("err = %v; want an error without the token", err)
 	}
 
 	f.rebase = func() (int, any) { return http.StatusConflict, map[string]any{keyMessage: "bad token " + token} }
 
-	if err := c.UpdateBranch(t.Context(), dotComConn(t), mrURL, headSHA); err == nil || strings.Contains(err.Error(), token) {
+	if err := c.UpdateBranch(t.Context(), webRepo(t), token, mrURL, headSHA); err == nil || strings.Contains(err.Error(), token) {
 		t.Errorf("UpdateBranch err = %v; want an error without the token", err)
 	}
 
@@ -470,28 +592,273 @@ func TestClient_TokenNeverInErrorsNorSentElsewhere(t *testing.T) {
 
 	moved := New(Config{APIURL: redirect.URL})
 
-	if _, err := moved.PullRequest(t.Context(), dotComConn(t), mrURL); err == nil || leaked {
-		t.Errorf("PullRequest via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", err, leaked)
+	for name, call := range map[string]func(*Client) error{
+		"PullRequest": func(c *Client) error { _, err := c.PullRequest(t.Context(), webRepo(t), token, mrURL); return err },
+		"BranchHead":  func(c *Client) error { _, err := c.BranchHead(t.Context(), webRepo(t), token, ""); return err },
+		"Compare":     func(c *Client) error { _, err := c.Compare(t.Context(), webRepo(t), token, "c1", "c2"); return err },
+	} {
+		if err := call(moved); err == nil || leaked {
+			t.Errorf("%s via a redirect = %v, token sent elsewhere: %v; want an error and no token sent", name, err, leaked)
+		}
+	}
+
+	// The reads echoing the credential back keep it out of their errors too.
+	echoing := echoGitLab(t)
+
+	for name, err := range map[string]error{
+		"BranchHead": func() error { _, err := echoing.BranchHead(t.Context(), webRepo(t), token, branch); return err }(),
+		"Compare":    func() error { _, err := echoing.Compare(t.Context(), webRepo(t), token, "c1", "c2"); return err }(),
+	} {
+		if err == nil || strings.Contains(err.Error(), token) {
+			t.Errorf("%s err = %v; want an error without the token", name, err)
+		}
 	}
 }
 
-// GitLab does not read branch heads or compare commits yet: both say so and send nothing.
-func TestBranchHeadAndCompare_Unsupported(t *testing.T) {
+// echoGitLab is a client of a GitLab that answers every request 500 with the token in its
+// message, and checks that the token arrives in the PRIVATE-TOKEN header only.
+func echoGitLab(t *testing.T) *Client {
+	t.Helper()
+
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("PRIVATE-TOKEN") != token || strings.Contains(r.URL.String(), token) {
+			t.Errorf("request %s: want the token in PRIVATE-TOKEN only", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "bad token " + token})
+	}))
+	t.Cleanup(echo.Close)
+
+	return New(Config{APIURL: echo.URL})
+}
+
+func TestBranchHead_NamedAndDefaultBranch(t *testing.T) {
 	t.Parallel()
 
 	f, c := newFakeGitLab(t)
-	repo := "https://gitlab.com/acme/platform/app"
+	f.seedHistory(3)
 
-	if _, err := c.BranchHead(t.Context(), dotComConn(t), repo, ""); !errors.Is(err, errors.ErrUnsupported) {
-		t.Errorf("BranchHead = %v; want ErrUnsupported", err)
+	for _, tt := range []struct{ branch, want string }{
+		{"", "c3"},
+		{mainBranch, "c3"},
+		{branch, headSHA},
+	} {
+		got, err := c.BranchHead(t.Context(), webRepo(t), token, tt.branch)
+		if err != nil || got != tt.want {
+			t.Errorf("BranchHead(%q) = %q, %v; want %q", tt.branch, got, err, tt.want)
+		}
 	}
 
-	if _, err := c.Compare(t.Context(), dotComConn(t), repo, "a1", "b2"); !errors.Is(err, errors.ErrUnsupported) {
-		t.Errorf("Compare = %v; want ErrUnsupported", err)
+	if got := f.sent(); !slices.Contains(got, "GET "+project) || !slices.Contains(got, "GET "+project+"/repository/branches/goal%2F3-add-x") {
+		t.Errorf("requests %v; want the project read for its default branch and the named branch read as one segment", got)
+	}
+}
+
+func TestBranchHead_UnknownIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+	f.seedHistory(1)
+
+	for _, tt := range []struct{ repo, branch string }{
+		{"https://gitlab.com/acme/platform/web", "gone"},
+		{"https://gitlab.com/acme/other", ""},
+		{"https://gitlab.com/acme/other", mainBranch},
+	} {
+		if _, err := c.BranchHead(t.Context(), repoOf(t, tt.repo), token, tt.branch); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("BranchHead(%s, %q) = %v; want ErrNotFound", tt.repo, tt.branch, err)
+		}
+	}
+
+	before := len(f.sent())
+	if _, err := c.BranchHead(t.Context(), webRepo(t), token, "../main"); err == nil || len(f.sent()) != before {
+		t.Errorf("BranchHead(../main) = %v after %v; want refused before sending", err, f.sent())
+	}
+}
+
+// hostRecorder answers every request itself and records the host each went to.
+type hostRecorder struct {
+	mu    sync.Mutex
+	hosts []string
+}
+
+func (h *hostRecorder) RoundTrip(r *http.Request) (*http.Response, error) {
+	h.mu.Lock()
+	h.hosts = append(h.hosts, r.URL.Host)
+	h.mu.Unlock()
+
+	return &http.Response{
+		StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}},
+		Body: io.NopCloser(strings.NewReader(`{"default_branch":"main","commit":{"id":"c9"},"commits":[]}`)), Request: r,
+	}, nil
+}
+
+// A project on a self-managed host is read from that host's API only. A project on a host of
+// another kind, one that names no namespace or name, and an empty token are refused before
+// anything is sent.
+func TestBranchHead_OnlyOnTheConnectionsHost(t *testing.T) {
+	t.Parallel()
+
+	rec := &hostRecorder{}
+	c := New(Config{Transport: rec})
+	selfManaged := repoOf(t, "https://"+selfManagedHost+"/acme/platform/web")
+
+	if sha, err := c.BranchHead(t.Context(), selfManaged, token, ""); err != nil || sha != "c9" {
+		t.Fatalf("BranchHead on %s = %q, %v; want c9", selfManagedHost, sha, err)
+	}
+
+	if _, err := c.Compare(t.Context(), selfManaged, token, "c1", "c9"); err != nil {
+		t.Fatalf("Compare on %s = %v", selfManagedHost, err)
+	}
+
+	rec.mu.Lock()
+	hosts := slices.Clone(rec.hosts)
+	rec.mu.Unlock()
+
+	if len(hosts) != 3 || slices.ContainsFunc(hosts, func(h string) bool { return h != selfManagedHost }) {
+		t.Errorf("requests went to %v; want three, all to %s", hosts, selfManagedHost)
+	}
+
+	f, faked := newFakeGitLab(t)
+	onGitHub := domain.CodeRepository{Host: domain.BuiltInCodeHosts()[0], Owner: "acme/platform", Name: "web"}
+
+	for _, tt := range []struct {
+		repo  domain.CodeRepository
+		token string
+	}{
+		{onGitHub, token},
+		{domain.CodeRepository{Host: gitLabDotCom, Owner: "acme"}, token},
+		{domain.CodeRepository{Host: gitLabDotCom, Owner: "..", Name: "web"}, token},
+		{domain.CodeRepository{}, token},
+		{webRepo(t), ""},
+	} {
+		if _, err := faked.BranchHead(t.Context(), tt.repo, tt.token, ""); err == nil {
+			t.Errorf("BranchHead(%+v) succeeded; want refused", tt.repo)
+		}
+
+		if _, err := faked.Compare(t.Context(), tt.repo, tt.token, "c1", "c2"); err == nil {
+			t.Errorf("Compare(%+v) succeeded; want refused", tt.repo)
+		}
 	}
 
 	if got := f.sent(); len(got) != 0 {
 		t.Errorf("requests %v; want none", got)
+	}
+}
+
+func TestCompare_CommitsOldestFirstWithFiles(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+	f.seedHistory(4)
+	// c3 renames a file and deletes another: both of each's paths count, once.
+	f.history[2].diffs = []map[string]any{
+		{"old_path": "old.go", "new_path": "new.go", "renamed_file": true},
+		{"old_path": "gone.go", "new_path": "gone.go", "deleted_file": true},
+	}
+
+	got, err := c.Compare(t.Context(), webRepo(t), token, "c1", "c4")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := ports.Comparison{Commits: []ports.Commit{
+		{SHA: "c2", Subject: "change f2.go", Files: []string{"f2.go"}},
+		{SHA: "c3", Subject: "change f3.go", Files: []string{"new.go", "old.go", "gone.go"}},
+		{SHA: "c4", Subject: "change f4.go", Files: []string{"f4.go"}},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Compare = %+v; want %+v", got, want)
+	}
+
+	if sent := f.sent(); !slices.Equal(sent, []string{
+		"GET " + project + "/repository/compare",
+		"GET " + project + "/repository/commits/c2/diff",
+		"GET " + project + "/repository/commits/c3/diff",
+		"GET " + project + "/repository/commits/c4/diff",
+	}) {
+		t.Errorf("requests %v; want the compare, then each commit's diff", sent)
+	}
+
+	// Nothing since: no commits, not truncated.
+	if got, err := c.Compare(t.Context(), webRepo(t), token, "c4", "c4"); err != nil || len(got.Commits) != 0 || got.Truncated {
+		t.Errorf("Compare(c4, c4) = %+v, %v; want no commits", got, err)
+	}
+}
+
+func TestCompare_UnknownCommitIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+	f.seedHistory(2)
+
+	for _, tt := range []struct{ repo, base, head string }{
+		{"https://gitlab.com/acme/platform/web", "gone", "c2"},
+		{"https://gitlab.com/acme/platform/web", "c1", "gone"},
+		{"https://gitlab.com/acme/other", "c1", "c2"},
+	} {
+		if _, err := c.Compare(t.Context(), repoOf(t, tt.repo), token, tt.base, tt.head); !errors.Is(err, ports.ErrNotFound) {
+			t.Errorf("Compare(%s, %s, %s) = %v; want ErrNotFound", tt.repo, tt.base, tt.head, err)
+		}
+	}
+
+	before := len(f.sent())
+
+	for _, tt := range []struct{ base, head string }{{"", "c2"}, {"c1", ""}, {"c1..c0", "c2"}, {"c1", "c2..c3"}} {
+		if _, err := c.Compare(t.Context(), webRepo(t), token, tt.base, tt.head); err == nil {
+			t.Errorf("Compare(%q, %q) succeeded; want refused", tt.base, tt.head)
+		}
+	}
+
+	if got := f.sent(); len(got) != before {
+		t.Errorf("requests %v; want none for refused refs", got[before:])
+	}
+
+	// A commit whose diff cannot be read fails the whole call.
+	f.mu.Lock()
+	f.history[1].diffStatus = http.StatusInternalServerError
+	f.mu.Unlock()
+
+	if got, err := c.Compare(t.Context(), webRepo(t), token, "c1", "c2"); err == nil || !strings.Contains(err.Error(), "c2") {
+		t.Errorf("Compare with an unreadable diff = %+v, %v; want an error naming c2", got, err)
+	}
+}
+
+// Past 100 commits, Compare returns the oldest 100 and says it truncated. The compare answer
+// carries every commit's diff, far over the 1 MiB other answers are held to.
+func TestCompare_TruncatesPast100(t *testing.T) {
+	t.Parallel()
+
+	f, c := newFakeGitLab(t)
+	f.seedHistory(ports.MaxCompareCommits + 30)
+
+	patch := strings.Repeat("+x\n", 8<<10)
+	for i := range f.history {
+		f.history[i].diffs[0]["diff"] = patch
+	}
+
+	got, err := c.Compare(t.Context(), webRepo(t), token, "c1", "c"+strconv.Itoa(ports.MaxCompareCommits+30))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got.Truncated || len(got.Commits) != ports.MaxCompareCommits {
+		t.Fatalf("Compare = %d commits, truncated %v; want %d and truncated", len(got.Commits), got.Truncated, ports.MaxCompareCommits)
+	}
+
+	if first, last := got.Commits[0].SHA, got.Commits[len(got.Commits)-1].SHA; first != "c2" || last != "c101" {
+		t.Errorf("commits %s to %s; want c2 to c101, the oldest", first, last)
+	}
+
+	if sent := f.sent(); len(sent) != 1+ports.MaxCompareCommits {
+		t.Errorf("%d requests; want the compare, then each of the 100 commits' diffs", len(sent))
+	}
+
+	// Exactly 100 is not truncated.
+	if got, err := c.Compare(t.Context(), webRepo(t), token, "c1", "c101"); err != nil || got.Truncated || len(got.Commits) != 100 {
+		t.Errorf("Compare(c1, c101) = %d commits, truncated %v, %v; want 100, not truncated", len(got.Commits), got.Truncated, err)
 	}
 }
 
@@ -502,7 +869,7 @@ func TestClient_RepositoriesUnsupported(t *testing.T) {
 	f, c := newFakeGitLab(t)
 
 	for _, owner := range []string{"", "acme"} {
-		if _, err := c.Repositories(t.Context(), dotComConn(t), owner); !errors.Is(err, errors.ErrUnsupported) {
+		if _, err := c.Repositories(t.Context(), gitLabDotCom, token, owner); !errors.Is(err, errors.ErrUnsupported) {
 			t.Errorf("Repositories(%q) = %v; want ErrUnsupported", owner, err)
 		}
 	}
@@ -524,7 +891,7 @@ type accessCase struct {
 func (tc accessCase) check(t *testing.T, c *Client) {
 	t.Helper()
 
-	got, err := c.RepositoryAccess(t.Context(), tc.repo, tc.token)
+	got, err := c.RepositoryAccess(t.Context(), repoOf(t, tc.repo), tc.token)
 	if err != nil {
 		t.Fatalf("%s: err = %v", tc.name, err)
 	}
@@ -603,10 +970,19 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 
 	c := New(Config{APIURL: accessGitLab(t).URL})
 
-	for _, bad := range []string{"http://gitlab.com/acme/app", "https://gitlab.com/acme", "https://u:p@gitlab.com/acme/app"} {
+	for _, bad := range []domain.CodeRepository{
+		{},
+		{Host: gitLabDotCom, Name: "app"},
+		{Host: gitLabDotCom, Owner: "acme/..", Name: "app"},
+		{Host: domain.BuiltInCodeHosts()[0], Owner: "acme", Name: "app"},
+	} {
 		if _, err := c.RepositoryAccess(t.Context(), bad, token); !errors.Is(err, domain.ErrInvalid) {
-			t.Errorf("RepositoryAccess(%q) err = %v; want domain.ErrInvalid", bad, err)
+			t.Errorf("RepositoryAccess(%+v) err = %v; want domain.ErrInvalid", bad, err)
 		}
+	}
+
+	if _, err := c.RepositoryAccess(t.Context(), webRepo(t), ""); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("RepositoryAccess without a token = %v; want domain.ErrInvalid", err)
 	}
 
 	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -616,8 +992,222 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	}))
 	t.Cleanup(echo.Close)
 
-	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), "https://gitlab.com/acme/docs", token)
+	got, err := New(Config{APIURL: echo.URL}).RepositoryAccess(t.Context(), repoOf(t, "https://gitlab.com/acme/docs"), token)
 	if err != nil || got.Read.OK || strings.Contains(got.Read.Reason+got.Push.Reason, token) {
 		t.Errorf("access = %+v, err = %v; want read failed without the token", got, err)
+	}
+}
+
+// ownerGitLab is a stand-in GitLab listing projects, 100 a page with X-Next-Page while there are
+// more: the group acme/platform (subgroups included, which it requires) has projects with the
+// given access levels, the user octo the levels of user, any other group or user 404 and another
+// token 401. min_access_level filters by level, as GitLab does. It records each request.
+func ownerGitLab(t *testing.T, group, user []int) (*httptest.Server, func() []string) {
+	t.Helper()
+
+	var (
+		mu    sync.Mutex
+		paths []string
+	)
+
+	listings := map[string][]int{"/groups/acme%2Fplatform/projects": group, "/users/octo/projects": user}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+
+		paths = append(paths, r.Method+" "+r.URL.EscapedPath())
+
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		levels, ok := listings[r.URL.EscapedPath()]
+		q := r.URL.Query()
+
+		switch {
+		case r.Method != http.MethodGet || r.Header.Get("PRIVATE-TOKEN") != token:
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: unauthorized})
+
+			return
+		case !ok:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "404 Group Not Found"})
+
+			return
+		case strings.HasPrefix(r.URL.Path, "/groups/") && q.Get("include_subgroups") != "true":
+			t.Errorf("%s without include_subgroups=true", r.URL.Path)
+		}
+
+		least, _ := strconv.Atoi(q.Get("min_access_level"))
+
+		var matching []int
+
+		for _, l := range levels {
+			if l >= least {
+				matching = append(matching, l)
+			}
+		}
+
+		page, err := strconv.Atoi(q.Get("page"))
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		from, to := min((page-1)*100, len(matching)), min(page*100, len(matching))
+
+		out := []map[string]any{}
+		for i := from; i < to; i++ {
+			out = append(out, map[string]any{"id": i, "path_with_namespace": "acme/platform/p" + strconv.Itoa(i)})
+		}
+
+		if to < len(matching) {
+			w.Header().Set("X-Next-Page", strconv.Itoa(page+1))
+		}
+
+		_ = json.NewEncoder(w).Encode(out)
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return slices.Clone(paths)
+	}
+}
+
+// levels are n access levels of level.
+func levels(n, level int) []int { return slices.Repeat([]int{level}, n) }
+
+// OwnerAccess counts a nested group's projects, subgroups included, or a user's when no group
+// has the path, and those the token can push to (Developer or more), across pages; it stops at
+// ports.MaxOwnerRepositories and says so. An unknown owner and a bad token are refusals in the
+// result. It only lists projects.
+func TestOwnerAccess(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, owner, token string
+		group, user        []int
+		want               ports.OwnerAccess
+		reason             string
+	}{
+		{
+			name: "nested group", owner: platformGroup, token: token, group: slices.Concat(levels(2, 20), levels(3, 30), levels(1, 50)),
+			want: ports.OwnerAccess{Readable: 6, Pushable: 4}, reason: "6",
+		},
+		{name: "user namespace", owner: octo, token: token, user: levels(150, 10), want: ports.OwnerAccess{Readable: 150}},
+		{
+			name: "truncated", owner: platformGroup, token: token, group: levels(ports.MaxOwnerRepositories+1, 40),
+			want: ports.OwnerAccess{Readable: ports.MaxOwnerRepositories, Pushable: ports.MaxOwnerRepositories, Truncated: true},
+		},
+		{name: "unknown owner", owner: "acme/gone", token: token, reason: "acme/gone"},
+		{name: "unknown user", owner: "nobody", token: token, reason: "nobody"},
+		{name: "bad token", owner: platformGroup, token: "glpat-wrong", group: levels(1, 30), reason: unauthorized},
+	} {
+		srv, paths := ownerGitLab(t, tc.group, tc.user)
+
+		got, err := New(Config{APIURL: srv.URL}).OwnerAccess(t.Context(), gitLabDotCom, tc.token, tc.owner)
+		if err != nil {
+			t.Fatalf("%s: err = %v", tc.name, err)
+		}
+
+		if reason := got.Reason; reason == "" || !strings.Contains(reason, tc.reason) {
+			t.Errorf("%s: reason %q; want one that says %q", tc.name, reason, tc.reason)
+		}
+
+		got.Reason = ""
+		if got != tc.want {
+			t.Errorf("%s: OwnerAccess = %+v; want %+v", tc.name, got, tc.want)
+		}
+
+		for _, p := range paths() {
+			if !strings.HasPrefix(p, "GET /groups/") && !strings.HasPrefix(p, "GET /users/") {
+				t.Errorf("%s: sent %s; want only project listings", tc.name, p)
+			}
+		}
+
+		if n := len(paths()); n > 1+2*ports.MaxOwnerRepositories/100 {
+			t.Errorf("%s: sent %d requests; want at most %d", tc.name, n, 1+2*ports.MaxOwnerRepositories/100)
+		}
+	}
+}
+
+// An empty token or owner, an owner that is not a namespace path and a host of another kind are
+// refused before anything is sent, and a token GitLab echoes is in no reason.
+func TestOwnerAccess_Refusals(t *testing.T) {
+	t.Parallel()
+
+	srv, paths := ownerGitLab(t, levels(1, 30), nil)
+	c := New(Config{APIURL: srv.URL})
+
+	for _, bad := range []struct {
+		host         domain.CodeHost
+		token, owner string
+	}{
+		{gitLabDotCom, "", acmeGroup},
+		{gitLabDotCom, token, ""},
+		{gitLabDotCom, token, "acme/.."},
+		{gitLabDotCom, token, "acme//x"},
+		{domain.BuiltInCodeHosts()[0], token, acmeGroup},
+		{domain.CodeHost{Kind: domain.CodeHostGitLab}, token, acmeGroup},
+	} {
+		if _, err := c.OwnerAccess(t.Context(), bad.host, bad.token, bad.owner); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("OwnerAccess(%+v, %q) err = %v; want domain.ErrInvalid", bad.host, bad.owner, err)
+		}
+	}
+
+	if n := len(paths()); n != 0 {
+		t.Errorf("sent %d requests; want none", n)
+	}
+
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "token " + token + " is revoked"})
+	}))
+	t.Cleanup(echo.Close)
+
+	got, err := New(Config{APIURL: echo.URL}).OwnerAccess(t.Context(), gitLabDotCom, token, acmeGroup)
+	if err != nil || got.Readable != 0 || got.Reason == "" || strings.Contains(got.Reason, token) {
+		t.Errorf("OwnerAccess with an echoed token = %+v, %v; want a refusal without the token", got, err)
+	}
+}
+
+// A redirect is not followed and is a refusal; a host that does not answer, or answers 5xx, is
+// an error.
+func TestOwnerAccess_RedirectsAndFailures(t *testing.T) {
+	t.Parallel()
+
+	var leaked atomic.Bool
+
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		leaked.Store(leaked.Load() || r.Header.Get("PRIVATE-TOKEN") != "")
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect) //nolint:gosec // the redirect under test
+	}))
+	t.Cleanup(redirect.Close)
+
+	got, err := New(Config{APIURL: redirect.URL}).OwnerAccess(t.Context(), gitLabDotCom, token, acmeGroup)
+	if err != nil || got.Readable != 0 || leaked.Load() {
+		t.Errorf("OwnerAccess via a redirect = %+v, %v, token sent elsewhere: %v; want a refusal and no token sent", got, err, leaked.Load())
+	}
+
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(failing.Close)
+
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+
+	for name, api := range map[string]string{"502": failing.URL, "no answer": dead.URL} {
+		if _, err := New(Config{APIURL: api}).OwnerAccess(t.Context(), gitLabDotCom, token, acmeGroup); err == nil {
+			t.Errorf("a host with %s: err = nil; want an error", name)
+		}
 	}
 }

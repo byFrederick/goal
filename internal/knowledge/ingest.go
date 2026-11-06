@@ -9,6 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +24,22 @@ type Connections interface {
 	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
 }
 
-// Secrets open the secrets synced sources read with: ports.OrgSecrets.
+// Secrets read and open the secrets synced sources read with: ports.OrgSecrets.
 type Secrets interface {
+	Get(ctx context.Context, name string) (domain.Secret, error)
 	Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error)
+}
+
+// Hosts list the code hosts the organization in ctx added (ADR 0041 decision 1):
+// ports.CodeHosts. The built-in ones are listed too.
+type Hosts interface {
+	CodeHosts(ctx context.Context) ([]domain.CodeHost, error)
+}
+
+// Listings name the factories that list a knowledge source: the current, unarchived factories
+// of the organization in ctx whose spec.knowledge names it (definitions.Cache).
+type Listings interface {
+	FactoriesListing(ctx context.Context, source string) []domain.FactoryID
 }
 
 // Defaults of the ingestion loop.
@@ -43,11 +59,17 @@ const (
 // sync into, written first in TempDir ("" is the system's); nil writes none, and repository and
 // Confluence sources then fail. Converter turns what is neither text nor HTML into Markdown; nil
 // refuses it. Keep is how long a replaced snapshot stays (ADR 0038 decision 3): the longest a
-// claim that may have pinned it can last; 0 deletes none.
+// claim that may have pinned it can last; 0 deletes none. Hosts are the organizations' code
+// hosts: a source gitdocs reads with a secret syncs only from a listed host (nil lists the
+// built-in ones only). Listings name the factories that list each source: a source's secret
+// opens only when each of them is in its scope (nil lists none, so only a secret open to all
+// opens).
 type IngestorConfig struct {
 	Knowledge   ports.Knowledge
 	Connections Connections
 	Secrets     Secrets
+	Hosts       Hosts
+	Listings    Listings
 	Uploads     ports.SourceReader
 	Readers     map[string]ports.SourceReader
 	Objects     ports.ObjectStore
@@ -369,9 +391,8 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 	return spec, reader, nil
 }
 
-// secretReader opens the secret spec's source reads with, now, without a factory (audited as
-// secret.used), so a value replaced since is the one read, and picks the reader name. A secret
-// open to some factories only does not open.
+// secretReader opens the secret spec's source reads with, now (audited as secret.used, for the
+// factory secretUse names), so a value replaced since is the one read, and picks the reader name.
 func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name string) (domain.SyncSpec, ports.SourceReader, error) {
 	src := spec.Source
 
@@ -384,11 +405,21 @@ func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name
 		return spec, nil, fmt.Errorf("source %s names reader %q, which this goald cannot read", src.Name, name)
 	}
 
-	opened, err := in.cfg.Secrets.Resolve(ctx, []string{src.Secret}, domain.SecretUse{})
-	if errors.Is(err, ports.ErrSecretNotAllowed) {
-		return spec, nil, fmt.Errorf("secret %s is open to some factories only; a knowledge source reads with a secret open to all: %w", src.Secret, err)
+	if name == kindReaders[domain.SourceRepository] {
+		listed, err := in.listedRepository(ctx, src)
+		if err != nil {
+			return spec, nil, err
+		}
+
+		spec.Source = listed
 	}
 
+	use, err := in.secretUse(ctx, src)
+	if err != nil {
+		return spec, nil, err
+	}
+
+	opened, err := in.cfg.Secrets.Resolve(ctx, []string{src.Secret}, use)
 	if err != nil {
 		return spec, nil, fmt.Errorf("secret %s: %w", src.Secret, err)
 	}
@@ -396,6 +427,75 @@ func (in *Ingestor) secretReader(ctx context.Context, spec domain.SyncSpec, name
 	spec.Secret = &opened[0]
 
 	return spec, reader, nil
+}
+
+// secretUse is what src's secret is opened for (ADR 0041 decision 16): no factory when the
+// secret is open to all; else the first of the factories listing src, when every one of them is
+// in its scope. A secret open to some factories only refuses a source a factory outside its scope
+// lists, naming the factory, and a source no factory lists.
+func (in *Ingestor) secretUse(ctx context.Context, src domain.KnowledgeSource) (domain.SecretUse, error) {
+	secret, err := in.cfg.Secrets.Get(ctx, src.Secret)
+	if err != nil {
+		return domain.SecretUse{}, fmt.Errorf("secret %s: %w", src.Secret, err)
+	}
+
+	if secret.Scope.All {
+		return domain.SecretUse{}, nil
+	}
+
+	var listing []domain.FactoryID
+	if in.cfg.Listings != nil {
+		listing = in.cfg.Listings.FactoriesListing(ctx, src.Name)
+	}
+
+	if len(listing) == 0 {
+		return domain.SecretUse{}, fmt.Errorf("secret %s is open to some factories only, and no factory lists source %s; "+
+			"a source no factory lists reads with a secret open to all: %w", src.Secret, src.Name, ports.ErrSecretNotAllowed)
+	}
+
+	for _, f := range listing {
+		if !secret.Scope.Allows(f) {
+			return domain.SecretUse{}, fmt.Errorf("secret %s is not open to factory %s, which lists source %s: %w",
+				src.Secret, f, src.Name, ports.ErrSecretNotAllowed)
+		}
+	}
+
+	return domain.SecretUse{Factory: listing[0]}, nil
+}
+
+// listedRepository is src, a source gitdocs reads with a secret, with its code host's kind set
+// to the one its repository's host is listed as among the organization's code hosts (ADR 0041
+// decision 1): the listed kind wins over the config's. A host the organization doesn't list is
+// refused before the secret is opened, so the secret goes to no host nobody listed.
+func (in *Ingestor) listedRepository(ctx context.Context, src domain.KnowledgeSource) (domain.KnowledgeSource, error) {
+	u, err := url.Parse(strings.TrimSpace(src.Config[domain.SourceRepositoryKey]))
+	if err != nil || u.Host == "" {
+		return src, fmt.Errorf("source %s: the config names no repository URL: %w", src.Name, domain.ErrInvalid)
+	}
+
+	hosts := domain.BuiltInCodeHosts()
+
+	if in.cfg.Hosts != nil {
+		added, err := in.cfg.Hosts.CodeHosts(ctx)
+		if err != nil {
+			return src, fmt.Errorf("source %s: list code hosts: %w", src.Name, err)
+		}
+
+		hosts = append(hosts, added...)
+	}
+
+	host := strings.ToLower(u.Host)
+
+	listed, ok := domain.ListedCodeHost(hosts, host)
+	if !ok {
+		return src, fmt.Errorf("source %s: %s is not one of the organization's code hosts, so goald sends it no secret; "+
+			"an owner can add it under Code hosts in the organization's settings: %w", src.Name, host, domain.ErrInvalid)
+	}
+
+	src.Config = maps.Clone(src.Config)
+	src.Config[domain.SourceCodeHostKey] = string(listed.Kind)
+
+	return src, nil
 }
 
 // errFetch marks a document its source could not hand over.

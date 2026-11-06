@@ -782,12 +782,16 @@ func tryRequest(line domain.Line, try domain.PastTry, orig domain.Run) (domain.R
 	rt := line.Runtime
 
 	a, ok := line.Agent(orig.Agent)
+	row, recorded := orig.Input.TryRepository()
+	repo, has := line.TryRepository(row)
 
 	switch {
-	case orig.Input.BranchHead == "":
+	case !recorded:
 		return domain.RunRequest{}, fmt.Sprintf("run %s recorded no commit", orig.ID)
 	case rt.Repository.URL == "":
 		return domain.RunRequest{}, "the factory has no repository to try in"
+	case !has:
+		return domain.RunRequest{}, fmt.Sprintf("the factory has no repository %s to try in", row.Repo)
 	case !ok || !line.TriableAgent(orig.Agent):
 		return domain.RunRequest{}, fmt.Sprintf("agent %s can't be tried: it needs MCP servers or secrets", orig.Agent)
 	}
@@ -799,8 +803,8 @@ func tryRequest(line domain.Line, try domain.PastTry, orig domain.Run) (domain.R
 
 	req := domain.RunRequest{
 		FactoryID: try.FactoryID, Version: line.VersionID, Kind: domain.RunKindTry, Station: try.Station,
-		Agent: a.Name, Model: try.Model, Bundle: domain.TaskKindTry, TryOf: try.ID, Commit: orig.Input.BranchHead,
-		Repository: rt.Repository, ModelConnection: rt.ModelConnection, Size: rt.Size, Checks: st.Checks,
+		Agent: a.Name, Model: try.Model, Bundle: domain.TaskKindTry, TryOf: try.ID, Commit: row.BranchHead,
+		Repository: repo, ModelConnection: rt.ModelConnection, Size: rt.Size, Checks: st.Checks,
 	}
 
 	if line.OnSecrets() { // the model key alone (ADR 0037 decision 7)

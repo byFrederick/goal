@@ -11,7 +11,7 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, submitItem } from '../api/client';
-import { factoriesQuery } from '../api/queries';
+import { factoriesQuery, versionModelQuery } from '../api/queries';
 import type { Factory, OrgSummary } from '../api/types';
 import { TooltipProvider } from '../ui/tooltip';
 import { NewItemFromSidebar } from './new-item';
@@ -274,5 +274,126 @@ describe('the Start control', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toBe('start is more than 365 days ahead');
     expect(screen.getByLabelText('Date').getAttribute('aria-invalid')).toBe('true');
+  });
+});
+
+describe('New item’s Repositories field', () => {
+  const created = { ref: 'goal#9', station: 'intake', start: undefined };
+  const entry = (name: string, url: string, extra: Record<string, unknown> = {}) => ({
+    name,
+    url,
+    access: 'read',
+    ...extra,
+  });
+  const one = [entry('api', 'https://github.com/acme/api', { default: true })];
+  const several = [
+    entry('api', 'https://github.com/acme/api', { default: true }),
+    entry('web', 'https://github.com/acme/web'),
+    entry('mono', 'https://github.com/acme/*'),
+  ];
+
+  async function openOnGoal(repositories: unknown[] | undefined, extra: Partial<Factory> = {}) {
+    vi.mocked(submitItem).mockReset();
+    const goal = factory('goal', { can: ['item:create'], title: 'Goal', current: { id: 'v1' } as never, ...extra });
+    const { client } = renderPicker([goal]);
+    client.setQueryData(versionModelQuery('org-1', 'goal-id', 'current').queryKey, {
+      model: { basics: { repositories } } as never,
+      ranges: {},
+    });
+    fireEvent.click(await newItemButton());
+    fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Factory' }), { key: 'Enter' });
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'goal' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Check the budget' } });
+  }
+  const field = () => screen.findByRole('group', { name: /Repositories/ });
+  const add = async (value: string) => {
+    fireEvent.click(within(await field()).getByRole('button', { name: 'Add' }));
+    const box = await screen.findByRole('combobox', { name: 'Repository' });
+    fireEvent.change(box, { target: { value } });
+    return box;
+  };
+
+  it('has no field for a factory without repositories', async () => {
+    await openOnGoal(undefined);
+    await screen.findByRole('textbox', { name: 'Title' });
+    expect(screen.queryByRole('group', { name: /Repositories/ })).toBeNull();
+  });
+
+  it('starts with the default entry as a chip, explains itself in the tooltip and lists the other entries', async () => {
+    await openOnGoal(several);
+    const group = await field();
+    expect(within(group).getByText('acme/api')).toBeTruthy();
+    expect(within(group).getByRole('button', { name: 'Remove acme/api' })).toBeTruthy();
+    expect(within(group).getByRole('button', { name: 'About Repositories' })).toBeTruthy();
+
+    await add('');
+    const options = within(screen.getByRole('listbox', { name: 'Repositories' })).getAllByRole('option');
+    expect(options.map((o) => o.textContent)).toEqual(['acme/web']);
+  });
+
+  it('takes a typed owner/name under an owner-wide entry, and nothing else', async () => {
+    await openOnGoal(several);
+    const box = await add('other/thing');
+    expect(screen.queryByRole('option')).toBeNull();
+    fireEvent.change(box, { target: { value: 'acme/docs' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(within(await field()).getByText('acme/docs')).toBeTruthy();
+  });
+
+  it('sends the picks in order as repositories', async () => {
+    await openOnGoal(several);
+    vi.mocked(submitItem).mockResolvedValue(created as never);
+    const box = await add('acme/web');
+    fireEvent.keyDown(box, { key: 'ArrowDown' });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(within(screen.getByRole('group', { name: /Repositories/ })).getByText('acme/web')));
+    fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
+
+    await waitFor(() => expect(submitItem).toHaveBeenCalled());
+    expect(vi.mocked(submitItem).mock.calls[0]?.[2]).toEqual({
+      title: 'Check the budget',
+      repositories: ['acme/api', 'acme/web'],
+    });
+  });
+
+  it('leaves repositories out when every chip is removed', async () => {
+    await openOnGoal(one);
+    vi.mocked(submitItem).mockResolvedValue(created as never);
+    fireEvent.click(within(await field()).getByRole('button', { name: 'Remove acme/api' }));
+    await waitFor(() => expect(screen.queryByText('acme/api')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
+
+    await waitFor(() => expect(submitItem).toHaveBeenCalled());
+    expect(vi.mocked(submitItem).mock.calls[0]?.[2]).toEqual({ title: 'Check the budget' });
+  });
+
+  it('stops at 10 picks', async () => {
+    const many = Array.from({ length: 11 }, (_, i) =>
+      entry(`r${i}`, `https://github.com/acme/r${i}`, i === 0 ? { default: true } : {}),
+    );
+    await openOnGoal(many);
+    for (let i = 1; i < 10; i += 1) {
+      const box = await add(`acme/r${i}`);
+      fireEvent.keyDown(box, { key: 'Enter' });
+      await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Repository' })).toBeNull());
+    }
+    expect(within(await field()).queryByRole('button', { name: 'Add' })).toBeNull();
+    expect(within(await field()).getAllByRole('button', { name: /^Remove/ })).toHaveLength(10);
+  });
+
+  it('shows goald’s refusal of a repository on the field', async () => {
+    await openOnGoal(one);
+    vi.mocked(submitItem).mockRejectedValue(
+      new ApiError({ title: 'Bad request', status: 400, detail: 'repository "acme/api" matches no entry' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Create item' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe('repository "acme/api" matches no entry');
+    expect(
+      within(await field())
+        .getByText('acme/api')
+        .closest('[aria-invalid]'),
+    ).toBeTruthy();
   });
 });

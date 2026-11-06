@@ -504,6 +504,52 @@ paths:
       responses:
         "204": { description: Cleared }
         default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/code-hosts:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+    get:
+      operationId: getCodeHosts
+      x-goal-scope: org:read
+      tags: [orgs]
+      summary: The code hosts the organization's repository tokens and knowledge secrets may go to
+      description: >-
+        The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in
+        and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners
+        added, sorted by host. Each host comes with the API base goald derives for it.
+      responses:
+        "200":
+          description: The code hosts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CodeHosts" }
+        default: { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setCodeHosts
+      x-goal-scope: org:code_hosts
+      tags: [orgs]
+      summary: Replace the organization's added code hosts
+      description: >-
+        Replaces the hosts the organization added with hosts: a host not in the list is removed,
+        and a host already added takes the kind sent. Only an owner may set them, with a sign-in
+        from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable
+        from the internet, because goald dials public addresses only (ADR 0009): an IP address,
+        localhost, a single-label name or a name under .local, .internal or .localhost is 400
+        code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts.
+        github.com and gitlab.com are always listed and never sent: either is 400
+        code-host-built-in. Audited as org.code_hosts_set with the hosts before and after;
+        sending the hosts already stored changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CodeHostsInput" }
+      responses:
+        "200":
+          description: The code hosts now listed, the built-in ones first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CodeHosts" }
+        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/settings/notifications:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -2039,9 +2085,12 @@ paths:
         With start, the item waits at the first station until it may start (ADR 0040): its at has
         passed and its after items are done. in becomes at when the item is filed, and each open
         after item becomes a linked dependency by the caller; a done one is met and left out.
-        Problems: 400 for what the line does not take, a start with both at and in, a bad time or
-        wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of
-        another factory.
+        repositories name the repositories it works on (ADR 0041 decision 4); none gives it the
+        factory's default entry's. Problems: 400 for what the line does not take, a start with
+        both at and in, a bad time or wait, a start more than 365 days ahead, an after item that
+        is cancelled, unknown or of another factory, a repository that matches none of the
+        factory's runtime.repositories entries, names an owner's entry or is on more than one of
+        its hosts (each problem quotes the value given), or more than 10 repositories.
       requestBody:
         required: true
         content:
@@ -2900,11 +2949,14 @@ paths:
       summary: Test an environment's MCP servers or a template
       description: >-
         Tests the environment of the draft (of the current version while no draft is open), or of
-        the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list,
-        its headers' {{secret}} references opened inside goald for the factory (audited as
-        secret.used without a run), through public addresses only, following no redirect, within
-        10 seconds; stdio servers answer tested false. With template, the template's remote MCP
-        servers and HTTP test run instead, with the secrets the body puts in its slots and its
+        the version the body names (draft, current or a number). Each MCP server, or only the one
+        server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}}
+        references opened inside goald for the factory (audited as secret.used without a run): a
+        remote one through public addresses only, following no redirect; a stdio one started in
+        goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only
+        when its command is exactly one the tool catalog ships and every URL in its env is on a
+        code host the organization lists; any other answers tested false with why, and nothing is
+        opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its
         plain env values changed by env. Each server's result is kept per factory, environment
         and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an
         error; its error is scrubbed of every value the test opened. 404 environment-not-found,
@@ -2921,39 +2973,63 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EnvironmentTestResult" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/repositories/test:
+  /v1/orgs/{org}/factories/{factory}/repositories/test:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
     post:
-      operationId: testRepository
-      x-goal-scope: factory:create
+      operationId: testFactoryRepository
+      x-goal-scope: definition:edit
       tags: [access]
-      summary: Test a token's read and push access to a repository
+      summary: Test a token against a repository or an owner's repositories, for a factory
       description: >-
-        Tests, before any factory exists, whether the token in the named secret can read the
-        repository at url and push to it, through the code host's API (github.com: GET
-        /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its
-        access level, Developer or more pushes), never git. The secret is opened inside goald
-        without a factory (audited as secret.used), so it must be open to all factories. Each
-        check answers ok with a one-line reason from the host; a check that fails is an answer,
-        not an error. For a classic GitHub token, permissions.push reflects the account's role,
-        not the token's scopes, so push ok can be optimistic; a fine-grained token answers its
-        own grant. A host that gives no answer within 10 seconds answers tested false with
-        "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found;
-        400 repository-host-unknown for a host other than github.com and gitlab.com,
-        repository-url-invalid for a URL that names no repository, and secret-not-allowed for a
-        secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+        Tests what the token in the named secret can do at url, one repository or an owner pattern
+        ending in /* (every repository of an account, organization or GitLab group), through the
+        code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8).
+        The url's host must be one of the organization's code hosts. The secret is opened inside
+        goald for the factory (audited as secret.used), as the environment test does. For a read
+        entry the summary is "Can read", or for an owner pattern how many repositories the token
+        can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit);
+        when the token can also push, warning says "Goal won't push, but agents could. Use a
+        read-only token." For a write entry the summary is "Can read and push", and note says the
+        host reports no pull-request permission, so Goal can't check it. A check that fails is an
+        answer, not an error. A host that gives no answer within 10 seconds answers tested false
+        with "couldn't test". The result replaces the factory's kept one for the same url, and is
+        tested again whenever the secret's value is replaced. No answer, reason or problem
+        carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown
+        for a host the organization doesn't list and repository-url-invalid for a URL that names
+        no repository or owner, both before the secret is opened, and secret-not-allowed for a
+        secret not open to this factory; 503 secrets-unavailable while goald has no master key.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/RepositoryTestRequest" }
+            schema: { $ref: "#/components/schemas/FactoryRepositoryTestRequest" }
       responses:
         "200":
-          description: The results
+          description: The result, as kept
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/RepositoryTestResult" }
+              schema: { $ref: "#/components/schemas/FactoryRepositoryTest" }
+        default: { $ref: "#/components/responses/Problem" }
+  /v1/orgs/{org}/factories/{factory}/repositories/tests:
+    parameters:
+      - $ref: "#/components/parameters/OrgRef"
+      - $ref: "#/components/parameters/FactoryRef"
+    get:
+      operationId: listFactoryRepositoryTests
+      x-goal-scope: factory:read
+      tags: [access]
+      summary: List a factory's kept repository tests
+      description: >-
+        The latest result of each url tested for the factory, sorted by url, as testFactoryRepository
+        answered it. Reading them tests nothing. 404 factory-not-found.
+      responses:
+        "200":
+          description: The kept results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactoryRepositoryTestList" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/factories/{factory}/webhooks:
     parameters:
@@ -5849,6 +5925,46 @@ components:
         join_role:
           description: The factory role people who join get; viewer when absent
           allOf: [{ $ref: "#/components/schemas/FactoryRole" }]
+    CodeHostKind:
+      type: string
+      enum: [github, gitlab]
+      description: The API the host speaks, GitHub's or GitLab's
+    CodeHost:
+      type: object
+      required: [host, kind, api_base, built_in]
+      properties:
+        host: { type: string, description: "A DNS name in lower case, such as ghe.example.com" }
+        kind: { $ref: "#/components/schemas/CodeHostKind" }
+        api_base:
+          type: string
+          description: >-
+            The REST API root goald derives: for GitHub, https://api.github.com for github.com,
+            https://api.<name>.ghe.com for <name>.ghe.com and https://<host>/api/v3 for any other
+            host; for GitLab, https://<host>/api/v4
+        built_in: { type: boolean, description: "true for github.com and gitlab.com, which every organization lists" }
+    CodeHosts:
+      type: object
+      required: [hosts]
+      properties:
+        hosts:
+          type: array
+          description: The built-in hosts first, then the added ones sorted by host
+          items: { $ref: "#/components/schemas/CodeHost" }
+    CodeHostInput:
+      type: object
+      required: [host, kind]
+      properties:
+        host: { type: string, minLength: 1, maxLength: 253, description: "A DNS name such as ghe.example.com; case is ignored" }
+        kind: { $ref: "#/components/schemas/CodeHostKind" }
+    CodeHostsInput:
+      type: object
+      required: [hosts]
+      properties:
+        hosts:
+          type: array
+          maxItems: 20
+          description: Every host the organization adds, without github.com and gitlab.com; empty removes them all
+          items: { $ref: "#/components/schemas/CodeHostInput" }
     OrgSlots:
       type: object
       description: >-
@@ -6138,6 +6254,30 @@ components:
         start:
           description: When the item may start; absent, as soon as it can
           allOf: [{ $ref: "#/components/schemas/Start" }]
+        repositories:
+          type: array
+          maxItems: 10
+          description: >-
+            The repositories the item works on, in order, the first being its first repository
+            (ADR 0041 decision 4). Each is a runtime.repositories entry's name, owner/name (or
+            group/sub/name) under one of the entries' hosts, host/owner/name or an https URL, that
+            an entry covers. Values naming the same repository count once. Absent or empty, the
+            factory's default entry's, or none without a default entry
+          items: { type: string, minLength: 1 }
+    ItemRepository:
+      type: object
+      description: One repository of an item and how it joined it (ADR 0041 decision 4)
+      required: [repo, joined]
+      properties:
+        repo: { type: string, description: "The repository's normalized host/owner/name in lower case, as in github.com/acme/api" }
+        joined:
+          type: string
+          enum: [filing, default, push, output]
+          description: "How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it"
+        joined_at:
+          type: string
+          format: date-time
+          description: When it joined; absent for an older item's default entry, resolved when it is read
     Start:
       type: object
       description: >-
@@ -6419,6 +6559,16 @@ components:
             0031); getItem and decideToolApproval only, absent or null when there is none
           nullable: true
           allOf: [{ $ref: "#/components/schemas/ToolApproval" }]
+        branch: { type: string, description: "The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it" }
+        repositories:
+          type: array
+          description: >-
+            The repositories the item works on, in the order they joined, the first being its
+            first repository (ADR 0041 decision 4); submitItem and getItem only (ItemCard has
+            them too). An item filed
+            before repositories shows the factory's default entry's, and an item of a factory
+            without code none
+          items: { $ref: "#/components/schemas/ItemRepository" }
     ToolApproval:
       type: object
       description: >-
@@ -6993,7 +7143,7 @@ components:
     ItemCard:
       type: object
       description: An item as boards and lists show it
-      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, pull_requests, slot, turn, summary, in_buffer, rope_held, touch_count]
+      required: [id, ref, number, title, type, station, state, class_of_service, rework_count, cost_usd, created_at, updated_at, age_seconds, agent, pr_url, pull_requests, slot, turn, summary, in_buffer, rope_held, touch_count, repositories]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>, as in goal#2" }
@@ -7059,6 +7209,14 @@ components:
         touch_count:
           type: integer
           description: The item's human touches so far
+        repositories:
+          type: array
+          description: >-
+            As Item's repositories: the repositories the item works on, in the order they joined,
+            the first being its first repository (ADR 0041 decision 4). An item filed before
+            repositories shows the factory's default entry's, and an item of a factory without
+            code an empty array
+          items: { $ref: "#/components/schemas/ItemRepository" }
         board_lane:
           type: string
           nullable: true
@@ -9947,7 +10105,7 @@ components:
           items: { $ref: "#/components/schemas/TemplateSummary" }
     TemplateSummary:
       type: object
-      required: [name, version, title, summary, stations, agents, connectors, changed]
+      required: [name, version, title, summary, stations, agents, connectors, changed, code]
       properties:
         name: { type: string }
         version: { type: integer }
@@ -9959,6 +10117,11 @@ components:
           type: array
           items: { type: string }
         changed: { type: string, description: 'The day the version was made, as in 2026-10-09' }
+        code: { $ref: "#/components/schemas/TemplateCode" }
+    TemplateCode:
+      type: string
+      enum: [none, read, write]
+      description: The code access a template needs; write when its line has a station that merges.
     Template:
       allOf:
         - $ref: "#/components/schemas/TemplateSummary"
@@ -10792,10 +10955,33 @@ components:
           type: array
           description: Its secret slots, in order
           items: { $ref: "#/components/schemas/TemplateSecret" }
+        parameters:
+          type: array
+          description: "Its non-secret parameters, in order. adds and test are the lines for every parameter's default; they never refer to a parameter"
+          items: { $ref: "#/components/schemas/TemplateParameter" }
         adds: { $ref: "#/components/schemas/TemplateAdds" }
         test:
           allOf: [{ $ref: "#/components/schemas/TemplateTest" }]
           nullable: true
+    TemplateParameter:
+      type: object
+      description: "A non-secret value a template takes, such as a host; otherwise's lines may refer to it as {{name}}"
+      required: [name, title, description, default]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        description: { type: string }
+        default: { type: string }
+        otherwise: { $ref: "#/components/schemas/TemplateOtherwise" }
+    TemplateOtherwise:
+      type: object
+      description: "The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field"
+      properties:
+        tools: { type: array, items: { type: string } }
+        env: { type: object, additionalProperties: { type: string } }
+        files: { type: object, additionalProperties: { type: string } }
+        mcp: { type: object, additionalProperties: { $ref: "#/components/schemas/TemplateMCP" } }
+        test: { $ref: "#/components/schemas/TemplateTest" }
     TemplateSecret:
       type: object
       required: [slot, title, description, suggest]
@@ -10857,19 +11043,49 @@ components:
           type: object
           description: The template's plain env values to use instead of its own, by name
           additionalProperties: { type: string }
-    RepositoryTestRequest:
+        parameters:
+          type: object
+          description: "The template's parameters' values, by name: a host name with an optional :port. A parameter without one takes its default"
+          additionalProperties: { type: string }
+    FactoryRepositoryTestRequest:
       type: object
-      required: [url, secret]
+      required: [url, secret, access]
       properties:
-        url: { type: string, description: "The repository's https URL, such as https://github.com/acme/app" }
+        url:
+          type: string
+          description: "One repository's https URL, such as https://github.com/acme/app, or an owner pattern, such as https://github.com/acme/*"
         secret: { $ref: "#/components/schemas/SecretName" }
-    RepositoryTestResult:
+        access:
+          type: string
+          enum: [read, write]
+          description: The access the factory's entry asks for, which picks the summary and the warning
+    FactoryRepositoryTestList:
       type: object
-      required: [tested, read, push]
+      required: [tests]
       properties:
-        tested: { type: boolean, description: "false when the host gave no answer within 10 seconds: read and push then say couldn't test" }
+        tests:
+          type: array
+          items: { $ref: "#/components/schemas/FactoryRepositoryTest" }
+    FactoryRepositoryTest:
+      type: object
+      required: [url, access, secret, at, tested, ok, summary, read, push]
+      properties:
+        url:
+          type: string
+          description: "The repository tested, as its lower-case host/owner/name, or host/owner/* for an owner pattern"
+        access: { type: string, enum: [read, write] }
+        secret: { $ref: "#/components/schemas/SecretName" }
+        at: { type: string, format: date-time, description: When it was tested }
+        tested: { type: boolean, description: "false when the host gave no answer: summary then starts with couldn't test" }
+        ok: { type: boolean, description: "Whether the token can do what access asks: read, or read and push" }
+        summary: { type: string, description: "One line, such as Can read, Can read 48 repositories in acme or Can read and push" }
+        warning: { type: string, description: "For a read entry whose token can also push: Goal won't push, but agents could. Use a read-only token." }
+        note: { type: string, description: "For a write entry: the host reports no pull-request permission, so Goal can't check it" }
         read: { $ref: "#/components/schemas/RepositoryCheck" }
         push: { $ref: "#/components/schemas/RepositoryCheck" }
+        readable: { type: integer, description: "For an owner pattern: how many of the owner's repositories the token can read" }
+        pushable: { type: integer, description: "For an owner pattern: how many of them it can push to" }
+        truncated: { type: boolean, description: "For an owner pattern: the count stopped at 1000, so there may be more" }
     NotificationSettings:
       type: object
       required: [slack_secret]
@@ -10920,7 +11136,7 @@ components:
       required: [server, tested, ok, tools]
       properties:
         server: { type: string }
-        tested: { type: boolean, description: "False for a stdio server, which goald does not start" }
+        tested: { type: boolean, description: "False for a stdio server goald does not start: its command is not one the tool catalog ships, or a URL in its env is not on a listed code host; error says which" }
         ok: { type: boolean }
         tools: { type: array, items: { type: string }, description: The tool names tools/list answered, sorted }
         error: { type: string, description: Why it failed, without a secret value }
@@ -11255,8 +11471,9 @@ components:
           type: object
           description: >-
             What its reader reads. A synced source names its reader (reader: gitdocs or
-            confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or
-            on the host code_host names: github or gitlab), branch, include and exclude;
+            confluence): gitdocs reads repository (its https URL on one of the organization's
+            code hosts; a sync on any other host fails before the secret is opened, and the kind
+            the host is listed as replaces code_host), branch, include and exclude;
             confluence reads site, email and spaces (space keys separated by commas), and the
             optional root_page (a page id: only that page and the pages under it).
           additionalProperties: { type: string }
