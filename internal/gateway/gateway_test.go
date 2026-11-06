@@ -149,10 +149,9 @@ type harness struct {
 	url   string
 	gw    *Gateway
 	store *porttest.Store
-	// org is the organization of the tasks; connections hold its connections (bundle_test.go).
-	org         domain.OrgID
-	connections *porttest.Connections
-	// rules are the standing rules of connections' data.
+	// org is the organization of the tasks, with its secrets (newOrg, bundle_test.go).
+	org domain.OrgID
+	// rules are the organization's standing rules.
 	rules *porttest.StandingRules
 	clock *porttest.Clock
 	key   []byte
@@ -258,8 +257,8 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		store: porttest.NewStore(), clock: porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)), key: []byte("gateway-test-key"),
 		questions: &fakeQuestions{}, approvals: &fakeToolApprovals{}, logs: &syncBuffer{},
 	}
-	org, conns, tenancy := newConnections(t, h.clock)
-	h.org, h.connections, h.rules = org, conns, porttest.NewStandingRules(conns)
+	org, tenancy := newOrg(t, h.clock)
+	h.org, h.rules = org, porttest.NewStandingRules(tenancy)
 	h.drafts = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: porttest.NewObjectStore(), Now: h.clock.Now})
 	h.requests = porttest.NewDraftRequests(porttest.NewTenancy(h.clock.Now), h.clock.Now)
 
@@ -297,7 +296,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	)
 
 	if d.knowledge {
-		h.kb, h.objects = porttest.NewKnowledge(h.connections, tenancy), porttest.NewObjectStore()
+		h.kb, h.objects = porttest.NewKnowledge(tenancy), porttest.NewObjectStore()
 		kb, objects = h.kb, h.objects
 	}
 
@@ -661,10 +660,10 @@ func TestNew_RequiresPolicies(t *testing.T) {
 
 	clock := porttest.NewClock(time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC))
 	store := porttest.NewStore()
-	_, conns, _ := newConnections(t, clock)
+	_, tenancy := newOrg(t, clock)
 
 	_, err := New(Deps{
-		Definitions: definitions{}, Items: store, StandingRules: porttest.NewStandingRules(conns), Events: store,
+		Definitions: definitions{}, Items: store, StandingRules: porttest.NewStandingRules(tenancy), Events: store,
 		Clock: clock, Questions: &fakeQuestions{}, ToolApprovals: &fakeToolApprovals{},
 	}, Config{Key: []byte("gateway-test-key")})
 	if err == nil || !strings.Contains(err.Error(), "Policies") {

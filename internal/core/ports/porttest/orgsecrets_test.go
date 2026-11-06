@@ -27,8 +27,8 @@ func TestSecrets_Conformance(t *testing.T) {
 		var orgs atomic.Int64
 
 		return secrettest.Harness{
-			Secrets:     func(key ports.MasterKey) ports.OrgSecrets { return secrets.WithKey(key) },
-			Key:         keys.Key,
+			Secrets: func(key ports.MasterKey) ports.OrgSecrets { return secrets.WithKey(key) },
+			Key:     keys.Key,
 			CopySealed: func(t *testing.T, fromOrg domain.OrgID, from string, toOrg domain.OrgID, to string) {
 				t.Helper()
 

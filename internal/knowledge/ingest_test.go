@@ -1159,4 +1159,3 @@ func TestIngest_SyncOpensTheSecretForTheFactoriesListingIt(t *testing.T) {
 
 	w.want("the audited uses", secrets.uses, secrets.uses[alphaBeta].Factory == beta, secrets.uses[docsToken] == domain.SecretUse{})
 }
-

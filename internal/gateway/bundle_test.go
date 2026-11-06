@@ -24,48 +24,18 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
 )
 
-// The secret values of the harness's connections, which no bundle carries.
+// The secret values the harness's organization holds, which no bundle carries.
 const (
-	cloneToken   = "acme-repo-s3cr3t-0123456789"   //nolint:gosec // a fake secret the bundle must not carry
-	issuesToken  = "acme-issues-s3cr3t-0123456789" //nolint:gosec // a fake secret the bundle must not carry
-	modelAPIKey  = "acme-model-s3cr3t-0123456789"  //nolint:gosec // a fake secret the bundle must not carry
-	connTracker  = "issues"
-	connDocs     = "docs"
-	trackerTitle = "Issue tracker"
-	fieldToken   = "token"
-	kindStdio    = "stdio-server"
+	cloneToken  = "acme-repo-s3cr3t-0123456789"   //nolint:gosec // a fake secret the bundle must not carry
+	issuesToken = "acme-issues-s3cr3t-0123456789" //nolint:gosec // a fake secret the bundle must not carry
+	modelAPIKey = "acme-model-s3cr3t-0123456789"  //nolint:gosec // a fake secret the bundle must not carry
+	connTracker = "issues"
+	connDocs    = "docs"
 )
 
-// testKinds are the platform kinds of the harness's connections: a model's access, git over https
-// with an API token, an issue tracker with a CLI and a remote MCP server, and a stdio server.
-func testKinds() []domain.ConnectionKind {
-	token := domain.KindField{Name: fieldToken, Title: "Token", Secret: true, Required: true}
-
-	return []domain.ConnectionKind{
-		{Name: "model-key", Title: "Model key", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{token}, Env: map[string]string{"MODEL_KEY": "{{token}}"}, Model: true,
-		}},
-		{Name: "code-host", Title: "Code host", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{token, {Name: "host", Title: "Host", Default: "github.com"}},
-			Env:    map[string]string{"CODE_TOKEN": "{{token}}"},
-			Git:    &domain.KindGit{Host: "{{host}}", Username: "x-access-token", PasswordEnv: "CODE_TOKEN"},
-		}},
-		{Name: "issue-tracker", Title: trackerTitle, Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{token, {Name: "site", Title: "Site", Required: true}},
-			Env:    map[string]string{"ISSUES_TOKEN": "{{token}}", "ISSUES_SITE": "{{site}}"},
-			CLI:    &domain.KindCLI{Tool: "npm:@acme/issues-cli@2.0.0"},
-			MCP:    &domain.KindMCP{URL: "https://{{site}}/mcp", Headers: map[string]string{"Authorization": "Bearer ${ISSUES_TOKEN}"}},
-			Docs:   "File and read issues with the issues CLI or its MCP tools.",
-		}},
-		{Name: kindStdio, Title: "MCP server", Platform: true, Spec: domain.KindSpec{
-			Fields: []domain.KindField{{Name: "command", Title: "Command"}}, MCP: &domain.KindMCP{Command: []string{"sh", "-c", "{{command}}"}},
-		}},
-	}
-}
-
-// newConnections makes an organization and its connections of testKinds: claude (the model),
-// code (git to github.com), issues, docs (a stdio server) and wiki (a stdio server too).
-func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Connections, *porttest.Tenancy) {
+// newOrg makes the organization acme and its secrets: the model key, the repository token and the
+// issue tracker's token, open to every factory.
+func newOrg(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttest.Tenancy) {
 	t.Helper()
 
 	tenancy := porttest.NewTenancy(clock.Now)
@@ -75,24 +45,16 @@ func newConnections(t *testing.T, clock *porttest.Clock) (domain.OrgID, *porttes
 		t.Fatal(err)
 	}
 
-	c := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
-	if err := c.SyncPlatformKinds(t.Context(), testKinds()); err != nil {
-		t.Fatal(err)
-	}
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 
-	for _, n := range []domain.NewConnection{
-		{Name: "claude", Kind: "model-key", Secrets: map[string]string{fieldToken: modelAPIKey}},
-		{Name: "code", Kind: "code-host", Secrets: map[string]string{fieldToken: cloneToken}},
-		{Name: connTracker, Kind: "issue-tracker", Fields: map[string]string{"site": "issues.example.com"}, Secrets: map[string]string{fieldToken: issuesToken}},
-		{Name: connDocs, Kind: kindStdio, Fields: map[string]string{"command": "npx -y @acme/docs-mcp@1.0.0"}},
-		{Name: "wiki", Kind: kindStdio, Fields: map[string]string{"command": "npx -y @acme/wiki-mcp@1.0.0"}},
-	} {
-		if _, err := c.Create(domain.WithOrg(t.Context(), org.ID), n, domain.LocalUser); err != nil {
+	for name, value := range map[string]string{"model-key": modelAPIKey, "repo-token": cloneToken, "issues-token": issuesToken} {
+		n := domain.NewSecret{Name: name, Value: value, Scope: domain.SecretScope{All: true}}
+		if _, err := secrets.Create(domain.WithOrg(t.Context(), org.ID), n, domain.LocalUser); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	return org.ID, c, tenancy
+	return org.ID, tenancy
 }
 
 // bundleYAML is a factory on connections with a private repository, a contract at the agent's

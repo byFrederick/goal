@@ -15,6 +15,7 @@ import (
 const (
 	cmdSecret      = "secret"
 	importedGitHub = "github"
+	docsSourceName = "docs"
 	secretName     = "acme-token"
 	// secretValue is the value the secret tests store; no output may hold it.
 	secretValue = "sk-acme-secret-value-91c4" //nolint:gosec // a test value, not a secret
@@ -31,22 +32,21 @@ func (g *defGoald) goalIn(t *testing.T, stdin string, args ...string) (string, e
 	return buf.String(), err
 }
 
-// githubConnection creates the connection github whose token refers to the secret acme-token,
-// as one made before ADR 0037 would.
-func (g *defGoald) githubConnection(t *testing.T) {
+// docsSource creates the knowledge source docs, which reads with the secret acme-token.
+func (g *defGoald) docsSource(t *testing.T) {
 	t.Helper()
 
-	n := domain.NewConnection{Name: importedGitHub, Kind: importedGitHub, Secrets: map[string]string{"token": "{{acme-token}}"}} //nolint:gosec // a reference to a test secret, not a value
-	if _, err := g.conns.Create(domain.WithOrg(t.Context(), g.orgID), n, domain.LocalUser); err != nil {
+	n := domain.NewKnowledgeSource{Name: docsSourceName, Title: "Docs", Kind: domain.SourceRepository, Secret: secretName}
+	if _, err := g.kb.CreateSource(domain.WithOrg(t.Context(), g.orgID), n, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// deleteGitHubConnection deletes the connection github.
-func (g *defGoald) deleteGitHubConnection(t *testing.T) {
+// deleteDocsSource deletes the knowledge source docs.
+func (g *defGoald) deleteDocsSource(t *testing.T) {
 	t.Helper()
 
-	if err := g.conns.Delete(domain.WithOrg(t.Context(), g.orgID), importedGitHub, domain.LocalUser); err != nil {
+	if err := g.kb.DeleteSource(domain.WithOrg(t.Context(), g.orgID), docsSourceName, domain.LocalUser, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -207,7 +207,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.githubConnection(t)
+	g.docsSource(t)
 
 	lines := strings.Split(strings.TrimSpace(g.mustGoal(t, cmdSecret, subList)), "\n")
 	if len(lines) != 2 {
@@ -215,7 +215,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 	}
 
 	for i, want := range [][]string{
-		{secretName, "factories all", "used by connection github", "last used never", "expires 2027-03-01"},
+		{secretName, "factories all", "used by knowledge_source docs", "last used never", "expires 2027-03-01"},
 		{"deploy-key", "factories f-1", "used by nothing", "last used never", "expires none"},
 	} {
 		for _, w := range want {
@@ -227,7 +227,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 
 	show := g.mustGoal(t, cmdSecret, subShow, secretName)
 	for _, w := range []string{
-		"acme-token", "source       value", "description  the acme API", "factories    all", "used by      connection github",
+		"acme-token", "source       value", "description  the acme API", "factories    all", "used by      knowledge_source docs",
 		"expires      2027-03-01, reminder 7 days before", "last used    never",
 	} {
 		if !strings.Contains(show, w) {
@@ -251,7 +251,7 @@ func TestSecretCommand_ImportDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.githubConnection(t)
+	g.docsSource(t)
 
 	file := filepath.Join(t.TempDir(), "secrets.env")
 	if err := os.WriteFile(file, []byte("ACME_TOKEN="+secretValue+"\nSENTRY_TOKEN="+secretValue+"-2\n"), 0o600); err != nil {
@@ -259,7 +259,7 @@ func TestSecretCommand_ImportDryRun(t *testing.T) {
 	}
 
 	out := g.mustGoal(t, cmdSecret, verbImport, file, "--dry-run")
-	for _, w := range []string{"exists acme-token (used by connection github)", "new    sentry-token", "dry run: nothing stored"} {
+	for _, w := range []string{"exists acme-token (used by knowledge_source docs)", "new    sentry-token", "dry run: nothing stored"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("dry run = %q; want %q in it", out, w)
 		}
@@ -312,8 +312,8 @@ func TestSecretCommand_ImportUsage(t *testing.T) {
 	}
 }
 
-// goal secret delete of a secret a connection refers to fails and names the connection; once it
-// is free, delete deletes it.
+// goal secret delete of a secret a knowledge source reads with fails and names the source; once
+// it is free, delete deletes it.
 func TestSecretCommand_DeleteInUse(t *testing.T) {
 	t.Parallel()
 
@@ -323,14 +323,14 @@ func TestSecretCommand_DeleteInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.githubConnection(t)
+	g.docsSource(t)
 
 	stdout, stderr, code := g.goalRun(t, "", cmdSecret, verbDelete, secretName)
-	if code != 1 || !strings.Contains(stderr, "secret acme-token is used by connection github") {
-		t.Errorf("delete in use = exit %d, stdout %q, stderr %q; want exit 1 naming connection github", code, stdout, stderr)
+	if code != 1 || !strings.Contains(stderr, "secret acme-token is used by knowledge_source docs") {
+		t.Errorf("delete in use = exit %d, stdout %q, stderr %q; want exit 1 naming knowledge source docs", code, stdout, stderr)
 	}
 
-	g.deleteGitHubConnection(t)
+	g.deleteDocsSource(t)
 
 	if out := g.mustGoal(t, cmdSecret, verbDelete, secretName); !strings.Contains(out, "deleted secret acme-token") {
 		t.Errorf("delete = %q", out)
