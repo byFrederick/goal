@@ -495,7 +495,6 @@ var probes = map[string]probe{
 	"replaceDraftTree":         {method: http.MethodPut, path: acmeDraft + "/tree", body: `{"files":{}}`, org: testOrg, factory: acmeID},
 	"validateDraft":            {method: http.MethodPost, path: acmeDraft + "/validate", body: `{}`, org: testOrg, factory: acmeID},
 	"testEnvironment":          {method: http.MethodPost, path: "/v1/orgs/acme/factories/acme/environments/default/test", body: `{}`, org: testOrg, factory: acmeID},
-	"testRepository":           {method: http.MethodPost, path: "/v1/orgs/acme/repositories/test", body: `{"url":"https://github.com/acme/app","secret":"repo-token"}`, org: testOrg},
 	"testFactoryRepository": {
 		method: http.MethodPost, path: "/v1/orgs/acme/factories/acme/repositories/test", org: testOrg, factory: acmeID,
 		body: `{"url":"https://github.com/acme/app","secret":"repo-token","access":"read"}`,

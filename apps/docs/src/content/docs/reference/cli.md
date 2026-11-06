@@ -501,7 +501,7 @@ Flags: `--server <name>`, `--version draft|current|N`.
 ## goal repository test
 
 ```text
-goal repository test <url> --secret <name> [--factory <factory> [--access read|write]]
+goal repository test <url> --secret <name> --factory <factory> [--access read|write]
 ```
 
 whether the secret's token can read the repository and push to it (github.com and gitlab.com), asked of the code host by goald with the secret opened there (owners and admins; exit 1 when a check fails). --factory tests for the factory, for the access its entry asks (default write), and goald keeps the result (goal factory show lists it); the url may be an owner pattern, https://github.com/acme/\*
