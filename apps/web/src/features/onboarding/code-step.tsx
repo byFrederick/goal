@@ -13,7 +13,7 @@ import { ApiError } from '../../api/client';
 import { getDraftFile, openDraft, putDraftFile } from '../../api/definitions';
 import { defKeys, keys, templatesQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
-import { createSecret, getSecret, patchSecret } from '../../api/secrets';
+import { createSecret } from '../../api/secrets';
 import { sessionHandlers } from '../../api/session';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
 import { Button } from '../../ui/button';
@@ -36,6 +36,7 @@ import {
 import { type OnboardingSearch, repositoryUrl } from './code-search';
 import { codeCard, FactoryCardOf, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout } from './onboarding-layout';
+import { openSecretTo } from './open-secret';
 
 type Scope = 'organization' | 'some';
 
@@ -54,13 +55,6 @@ export function resultText(label: string, r: FactoryRepositoryTest): string {
   if (r.ok) return `${label}: ${r.summary}`;
   const reason = !r.tested ? '' : !r.read.ok ? r.read.reason : r.push.reason;
   return `${label}: ${r.summary}${reason && !r.summary.includes(reason) ? ` ${reason}` : ''}`.trim();
-}
-
-/** Makes the secret open to the factory, keeping its value and every other factory it was open to. */
-async function openSecretTo(org: string, name: string, factory: string): Promise<void> {
-  const secret = await getSecret(org, name);
-  if (secret.scope.all_factories || secret.scope.factories.includes(factory)) return;
-  await patchSecret(org, name, { scope: { all_factories: false, factories: [...secret.scope.factories, factory] } });
 }
 
 /** `search` is the URL's choice (code-search.ts): the route passes it, so the step reads it the same way in a test. */

@@ -26,6 +26,8 @@ goal run <factory> "Add a health check endpoint" --body "Return 200 from /health
 
 The web app can submit an item too. Setup submits the template's starter item at its last step, the First item step. The step names the repository only when you connected code in the Code step; a factory set up with No code shows the item without repository wording.
 
+Agents cannot run without a model key. If the factory has none when the First item step opens, for example because you skipped it in the Line step, the step submits nothing. It says that agents need a model key and shows the same key form as the Line step. **Publish and start** saves the key, publishes it as a new version and then submits the starter item.
+
 ## 2. Watch it move
 
 The item moves through the factory's line: its stations, the agents at each one, and the order they run in all come from the factory's definition. The screens show an example line of Intake, Spec, Build, Review, Done. A factory's own stations may have other names. [Concepts](/docs/concepts/) explains the flow.

@@ -16,6 +16,9 @@ type AttentionItem struct {
 	// BlockedReason is the reason of a blocked item's latest blocked or paused event ("" when it
 	// gave none, or the item is not blocked).
 	BlockedReason string
+	// BlockedCode is the stable code of that event (data.code, such as BlockModelKeyMissing), ""
+	// when it has none.
+	BlockedCode string
 	// Paused reports whether a person paused a blocked item (its latest such event is paused).
 	Paused bool
 }

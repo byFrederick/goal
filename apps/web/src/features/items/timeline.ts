@@ -3,6 +3,7 @@
 // record of each run (GET …/items/{item}/runs), when at hand, is the authority on its status,
 // turns, cost and the definition version it ran on.
 import type { ItemEvent, Run } from '../../api/types';
+import { blockedWords } from '../../shared/blocked-words';
 import { humanize } from '../../shared/format';
 import type { Tone } from '../../shared/item-state';
 
@@ -90,6 +91,8 @@ export interface NoteEntry {
   text: string;
   detail?: string;
   tone: Tone;
+  /** The block's code when its plain sentence is the text and the reason is the detail. */
+  blockedCode?: string;
   /** An agent's question or a person's answer: the row gets the question mark. */
   question?: boolean;
   /** The question is still open: its row says Now. */
@@ -184,8 +187,13 @@ function note(e: ItemEvent): Omit<NoteEntry, 'kind' | 'key' | 'at' | 'station' |
       return { text: `${actor} retried it`, tone: 'run' };
     case 'waiting_human':
       return withReason('Waiting on you', 'you');
-    case 'blocked':
-      return withReason('Blocked', 'rework');
+    case 'blocked': {
+      // A known code says why in plain words; the reason stays as the detail behind the ⓘ.
+      const code = str(e.data.code);
+      const words = blockedWords(code);
+      if (!words || !code) return withReason('Blocked', 'rework');
+      return { ...withReason(words.sentence, 'rework'), blockedCode: code };
+    }
     case 'contract_failed':
       return {
         text: 'Output did not match the station contract',
