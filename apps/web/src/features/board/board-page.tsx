@@ -353,6 +353,7 @@ export function BoardPage() {
     navigate({ search: (prev) => ({ ...prev, ...change }), replace: true, resetScroll: false });
   const selected = board.stations.find((s) => s.id === search.station)?.id ?? firstStation(board);
   const [moving, setMoving] = useState<{ item: ItemCard; to?: string | undefined } | null>(null);
+  const movedId = useRef<string | null>(null);
   const onMove: OnMove = holds(factory, 'item:operate') ? (item, to) => setMoving({ item, to }) : undefined;
   const role = factoryRoleNote(factory.role, factory.name);
   // A phone keeps its filters row behind the top bar's Filter button; from 768 px the top bar holds Pull andon and New item.
@@ -457,7 +458,18 @@ export function BoardPage() {
             if (!open) setMoving(null);
           }}
           initialTo={moving.to}
-          onMoved={(updated) => focusCard(updated.id)}
+          onMoved={(updated) => {
+            movedId.current = updated.id;
+            focusCard(updated.id);
+          }}
+          // Radix would refocus the old card, which left its column; the moved card gets focus
+          // after the dialog has unmounted, whatever the busy submit button held before.
+          onCloseAutoFocus={(event) => {
+            if (!movedId.current) return;
+            event.preventDefault();
+            focusCard(movedId.current);
+            movedId.current = null;
+          }}
         />
       ) : null}
     </>
