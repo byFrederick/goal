@@ -1,0 +1,5 @@
+{"data":{"project":{"jobsEnabled":true,"mergeRequest":{"diffHeadSha":"4b825dc6","headPipeline":
+{"id":"gid://gitlab/Ci::Pipeline/700","name":null,"status":"FAILED","ref":"goal/3-add-x","source":"push","path":"/acme/platform/web/-/pipelines/700","failedJobs":{"nodes":[
+{"name":"lint:optional","allowFailure":true},
+{"name":"e2e 1/12","allowFailure":false},{"name":"e2e 2/12","allowFailure":false},{"name":"e2e 3/12","allowFailure":false},
+{"name":"e2e 4/12","allowFailure":false},{"name":"e2e 5/12","allowFailure":false},{"name":"e2e 6/12","allowFailure":false}]}}}}}}
