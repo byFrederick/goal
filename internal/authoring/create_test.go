@@ -96,7 +96,7 @@ func TestCreateFactory_TemplateErrors(t *testing.T) {
 	}
 }
 
-func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
+func TestCreateFactory_BlankSkeletonHasAWorkStationAndOneAgent(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -111,9 +111,22 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 		t.Fatalf("model: %v", err)
 	}
 
-	if m.Model.Basics["name"] != blankName || len(m.Model.Line) != 0 || len(m.Model.Agents) != 0 {
-		t.Errorf("blank model = %+v", m.Model)
+	if m.Model.Basics["name"] != blankName {
+		t.Errorf("blank basics = %v", m.Model.Basics)
 	}
+
+	agents, _ := m.Model.Agents["agents"].([]any)
+	if len(agents) != 1 {
+		t.Fatalf("blank agents = %v, want one", m.Model.Agents)
+	}
+
+	agent, _ := agents[0].(map[string]any)
+
+	if work := agentStations(m.Model.Line); len(work) != 1 || work[0]["name"] != "Work" || work[0]["agent"] != agent["name"] {
+		t.Errorf("blank line = %v, want one agent station titled Work that runs agent %v", m.Model.Line, agent["name"])
+	}
+
+	h.wantPromptInDraft(t, c.Factory.ID, agent)
 
 	if m.Model.Basics["size"] != nil || m.Model.Basics["image"] != nil || m.Model.Basics["auth"] != nil {
 		t.Errorf("skeleton basics = %v, want no size, which moved to the environment, and none of the removed runtime keys", m.Model.Basics)
@@ -123,6 +136,69 @@ func TestCreateFactory_BlankSkeletonNamesNoStationOrAgent(t *testing.T) {
 
 	if c.Draft.Source.Kind != domain.SourceBlank || c.Draft.Source.Template != "" {
 		t.Errorf("source = %+v", c.Draft.Source)
+	}
+}
+
+// wantPromptInDraft fails unless the agent model's prompt file is in the draft of f.
+func (h *harness) wantPromptInDraft(t *testing.T, f domain.FactoryID, agent map[string]any) {
+	t.Helper()
+
+	prompt, _ := agent["prompt"].(map[string]any)
+	if p, _ := prompt["path"].(string); p == "" || h.draftFile(t, f, strings.TrimPrefix(p, "./")) == "" {
+		t.Errorf("agent %v: its prompt file is not in the draft", agent)
+	}
+}
+
+// agentStations are the line model's stations of kind agent.
+func agentStations(line map[string]any) []map[string]any {
+	stations, _ := line["stations"].([]any)
+
+	var out []map[string]any
+
+	for _, st := range stations {
+		if st, _ := st.(map[string]any); st["kind"] == "agent" {
+			out = append(out, st)
+		}
+	}
+
+	return out
+}
+
+// A blank start publishes as it is created: nothing has to be saved before its first publish.
+func TestCreateFactory_BlankSkeletonPublishesAsCreated(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: blankName, Start: authoring.Start{Kind: authoring.StartBlank}})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	f := c.Factory.ID
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	for _, p := range val.Problems {
+		if p.Severity == domain.SeverityError {
+			t.Errorf("blank draft has error %s: %s", p.Code, p.Message)
+		}
+	}
+
+	v, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+	if err != nil {
+		if invalid, ok := errors.AsType[*authoring.InvalidError](err); ok {
+			t.Fatalf("publish refused: %v", codes(invalid.Problems))
+		}
+
+		t.Fatalf("publish: %v", err)
+	}
+
+	if v.Number != 1 {
+		t.Errorf("published %+v, want v1", v)
 	}
 }
 
