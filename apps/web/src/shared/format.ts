@@ -59,6 +59,27 @@ export function formatHours(h: number): string {
   return formatDuration(h * 3_600_000);
 }
 
+/** CPU time of a run: "42 s" under a minute, "3.1 min" from a minute up; — when the box did not measure it. */
+export function formatCpuSeconds(seconds: number | null): string {
+  if (seconds === null) return '—';
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  return `${Math.round(seconds / 6) / 10} min`;
+}
+
+/** A byte count in binary units: "512 MB", "1.2 GB"; — when the box did not measure it. */
+export function formatBytes(bytes: number | null): string {
+  if (bytes === null) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i++;
+  }
+  const text = i === 0 || value >= 100 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
+  return `${text} ${units[i]}`;
+}
+
 export function formatPercent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatDurationCompact, formatHours, formatUsdCost, ordinal } from './format';
+import {
+  formatBytes,
+  formatCpuSeconds,
+  formatDuration,
+  formatDurationCompact,
+  formatHours,
+  formatUsdCost,
+  ordinal,
+} from './format';
 
 describe('formatHours', () => {
   it('says a duration in hours adaptively, as the Item page does', () => {
@@ -49,5 +57,23 @@ describe('formatUsdCost', () => {
     expect(formatUsdCost(0.0001)).toBe('<$0.01');
     expect(formatUsdCost(0.01)).toBe('$0.01');
     expect(formatUsdCost(2.4)).toBe('$2.40');
+  });
+});
+
+describe('formatCpuSeconds', () => {
+  it('says seconds under a minute, minutes from a minute up, and — for null', () => {
+    expect(formatCpuSeconds(42)).toBe('42 s');
+    expect(formatCpuSeconds(186)).toBe('3.1 min');
+    expect(formatCpuSeconds(60)).toBe('1 min');
+    expect(formatCpuSeconds(null)).toBe('—');
+  });
+});
+
+describe('formatBytes', () => {
+  it('scales by 1024 and shows — for null', () => {
+    expect(formatBytes(512 * 1024 ** 2)).toBe('512 MB');
+    expect(formatBytes(Math.round(1.2 * 1024 ** 3))).toBe('1.2 GB');
+    expect(formatBytes(1024 ** 3)).toBe('1 GB');
+    expect(formatBytes(null)).toBe('—');
   });
 });
