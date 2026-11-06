@@ -2,19 +2,19 @@
 -- Phase 4 (4-16): the knowledge base (spec 4 §4.8, §6). One per organization, made of sources:
 -- uploads (originals in the bucket at orgs/<org-id>/knowledge/<sha256>), synced connections and
 -- live connections (never indexed). A source's documents are split into chunks, each with a
--- keyword index (a simple tsvector, any language) and an embedding (halfvec of 1024 dimensions,
--- HNSW by cosine distance) of the install's one embedding model, which every chunk records. A
--- goald syncs a source under a lease (lease_until), so any instance may sync any source and the
--- lease of one that died ends. Every row is the organization's, under row-level security.
+-- keyword index (a simple tsvector, any language). A goald syncs a source under a lease
+-- (lease_until), so any instance may sync any source and the lease of one that died ends. Every
+-- row is the organization's, under row-level security.
 --
--- The vector type is pgvector's, which goal db init creates as the database's administrator
--- (extensions need one); goal_owner cannot.
+-- Edited after it was applied (2026-11-06, ADR 0038's amendment), against the database rule
+-- "Never edit an applied migration" on purpose: this file used to stop without pgvector's vector
+-- extension, so a fresh install on plain PostgreSQL failed here, before any later file could
+-- fix it. Goose never re-runs an applied file, so no database that ran the old one sees this one.
+-- Where the extension exists, the guarded block below adds what the old file had: each chunk's
+-- embedding (halfvec of 1024 dimensions, HNSW by cosine distance) and its CHECK with embed_model.
+-- Without it, chunks get no embedding. 00098 drops the embeddings either way.
 -- +goose StatementBegin
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
-    RAISE EXCEPTION 'extension vector is missing: run goal db init (on PostgreSQL with pgvector, compose.yaml''s image)'
-      USING ERRCODE = 'feature_not_supported';
-  END IF;
   PERFORM set_config('search_path', quote_ident(current_schema()) || ', pg_temp', true);
 END $$;
 -- +goose StatementEnd
@@ -86,16 +86,31 @@ CREATE TABLE knowledge_chunks (
   heading     text NOT NULL DEFAULT '' CHECK (length(heading) <= 1000),
   text        text NOT NULL CHECK (length(text) <= 8000),
   tsv         tsvector GENERATED ALWAYS AS (to_tsvector('simple', heading || ' ' || text)) STORED,
-  embedding   halfvec(1024),
   embed_model text,
-  CHECK ((embedding IS NULL) = (embed_model IS NULL)),
   -- A chunk belongs to a document of its own source and organization.
   FOREIGN KEY (org_id, source_id, document_id) REFERENCES knowledge_documents (org_id, source_id, id) ON DELETE CASCADE,
   UNIQUE (document_id, ord)
 );
 CREATE INDEX knowledge_chunks_org_source_idx ON knowledge_chunks (org_id, source_id, document_id);
 CREATE INDEX knowledge_chunks_tsv_idx ON knowledge_chunks USING gin (tsv);
-CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks USING hnsw (embedding halfvec_cosine_ops);
+
+-- Only where pgvector's extension exists: the embedding, its CHECK and its index, as the file had
+-- them before its edit. The type and operator class are named in the extension's own schema.
+-- +goose StatementBegin
+DO $$
+DECLARE
+  ext text;
+BEGIN
+  SELECT n.nspname INTO ext FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+  WHERE e.extname = 'vector';
+  IF ext IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE knowledge_chunks ADD COLUMN embedding %I.halfvec(1024), '
+      || 'ADD CHECK ((embedding IS NULL) = (embed_model IS NULL))', ext);
+    EXECUTE format('CREATE INDEX knowledge_chunks_embedding_idx ON knowledge_chunks '
+      || 'USING hnsw (embedding %I.halfvec_cosine_ops)', ext);
+  END IF;
+END $$;
+-- +goose StatementEnd
 
 ALTER TABLE knowledge_sources ENABLE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON knowledge_sources

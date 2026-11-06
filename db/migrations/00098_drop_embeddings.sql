@@ -1,11 +1,16 @@
 -- +goose Up
 -- Knowledge is files (ADR 0038 decision 16): nothing embeds a chunk any more, so the embeddings, the
 -- model each source, document and chunk was embedded with and the HNSW index on them go. The
--- vector extension itself stays: the administrator owns it (goal db init), so no migration can
--- drop it. The chunks and documents stay, with keyword search, until upload sources hold
--- their files without them.
-DROP INDEX knowledge_chunks_embedding_idx;
-ALTER TABLE knowledge_chunks DROP COLUMN embedding, DROP COLUMN embed_model;
+-- vector extension, where a database has it, stays: its administrator owns it, so no migration
+-- can drop it; the administrator does (docs/engineering/cloudflare-operations.md). The chunks and
+-- documents stay, with keyword search, until upload sources hold their files without them.
+--
+-- Edited after it was applied (2026-11-06, ADR 0038's amendment), against the database rule
+-- "Never edit an applied migration" on purpose: 00054 now adds the embedding and its index only
+-- where the extension exists, so both drops below are IF EXISTS. Goose never re-runs an applied
+-- file, and where the extension exists this file does what it did before.
+DROP INDEX IF EXISTS knowledge_chunks_embedding_idx;
+ALTER TABLE knowledge_chunks DROP COLUMN IF EXISTS embedding, DROP COLUMN embed_model;
 ALTER TABLE knowledge_documents DROP COLUMN embed_model;
 ALTER TABLE knowledge_sources DROP COLUMN embed_model;
 
