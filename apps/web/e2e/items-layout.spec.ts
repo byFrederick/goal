@@ -46,9 +46,12 @@ for (const { width, height } of [
       .locator('tbody tr')
       .filter({ has: page.getByRole('link') })
       .first();
-    const link = row.locator('td').nth(2).getByRole('link').first();
-    await expectNoOverlap(link, row.locator('td').nth(3), 'the title link and the Type cell');
-    await expectNoOverlap(link, row.locator('td').nth(4), 'the title link and the Lane cell');
+    // Cells are found by their header's index: a Repositories cell may sit after Title.
+    const headers = await table.locator('thead th').allInnerTexts();
+    const at = (name: string) => headers.findIndex((h) => h.trim().startsWith(name));
+    const link = row.locator('td').nth(at('Title')).getByRole('link').first();
+    await expectNoOverlap(link, row.locator('td').nth(at('Type')), 'the title link and the Type cell');
+    await expectNoOverlap(link, row.locator('td').nth(at('Lane')), 'the title link and the Lane cell');
     const fits = await table.evaluate((t) => {
       const box = t.parentElement as HTMLElement;
       return t.scrollWidth <= box.clientWidth && box.scrollWidth <= box.clientWidth;
