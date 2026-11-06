@@ -111,6 +111,22 @@ describe('the stations table', () => {
     expect(screen.getAllByText('Not limited')).toHaveLength(2);
   });
 
+  it('puts kind, WIP limit, who works and order on a second line with visible labels below the wide breakpoint', async () => {
+    renderLine();
+    const row = (await screen.findByRole('listitem', { name: '2. Build, agent station' })) as HTMLElement;
+    for (const text of ['Kind', 'WIP limit', 'Who works here', 'Order']) {
+      const label = within(row).getByText(text);
+      expect(label.className).toContain('@[940px]:hidden');
+    }
+    const second = within(row).getByText('Kind').parentElement?.parentElement;
+    expect(second?.className).toContain('@[940px]:contents');
+    expect(row.querySelector('[class*="@[940px]:grid-cols"]')).toBeTruthy();
+    expect(within(row).getByRole('group', { name: 'Kind of Build' })).toBeTruthy();
+    expect(within(row).getByRole('textbox', { name: 'WIP limit of Build' })).toBeTruthy();
+    expect(within(row).getByRole('combobox', { name: 'Who works at Build' })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Move Build up' })).toBeTruthy();
+  });
+
   it('keeps each station’s rules behind a collapsed disclosure', async () => {
     renderLine();
     const toggle = await screen.findByRole('button', { name: 'Rules of Build' });
