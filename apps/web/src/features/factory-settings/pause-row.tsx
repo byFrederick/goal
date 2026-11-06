@@ -45,13 +45,14 @@ export function PauseRow({ org, factory }: { org: OrgSummary; factory: Factory }
       action={
         <Button
           variant="secondary"
-          disabled={toggle.isPending}
+          busy={toggle.isPending}
+          busyLabel={factory.paused ? 'Resuming…' : 'Pausing…'}
           onClick={() => {
             setError(null);
             toggle.mutate(factory);
           }}
         >
-          {factory.paused ? (toggle.isPending ? 'Resuming…' : 'Resume') : toggle.isPending ? 'Pausing…' : 'Pause'}
+          {factory.paused ? 'Resume' : 'Pause'}
         </Button>
       }
     />

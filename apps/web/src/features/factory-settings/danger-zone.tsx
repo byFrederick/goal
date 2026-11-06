@@ -83,8 +83,13 @@ export function DangerZone({ org, factory, archives, deletes }: DangerZoneProps)
             description="Lists it in the sidebar and the Factories home again. It stays paused until you resume it."
             error={restore.error ? actionError(restore.error) : null}
             action={
-              <Button variant="secondary" disabled={restore.isPending} onClick={() => restore.mutate()}>
-                {restore.isPending ? 'Restoring…' : 'Restore'}
+              <Button
+                variant="secondary"
+                busy={restore.isPending}
+                busyLabel="Restoring…"
+                onClick={() => restore.mutate()}
+              >
+                Restore
               </Button>
             }
           />
