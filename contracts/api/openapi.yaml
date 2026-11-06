@@ -8809,7 +8809,7 @@ components:
       description: >-
         One agent run: one container working one item at one station. Its full transcript is not
         kept (phase 2.2); the item's events carry the trace.
-      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version]
+      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version, cpu_seconds, peak_memory_bytes, box_size]
       properties:
         id: { type: string }
         item_id: { type: string }
@@ -8835,6 +8835,26 @@ components:
           type: integer
           nullable: true
           description: That version's number ("ran on v9"); null when the run has no version
+        cpu_seconds:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The CPU time the run's box used, in seconds; null while the run is running, when the
+            box could not read it or for a run from before it was recorded
+        peak_memory_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: The most memory the run's box used at once; null when cpu_seconds would be
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The box size the run ran in; null for a run from before box sizes were recorded
+    SandboxSize:
+      type: string
+      description: How much CPU and memory a run's box gets (a factory's runtime.size)
+      enum: [small, medium, large]
     OrgRunList:
       type: object
       required: [runs, next_cursor, summary]
@@ -9092,6 +9112,7 @@ components:
         - rework_usd
         - rework_share
         - budgets
+        - usage
       properties:
         window: { $ref: "#/components/schemas/SpendWindow" }
         since: { type: string, format: date-time, description: "The window's start, 00:00 UTC" }
@@ -9138,6 +9159,7 @@ components:
           type: array
           description: One per factory goald runs that the caller sees and that is not archived, by name
           items: { $ref: "#/components/schemas/SpendBudget" }
+        usage: { $ref: "#/components/schemas/SpendUsage" }
     SpendDay:
       type: object
       required: [day, usd, by_factory]
@@ -9161,6 +9183,63 @@ components:
         factory_id: { type: string }
         agent: { type: string, description: The agent's name in its factory }
         usd: { type: number, format: double }
+    SpendUsage:
+      type: object
+      description: >-
+        The CPU time and peak memory of the window's runs (a run counts by when it started), over
+        the runs that reported either, for the factories the caller sees. Each row groups the runs
+        of a factory's agent or station in boxes of one size; a group none of whose runs reported
+        a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one
+        last.
+      required: [by_agent, by_station]
+      properties:
+        by_agent:
+          type: array
+          items: { $ref: "#/components/schemas/AgentUsage" }
+        by_station:
+          type: array
+          items: { $ref: "#/components/schemas/StationUsage" }
+    AgentUsage:
+      type: object
+      required: [factory_id, agent, box_size, runs, cpu_seconds_p50, cpu_seconds_p90, peak_memory_bytes_p50, peak_memory_bytes_p90]
+      properties:
+        factory_id: { type: string }
+        agent: { type: string, description: The agent's name in its factory }
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The runs' box size; null for runs from before box sizes were recorded
+        runs: { type: integer, description: The runs that reported a CPU time or a peak memory }
+        cpu_seconds_p50:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The median CPU seconds of the runs that reported one, interpolated between the closest
+            runs (percentile_cont); null when none did
+        cpu_seconds_p90: { type: number, format: double, nullable: true, description: The 90th percentile, as cpu_seconds_p50 }
+        peak_memory_bytes_p50:
+          type: integer
+          format: int64
+          nullable: true
+          description: The median peak memory of the runs that reported one, rounded to a byte; null when none did
+        peak_memory_bytes_p90: { type: integer, format: int64, nullable: true, description: The 90th percentile, as peak_memory_bytes_p50 }
+    StationUsage:
+      description: AgentUsage by station
+      type: object
+      required: [factory_id, station, box_size, runs, cpu_seconds_p50, cpu_seconds_p90, peak_memory_bytes_p50, peak_memory_bytes_p90]
+      properties:
+        factory_id: { type: string }
+        station: { type: string, description: The station's id in its factory }
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The runs' box size; null for runs from before box sizes were recorded
+        runs: { type: integer, description: The runs that reported a CPU time or a peak memory }
+        cpu_seconds_p50: { type: number, format: double, nullable: true, description: As AgentUsage's }
+        cpu_seconds_p90: { type: number, format: double, nullable: true, description: As AgentUsage's }
+        peak_memory_bytes_p50: { type: integer, format: int64, nullable: true, description: As AgentUsage's }
+        peak_memory_bytes_p90: { type: integer, format: int64, nullable: true, description: As AgentUsage's }
     ModelSpend:
       type: object
       required: [model, usd]

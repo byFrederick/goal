@@ -113,6 +113,75 @@ func TestAPI_RunsOfAnItem(t *testing.T) {
 	}
 }
 
+// A run carries its box's CPU seconds, peak memory and box size on getRun, listItemRuns and
+// listRuns; a run without them, or from before box sizes, carries nulls.
+func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.seedTitled(t, "Fix the backend build")
+
+	cpu, peak := 42.5, int64(805306368)
+	counted, err := h.store.StartRun(inOrg(t), ports.NewRun{
+		FactoryID: it.FactoryID, ItemID: it.ID, Station: it.Station, Agent: agBackend, Model: runModel,
+		StartedAt: t0.Add(time.Minute), Size: domain.SandboxLarge,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak}
+	if err := h.store.FinishRun(inOrg(t), counted, res, t0.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	bare := h.orgRun(t, it, agBackend, t0.Add(3*time.Minute), domain.RunResult{Status: domain.RunFailed, Error: "no counters"})
+
+	large := gen.SandboxSize(domain.SandboxLarge)
+	wantCounted := map[string]any{"cpu_seconds": cpu, "peak_memory_bytes": float64(peak), "box_size": string(large)}
+	wantBare := map[string]any{"cpu_seconds": nil, "peak_memory_bytes": nil, "box_size": nil}
+
+	usage := func(what string, raw json.RawMessage, want map[string]any) {
+		t.Helper()
+
+		var got map[string]any
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+
+		for k, w := range want {
+			if v, ok := got[k]; !ok || v != w {
+				t.Errorf("%s: %s = %v (present %t); want %v", what, k, v, ok, w)
+			}
+		}
+	}
+
+	for id, want := range map[domain.RunID]map[string]any{counted: wantCounted, bare: wantBare} {
+		var run json.RawMessage
+		if code := h.call(t, http.MethodGet, "/v1/orgs/acme/runs/"+string(id), "", &run); code != http.StatusOK {
+			t.Fatalf("get run %s = %d", id, code)
+		}
+
+		usage("getRun "+string(id), run, want)
+	}
+
+	var items struct{ Runs []json.RawMessage }
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/items/"+string(it.ID)+"/runs", "", &items); code != http.StatusOK || len(items.Runs) != 2 {
+		t.Fatalf("list item runs = %d, %d runs; want 200 and two", code, len(items.Runs))
+	}
+
+	usage("listItemRuns' oldest", items.Runs[0], wantCounted)
+	usage("listItemRuns' newest", items.Runs[1], wantBare)
+
+	var org struct{ Runs []json.RawMessage }
+	if code := h.call(t, http.MethodGet, orgRunsPath, "", &org); code != http.StatusOK || len(org.Runs) != 2 {
+		t.Fatalf("list runs = %d, %d runs; want 200 and two", code, len(org.Runs))
+	}
+
+	usage("listRuns' newest", org.Runs[0], wantBare)
+	usage("listRuns' oldest", org.Runs[1], wantCounted)
+}
+
 func TestAPI_RunsOfAnItemAreCappedAt200(t *testing.T) {
 	t.Parallel()
 
