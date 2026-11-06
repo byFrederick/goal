@@ -121,8 +121,8 @@ func TestTemplateCatalog_Push(t *testing.T) {
 	h := newHarness(t)
 	catalog := authoring.NewTemplateCatalog(h.objects, h.clock)
 
-	if err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)}); err != nil {
-		t.Fatalf("push: %v", err)
+	if added, err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)}); err != nil || !added {
+		t.Fatalf("push = %v, %v; want added", added, err)
 	}
 
 	// goald's index lists what the operator pushed.
@@ -131,14 +131,126 @@ func TestTemplateCatalog_Push(t *testing.T) {
 		t.Fatalf("pushed template = %+v, %v", got, err)
 	}
 
-	again := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)})
-	if !errors.Is(again, authoring.ErrTemplateExists) {
-		t.Errorf("push of an existing version = %v, want ErrTemplateExists", again)
+	if _, err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: "Acme Review", Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)}); !errors.Is(err, authoring.ErrInvalidRequest) {
+		t.Errorf("push of a bad name = %v, want ErrInvalidRequest", err)
 	}
 
-	badName := catalog.Push(h.ctx, authoring.TemplateUpload{Name: "Acme Review", Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)})
-	if !errors.Is(badName, authoring.ErrInvalidRequest) {
-		t.Errorf("push of a bad name = %v, want ErrInvalidRequest", badName)
+	// Validation runs before the bucket is read: an invalid upload of the stored version is
+	// refused, not taken as unchanged.
+	if _, err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: []byte("title: x\n"), Files: acmeFiles(nilIDYAML)}); !isInvalid(err) {
+		t.Errorf("invalid push of a stored version = %v, want *TemplateInvalidError", err)
+	}
+}
+
+func isInvalid(err error) bool {
+	_, ok := errors.AsType[*authoring.TemplateInvalidError](err)
+
+	return ok
+}
+
+func TestTemplateCatalog_PushSameVersionTwice(t *testing.T) {
+	t.Parallel()
+
+	meta := []byte("title: Acme review\ncode: read\n")
+	h := newHarness(t)
+	catalog := authoring.NewTemplateCatalog(h.objects, h.clock)
+	up := authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)}
+
+	if added, err := catalog.Push(h.ctx, up); err != nil || !added {
+		t.Fatalf("first push = %v, %v; want added", added, err)
+	}
+
+	base := authoring.TemplatesPrefix + reviewTemplate + "/1/"
+
+	before, err := h.objects.List(h.ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if added, err := catalog.Push(h.ctx, up); err != nil || added {
+		t.Fatalf("second push = %v, %v; want unchanged and no error", added, err)
+	}
+
+	after, err := h.objects.List(h.ctx, base)
+	if err != nil || !slices.Equal(before, after) {
+		t.Errorf("objects after the second push = %+v, %v; want %+v", after, err, before)
+	}
+
+	for _, o := range after {
+		if n := h.objects.Writes(o.Key); n != 1 {
+			t.Errorf("%s was written %d times, want once", o.Key, n)
+		}
+	}
+}
+
+func TestTemplateCatalog_PushRefusesChangedVersion(t *testing.T) {
+	t.Parallel()
+
+	meta := []byte("title: Acme review\ncode: read\n")
+	base := authoring.TemplatesPrefix + reviewTemplate + "/1/"
+
+	with := func(edit func(map[string][]byte)) map[string][]byte {
+		files := acmeFiles(nilIDYAML)
+		edit(files)
+
+		return files
+	}
+
+	tests := []struct {
+		name  string
+		meta  []byte
+		files map[string][]byte
+		first map[string][]byte // the files of the first push, acmeFiles when nil
+		extra string            // a key put under the version's prefix before the second push
+	}{
+		{name: "meta-differs", meta: []byte("title: Acme review, changed\ncode: read\n"), files: acmeFiles(nilIDYAML)},
+		{name: "file-differs", meta: meta, files: with(func(f map[string][]byte) { f[promptFile] = []byte("# changed\n") })},
+		{name: "file-added", meta: meta, files: with(func(f map[string][]byte) { f["agents/extra.md"] = []byte("# extra\n") })},
+		{name: "file-missing", meta: meta, files: acmeFiles(nilIDYAML), first: with(func(f map[string][]byte) { f["agents/extra.md"] = []byte("# extra\n") })},
+		{name: "extra-object", meta: meta, files: acmeFiles(nilIDYAML), extra: base + "factory/stray.md"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t)
+			catalog := authoring.NewTemplateCatalog(h.objects, h.clock)
+
+			first := tt.first
+			if first == nil {
+				first = acmeFiles(nilIDYAML)
+			}
+
+			if _, err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: meta, Files: first}); err != nil {
+				t.Fatalf("first push: %v", err)
+			}
+
+			if tt.extra != "" {
+				if _, err := h.objects.Put(h.ctx, tt.extra, []byte("stray")); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			added, err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: tt.meta, Files: tt.files})
+			if added || !errors.Is(err, authoring.ErrTemplateExists) {
+				t.Errorf("push of a changed version = %v, %v; want ErrTemplateExists", added, err)
+			}
+		})
+	}
+
+	// A partial earlier push, with no template.yaml, is not repaired.
+	h := newHarness(t)
+	catalog := authoring.NewTemplateCatalog(h.objects, h.clock)
+
+	for p, body := range acmeFiles(nilIDYAML) {
+		if _, err := h.objects.Put(h.ctx, base+"factory/"+p, body); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := catalog.Push(h.ctx, authoring.TemplateUpload{Name: reviewTemplate, Version: 1, Meta: meta, Files: acmeFiles(nilIDYAML)}); !errors.Is(err, authoring.ErrTemplateExists) {
+		t.Errorf("push over a partial version = %v, want ErrTemplateExists", err)
 	}
 }
 
@@ -169,7 +281,7 @@ func TestTemplateCatalog_PushRefusesInvalidTemplates(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t)
-			err := authoring.NewTemplateCatalog(h.objects, h.clock).Push(h.ctx,
+			_, err := authoring.NewTemplateCatalog(h.objects, h.clock).Push(h.ctx,
 				authoring.TemplateUpload{Name: tt.name, Version: 1, Meta: []byte(tt.meta), Files: tt.files})
 
 			invalid, ok := errors.AsType[*authoring.TemplateInvalidError](err)
