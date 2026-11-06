@@ -58,11 +58,6 @@ export interface Finished {
   output_tokens: number;
   session_id: string;
   /**
-   * The item branch's commit on the remote when the agent ended (git ls-remote); absent without a
-   * repository, when the remote has no such branch or the lookup failed.
-   */
-  pushed_head?: string;
-  /**
    * Each repository the run cloned or the credential helper answered for (ADR 0041 decision 5),
    * once: the commits prepare saw, the item branch's commit on the remote once the agent ended,
    * and whether that is a new head. Absent for a run whose bundle had no repositories.
