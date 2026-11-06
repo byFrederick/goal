@@ -2016,9 +2016,10 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           ended_at: status === 'running' ? null : new Date(Math.round(at)).toISOString(),
           definition_version_id: version?.id ?? null,
           definition_version: version?.number ?? null,
-          cpu_seconds: null,
-          peak_memory_bytes: null,
-          box_size: null,
+          // A finished run has the box's figures; a run still going or one that failed keeps nulls.
+          cpu_seconds: status === 'succeeded' ? step.turns * 6.5 : null,
+          peak_memory_bytes: status === 'succeeded' ? (256 + step.turns * 24) * 1024 ** 2 : null,
+          box_size: status === 'succeeded' ? (step.turns > 15 ? 'medium' : 'small') : null,
         });
         if (status !== 'running') {
           push('run_finished', agent, { status, error: step.error ?? '', cost_usd: step.cost, turns: step.turns }, run);
