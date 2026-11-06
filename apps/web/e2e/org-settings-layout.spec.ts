@@ -52,10 +52,17 @@ test('the Code hosts ⓘ is 44 px on a phone and its tip stays inside the viewpo
   const tip = hosts.getByRole('button', { name: 'About Code hosts' });
   await expectTarget44(tip, 'About Code hosts');
   await expectTarget44(hosts.getByRole('button', { name: `Remove ${longHost}` }), 'Remove the added host');
+  // Radix closes a tip when an ancestor of its trigger scrolls, so settle the scroll before the tap.
+  await tip.scrollIntoViewIfNeeded();
+  await page.evaluate(
+    () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
   await tip.click();
+  await expect(tip).toHaveAttribute('data-state', /open/);
   const tipBox = page
     .locator('[data-radix-popper-content-wrapper]')
-    .getByText('Tokens go only to these hosts', { exact: false });
+    .getByText('Tokens go only to these hosts', { exact: false })
+    .first();
   await expect(tipBox).toBeVisible();
   const box = await tipBox.boundingBox();
   expect(box).not.toBeNull();
