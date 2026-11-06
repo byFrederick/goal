@@ -57,9 +57,12 @@ test('an address another organization has is refused on the address field', asyn
 
 test('an unknown step under an organization is not found', async ({ page }) => {
   await signIn(page.request);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/o/goal/get-started/not-a-step');
 
   await expect(page.getByRole('heading', { name: 'No such page' })).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test('Save and finish later signs out when there is no organization yet', async ({ page }) => {
@@ -216,4 +219,39 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Finish setting up' })).toHaveCount(0);
   await expect(page.getByRole('img', { name: /of 9 done/ })).toHaveCount(0);
+});
+
+for (const size of [
+  { width: 1440, height: 1000 },
+  { width: 390, height: 844 },
+]) {
+  test(`step 3 keeps focus on Continue after the token test at ${size.width} px`, async ({ page }) => {
+    await signIn(page.request);
+    await page.setViewportSize(size);
+    await makeFactory(page);
+    await page.getByRole('radio', { name: /^Read and write/ }).check();
+    await page.getByLabel('Repository', { exact: true }).fill('https://github.com/acme/goal-readonly');
+    await page.getByLabel('Token').fill('test-token');
+    const next = page.getByRole('button', { name: 'Continue' });
+    await next.focus();
+    await next.press('Enter');
+
+    await expect(page.getByRole('status')).toContainText(/Can read but not push/);
+    await expect(next).toBeFocused();
+  });
+}
+
+test('Back from the Line step keeps Read and write on the Code step, also after a reload', async ({ page }) => {
+  await signIn(page.request);
+  await makeFactory(page);
+  await connectCode(page);
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?/);
+
+  await page.getByRole('link', { name: 'Back' }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*access=write/);
+  await expect(page.getByRole('radio', { name: /^Read and write/ })).toBeChecked();
+  await expect(page.getByLabel('Repository', { exact: true })).toHaveValue('https://github.com/acme/goal');
+
+  await page.reload();
+  await expect(page.getByRole('radio', { name: /^Read and write/ })).toBeChecked();
 });

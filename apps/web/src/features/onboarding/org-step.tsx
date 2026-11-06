@@ -155,7 +155,7 @@ export function OrgStep({ home }: { home: OrgSummary | undefined }) {
                   aria-pressed={on}
                   onClick={() => toggle(use)}
                   className={cn(
-                    'inline-flex h-10 items-center gap-2 rounded-cell border px-3 font-control text-body transition-colors duration-200',
+                    'inline-flex h-10 items-center max-md:h-auto max-md:min-h-11 gap-2 rounded-cell border px-3 font-control text-body transition-colors duration-200',
                     on ? 'border-run bg-run-tint text-run-ink' : 'border-rule bg-card text-ink-soft hover:bg-panel',
                   )}
                 >

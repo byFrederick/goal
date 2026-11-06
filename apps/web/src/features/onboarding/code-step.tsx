@@ -17,7 +17,6 @@ import { createSecret, getSecret, patchSecret } from '../../api/secrets';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
-import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
 import { InfoTip } from '../../ui/info-tip';
 import { RadioCards, type RadioOption } from '../../ui/radio-cards';
@@ -149,7 +148,9 @@ function CodeForm({
 }) {
   const navigate = useNavigate();
   const client = useQueryClient();
-  const [access, setAccess] = useState<CodeAccess>(startAccess[code]);
+  const [access, setAccess] = useState<CodeAccess>(
+    search.access && disabledReason(code, search.access) === undefined ? search.access : startAccess[code],
+  );
   const [scope, setScope] = useState<Scope>('some');
   const [owner, setOwner] = useState('');
   const [addresses, setAddresses] = useState<string[]>([search.url && !search.url.endsWith('/*') ? search.url : '']);
@@ -214,7 +215,7 @@ function CodeForm({
     void navigate({
       to: '/o/$org/get-started/$step',
       params: { org: org.slug, step: 'line' },
-      search: { ...entry, template: search.template, factory },
+      search: { ...entry, template: search.template, factory, access },
     });
 
   const write = useMutation({
@@ -312,7 +313,8 @@ function CodeForm({
           form="code-form"
           size="lg"
           variant="primary"
-          disabled={
+          // aria-disabled, not disabled: a disabled button drops focus to <body> when the answer shows. `submit` refuses.
+          aria-disabled={
             wantsCode && (failed || clash || busy || (!passed && (!urlsValid || validUrls.length === 0 || !hasToken)))
           }
         >
@@ -496,11 +498,7 @@ function CodeForm({
               </div>
             ) : null}
 
-            <div
-              role="status"
-              aria-live="polite"
-              className={cn('flex flex-col gap-2', !answer && !run.isError && !write.isError && 'hidden')}
-            >
+            <div role="status" aria-live="polite" className="flex flex-col gap-2 empty:sr-only">
               {answer && (passed || failed)
                 ? answer.results.map((r, i) => {
                     const label = repositoryLabel(answer.urls[i] ?? r.url);
