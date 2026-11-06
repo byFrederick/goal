@@ -236,7 +236,7 @@ describe('the draft', () => {
 });
 
 describe('a blank factory', () => {
-  it('starts from goald’s skeleton and publishes once the line, an agent and its model connection are added', async () => {
+  it('starts from goald’s skeleton: one Work agent station, Done and one agent, and publishes as it is', async () => {
     const { body: f } = await call<Factory>('/v1/orgs/acme/factories', {
       method: 'POST',
       body: JSON.stringify({ name: 'blank-one', start: { kind: 'blank' } }),
@@ -245,30 +245,21 @@ describe('a blank factory', () => {
     const { body: draft } = await call<Draft>(`${path}/draft`);
     expect(draft.source).toEqual({ kind: 'blank' });
 
-    const before = await call<Validation>(`${path}/draft/validate`, { method: 'POST', body: '{}' });
-    expect(before.body.problems.filter((p) => p.code === 'schema-required').map((p) => p.pointer)).toEqual([
-      '/line/stations',
-      '/agents/agents',
-    ]);
-
     const { body: m } = await call<DraftModel>(`${path}/draft/model`);
-    const agents = { agents: [{ name: 'worker', prompt: { path: './agents/worker.md' } }] };
-    const files = { 'agents/worker.md': { text: '# worker\n' } };
-    expect((await call(`${path}/draft/model/agents`, put({ value: agents, files }, m.etags.agents))).status).toBe(200);
-    const line = {
-      stations: [
-        { id: 'inbox', kind: 'queue' },
-        { id: 'work', kind: 'agent', agent: 'worker', wip: 1 },
-        { id: 'done', kind: 'done' },
-      ],
-    };
-    const lined = await call<SaveResult>(`${path}/draft/model/line`, put({ value: line }, m.etags.line));
-    expect(lined.status).toBe(200);
+    const stations = m.model.line.stations ?? [];
+    const agents = m.model.agents.agents ?? [];
+    expect(stations.filter((s) => s.kind === 'agent')).toHaveLength(1);
+    expect(stations[0]).toMatchObject({ id: 'work', name: 'Work', kind: 'agent', agent: 'worker' });
+    expect(stations.at(-1)?.kind).toBe('done');
+    expect(agents.map((a) => a.name)).toEqual(['worker']);
+
+    const before = await call<Validation>(`${path}/draft/validate`, { method: 'POST', body: '{}' });
+    expect(before.body.problems.filter((p) => p.code === 'schema-required')).toEqual([]);
 
     // ADR 0037: goald asks for no model connection; a model key is optional, so publish needs none.
     const published = await call<Version>(`${path}/draft/publish`, {
       method: 'POST',
-      body: JSON.stringify({ revision: lined.body.revision }),
+      body: JSON.stringify({ revision: before.body.revision }),
     });
     expect(published.status).toBe(201);
     expect(published.body.number).toBe(1);

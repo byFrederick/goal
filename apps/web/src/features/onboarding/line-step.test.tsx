@@ -24,11 +24,15 @@ const api = vi.hoisted(() => ({
   model: {} as Record<string, unknown>,
   factory: null as unknown,
   saves: [] as { section: string; value: unknown }[],
+  problems: [] as { severity: string; pointer?: string; message: string }[],
 }));
 
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
   getFactory: vi.fn(async () => api.factory as Factory),
+  validateDraft: vi.fn(
+    async () => ({ ok: true, revision: 1, counts: {}, checks: [], problems: api.problems }) as never,
+  ),
   getDraft: vi.fn(async () => ({ base: null, revision: 1 }) as never),
   getDraftModel: vi.fn(
     async () =>
@@ -125,7 +129,10 @@ function setDraft(over: Partial<Model> = {}) {
 }
 
 beforeEach(() => {
+  // jsdom has no scrollIntoView; the line editor scrolls a focused control into view.
+  Element.prototype.scrollIntoView = vi.fn();
   api.saves = [];
+  api.problems = [];
   setFactory();
   setDraft();
 });
@@ -227,9 +234,105 @@ describe('step 4, shape the line', () => {
   });
 
   it('continues to the budget step with the factory, without publishing it', async () => {
+    const router = renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const next = await screen.findByRole('button', { name: 'Continue' });
+    await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(next);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/budget'));
+    expect(router.state.location.search).toMatchObject({ factory: factoryId });
+  });
+});
+
+const names = () =>
+  within(screen.getByRole('list', { name: 'The stations' }))
+    .getAllByRole('region')
+    .map((r) => r.getAttribute('aria-label'));
+
+describe('shaping the line', () => {
+  const blank = () =>
+    setDraft({
+      line: {
+        stations: [
+          { id: 'work', name: 'Work', kind: 'agent', agent: 'worker', wip: 1 },
+          { id: 'done', name: 'Done', kind: 'done' },
+        ],
+      },
+      agents: { agents: [{ name: 'worker' }] },
+    });
+
+  it('renders the Work card of a blank draft and lets Continue through', async () => {
+    blank();
     renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
-    const next = await screen.findByRole('link', { name: 'Continue' });
-    expect(next.getAttribute('href')).toBe(`/o/acme/get-started/budget?factory=${factoryId}`);
+    expect(await screen.findByRole('region', { name: 'Work' })).toBeTruthy();
+    const next = screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement;
+    await waitFor(() => expect(next.disabled).toBe(false));
+    expect(screen.queryByText(/then continue/)).toBeNull();
+  });
+
+  it('adds a station at the control that was pressed', async () => {
+    blank();
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByRole('region', { name: 'Work' });
+    const adds = screen.getAllByRole('button', { name: 'Add a station here' });
+    expect(adds).toHaveLength(2);
+    fireEvent.click(adds[1] as HTMLElement);
+    await waitFor(() => expect(names()).toEqual(['Work', 'New station', 'Done']));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a station here' })[0] as HTMLElement);
+    await waitFor(() => expect(names()).toEqual(['New station', 'Work', 'New station', 'Done']));
+  });
+
+  it('moves and removes a station, and announces each move', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByRole('region', { name: 'Spec' });
+    fireEvent.click(screen.getByRole('button', { name: 'Move Spec later' }));
+    await waitFor(() => expect(names()).toEqual(['Intake', 'Build', 'Spec', 'Review', 'Done']));
+    expect(screen.getByRole('status', { name: '' }).textContent).toBe('Spec moved to position 3 of 5');
+    fireEvent.click(screen.getByRole('button', { name: 'Move Spec earlier' }));
+    await waitFor(() => expect(names()).toEqual(['Intake', 'Spec', 'Build', 'Review', 'Done']));
+    expect(screen.getByText('Spec moved to position 2 of 5')).toBeTruthy();
+
+    expect(within(screen.getByRole('region', { name: 'Done' })).queryByRole('button')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Move Intake earlier' }).getAttribute('aria-disabled')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Build' }));
+    await waitFor(() => expect(names()).toEqual(['Intake', 'Spec', 'Review', 'Done']));
+  });
+
+  it('holds Continue with a sentence while no station runs an agent, and frees it once one is added', async () => {
+    setDraft({
+      line: {
+        stations: [
+          { id: 'inbox', name: 'Inbox', kind: 'queue' },
+          { id: 'done', name: 'Done', kind: 'done' },
+        ],
+      },
+    });
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const next = (await screen.findByRole('button', { name: 'Continue' })) as HTMLButtonElement;
+    const sentence = 'Add a station that runs an agent, then continue.';
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    expect(next.disabled).toBe(true);
+    expect(sentence).not.toContain('/');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a station here' })[1] as HTMLElement);
+    await waitFor(() => expect(screen.queryByText(sentence)).toBeNull());
+    await waitFor(() => expect(next.disabled).toBe(false));
+  });
+
+  it('holds Continue with a sentence while validation reports an error', async () => {
+    api.problems = [{ severity: 'error', pointer: '/line/stations/0/agent', message: 'agent is missing' }];
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const sentence = 'Fix the problems in this line, then continue.';
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/\/line/)).toBeNull();
+
+    api.problems = [];
+    const spec = screen.getByRole('region', { name: 'Spec' });
+    fireEvent.change(within(spec).getByRole('combobox', { name: 'Agent of Spec' }), { target: { value: 'reviewer' } });
+    await waitFor(() => expect(screen.queryByText(sentence)).toBeNull(), { timeout: 3000 });
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+    );
   });
 });
 
