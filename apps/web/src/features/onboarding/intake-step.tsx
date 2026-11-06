@@ -370,6 +370,11 @@ function TriggerRow({
   );
 }
 
+/** The triggers that are on, then the ways that are always there, as one sentence: "A, B, New item, CLI and API". */
+function intakeSentence(names: string[]): string {
+  return [...names, 'New item, CLI and API'].join(', ');
+}
+
 /** The panel's Intake card: the triggers switched on, then what is always on. Steps 6 to 8 draw it. */
 export function IntakeCard({ names }: { names: string[] }) {
   return (
@@ -378,16 +383,7 @@ export function IntakeCard({ names }: { names: string[] }) {
       className="flex min-w-0 flex-col gap-2 rounded-card border border-run bg-hover p-4 ring-4 ring-run/25"
     >
       <span className="text-meta text-ink-soft">Intake</span>
-      {names.length > 0 ? (
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">
-          {names.map((name) => (
-            <li key={name} className="text-secondary break-words text-ink">
-              {name}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <span className="text-secondary break-words text-ink-soft">And New item, CLI, API</span>
+      <span className="text-secondary break-words text-ink">{intakeSentence(names)}</span>
     </section>
   );
 }

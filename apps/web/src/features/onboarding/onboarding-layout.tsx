@@ -3,7 +3,7 @@
 // left with Back and the primary action at its bottom, and on the right the dark panel "Your factory,
 // as you build it". The panel's slots are filled by the steps; until then they show dashed placeholders.
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import type { OrgSummary } from '../../api/types';
 import { useSignOut } from '../../shared/account';
 import { cn } from '../../ui/cn';
@@ -90,6 +90,14 @@ function SaveAndFinishLater({ org }: { org: OrgSummary | undefined }) {
 /** The eight steps: a bar and a name each. Done steps are lighter, the current one cobalt and bold. */
 function Stepper({ step }: { step: OnboardingStepKey }) {
   const current = stepIndex(step);
+  const currentItem = useRef<HTMLLIElement>(null);
+  // The stepper scrolls sideways on a phone: bring the current step's label into its box. Instant and
+  // nearest, so the page does not move and no second animation joins the step's own transition.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the step changes.
+  useEffect(() => {
+    // Optional call: jsdom, which most step tests run in, has no scrollIntoView.
+    currentItem.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+  }, [step]);
   return (
     <section
       aria-label="Setup steps"
@@ -107,6 +115,7 @@ function Stepper({ step }: { step: OnboardingStepKey }) {
           return (
             <li
               key={s.key}
+              ref={isCurrent ? currentItem : undefined}
               aria-current={isCurrent ? 'step' : undefined}
               className={cn(
                 'flex flex-auto flex-col gap-2 text-meta font-control whitespace-nowrap',
