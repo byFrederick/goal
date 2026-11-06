@@ -22,3 +22,33 @@ export async function expectNoOverlap(a: Locator, b: Locator, names: string) {
   const overlaps = x.x < y.x + y.width && y.x < x.x + x.width && x.y < y.y + y.height && y.y < x.y + x.height;
   expect(overlaps, `${names} overlap`).toBe(false);
 }
+
+/**
+ * The characters of each truncated title the page shows: the share of the text's width that fits,
+ * times its length, or the whole text when it fits. `selector` finds the elements that truncate.
+ */
+export async function shownTitleCharacters(scope: Locator, selector: string) {
+  return scope.evaluate(
+    (root, sel) =>
+      Array.from(root.querySelectorAll<HTMLElement>(sel))
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => {
+          const text = (el.textContent ?? '').trim();
+          const shown =
+            el.scrollWidth > el.clientWidth ? Math.floor((el.clientWidth / el.scrollWidth) * text.length) : text.length;
+          return { text: text.slice(0, 40), shown, needed: Math.min(30, text.length) };
+        }),
+    selector,
+  );
+}
+
+/** Refs whose text is wider than their box (cut off), found by the mono ref spans of a table. */
+export async function cutRefs(scope: Locator, selector = 'span.font-mono') {
+  return scope.evaluate(
+    (root, sel) =>
+      Array.from(root.querySelectorAll<HTMLElement>(sel))
+        .filter((el) => el.getClientRects().length > 0 && el.scrollWidth > el.clientWidth)
+        .map((el) => el.textContent),
+    selector,
+  );
+}

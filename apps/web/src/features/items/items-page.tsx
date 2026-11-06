@@ -18,7 +18,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
 import { touchLink } from '../../ui/touch-target';
-import { AssemblyTableRow, hideBelowLg, ItemTableRow, listRows } from './assembly-rows';
+import { AssemblyTableRow, hideBelowLg, ItemTableRow, listRows, minorColumn } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
   applyFilters,
@@ -108,17 +108,22 @@ function ItemsActions() {
 
 const columns = ['Ref', 'Title', 'Repositories', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost'] as const;
 
-/** From lg the table lays out in fixed columns, so it always fits its box; Title takes what is left. */
+/**
+ * From lg the table lays out in fixed columns, so it always fits its box; Title takes what is left.
+ * Ref is wide enough for an assembly row's chevron beside it. Type, Lane, Agent and Age are columns
+ * only while the table's box is 1150 px wide (`minorColumn`): the widths below sum to 832 px, which
+ * leaves Title about 318 px. In a narrower box they sit under the title.
+ */
 const columnWidth: Partial<Record<(typeof columns)[number], string>> = {
-  Ref: 'lg:w-14 xl:w-16',
+  Ref: 'lg:w-24',
   Repositories: '2xl:w-48',
-  Type: 'lg:w-14 xl:w-20',
-  Lane: 'lg:w-20 xl:w-24',
-  Station: 'lg:w-20 xl:w-28',
-  State: 'lg:w-28 xl:w-36',
-  Agent: 'lg:w-20 xl:w-28',
-  Age: 'lg:w-12 xl:w-16',
-  Cost: 'lg:w-16 xl:w-20',
+  Type: 'lg:w-20',
+  Lane: 'lg:w-24',
+  Station: 'lg:w-28',
+  State: 'lg:w-36',
+  Agent: 'lg:w-28',
+  Age: 'lg:w-16',
+  Cost: 'lg:w-20',
 };
 
 export function ItemsPage() {
@@ -359,14 +364,14 @@ export function ItemsPage() {
         <p className="m-0 text-body text-muted">No items match these filters. Try another view or filter.</p>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-card border border-line bg-card">
+          <div className="@container overflow-x-auto rounded-card border border-line bg-card">
             <table
               aria-label="Items"
               className="w-full min-w-max border-collapse text-body whitespace-nowrap lg:min-w-0 lg:table-fixed"
             >
               <thead className="bg-panel text-secondary font-medium text-muted">
                 <tr>
-                  <th scope="col" className="w-px px-3 py-2 text-left lg:w-8 lg:max-xl:px-1 xl:w-10">
+                  <th scope="col" className="w-px px-3 py-2 text-left lg:w-12">
                     <span className="sr-only">Select</span>
                   </th>
                   {columns
@@ -376,12 +381,13 @@ export function ItemsPage() {
                         key={column}
                         scope="col"
                         className={cn(
-                          'px-3 py-2 text-left font-medium whitespace-nowrap lg:max-xl:px-1',
+                          'px-3 py-2 text-left font-medium whitespace-nowrap',
                           column === 'Repositories' && 'hidden 2xl:table-cell',
                           column === 'Cost' && 'text-right',
                           columnWidth[column],
-                          (column === 'Lane' || column === 'Agent' || column === 'Age' || column === 'Cost') &&
-                            hideBelowLg,
+                          (column === 'Type' || column === 'Lane' || column === 'Agent' || column === 'Age') &&
+                            minorColumn,
+                          column === 'Cost' && hideBelowLg,
                         )}
                       >
                         {column}

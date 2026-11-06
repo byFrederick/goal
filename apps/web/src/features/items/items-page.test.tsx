@@ -351,8 +351,14 @@ describe('Items filters in the URL', () => {
     const ref = await screen.findByText('#144');
     expect(ref.className).toContain('font-mono');
     expect(ref.getAttribute('title')).toBe('sre#144');
-    expect(screen.getByText('feature')).toBeTruthy();
+    // The type shows in its column and again on the second line under the title, which a narrow table uses.
+    expect(screen.getAllByText('feature')).toHaveLength(2);
     expect(screen.queryByText('Feature')).toBeNull();
+    const row = ref.closest('tr') as HTMLElement;
+    expect(within(row).getByText('Type:')).toBeTruthy();
+    expect(within(row).getByText('Lane:')).toBeTruthy();
+    expect(within(row).getByText('Agent:')).toBeTruthy();
+    expect(within(row).getByText('Age:')).toBeTruthy();
   });
 
   it('adds a Repositories column after Title when the items name several repositories', async () => {

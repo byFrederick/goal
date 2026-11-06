@@ -2,7 +2,8 @@
 // at 1440 and 390 px in both themes. A done assembly keeps its Progress, Parts and Plan and drops the actions.
 // The pictures are attached to the report, not compared; the design exports are the reference.
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll } from './support';
+import { expectNoHorizontalScroll, lengthenTitles } from './support';
+import { cutRefs, shownTitleCharacters } from './support-boxes';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -124,18 +125,33 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 for (const width of [1024, 1280, 1440]) {
-  test(`shows every Parts column inside the card at ${width} px`, async ({ page }) => {
+  test(`gives the Parts titles the leftover width inside the card at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
+    await lengthenTitles(page, /\/v1\/orgs\/[^/]+\/factories\/[^/]+\/items\/17(\?|$)/);
     await page.goto('/o/acme/f/goal/items/17');
     const table = page.getByRole('table', { name: /^Parts of/ });
     await expect(table).toBeVisible();
     const card = await table.locator('xpath=..').boundingBox();
-    for (const name of ['Part', 'Ref', 'Title', 'Station', 'State', 'Cost', 'Pull request']) {
+    // Ref, Station and Cost are columns only while the table's box is wide; else they sit under the title.
+    for (const name of ['Part', 'Title', 'State', 'Pull request']) {
       const header = table.getByRole('columnheader', { name, exact: true });
       await expect(header).toBeVisible();
       const at = await header.boundingBox();
       expect(at && card && at.x + at.width <= card.x + card.width + 1, `${name} ends inside the card`).toBe(true);
     }
+    const minimum: Record<string, number> = { Part: 60, Title: 240, Ref: 60, Station: 80, State: 70, Cost: 60 };
+    for (const [name, least] of Object.entries(minimum)) {
+      const header = table.getByRole('columnheader', { name, exact: true });
+      if (!(await header.isVisible())) continue;
+      expect((await header.boundingBox())?.width ?? 0, `the ${name} column`).toBeGreaterThanOrEqual(least);
+    }
+    if (!(await table.getByRole('columnheader', { name: 'Station', exact: true }).isVisible())) {
+      await expect(table.getByText('Station:').first()).toBeAttached();
+    }
+    const titles = await shownTitleCharacters(table, 'tbody td a.truncate');
+    expect(titles.length).toBeGreaterThan(0);
+    for (const t of titles) expect(t.shown, `"${t.text}" shows ${t.shown} characters`).toBeGreaterThanOrEqual(t.needed);
+    expect(await cutRefs(table, 'tbody td.text-muted.whitespace-nowrap')).toEqual([]);
     const scrolls = await table.locator('xpath=..').evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(scrolls).toBeLessThanOrEqual(0);
   });
