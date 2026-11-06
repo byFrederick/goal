@@ -2,7 +2,8 @@
 // with no items gets its starter item (factory.yaml's starter.item, from the published version) submitted once,
 // through submitItem. The submission is a query under its own key with no refetch, so a re-render or a remount
 // after it does not submit again. A factory that already has items shows its newest one. A factory with no starter
-// item shows the empty state and submits nothing. The item card refreshes from the stream's item events (the keys
+// item shows the empty state and submits nothing. A factory whose published factory.yaml has no model key gets the
+// model key card first (model-key-gate.tsx) and its starter item is submitted once the key is published. The item card refreshes from the stream's item events (the keys
 // the stream invalidates), never by polling.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -20,6 +21,7 @@ import { cn } from '../../ui/cn';
 import { stationLabel } from '../factory-editor/line/labels';
 import { touchSentence } from '../items/touch-words';
 import { type OnboardingSearch, repoOf } from './code-search';
+import { ModelKeyGate } from './model-key-gate';
 import { OnboardingLayout } from './onboarding-layout';
 import { stepPanel } from './step-panel';
 
@@ -145,7 +147,17 @@ function Watch({
 
   if (newest) return <Watched {...page} itemId={newest.id} />;
   if (!starter) return <Empty {...page} />;
-  return <Submitted {...page} starter={starter} />;
+  return (
+    <ModelKeyGate
+      org={org}
+      factoryId={factoryId}
+      currentVersionId={factory.current?.id ?? null}
+      back={<Back org={org} search={search} factory={factoryId} />}
+      preview={stepPanel({ org, search, factory, model: model.data.model, intake: intake.data })}
+    >
+      <Submitted {...page} starter={starter} />
+    </ModelKeyGate>
+  );
 }
 
 /**

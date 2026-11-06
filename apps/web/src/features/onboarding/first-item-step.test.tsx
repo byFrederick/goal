@@ -8,11 +8,25 @@ import {
   Outlet,
   RouterProvider,
 } from '@tanstack/react-router';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getItem, listInvitations, listItemEvents, listItems, listMembers, submitItem } from '../../api/client';
-import { getFactory, getVersionModel } from '../../api/definitions';
+import {
+  getDraft,
+  getDraftFile,
+  getDraftModel,
+  getFactory,
+  getVersion,
+  getVersionFile,
+  getVersionModel,
+  listDraftFiles,
+  openDraft,
+  publishDraft,
+  putDraftFile,
+  validateDraft,
+} from '../../api/definitions';
 import { getIntake } from '../../api/intake';
+import { createSecret } from '../../api/secrets';
 import type { Factory, FactoryModel, Intake, Item, ItemEvent, OrgSummary } from '../../api/types';
 import { OrgContext } from '../../shared/org';
 import { TooltipProvider } from '../../ui/tooltip';
@@ -31,7 +45,21 @@ vi.mock('../../api/client', async (importOriginal) => ({
 vi.mock('../../api/definitions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/definitions')>()),
   getFactory: vi.fn(),
+  getVersion: vi.fn(),
+  getVersionFile: vi.fn(),
   getVersionModel: vi.fn(),
+  getDraft: vi.fn(),
+  getDraftModel: vi.fn(),
+  listDraftFiles: vi.fn(),
+  getDraftFile: vi.fn(),
+  putDraftFile: vi.fn(),
+  validateDraft: vi.fn(),
+  publishDraft: vi.fn(),
+  openDraft: vi.fn(),
+}));
+vi.mock('../../api/secrets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/secrets')>()),
+  createSecret: vi.fn(),
 }));
 vi.mock('../../api/intake', () => ({ getIntake: vi.fn() }));
 
@@ -118,8 +146,12 @@ const events: ItemEvent[] = [
   },
 ] as ItemEvent[];
 
+const keyed = "apiVersion: goal/v1\nspec:\n  runtime:\n    modelKey: '{{model-key}}'\n";
+const unkeyed = 'apiVersion: goal/v1\nspec:\n  runtime: {}\n';
+
 let items: Item[];
 let current: Item;
+let published: string;
 
 beforeEach(() => {
   items = [];
@@ -132,6 +164,9 @@ beforeEach(() => {
     draft: null,
   } as unknown as Factory);
   vi.mocked(getVersionModel).mockResolvedValue({ model: modelWith(starter) } as never);
+  published = keyed;
+  vi.mocked(getVersion).mockResolvedValue({ files: [{ path: 'factory.yaml', sha256: 'sha-1', size: 10 }] } as never);
+  vi.mocked(getVersionFile).mockImplementation(async () => ({ text: published, sha256: 'sha-1' }) as never);
   vi.mocked(getIntake).mockResolvedValue({
     items: 0,
     from: null,
@@ -280,5 +315,77 @@ describe('step 8, watch your first item', () => {
       .flatMap((q) => q.observers.map((o) => o.options.refetchInterval));
     expect(intervals.length).toBeGreaterThan(0);
     expect(intervals.every((i) => !i)).toBe(true);
+  });
+
+  describe('without a model key', () => {
+    beforeEach(() => {
+      published = unkeyed;
+      let draftText = unkeyed;
+      vi.mocked(getDraft).mockResolvedValue({ base: null, revision: 1 } as never);
+      vi.mocked(getDraftModel).mockResolvedValue({
+        model: modelWith(starter),
+        etags: { basics: 'b1', line: 'l1', agents: 'a1', connections: 'c1', review: 'r1' },
+        revision: 1,
+      } as never);
+      vi.mocked(listDraftFiles).mockResolvedValue([{ path: 'factory.yaml', sha256: 'd1', size: 10 }] as never);
+      vi.mocked(getDraftFile).mockImplementation(async () => ({ text: draftText, sha256: 'd1' }) as never);
+      vi.mocked(putDraftFile).mockImplementation((async (_o: string, _f: string, _p: string, text: string) => {
+        draftText = text;
+        return {
+          etag: 'n',
+          revision: 2,
+          updated_at: '2026-10-28T10:00:00Z',
+          sections: [],
+          change_count: 1,
+          problem_count: 0,
+        };
+      }) as never);
+      vi.mocked(validateDraft).mockResolvedValue({
+        ok: true,
+        revision: 2,
+        counts: {},
+        checks: [],
+        problems: [],
+      } as never);
+      vi.mocked(openDraft).mockResolvedValue({ revision: 1 } as never);
+      vi.mocked(createSecret).mockResolvedValue({} as never);
+    });
+
+    it('holds the starter item until the factory has a model key', async () => {
+      renderStep();
+
+      expect(await screen.findByText(/Agents need a model key to run/)).toBeTruthy();
+      expect(screen.getByLabelText('Model key', { selector: 'input' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Publish and start' })).toBeTruthy();
+      expect(document.body.textContent).not.toMatch(/\{\{|spec\.runtime/);
+      expect(submitItem).not.toHaveBeenCalled();
+    });
+
+    it('publishes the key and then submits the starter item once', async () => {
+      let finish: (v: unknown) => void = () => {};
+      vi.mocked(publishDraft).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }) as never,
+      );
+      renderStep();
+      await screen.findByText(/Agents need a model key to run/);
+
+      fireEvent.change(screen.getByLabelText('Model key', { selector: 'input' }), { target: { value: 'sk-test' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+      const publish = await screen.findByRole('button', { name: 'Publish and start' });
+      await waitFor(() => expect((publish as HTMLButtonElement).disabled).toBe(false));
+      expect(submitItem).not.toHaveBeenCalled();
+      fireEvent.click(publish);
+
+      await waitFor(() => expect(publishDraft).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(publishDraft).mock.calls[0]?.[2]).toMatchObject({ expected_current_version_id: 'version-1' });
+      expect(submitItem).not.toHaveBeenCalled();
+      finish({});
+
+      expect(await screen.findByRole('heading', { level: 2, name: title })).toBeTruthy();
+      expect(submitItem).toHaveBeenCalledTimes(1);
+    });
   });
 });
