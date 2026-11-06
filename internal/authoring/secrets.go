@@ -32,8 +32,8 @@ const (
 	// CodeKnowledgeSecretNotInScope: a listed source reads with a secret whose factory scope
 	// leaves the factory out, so listing it would hand the factory that secret's reach.
 	CodeKnowledgeSecretNotInScope = "knowledge-secret-not-in-scope"
-	// CodeKnowledgeCopiesCheckout: a warning; a listed Repository source reads the factory's own
-	// repository, whose files its runs already have on the item's branch.
+	// CodeKnowledgeCopiesCheckout: a warning; a listed Repository source reads the only repository
+	// of a factory with exactly one, whose files its runs already have on the item's branch.
 	CodeKnowledgeCopiesCheckout = "knowledge-copies-checkout"
 	// CodeMergeNeedsCodeHost: a station merges, but runtime.repository has no token, so nothing
 	// could merge the item's pull requests.
@@ -282,9 +282,9 @@ func (r *secretsRun) knowledge(sources []domain.KnowledgeSource) {
 					"add the factory to the secret's scope on the Secrets page, or remove the source", name, src.Secret))
 		}
 
-		if repo := r.f.Spec.Runtime.Repository; repo != nil && src.CopiesCheckout(repo.URL) {
+		if repo, ok := r.f.Spec.Runtime.OnlyRepository(); ok && src.CopiesCheckout(repo.URL) {
 			r.add(at, domain.SeverityWarning, CodeKnowledgeCopiesCheckout, fmt.Sprintf(
-				"knowledge.sources: the source %s reads runtime.repository, %s, whose files every run already has on the item's branch",
+				"knowledge.sources: the source %s reads the factory's repository, %s, whose files every run already has on the item's branch",
 				name, repo.URL))
 		}
 	}

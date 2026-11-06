@@ -404,7 +404,7 @@ spec:
 | `unknown-agent`, `unknown-station`, `unknown-lane`, `unknown-work-type` | error | an `appliesTo` entry the definition does not declare, located at that entry (`knowledge source runbooks: appliesTo.stations: unknown station "ghost"`) |
 | `knowledge-source-unknown` | error | the organization has no source of the name; the fix removes the entry |
 | `knowledge-secret-not-in-scope` | error | the source reads with a secret whose factory scope leaves the factory out, so listing it would hand the factory that secret's reach |
-| `knowledge-copies-checkout` | warning | the source is a Repository source, or a synced source read by gitdocs, of the repository in `runtime.repository.url`: the same host and path, ignoring case, a trailing slash and `.git`. Its runs already have those files on the item's branch. The warning does not block validation or publishing. |
+| `knowledge-copies-checkout` | warning | the source is a Repository source, or a synced source read by gitdocs, of the factory's only repository: `runtime.repository.url`, or the one entry of `runtime.repositories` when it is not an owner pattern (`Runtime.OnlyRepository`). A factory with two or more repositories gets no warning. The match is the same host and path, ignoring case, a trailing slash and `.git`. Its runs already have those files on the item's branch. The warning does not block validation or publishing. |
 
 For example, a factory whose `runtime.repository.url` is `https://github.com/acme/app` and that lists a Repository source of `https://github.com/acme/app.git` validates and publishes with the `knowledge-copies-checkout` warning.
 

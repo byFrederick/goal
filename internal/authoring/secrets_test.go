@@ -93,7 +93,7 @@ func TestSecretsCheck(t *testing.T) {
 		},
 		{
 			name: "a knowledge source the organization lacks", yaml: strings.Replace(acmeYAML, "  agents:\n", "  knowledge: { sources: [handbook] }\n  agents:\n", 1),
-			code: authoring.CodeKnowledgeSourceUnknown, file: yamlFile, pointer: "/basics/knowledge_sources/0", inPlaces: []string{"handbook"},
+			code: authoring.CodeKnowledgeSourceUnknown, file: yamlFile, pointer: firstSourcePointer, inPlaces: []string{"handbook"},
 			fixes: []domain.ProblemFix{{Label: "Remove handbook", Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "remove", Path: "/knowledge_sources/0"}}}},
 		},
 		{
@@ -284,12 +284,21 @@ func TestSecretsCheck_KnowledgeSources(t *testing.T) {
 		},
 		{
 			name: "a repository source of the factory's own repository", yaml: withSources("- self"),
-			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: "/basics/knowledge_sources/0",
-			inPlaces: []string{"self", "runtime.repository"},
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: firstSourcePointer,
+			inPlaces: []string{"self", "https://git.example.com/acme/review.git"},
 		},
 		{
+			name: "a repository source of the factory's one entry of runtime.repositories", yaml: withRepositories(withSources("- self"),
+				`{ name: review, url: "https://git.example.com/acme/review", token: "{{code-token}}", access: write }`),
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: firstSourcePointer,
+			inPlaces: []string{"self", "https://git.example.com/acme/review"},
+		},
+		{name: "a repository source of one of the factory's two repositories", yaml: withRepositories(withSources("- self"),
+			`{ name: review, url: "https://git.example.com/acme/review", token: "{{code-token}}", access: write }`,
+			`{ name: docs, url: "https://git.example.com/acme/docs", token: "{{code-token}}", access: read }`)},
+		{
 			name: "a synced repository source of the factory's own repository", yaml: withSources("- { name: self-synced, appliesTo: { agents: [engineer] } }"),
-			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: "/basics/knowledge_sources/0",
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: firstSourcePointer,
 			inPlaces: []string{"self-synced"},
 		},
 		{name: "a repository source while the factory has no repository", yaml: strings.Replace(withSources("- self"),
@@ -311,6 +320,15 @@ func TestSecretsCheck_KnowledgeSources(t *testing.T) {
 			wantSecretsProblem(t, tt, v)
 		})
 	}
+}
+
+// firstSourcePointer is where the first entry of knowledge.sources shows in the editor.
+const firstSourcePointer = "/basics/knowledge_sources/0"
+
+// withRepositories is yaml with runtime.repositories' entries in place of runtime.repository.
+func withRepositories(yaml string, entries ...string) string {
+	return strings.Replace(yaml, "    repository: { url: \"https://git.example.com/acme/review.git\", token: \"{{code-token}}\", forge: github }\n",
+		"    repositories: ["+strings.Join(entries, ", ")+"]\n", 1)
 }
 
 // withRepository is acmeYAML whose repository is the runtime YAML lines repo.

@@ -86,6 +86,17 @@ func (r Runtime) DefaultRepository() (RepositoryEntry, bool) {
 	return RepositoryEntry{}, false
 }
 
+// OnlyRepository is the factory's entry when it has exactly one and that entry names one
+// repository, not an owner pattern: the checkout every run has. False for none, two or more.
+func (r Runtime) OnlyRepository() (RepositoryEntry, bool) {
+	entries := r.RepositoryEntries()
+	if len(entries) != 1 || entries[0].OwnerPattern() {
+		return RepositoryEntry{}, false
+	}
+
+	return entries[0], true
+}
+
 // Writes reports whether the factory has an entry that writes.
 func (r Runtime) Writes() bool {
 	return slices.ContainsFunc(r.RepositoryEntries(), func(e RepositoryEntry) bool { return e.Access == AccessWrite })

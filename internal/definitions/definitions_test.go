@@ -993,3 +993,47 @@ func TestLine_ReadsAPinnedVersionInItsOrg(t *testing.T) {
 		t.Errorf("Line from another organization = %v, want ErrNotFound", err)
 	}
 }
+
+// reading is f with spec.knowledge listing sources.
+func reading(f map[string]string, sources string) map[string]string {
+	out := maps.Clone(f)
+	out[config.FileName] = strings.Replace(out[config.FileName], "  board:", "  knowledge: { sources: ["+sources+"] }\n  board:", 1)
+
+	return out
+}
+
+// The factories listing a source are the organization's current, unarchived factories whose
+// spec.knowledge names it, ordered by name: another organization's and an archived one's are left out.
+func TestCache_FactoriesListingASource(t *testing.T) {
+	t.Parallel()
+
+	const (
+		betaID  domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a02"
+		gammaID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a03"
+		deltaID domain.FactoryID = "5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f9a04"
+	)
+
+	h := newHarness(t)
+	h.publish(t, org, reading(withID(acme("zeta", noteContract), acmeID), "handbook, { name: runbooks }"))
+	h.publish(t, org, reading(withID(acme("beta", noteContract), betaID), "{ name: handbook, appliesTo: { agents: [writer] } }"))
+	h.publish(t, org, reading(withID(acme("gamma", noteContract), gammaID), "handbook")) // archived below
+	h.publish(t, org, withID(acme("delta", noteContract), deltaID))
+	h.publish(t, other, reading(withID(acme(acmeName, noteContract), otherID), "handbook"))
+	h.archive(t, org, gammaID)
+
+	c := h.cache(t, nil)
+
+	for source, want := range map[string][]domain.FactoryID{
+		"handbook": {betaID, acmeID},
+		"runbooks": {acmeID},
+		"wiki":     nil,
+	} {
+		if got := c.FactoriesListing(ctxOf(t, org), source); !slices.Equal(got, want) {
+			t.Errorf("FactoriesListing(%s) = %v, want %v", source, got, want)
+		}
+	}
+
+	if got := c.FactoriesListing(t.Context(), "handbook"); got != nil {
+		t.Errorf("FactoriesListing without an organization = %v, want none", got)
+	}
+}

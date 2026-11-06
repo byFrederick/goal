@@ -445,6 +445,29 @@ func (c *Cache) Factories(ctx context.Context) []*config.Factory {
 	return out
 }
 
+// FactoriesListing returns the ids of the organization in ctx's current factories whose
+// spec.knowledge names source, ordered by name, but for archived factories (ADR 0041 decision
+// 16: a knowledge source's secret must be open to each of them); none without an organization.
+func (c *Cache) FactoriesListing(ctx context.Context, source string) []domain.FactoryID {
+	org, ok := domain.OrgFrom(ctx)
+	if !ok {
+		return nil
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var out []domain.FactoryID
+
+	for _, cur := range sorted(c.current) {
+		if cur.org == org && !cur.archived && slices.Contains(cur.factory.Spec.Knowledge.Names(), source) {
+			out = append(out, domain.FactoryID(cur.factory.Metadata.ID))
+		}
+	}
+
+	return out
+}
+
 // Lookup finds the current definition of a factory of the organization in ctx by id or by
 // metadata.name, without case (as authoring does). On a miss it reloads the organization only
 // when the store has a current version of that factory the cache lacks (a publish whose notice
