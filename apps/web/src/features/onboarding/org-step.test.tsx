@@ -161,6 +161,10 @@ describe('step 1, name the organization', () => {
     fireEvent.click(continueButton());
 
     await waitFor(() => expect(continueButton().getAttribute('aria-busy')).toBe('true'));
+    expect(continueButton().getAttribute('aria-disabled')).toBe('true');
+    expect((continueButton() as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(continueButton());
+    expect(createOrg).toHaveBeenCalledTimes(1);
   });
 
   it('Back and Save and finish later go to the organization the person is in', async () => {

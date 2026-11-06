@@ -122,7 +122,7 @@ export function NotificationsSection() {
                   size="md"
                   busy={save.isPending && save.variables !== null}
                   busyLabel="Saving…"
-                  disabled={!value || value === saved}
+                  disabled={!value || value === saved || (save.isPending && save.variables === null)}
                   onClick={() => save.mutate(value)}
                 >
                   Save
@@ -133,6 +133,7 @@ export function NotificationsSection() {
                     size="md"
                     busy={save.isPending && save.variables === null}
                     busyLabel="Turning off…"
+                    disabled={save.isPending && save.variables !== null}
                     onClick={() => save.mutate(null)}
                   >
                     Turn off
