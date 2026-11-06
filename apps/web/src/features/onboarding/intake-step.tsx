@@ -255,8 +255,8 @@ function Ready({
           type="button"
           size="lg"
           variant="primary"
-          disabled={pending}
-          aria-busy={pending || undefined}
+          busy={pending}
+          busyLabel={count === 1 ? 'Turning on 1 trigger…' : `Turning on ${count} triggers…`}
           onClick={() => void turnOn()}
         >
           {label}

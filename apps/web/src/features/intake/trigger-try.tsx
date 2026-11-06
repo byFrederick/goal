@@ -109,8 +109,8 @@ function TryDialog({ org, factory, trigger, events, title }: Omit<TryProps, 'dis
           </NativeSelect>
         </Field>
         <div>
-          <Button type="submit" variant="primary" disabled={!chosen || run.isPending}>
-            {run.isPending ? 'Trying…' : 'Run the try'}
+          <Button type="submit" variant="primary" disabled={!chosen} busy={run.isPending} busyLabel="Trying…">
+            Run the try
           </Button>
         </div>
       </form>
@@ -228,9 +228,16 @@ export function TryCheck({ org, factory, trigger, disabled, checking, readAt, on
     });
   };
   return (
-    <Button variant="white" size="md" disabled={disabled || checking || stillChecking || run.isPending} onClick={tryIt}>
+    <Button
+      variant="white"
+      size="md"
+      disabled={disabled || checking || stillChecking}
+      busy={run.isPending}
+      busyLabel="Trying…"
+      onClick={tryIt}
+    >
       <Play size={15} strokeWidth={1.5} aria-hidden="true" />
-      {run.isPending ? 'Trying…' : 'Try a check'}
+      Try a check
     </Button>
   );
 }
