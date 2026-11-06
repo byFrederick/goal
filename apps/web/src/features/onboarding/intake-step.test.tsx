@@ -294,6 +294,18 @@ describe('step 6, choose where work comes from', () => {
     );
   });
 
+  it('shows the button as busy while the write is pending', async () => {
+    vi.mocked(putDraftFile).mockReturnValue(new Promise(() => {}));
+    renderStep(url);
+    await screen.findByRole('switch', { name: 'weekly-dependency-audit' });
+    fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on 1 trigger' }));
+    const button = await screen.findByRole('button', { name: 'Turning on 1 trigger…' });
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+  });
+
   it('turns on several triggers in one publish', async () => {
     vi.mocked(getIntake).mockResolvedValue(
       intakeOf([

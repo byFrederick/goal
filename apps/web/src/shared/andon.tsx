@@ -229,8 +229,8 @@ function PullDialog({ factory, open, onOpenChange, onConfirm, pending }: DialogP
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? 'Stopping the line…' : 'Stop the line'}
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Stopping the line…">
+              Stop the line
             </Button>
           </div>
         </form>
@@ -274,8 +274,8 @@ function ClearDialog({ factory, pull, open, onOpenChange, onConfirm, pending }: 
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={pending}>
-              {pending ? 'Restarting the line…' : 'Restart the line'}
+            <Button type="submit" variant="primary" busy={pending} busyLabel="Restarting the line…">
+              Restart the line
             </Button>
           </div>
         </form>

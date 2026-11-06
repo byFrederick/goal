@@ -23,6 +23,18 @@ func (q *Queries) ClearLapsedPreviousSecrets(ctx context.Context) error {
 	return err
 }
 
+const connectionKeyIDs = `-- name: ConnectionKeyIDs :one
+SELECT goal_connection_key_ids()::text[] AS key_ids
+`
+
+// The master key ids of every organization's sealed secrets and webhook endpoints (00133).
+func (q *Queries) ConnectionKeyIDs(ctx context.Context) ([]string, error) {
+	row := q.db.QueryRow(ctx, connectionKeyIDs)
+	var key_ids []string
+	err := row.Scan(&key_ids)
+	return key_ids, err
+}
+
 const deleteSecret = `-- name: DeleteSecret :one
 DELETE FROM secrets WHERE name = $1 RETURNING id
 `
@@ -97,8 +109,7 @@ const lockSecret = `-- name: LockSecret :one
 SELECT id FROM secrets WHERE name = $1 FOR UPDATE
 `
 
-// The secret name, locked for its deletion: connection writes that refer to it
-// (ShareReferencedCredentials) wait for it, and it waits for them.
+// The secret name, locked for its deletion.
 func (q *Queries) LockSecret(ctx context.Context, name string) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockSecret, name)
 	var id uuid.UUID

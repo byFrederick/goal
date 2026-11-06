@@ -12,8 +12,8 @@ dotenv: [".env"]
 
 vars:
   GOLANGCI: '{{.GOLANGCI | default "golangci-lint"}}'
-  # compose.yaml's PostgreSQL: 18 with pgvector (the knowledge base, 00054).
-  PG_IMAGE: pgvector/pgvector:0.8.7-pg18-trixie
+  # compose.yaml's PostgreSQL: the official PostgreSQL 18 image on Debian trixie.
+  PG_IMAGE: postgres:18.6-trixie
   OAPI_CODEGEN_VERSION: v2.8.0
   # Working copy of the factory definitions: outside this repository, never committed.
   FACTORIES_DIR: '{{.GOAL_FACTORIES_DIR | default "../goal-factories"}}'
@@ -27,12 +27,11 @@ vars:
   # no Docker (the dev agent image, in which station checks run, ships the server).
   MIGRATE_WITH:
     sh: command -v docker >/dev/null 2>&1 && echo docker || echo local
-  # What goal db init grants and creates before goald migrates (postgres.InitRoles), for migrate-check.
+  # What goal db init grants before goald migrates (postgres.InitRoles), for migrate-check.
   MIGRATE_GRANTS: >-
     REVOKE TEMPORARY, CONNECT ON DATABASE goal FROM PUBLIC;
     GRANT CONNECT, CREATE ON DATABASE goal TO goal_owner; GRANT CONNECT ON DATABASE goal TO goal_app, goal_auth;
     GRANT USAGE, CREATE ON SCHEMA public TO goal_owner; GRANT USAGE ON SCHEMA public TO goal_app, goal_auth;
-    CREATE EXTENSION IF NOT EXISTS vector
   # deploy/terraform/'s one workspace and its SOPS file (docs/engineering/cloudflare-operations.md).
   TF_WORKSPACE_NAME: production
   SOPS_FILE: deploy/terraform/secrets/production.sops.yaml
@@ -374,6 +373,18 @@ tasks:
     deps: [build]
     cmds:
       - bin/goal storage init
+
+  catalog:templates:push:
+    desc: Push every starter template (deploy/catalog/templates/<name>/<version>/) into the bucket GOAL_S3_* names (the local RustFS by default); a version already held unchanged is not an error, so it can be repeated
+    deps: [build]
+    cmds:
+      - |
+        set -eu
+        for d in deploy/catalog/templates/*/*/; do
+          v="$(basename "$d")"
+          n="$(basename "$(dirname "$d")")"
+          bin/goal catalog templates push "$d" --name "$n" --version "$v"
+        done
 
   factory:validate:
     desc: Validate every factory in the working copy (GOAL_FACTORIES_DIR) through goald

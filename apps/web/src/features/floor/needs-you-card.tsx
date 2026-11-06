@@ -52,19 +52,21 @@ function DecisionActions({
   const pending = decide.isPending ? decide.variables?.kind : undefined;
   return (
     <>
-      <Button size="sm" className="max-md:h-11 max-md:flex-1 max-md:justify-center" onClick={() => setDenying(true)}>
+      <Button size="sm" className="max-md:h-11 max-md:justify-center" onClick={() => setDenying(true)}>
         Deny
       </Button>
       <Button
         size="sm"
         variant="approve"
         className="max-md:hidden"
-        disabled={decide.isPending || approved}
+        busy={pending === 'approve'}
+        busyLabel="Approving…"
+        disabled={approved || pending === 'reject'}
         aria-label={`${approved ? 'Approved' : 'Approve'} ${item.ref}`}
         onClick={() => decide.mutate({ kind: 'approve' }, { onSuccess: onApproved })}
       >
         <SuccessLabel done={approved} doneLabel="Approved">
-          {pending === 'approve' ? 'Approving…' : 'Approve'}
+          Approve
         </SuccessLabel>
       </Button>
       <Link
@@ -90,7 +92,7 @@ function DecisionActions({
 function DecideLink({ row }: { row: InboxRow }) {
   const params = useFactoryParams();
   const className =
-    'inline-flex h-9 items-center rounded-control border border-rule bg-card px-3 text-secondary font-medium text-ink no-underline hover:bg-panel max-md:h-11 max-md:flex-1 max-md:justify-center';
+    'inline-flex h-9 items-center rounded-control border border-rule bg-card px-3 text-secondary font-medium text-ink no-underline hover:bg-panel max-md:h-11 max-md:justify-center';
   return row.item ? (
     <Link to="/o/$org/f/$factory/items/$ref" params={{ ...params, ref: row.item.ref }} className={className}>
       Decide

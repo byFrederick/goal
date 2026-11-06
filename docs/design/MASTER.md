@@ -112,7 +112,7 @@ Rules:
 - **Sidebar** (248px by default; resizable 216–400px; collapses to a 56px rail; the existing resize behaviour is unchanged, with the snap animated per MOTION.md):
   - **Top row:** the Goal mark and the organization's name open the organization menu; Search (⌘K) and Collapse on the right.
   - **New item:** a secondary button (white, rule border, ink text) with a `C` key hint in a mono keycap. Not a filled brand block.
-  - **Organization-wide:** Home, Needs you (orange count), Runs, Connections, Credentials, Knowledge. 32px rows, 16px icons. The current page is a grey `--color-hover` fill with ink text and an ink icon.
+  - **Organization-wide:** Home, Needs you (orange count), Runs, Access, Secrets, Webhooks, Knowledge. 32px rows, 16px icons. The current page is a grey `--color-hover` fill with ink text and an ink icon.
   - **Factories:** each factory is a collapsible group: its 18px letter badge, its name, and an orange count (needs you) or a red dot (andon). The open factory's pages (Floor, Board, Items, Agents, Intake, Jonah, Definition, Settings) sit under a 1px guide line; the current one is a grey fill.
   - **Bottom:** spend this week as a plain row with a 4px bar (no card), then the person.
 - **Top bar** (52px): the breadcrumb (muted ancestors, ink current) on the left; the page's actions on the right, the primary one last. At tablet widths, when the actions do not fit beside the crumbs, they wrap to a right-aligned row under the crumbs (no animation); the crumbs keep at least their last item, ellipsized.
@@ -131,6 +131,7 @@ Unchanged from version 2: New item, Needs you (Approval, Decision, Question, Ale
   - Approve inside Needs you: orange fill, white text.
   - Icon buttons: 32px, `aria-label`, a 44px hit area on a coarse pointer, muted icon that turns ink on hover.
   - Every button scales to 0.97 while pressed (MOTION.md).
+  - Busy: a button whose click waits on the server takes `busy` (and `busyLabel`), never only `disabled`. It keeps its size: it reserves the wider of its labels (idle, busy and, with `SuccessLabel`, done). After 100 ms the label swaps to the work in progress, led by the 16px `Spinner` (action-ink on primary, action, approve and danger-fill; ink on secondary, ghost and danger). It sets `aria-busy="true"` and `aria-disabled="true"` instead of `disabled`, so focus stays and assistive tech hears the change; clicks and the submit of a `type="submit"` button are ignored. It keeps full opacity and a `progress` cursor, never the disabled look. On success it swaps to the check; on failure the label comes back and the page's error Callout shows, with focus still on the button. Keep `disabled` for conditions that are not a pending request. Busy labels are a present participle with an ellipsis: Publishing v{N}…, Saving…, Sending N invites…, Turning on N triggers…, Approving…, Merging…, Rejecting…, Deleting…, Revoking…, Creating…, Stopping the line…, Restarting the line…, Moving…, Scheduling…, Cancelling…, Restoring…. `apps/web/src/ui/busy-guard.test.ts` fails on a Button whose `disabled` references a pending request, except for its commented list of sibling locks. Motion: MOTION.md, A button waits on the server.
 - **Chips:** 22px, 4px radius, 12px at 500, white with a line border and a 6px dot for status. Tinted only for needs you (orange) and sent back (red).
 - **Segmented control:** a `hover`-grey track with no border, 2px inset; the selected segment is white with a hairline shadow, and the highlight slides between segments.
 - **Truncated labels:** a label that truncates carries a `title` with its full text (or wraps); `truncate-title.test.ts` guards it.
@@ -154,6 +155,7 @@ The screens on the canvas, one page per flow (unchanged list from version 2): Ge
 ## Accessibility and checks
 
 - WCAG 2.2 AA in both themes: text 4.5:1 (3:1 at 24px+), controls 3:1. Colours that must be told apart also differ in lightness.
+- A mark that carries a value, such as a WIP slot in the preview, uses `muted` or stronger for its border, never `line`: a hairline is about 1.2:1 and fails 1.4.11.
 - Real elements: `<button>`, `<a href>`, `<input>` with `<label>`, `role="switch"`. Focus rings are 2px `run` with a 2px offset. Every drag has a Move menu, and every shortcut is shown where its action is.
 - Phone-first: check 375, 768 and 1440px. Below 1024px wide tables scroll in their own box; from 1024px every column shows and long titles end in an ellipsis.
 - Every visual change runs the ui-ux-pro-max pre-delivery checklist and the MOTION.md checklist.

@@ -161,8 +161,15 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
       <TopBarSlot
         actions={
           mayManage ? (
-            <Button type="submit" form={formId} variant="action" disabled={!dirty || save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save changes'}
+            <Button
+              type="submit"
+              form={formId}
+              variant="action"
+              busy={save.isPending}
+              busyLabel="Saving…"
+              disabled={!dirty}
+            >
+              Save changes
             </Button>
           ) : undefined
         }
@@ -198,7 +205,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                   />
                 </SettingsRow>
                 <SettingsRow id="oslug" label="Address" help="Changing it breaks old links" error={shown('slug')}>
-                  <div className="flex h-11 items-stretch overflow-hidden rounded-control border border-rule bg-card md:h-10">
+                  <div className="flex h-[46px] items-stretch overflow-hidden rounded-control border border-rule bg-card md:h-10">
                     <span
                       aria-hidden="true"
                       className="flex shrink-0 items-center whitespace-nowrap border-r border-rule bg-panel px-3 text-secondary text-muted"
@@ -215,7 +222,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                       autoComplete="off"
                       autoCapitalize="off"
                       spellCheck={false}
-                      className="h-full min-w-0 flex-1 border-0 font-mono hover:border-0 md:text-sm"
+                      className="h-full min-w-0 flex-1 border-0 font-mono hover:border-0 max-md:min-h-11 md:text-sm"
                       aria-invalid={shown('slug') ? true : undefined}
                       aria-describedby={describedBy('oslug', { help: true, error: shown('slug') })}
                     />

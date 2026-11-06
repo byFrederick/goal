@@ -124,7 +124,7 @@ async function buildColumn() {
 }
 
 describe('the Done column header', () => {
-  it('shows both figures in full and lets the meta line wrap instead of clipping one', async () => {
+  it('keeps both notes on one line, each truncating with its full text as a title', async () => {
     const done: BoardStation = {
       ...buildStation([]),
       id: 'done',
@@ -152,8 +152,12 @@ describe('the Done column header', () => {
     expect(within(column).getByText('0 today')).toBeTruthy();
     const week = within(column).getByText('281 this week');
     expect(within(column).getByText('Merged pull requests')).toBeTruthy();
-    expect(week.classList).not.toContain('shrink-0');
-    expect(week.parentElement?.classList).toContain('flex-wrap');
+    expect(week.classList).toContain('truncate');
+    expect(week.getAttribute('title')).toBe('281 this week');
+    expect(week.parentElement?.classList).not.toContain('flex-wrap');
+    const left = within(column).getByText('Merged pull requests');
+    expect(left.classList).toContain('truncate');
+    expect(left.getAttribute('title')).toBe('Merged pull requests');
   });
 });
 

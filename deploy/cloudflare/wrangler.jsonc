@@ -35,11 +35,12 @@
   "triggers": { "crons": ["* * * * *"] },
   "containers": [
     {
-      // goald with the web UI; next to the database (PlanetScale, us-east).
+      // goald with the web UI; next to the database (PlanetScale, us-east). Sizes: Container
+      // sizes in docs/engineering/cloudflare-operations.md.
       "class_name": "Goald",
       "image": "../../cmd/goald/Dockerfile",
       "image_build_context": "../..",
-      "instance_type": "standard-1",
+      "instance_type": "basic",
       "max_instances": 1,
       "constraints": { "regions": ["ENAM"] }
     },
@@ -47,7 +48,7 @@
       "class_name": "Auth",
       "image": "../../apps/auth/Dockerfile",
       "image_build_context": "../..",
-      "instance_type": "basic",
+      "instance_type": "lite",
       "max_instances": 1,
       "constraints": { "regions": ["ENAM"] }
     },

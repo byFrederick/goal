@@ -18,7 +18,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
 import { touchLink } from '../../ui/touch-target';
-import { AssemblyTableRow, hideBelowLg, hideBelowXl, ItemTableRow, listRows } from './assembly-rows';
+import { AssemblyTableRow, hideBelowLg, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
   applyFilters,
@@ -107,6 +107,19 @@ function ItemsActions() {
 }
 
 const columns = ['Ref', 'Title', 'Repositories', 'Type', 'Lane', 'Station', 'State', 'Agent', 'Age', 'Cost'] as const;
+
+/** From lg the table lays out in fixed columns, so it always fits its box; Title takes what is left. */
+const columnWidth: Partial<Record<(typeof columns)[number], string>> = {
+  Ref: 'lg:w-14 xl:w-16',
+  Repositories: '2xl:w-48',
+  Type: 'lg:w-14 xl:w-20',
+  Lane: 'lg:w-20 xl:w-24',
+  Station: 'lg:w-20 xl:w-28',
+  State: 'lg:w-28 xl:w-36',
+  Agent: 'lg:w-20 xl:w-28',
+  Age: 'lg:w-12 xl:w-16',
+  Cost: 'lg:w-16 xl:w-20',
+};
 
 export function ItemsPage() {
   const factory = useFactory();
@@ -349,11 +362,11 @@ export function ItemsPage() {
           <div className="overflow-x-auto rounded-card border border-line bg-card">
             <table
               aria-label="Items"
-              className="w-full min-w-max border-collapse text-body whitespace-nowrap lg:min-w-0"
+              className="w-full min-w-max border-collapse text-body whitespace-nowrap lg:min-w-0 lg:table-fixed"
             >
               <thead className="bg-panel text-secondary font-medium text-muted">
                 <tr>
-                  <th scope="col" className="w-px px-3 py-2 text-left">
+                  <th scope="col" className="w-px px-3 py-2 text-left lg:w-8 lg:max-xl:px-1 xl:w-10">
                     <span className="sr-only">Select</span>
                   </th>
                   {columns
@@ -363,11 +376,12 @@ export function ItemsPage() {
                         key={column}
                         scope="col"
                         className={cn(
-                          'px-3 py-2 text-left font-medium whitespace-nowrap',
+                          'px-3 py-2 text-left font-medium whitespace-nowrap lg:max-xl:px-1',
                           column === 'Repositories' && 'hidden 2xl:table-cell',
                           column === 'Cost' && 'text-right',
-                          (column === 'Agent' || column === 'Age') && hideBelowXl,
-                          (column === 'Lane' || column === 'Cost') && hideBelowLg,
+                          columnWidth[column],
+                          (column === 'Lane' || column === 'Agent' || column === 'Age' || column === 'Cost') &&
+                            hideBelowLg,
                         )}
                       >
                         {column}

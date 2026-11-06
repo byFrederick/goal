@@ -178,6 +178,8 @@
   --animate-row-in: row-in var(--duration-fast) var(--ease-out) both;
   /* The sweep across an agent's working status line (MOTION.md, An agent working). See the thinking utility below. */
   --animate-icon-swap: icon-swap var(--duration-fast) var(--ease-out) both;
+  /* A busy button's label swaps to the work in progress (MOTION.md, A button waits on the server). */
+  --animate-busy-swap: icon-swap var(--duration-quick) var(--ease-out) both;
 
   --animate-thinking-shimmer: thinking-shimmer var(--duration-shimmer) linear infinite;
 

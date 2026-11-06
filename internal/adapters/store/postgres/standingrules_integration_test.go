@@ -14,7 +14,7 @@ import (
 )
 
 // Migration 00091 keys standing rules by server too: a rule keyed by its connection before it
-// is listed after it unchanged, with no server key, and a row with both keys, or with part of the
+// keeps that key after it, with no server key, and a row with both keys, or with part of the
 // server key, is refused.
 func TestMigrate_StandingRulesServerKey(t *testing.T) {
 	t.Parallel()
@@ -34,23 +34,25 @@ func TestMigrate_StandingRulesServerKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	migrate(t, db.owner)
+	migrateTo(t, openPool(t, db.owner), 91)
 
-	got, err := NewStandingRules(store).StandingRules(domain.WithOrg(t.Context(), org), false)
-	if err != nil || len(got) != 1 {
-		t.Fatalf("StandingRules after 00091 = %+v, %v; want the old rule", got, err)
+	// 00133 drops connection_id, so the row is read as 00091 left it.
+	var connID, factoryID, environment, server *string
+	if err := admin.QueryRow(t.Context(), `SELECT connection_id::text, factory_id::text, environment, server
+		FROM standing_rules WHERE id = $1 AND revoked_at IS NULL`, rule).Scan(&connID, &factoryID, &environment, &server); err != nil {
+		t.Fatalf("the old rule after 00091: %v; want it, active", err)
 	}
 
-	if r := got[0]; r.ID != domain.StandingRuleID(rule.String()) || r.ConnectionID != domain.ConnectionID(conn.String()) ||
-		r.Factory != "" || r.Environment != "" || r.Server != "" || !r.Active() {
-		t.Errorf("the old rule after 00091 = %+v; want it keyed by its connection, active", r)
+	if connID == nil || *connID != conn.String() || factoryID != nil || environment != nil || server != nil {
+		t.Errorf("the old rule after 00091 = connection %v, factory %v, environment %v, server %v; want it keyed by its connection",
+			connID, factoryID, environment, server)
 	}
 
 	factory := uuid.Must(uuid.NewV7())
 
 	for name, cols := range map[string][]any{
-		"both keys":                      {conn, factory, "default", "acme-git"},
-		"a server key without a factory": {nil, nil, "default", "acme-git"},
+		"both keys":                      {conn, factory, "default", acmeGit},
+		"a server key without a factory": {nil, nil, "default", acmeGit},
 		"no key":                         {nil, nil, nil, nil},
 	} {
 		_, err := admin.Exec(t.Context(), `INSERT INTO standing_rules

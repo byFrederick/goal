@@ -497,11 +497,10 @@ var (
 	pushedHead = strings.Repeat("c", 40)
 )
 
-// pushed is a succeeded result with output that pushed head, reported as today's worker image
-// does, as the single pushed_head.
+// pushed is a succeeded result with output that pushed head to the task's repository.
 func pushed(output, head string) domain.RunResult {
 	res := ok(output)
-	res.Repositories = []domain.RunRepository{{PushedHead: head}}
+	res.Repositories = []domain.RunRepository{{Repo: repoURL, PushedHead: head}}
 
 	return res
 }
@@ -516,7 +515,7 @@ func TestRun_RecordsTheBriefOutputAndHeads(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, repoLine(), porttest.Sequence(pushed(`{"lane":"backend"}`, pushedHead)))
-	h.worker.Heads(branchHead, baseHead)
+	h.worker.PreparedRepositories(domain.WorkerRepository{Repo: repoURL, BranchHead: branchHead, BaseCommit: baseHead})
 	it := h.submit(t, domain.NewItem{Title: "Add a version command", Body: "Print the build's version."})
 
 	h.step(t)
@@ -548,8 +547,7 @@ func TestRun_RecordsTheBriefOutputAndHeads(t *testing.T) {
 }
 
 // A worker that reports the repositories list (ADR 0041 decision 5) records one row per
-// repository it names, on its normalized name, with only the commits it may record; the list wins
-// over the single heads.
+// repository it names, on its normalized name, with only the commits it may record.
 func TestRun_RecordsTheReportedRepositories(t *testing.T) {
 	t.Parallel()
 
@@ -557,7 +555,6 @@ func TestRun_RecordsTheReportedRepositories(t *testing.T) {
 	res := ok(`{"lane":"backend"}`)
 	res.Repositories = []domain.RunRepository{{Repo: repoKey, PushedHead: branchHead}, {Repo: docs, PushedHead: pushedHead, Wrote: true}}
 	h := newHarness(t, repoLine(), porttest.Sequence(res))
-	h.worker.Heads(pushedHead, pushedHead) // the single heads, which the list overrides
 	h.worker.PreparedRepositories(
 		domain.WorkerRepository{Repo: repoURL, BranchHead: branchHead, BaseCommit: baseHead},
 		domain.WorkerRepository{Repo: "not a repository", BranchHead: branchHead},
@@ -588,7 +585,7 @@ func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 	line := repoLine()
 	line.Stations[1].Checks = []string{makeTest} // the work station, after the inbox
 	h := newHarness(t, line, porttest.Sequence(pushed(`{"try":1}`, branchHead), pushed(`{"try":2}`, pushedHead)))
-	h.worker.Heads(branchHead, baseHead)
+	h.worker.PreparedRepositories(domain.WorkerRepository{Repo: repoURL, BranchHead: branchHead, BaseCommit: baseHead})
 	h.worker.Exit(makeTest, 2, 0)
 	it := h.submit(t, domain.NewItem{Title: "Add a version command"})
 
@@ -632,12 +629,12 @@ func TestRun_RetryInTheSameBoxRecordsNoHeads(t *testing.T) {
 }
 
 // Without a repository a run records its brief and output, and no heads, even when the worker
-// reports some; nothing fails.
+// reports a row on no repository; nothing fails.
 func TestRun_WithoutARepositoryRecordsNoHeads(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, lineOf(agentStation(stWork, agWorker, 1, 1)), porttest.Succeed(`{"lane":"backend"}`))
-	h.worker.Heads(branchHead, baseHead)
+	h.worker.PreparedRepositories(domain.WorkerRepository{BranchHead: branchHead, BaseCommit: baseHead})
 	it := h.submit(t, domain.NewItem{Title: "Write the release notes"})
 
 	h.step(t)

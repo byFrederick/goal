@@ -101,18 +101,19 @@ export function AssemblyActions({ item, itemKey, parts, factory, stationLanes, p
       {showPause ? (
         <Button
           variant="white"
-          disabled={decide.isPending}
+          busy={pending === 'pause'}
+          busyLabel="Pausing…"
           onClick={() => decide.mutate({ kind: 'pause', reason: '' })}
         >
           <Pause size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'pause' ? 'Pausing…' : 'Pause'}
+          Pause
         </Button>
       ) : null}
       {showCancel ? (
         <>
-          <Button variant="rework" disabled={cancel.isPending} onClick={() => setCancelOpen(true)}>
+          <Button variant="rework" busy={cancel.isPending} busyLabel="Cancelling…" onClick={() => setCancelOpen(true)}>
             <Ban size={16} strokeWidth={1.75} aria-hidden="true" />
-            {cancel.isPending ? 'Cancelling…' : 'Cancel assembly'}
+            Cancel assembly
           </Button>
           <CancelDialog
             openParts={openPartCount(parts)}
@@ -130,9 +131,14 @@ export function AssemblyActions({ item, itemKey, parts, factory, stationLanes, p
         </>
       ) : null}
       {showResume ? (
-        <Button variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ kind: 'retry' })}>
+        <Button
+          variant="primary"
+          busy={pending === 'retry'}
+          busyLabel="Resuming…"
+          onClick={() => decide.mutate({ kind: 'retry' })}
+        >
           <Play size={16} strokeWidth={1.75} aria-hidden="true" />
-          {pending === 'retry' ? 'Resuming…' : 'Resume'}
+          Resume
         </Button>
       ) : null}
     </div>
@@ -168,7 +174,7 @@ function CancelDialog({ openParts, working, open, onOpenChange, onConfirm, pendi
           className="flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            onConfirm();
+            if (!pending) onConfirm();
           }}
         >
           {refusal ? (
@@ -183,9 +189,9 @@ function CancelDialog({ openParts, working, open, onOpenChange, onConfirm, pendi
             <DialogClose asChild>
               <Button variant="secondary">Keep it</Button>
             </DialogClose>
-            <Button type="submit" variant="rework" disabled={pending}>
+            <Button type="submit" variant="rework" busy={pending} busyLabel="Cancelling…">
               <Ban size={16} strokeWidth={1.75} aria-hidden="true" />
-              {pending ? 'Cancelling…' : 'Cancel assembly'}
+              Cancel assembly
             </Button>
           </div>
         </form>

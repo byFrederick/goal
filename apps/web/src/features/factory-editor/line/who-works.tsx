@@ -37,9 +37,11 @@ export function WhoWorks({
 
   if (station.kind === 'human') {
     return (
-      <span className="flex min-h-9 items-center gap-2 text-sm text-ink-soft">
-        <Users size={16} strokeWidth={1.5} aria-hidden="true" className="text-muted" />
-        Approvers of {factory}
+      <span className="flex min-h-9 min-w-0 items-center gap-2 text-sm text-ink-soft">
+        <Users size={16} strokeWidth={1.5} aria-hidden="true" className="flex-none text-muted" />
+        <span className="min-w-0 truncate" title={`Approvers of ${factory}`}>
+          Approvers of {factory}
+        </span>
       </span>
     );
   }
@@ -48,7 +50,9 @@ export function WhoWorks({
     const external = hasExternalIntake(line.intake);
     return (
       <span className="flex min-h-9 min-w-0 flex-col justify-center text-sm leading-snug">
-        <span className="line-clamp-2 min-w-0">{intakeSummary(line.intake)}</span>
+        <span className="line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={intakeSummary(line.intake)}>
+          {intakeSummary(line.intake)}
+        </span>
         {external ? (
           <Link
             to="."

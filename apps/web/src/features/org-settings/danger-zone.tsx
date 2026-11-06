@@ -89,8 +89,14 @@ function DeleteOrganization({ org, name, onLeave }: { org: OrgSummary; name: str
             spellCheck={false}
             className="max-w-65"
           />
-          <Button type="submit" variant="danger-fill" disabled={typed !== name || remove.isPending}>
-            {remove.isPending ? 'Deleting…' : 'Delete organization'}
+          <Button
+            type="submit"
+            variant="danger-fill"
+            busy={remove.isPending}
+            busyLabel="Deleting…"
+            disabled={typed !== name}
+          >
+            Delete organization
           </Button>
         </div>
         {error ? (

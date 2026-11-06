@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearItemStart, setItemStart } from '../../api/client';
 import type { Factory, Item, ItemEvent } from '../../api/types';
+import { expectBusyOnClick } from '../../test/busy';
 import { renderFactoryPage } from '../../test/route';
 import { ClosedBanner, closedBy, StartBanner } from './start-banner';
 
@@ -113,5 +114,18 @@ describe('Closed by', () => {
     const banner = await screen.findByRole('status');
     expect(banner.textContent).toContain('Closed by architect.');
     expect(banner.textContent).toContain('Nothing here is work.');
+  });
+
+  it('shows Save as busy while the new start is pending and sends it once', async () => {
+    vi.mocked(setItemStart).mockImplementation(() => new Promise(() => {}));
+    render(() => <StartBanner item={later} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Change/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Date'), { target: { value: '2026-11-24' } });
+    fireEvent.change(within(dialog).getByLabelText('Time'), { target: { value: '10:15' } });
+    await expectBusyOnClick(within(dialog).getByRole('button', { name: 'Save' }), 'Saving…');
+
+    expect(setItemStart).toHaveBeenCalledTimes(1);
   });
 });

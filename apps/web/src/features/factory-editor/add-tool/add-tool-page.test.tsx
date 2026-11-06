@@ -189,6 +189,32 @@ describe('a template', () => {
     expect(await screen.findByText('Added to draft')).toBeTruthy();
   });
 
+  it('shows Add to draft as busy, not disabled, while it saves, and sends one request', async () => {
+    calls.flush.mockReturnValue(new Promise(() => undefined));
+    wrap(<TemplatePanel template={sentry} environment="default" onEnvironment={() => undefined} />);
+    fireEvent.change(screen.getByPlaceholderText('Paste sentry auth token'), { target: { value: 'sntrys_value' } });
+    const button = screen.getByRole('button', { name: 'Add to draft' }) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(calls.editFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Test as busy, not disabled, while it runs, and sends one request', async () => {
+    calls.testEnvironment.mockReturnValue(new Promise(() => undefined));
+    wrap(<TemplatePanel template={sentry} environment="default" onEnvironment={() => undefined} />);
+    fireEvent.change(screen.getByPlaceholderText('Paste sentry auth token'), { target: { value: 'sntrys_value' } });
+    const button = screen.getByRole('button', { name: 'Test' }) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(calls.createSecret).toHaveBeenCalledTimes(1);
+  });
+
   it('takes an existing secret without creating one', async () => {
     wrap(<TemplatePanel template={sentry} environment="default" onEnvironment={() => undefined} />);
     fireEvent.click(screen.getByRole('combobox', { name: 'Secret' }));

@@ -79,8 +79,7 @@ WHERE id = sqlc.arg(id)
 RETURNING updated_at;
 
 -- name: LockSecret :one
--- The secret name, locked for its deletion: connection writes that refer to it
--- (ShareReferencedCredentials) wait for it, and it waits for them.
+-- The secret name, locked for its deletion.
 SELECT id FROM secrets WHERE name = sqlc.arg(name) FOR UPDATE;
 
 -- name: DeleteSecret :one
@@ -142,3 +141,7 @@ FOR NO KEY UPDATE;
 -- name: ResealPreviousSecret :exec
 UPDATE secrets SET previous_key_id = sqlc.arg(key_id), previous_nonce = sqlc.arg(nonce), previous_ciphertext = sqlc.arg(ciphertext)
 WHERE id = sqlc.arg(id);
+
+-- name: ConnectionKeyIDs :one
+-- The master key ids of every organization's sealed secrets and webhook endpoints (00133).
+SELECT goal_connection_key_ids()::text[] AS key_ids;

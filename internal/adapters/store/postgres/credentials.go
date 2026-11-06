@@ -99,14 +99,14 @@ func (c *Credentials) Delete(ctx context.Context, name string, by domain.Actor) 
 	return c.t.delete(ctx, name, by)
 }
 
-// UsedBy implements ports.Credentials.
-func (c *Credentials) UsedBy(ctx context.Context, name string) ([]string, error) {
-	users, err := fetch(ctx, c.t.s.read, func(q *db.Queries) ([]string, error) { return q.CredentialUsers(ctx, name) })
-	if err != nil {
-		return nil, fmt.Errorf("credential %s: its connections: %w", name, err)
+// UsedBy implements ports.Credentials. Connections referred to credentials; with them gone
+// (00133) nothing does, and the deprecated answers keep their shape with no users.
+func (c *Credentials) UsedBy(ctx context.Context, _ string) ([]string, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
+		return nil, domain.ErrNoOrg
 	}
 
-	return append([]string{}, users...), nil
+	return []string{}, nil
 }
 
 // Resolve implements ports.Credentials.
@@ -142,34 +142,15 @@ func (c *Credentials) ImportPreview(ctx context.Context, names []string) ([]doma
 		return nil, fmt.Errorf("import preview: %w", err)
 	}
 
-	var (
-		existing []string
-		used     []db.CredentialUserCountsRow
-	)
-
-	err := c.t.s.read(ctx, func(q *db.Queries) error {
-		var err error
-
-		if existing, err = q.SecretNames(ctx, names); err != nil {
-			return err
-		}
-
-		used, err = q.CredentialUserCounts(ctx, names)
-
-		return err
-	})
+	existing, err := fetch(ctx, c.t.s.read, func(q *db.Queries) ([]string, error) { return q.SecretNames(ctx, names) })
 	if err != nil {
 		return nil, fmt.Errorf("import preview: %w", err)
 	}
 
-	counts := make(map[string]int, len(used))
-	for _, u := range used {
-		counts[u.Name] = int(u.Connections)
-	}
-
+	// No connection refers to a name any more (00133), so every count is zero.
 	out := make([]domain.CredentialImportPreview, 0, len(names))
 	for _, name := range names {
-		out = append(out, domain.CredentialImportPreview{Name: name, Exists: slices.Contains(existing, name), Connections: counts[name]})
+		out = append(out, domain.CredentialImportPreview{Name: name, Exists: slices.Contains(existing, name)})
 	}
 
 	return out, nil
