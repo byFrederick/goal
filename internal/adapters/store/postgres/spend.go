@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -57,22 +58,8 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 			f.ByModel = append(f.ByModel, domain.ModelSpend{Model: m.Model, USD: m.SpendUsd})
 		}
 
-		byAgent, err := q.OrgUsageByAgent(ctx, db.OrgUsageByAgentParams{Since: since, Until: until})
-		if err != nil {
-			return fmt.Errorf("usage by agent: %w", err)
-		}
-
-		for _, u := range byAgent {
-			f.UsageByAgent = append(f.UsageByAgent, runUsage(db.OrgUsageByStationRow(u)))
-		}
-
-		byStation, err := q.OrgUsageByStation(ctx, db.OrgUsageByStationParams{Since: since, Until: until})
-		if err != nil {
-			return fmt.Errorf("usage by station: %w", err)
-		}
-
-		for _, u := range byStation {
-			f.UsageByStation = append(f.UsageByStation, runUsage(u))
+		if err := readUsage(ctx, q, since, until, &f); err != nil {
+			return err
 		}
 
 		if f.ReworkUSD, err = q.OrgReworkSpend(ctx, db.OrgReworkSpendParams{Since: since, Until: until}); err != nil {
@@ -95,6 +82,29 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 	}
 
 	return domain.NewOrgSpend(w, f), nil
+}
+
+// readUsage reads the usage of the runs started in [since, until) into f, by agent and by station.
+func readUsage(ctx context.Context, q *db.Queries, since, until time.Time, f *domain.SpendFacts) error {
+	byAgent, err := q.OrgUsageByAgent(ctx, db.OrgUsageByAgentParams{Since: since, Until: until})
+	if err != nil {
+		return fmt.Errorf("usage by agent: %w", err)
+	}
+
+	for _, u := range byAgent {
+		f.UsageByAgent = append(f.UsageByAgent, runUsage(db.OrgUsageByStationRow(u)))
+	}
+
+	byStation, err := q.OrgUsageByStation(ctx, db.OrgUsageByStationParams{Since: since, Until: until})
+	if err != nil {
+		return fmt.Errorf("usage by station: %w", err)
+	}
+
+	for _, u := range byStation {
+		f.UsageByStation = append(f.UsageByStation, runUsage(u))
+	}
+
+	return nil
 }
 
 // runUsage is a usage row of OrgUsageByAgent or OrgUsageByStation: its percentiles are nil when

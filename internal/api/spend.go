@@ -110,7 +110,7 @@ func (s *server) spendOut(ctx context.Context, sp domain.OrgSpend) gen.OrgSpend 
 	out := gen.OrgSpend{
 		Window: gen.SpendWindow(sp.Period), Since: sp.Since, Until: sp.Until, Complete: complete,
 		Days: make([]gen.SpendDay, 0, len(sp.Days)), ByAgent: []gen.AgentSpend{}, ByModel: []gen.ModelSpend{}, Weekly: []gen.WeekCost{},
-		Budgets: []gen.SpendBudget{}, Usage: gen.SpendUsage{ByAgent: []gen.AgentUsage{}, ByStation: []gen.StationUsage{}},
+		Budgets: []gen.SpendBudget{},
 	}
 
 	for _, d := range sp.Days {
@@ -133,25 +133,7 @@ func (s *server) spendOut(ctx context.Context, sp domain.OrgSpend) gen.OrgSpend 
 		}
 	}
 
-	for _, u := range sp.UsageByAgent {
-		if sees(u.FactoryID) {
-			out.Usage.ByAgent = append(out.Usage.ByAgent, gen.AgentUsage{
-				FactoryId: string(u.FactoryID), Agent: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
-				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
-				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
-			})
-		}
-	}
-
-	for _, u := range sp.UsageByStation {
-		if sees(u.FactoryID) {
-			out.Usage.ByStation = append(out.Usage.ByStation, gen.StationUsage{
-				FactoryId: string(u.FactoryID), Station: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
-				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
-				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
-			})
-		}
-	}
+	out.Usage = usageOut(sp, sees)
 
 	if !complete {
 		return out
@@ -315,6 +297,33 @@ func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]g
 
 // modelKeyKind is the kind of a model_connections entry that is the model key's secret.
 const modelKeyKind = "secret"
+
+// usageOut is sp's usage rows of the factories the caller sees, in their order.
+func usageOut(sp domain.OrgSpend, sees func(domain.FactoryID) bool) gen.SpendUsage {
+	out := gen.SpendUsage{ByAgent: []gen.AgentUsage{}, ByStation: []gen.StationUsage{}}
+
+	for _, u := range sp.UsageByAgent {
+		if sees(u.FactoryID) {
+			out.ByAgent = append(out.ByAgent, gen.AgentUsage{
+				FactoryId: string(u.FactoryID), Agent: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
+				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
+				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
+			})
+		}
+	}
+
+	for _, u := range sp.UsageByStation {
+		if sees(u.FactoryID) {
+			out.ByStation = append(out.ByStation, gen.StationUsage{
+				FactoryId: string(u.FactoryID), Station: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
+				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
+				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
+			})
+		}
+	}
+
+	return out
+}
 
 // bytesOf is an interpolated byte count rounded to a byte, nil for none.
 func bytesOf(v *float64) *int64 {

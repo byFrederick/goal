@@ -338,10 +338,10 @@ func usageLines(sp gen.OrgSpend) string {
 				}
 			}
 
-			return "null"
+			return unsetUSD
 		}
 
-		box := "null"
+		box := unsetUSD
 		if size != nil {
 			box = string(*size)
 		}

@@ -191,20 +191,30 @@ func testOrgSpendUsage(f *fixture) {
 	}
 
 	byAgent := []domain.RunUsage{
-		{FactoryID: f2, Name: agWorker, BoxSize: domain.SandboxMedium, Runs: 1,
-			CPUSecondsP50: num(50), CPUSecondsP90: num(50), PeakMemoryBytesP50: num(64), PeakMemoryBytesP90: num(64)},
-		{FactoryID: f1, Name: agWorker, BoxSize: domain.SandboxLarge, Runs: 4,
-			CPUSecondsP50: num(25), CPUSecondsP90: num(37), PeakMemoryBytesP50: num(250), PeakMemoryBytesP90: num(370)},
+		{
+			FactoryID: f2, Name: agWorker, BoxSize: domain.SandboxMedium, Runs: 1,
+			CPUSecondsP50: num(50), CPUSecondsP90: num(50), PeakMemoryBytesP50: num(64), PeakMemoryBytesP90: num(64),
+		},
+		{
+			FactoryID: f1, Name: agWorker, BoxSize: domain.SandboxLarge, Runs: 4,
+			CPUSecondsP50: num(25), CPUSecondsP90: num(37), PeakMemoryBytesP50: num(250), PeakMemoryBytesP90: num(370),
+		},
 		{FactoryID: f1, Name: agWorker, BoxSize: domain.SandboxSmall, Runs: 1, CPUSecondsP50: num(5), CPUSecondsP90: num(5)},
 		{FactoryID: f1, Name: agReviewer, Runs: 1, PeakMemoryBytesP50: num(1000), PeakMemoryBytesP90: num(1000)},
 	}
 	byStation := []domain.RunUsage{
-		{FactoryID: f2, Name: stWork, BoxSize: domain.SandboxMedium, Runs: 1,
-			CPUSecondsP50: num(50), CPUSecondsP90: num(50), PeakMemoryBytesP50: num(64), PeakMemoryBytesP90: num(64)},
-		{FactoryID: f1, Name: stReview, BoxSize: domain.SandboxLarge, Runs: 2,
-			CPUSecondsP50: num(35), CPUSecondsP90: num(39), PeakMemoryBytesP50: num(350), PeakMemoryBytesP90: num(390)},
-		{FactoryID: f1, Name: stWork, BoxSize: domain.SandboxLarge, Runs: 2,
-			CPUSecondsP50: num(15), CPUSecondsP90: num(19), PeakMemoryBytesP50: num(150), PeakMemoryBytesP90: num(190)},
+		{
+			FactoryID: f2, Name: stWork, BoxSize: domain.SandboxMedium, Runs: 1,
+			CPUSecondsP50: num(50), CPUSecondsP90: num(50), PeakMemoryBytesP50: num(64), PeakMemoryBytesP90: num(64),
+		},
+		{
+			FactoryID: f1, Name: stReview, BoxSize: domain.SandboxLarge, Runs: 2,
+			CPUSecondsP50: num(35), CPUSecondsP90: num(39), PeakMemoryBytesP50: num(350), PeakMemoryBytesP90: num(390),
+		},
+		{
+			FactoryID: f1, Name: stWork, BoxSize: domain.SandboxLarge, Runs: 2,
+			CPUSecondsP50: num(15), CPUSecondsP90: num(19), PeakMemoryBytesP50: num(150), PeakMemoryBytesP90: num(190),
+		},
 		{FactoryID: f1, Name: stWork, BoxSize: domain.SandboxSmall, Runs: 1, CPUSecondsP50: num(5), CPUSecondsP90: num(5)},
 		{FactoryID: f1, Name: stReview, Runs: 1, PeakMemoryBytesP50: num(1000), PeakMemoryBytesP90: num(1000)},
 	}
@@ -217,8 +227,10 @@ func testOrgSpendUsage(f *fixture) {
 		t.Fatal(err)
 	}
 
-	mine := domain.RunUsage{FactoryID: other.factory, Name: agWorker, BoxSize: domain.SandboxLarge, Runs: 1,
-		CPUSecondsP50: num(7777), CPUSecondsP90: num(7777), PeakMemoryBytesP50: num(7777), PeakMemoryBytesP90: num(7777)}
+	mine := domain.RunUsage{
+		FactoryID: other.factory, Name: agWorker, BoxSize: domain.SandboxLarge, Runs: 1,
+		CPUSecondsP50: num(7777), CPUSecondsP90: num(7777), PeakMemoryBytesP50: num(7777), PeakMemoryBytesP90: num(7777),
+	}
 	checkUsage(t, "the other organization's UsageByAgent", theirs.UsageByAgent, []domain.RunUsage{mine})
 	mine.Name = stWork
 	checkUsage(t, "the other organization's UsageByStation", theirs.UsageByStation, []domain.RunUsage{mine})

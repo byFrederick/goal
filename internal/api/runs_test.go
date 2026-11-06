@@ -122,6 +122,7 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 	it := h.seedTitled(t, "Fix the backend build")
 
 	cpu, peak := 42.5, int64(805306368)
+
 	counted, err := h.store.StartRun(inOrg(t), ports.NewRun{
 		FactoryID: it.FactoryID, ItemID: it.ID, Station: it.Station, Agent: agBackend, Model: runModel,
 		StartedAt: t0.Add(time.Minute), Size: domain.SandboxLarge,
