@@ -15,6 +15,7 @@ import { holds, reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { NumberRoll } from '../../ui/number-roll';
+import { touchLinkWide } from '../../ui/touch-target';
 import { useEntryDecision } from '../needs-you/actions';
 import { typeLabel, typeOf } from '../needs-you/types';
 
@@ -52,7 +53,7 @@ export function NeedsYouFirst({
         <Link
           to="/o/$org/needs-you"
           params={{ org: org.slug }}
-          className="ml-auto text-secondary font-control text-run-ink no-underline hover:underline"
+          className={cn(touchLinkWide, 'ml-auto text-secondary font-control text-run-ink no-underline hover:underline')}
         >
           Open all
         </Link>

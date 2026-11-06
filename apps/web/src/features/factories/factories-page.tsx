@@ -16,8 +16,10 @@ import { NewItemFromSidebar } from '../../shared/new-item';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
+import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Skeleton } from '../../ui/skeleton';
+import { touchLink } from '../../ui/touch-target';
 import { ArchivedFactories } from './archived-factories';
 import { FactoryRow } from './factory-row';
 import { MiniLineShape } from './mini-line';
@@ -173,7 +175,7 @@ function ArchivedLink({ slug }: { slug: string }) {
       to="/o/$org"
       params={{ org: slug }}
       search={{ archived: true }}
-      className="self-start text-secondary font-control text-muted no-underline hover:underline"
+      className={cn(touchLink, 'self-start text-secondary font-control text-muted no-underline hover:underline')}
     >
       Archived factories
     </Link>
