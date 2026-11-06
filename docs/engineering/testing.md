@@ -43,6 +43,8 @@ task e2e:secrets        # a run on secrets against a private repository, the che
 
 ### Required checks
 
+An e2e spec whose page counts by day or week (Runs, Spend, Home, the Floor) pins the clock with `pinClock` from `apps/web/e2e/support.ts`: it resets the mock at noon UTC and fixes the browser's `Date.now`. The mock seeds its items minutes before its own now and CI runs in UTC, so without the pin they fall on yesterday for a few hours after 00:00 UTC.
+
 A pull request into main runs three ci jobs: `task check`, `task test-integration` and the e2e job's 12 shards, `task web:e2e (1/12)` through `task web:e2e (12/12)`. When nothing under `apps/web/`, `packages/api-client/`, `contracts/` or `.github/workflows/ci.yml` changed, each shard succeeds without running the suite, so it always reports a status.
 
 Branch protection is not managed in code: `deploy/terraform` has no GitHub provider and the repository has no ruleset file. A repository admin sets the required checks by hand. In the branch protection rule or ruleset for main, under required status checks, add the twelve checks `task web:e2e (1/12)`, `task web:e2e (2/12)`, … `task web:e2e (12/12)` next to `task check` and `task test-integration`. A shard that fails only on a known flaky test (software#759) is re-run once before anyone judges it.

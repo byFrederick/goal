@@ -15,6 +15,13 @@ function runsFor(params: Record<string, string>) {
 }
 
 describe('the mock GET /v1/orgs/{org}/runs', () => {
+  it('defaults to the UTC day of the now it is given, whatever the time of day', () => {
+    const noon = seed(Date.parse('2026-10-27T12:00:00Z'));
+    const result = orgRunsOf(noon, acmeOrg, new URLSearchParams({ limit: '200' }), Date.parse('2026-10-27T00:30:00Z'));
+    if (!('body' in result)) throw new Error(result.detail);
+    expect(result.body.runs.length).toBeGreaterThan(0);
+  });
+
   it('lists the runs newest first, each with its factory and its item', () => {
     const { runs } = runsFor({});
     const starts = runs.map((r) => Date.parse(r.started_at));

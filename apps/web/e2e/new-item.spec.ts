@@ -2,12 +2,11 @@
 // factory picker. The picker starts on the open factory, is empty elsewhere, and lists only the
 // factories the person may add items to.
 import { expect, type Page, test } from '@playwright/test';
+import { pinClock } from './support';
 
-// One instant for the test, the mock and the page (the same as floor.spec.ts).
-const now = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
-
-test.beforeEach(async ({ request }) => {
-  await request.post('/__mock/reset', { data: { now: now.toISOString() } });
+// One instant for the mock and the page: noon UTC (support.ts).
+test.beforeEach(async ({ page, request }) => {
+  await pinClock(page, request);
 });
 
 // The shortcut listens once the shell has mounted, which is after the page's load event. Press C until
