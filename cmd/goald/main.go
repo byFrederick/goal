@@ -64,7 +64,6 @@ import (
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
-	"github.com/byFrederick/goal/internal/moveover"
 	"github.com/byFrederick/goal/internal/notify"
 	"github.com/byFrederick/goal/internal/retention"
 )
@@ -229,12 +228,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake, Hosts: store, Tests: postgres.NewEnvironmentTests(store)}, Log: log,
 	})
-	// The code host adapters: moving over tests a converted version's repository token with them,
-	// the engine merges with them and the API lists what a connection reaches. The standing rules
-	// (ADR 0031): the engine keeps and revokes them, the gateway, the API and moving over read them.
+	// The code host adapters: the engine merges with them and the API lists what a connection
+	// reaches. The standing rules (ADR 0031): the engine keeps and revokes them, and the gateway
+	// and the API read them.
 	hosts, rules := codeHosts(s.AllowPrivateUpstreams), postgres.NewStandingRules(store)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
-	moveOver(ctx, store, connections, rules, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -311,26 +309,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, j)
-}
-
-// moveOver moves every organization from connections and credentials to secrets and environment
-// files, once (ADR 0037 decision 19), points synced knowledge sources at their connections'
-// secrets and moves factory webhook endpoints to the organization (ADR 0040 decision 15): run
-// before the lines load, so they load the converted versions. A converted version is published
-// only after its repository token (on hosts) and remote MCP servers (through tools) pass their
-// test. A failure is logged and goald starts, an unconverted factory running on the
-// old path.
-func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, rules ports.StandingRules, secrets *postgres.Secrets, intake *postgres.Intake,
-	definitions ports.DefinitionStore, authors *authoring.Service, hosts map[string]ports.CodeHost, tools ports.ToolLister,
-	clock ports.Clock, log *slog.Logger,
-) {
-	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, StandingRules: rules, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
-		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Hosts: store, Tools: tools, Clock: clock, Logger: log,
-	}).Run(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
-	}
 }
 
 // newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's

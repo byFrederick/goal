@@ -1,8 +1,7 @@
 // Package environmentcheck tests an MCP server of an environment file (ADR 0037 decision 9): it
 // opens the secrets a remote server's headers or a stdio server's env name, calls tools/list with
-// them and scrubs every error of the opened values. The environment test route (internal/api) and the conversion at
-// goald's start (internal/moveover, decision 19) both test servers with it. Opened values reach
-// the ToolLister only.
+// them and scrubs every error of the opened values. The environment test route (internal/api)
+// tests servers with it. Opened values reach the ToolLister only.
 package environmentcheck
 
 import (
