@@ -454,6 +454,10 @@ func (e *Engine) Run(ctx context.Context) error {
 			}
 		}
 
+		if _, err := e.PollCI(ctx); err != nil && ctx.Err() == nil {
+			e.log.ErrorContext(ctx, "poll ci", slog.Any("error", err))
+		}
+
 		if err := e.Tick(ctx); err != nil && ctx.Err() == nil {
 			e.log.ErrorContext(ctx, "tick", slog.Any("error", err))
 		}
