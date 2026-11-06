@@ -11087,6 +11087,13 @@ components:
         note: { type: string, description: "For a write entry: the host reports no pull-request permission, so Goal can't check it" }
         read: { $ref: "#/components/schemas/RepositoryCheck" }
         push: { $ref: "#/components/schemas/RepositoryCheck" }
+        ci:
+          allOf: [{ $ref: "#/components/schemas/RepositoryCheck" }]
+          description: >-
+            Whether the token can read the commit checks (GitHub) or the pipelines (GitLab) that a
+            station with waitFor: ci waits on, with the host's reason. Absent for a test kept before
+            goald checked CI, until the repository is tested again, and for an owner pattern. It
+            never changes ok: only a factory with a waitFor: ci station needs it.
         readable: { type: integer, description: "For an owner pattern: how many of the owner's repositories the token can read" }
         pushable: { type: integer, description: "For an owner pattern: how many of them it can push to" }
         truncated: { type: boolean, description: "For an owner pattern: the count stopped at 1000, so there may be more" }

@@ -34,7 +34,7 @@ Webhooks bring events in. For what git doesn't do, such as reading issues, check
 - **`github-read`** runs GitHub's MCP server in read-only mode and suggests a read-only fine-grained token. Use it for agents that only read, and for checks.
 - **`github`** keeps every tool, with merges and deletes asking a person first, and suggests a token that can write.
 
-Publishing warns when an agent that only reads, or a check, can call a GitHub tool that writes. Switch the environment to `github-read`, or set those tools to `ask` or `off`. A token an environment names, such as `GH_TOKEN`, is the environment's: Goal can't narrow it, so make it read-only too. Pick the token the way [Connect code to a factory](../connect-code/#pick-a-token-for-each-entry) describes.
+Publishing warns when an agent that only reads, or a check, can call a GitHub tool that writes. Switch the environment to `github-read`, or set those tools to `ask` or `off`. A token an environment names, such as `GH_TOKEN`, is the environment's: Goal can't narrow it, so make it read-only too. Pick the token the way [Connect code to a factory](../connect-code/#pick-a-token-for-each-entry) describes. When a station waits for CI, goald reads the repository's check runs and commit statuses with the entry's token, so a fine-grained token needs read access to Checks and Commit statuses as well; a factory with no station that waits for CI doesn't need it.
 
 ## Add a code host for Enterprise or self-managed GitLab
 

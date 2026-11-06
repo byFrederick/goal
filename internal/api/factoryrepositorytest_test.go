@@ -25,6 +25,7 @@ const (
 	appShown             = "GitHub shows acme/app to the token"
 	accessRead           = "read"
 	codeRepoURLInvalid   = "repository-url-invalid"
+	canRead              = "Can read"
 )
 
 // The repository a repository test tests and the secret it opens.
@@ -78,7 +79,7 @@ var readAndPush = ports.RepositoryAccess{
 	Push: ports.AccessCheck{OK: true, Reason: "GitHub grants the token push to acme/app"},
 }
 
-// A read entry whose token reads and can't push answers "Can read", with no warning and no note;
+// A read entry whose token reads and can't push answers canRead, with no warning and no note;
 // the token goes to the code host and nowhere in the answer.
 func TestFactoryRepositoryTest_Read(t *testing.T) {
 	t.Parallel()
@@ -90,7 +91,7 @@ func TestFactoryRepositoryTest_Read(t *testing.T) {
 	r := h.testFactoryRepository(t, factoryRepoTestPath, testedRepo, repoSecret, accessRead)
 	got := decode[gen.FactoryRepositoryTest](t, r, http.StatusOK)
 
-	if !got.Tested || !got.Ok || got.Summary != "Can read" || got.Warning != nil || got.Note != nil ||
+	if !got.Tested || !got.Ok || got.Summary != canRead || got.Warning != nil || got.Note != nil ||
 		got.Url != testedRepoKey || got.Push.Ok || !strings.Contains(got.Push.Reason, "no push") || got.Readable != nil {
 		t.Errorf("test = %s; want Can read, no warning, the host's reasons", body(t, got))
 	}
@@ -113,7 +114,7 @@ func TestFactoryRepositoryTest_ReadWarnsOnPush(t *testing.T) {
 	h.codehost.SetAccess(testedRepo, repoTokenValue, readAndPush)
 
 	got := decode[gen.FactoryRepositoryTest](t, h.testFactoryRepository(t, factoryRepoTestPath, testedRepo, repoSecret, accessRead), http.StatusOK)
-	if !got.Ok || got.Summary != "Can read" || valueOf(got.Warning) != readOnlyWarning {
+	if !got.Ok || got.Summary != canRead || valueOf(got.Warning) != readOnlyWarning {
 		t.Errorf("test = %s; want Can read with the read-only warning", body(t, got))
 	}
 }
@@ -271,7 +272,7 @@ func TestFactoryRepositoryTest_KeptAndListed(t *testing.T) {
 
 	kept := h.keptRepositoryTests(t)
 	if len(kept) != 2 || kept[0].Url != acmeOwnerKey || kept[1].Url != testedRepoKey ||
-		kept[1].Access != gen.FactoryRepositoryTestAccessRead || kept[1].Summary != "Can read" || kept[0].Summary != "Can read 3 repositories in acme" {
+		kept[1].Access != gen.FactoryRepositoryTestAccessRead || kept[1].Summary != canRead || kept[0].Summary != "Can read 3 repositories in acme" {
 		t.Errorf("kept = %s; want acme/* then acme/app, as last tested", body(t, kept))
 	}
 
@@ -422,5 +423,110 @@ func TestFactoryRepositoryTest_ListedEnterpriseHost(t *testing.T) {
 
 	if tokens := h.codehost.AccessTokens(); len(tokens) != 1 || tokens[0] != repoTokenValue {
 		t.Errorf("the code host got %d tokens; want the secret's value once", len(tokens))
+	}
+}
+
+// ciReadable and ciRefused are the fake host's CI checks of acme/app.
+var (
+	ciReadable = ports.AccessCheck{OK: true, Reason: "GitHub shows the checks and statuses of acme/app"}
+	ciRefused  = ports.AccessCheck{Reason: "the token has no read access to Checks and Commit statuses in acme/app"}
+)
+
+// A one-repository test whose token reads CI answers, and keeps, ci passing with the host's
+// reason.
+func TestFactoryRepositoryTest_CIPasses(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+
+	a := readNoPush
+	a.CI = ciReadable
+	h.codehost.SetAccess(testedRepo, repoTokenValue, a)
+
+	got := decode[gen.FactoryRepositoryTest](t, h.testFactoryRepository(t, factoryRepoTestPath, testedRepo, repoSecret, accessRead), http.StatusOK)
+	if got.Ci == nil || !got.Ci.Ok || got.Ci.Reason != ciReadable.Reason {
+		t.Errorf("test = %s; want ci passing with the host's reason", body(t, got))
+	}
+
+	if kept := h.keptRepositoryTests(t); len(kept) != 1 || kept[0].Ci == nil || !kept[0].Ci.Ok {
+		t.Errorf("kept = %s; want the passing ci kept", body(t, kept))
+	}
+}
+
+// A token that can't read CI fails ci with the host's reason, and ok, summary, warning, read and
+// push stay as they are without it: only a factory that waits for CI needs it. A host that gives
+// no answer fails ci with the same couldn't test reason as read and push.
+func TestFactoryRepositoryTest_CIFailsKeepsOK(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+
+	for _, access := range []ports.RepositoryAccess{readNoPush, readAndPush} {
+		for _, entry := range []string{accessRead, "write"} {
+			h.codehost.SetAccess(testedRepo, repoTokenValue, access)
+			want := decode[gen.FactoryRepositoryTest](t, h.testFactoryRepository(t, factoryRepoTestPath, testedRepo, repoSecret, entry), http.StatusOK)
+
+			refused := access
+			refused.CI = ciRefused
+			h.codehost.SetAccess(testedRepo, repoTokenValue, refused)
+			got := decode[gen.FactoryRepositoryTest](t, h.testFactoryRepository(t, factoryRepoTestPath, testedRepo, repoSecret, entry), http.StatusOK)
+
+			expectCIRefusedOnly(t, entry, got, want)
+		}
+	}
+
+	h.codehost.StallAccess()
+
+	got := decode[gen.FactoryRepositoryTest](t, h.testFactoryRepository(t, factoryRepoTestPath, testedRepo, repoSecret, accessRead), http.StatusOK)
+	if got.Ci == nil || got.Ci.Ok || got.Ci.Reason != got.Read.Reason || !strings.HasPrefix(got.Ci.Reason, "couldn't test") {
+		t.Errorf("untested = %s; want ci failing with read's couldn't test reason", body(t, got))
+	}
+}
+
+// expectCIRefusedOnly fails t unless got, the entry's test with CI refused, fails ci with the
+// host's reason and answers ok, summary, warning, read and push as want, the test without it.
+func expectCIRefusedOnly(t *testing.T, entry string, got, want gen.FactoryRepositoryTest) {
+	t.Helper()
+
+	if got.Ci == nil || got.Ci.Ok || got.Ci.Reason != ciRefused.Reason {
+		t.Errorf("%s test = %s; want ci failing with the host's reason", entry, body(t, got))
+	}
+
+	if got.Ok != want.Ok || got.Summary != want.Summary || valueOf(got.Warning) != valueOf(want.Warning) || got.Read != want.Read || got.Push != want.Push {
+		t.Errorf("%s test with CI refused = %s; want ok, summary, warning, read and push as without it: %s", entry, body(t, got), body(t, want))
+	}
+}
+
+// A test kept before goald checked CI, and an owner pattern's, answer no ci key at all: absent,
+// not failed.
+func TestFactoryRepositoryTest_CIAbsent(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+	h.codehost.SetOwnerAccess("github.com", "acme", repoTokenValue, ports.OwnerAccess{Readable: 2, Reason: "GitHub lists 2 repositories of acme"})
+
+	old := domain.RepositoryTest{
+		Factory: acmeID, URL: testedRepoKey, Access: accessRead, Secret: repoSecret, At: h.clock.Now(), Tested: true, OK: true,
+		Summary: canRead, ReadOK: true, ReadReason: appShown, PushReason: "no push",
+	}
+	if err := h.repoTests.Record(inOrg(t), old); err != nil {
+		t.Fatal(err)
+	}
+
+	r := h.testFactoryRepository(t, factoryRepoTestPath, "https://github.com/acme/*", repoSecret, accessRead)
+	if got := decode[gen.FactoryRepositoryTest](t, r, http.StatusOK); got.Ci != nil || strings.Contains(string(r.body), `"ci"`) {
+		t.Errorf("owner pattern = %s; want no ci", r.body)
+	}
+
+	list := h.request(t, http.MethodGet, factoryRepoTestsPath, "", nil)
+	if kept := decode[gen.FactoryRepositoryTestList](t, list, http.StatusOK).Tests; len(kept) != 2 || kept[0].Ci != nil || kept[1].Ci != nil {
+		t.Errorf("kept = %s; want both tests without ci", body(t, kept))
+	}
+
+	if strings.Contains(string(list.body), `"ci"`) {
+		t.Errorf("list = %s; want no ci key", list.body)
 	}
 }
