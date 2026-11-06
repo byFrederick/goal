@@ -46,3 +46,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0041](0041-code-and-github-without-an-app.md): Code and GitHub without an App: optional code access, the repositories an item opens, write access per agent, webhooks the organization connects once. Status: accepted.
 - [ADR 0042](0042-starter-templates-are-committed-product-content.md): The install's starter templates are committed product content. Status: accepted.
 - [ADR 0043](0043-merge-stations-take-turns-per-target.md): Merge stations take turns per target. Status: accepted.
+- [ADR 0044](0044-goald-waits-for-ci.md): goald waits for CI, not run boxes. Status: accepted.
