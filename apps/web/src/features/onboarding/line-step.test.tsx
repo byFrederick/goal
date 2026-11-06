@@ -325,6 +325,14 @@ describe('shaping the line', () => {
     expect(await screen.findByText(sentence)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText(/\/line/)).toBeNull();
+
+    api.problems = [];
+    const spec = screen.getByRole('region', { name: 'Spec' });
+    fireEvent.change(within(spec).getByRole('combobox', { name: 'Agent of Spec' }), { target: { value: 'reviewer' } });
+    await waitFor(() => expect(screen.queryByText(sentence)).toBeNull(), { timeout: 3000 });
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+    );
   });
 });
 
