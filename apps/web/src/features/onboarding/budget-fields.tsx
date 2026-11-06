@@ -160,7 +160,7 @@ function BudgetSlider({
         onPointerUp={onDone}
         onKeyUp={onDone}
         onBlur={onDone}
-        className="w-full cursor-pointer accent-run"
+        className="w-full cursor-pointer accent-run max-md:h-11"
       />
       <div className="flex justify-between text-secondary text-muted">
         <span>{formatUsdCompact(range.min)}</span>

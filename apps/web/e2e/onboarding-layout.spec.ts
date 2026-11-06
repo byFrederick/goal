@@ -73,3 +73,23 @@ test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   }
   await expectAccessible(page);
 });
+
+test('gives the purpose buttons and the Budget sliders a 44 px target at 390 px', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.request.post('/__mock/reset', {
+    data: { orgs: 'none', auth: { mode: 'session', signed_in: 'fresh', email: 'f.cruz@example.com' } },
+  });
+  await page.goto('/get-started');
+  for (const name of ['Build software', 'Run operations', 'Answer support', 'Something else']) {
+    const box = await page.getByRole('button', { name }).boundingBox();
+    expect(box?.height ?? 0, name).toBeGreaterThanOrEqual(44);
+  }
+
+  await page.request.post('/__mock/reset');
+  await page.goto('/o/goal/get-started/budget');
+  for (const id of ['budget-day', 'budget-week', 'budget-item']) {
+    const box = await page.locator(`#${id}`).boundingBox();
+    expect(box?.height ?? 0, id).toBeGreaterThanOrEqual(44);
+  }
+});
