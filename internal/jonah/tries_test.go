@@ -162,8 +162,9 @@ func newTryWorld(t *testing.T, orgs int) *tryWorld {
 		w.orgs, w.factories[o.ID] = append(w.orgs, o.ID), f
 		w.defs.lines[o.ID] = domain.Line{
 			OrgID: o.ID, FactoryID: f, VersionID: tryVersion, Number: 1, Jonah: domain.DefaultJonahPolicy(),
-			Runtime: domain.Runtime{ModelConnection: modelConn, Model: reviewModel, Repository: domain.Repository{URL: "https://example.com/acme.git"}},
-			Agents:  []domain.AgentSpec{{Name: tryAgent}},
+			Runtime:      domain.Runtime{ModelKey: "{{claude-key}}", Model: reviewModel, Repository: domain.Repository{URL: "https://example.com/acme.git"}},
+			Environments: []domain.Environment{{Name: domain.DefaultEnvironment}},
+			Agents:       []domain.AgentSpec{{Name: tryAgent}},
 			Stations: []domain.Station{
 				{ID: stSpec, Kind: domain.KindHuman}, {ID: stBuild, Kind: domain.KindAgent, Agent: tryAgent}, {ID: stTryDone, Kind: domain.KindDone},
 			},
@@ -857,7 +858,7 @@ func wantGradeRequests(t *testing.T, reqs []domain.RunRequest, org domain.OrgID,
 	for _, r := range reqs[1:] {
 		want := domain.RunRequest{
 			OrgID: org, FactoryID: f, Version: tryVersion, Kind: domain.RunKindTry, Station: stBuild, Agent: tryAgent,
-			Model: reviewModel, Bundle: domain.TaskKindGrade, TryOf: try, GradeOf: r.GradeOf, ModelConnection: modelConn,
+			Model: reviewModel, Bundle: domain.TaskKindGrade, TryOf: try, GradeOf: r.GradeOf, ModelKey: "{{claude-key}}",
 			Size: domain.SandboxSmall, Timeout: tryTimeout,
 		}
 		if !reflect.DeepEqual(r, want) {
