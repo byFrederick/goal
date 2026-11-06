@@ -474,6 +474,9 @@ type Station struct {
 	// integrates one item per merge target at a time or several at once. Only a merge station
 	// may set it.
 	Merges string `json:"merges,omitempty"`
+	// WaitFor makes goald wait for CI before and after the station's runs (ADR 0044); nil when
+	// the station does not.
+	WaitFor *WaitFor `json:"waitFor,omitempty"`
 	// Context names what goald preloads into the station's runs: "inflight" for the factory's
 	// open work.
 	Context []string `json:"context,omitempty"`
@@ -509,6 +512,34 @@ func (r RouteEntry) MarshalJSON() ([]byte, error) {
 	type plain RouteEntry
 
 	return json.Marshal(plain(r))
+}
+
+// WaitFor is a station's waitFor: its long form {ci: {grace, max, rounds}}, or the shorthand
+// "ci", which decodes as CI with every field left out.
+type WaitFor struct {
+	CI *CIWait `json:"ci,omitempty"`
+}
+
+// CIWait is waitFor.ci; a field left out takes its domain default.
+type CIWait struct {
+	Grace  string `json:"grace,omitempty"`
+	Max    string `json:"max,omitempty"`
+	Rounds int    `json:"rounds,omitempty"`
+}
+
+// UnmarshalJSON reads waitFor as its shorthand ("ci", the only one the schema allows) or as
+// {ci: {...}}.
+func (w *WaitFor) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*w = WaitFor{CI: &CIWait{}}
+
+		return nil
+	}
+
+	type plain WaitFor
+
+	return json.Unmarshal(data, (*plain)(w))
 }
 
 // ActionMerge is the station action that merges the item's pull request on approval.

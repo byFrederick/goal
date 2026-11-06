@@ -292,3 +292,17 @@ func TestJonahPolicy_Budget(t *testing.T) {
 }
 
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+
+// A station waits for CI when its WaitFor is set; the zero value is a station without waitFor.
+func TestStation_WaitsForCI(t *testing.T) {
+	t.Parallel()
+
+	if (Station{Kind: KindAgent}).WaitsForCI() {
+		t.Error("a station without waitFor waits for CI")
+	}
+
+	st := Station{Kind: KindAgent, WaitFor: CIWait{Grace: DefaultCIGrace, Max: DefaultCIMax, Rounds: DefaultCIRounds}}
+	if !st.WaitsForCI() {
+		t.Error("a station with waitFor does not wait for CI")
+	}
+}

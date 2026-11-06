@@ -48,6 +48,30 @@ A station's `merges` field sets this:
 
 `merges` applies only to a station with `action: merge`. Nothing is claimed at a human station, so there a person decides the order.
 
+## Wait for CI
+
+A station's `waitFor` makes goald wait for CI on the commits an item's runs pushed. A run at the station starts only once CI on the item's current commits has finished. After a run pushes, the item moves on only once CI on what it pushed has passed. A failure sends the item back to the same station. The setting names no host, CI system, workflow or check: goald reads every check the code host reports for the commit. This takes effect once the engine parts of the CI wait land; until then, the definition accepts the setting and nothing acts on it.
+
+The short form uses the defaults:
+
+```yaml
+waitFor: ci
+```
+
+The long form changes any of them. A field left out takes its default, and `max` must be above `grace`:
+
+```yaml
+waitFor: { ci: { grace: 5m, max: 60m, rounds: 3 } }
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `grace` | `5m` | How long after the run ended a first check may take to appear. A commit with no check by then gets no CI. |
+| `max` | `60m` | The longest goald waits on one commit. CI not finished by then counts as failed. |
+| `rounds` | `3` | How many CI rounds one visit to the station gets before the item blocks for a person. |
+
+The decision is ADR 0044 (`docs/adr/0044-goald-waits-for-ci.md` in the repository).
+
 ## Flow settings
 
 The line's rules for how work is released and paced sit in `board.flow`. Some of them are used today and some are not:

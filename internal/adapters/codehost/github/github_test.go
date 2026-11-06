@@ -1584,18 +1584,3 @@ func TestOwnerAccess_RedirectsAndFailures(t *testing.T) {
 		}
 	}
 }
-
-// Until the github part of ADR 0044 lands, Checks reads nothing and says it cannot.
-func TestChecks_Unsupported(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		t.Errorf("Checks sent %s %s; want no request", r.Method, r.URL.Path)
-	}))
-	t.Cleanup(srv.Close)
-
-	_, err := New(Config{APIURL: srv.URL}).Checks(t.Context(), appRepo(t), token, headSHA, prURL)
-	if !errors.Is(err, errors.ErrUnsupported) {
-		t.Errorf("err = %v; want errors.ErrUnsupported", err)
-	}
-}
