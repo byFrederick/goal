@@ -44,6 +44,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	}{
 		{"Record_LatestReplaces", testLatestReplaces},
 		{"Record_KeepsOwnerCounts", testOwnerCounts},
+		{"Record_KeepsCICheck", testCICheck},
 		{"Record_InvalidRefused", testInvalid},
 		{"Record_UnknownFactoryNotFound", testUnknownFactory},
 		{"List_ByFactory", testListByFactory},
@@ -118,6 +119,38 @@ func testOwnerCounts(t *testing.T, h Harness) {
 	}
 }
 
+func testCICheck(t *testing.T, h Harness) {
+	t.Helper()
+
+	org := h.NewOrg(t)
+	f := h.NewFactory(t, org)
+	ctx := domain.WithOrg(t.Context(), org)
+
+	failing := passed(f, app)
+	failing.CITested, failing.CIReason = true, "the token has no read access to Checks and Commit statuses"
+
+	passing := passed(f, "github.com/acme/web")
+	passing.CITested, passing.CIOK, passing.CIReason = true, true, "GitHub shows the checks of acme/web"
+
+	// A test without a CI check reads back without one, not as a failed one.
+	absent := passed(f, owner)
+
+	for _, r := range []domain.RepositoryTest{failing, passing, absent} {
+		if err := h.Tests.Record(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := h.Tests.List(ctx, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []domain.RepositoryTest{absent, failing, passing}; len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("List = %+v; want %+v", got, want)
+	}
+}
+
 func testInvalid(t *testing.T, h Harness) {
 	t.Helper()
 
@@ -137,7 +170,10 @@ func testInvalid(t *testing.T, h Harness) {
 	negative := passed(f, owner)
 	negative.Readable = -1
 
-	for _, bad := range []domain.RepositoryTest{untestedOK, badAccess, noTime, negative, passed(f, "")} {
+	untestedCI := passed(f, app)
+	untestedCI.CIOK = true
+
+	for _, bad := range []domain.RepositoryTest{untestedOK, badAccess, noTime, negative, untestedCI, passed(f, "")} {
 		if err := h.Tests.Record(ctx, bad); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("Record(%+v) = %v; want ErrInvalid", bad, err)
 		}

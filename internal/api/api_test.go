@@ -226,6 +226,8 @@ type harness struct {
 	// conversions are the factories' conversions to secrets, which the inbox lists when refused.
 	conversions *porttest.FactoryConversions
 	tools       *porttest.ToolLister
+	// repoTests keep the factories' repository tests.
+	repoTests *porttest.RepositoryTests
 	// modelLine, when set, changes the line a model proposal reads (jonah_test.go).
 	modelLine func(*domain.Line)
 }
@@ -552,7 +554,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.conversions = conversionsOf(testOrg, acmeID, lineID)
 
 	h.platform = porttest.NewPlatform(h.keys)
-	h.notifications = porttest.NewNotificationPreferences()
+	h.notifications, h.repoTests = porttest.NewNotificationPreferences(), repositoryTestsOf(testOrg, acmeID, lineID)
 
 	connections := h.connections(t, tenancy)
 	h.intake.UseSecrets(h.secrets)
@@ -567,7 +569,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications, NotificationSettings: h.notifySettings, SlackMessenger: h.slack,
 		DraftRequests: h.drafts,
-		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, RepositoryTests: repositoryTestsOf(testOrg, acmeID, lineID), Conversions: h.conversions,
+		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, RepositoryTests: h.repoTests, Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity

@@ -4408,6 +4408,9 @@ type FactoryRepositoryTest struct {
 	// At When it was tested
 	At time.Time `json:"at"`
 
+	// Ci Whether the token can read the commit checks (GitHub) or the pipelines (GitLab) that a station with waitFor: ci waits on, with the host's reason. Absent for a test kept before goald checked CI, until the repository is tested again, and for an owner pattern. It never changes ok: only a factory with a waitFor: ci station needs it.
+	Ci *RepositoryCheck `json:"ci,omitempty"`
+
 	// Note For a write entry: the host reports no pull-request permission, so Goal can't check it
 	Note *string `json:"note,omitempty"`
 

@@ -29,7 +29,7 @@ var (
 	errRepositoryURLInvalid  = errors.New("repository URL invalid")
 )
 
-// couldNotTest starts both checks' reasons when the host gave no answer.
+// couldNotTest starts each check's reason when the host gave no answer.
 const couldNotTest = "couldn't test"
 
 // repositoryTestProblem answers the repository test rules with their codes.
@@ -218,6 +218,9 @@ func (s *server) testRepositoryFor(ctx context.Context, factory domain.FactoryID
 		if a, err = target.ch.RepositoryAccess(tctx, target.repo, token); err == nil {
 			t.ReadOK, t.ReadReason = a.Read.OK, environmentcheck.OneLine(a.Read.Reason, values)
 			t.PushOK, t.PushReason = a.Push.OK, environmentcheck.OneLine(a.Push.Reason, values)
+			// The CI check (ADR 0044 decision 10) never changes what the test judges: only a
+			// factory with a waitFor: ci station needs it.
+			t.CITested, t.CIOK, t.CIReason = true, a.CI.OK, environmentcheck.OneLine(a.CI.Reason, values)
 		}
 	}
 
@@ -233,6 +236,9 @@ func (s *server) testRepositoryFor(ctx context.Context, factory domain.FactoryID
 		s.log.WarnContext(ctx, "repository test untested", slog.String("factory", string(factory)), slog.String("url", target.key), slog.String("reason", reason))
 
 		t.Tested, t.Summary, t.ReadReason, t.PushReason = false, reason, reason, reason
+		if !target.pattern() {
+			t.CITested, t.CIOK, t.CIReason = true, false, reason
+		}
 	default:
 		t.OK, t.Summary = judgeRepositoryTest(t, target.owner)
 		if t.Access == domain.RepositoryTestRead && t.PushOK {
@@ -304,6 +310,11 @@ func repositoryTestOut(t domain.RepositoryTest) gen.FactoryRepositoryTest {
 
 	if t.Warning != "" {
 		out.Warning = optional(t.Warning)
+	}
+
+	// No CI check is no ci at all: a test kept before goald checked CI, or an owner pattern's.
+	if t.CITested {
+		out.Ci = &gen.RepositoryCheck{Ok: t.CIOK, Reason: t.CIReason}
 	}
 
 	if t.Tested && t.Access == domain.RepositoryTestWrite {

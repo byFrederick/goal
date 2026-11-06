@@ -11,7 +11,7 @@ import (
 
 var _ ports.RepositoryTests = (*RepositoryTests)(nil)
 
-// RepositoryTests implements ports.RepositoryTests over 00131's repository_tests, as goal_app
+// RepositoryTests implements ports.RepositoryTests over 00131's repository_tests (with 00135's CI check), as goal_app
 // under row-level security: every statement sees the organization in ctx. A test upserts the one
 // row of its factory and url.
 type RepositoryTests struct {
@@ -36,12 +36,20 @@ func (r *RepositoryTests) Record(ctx context.Context, t domain.RepositoryTest) e
 		return err
 	}
 
+	// A test without a CI check keeps NULL, as the tests kept before migration 00135 have.
+	var ciOK *bool
+
+	var ciReason *string
+	if t.CITested {
+		ciOK, ciReason = &t.CIOK, &t.CIReason
+	}
+
 	err = r.s.inTx(ctx, func(q *db.Queries) error {
 		_, err := q.UpsertRepositoryTest(ctx, db.UpsertRepositoryTestParams{
 			FactoryID: factory, Url: t.URL, Access: t.Access, Secret: t.Secret, At: t.At.UTC(), Tested: t.Tested, Ok: t.OK,
 			Summary: t.Summary, Warning: t.Warning, ReadOk: t.ReadOK, ReadReason: t.ReadReason, PushOk: t.PushOK, PushReason: t.PushReason,
 			Readable: int32(min(t.Readable, ports.MaxOwnerRepositories)), Pushable: int32(min(t.Pushable, ports.MaxOwnerRepositories)), //nolint:gosec // bounded above
-			Truncated: t.Truncated,
+			Truncated: t.Truncated, CiOk: ciOK, CiReason: ciReason,
 		})
 
 		return err
@@ -94,11 +102,21 @@ func (r *RepositoryTests) BySecret(ctx context.Context, secret string) ([]domain
 func repositoryTestsOut(rows []db.RepositoryTest) []domain.RepositoryTest {
 	out := make([]domain.RepositoryTest, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.RepositoryTest{
+		t := domain.RepositoryTest{
 			Factory: domain.FactoryID(r.FactoryID.String()), URL: r.Url, Access: r.Access, Secret: r.Secret, At: r.At.UTC(),
 			Tested: r.Tested, OK: r.Ok, Summary: r.Summary, Warning: r.Warning, ReadOK: r.ReadOk, ReadReason: r.ReadReason,
 			PushOK: r.PushOk, PushReason: r.PushReason, Readable: int(r.Readable), Pushable: int(r.Pushable), Truncated: r.Truncated,
-		})
+		}
+
+		// NULL ci_ok is a test with no CI check, never a failed one.
+		if r.CiOk != nil {
+			t.CITested, t.CIOK = true, *r.CiOk
+			if r.CiReason != nil {
+				t.CIReason = *r.CiReason
+			}
+		}
+
+		out = append(out, t)
 	}
 
 	return out
