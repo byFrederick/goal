@@ -147,16 +147,15 @@ func inOrg(t *testing.T) context.Context {
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
-// kindGitHub is the platform's github connection kind, and the name of the connection
-// createGitHub makes.
+// kindGitHub is the platform's github connection kind, and the name of acme's github connection.
 const kindGitHub = "github"
 
-// createGitHub adds acme's github connection, whose token is secret.
-func (h *harness) createGitHub(t *testing.T, secret string) {
+// createGitHub adds acme's connection name, of the github kind, whose token is secret.
+func (h *harness) createGitHub(t *testing.T, name, secret string) {
 	t.Helper()
 
 	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
-		Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": secret},
+		Name: name, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: secret},
 	}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}

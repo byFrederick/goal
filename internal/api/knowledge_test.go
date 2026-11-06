@@ -286,7 +286,7 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 
 	h := newHarness(t)
 	h.createHandbook(t)
-	h.createGitHub(t, "ghp_test")
+	h.createGitHub(t, kindGitHub, "ghp_test")
 	h.createRepoSecret(t)
 
 	for _, tc := range []struct {
