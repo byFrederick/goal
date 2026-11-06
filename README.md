@@ -7,7 +7,7 @@ Goal runs AI agent factories on your machine. A factory is a definition: `factor
 Factory definitions are content, not code. goald keeps them, not this repository: file content in one versioned S3-compatible bucket, drafts and published versions in PostgreSQL (ADR 0005 and its 2.2 amendment). The first factory, `goal`, builds this repository; others (`sre`, `university`) run the same engine on other work.
 
 ```
-internal/cli/          the goal CLI's commands (cmd/goal/main.go only wires them): goal up, run, follow, item, approve [--always-allow], deny, reject, retry, merge; goal standing-rules list|revoke; goal factory pull|validate|push|publish|list [--archived]|versions|restore|archive|delete|ask [--agent] [--wait]; goal org list|use|create; goal login|logout|whoami; goal key; goal admin; goal connection; goal secret list|show|create|replace|delete|import; goal search; goal runs; goal judge list|try; goal bake-off run|show|apply; goal jonah [show|approve|edit|reject|look] (jonah.go); goal status; goal triggers list|show|try; goal webhooks list|create|rotate|deliveries; goal storage init; goal catalog skills|templates; goal db init|migrate|recover-admin|recover-owner
+internal/cli/          the goal CLI's commands (cmd/goal/main.go only wires them): goal up, run, follow, item, approve [--always-allow], deny, reject, retry, merge; goal standing-rules list|revoke; goal factory pull|validate|push|publish|list [--archived]|versions|restore|archive|delete|ask [--agent] [--wait]; goal org list|use|create; goal login|logout|whoami; goal key; goal admin; goal secret list|show|create|replace|delete|import; goal search; goal runs; goal judge list|try; goal bake-off run|show|apply; goal jonah [show|approve|edit|reject|look] (jonah.go); goal status; goal triggers list|show|try; goal webhooks list|create|rotate|deliveries; goal storage init; goal catalog skills|templates; goal db init|migrate|recover-admin|recover-owner
 
 cmd/goald/             daemon: flow engine, HTTP API (/v1/orgs/{org}/..., with an SSE stream per organization), MCP gateway (/mcp), Docker agent runs
 contracts/api/         openapi.yaml: the HTTP API contract (Go types in internal/api/gen, TypeScript in packages/api-client)
@@ -57,12 +57,12 @@ task test-integration      # adapters against PostgreSQL 18 and RustFS
 ```bash
 # .env: GOAL_GATEWAY_KEY (openssl rand -hex 32) and GOAL_MASTER_KEYS=k1:<openssl rand -base64 32> (keep a copy offline)
 task up                                            # the agent image (goal-agent, apps/worker/README.md) and the egress proxy's, PostgreSQL + RustFS, bucket, then goald in the foreground
-# in another terminal, once: the organization's connections a factory runs on (or the Connections page);
-# each reads its secret from stdin: paste it, then Ctrl-D
-bin/goal connection create claude --kind claude-subscription --secret token=-   # the output of claude setup-token
-bin/goal connection create github --kind github --secret token=-                # a fine-grained token, these repos only
-task factory:push DIR=../goal-factories/goal -- --publish  # the definition goald runs: runtime.modelConnection: claude,
-                                                   # runtime.repository.connection: github, connections: [github]
+# in another terminal, once: the organization's secrets a factory runs on (or the Secrets page);
+# each reads its value from stdin: paste it, then Ctrl-D
+bin/goal secret create claude-token --all-factories   # the output of claude setup-token
+bin/goal secret create github-token --all-factories   # a fine-grained token, these repos only
+task factory:push DIR=../goal-factories/goal -- --publish  # the definition goald runs: runtime.modelKey: "{{claude-token}}",
+                                                   # runtime.repository.token: "{{github-token}}"
 bin/goal run goal "Add a goal version subcommand"  # submit; prints the timeline until a human must act
 bin/goal item goal#2                               # read the spec the architect wrote (or: goal item 2)
 bin/goal approve goal#2                            # approve-spec → build → review → merge (you)
@@ -194,9 +194,9 @@ A merge to main does not deploy. A person deploys production by running the depl
 
 Bootstrap, deploys, master key escrow and rotation, and restores: [docs/engineering/cloudflare-operations.md](docs/engineering/cloudflare-operations.md). Agents format, check and plan; only the owner, or the coordinator the owner authorizes, applies.
 
-## Connections and the model
+## Secrets and the model
 
-A factory signs in with its organization's connections, never with goald's environment: owners and admins create them on the Connections page or with `goal connection create` (secret values from stdin or a file, sealed under `GOAL_MASTER_KEYS`, never shown again), and the definition names them. `runtime.modelConnection` gives every run its model: a `claude-subscription` connection holds the output of `claude setup-token` (for one person's own use on their own subscription), an `anthropic` one an API key, a `bedrock` one AWS credentials minted per run. `runtime.repository.connection` clones the repository, and the factory's connections whose kind has a code host (`github`, `gitlab`) merge its pull requests. A run's box gets each connection's variables as it needs them and uses them directly, MCP servers included.
+A factory signs in with its organization's secrets, never with goald's environment: owners and admins create them on the Secrets page or with `goal secret create` (the value from stdin or an import file, sealed under `GOAL_MASTER_KEYS`, never shown again), and the definition names them in double braces. `runtime.modelKey` gives every run its model: a Claude subscription token (the output of `claude setup-token`, for one person's own use on their own subscription) or an Anthropic API key. `runtime.repository.token` clones the repository, pushes and merges its pull requests. Each environment file (`environments/<name>.yaml`) says which secrets an agent's box gets, MCP servers included, and the Access page shows what each agent can reach. Details: [Access and secrets](apps/docs/src/content/docs/concepts/access-and-secrets.md).
 
 Upgrading an install from before connections (spec 4 §14): goald ignores `GOAL_TASK_ENV`, `CLAUDE_CODE_OAUTH_TOKEN` and `GOAL_GITHUB_*` with a warning, and blocks the items of a version that still uses `env:` references, `runtime.image`, `runtime.auth` or inline connections, or names no model connection ("publish a version with connections"). Create the secrets they held (`goal secret create`), name them in each factory (`runtime.modelConnection: claude`, `runtime.repository.connection: github`, `connections: [github, …]`), apply the fixes `goal factory validate` or the builder shows, publish, `goal retry` the blocked items, and delete the old variables from `.env`.
 
