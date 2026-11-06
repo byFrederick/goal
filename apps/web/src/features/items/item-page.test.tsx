@@ -411,6 +411,7 @@ describe('the item decisions at each width', () => {
     await waitFor(() => expect(noteItem).toHaveBeenCalledTimes(1));
     fireEvent.submit(form);
     fireEvent.keyDown(field as HTMLElement, { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 50));
 
     expect(noteItem).toHaveBeenCalledTimes(1);
   });
