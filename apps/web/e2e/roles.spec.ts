@@ -147,7 +147,9 @@ test.describe('an editor', () => {
     await page.goto('/o/acme/f/goal/definition/basics');
     await expect(page.getByRole('link', { name: 'Review changes', exact: true }).first()).toBeVisible();
     await expect(page.getByText(/^View only/)).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'Name', description: 'Lowercase, used in links and the rail' })).not.toHaveAttribute('readonly', '');
+    await expect(
+      page.getByRole('textbox', { name: 'Name', description: 'Lowercase, used in links and the rail' }),
+    ).not.toHaveAttribute('readonly', '');
     await expect(page.getByText('You’re a viewer of goal')).toHaveCount(0);
     await expect(newFactory(page)).toHaveCount(0);
 
