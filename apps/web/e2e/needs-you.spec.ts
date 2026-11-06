@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoClippedElements, expectNoHorizontalScroll, openNavigation, orgNav } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll, isPhone, openNavigation, orgNav } from './support';
 import { boxOf } from './support-boxes';
 
 // Needs you (/o/acme/needs-you): the list, the split detail and the phone's approve view, against the
@@ -254,6 +254,11 @@ const needsCount = async (page: import('@playwright/test').Page) => {
       .getByRole('link', { name: /^Needs you/ })
       .first()
       .innerText()) ?? '';
+  if (isPhone(page)) {
+    // On a phone the navigation is a dialog over the page: close it so the list can be clicked.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+  }
   return Number(/\d+/.exec(text)?.[0] ?? 0);
 };
 
