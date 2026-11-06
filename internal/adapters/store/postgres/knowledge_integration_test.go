@@ -270,36 +270,71 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	}
 }
 
-// Without pgvector's extension the knowledge migration stops, saying what to run.
-func TestMigrate_KnowledgeNeedsTheVectorExtension(t *testing.T) {
+// ADR 0038: a database without pgvector's extension migrates to the latest version, and nothing
+// creates the extension on the way.
+func TestMigrate_KnowledgeNeedsNoVectorExtension(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDB(t, OwnerRole)
-	execSQL(t, db.admin, "DROP EXTENSION vector")
+	admin := openPool(t, db.admin)
 
-	err := Migrate(t.Context(), openPool(t, db.owner))
-	if err == nil || !strings.Contains(err.Error(), "extension vector is missing: run goal db init") {
-		t.Fatalf("Migrate = %v, want the missing extension named", err)
+	if err := Migrate(t.Context(), openPool(t, db.owner)); err != nil {
+		t.Fatalf("Migrate = %v, want every migration applied without pgvector", err)
+	}
+
+	var vector bool
+	if err := admin.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')`).Scan(&vector); err != nil || vector {
+		t.Errorf("extension vector = %v, %v; want none", vector, err)
 	}
 }
 
-// Review 4 SQL L7: a provider that put pgvector in a schema of its own (an extensions schema is
-// common) failed 00054 with "type halfvec does not exist"; goal db init says what to do instead.
-func TestInitRoles_PgvectorInAnotherSchemaIsNamed(t *testing.T) {
+// A database that had pgvector's extension when it ran 00054 got the embeddings as before the
+// edit of that file (ADR 0038's amendment of 2026-11-06), and 00098 still drops them.
+func TestMigrate_KnowledgeWithTheVectorExtensionDropsItsEmbeddings(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDB(t, OwnerRole)
-	execSQL(t, db.admin, "DROP EXTENSION vector; CREATE SCHEMA extensions; CREATE EXTENSION vector SCHEMA extensions")
+	admin, owner := openPool(t, db.admin), openPool(t, db.owner)
 
-	err := pgx.BeginFunc(t.Context(), openPool(t, db.admin), func(tx pgx.Tx) error { return createExtensions(t.Context(), tx) })
-	if err == nil || !strings.Contains(err.Error(), `ALTER EXTENSION vector SET SCHEMA public`) {
-		t.Fatalf("createExtensions = %v, want the move to Goal's schema named", err)
+	var available bool
+	if err := admin.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector')`).Scan(&available); err != nil {
+		t.Fatal(err)
 	}
 
-	execSQL(t, db.admin, "ALTER EXTENSION vector SET SCHEMA public")
+	if !available {
+		t.Skip("this PostgreSQL has no vector extension to install; compose.yaml's has none")
+	}
 
-	if err := pgx.BeginFunc(t.Context(), openPool(t, db.admin), func(tx pgx.Tx) error { return createExtensions(t.Context(), tx) }); err != nil {
-		t.Fatalf("createExtensions after the move = %v", err)
+	execSQL(t, db.admin, "CREATE EXTENSION vector")
+
+	embeddings := func() (column, check, index string) {
+		t.Helper()
+
+		if err := admin.QueryRow(t.Context(), `SELECT
+			  coalesce((SELECT format_type(atttypid, atttypmod) FROM pg_attribute
+			            WHERE attrelid = 'knowledge_chunks'::regclass AND attname = 'embedding' AND NOT attisdropped), ''),
+			  coalesce((SELECT string_agg(pg_get_constraintdef(oid), ';') FROM pg_constraint
+			            WHERE conrelid = 'knowledge_chunks'::regclass AND pg_get_constraintdef(oid) LIKE '%embedding%'), ''),
+			  coalesce((SELECT indexdef FROM pg_indexes WHERE indexname = 'knowledge_chunks_embedding_idx'), '')`).
+			Scan(&column, &check, &index); err != nil {
+			t.Fatal(err)
+		}
+
+		return column, check, index
+	}
+
+	migrateTo(t, owner, 54)
+
+	column, check, index := embeddings()
+	if column != "halfvec(1024)" || check != "CHECK (((embedding IS NULL) = (embed_model IS NULL)))" ||
+		!strings.Contains(index, "USING hnsw (embedding halfvec_cosine_ops)") {
+		t.Errorf("after 00054: embedding %q, check %q, index %q; want halfvec(1024), its CHECK and the HNSW index", column, check, index)
+	}
+
+	migrateTo(t, owner, 98)
+
+	if column, check, index := embeddings(); column != "" || check != "" || index != "" {
+		t.Errorf("after 00098: embedding %q, check %q, index %q; want none", column, check, index)
 	}
 }
 
