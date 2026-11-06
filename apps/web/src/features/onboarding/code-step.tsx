@@ -33,7 +33,7 @@ import {
   withRepositories,
 } from './code-repositories';
 import { type OnboardingSearch, repositoryUrl } from './code-search';
-import { codeCard, organizationCard } from './factory-preview';
+import { codeCard, FactoryCardOf, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout } from './onboarding-layout';
 
 type Scope = 'organization' | 'some';
@@ -71,7 +71,19 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
   // nothing focusable sits inside the hidden layer.
   if (templates.isPending) {
     return (
-      <OnboardingLayout step="code" org={org} preview={{ organization: organizationCard(org, window.location.host) }}>
+      <OnboardingLayout
+        step="code"
+        org={org}
+        preview={
+          search.factory
+            ? previewSlots({
+                organization: organizationCard(org, window.location.host),
+                code: undefined,
+                factory: <FactoryCardOf org={org.id} factory={search.factory} />,
+              })
+            : { organization: organizationCard(org, window.location.host) }
+        }
+      >
         <Skeleton ready={false} placeholder={<CodePlaceholder />}>
           {null}
         </Skeleton>
@@ -322,7 +334,11 @@ function CodeForm({
           Continue
         </Button>
       }
-      preview={{ organization: organizationCard(org, host), second: preview }}
+      preview={previewSlots({
+        organization: organizationCard(org, host),
+        code: preview,
+        factory: <FactoryCardOf org={org.id} factory={factory} />,
+      })}
     >
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-kpi tracking-display">Connect your code</h1>
