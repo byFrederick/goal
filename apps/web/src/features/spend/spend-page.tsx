@@ -21,6 +21,7 @@ import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { Spinner } from '../../ui/spinner';
 import { BarList, type SpendRow } from './bar-list';
+import { BoxUsage, BoxUsagePlaceholder } from './box-usage';
 import { Budgets } from './budgets';
 import { SpendDays } from './days-chart';
 import { Payers } from './payers';
@@ -122,6 +123,7 @@ function SpendPlaceholder() {
         ))}
       </div>
       <div className="h-72 rounded-card bg-hover" />
+      <BoxUsagePlaceholder />
     </div>
   );
 }
@@ -155,6 +157,7 @@ function Ready({ spend, org }: { spend: OrgSpend; org: string }) {
         <Budgets budgets={spend.budgets} />
         <Payers budgets={spend.budgets} org={org} total={spend.budgets.length} />
       </div>
+      <BoxUsage spend={spend} factoryNames={nameOf} />
     </>
   );
 }

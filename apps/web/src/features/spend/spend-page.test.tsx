@@ -98,7 +98,7 @@ describe('the spend screen, ready', () => {
     expect(todayLabel.className).not.toContain('inset-x-0');
     expect(slots[0]?.querySelector('.max-w-12.opacity-45')).not.toBeNull();
     expect(container.querySelectorAll('.max-w-12')).toHaveLength(1);
-    expect(screen.getAllByRole('row')).toHaveLength(2);
+    expect(within(screen.getByRole('table', { name: /Spend by day/ })).getAllByRole('row')).toHaveLength(2);
   });
 
   it('draws the days of the month and 90 days', async () => {
@@ -285,5 +285,62 @@ describe('the other states', () => {
     const figures = screen.getByRole('region', { name: 'Spend this week' });
     expect(within(figures).queryByText('$0')).toBeNull();
     expect(within(figures).getAllByText('—').length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('Box usage', () => {
+  const section = async () => within(await screen.findByRole('region', { name: 'Box usage' }));
+
+  it('shows the agents with their box, runs, CPU and memory, and the factory when there are several', async () => {
+    renderSpend();
+    const box = await section();
+    const row = box.getByText('backend-engineer').closest('tr') as HTMLElement;
+    expect(within(row).getByText('software')).toBeTruthy();
+    for (const text of ['Large', '42', '3.1 min', '6.9 min', '1.2 GB', '2.4 GB']) {
+      expect(within(row).getByText(text)).toBeTruthy();
+    }
+    expect(box.getByRole('columnheader', { name: 'CPU median' })).toBeTruthy();
+    expect(box.getByRole('columnheader', { name: 'Memory P90' })).toBeTruthy();
+    expect(within(box.getByText('reviewer').closest('tr') as HTMLElement).getByText('42 s')).toBeTruthy();
+    const unknown = box.getByText('infra-engineer').closest('tr') as HTMLElement;
+    expect(within(unknown).getByText('Unknown')).toBeTruthy();
+    expect(within(unknown).getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('switches to the stations', async () => {
+    renderSpend();
+    const box = await section();
+    fireEvent.click(box.getByRole('radio', { name: 'Stations' }));
+    expect(box.getByText('build')).toBeTruthy();
+    expect(box.getByText('triage')).toBeTruthy();
+    expect(box.queryByText('backend-engineer')).toBeNull();
+    expect(box.getByRole('columnheader', { name: 'Station' })).toBeTruthy();
+  });
+
+  it('explains median, P90, the CPU span and the left-out runs in the ⓘ, with no paragraph', async () => {
+    renderSpend();
+    const box = await section();
+    const tip = box.getByRole('button', { name: 'About Box usage' });
+    expect(tip.getAttribute('aria-describedby')).toBeTruthy();
+    const text = document.getElementById(tip.getAttribute('aria-describedby') as string)?.textContent ?? '';
+    expect(text).toMatch(/Median/);
+    expect(text).toMatch(/P90/);
+    expect(text).toMatch(/prepare to the run’s end/);
+    expect(text).toMatch(/couldn’t measure are left out/);
+  });
+
+  it('shows the empty state, no table, when the window has no usage', async () => {
+    answerWith((w) => spendFixture({ window: w, usage: { by_agent: [], by_station: [] } }));
+    renderSpend();
+    const box = await section();
+    expect(box.getByText('No box usage in this window')).toBeTruthy();
+    expect(box.queryByRole('table')).toBeNull();
+  });
+
+  it('shows a placeholder in its slot while the answer waits', async () => {
+    getOrgSpend.mockImplementation(() => new Promise(() => {}));
+    renderSpend();
+    expect(await screen.findByRole('status')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Box usage' })).toBeNull();
   });
 });
