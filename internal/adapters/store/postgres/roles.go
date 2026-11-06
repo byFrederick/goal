@@ -55,10 +55,9 @@ type Roles struct {
 // that is no superuser goal_owner with INHERIT and SET (adoptOwnerRole), lets them log in with the given passwords, grants goal_owner the database and the current schema and
 // goal_app and goal_auth their use (revoking PUBLIC's CONNECT and TEMPORARY on the database), and
 // hands every table, view, sequence and function of the current schema that the bootstrap user
-// owns to goal_owner (goose_db_version included), so the next migration runs as goal_owner, and
-// creates the extensions the migrations need (pgvector's vector, 00054), which only an
-// administrator can. It returns how many objects changed owner. It is idempotent; passwords are
-// never logged or put into errors.
+// owns to goal_owner (goose_db_version included), so the next migration runs as goal_owner. It
+// creates and checks no extension: the migrations need none (ADR 0038). It returns how many
+// objects changed owner. It is idempotent; passwords are never logged or put into errors.
 func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err error) {
 	if r.OwnerPassword == "" || r.AppPassword == "" || r.AuthPassword == "" {
 		return 0, errors.New("postgres: init roles: every role password is required")
@@ -81,53 +80,15 @@ func InitRoles(ctx context.Context, pool *pgxpool.Pool, r Roles) (moved int, err
 			}
 		}
 
-		if moved, err = grantAndTransfer(ctx, tx); err != nil {
-			return err
-		}
+		moved, err = grantAndTransfer(ctx, tx)
 
-		return createExtensions(ctx, tx)
+		return err
 	})
 	if err != nil {
 		return 0, fmt.Errorf("postgres: init roles: %w", err)
 	}
 
 	return moved, nil
-}
-
-// ErrNoPgvector is InitRoles' answer on a PostgreSQL server without pgvector.
-var ErrNoPgvector = errors.New("PostgreSQL has no pgvector extension, which the knowledge base needs: run compose.yaml's " +
-	"PostgreSQL image (docker compose up -d postgres recreates its container on the same volume, data kept) or install " +
-	"pgvector for PostgreSQL 18 on the server")
-
-// createExtensions creates pgvector's extension in the current schema when it is missing.
-func createExtensions(ctx context.Context, tx pgx.Tx) error {
-	var available bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector')").Scan(&available); err != nil {
-		return fmt.Errorf("extensions: %w", err)
-	}
-
-	if !available {
-		return ErrNoPgvector
-	}
-
-	if _, err := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS vector"); err != nil {
-		return fmt.Errorf("create extension vector: %w", err)
-	}
-
-	// The migrations and goal_app resolve halfvec through Goal's schema only, so an extension a
-	// provider installed elsewhere (an extensions schema) is not found.
-	var in, goal string
-	if err := tx.QueryRow(ctx, `SELECT n.nspname::text, current_schema()::text FROM pg_extension e
-		JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = 'vector'`).Scan(&in, &goal); err != nil {
-		return fmt.Errorf("extension vector: %w", err)
-	}
-
-	if in != goal {
-		return fmt.Errorf("pgvector's extension is in schema %s, not %s with Goal's tables: run ALTER EXTENSION vector SET SCHEMA %s "+
-			"as the database's administrator, then goal db init again", in, goal, goal)
-	}
-
-	return nil
 }
 
 // adoptOwnerRole lets an administrator that is no superuser act as goal_owner. With CREATEROLE,
