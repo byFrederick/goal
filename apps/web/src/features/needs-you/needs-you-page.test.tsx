@@ -273,6 +273,46 @@ describe('Needs you: the item an alert names', () => {
   });
 });
 
+describe('Needs you: a blocked item', () => {
+  const blockedEntry = (code: string | null): InboxEntry => ({
+    ...decision,
+    id: 'blocked:item-5',
+    kind: 'blocked',
+    item: card({ id: 'item-5', ref: 'software#5', number: 5, title: 'Show spend per factory', station: 'build' }),
+    station: 'build',
+    action: null,
+    approval: null,
+    blocked: { reason: 'names no runtime.modelKey: set {{secret}}', code, paused: false },
+  });
+  const show = (code: string | null) =>
+    renderPage({
+      search: { entry: 'blocked:item-5' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([blockedEntry(code)])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+  it('says a missing model key in plain words in the row and the Alert, with the link to Settings', async () => {
+    show('model_key_missing');
+
+    const alert = await screen.findByRole('region', { name: 'Why it is blocked' });
+    expect(within(alert).getByRole('link', { name: 'Settings' }).getAttribute('href')).toMatch(/\/settings#runtime$/);
+    expect(alert.textContent).toContain('Agents need a model key: add one in Settings');
+    expect(within(alert).getByRole('button', { name: 'About Why it is blocked' })).toBeTruthy();
+    expect(screen.getAllByText('Agents need a model key: add one in Settings').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: /Show spend per factory/ }).textContent).not.toContain('{{');
+  });
+
+  it('shows the reason as it is for a block without a code', async () => {
+    show(null);
+
+    const alert = await screen.findByRole('region', { name: 'Why it is blocked' });
+    expect(alert.textContent).toContain('names no runtime.modelKey');
+    expect(within(alert).queryByRole('link', { name: 'Settings' })).toBeNull();
+  });
+});
+
 describe('Needs you: deciding a Decision', () => {
   it('swaps the Approve label for a check once the approval went through, before the entry leaves', async () => {
     vi.mocked(approveItem).mockResolvedValue({ id: 'item-3', state: 'done' } as unknown as Item);

@@ -27,6 +27,27 @@ const merge = (ref: string, since: string) =>
 const approve = (ref: string, since: string) =>
   entry({ id: `decision:${ref}`, item: card(ref, 'review'), station: 'review', since });
 
+describe('inboxGroups: blocked words', () => {
+  const blockedWith = (code: string | null) =>
+    inboxGroups([
+      entry({
+        id: 'blocked:sre#9',
+        kind: 'blocked',
+        item: card('sre#9', 'build'),
+        station: 'build',
+        blocked: { reason: 'names no runtime.modelKey: set {{secret}}', code, paused: false },
+      }),
+    ])[0]?.rows[0]?.why;
+
+  test('says a known code in plain words, never the raw reason', () => {
+    expect(blockedWith('model_key_missing')).toBe('Blocked at Build: Agents need a model key: add one in Settings');
+  });
+
+  test('keeps the reason for a block without a code', () => {
+    expect(blockedWith(null)).toContain('names no runtime.modelKey');
+  });
+});
+
 describe('inboxGroups', () => {
   test('groups the entries as Ready to merge, Needs a decision, Blocked, each with its count', () => {
     const groups = inboxGroups([
