@@ -104,6 +104,7 @@ function ChangeStart({ item }: { item: Item }) {
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (save.isPending) return;
     setProblem(undefined);
     if (!when.missing) save.mutate();
     else setProblem(when.missing);
@@ -131,8 +132,8 @@ function ChangeStart({ item }: { item: Item }) {
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : choice.mode === 'now' ? 'Start now' : 'Save'}
+            <Button type="submit" variant="primary" busy={save.isPending} busyLabel="Saving…">
+              {choice.mode === 'now' ? 'Start now' : 'Save'}
             </Button>
           </div>
         </form>

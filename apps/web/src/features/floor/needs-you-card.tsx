@@ -59,12 +59,14 @@ function DecisionActions({
         size="sm"
         variant="approve"
         className="max-md:hidden"
-        disabled={decide.isPending || approved}
+        busy={pending === 'approve'}
+        busyLabel="Approving…"
+        disabled={approved || pending === 'reject'}
         aria-label={`${approved ? 'Approved' : 'Approve'} ${item.ref}`}
         onClick={() => decide.mutate({ kind: 'approve' }, { onSuccess: onApproved })}
       >
         <SuccessLabel done={approved} doneLabel="Approved">
-          {pending === 'approve' ? 'Approving…' : 'Approve'}
+          Approve
         </SuccessLabel>
       </Button>
       <Link
