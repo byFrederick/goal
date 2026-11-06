@@ -353,42 +353,91 @@ const maxTemplateName = 63
 // Push adds one version of a template to the catalog (B §7, goal catalog templates push). It
 // refuses a name that is not lowercase words joined by dashes, a version below 1
 // (ErrInvalidRequest), files outside the path rules or limits, a template.yaml without a title
-// or without code none or read (write follows from a line that merges), a definition with error problems, a metadata.id other than the nil UUID and any credential:
-// reference (*TemplateInvalidError: templates never include credentials), and a version the
-// catalog has (ErrTemplateExists). Files are written once each, template.yaml last, so the
-// version is listed only when it is complete.
-func (x *TemplateCatalog) Push(ctx context.Context, t TemplateUpload) error {
+// or without code none or read (write follows from a line that merges), a definition with error
+// problems, a metadata.id other than the nil UUID and any credential: reference
+// (*TemplateInvalidError: templates never include credentials). When the catalog has the
+// version already, Push writes nothing: it reports added false when the stored objects are
+// exactly the ones it would write, byte for byte, and refuses any other stored version with
+// ErrTemplateExists, because a template version never changes. Files are written once each,
+// template.yaml last, so the version is listed only when it is complete.
+func (x *TemplateCatalog) Push(ctx context.Context, t TemplateUpload) (added bool, err error) {
 	if len(t.Name) > maxTemplateName || !templateName.MatchString(t.Name) || t.Version < 1 {
-		return fmt.Errorf("template %q version %d: a name is lowercase words joined by dashes, a version a number from 1: %w",
+		return false, fmt.Errorf("template %q version %d: a name is lowercase words joined by dashes, a version a number from 1: %w",
 			t.Name, t.Version, ErrInvalidRequest)
 	}
 
 	if err := checkFiles(t.Files); err != nil {
-		return err
+		return false, err
 	}
 
 	if problems := templateProblems(t); len(problems) > 0 {
-		return &TemplateInvalidError{Problems: problems}
+		return false, &TemplateInvalidError{Problems: problems}
 	}
 
 	base := TemplatesPrefix + t.Name + "/" + strconv.Itoa(t.Version) + "/"
 
 	existing, err := x.objects.List(ctx, base)
 	if err != nil {
-		return fmt.Errorf("list %s: %w", base, err)
+		return false, fmt.Errorf("list %s: %w", base, err)
 	}
 
+	want := make(map[string][]byte, len(t.Files)+1)
+	for p, body := range t.Files {
+		want[base+templateFiles+p] = body
+	}
+
+	want[base+templateMeta] = t.Meta
+
 	if len(existing) > 0 {
-		return fmt.Errorf("template %s v%d: %w", t.Name, t.Version, ErrTemplateExists)
+		same, err := x.storedAs(ctx, existing, want)
+		if err != nil {
+			return false, err
+		}
+
+		if !same {
+			return false, fmt.Errorf("template %s v%d: %w", t.Name, t.Version, ErrTemplateExists)
+		}
+
+		return false, nil
 	}
 
 	for _, p := range slices.Sorted(maps.Keys(t.Files)) {
 		if err := x.putNew(ctx, base+templateFiles+p, t.Files[p]); err != nil {
-			return err
+			return false, err
 		}
 	}
 
-	return x.putNew(ctx, base+templateMeta, t.Meta)
+	if err := x.putNew(ctx, base+templateMeta, t.Meta); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// storedAs reports whether the objects under a version's prefix are exactly want by key, byte
+// for byte. It reads each body: an ETag is no content hash for a multipart upload.
+func (x *TemplateCatalog) storedAs(ctx context.Context, existing []ports.ObjectInfo, want map[string][]byte) (bool, error) {
+	if len(existing) != len(want) {
+		return false, nil
+	}
+
+	for _, o := range existing {
+		body, ok := want[o.Key]
+		if !ok || o.Size != int64(len(body)) {
+			return false, nil
+		}
+
+		got, err := x.objects.Get(ctx, o.Key)
+		if err != nil {
+			return false, fmt.Errorf("read %s: %w", o.Key, err)
+		}
+
+		if !bytes.Equal(got.Body, body) {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 // putNew writes an object of a version being pushed: ErrTemplateExists when another push wrote
