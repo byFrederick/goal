@@ -453,6 +453,8 @@ export const orgCan = [
   'personal_token:read',
   'secret:manage',
   'secret:read',
+  'webhook:manage',
+  'webhook:read',
 ];
 export const factoryCan = [
   'andon:manage',
@@ -465,7 +467,6 @@ export const factoryCan = [
   'item:decide',
   'item:operate',
   'trigger:try',
-  'webhook:manage',
 ];
 
 /** The organizations' ids. */

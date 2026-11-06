@@ -1,0 +1,41 @@
+# Starter template (ADR 0042): requests become small pull requests a person reviews.
+# Onboarding gives the factory its repositories at the Code step (ADR 0041).
+apiVersion: goal/v1
+kind: Factory
+metadata:
+  id: 00000000-0000-0000-0000-000000000000
+  name: software-delivery
+  title: Software delivery
+starter:
+  item:
+    title: Add a short README section on how to run the tests
+    type: feature
+    body: >-
+      Add a "Running the tests" section to the README that says which command runs the tests
+      and what it needs installed. Change nothing else.
+spec:
+  runtime: {}
+  agents:
+    - name: specifier
+      description: Writes the spec.
+      prompt: ./agents/specifier.md
+    - name: builder
+      description: Makes the change and opens the pull request.
+      prompt: ./agents/builder.md
+  board:
+    workTypes: [feature, fix]
+    triggers:
+      - name: weekly-dependency-check
+        enabled: false
+        on: schedule
+        cron: "0 9 * * 1"
+        create:
+          type: fix
+          station: inbox
+          title: Check the dependencies for updates
+    stations:
+      - { id: inbox, name: Inbox, kind: queue }
+      - { id: spec, name: Spec, kind: agent, agent: specifier, wip: 2 }
+      - { id: build, name: Build, kind: agent, agent: builder, wip: 2 }
+      - { id: review, name: Review, kind: human }
+      - { id: done, name: Done, kind: done }

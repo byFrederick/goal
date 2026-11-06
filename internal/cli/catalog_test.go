@@ -62,13 +62,16 @@ func TestCatalogSkills_SyncPrintsEachSkillAndFailsOnAny(t *testing.T) {
 	}
 }
 
+// templateFactoryYAML is a template folder's definition root.
+const templateFactoryYAML = "factory/factory.yaml"
+
 func TestCatalogTemplates_PushAndList(t *testing.T) {
 	t.Parallel()
 
 	template := strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1)
 	dir := filepath.Join(t.TempDir(), "acme-review")
 	writeFiles(t, dir, map[string]string{
-		"template.yaml": "title: Acme review\nsummary: Write, then approve\ncode: none\n", "factory/factory.yaml": template,
+		templateMetaFile: "title: Acme review\nsummary: Write, then approve\ncode: none\n", templateFactoryYAML: template,
 		"factory/agents/writer.md": "# writer\n", "factory/.DS_Store": "junk",
 		"factory/" + envPath: workingCopy()[envPath],
 	})
@@ -94,13 +97,16 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 		t.Errorf("list = %v\n%s", err, buf.String())
 	}
 
-	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err == nil ||
-		!strings.Contains(err.Error(), "never change") {
-		t.Errorf("push of an existing version = %v", err)
+	buf.Reset()
+
+	// A repeated push of the unchanged version succeeds, as the operator's task runs it every time.
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err != nil ||
+		buf.String() != "acme-review v1 is in the catalog already, unchanged\n" {
+		t.Errorf("push of an unchanged version = %v\n%s", err, buf.String())
 	}
 
 	// A template with a factory's own id is refused, the problem located in the folder.
-	writeFiles(t, dir, map[string]string{"factory/factory.yaml": factoryYAML})
+	writeFiles(t, dir, map[string]string{templateFactoryYAML: factoryYAML})
 	buf.Reset()
 
 	if up, err = readTemplate(dir, "acme-review", 2); err != nil {
@@ -113,14 +119,50 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 	}
 }
 
+func TestCatalogTemplates_PushRefusesChangedVersion(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join(t.TempDir(), "acme-review")
+	writeFiles(t, dir, map[string]string{
+		templateMetaFile:           "title: Acme review\ncode: none\n",
+		templateFactoryYAML:        strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
+		"factory/agents/writer.md": "# writer\n",
+		"factory/" + envPath:       workingCopy()[envPath],
+	})
+
+	catalog := authoring.NewTemplateCatalog(porttest.NewObjectStore(), porttest.NewClock(time.Now()))
+
+	up, err := readTemplate(dir, "acme-review", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err != nil {
+		t.Fatalf("push = %v\n%s", err, buf.String())
+	}
+
+	writeFiles(t, dir, map[string]string{templateMetaFile: "title: Acme review, changed\ncode: none\n"})
+
+	if up, err = readTemplate(dir, "acme-review", 1); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pushTemplate(t.Context(), &printer{w: &buf}, catalog, dir, up, "goal-test"); err == nil ||
+		!strings.Contains(err.Error(), "never change") {
+		t.Errorf("push of a changed version = %v", err)
+	}
+}
+
 func TestCatalogTemplates_PushRefusesTemplateWithoutCode(t *testing.T) {
 	t.Parallel()
 
 	dir := filepath.Join(t.TempDir(), "acme-review")
 	writeFiles(t, dir, map[string]string{
-		"template.yaml":        "title: Acme review\n",
-		"factory/factory.yaml": strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
-		"factory/" + envPath:   workingCopy()[envPath],
+		templateMetaFile:     "title: Acme review\n",
+		templateFactoryYAML:  strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
+		"factory/" + envPath: workingCopy()[envPath],
 	})
 
 	up, err := readTemplate(dir, "acme-review", 1)

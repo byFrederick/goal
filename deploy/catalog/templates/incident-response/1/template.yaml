@@ -1,0 +1,8 @@
+title: Incident response
+summary: Alerts become investigations, fixes and postmortems.
+description: >-
+  A triager sorts each alert, an investigator finds the cause, a fixer proposes the fix and
+  writes the postmortem, and a person reviews it.
+connectors: []
+changed: "2026-11-06"
+code: none
