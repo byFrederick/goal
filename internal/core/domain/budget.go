@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // BudgetPolicy is what the engine does once a factory's weekly budget is used up.
 type BudgetPolicy string
@@ -50,6 +53,48 @@ func (r Runtime) WeeklyBudget(spent float64, now time.Time) BudgetStatus {
 		WeeklyUSD: r.WeeklyUSD, SpentUSD: spent, Since: BudgetSince(now), Policy: policy,
 		Exhausted: r.HasWeeklyBudget() && spent >= r.WeeklyUSD,
 	}
+}
+
+// RunCost is one agent run as the weekly budget counts it: when it started and what it cost.
+type RunCost struct {
+	StartedAt time.Time
+	CostUSD   float64
+}
+
+// BudgetResumesAt is when a used-up weekly budget has room again on its own: the earliest
+// moment the spend of the runs still in the window falls below weeklyUSD, each run leaving the
+// window BudgetWindow after it started. A run that started exactly BudgetWindow ago still counts
+// (WeeklyBudget's window includes its start), so the moment returned is that boundary and the
+// engine resumes on its first tick after it. runs are the window's runs at now in any order;
+// those that started before it are ignored. It returns false without a budget or when the
+// spend is already below the cap.
+func BudgetResumesAt(runs []RunCost, weeklyUSD float64, now time.Time) (time.Time, bool) {
+	if weeklyUSD <= 0 {
+		return time.Time{}, false
+	}
+
+	since := BudgetSince(now)
+	in := slices.DeleteFunc(slices.Clone(runs), func(r RunCost) bool { return r.StartedAt.Before(since) })
+	slices.SortStableFunc(in, func(a, b RunCost) int { return a.StartedAt.Compare(b.StartedAt) })
+
+	// left[i] is the spend of the runs that started after in[i-1]: summed from the newest, so no
+	// error builds up from subtracting.
+	left := make([]float64, len(in)+1)
+	for i := len(in) - 1; i >= 0; i-- {
+		left[i] = left[i+1] + in[i].CostUSD
+	}
+
+	if left[0] < weeklyUSD {
+		return time.Time{}, false
+	}
+
+	for i, r := range in {
+		if left[i+1] < weeklyUSD {
+			return r.StartedAt.Add(BudgetWindow), true
+		}
+	}
+
+	return time.Time{}, false // unreachable: left[len(in)] is 0, below a positive cap
 }
 
 // BudgetFor is the weekly budget's share of a window of length d (WeeklyUSD × d / 7 days), as
