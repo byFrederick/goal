@@ -59,6 +59,9 @@ const (
 	codeBufferOffDrum   = "buffer-not-at-constraint"
 	// codeMergesWithoutMergeAction: merges on a station whose action is not merge.
 	codeMergesWithoutMergeAction = "merges-without-merge-action"
+	// codeWaitForMaxNotAboveGrace: a station's waitFor.ci.max, a default counted, is not above
+	// its grace.
+	codeWaitForMaxNotAboveGrace = "wait-for-max-not-above-grace"
 
 	codeIntegrationLandAtNotMerge = "integration-land-at-not-merge"
 	codeIntegrationWithoutMerge   = "integration-without-merge-station"
@@ -539,8 +542,22 @@ func (c *checker) station(i int, s Station) {
 		c.errorf(checkLine, codeMergesWithoutMergeAction, append(base, "merges"), "station %s: merges needs action merge", s.ID)
 	}
 
+	c.waitFor(i, s)
 	c.gate(i, s)
 	c.capacity(i, s)
+}
+
+// waitFor refuses a station's waitFor.ci whose max, a default counted, is not above its grace;
+// the schema has checked each field on its own.
+func (c *checker) waitFor(i int, s Station) {
+	if s.WaitFor == nil || s.WaitFor.CI == nil {
+		return
+	}
+
+	if ci := ciWait(*s.WaitFor.CI); ci.Max <= ci.Grace {
+		c.errorf(checkLine, codeWaitForMaxNotAboveGrace, at("spec", "board", "stations", i, "waitFor", "ci", "max"),
+			"station %s: waitFor.ci.max must be above grace", s.ID)
+	}
 }
 
 func (c *checker) gate(i int, s Station) {

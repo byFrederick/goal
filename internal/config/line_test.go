@@ -425,6 +425,70 @@ func TestLoad_RefusesUnknownStationMerges(t *testing.T) {
 	}
 }
 
+// stationWork is the agent station of baseFactory.
+const stationWork = "work"
+
+// A station's waitFor reaches the domain station in both forms, and a field left out takes its
+// default; a station without it does not wait for CI.
+func TestLine_CarriesStationWaitFor(t *testing.T) {
+	t.Parallel()
+
+	defaults := domain.CIWait{Grace: domain.DefaultCIGrace, Max: domain.DefaultCIMax, Rounds: domain.DefaultCIRounds}
+
+	for _, tt := range []struct {
+		name, waitFor string
+		want          domain.CIWait
+	}{
+		{name: "absent"},
+		{name: "short form", waitFor: "ci", want: defaults},
+		{name: "long form", waitFor: "{ ci: { grace: 2m, max: 2h, rounds: 5 } }", want: domain.CIWait{Grace: 2 * time.Minute, Max: 2 * time.Hour, Rounds: 5}},
+		{name: "long form with max only", waitFor: "{ ci: { max: 30m } }", want: domain.CIWait{Grace: 5 * time.Minute, Max: 30 * time.Minute, Rounds: 3}},
+		{name: "long form with no fields", waitFor: "{ ci: {} }", want: defaults},
+	} {
+		doc := baseFactory
+		if tt.waitFor != "" {
+			doc = edited(workAgentLine, workAgentLine+"        waitFor: "+tt.waitFor+"\n")
+		}
+
+		f, err := Load(checkTree(doc, nil))
+		if err != nil {
+			t.Fatalf("%s: load: %v", tt.name, err)
+		}
+
+		work, _ := f.Line().Station(stationWork)
+		if work.WaitFor != tt.want || work.WaitsForCI() != (tt.waitFor != "") {
+			t.Errorf("%s: work waits for %+v (waits for CI %v), want %+v", tt.name, work.WaitFor, work.WaitsForCI(), tt.want)
+		}
+
+		if stations := f.Line().Stations; slices.ContainsFunc(stations, func(s domain.Station) bool { return s.ID != stationWork && s.WaitsForCI() }) {
+			t.Errorf("%s: a station without waitFor waits for CI: %+v", tt.name, stations)
+		}
+	}
+}
+
+// The schema refuses a waitFor that is not ci, an unknown key, a duration that is not a positive
+// whole number of s, m or h, and rounds that are not a whole number of at least 1.
+func TestLoad_RefusesInvalidStationWaitFor(t *testing.T) {
+	t.Parallel()
+
+	for _, waitFor := range []string{
+		"github", "''", "[ci]", "{}", "{ gitlab: {} }", "{ ci: { timeout: 5m } }", "{ ci: ci }",
+		"{ ci: { grace: 0m } }", "{ ci: { max: -5m } }", "{ ci: { grace: 5 } }", "{ ci: { max: 1d } }",
+		"{ ci: { rounds: 0 } }", "{ ci: { rounds: 1.5 } }",
+	} {
+		doc := edited(workAgentLine, workAgentLine+"        waitFor: "+waitFor+"\n")
+
+		_, problems := Check(checkTree(doc, nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("waitFor %s: problems %+v, want a schema problem", waitFor, problems)
+		}
+
+		if _, err := Load(checkTree(doc, nil)); err == nil {
+			t.Errorf("waitFor %s loaded, want it refused", waitFor)
+		}
+	}
+}
+
 func TestLoad_RefusesTargetsThatAreNotPositive(t *testing.T) {
 	t.Parallel()
 
