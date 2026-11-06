@@ -82,7 +82,7 @@ On the web, a trigger that is off in the definition appears in the Triggers tabl
 
 The New trigger dialog lists the same suggestions under "Or turn on a suggestion from the factory's definition", each with the station it creates items at. **Turn on** publishes a new version with the trigger on, and the row leaves the list. The block is absent when the definition has no disabled triggers. The onboarding Intake step offers the same suggestions as its starter triggers.
 
-New trigger's **Built in** group lists Schedule and **Check with an agent**. A second group, also called Check with an agent, lists each MCP server the agents' environments give them, such as GitHub, Cloudflare or Context7, and never a built-in tool or a permission pattern. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the first agent whose environment has that server. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
+New trigger's **Built in** group lists Schedule and **Check with an agent**. A second group, also called Check with an agent, lists each MCP server the agents' environments give them, such as GitHub, Cloudflare or Context7, and never a built-in tool or a permission pattern. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the first agent whose environment has that server. When an environment file can't be read, the group says so and offers **Retry**. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
 
 ## Try a trigger on a past event
 

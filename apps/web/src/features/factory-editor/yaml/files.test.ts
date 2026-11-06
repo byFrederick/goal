@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { linesText } from './blocks';
-import { changedLines, fileNameProblem, fileTree, folderOf, isReadOnlyPath, newFileText, type TreeNode } from './files';
+import {
+  changedLines,
+  errorCounts,
+  fileNameProblem,
+  fileTree,
+  folderOf,
+  isReadOnlyPath,
+  newFileText,
+  type TreeNode,
+} from './files';
 
 const info = (path: string) => ({ path, sha256: path, size: 10 });
 
@@ -83,5 +92,23 @@ describe('names and text', () => {
     expect(linesText([31, 45])).toBe('lines 31–45');
     expect(linesText([30, 30])).toBe('line 30');
     expect(linesText([0, 0])).toBe('not in the file yet');
+  });
+});
+
+describe('errorCounts', () => {
+  const problem = (severity: 'error' | 'warning' | 'info', file?: string) =>
+    ({ severity, file, line: 1, code: 'x', message: 'm' }) as never;
+
+  it('counts only errors: a file with only a warning or an info has no entry', () => {
+    const counts = errorCounts(
+      [problem('warning'), problem('info'), problem('warning', 'agents/a.md')],
+      'factory.yaml',
+    );
+    expect(counts.size).toBe(0);
+  });
+
+  it('counts one error beside a warning as 1', () => {
+    const counts = errorCounts([problem('error'), problem('warning')], 'factory.yaml');
+    expect(counts.get('factory.yaml')).toBe(1);
   });
 });

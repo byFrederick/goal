@@ -811,9 +811,11 @@ export const environmentTextQuery = (org: string, factory: Factory, name: string
         return factory.current
           ? await getVersionFile(org, factory.id, 'current', path, signal)
           : { text: '', sha256: '' };
-      } catch {
-        // An agent can name an environment whose file is missing: it reaches no server.
-        return { text: '', sha256: '' };
+      } catch (error) {
+        // An agent can name an environment whose file is missing (404): it reaches no server.
+        // Any other failure is an error, not an empty file.
+        if (error instanceof ApiError && error.status === 404) return { text: '', sha256: '' };
+        throw error;
       }
     },
   });
