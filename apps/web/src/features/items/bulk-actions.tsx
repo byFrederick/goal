@@ -96,7 +96,7 @@ export function BulkActions({
             Move
           </button>
           <Button
-            variant="secondary"
+            variant="ghost"
             className={barButton}
             busy={pause.isPending}
             busyLabel="Pausing…"
