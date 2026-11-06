@@ -78,11 +78,12 @@ func TestConnections_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return connectiontest.Harness{
-			Connections: func(key ports.MasterKey) ports.Connections { return NewConnections(d.store, key) },
-			Key:         func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
-			Audit:       d.store,
-			NewOrg:      func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
-			Rekey:       func(ctx context.Context, key ports.MasterKey) (int, error) { return Rekey(ctx, d.owner, key) },
+			Connections:   func(key ports.MasterKey) ports.Connections { return NewConnections(d.store, key) },
+			Key:           func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
+			Audit:         d.store,
+			StandingRules: NewStandingRules(d.store),
+			NewOrg:        func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
+			Rekey:         func(ctx context.Context, key ports.MasterKey) (int, error) { return Rekey(ctx, d.owner, key) },
 		}
 	})
 }

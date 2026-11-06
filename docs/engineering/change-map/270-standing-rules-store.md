@@ -4,7 +4,7 @@ The connections store's tool modes or standing rules: `connections.tool_modes`, 
 
 ## Also change
 
-The `Connections` port (`internal/core/ports/connections.go`), its in-memory fake (`internal/core/ports/porttest/connections.go`, `internal/core/ports/porttest/standingrules.go`) and the conformance suite `porttest/connectiontest`, which runs against both; `Connections.Delete` in the adapter and the fake together with the standing rules, since deleting a connection revokes its active rules ([ADR 0031](../../adr/0031-tool-calls-ask-first-and-standing-rules.md) decision 7)
+The `StandingRules` port (`internal/core/ports/standingrules.go`: the list, the server-keyed rule and revoking), its in-memory fake (`internal/core/ports/porttest/standingrules.go`, `porttest.NewStandingRules` over a fake `Connections`' data) and the conformance suite `porttest/standingruletest`; the `Connections` port (`internal/core/ports/connections.go`: the connection-keyed `CreateStandingRule`), its fake (`internal/core/ports/porttest/connections.go`) and the conformance suite `porttest/connectiontest`, which reads rules through a `StandingRules` value; each suite runs against the fake and the adapter; `Connections.Delete` in the adapter and the fake together with the standing rules, since deleting a connection revokes its active rules ([ADR 0031](../../adr/0031-tool-calls-ask-first-and-standing-rules.md) decision 7)
 
 ## Run
 

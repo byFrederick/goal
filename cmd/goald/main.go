@@ -229,8 +229,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake, Hosts: store, Tests: postgres.NewEnvironmentTests(store)}, Log: log,
 	})
 	// The code host adapters: the engine merges with them and the API lists what a connection
-	// reaches.
-	hosts := codeHosts(s.AllowPrivateUpstreams)
+	// reaches. The standing rules (ADR 0031): the engine keeps and revokes them, and the gateway
+	// and the API read them.
+	hosts, rules := codeHosts(s.AllowPrivateUpstreams), postgres.NewStandingRules(store)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
 
 	boxes, err := sandboxes(ctx, s, log)
@@ -242,7 +243,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
-		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
+		Definitions: defs, Items: store, Connections: connections, StandingRules: rules, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
@@ -255,7 +256,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
@@ -286,7 +287,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
+		Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,

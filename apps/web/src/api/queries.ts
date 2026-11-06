@@ -55,14 +55,6 @@ import {
 } from './client';
 import { getCodeHosts } from './code-hosts';
 import {
-  type ConnectionFilter,
-  getConnection,
-  listConnectionAudit,
-  listConnectionKinds,
-  listConnectionRepositories,
-  listConnections,
-} from './connections';
-import {
   getCatalog,
   getDraft,
   getDraftFile,
@@ -178,20 +170,7 @@ export const keys = {
   /** Every member's personal tokens (owners and admins). */
   memberTokens: (org: string) => ['org', org, 'member-tokens'] as const,
   factories: (org: string) => ['org', org, 'factories'] as const,
-  /**
-   * The prefix of everything about the organization's connections (spec 4 §10): lists by filter,
-   * one connection by name, the audit entries about them. `event: connection` invalidates it.
-   */
-  connections: (org: string) => ['org', org, 'connections'] as const,
-  connectionList: (org: string, filter: ConnectionFilter) => ['org', org, 'connections', filter] as const,
-  connection: (org: string, name: string) => ['org', org, 'connections', 'detail', name] as const,
-  /** Audit entries about connections: every one's (`all`) or one's, by its id. */
-  connectionActivity: (org: string, id?: string) => ['org', org, 'connections', 'activity', id ?? 'all'] as const,
-  connectionKinds: (org: string) => ['org', org, 'connection-kinds'] as const,
-  /** The owners and repositories a code host connection reaches; `owner` absent is its own account. */
-  connectionRepositories: (org: string, connection: string, owner?: string) =>
-    ['org', org, 'connections', 'repositories', connection, owner ?? 'account'] as const,
-  /** The organization's secrets (ADR 0037): the list, one secret, and the audit entries about it. A connection's change also moves them. */
+  /** The organization's secrets (ADR 0037): the list, one secret, and the audit entries about it. */
   /** What the organization's agents reach (ADR 0037): the read model, by view. A secret's or a factory's change moves it. */
   access: (org: string, by: string) => ['org', org, 'access', by] as const,
   /** The organization's active standing rules (Always allow). */
@@ -361,48 +340,6 @@ export const memberTokensQuery = (org: string) =>
   queryOptions({
     queryKey: keys.memberTokens(org),
     queryFn: ({ signal }) => listMemberTokens(org, signal),
-    staleTime: 30_000,
-  });
-
-/** The organization's connections; `factory` (an id) narrows them to what its current version names. */
-export const connectionsQuery = (org: string, filter: ConnectionFilter = {}) =>
-  queryOptions({
-    queryKey: keys.connectionList(org, filter),
-    queryFn: ({ signal }) => listConnections(org, filter, signal),
-    staleTime: 30_000,
-  });
-
-export const connectionQuery = (org: string, name: string) =>
-  queryOptions({
-    queryKey: keys.connection(org, name),
-    queryFn: ({ signal }) => getConnection(org, name, signal),
-    staleTime: 30_000,
-    retry: retryUnlessRefused,
-  });
-
-/** The repositories of one owner a GitHub connection reaches (connection:browse); a step's list, not cached for long. */
-export const connectionRepositoriesQuery = (org: string, connection: string, owner?: string) =>
-  queryOptions({
-    queryKey: keys.connectionRepositories(org, connection, owner),
-    queryFn: ({ signal }) => listConnectionRepositories(org, connection, owner, signal),
-    staleTime: 30_000,
-    // A failed list shows its problem with Retry; an automatic retry would only delay that.
-    retry: false,
-  });
-
-/** A kind changes with a goald release or an admin's edit: minutes are fresh enough. */
-export const connectionKindsQuery = (org: string) =>
-  queryOptions({
-    queryKey: keys.connectionKinds(org),
-    queryFn: ({ signal }) => listConnectionKinds(org, signal),
-    staleTime: 5 * 60_000,
-  });
-
-/** The newest audit entries about connections (owners and admins: audit:read). */
-export const connectionActivityQuery = (org: string, id?: string) =>
-  queryOptions({
-    queryKey: keys.connectionActivity(org, id),
-    queryFn: ({ signal }) => listConnectionAudit(org, { connection: id, limit: id ? 6 : 5 }, signal),
     staleTime: 30_000,
   });
 

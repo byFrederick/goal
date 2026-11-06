@@ -192,7 +192,7 @@ Access also shows the secret the organization's Slack notifications use, when th
 
 ## From the command line
 
-- `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets. A value comes only from stdin or the import file and is never shown. `goal credential` and `goal connection` moved: each prints where its commands went and exits 2.
+- `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets. A value comes only from stdin or the import file and is never shown.
 - `goal repository test <url> --secret <name> --factory <factory>` tests a token for one of the factory's entries and keeps the answer ([Testing a repository's token](#testing-a-repositorys-token)). Without `--factory` it says the flag is required and exits 1 without calling goald.
 
 Flags and output are in the [CLI reference](../../reference/).

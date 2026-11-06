@@ -215,9 +215,9 @@ func TestLoad_RemovedFormsAreErrorsAndTheirVersionsDoNotRun(t *testing.T) {
 }
 
 // A version published before ADR 0037 has the keys it moved and no environment files: it loads,
-// and its line is what the engine runs today, with its connections, model connection, size and
-// tools, no removed form and no refusal.
-func TestLoad_MovedKeysStillRunOnTheOldPath(t *testing.T) {
+// with its connections, model connection, size and tools and no removed form, but the engine
+// refuses its runs with the fix (ADR 0037 decision 19).
+func TestLoad_MovedKeysLoadButDoNotRun(t *testing.T) {
 	t.Parallel()
 
 	f, err := Load(checkTree(oldPathFactory, map[string]string{defaultEnvFile: absent}))
@@ -232,8 +232,8 @@ func TestLoad_MovedKeysStillRunOnTheOldPath(t *testing.T) {
 		t.Errorf("line = %+v; want the old path's connections, model connection, size, tools and repository", line)
 	}
 
-	if len(line.Removed) != 0 || line.Refusal() != "" {
-		t.Errorf("removed %q, refusal %q; want none, so the engine runs it", line.Removed, line.Refusal())
+	if len(line.Removed) != 0 || !strings.Contains(line.Refusal(), "on connections") {
+		t.Errorf("removed %q, refusal %q; want no removed form and the refusal of a version on connections", line.Removed, line.Refusal())
 	}
 }
 

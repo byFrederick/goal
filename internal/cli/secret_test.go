@@ -13,12 +13,43 @@ import (
 )
 
 const (
-	cmdSecret     = "secret"
-	cmdCredential = "credential"
-	secretName    = "acme-token"
+	cmdSecret      = "secret"
+	importedGitHub = "github"
+	secretName     = "acme-token"
 	// secretValue is the value the secret tests store; no output may hold it.
 	secretValue = "sk-acme-secret-value-91c4" //nolint:gosec // a test value, not a secret
 )
+
+// goalIn runs one CLI command line against g with stdin and returns its output.
+func (g *defGoald) goalIn(t *testing.T, stdin string, args ...string) (string, error) {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	err := run(t.Context(), args, &printer{w: &buf, in: strings.NewReader(stdin)}, testEnv(t, g.srv.URL, map[string]string{envOrg: orgAcme}), nil)
+
+	return buf.String(), err
+}
+
+// githubConnection creates the connection github whose token refers to the secret acme-token,
+// as one made before ADR 0037 would.
+func (g *defGoald) githubConnection(t *testing.T) {
+	t.Helper()
+
+	n := domain.NewConnection{Name: importedGitHub, Kind: importedGitHub, Secrets: map[string]string{"token": "{{acme-token}}"}} //nolint:gosec // a reference to a test secret, not a value
+	if _, err := g.conns.Create(domain.WithOrg(t.Context(), g.orgID), n, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// deleteGitHubConnection deletes the connection github.
+func (g *defGoald) deleteGitHubConnection(t *testing.T) {
+	t.Helper()
+
+	if err := g.conns.Delete(domain.WithOrg(t.Context(), g.orgID), importedGitHub, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // goalRun runs one CLI command line against g through Run, with stdin, and returns stdout, stderr
 // and the exit code.
@@ -335,7 +366,6 @@ func TestSecretCommand_NeverPrintsAValue(t *testing.T) {
 		{secretValue, []string{cmdSecret, verbCreate, "Bad_Name"}},
 		{secretValue, []string{cmdSecret, verbReplace, secretName}},
 		{secretValue, []string{cmdSecret, verbReplace, "missing"}},
-		{"{{acme-token}}", []string{cmdConnection, verbCreate, importedGitHub, "--kind", importedGitHub, "--secret", "token=-"}},
 		{"", []string{cmdSecret, subList}},
 		{"", []string{cmdSecret, subShow, secretName}},
 		{"", []string{cmdSecret, verbImport, file, "--dry-run"}},
@@ -348,30 +378,5 @@ func TestSecretCommand_NeverPrintsAValue(t *testing.T) {
 		if strings.Contains(stdout, secretValue) || strings.Contains(stderr, secretValue) {
 			t.Errorf("%q (exit %d) printed the value: stdout %q, stderr %q", step.args, code, stdout, stderr)
 		}
-	}
-}
-
-// goal credential, whatever follows it, prints that it moved to goal secret and exits 2, without
-// calling goald or printing the whole usage.
-func TestCredentialCommand_Moved(t *testing.T) {
-	t.Parallel()
-
-	g := newDefGoald(t)
-
-	for _, args := range [][]string{
-		{cmdCredential},
-		{cmdCredential, subList},
-		{cmdCredential, verbCreate, secretName, "--type", "api_key"},
-		{cmdCredential, "rm", secretName},
-	} {
-		stdout, stderr, code := g.goalRun(t, secretValue, args...)
-		if code != 2 || stdout != "" || !strings.Contains(stderr, "goal credential moved to goal secret") ||
-			strings.Contains(stderr, "usage:") || strings.Count(stderr, "\n") != 1 {
-			t.Errorf("%q = exit %d, stdout %q, stderr %q; want exit 2 and one line naming goal secret", args, code, stdout, stderr)
-		}
-	}
-
-	if out := g.mustGoal(t, cmdSecret, subList); !strings.Contains(out, "no secrets") {
-		t.Errorf("list after goal credential = %q; want nothing created", out)
 	}
 }

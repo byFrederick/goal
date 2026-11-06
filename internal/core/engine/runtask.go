@@ -40,7 +40,7 @@ import (
 //
 // A Jonah run (ADR 0034 decision 1) holds no lease and works no item, so no item event is written
 // for it: its sandbox's prepare gets no repository's git login, as it clones none, and its agent
-// only the model connection's env. Without pins of its own, it pins the newest snapshot of each of
+// only the model key. Without pins of its own, it pins the newest snapshot of each of
 // its line's knowledge sources scoped to no agent, station, lane or work type.
 //
 // A check (ADR 0040 decision 19) holds no lease either and works no item: its agent gets its
@@ -85,7 +85,7 @@ func (e *Engine) RunTask(ctx context.Context, req domain.RunRequest) (domain.Run
 		it = domain.Item{ID: req.Item, FactoryID: req.FactoryID, Station: req.Station}
 	}
 
-	return e.runTask(ctx, runTask{RunRequest: req, item: it, own: req.Connections, box: &b})
+	return e.runTask(ctx, runTask{RunRequest: req, item: it, box: &b})
 }
 
 // runTask is one run of the lifecycle: its request and what the caller adds to it.
@@ -94,9 +94,6 @@ type runTask struct {
 
 	// item is the item the run works, whose events record it; zero for a Jonah run.
 	item domain.Item
-	// own are the connections whose env the agent gets besides the model's: the request's
-	// Connections, or the line's subset of them.
-	own []string
 	// box is the sandbox the run opens when it has none, and runs in.
 	box *box
 	// work is the bundle's brief as the gateway serves it (spec.brief: the item's Work(),
@@ -165,7 +162,7 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 	)
 
 	if err == nil {
-		env, err = e.runEnv(ctx, t.RunRequest, t.own, runID)
+		env, err = e.runEnv(ctx, t.RunRequest, runID)
 		scrub = newScrubber(append(env.secrets, token)...)
 	}
 
