@@ -20,8 +20,13 @@ export const Route = createFileRoute('/o/$org_/get-started/$step')({
     if (!org) throw notFound();
     return { org };
   },
-  head: ({ match: { context, params } }) =>
-    pageTitle(isOrgOnboardingStep(params.step) ? stepLabel(params.step) : '', context.org.name),
+  // beforeLoad throws notFound() before it sets `org` for an unknown step, so `org` may be missing here.
+  head: ({ match: { context, params } }) => {
+    const org: { name: string } | undefined = context.org;
+    return pageTitle(
+      ...[isOrgOnboardingStep(params.step) ? stepLabel(params.step) : '', org?.name ?? ''].filter(Boolean),
+    );
+  },
   component: function Step() {
     const { step } = Route.useParams();
     const { org } = Route.useRouteContext();
