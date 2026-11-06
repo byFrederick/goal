@@ -299,9 +299,30 @@ type Station struct {
 	// Merges says whether a station with ActionMerge integrates one item per merge target at a
 	// time (MergesSerialize, the default) or several at once (MergesAllow); see TakesTurns.
 	Merges MergesPolicy
+	// WaitFor is how the station waits for CI (ADR 0044); the zero value is a station without
+	// waitFor. See WaitsForCI.
+	WaitFor CIWait
 	// Context names what goald preloads into the feedback of every run at the station.
 	Context []StationContext
 }
+
+// CIWait is a station's waitFor: ci, with every default filled in (ADR 0044 decision 7). A wait
+// ends when no check appeared within Grace after the run ended, or when Max has passed; after
+// Rounds CI rounds in one visit to the station, the item blocks for a person.
+type CIWait struct {
+	Grace, Max time.Duration
+	Rounds     int
+}
+
+// The CIWait defaults, for a field the definition leaves out.
+const (
+	DefaultCIGrace  = 5 * time.Minute
+	DefaultCIMax    = 60 * time.Minute
+	DefaultCIRounds = 3
+)
+
+// WaitsForCI reports whether the station sets waitFor: ci.
+func (s Station) WaitsForCI() bool { return s.WaitFor != CIWait{} }
 
 // MergesPolicy says whether a merge station integrates items into the same merge target one at
 // a time. A merge target is the branch an item's pull request merges into: the default branch for
