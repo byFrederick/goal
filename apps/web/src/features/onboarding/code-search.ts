@@ -3,12 +3,15 @@
 // Code step, `url` (the first repository, or an owner pattern) and `secret` (the token's name) name the code
 // the preview shows; the token itself is never in the URL. Malformed values are dropped, never thrown on.
 import { secretNamePattern } from '../secrets/words';
+import type { CodeAccess } from './code-repositories';
 
 export interface CodeSearch {
   /** The first repository's https URL, such as https://github.com/acme/app, or an owner pattern: the later steps' card names it. */
   url?: string | undefined;
   /** The secret that holds the token, by name. */
   secret?: string | undefined;
+  /** The access chosen on the Code step, so Back and a reload show the same choice. */
+  access?: CodeAccess | undefined;
 }
 
 export interface OnboardingSearch extends CodeSearch {
@@ -50,8 +53,10 @@ export function repoOf(url: string | undefined): string | undefined {
 export function codeSearch(search: Record<string, unknown>): CodeSearch {
   const url = repositoryUrl(text(search.url));
   const secret = text(search.secret);
+  const access =
+    search.access === 'none' || search.access === 'read' || search.access === 'write' ? search.access : undefined;
   // Every key is set, undefined when refused: the router would otherwise show the raw URL value through.
-  return { url, secret: secret && secretNamePattern.test(secret) ? secret : undefined };
+  return { url, secret: secret && secretNamePattern.test(secret) ? secret : undefined, access };
 }
 
 /** The URL state of every onboarding step: the Code step's choice and the factory, when there is one. */

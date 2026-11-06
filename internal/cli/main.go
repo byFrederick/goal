@@ -321,7 +321,9 @@ const usage = `usage:
   goal catalog templates push <dir> --version N [--name NAME]
                                                   add a template version (<dir>/template.yaml and the
                                                   definition in <dir>/factory/; NAME defaults to the
-                                                  folder's name) to the bucket's template catalog
+                                                  folder's name) to the bucket's template catalog;
+                                                  a version already there unchanged succeeds, a
+                                                  changed one is refused
   goal catalog templates list                     the catalog's templates, latest version of each
   goal db init                                    create the database roles goald runs as (goal_owner,
                                                   goal_app) and hand the schema to goal_owner

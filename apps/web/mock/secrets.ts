@@ -1,12 +1,12 @@
 // The organizations' secrets for the mock API (ADR 0037): GET and POST …/secrets, POST
-// …/secrets/import, POST …/factories/{factory}/repositories/test (a token's check for a factory's entry), GET, PATCH and DELETE …/secrets/{secret}, PUT …/secrets/{secret}/value, and the
+// …/secrets/import, GET …/factories/{factory}/repositories/tests and POST …/repositories/test (a token's check for a factory's entry, kept as the latest per url), GET, PATCH and DELETE …/secrets/{secret}, PUT …/secrets/{secret}/value, and the
 // audit entries about a secret (GET …/audit?target_kind=secret), refusing as goald does
 // (secret-invalid, secret-not-found, secret-name-taken, secret-in-use naming the uses, a fresh sign-in
 // for every change). A value is never kept: a create, a replace and an import are acknowledged and
 // the value dropped, and no answer carries one. acme starts with the nine secrets of the Secrets
 // picture; their dates are set from the mock clock, so the reminder window shows whenever the mock runs.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Actor, AuditEntry, Factory, Org } from '@goal/api-client';
+import type { Actor, AuditEntry, components, Factory, Org } from '@goal/api-client';
 import type { Secret, SecretUse } from '../src/api/types.ts';
 
 /** The contract's SecretName pattern (contracts/api/openapi.yaml). */
@@ -38,6 +38,8 @@ export interface MockSecrets {
     body: () => Promise<Record<string, unknown>>,
   ) => Promise<boolean>;
 }
+
+type RepositoryTest = components['schemas']['FactoryRepositoryTest'];
 
 /** A seeded secret: its scope by factory name, which the answer resolves to ids. */
 interface Seed {
@@ -190,6 +192,8 @@ function seeds(): Seed[] {
 
 export function createSecrets({ clock, actor, stale, factories, acme }: Deps): MockSecrets {
   let stored = new Map<string, Stored[]>();
+  // The latest repository test per factory and url; the software factory starts with one.
+  let kept = new Map<string, Map<string, RepositoryTest>>();
   let nextAudit = 1;
 
   const entry = (id: string, by: Actor, action: string, at: number, data: Record<string, unknown> = {}) =>
@@ -204,6 +208,7 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
 
   const reset = (now: number) => {
     const by: Actor = { kind: 'user', id: 'local', name: 'Local user' };
+    kept = new Map();
     stored = new Map([
       [
         acme,
@@ -245,6 +250,28 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
     ]);
   };
   reset(clock());
+
+  const testsOf = (factory: Factory) => {
+    let of = kept.get(factory.id);
+    if (!of) {
+      of = new Map();
+      if (factory.name === 'software') {
+        of.set('github.com/acme/app', {
+          url: 'github.com/acme/app',
+          access: 'write',
+          secret: 'github-token',
+          at: new Date(clock() - 2 * hourMs).toISOString(),
+          tested: true,
+          ok: true,
+          summary: 'Can read and push',
+          read: { ok: true, reason: 'Cloned' },
+          push: { ok: true, reason: 'Can push' },
+        });
+      }
+      kept.set(factory.id, of);
+    }
+    return of;
+  };
 
   // An organization without seeded secrets gets its list on first use, so a secret added to it stays.
   const list = (org: string) => {
@@ -329,11 +356,23 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
     reset,
     outlines,
     async handle(org, rest, method, url, req, res, body) {
-      if (/^\/factories\/[^/]+\/repositories\/test$/.test(rest) && method === 'POST') {
+      const tests = rest.match(/^\/factories\/([^/]+)\/repositories\/(test|tests)$/);
+      if (tests && (tests[2] === 'tests' ? method === 'GET' : method === 'POST')) {
+        const ref = decodeURIComponent(tests[1] ?? '');
+        const factory = factories(org.id).find((f) => f.id === ref || f.name === ref);
+        if (!factory) {
+          refuse(res, 404, 'factory not found', 'factory-not-found');
+          return true;
+        }
+        const latest = testsOf(factory);
+        if (tests[2] === 'tests') {
+          send(res, 200, { tests: [...latest.values()].sort((a, b) => a.url.localeCompare(b.url)) });
+          return true;
+        }
         // The factory's check (ADR 0041): a repository named *-readonly refuses the push, one named *-missing the read.
         const input = await body();
         const address = typeof input.url === 'string' ? input.url : '';
-        const access = input.access === 'read' ? 'read' : 'write';
+        const access: 'read' | 'write' = input.access === 'read' ? 'read' : 'write';
         if (typeof input.secret !== 'string' || !named(org.id, input.secret)) {
           refuse(res, 404, `secret "${String(input.secret)}" not found`, 'secret-not-found');
           return true;
@@ -345,7 +384,7 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
         const noRead = /-missing(\.git)?$/.test(address);
         const noPush = access === 'write' && /-readonly(\.git)?$/.test(address);
         const good = !noRead && !noPush;
-        send(res, 200, {
+        const result = {
           url: address.replace(/^https:\/\//, '').toLowerCase(),
           access,
           secret: input.secret,
@@ -365,7 +404,10 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
           push: good
             ? { ok: true, reason: 'Can push' }
             : { ok: false, reason: 'The token has no write access to this repository.' },
-        });
+        };
+        // The latest result per url is what the factory's Code section lists.
+        latest.set(result.url, result);
+        send(res, 200, result);
         return true;
       }
       if (rest === '/audit' && method === 'GET' && url.searchParams.get('target_kind') === 'secret') {

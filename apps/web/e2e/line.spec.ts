@@ -220,3 +220,25 @@ test('add a station, name it, raise its WIP, add a check and change its kind', a
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 });
+
+for (const width of [1024, 1280, 1440]) {
+  test(`fits the stations table in its card at ${width} px without clipped columns`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openLine(page);
+    const box = stations(page).locator('xpath=ancestor::div[contains(@class,"overflow-x-auto")][1]');
+    const fits = await box.evaluate((el) => el.scrollWidth <= el.clientWidth);
+    expect(fits, 'the stations box does not scroll sideways').toBe(true);
+    const edges = await box.evaluate((el, selector) => {
+      const right = el.getBoundingClientRect().right;
+      const first = el.querySelector(selector)?.firstElementChild;
+      const cells = first ? Array.from(first.children) : [];
+      const boxes = cells.map((c) => c.getBoundingClientRect());
+      return {
+        inside: boxes.every((b) => b.right <= right + 1),
+        apart: boxes.every((b, i) => i === 0 || (boxes[i - 1]?.right ?? 0) <= b.left + 1),
+      };
+    }, 'ol > li');
+    expect(edges.inside, 'every cell of the first row ends inside the card').toBe(true);
+    expect(edges.apart, 'adjacent cells of the first row do not overlap').toBe(true);
+  });
+}

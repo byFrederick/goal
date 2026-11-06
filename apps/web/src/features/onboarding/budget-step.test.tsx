@@ -274,4 +274,50 @@ describe('step 5, set budgets and targets', () => {
     expect(screen.getByText('Station Build names an agent that does not exist.')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1, name: 'Set budgets and targets' })).toBeTruthy();
   });
+
+  it('explains line and agents problems in plain sentences with one link to the Line step', async () => {
+    vi.mocked(publishDraft).mockRejectedValueOnce(
+      new ApiError({
+        type: 'about:blank',
+        title: 'Conflict',
+        status: 409,
+        code: 'definition-invalid',
+        detail: 'fix the problems first',
+        problems: [
+          {
+            code: 'schema-required',
+            severity: 'error',
+            section: 'files',
+            pointer: '',
+            message: "spec.board: missing property 'stations'",
+          },
+          {
+            code: 'schema-required',
+            severity: 'error',
+            section: 'files',
+            pointer: '',
+            message: "spec: missing property 'agents'",
+          },
+          {
+            code: 'unknown-agent',
+            severity: 'error',
+            section: 'line',
+            pointer: '/line/stations/0/agent',
+            message: 'Station Build names an agent that does not exist.',
+          },
+        ],
+      } as never),
+    );
+    renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByText('The line has no stations. Add one on the Line step.')).toBeTruthy();
+    expect(screen.getByText('The factory has no agents. Add one on the Line step.')).toBeTruthy();
+    const links = screen.getAllByRole('link', { name: /Line step/ });
+    expect(links).toHaveLength(1);
+    const href = links[0]?.getAttribute('href') ?? '';
+    expect(href).toContain('/o/acme/get-started/line');
+    expect(href).toContain(`factory=${factoryId}`);
+    expect(screen.queryByText(/spec|\/line\//)).toBeNull();
+  });
 });

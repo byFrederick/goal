@@ -16,6 +16,6 @@ The database rules (forward-only, row-level security, indexes, definers) are in 
 7. **Add the conformance case.** Put the behavior in the shared suite: `internal/core/ports/porttest/storetest` for the `Store`, the matching `*test` package for another port. The fake runs it in `internal/core/ports/porttest/store_test.go`, and PostgreSQL runs it in `internal/adapters/store/postgres/store_integration_test.go` (`TestStore_Conformance`).
 8. **Implement the adapter** in `internal/adapters/store/postgres` over the generated queries.
 9. **Run the checks.** `task test` (the fake's run of the suite) and `task lint`.
-10. **Run the database checks.** `task migrate-check` applies every migration to a throwaway PostgreSQL 18 with pgvector. `task test-integration` runs the suite against PostgreSQL. Both need a PostgreSQL. Where none can be started, they still run in CI on the pull request: say in the pull request that you did not run them yourself.
+10. **Run the database checks.** `task migrate-check` applies every migration to a throwaway PostgreSQL 18. `task test-integration` runs the suite against PostgreSQL. Both need a PostgreSQL. Where none can be started, they still run in CI on the pull request: say in the pull request that you did not run them yourself.
 11. **Docs as built.** Update `docs/engineering/architecture.md` where it describes the data.
 12. **Deliver** with [goal-deliver](../goal-deliver/SKILL.md).

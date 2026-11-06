@@ -5,17 +5,17 @@
 # stack profile (goal up --compose).
 # Ports bind to 127.0.0.1 only. Credentials come from .env (see .env.example) with dev-only defaults.
 services:
-  # PostgreSQL 18 with pgvector for the knowledge base (spec 4 §4.8): the official postgres:18
-  # image on Debian trixie plus the extension, so the data directory on goal-pg (PostgreSQL 18,
-  # trixie's glibc collations) is the same and an install that ran postgres:18 keeps its data. The
-  # first goal up after the change recreates this container once on the same volume; goal db
-  # init then creates the extension.
+  # The official PostgreSQL 18 image on Debian trixie: Goal needs no extension (ADR 0038). An
+  # install that ran the earlier image, PostgreSQL 18 on trixie with the vector extension, keeps its
+  # data on the same goal-pg volume, with the same data directory and glibc collations; drop the
+  # extension before the switch (README.md). The first goal up after it recreates this container
+  # once on that volume.
   # init: docker-init is PID 1 and reaps strays: the postmaster as PID 1 would inherit every orphan
   # in the container and restart the server when one exits non-zero, as an untracked child. The
   # healthcheck runs pg_isready without a shell to orphan it, and Docker waits past pg_isready's
   # own 3-second limit before killing it.
   postgres:
-    image: pgvector/pgvector:0.8.7-pg18-trixie
+    image: postgres:18.6-trixie
     init: true
     environment:
       POSTGRES_DB: goal
