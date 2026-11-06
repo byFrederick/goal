@@ -26,6 +26,8 @@ func (p CIPhase) Valid() bool { return p == CIPhaseBefore || p == CIPhaseAfter }
 // CIOutcome is how a CI wait ended (ADR 0044 decisions 7 and 8).
 type CIOutcome string
 
+// The outcomes of a CI wait: every check passed, a check failed, max passed first, no check
+// appeared within grace, the token cannot read CI, or the head moved.
 const (
 	CIPassed     CIOutcome = "passed"
 	CIFailed     CIOutcome = "failed"

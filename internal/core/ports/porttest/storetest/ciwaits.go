@@ -25,12 +25,12 @@ var ciWaitsTests = []struct {
 
 // The repository, commits and stations the CI wait cases use.
 const (
-	ciRepo, ciHost         = "github.com/acme/app", "github.com"
-	ciSHA, ciNewSHA        = "c0ffee30", "c0ffee31"
-	ciStation, ciVisit     = "review", "visit-1"
-	ciOwner, ciOtherOwner  = "goald-a", "goald-b"
-	ciLease                = time.Minute
-	ciChecks               = `{"checks": [{"name": "test", "state": "finished", "result": "passed"}]}`
+	ciRepo, ciHost        = "github.com/acme/app", "github.com"
+	ciSHA, ciNewSHA       = "c0ffee30", "c0ffee31"
+	ciStation, ciVisit    = "review", "visit-1"
+	ciOwner, ciOtherOwner = "goald-a", "goald-b"
+	ciLease               = time.Minute
+	ciChecks              = `{"checks": [{"name": "test", "state": "finished", "result": "passed"}]}`
 )
 
 // ciWait is a new before-run wait of item on ciRepo at sha, round 1 of ciVisit, started at t1.
@@ -40,13 +40,17 @@ func ciWait(item domain.ItemID, sha string) domain.NewCIWait {
 	}
 }
 
-// openCIWait opens n or fails the test.
+// openCIWait opens n or fails the test, and checks the wait is open with an id and n's fields.
 func (f *fixture) openCIWait(t *testing.T, n domain.NewCIWait) domain.CIWait {
 	t.Helper()
 
 	w, err := f.Store.OpenCIWait(f.ctx(t), n)
 	if err != nil {
 		t.Fatalf("OpenCIWait(%s, %s) = %v", n.Item, n.SHA, err)
+	}
+
+	if w.ID == "" || !w.Open() || w.Item != n.Item || w.Repo != n.Repo || w.SHA != n.SHA || w.Round != n.Round || w.Phase != n.Phase {
+		t.Fatalf("OpenCIWait = %+v; want an open wait with an id and the fields of %+v", w, n)
 	}
 
 	return w
@@ -82,12 +86,8 @@ func testCIWaitsShareOnePoll(f *fixture) {
 	t := f.t
 
 	a, b := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
-	wa := f.openCIWait(t, ciWait(a.ID, ciSHA))
+	f.openCIWait(t, ciWait(a.ID, ciSHA))
 	f.openCIWait(t, ciWait(b.ID, ciSHA))
-
-	if wa.ID == "" || !wa.Open() || wa.Repo != ciRepo || wa.SHA != ciSHA || wa.Round != 1 {
-		t.Fatalf("OpenCIWait = %+v; want an open wait with an id on %s at %s, round 1", wa, ciRepo, ciSHA)
-	}
 
 	polls := f.leaseCIPolls(t, t1, ciOwner)
 	want := domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: ciSHA}
@@ -110,23 +110,31 @@ func testCIWaitsShareOnePoll(f *fixture) {
 	}
 
 	for _, it := range []domain.Item{a, b} {
-		ws := f.openCIWaits(t, it.ID)
-		if len(ws) != 1 {
-			t.Fatalf("OpenCIWaits(%s) = %d waits; want 1", it.ID, len(ws))
-		}
-
-		p := ws[0].Poll
-		if !jsonEqual(p.Checks, json.RawMessage(ciChecks)) || p.ETag != `"v1"` || !p.FirstCheckSeenAt.Equal(seen) || !p.NextPollAt.Equal(next) {
-			t.Errorf("OpenCIWaits(%s) poll = %+v; want the recorded checks, etag, first check at %s and next poll at %s", it.ID, p, seen, next)
-		}
-
-		if p.LeaseOwner != "" || !p.LeaseUntil.IsZero() {
-			t.Errorf("OpenCIWaits(%s) poll lease = %s until %s; want released after RecordCIPoll", it.ID, p.LeaseOwner, p.LeaseUntil)
-		}
+		f.sameRecordedPoll(t, it.ID, r)
 	}
 
 	if got := f.leaseCIPolls(t, next.Add(-time.Second), ciOwner); len(got) != 0 {
 		t.Errorf("LeaseDueCIPolls before the next poll = %+v; want none", got)
+	}
+}
+
+// sameRecordedPoll checks that the item's one open wait shows r recorded on its poll, with the
+// lease released.
+func (f *fixture) sameRecordedPoll(t *testing.T, item domain.ItemID, r domain.CIPollResult) {
+	t.Helper()
+
+	ws := f.openCIWaits(t, item)
+	if len(ws) != 1 {
+		t.Fatalf("OpenCIWaits(%s) = %d waits; want 1", item, len(ws))
+	}
+
+	p := ws[0].Poll
+	if !jsonEqual(p.Checks, r.Checks) || p.ETag != r.ETag || !p.FirstCheckSeenAt.Equal(r.FirstCheckSeenAt) || !p.NextPollAt.Equal(r.NextPollAt) {
+		t.Errorf("OpenCIWaits(%s) poll = %+v; want the recorded %+v", item, p, r)
+	}
+
+	if p.LeaseOwner != "" || !p.LeaseUntil.IsZero() {
+		t.Errorf("OpenCIWaits(%s) poll lease = %s until %s; want released after RecordCIPoll", item, p.LeaseOwner, p.LeaseUntil)
 	}
 }
 
@@ -186,16 +194,23 @@ func testCIWaitsSupersededOnNewSHA(f *fixture) {
 		t.Fatalf("OpenCIWaits = %+v; want only the wait on %s", ws, ciNewSHA)
 	}
 
-	if _, err := f.Store.ReplaceCIWaitSHA(f.ctx(t), old.ID, "c0ffee32", "", moved); !errors.Is(err, ports.ErrNotFound) {
+	f.supersededStaysEnded(t, old.ID, moved)
+}
+
+// supersededStaysEnded checks that the superseded wait id can be neither replaced nor ended
+// again, and that only the new sha's poll is leased at `at`.
+func (f *fixture) supersededStaysEnded(t *testing.T, id domain.CIWaitID, at time.Time) {
+	t.Helper()
+
+	if _, err := f.Store.ReplaceCIWaitSHA(f.ctx(t), id, "c0ffee32", "", at); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("ReplaceCIWaitSHA of the superseded wait = %v; want ErrNotFound", err)
 	}
 
-	// The superseded wait ended: ending it again ends nothing.
-	if n, err := f.Store.EndCIWaits(f.ctx(t), []domain.CIWaitID{old.ID}, domain.CIPassed, moved); err != nil || n != 0 {
+	if n, err := f.Store.EndCIWaits(f.ctx(t), []domain.CIWaitID{id}, domain.CIPassed, at); err != nil || n != 0 {
 		t.Errorf("EndCIWaits of the superseded wait = %d, %v; want 0, nil", n, err)
 	}
 
-	polls := f.leaseCIPolls(t, moved, ciOwner)
+	polls := f.leaseCIPolls(t, at, ciOwner)
 	if len(polls) != 1 || polls[0].SHA != ciNewSHA {
 		t.Errorf("LeaseDueCIPolls = %+v; want only the new sha's poll", polls)
 	}

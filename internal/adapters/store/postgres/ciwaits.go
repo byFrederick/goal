@@ -147,7 +147,7 @@ func (s *Store) LeaseDueCIPolls(ctx context.Context, now time.Time, owner string
 	until := now.Add(lease)
 
 	rows, err := fetch(ctx, s.inTx, func(q *db.Queries) ([]db.CiPoll, error) {
-		return q.LeaseDueCIPolls(ctx, db.LeaseDueCIPollsParams{Owner: &owner, LeaseUntil: &until, Now: now, MaxPolls: int32(max(min(limit, maxCIPollLease), 0))}) //nolint:gosec // bounded
+		return q.LeaseDueCIPolls(ctx, db.LeaseDueCIPollsParams{Owner: &owner, LeaseUntil: &until, Now: now, MaxPolls: int32(max(min(limit, maxCIPollLease), 0))})
 	})
 	if err != nil {
 		return nil, fmt.Errorf("lease ci polls: %w", err)
@@ -175,7 +175,8 @@ func (s *Store) RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner st
 	n, err := fetch(ctx, s.inTx, func(q *db.Queries) (int64, error) {
 		return q.RecordCIPoll(ctx, db.RecordCIPollParams{
 			Checks: checks, Etag: r.ETag, LastError: r.Error, FirstCheckSeenAt: optionalTime(r.FirstCheckSeenAt), NextPollAt: r.NextPollAt,
-			IntervalSeconds: int32(r.Interval / time.Second), Host: key.Host, Repo: key.Repo, Sha: key.SHA, Owner: &owner,
+			IntervalSeconds: int32(r.Interval / time.Second), Host: //nolint:gosec // Check bounds it to 15..120
+			key.Host, Repo:  key.Repo, Sha: key.SHA, Owner: &owner,
 		})
 	})
 
