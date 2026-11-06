@@ -963,18 +963,18 @@ func TestRepositoryAccess(t *testing.T) {
 	}
 }
 
-// ciProject is one project of ciGitLab: what GraphQL answers as its jobsEnabled, and its REST
+// ciProject is one project of ciRepoGitLab: what GraphQL answers as its jobsEnabled, and its REST
 // builds_access_level, nil when the answer has no such field.
 type ciProject struct {
 	jobsEnabled bool
 	builds      *string
 }
 
-// ciGitLab is a stand-in GitLab with recorded answers: GET /api/v4/projects/:id shows each of
+// ciRepoGitLab is a stand-in GitLab with recorded answers: GET /api/v4/projects/:id shows each of
 // projects with Developer access and its builds_access_level, POST /api/graphql answers the
 // project's jobsEnabled for a Bearer token, and any other project is 404. It records each
 // request with its GraphQL body.
-func ciGitLab(t *testing.T, projects map[string]ciProject) (*httptest.Server, func() []string) {
+func ciRepoGitLab(t *testing.T, projects map[string]ciProject) (*httptest.Server, func() []string) {
 	t.Helper()
 
 	var (
@@ -1085,9 +1085,9 @@ func (tc ciCase) check(t *testing.T, c *Client) {
 func TestRepositoryAccess_CI(t *testing.T) {
 	t.Parallel()
 
-	disabled, private := "disabled", "private"
+	disabled, private := buildsDisabled, "private"
 
-	srv, requests := ciGitLab(t, map[string]ciProject{
+	srv, requests := ciRepoGitLab(t, map[string]ciProject{
 		"acme/app":      {jobsEnabled: true, builds: &private},
 		"acme/ci-off":   {builds: &disabled},
 		"acme/hidden":   {builds: &private},

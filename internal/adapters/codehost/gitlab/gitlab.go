@@ -630,7 +630,7 @@ func (cl *Client) ciCheck(ctx context.Context, m mergeRequest, project, builds s
 	switch {
 	case enabled:
 		return ports.AccessCheck{OK: true, Reason: "GitLab shows the token the pipelines of " + project}
-	case builds == "disabled":
+	case builds == buildsDisabled:
 		return ports.AccessCheck{OK: true, Reason: "CI is off for this project"}
 	default:
 		return ports.AccessCheck{Reason: fmt.Sprintf("GitLab shows the token no pipelines of %s (%s): the token needs read_api and a role that can see pipelines", project, why)}
