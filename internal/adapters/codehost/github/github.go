@@ -985,3 +985,9 @@ func (cl *Client) OwnerAccess(ctx context.Context, host domain.CodeHost, token, 
 
 	return out, nil
 }
+
+// Checks implements ports.CodeHost. It does not read CI yet: it sends nothing and returns an error
+// wrapping errors.ErrUnsupported.
+func (cl *Client) Checks(_ context.Context, repo domain.CodeRepository, _, sha, _ string) (ports.CommitChecks, error) {
+	return ports.CommitChecks{}, fmt.Errorf("checks of %s at %s: %w", repo, sha, errors.ErrUnsupported)
+}

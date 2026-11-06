@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -281,5 +282,96 @@ func TestCodeHost_OwnerAccess(t *testing.T) {
 
 	if _, err := c.OwnerAccess(t.Context(), domain.CodeHost{}, testToken, "acme"); !errors.Is(err, domain.ErrInvalid) {
 		t.Errorf("OwnerAccess without a host err = %v; want domain.ErrInvalid", err)
+	}
+}
+
+// The poller and gate parts test against scripted CI answers, so the fake must replay them in
+// order, keep what errors carry and record every call.
+func TestCodeHost_Checks(t *testing.T) {
+	t.Parallel()
+
+	const (
+		repoURL = "https://github.com/acme/app"
+		pr      = "https://github.com/acme/app/pull/7"
+		head    = "4b825dc6"
+		pushed  = "9f3a1c2e"
+	)
+
+	app := repositoryOf(t, repoURL)
+	retryAt := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	running := ports.CommitChecks{Checks: []ports.Check{{Name: "test", State: ports.CheckRunning}}}
+	done := ports.CommitChecks{Checks: []ports.Check{{Name: "test", State: ports.CheckFinished, Result: ports.CheckPassed}}}
+	moved := ports.CommitChecks{Head: pushed}
+
+	h := porttest.NewCodeHost()
+	h.SetChecks(repoURL, head,
+		porttest.ChecksAnswer{Checks: running},
+		porttest.ChecksAnswer{Err: &ports.RateLimitedError{RetryAt: retryAt}},
+		porttest.ChecksAnswer{Checks: done},
+	)
+	h.SetChecks(repoURL, "hidden", porttest.ChecksAnswer{Err: &ports.CINotReadableError{Permission: "Checks: read"}})
+	h.SetChecks(repoURL, "old", porttest.ChecksAnswer{Checks: moved})
+
+	ctx := t.Context()
+
+	// The scripted sequence, Head defaulting to the sha asked about.
+	got, err := h.Checks(ctx, app, testToken, head, "")
+	if err != nil || got.Head != head || got.Finished() {
+		t.Fatalf("first answer = %+v, %v; want %s running", got, err, head)
+	}
+
+	_, err = h.Checks(ctx, app, testToken, head, "")
+
+	var rl *ports.RateLimitedError
+	if !errors.As(err, &rl) || !rl.RetryAt.Equal(retryAt) {
+		t.Fatalf("second answer err = %v; want a RateLimitedError retrying at %v", err, retryAt)
+	}
+
+	// The last answer repeats.
+	for range 2 {
+		if got, err := h.Checks(ctx, app, testToken, head, ""); err != nil || !got.Finished() || got.Head != head {
+			t.Fatalf("last answer = %+v, %v; want %s finished", got, err, head)
+		}
+	}
+
+	if got, err := h.Checks(ctx, app, testToken, "old", pr); err != nil || got.Head != pushed {
+		t.Errorf("moved head = %+v, %v; want head %s", got, err, pushed)
+	}
+
+	if _, err := h.Checks(ctx, app, testToken, "hidden", ""); !errors.Is(err, ports.ErrCINotReadable) {
+		t.Errorf("hidden CI err = %v; want ErrCINotReadable", err)
+	}
+
+	if got, err := h.Checks(ctx, app, testToken, "unscripted", ""); err != nil || got.Head != "unscripted" || len(got.Checks) != 0 {
+		t.Errorf("unscripted = %+v, %v; want no checks at head unscripted", got, err)
+	}
+
+	// Refusals, as the adapters refuse them.
+	other := repositoryOf(t, "https://github.com/acme/other")
+	if _, err := h.Checks(ctx, app, "", head, ""); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("no token err = %v; want ErrInvalid", err)
+	}
+
+	if _, err := h.Checks(ctx, domain.CodeRepository{}, testToken, head, ""); !errors.Is(err, domain.ErrInvalid) {
+		t.Errorf("no repository err = %v; want ErrInvalid", err)
+	}
+
+	if _, err := h.Checks(ctx, other, testToken, head, pr); !errors.Is(err, ports.ErrNotMergeable) {
+		t.Errorf("foreign pull request err = %v; want ErrNotMergeable", err)
+	}
+
+	calls := h.ChecksCalls()
+	want := []porttest.ChecksCall{
+		{Repo: app, SHA: head, Token: testToken},
+		{Repo: app, SHA: head, Token: testToken},
+		{Repo: app, SHA: head, Token: testToken},
+		{Repo: app, SHA: head, Token: testToken},
+		{Repo: app, SHA: "old", URL: pr, Token: testToken},
+		{Repo: app, SHA: "hidden", Token: testToken},
+		{Repo: app, SHA: "unscripted", Token: testToken},
+	}
+
+	if !slices.Equal(calls, want) {
+		t.Errorf("calls = %+v; want %+v", calls, want)
 	}
 }
