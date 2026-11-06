@@ -258,7 +258,7 @@ describe('Needs you: the item an alert names', () => {
       station: 'build',
       action: null,
       approval: null,
-      blocked: { reason: 'No test environment', paused: false },
+      blocked: { reason: 'No test environment', code: null, paused: false },
     };
     renderPage({
       search: { entry: 'blocked:item-5' },
