@@ -196,6 +196,9 @@ type Deps struct {
 	Connections         ports.Connections
 	ParseKind           KindParser
 	ConnectionTransport http.RoundTripper
+	// StandingRules are the organization's standing rules (ADR 0031 decision 7), which
+	// /standing-rules lists; the engine revokes them.
+	StandingRules ports.StandingRules
 	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost),
 	// as the engine has them; they list what a connection reaches. Without one, no kind is a code
 	// host here.
@@ -266,7 +269,7 @@ func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
-		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.RepositoryTests == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
+		d.Connections == nil, d.StandingRules == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.RepositoryTests == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
@@ -327,7 +330,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, repoTests: d.RepositoryTests, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, connections: d.Connections, rules: d.StandingRules, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, repoTests: d.RepositoryTests, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
@@ -449,6 +452,8 @@ type server struct {
 	connections      ports.Connections
 	parseKind        KindParser
 	connectionClient *http.Client
+	// rules serve the standing-rules list.
+	rules ports.StandingRules
 	// codehosts list what code host connections reach.
 	codehosts map[string]ports.CodeHost
 	// repoTestTimeout bounds a repository test's call to its code host.

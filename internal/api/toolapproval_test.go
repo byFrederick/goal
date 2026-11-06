@@ -98,7 +98,7 @@ func decisionData(t *testing.T, e domain.Event) string {
 func (h *harness) rules(t *testing.T) []domain.StandingRule {
 	t.Helper()
 
-	rules, err := h.conns.StandingRules(inOrg(t), true)
+	rules, err := h.standingRules.StandingRules(inOrg(t), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +380,7 @@ func (h *harness) checkServerRule(t *testing.T) {
 		Factory: acmeID, Environment: domain.DefaultEnvironment, Server: approvalConnection, Tool: approvalTool, Agent: agBackend,
 		Item: "019a4000-0000-7000-8000-0000000000aa",
 	}
-	if _, err := h.conns.CreateServerStandingRule(inOrg(t), n, domain.LocalUser); err != nil {
+	if _, err := h.standingRules.CreateServerStandingRule(inOrg(t), n, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 

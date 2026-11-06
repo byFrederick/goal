@@ -233,7 +233,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// the engine merges with them and the API lists what a connection reaches.
 	hosts := codeHosts(s.AllowPrivateUpstreams)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
-	moveOver(ctx, store, connections, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
+	// Standing rules (ADR 0031 decision 7): the engine keeps and revokes them, the gateway's bundle
+	// and the API list them, and moving over re-keys them.
+	rules := postgres.NewStandingRules(store)
+	moveOver(ctx, store, connections, rules, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -244,7 +247,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
-		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
+		Definitions: defs, Items: store, Connections: connections, StandingRules: rules, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
@@ -257,7 +260,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
+		Contracts: defs, Secrets: secrets, Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
@@ -288,7 +291,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
+		Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
 		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
@@ -319,12 +322,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 // only after its repository token (on hosts) and remote MCP servers (through tools) pass their
 // test. A failure is logged and goald starts, an unconverted factory running on the
 // old path.
-func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, intake *postgres.Intake,
+func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, rules ports.StandingRules, secrets *postgres.Secrets, intake *postgres.Intake,
 	definitions ports.DefinitionStore, authors *authoring.Service, hosts map[string]ports.CodeHost, tools ports.ToolLister,
 	clock ports.Clock, log *slog.Logger,
 ) {
 	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
+		Orgs: store, Connections: connections, StandingRules: rules, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
 		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Hosts: store, Tools: tools, Clock: clock, Logger: log,
 	}).Run(ctx)
 	if err != nil {
