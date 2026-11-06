@@ -145,11 +145,12 @@ function Panel({ template, environment, onEnvironment, taken }: PanelProps & { t
           <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="white"
-              disabled={!names || test.isPending}
-              aria-busy={test.isPending || undefined}
+              disabled={!names}
+              busy={test.isPending}
+              busyLabel="Testing…"
               onClick={() => test.mutate()}
             >
-              {test.isPending ? 'Testing…' : answer ? 'Test again' : 'Test'}
+              {answer ? 'Test again' : 'Test'}
             </Button>
             {!names ? <span className="text-secondary text-muted">Pick or paste a secret to test.</span> : null}
           </div>

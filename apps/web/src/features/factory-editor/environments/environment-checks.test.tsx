@@ -68,9 +68,18 @@ vi.mock('../../secrets/new-secret-sheet', () => ({
     ) : null,
 }));
 
-const file = 'apiVersion: goal/v1\nkind: Environment\nspec:\n  env:\n    GH_TOKEN: ghp_0123456789abcdef # keep\n';
+const file =
+  'apiVersion: goal/v1\nkind: Environment\nspec:\n  env:\n    GH_TOKEN: ghp_0123456789abcdef # keep\n  mcp:\n    linear:\n      url: https://mcp.linear.app/mcp\n';
 
-function Harness({ secrets }: { secrets: string[] }) {
+function Harness({
+  secrets,
+  testing = false,
+  testAll = () => undefined,
+}: {
+  secrets: string[];
+  testing?: boolean;
+  testAll?: () => void;
+}) {
   const [text, setText] = useState(file);
   const spec = readEnv(text);
   const change = (edit: (t: string) => string) => setText((t) => edit(t));
@@ -85,8 +94,8 @@ function Harness({ secrets }: { secrets: string[] }) {
         readOnly={false}
         results={{}}
         factoryName="goal"
-        testAll={() => undefined}
-        testing={false}
+        testAll={testAll}
+        testing={testing}
       />
       {fixes.sheet}
       <pre data-testid="file">{text}</pre>
@@ -95,7 +104,7 @@ function Harness({ secrets }: { secrets: string[] }) {
   );
 }
 
-function renderChecks(secrets: string[]) {
+function renderChecks(secrets: string[], props: { testing?: boolean; testAll?: () => void } = {}) {
   const client = new QueryClient();
   client.setQueryData(
     keys.secrets('o1'),
@@ -104,7 +113,7 @@ function renderChecks(secrets: string[]) {
   client.setQueryData(keys.factories('o1'), []);
   return render(
     <QueryClientProvider client={client}>
-      <Harness secrets={secrets} />
+      <Harness secrets={secrets} {...props} />
     </QueryClientProvider>,
   );
 }
@@ -117,6 +126,17 @@ describe('the checks of an environment', () => {
     expect(screen.getAllByText('GH_TOKEN holds a key in plain text.').length).toBeGreaterThan(0);
     expect(screen.queryByText('not here')).toBeNull();
     expect(screen.getByText('Checks on default')).toBeTruthy();
+  });
+
+  it('show Test servers as busy, not disabled, while the servers are tested, and ignore a click', () => {
+    const testAll = vi.fn();
+    renderChecks([], { testing: true, testAll });
+    const button = screen.getByRole('button', { name: 'Test servers' }) as HTMLButtonElement;
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    expect(testAll).not.toHaveBeenCalled();
   });
 
   it('create the secret in place for Move to Secrets, then write its reference', () => {

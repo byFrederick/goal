@@ -155,12 +155,13 @@ export function AddFooter({ apply, onAdded }: { apply: Apply; onAdded?: () => vo
         <Button
           variant="action"
           className="order-1 h-11 max-md:w-full md:order-2 md:h-10"
-          disabled={apply.disabled || mutation.isPending || mutation.isSuccess}
-          aria-busy={mutation.isPending || undefined}
+          disabled={apply.disabled || mutation.isSuccess}
+          busy={mutation.isPending}
+          busyLabel="Adding…"
           onClick={() => mutation.mutate()}
         >
           <SuccessLabel done={mutation.isSuccess} doneLabel="Added to draft">
-            {mutation.isPending ? 'Adding…' : 'Add to draft'}
+            Add to draft
           </SuccessLabel>
         </Button>
       </div>

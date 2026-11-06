@@ -111,7 +111,9 @@ function RuleRow({ rule }: { rule: StandingRule }) {
             <Button
               variant="danger"
               size="sm"
-              disabled={revoke.isPending || leaving}
+              disabled={leaving}
+              busy={revoke.isPending}
+              busyLabel="Revoking…"
               onClick={() => revoke.mutate()}
               aria-label={`Revoke ${rule.tool} for ${rule.agent}`}
             >
