@@ -171,6 +171,17 @@ for (const theme of ['light', 'dark'] as const) {
   }
 }
 
+test.describe('the New item row at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('is a 44 px target', async ({ page }) => {
+    await page.goto('/o/acme/f/support'); // no item has merged here, so How work gets in shows
+    const ways = page.getByRole('region', { name: 'How work gets in' });
+    const box = await ways.getByRole('button', { name: /New item/ }).boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  });
+});
+
 test.describe('activity at 390 px', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
