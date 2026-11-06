@@ -926,6 +926,51 @@ func TestCheck_StationMerges(t *testing.T) {
 	}
 }
 
+// waitFor's max must be above its grace, a default counted: Check refuses one that is not,
+// naming the station.
+func TestCheck_StationWaitFor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, waitFor string
+		refused       bool
+	}{
+		{name: "short form", waitFor: "ci"},
+		{name: "long form", waitFor: "{ ci: { grace: 1m, max: 2m, rounds: 1 } }"},
+		{name: "long form with no fields", waitFor: "{ ci: {} }"},
+		{name: "max equal to grace", waitFor: "{ ci: { grace: 10m, max: 10m } }", refused: true},
+		{name: "grace above the default max", waitFor: "{ ci: { grace: 70m } }", refused: true},
+		{name: "max below the default grace", waitFor: "{ ci: { max: 60s } }", refused: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(edited(workAgentLine, workAgentLine+"        waitFor: "+tt.waitFor+"\n"), nil))
+
+			i := indexOf(problems, codeWaitForMaxNotAboveGrace)
+			if !tt.refused {
+				if i >= 0 || slices.ContainsFunc(problems, domain.DefinitionProblem.Blocking) {
+					t.Errorf("problems %+v, want none blocking", problems)
+				}
+
+				return
+			}
+
+			if i < 0 {
+				t.Fatalf("problems %+v, want %s", problems, codeWaitForMaxNotAboveGrace)
+			}
+
+			p := problems[i]
+			if p.Message != "station work: waitFor.ci.max must be above grace" || !p.Blocking() || p.Check != checkLine ||
+				!strings.HasSuffix(p.Pointer, "/stations/1/wait_for/ci/max") {
+				t.Errorf("problem %+v, want a blocking line error at wait_for/ci/max naming station work", p)
+			}
+		})
+	}
+}
+
 // srcHandbook is the knowledge source the cases list.
 const srcHandbook = "handbook"
 

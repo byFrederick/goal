@@ -82,12 +82,17 @@ const (
 	maxListBytes = 8 << 20
 )
 
-// Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
+// Client calls GitHub's REST API. It is safe for concurrent use. Its only state is the last ETag
+// and answer of each URL Checks reads, kept in memory for conditional requests and guarded by a
+// mutex; anything else it reads it reads again.
 type Client struct {
 	api     string
 	http    *http.Client
 	polls   []time.Duration
 	retries []time.Duration
+
+	etagsMu sync.Mutex
+	etags   map[string]etagged
 }
 
 // New returns a client. cfg.APIURL, when set, must be an http(s) URL; goald's settings check it.
@@ -108,6 +113,7 @@ func New(cfg Config) *Client {
 		api:     strings.TrimSuffix(cfg.APIURL, "/"),
 		polls:   slices.Clone(cfg.MergeabilityPolls),
 		retries: slices.Clone(cfg.MergeRetries),
+		etags:   map[string]etagged{},
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
@@ -809,15 +815,10 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 		reader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, p.api+path, reader)
+	req, err := newRequest(ctx, p, method, path, reader)
 	if err != nil {
 		return 0, "", nil, err
 	}
-
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+p.token)
-	req.Header.Set("X-GitHub-Api-Version", apiVersion)
-	req.Header.Set("User-Agent", "goald")
 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -850,6 +851,21 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 	}
 
 	return res.StatusCode, msg, res.Header, nil
+}
+
+// newRequest is a request to GitHub's API at path, signed in with the pull's token.
+func newRequest(ctx context.Context, p pull, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, p.api+path, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("X-GitHub-Api-Version", apiVersion)
+	req.Header.Set("User-Agent", "goald")
+
+	return req, nil
 }
 
 // messageOf is the message of GitHub's JSON answer raw; a listing answers an array, which
@@ -1015,10 +1031,4 @@ func (cl *Client) OwnerAccess(ctx context.Context, host domain.CodeHost, token, 
 	}
 
 	return out, nil
-}
-
-// Checks implements ports.CodeHost. It does not read CI yet: it sends nothing and returns an error
-// wrapping errors.ErrUnsupported.
-func (cl *Client) Checks(_ context.Context, repo domain.CodeRepository, _, sha, _ string) (ports.CommitChecks, error) {
-	return ports.CommitChecks{}, fmt.Errorf("checks of %s at %s: %w", repo, sha, errors.ErrUnsupported)
 }

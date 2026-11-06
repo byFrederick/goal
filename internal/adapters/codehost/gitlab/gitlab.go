@@ -3,18 +3,21 @@
 // (domain.CodeRepository) and the access token that signs in to it (ADR 0041, decision 7).
 //
 // It reads merge requests, merges them, rebases them on their target, deletes branches, reads a
-// branch's head and the commits between two commits with their files, and checks what a token can
-// do in one project or in all of a group's or user's, nothing else. A project on a host of another
-// kind, and a merge request URL that is not the project's
+// branch's head and the commits between two commits with their files, checks what a token can do
+// in one project or in all of a group's or user's, and reads a commit's pipelines as its checks
+// through GitLab's GraphQL API (checks.go), nothing else. A project on a host of another kind,
+// and a merge request URL that is not the project's
 // (https://<host>/<namespace>/<project>/-/merge_requests/<iid>), are refused before anything is
-// sent. The API is the host's domain.CodeHostAPIBase, https://<host>/api/v4. A merge
-// names the head SHA it was asked for, so GitLab refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
+// sent. The API is the host's domain.CodeHostAPIBase, https://<host>/api/v4, and GraphQL is
+// https://<host>/api/graphql beside it. A merge names the head SHA it was asked for, so GitLab
+// refuses it if the branch moved, and it is never forced: GitLab's refusals (not mergeable,
 // conflicts, head moved) come back as ports.ErrNotMergeable. GitLab's rebase takes no expected
 // head: UpdateBranch reads the merge request first and rebases only if its head is the one it
 // was given, best effort against a push in between, and never forced; a rebase GitLab refuses
-// for conflicts comes back as a *ports.MergeConflictError (without files). Squash merges with squash; merge
-// uses the project's own merge method. The token travels only in the PRIVATE-TOKEN header of
-// requests to that API; redirects are not followed, and the token is scrubbed from every error.
+// for conflicts comes back as a *ports.MergeConflictError (without files). Squash merges with
+// squash; merge uses the project's own merge method. The token travels only in the PRIVATE-TOKEN
+// header of requests to that API; redirects are not followed, and the token is scrubbed from
+// every error.
 package gitlab
 
 import (
@@ -829,10 +832,4 @@ func (cl *Client) countProjects(ctx context.Context, m mergeRequest, listing, qu
 			return out, nil
 		}
 	}
-}
-
-// Checks implements ports.CodeHost. It does not read CI yet: it sends nothing and returns an error
-// wrapping errors.ErrUnsupported.
-func (cl *Client) Checks(_ context.Context, repo domain.CodeRepository, _, sha, _ string) (ports.CommitChecks, error) {
-	return ports.CommitChecks{}, fmt.Errorf("checks of %s at %s: %w", repo, sha, errors.ErrUnsupported)
 }
