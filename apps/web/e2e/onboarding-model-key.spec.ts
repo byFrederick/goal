@@ -86,7 +86,11 @@ test('a template with a model key set in the Line step starts its first item and
   await expectItemRuns(page);
 });
 
-test('Start empty with a model key set in the Line step starts its first item and runs it', async ({ page }) => {
+// A Start empty factory has no starter item (goald's authoring/create.go and the mock's blankSkeleton), so the
+// First item step shows its empty state and files nothing. The key is proven by filing a starter item by hand.
+test('Start empty with a model key set in the Line step shows no hold, and an item filed later runs', async ({
+  page,
+}) => {
   await newOrganization(page);
   await page.getByRole('radio', { name: /Start empty/ }).check();
   await page.getByRole('button', { name: /^Use / }).click();
@@ -94,7 +98,25 @@ test('Start empty with a model key set in the Line step starts its first item an
   await reachLine(page);
   await setModelKey(page);
   await reachFirstItem(page);
-  await expectItemRuns(page);
+  await expect(page.getByText('This factory has no starter item, so nothing runs yet.')).toBeVisible();
+  await expect(page.getByText('Agents need a model key to run.')).toHaveCount(0);
+  await expectNoHorizontalScroll(page);
+
+  const factory = factoryOf(page);
+  const empty = await page.request.get(`/v1/orgs/acme/factories/${factory}/items`);
+  expect(((await empty.json()) as { items: Card[] }).items).toEqual([]);
+
+  const filed = await page.request.post(`/v1/orgs/acme/factories/${factory}/items`, {
+    data: { title: 'Review the newest open pull request' },
+  });
+  expect(filed.ok()).toBeTruthy();
+  const { id } = (await filed.json()) as { id: string };
+  const events = await page.request.get(`/v1/orgs/acme/items/${id}/events`);
+  const kinds = ((await events.json()) as { events: { kind: string }[] }).events.map((e) => e.kind);
+  expect(kinds).toContain('claimed');
+  expect(kinds).not.toContain('blocked');
+  const runs = await page.request.get(`/v1/orgs/acme/items/${id}/runs`);
+  expect(((await runs.json()) as { runs: unknown[] }).runs.length).toBeGreaterThan(0);
 });
 
 test('without a model key the First item step files nothing and says why', async ({ page }) => {
