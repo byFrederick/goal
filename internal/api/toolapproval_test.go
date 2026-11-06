@@ -64,11 +64,13 @@ func (h signedIn) signInOwnerNow() {
 	h.identity.AddSession(freshOwnerToken, ownerID, domain.Session{ID: freshOwnerSession, CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true})
 }
 
-// checkRule checks r is backend's active rule on repo's create_comment, approved on it.
+// checkRule checks r is backend's active rule on create_comment of server repo in line's default
+// environment, approved on it.
 func checkRule(t *testing.T, rules []domain.StandingRule, it domain.Item) {
 	t.Helper()
 
-	if len(rules) != 1 || rules[0].Connection != approvalConnection || rules[0].Tool != approvalTool ||
+	if len(rules) != 1 || rules[0].ConnectionID != "" || rules[0].Factory != lineID || rules[0].Environment != domain.DefaultEnvironment ||
+		rules[0].Server != approvalConnection || rules[0].Tool != approvalTool ||
 		rules[0].Agent != agBackend || rules[0].ItemID != it.ID || !rules[0].Active() {
 		t.Errorf("rules %+v; want one active rule for backend on repo's create_comment", rules)
 	}
@@ -327,13 +329,13 @@ func (h *harness) alwaysAllowed(t *testing.T, header http.Header) gen.StandingRu
 	return list.Rules[len(list.Rules)-1]
 }
 
-// checkListedRule checks rule is the local user's active rule for backend on repo's
-// create_comment.
+// checkListedRule checks rule is the local user's active rule for backend on create_comment of
+// server repo in line's default environment.
 func checkListedRule(t *testing.T, rule gen.StandingRule) {
 	t.Helper()
 
-	if rule.Id == "" || deref(rule.ConnectionId) == "" || rule.FactoryId != nil || rule.Environment != nil || rule.Server != nil ||
-		deref(rule.Connection) != approvalConnection || rule.Tool != approvalTool ||
+	if rule.Id == "" || rule.ConnectionId != nil || rule.Connection != nil || deref(rule.FactoryId) != lineID ||
+		deref(rule.Environment) != domain.DefaultEnvironment || deref(rule.Server) != approvalConnection || rule.Tool != approvalTool ||
 		rule.Agent != agBackend || rule.CreatedBy.Id != domain.LocalUser.ID || rule.ItemId == "" || rule.RevokedAt != nil || rule.RevokedBy != nil {
 		t.Errorf("rule %+v; want backend's active rule on repo's create_comment", rule)
 	}

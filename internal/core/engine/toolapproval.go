@@ -177,7 +177,7 @@ func (e *Engine) alwaysAllow(ctx context.Context, it domain.Item, l domain.Line,
 	return err
 }
 
-// alwaysAllowOffered is whether a call of tool on MCP server server by agent offers Always allow:
+// alwaysAllowOffered is whether agent's call of tool on the MCP server named server offers Always allow:
 // the tool's mode in the agent's environment file is ask, the one mode a standing rule lifts
 // (domain.ServerToolModes). It fails with domain.ErrNotOnSecrets for a line not on secrets, and
 // with ErrBadToolCall for a server the agent's environment lacks.

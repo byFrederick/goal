@@ -97,7 +97,7 @@ func TestRequestToolApproval_EndsTheRunAndWaitsForAPerson(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
-				it, run := h.asking(t)
+			it, run := h.asking(t)
 
 			requester := h.e
 			if other {

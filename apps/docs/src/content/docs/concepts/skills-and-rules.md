@@ -39,16 +39,13 @@ An `ask` call does not run. The run ends, and the item waits for a person:
 
 1. The person sees the call, with its input and the agent's role, and chooses Approve or Deny. Deny can carry a note that the next run reads.
 2. Approve runs the call once, in the next run. Deny sends the item back with the denial in its brief.
-3. Approve with Always allow also records a standing rule (below).
+3. Approve with Always allow also records a standing rule (below). Always allow is offered only when the tool's mode in the agent's environment file is `ask`. When the ask comes from somewhere else, such as the factory's `toolRule`, a standing rule would lift nothing, so the call can only be approved once.
 
 The built-in tools do not ask first. `builtins` set to `ask` is served as `off` for them.
 
 ## Standing rules
 
-A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it lasts until someone revokes it. What it covers depends on where the factory keeps its keys:
-
-- In a factory on secrets, the rule covers the role, the tool name, and the server in the environment file the agent runs with (`mcp.<server>` in `environments/<name>.yaml`), in that factory only. The same server in another environment or another factory still asks.
-- In a factory still on connections, the rule covers the role, the tool name and the connection, in every factory of the organization. Deleting the connection revokes it.
+A standing rule lets one agent role call one tool of one MCP server without asking. It is created only by Always allow on a tool approval, and it lasts until someone revokes it. The rule covers the role, the tool name, and the server in the environment file the agent runs with (`mcp.<server>` in `environments/<name>.yaml`), in that factory only. The same server in another environment or another factory still asks.
 
 A standing rule only turns `ask` into allowed for its role. A tool set to `off` stays off.
 
