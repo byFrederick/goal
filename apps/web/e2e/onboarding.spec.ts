@@ -84,7 +84,10 @@ async function makeFactory(page: Page) {
 async function setModelKey(page: Page) {
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await expect(page.getByText('Add the model key, then continue.')).toBeVisible();
-  await page.getByLabel('Model key', { exact: true }).fill('test-token');
+  await page
+    .locator('input')
+    .and(page.getByLabel('Model key', { exact: true }))
+    .fill('test-token');
   await page.getByRole('button', { name: 'Save the key' }).click();
   await expect(page.getByText('Saved as the secret model-key, open to this factory.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
