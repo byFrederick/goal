@@ -45,6 +45,7 @@ type Store struct {
 	repos   map[domain.ItemID][]domain.ItemRepository
 	joined  []domain.FollowUpID // follow-ups in the order they joined a triage item
 	views   map[domain.SavedViewID]savedViewRecord
+	ci      ciRows
 	jonah   jonahRows
 	ids     int
 	changes changes
@@ -72,6 +73,7 @@ func NewStore() *Store {
 		spans:     map[domain.ItemID][]domain.Span{},
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 		views:     map[domain.SavedViewID]savedViewRecord{},
+		ci:        ciRows{polls: map[ciPollID]*domain.CIPoll{}},
 		jonah:     jonahRows{runKinds: map[domain.RunID]domain.RunKind{}},
 	}
 }
@@ -140,6 +142,7 @@ func (s *Store) purge(org domain.OrgID) {
 
 	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return gone[r.ItemID] })
 	s.edges = slices.DeleteFunc(s.edges, func(e domain.Edge) bool { return gone[e.Item] || gone[e.Needs] })
+	s.ci.purge(org, gone)
 	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool {
 		if gone[e.ItemID] {
 			delete(s.labels, e.ID)

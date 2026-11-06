@@ -63,6 +63,39 @@ type AuditLog struct {
 	RequestID  *string
 }
 
+type CiPoll struct {
+	OrgID            uuid.UUID
+	Host             string
+	Repo             string
+	Sha              string
+	NextPollAt       time.Time
+	IntervalSeconds  int32
+	Etag             string
+	Checks           []byte
+	FirstCheckSeenAt *time.Time
+	LastError        string
+	LeaseOwner       *string
+	LeaseUntil       *time.Time
+}
+
+type CiWait struct {
+	ID        uuid.UUID
+	OrgID     uuid.UUID
+	ItemID    uuid.UUID
+	Station   string
+	Visit     string
+	Host      string
+	Repo      string
+	Sha       string
+	PrUrl     *string
+	Phase     string
+	Round     int32
+	Held      []byte
+	StartedAt time.Time
+	EndedAt   *time.Time
+	Outcome   *string
+}
+
 type DefinitionVersion struct {
 	ID            uuid.UUID
 	OrgID         uuid.UUID
