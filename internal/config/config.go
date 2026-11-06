@@ -470,6 +470,10 @@ type Station struct {
 	// Action makes goald act when the item is approved at this station, a human station or an
 	// agent station with a gate: "merge" merges the item's pull requests first.
 	Action string `json:"action,omitempty"`
+	// Merges is "serialize" (the default) or "allow": whether a station with action merge
+	// integrates one item per merge target at a time or several at once. Only a merge station
+	// may set it.
+	Merges string `json:"merges,omitempty"`
 	// Context names what goald preloads into the station's runs: "inflight" for the factory's
 	// open work.
 	Context []string `json:"context,omitempty"`
