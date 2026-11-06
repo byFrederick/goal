@@ -59,6 +59,9 @@ const (
 	codeBufferOffDrum   = "buffer-not-at-constraint"
 	// codeMergesWithoutMergeAction: merges on a station whose action is not merge.
 	codeMergesWithoutMergeAction = "merges-without-merge-action"
+	// codeWaitForMaxNotAboveGrace: a station's waitFor.ci.max, a default counted, is not above
+	// its grace.
+	codeWaitForMaxNotAboveGrace = "wait-for-max-not-above-grace"
 
 	codeIntegrationLandAtNotMerge = "integration-land-at-not-merge"
 	codeIntegrationWithoutMerge   = "integration-without-merge-station"
@@ -537,6 +540,13 @@ func (c *checker) station(i int, s Station) {
 
 	if s.Merges != "" && s.Action != string(domain.ActionMerge) {
 		c.errorf(checkLine, codeMergesWithoutMergeAction, append(base, "merges"), "station %s: merges needs action merge", s.ID)
+	}
+
+	if w := s.WaitFor; w != nil && w.CI != nil {
+		if ci := ciWait(*w.CI); ci.Max <= ci.Grace {
+			c.errorf(checkLine, codeWaitForMaxNotAboveGrace, append(base, "waitFor", "ci", "max"),
+				"station %s: waitFor.ci.max must be above grace", s.ID)
+		}
 	}
 
 	c.gate(i, s)
