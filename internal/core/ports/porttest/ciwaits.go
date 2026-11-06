@@ -125,6 +125,12 @@ func (s *Store) LeaseDueCIPolls(ctx context.Context, now time.Time, owner string
 		return nil, err
 	}
 
+	if owner == "" || lease <= 0 {
+		return nil, fmt.Errorf("lease ci polls: an owner and a lease are required: %w", domain.ErrInvalid)
+	}
+
+	limit = max(limit, 0)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

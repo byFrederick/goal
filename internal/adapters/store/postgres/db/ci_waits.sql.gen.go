@@ -31,6 +31,18 @@ func (q *Queries) CIRounds(ctx context.Context, arg CIRoundsParams) (int64, erro
 	return count, err
 }
 
+const cIWaitItem = `-- name: CIWaitItem :one
+SELECT item_id FROM ci_waits WHERE id = $1 AND ended_at IS NULL
+`
+
+// The item of the open wait id, for its lock; no row when the wait is not open.
+func (q *Queries) CIWaitItem(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, cIWaitItem, id)
+	var item_id uuid.UUID
+	err := row.Scan(&item_id)
+	return item_id, err
+}
+
 const endCIWaits = `-- name: EndCIWaits :execrows
 UPDATE ci_waits SET ended_at = $1, outcome = $2
 WHERE id = ANY($3::uuid[]) AND ended_at IS NULL

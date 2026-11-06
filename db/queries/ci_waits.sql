@@ -16,6 +16,10 @@ VALUES (sqlc.arg(id), sqlc.arg(item_id), sqlc.arg(station), sqlc.arg(visit), sql
         sqlc.narg(pr_url), sqlc.arg(phase), sqlc.arg(round), sqlc.narg(held), sqlc.arg(started_at))
 RETURNING *;
 
+-- name: CIWaitItem :one
+-- The item of the open wait id, for its lock; no row when the wait is not open.
+SELECT item_id FROM ci_waits WHERE id = sqlc.arg(id) AND ended_at IS NULL;
+
 -- name: EndOpenCIWait :one
 -- Ends the open wait id with outcome at ended_at and returns it; no row when it is not open.
 UPDATE ci_waits SET ended_at = sqlc.arg(ended_at), outcome = sqlc.arg(outcome)
