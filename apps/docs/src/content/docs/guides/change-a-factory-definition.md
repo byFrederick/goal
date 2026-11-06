@@ -85,7 +85,7 @@ In the Definition editor, Review and publish shows, beside the changes of the op
 
 ## Edit the line in the app
 
-You can also change the line in the draft's form: open the factory's Definition and choose Line. The stations are one table, in the order work moves through them. Each row has its number, its name with its id under it, its kind (Queue, Agent, Human or Done), its WIP limit, who works there, and the Order buttons. On a narrow screen the table scrolls sideways inside its own box.
+You can also change the line in the draft's form: open the factory's Definition and choose Line. The stations are one table, in the order work moves through them. Each row has its number, its name with its id under it, its kind (Queue, Agent, Human or Done), its WIP limit, who works there, and the Order buttons. When the editor is too narrow for one row, each station takes two lines: the name and id first, then its kind, WIP limit, who works there and the Order buttons, each with its label. On a phone the table scrolls sideways inside its own box.
 
 - Change a station's name, kind or WIP limit in its row. A kind change that drops fields, such as an agent's checks, says what it removed and offers Undo.
 - Move a station with its up and down buttons, or focus its row and press Alt with the up or down arrow, or drag its number. The More menu inserts a station above or below, duplicates it or deletes it.

@@ -157,5 +157,5 @@ The screens on the canvas, one page per flow (unchanged list from version 2): Ge
 - WCAG 2.2 AA in both themes: text 4.5:1 (3:1 at 24px+), controls 3:1. Colours that must be told apart also differ in lightness.
 - A mark that carries a value, such as a WIP slot in the preview, uses `muted` or stronger for its border, never `line`: a hairline is about 1.2:1 and fails 1.4.11.
 - Real elements: `<button>`, `<a href>`, `<input>` with `<label>`, `role="switch"`. Focus rings are 2px `run` with a 2px offset. Every drag has a Move menu, and every shortcut is shown where its action is.
-- Phone-first: check 375, 768 and 1440px. Below 1024px wide tables scroll in their own box. A wide table that cannot hold every column at a usable width moves its less important values onto a second line under the title rather than squeezing the title, and long titles end in an ellipsis.
+- Phone-first: check 375, 768 and 1440px. Below 1024px wide tables scroll in their own box. A wide table that cannot hold every column at a usable width moves its less important fields onto a second line instead of squeezing them, and long titles end in an ellipsis.
 - Every visual change runs the ui-ux-pro-max pre-delivery checklist and the MOTION.md checklist.

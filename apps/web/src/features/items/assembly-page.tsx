@@ -15,6 +15,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { StatStrip } from '../../ui/stat-strip';
 import { StatusIcon } from '../../ui/status-icon';
+import { touchLink } from '../../ui/touch-target';
 import { AssemblyActions } from './assembly-actions';
 import {
   agentRole,
@@ -201,7 +202,7 @@ function PartsTable({
               <th scope="col" className="min-w-[4.5rem] py-2 pr-3 font-normal whitespace-nowrap">
                 State
               </th>
-              <th scope="col" className={cn('py-2 pr-3 text-right font-normal whitespace-nowrap', partsColumn)}>
+              <th scope="col" className={cn('min-w-[3.75rem] py-2 pr-3 text-right font-normal whitespace-nowrap', partsColumn)}>
                 Cost
               </th>
               <th scope="col" className="py-2 font-normal whitespace-nowrap max-md:hidden">
@@ -221,7 +222,7 @@ function PartsTable({
                     to="/o/$org/f/$factory/items/$ref"
                     params={link(part)}
                     title={part.title}
-                    className="block truncate font-medium no-underline hover:underline"
+                    className={cn('block truncate font-medium no-underline hover:underline', touchLink)}
                   >
                     {part.title}
                   </Link>
