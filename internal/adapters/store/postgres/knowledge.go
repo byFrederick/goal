@@ -17,13 +17,12 @@ import (
 
 var _ ports.Knowledge = (*Knowledge)(nil)
 
-// Knowledge implements ports.Knowledge over 00054's knowledge_sources, knowledge_documents and
-// knowledge_chunks and 00095's knowledge_snapshots, knowledge_files and knowledge_reads, as goal_app under row-level security: every statement sees the organization
-// in ctx only (a claim alone reads across organizations, through 00055's definer), and every
-// change people make appends its audit entry in its transaction. A search is one statement: the
-// nearest chunks by cosine distance (exact over small sources, else pgvector's HNSW index on
-// halfvec with its iterative scan) and the best by keywords, both over the named sources only,
-// fused by reciprocal rank.
+// Knowledge implements ports.Knowledge over 00054's knowledge_sources, 00099's knowledge_uploads
+// and 00095's knowledge_snapshots, knowledge_files and knowledge_reads, as goal_app under
+// row-level security: every statement sees the organization in ctx only (a claim alone reads
+// across organizations, through 00055's definer), and every change people make appends its audit
+// entry in its transaction. Knowledge is files (ADR 0038): an agent reads a source's files
+// through its snapshots, and nothing embeds or ranks them here.
 type Knowledge struct {
 	s *Store
 }

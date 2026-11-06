@@ -4,7 +4,7 @@
 #   docker build -f apps/worker/Dockerfile -t ghcr.io/byfrederick/goal-agent:0.2.0 .
 # A sandbox idles in it until goald execs `goal-agent prepare`, `goal-agent run` and the station's
 # checks; apps/worker/README.md has the contract. It carries the worker (Claude Code through the Agent
-# SDK), git, gh, glab, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries with pgvector;
+# SDK), git, gh, glab, mise with Go, Node and Python, a C compiler and PostgreSQL 18's server binaries;
 # a repository's other tools come from its mise config at prepare. Every version is pinned and
 # every download checked against the checksums its project publishes. The production deploy builds
 # and pushes it reproducibly (deploy/cloudflare/scripts/deploy.sh): the slow stages (apt, mise,
@@ -40,7 +40,7 @@ RUN mise="mise-v${MISE_VERSION}-linux-$([ "${TARGETARCH}" = amd64 ] && echo x64 
  && install -D -m 0755 "${glab}/bin/glab" /out/usr/local/bin/glab \
  && curl -fsSL --create-dirs https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /out/usr/share/keyrings/pgdg.asc
 
-# base: Debian with the system packages, PostgreSQL's server binaries and pgvector, gh, glab and mise with the
+# base: Debian with the system packages, PostgreSQL's server binaries, gh, glab and mise with the
 # image's Go, Node and Python, installed as the sandbox's user into /opt/mise.
 FROM ${DEBIAN_IMAGE} AS base
 ARG PG_MAJOR=18
@@ -60,7 +60,7 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install --yes --no-install-recommends \
       curl git openssh-client ripgrep jq unzip xz-utils zstd bzip2 procps less \
-      gcc libc6-dev make "postgresql-${PG_MAJOR}" "postgresql-${PG_MAJOR}-pgvector" \
+      gcc libc6-dev make "postgresql-${PG_MAJOR}" \
  && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
       /var/cache/debconf/*-old /var/cache/ldconfig/aux-cache \
  && useradd --uid 1000 --user-group --create-home --home-dir /home/node --shell /bin/bash node \

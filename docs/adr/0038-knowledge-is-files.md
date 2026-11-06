@@ -4,6 +4,8 @@ Status: accepted · 2026-11-03 · Amended by [ADR 0039](0039-jonah-learns-from-t
 
 Amended during the build: the migration that drops the old tables (00099, with 00098 for the embeddings) does not drop the `vector` extension, because the administrator owns it and the migration role may not drop it. `goal db init` creates it and the administrator drops it, once no database needs 00054's `vector` columns on a fresh install; row 8 of the build plan reads that way. Uploads keep the original in the bucket and their name and content hash in `knowledge_uploads` (decision 2).
 
+Amended 2026-11-06: migration 00054 no longer needs the `vector` extension. It adds its embedding column, CHECK and index only where the extension exists, and 00098 drops them if they exist, so a fresh install runs on PostgreSQL without pgvector. `goal db init` no longer creates the extension. Administrators drop it from an existing database once 00098 and 00099 have run, as [cloudflare-operations.md](../engineering/cloudflare-operations.md#dropping-the-vector-extension) describes.
+
 - **Replaces:**
   - Decision 6 of [ADR 0008](0008-portable-runs-connections-and-knowledge.md): the knowledge base of chunks and vectors, searched through gateway tools.
   - [ADR 0027](0027-knowledge-use-and-verdicts.md), knowledge uses and verdicts. Uses become reads (decision 10), and verdicts go.
@@ -328,7 +330,7 @@ An independent review of the first draft against the code changed nine things, a
 | 5 | **Run start.** Decisions 7–9. | backend | Pins on the claim, in the task token and the `knowledge_pinned` event. The bundle's snapshot URLs, and the gateway's `GET /run/knowledge/<source>` for local runs. The prompt section, built per run from `appliesTo`. The three knowledge tools are removed. In `apps/worker`: `prepare` downloads in parallel with the clone, `/knowledge` goes into the image and the sandbox contract, and `agent` adds `additionalDirectories` and the section. | 3, 4 |
 | 6 | **Reads.** Decision 10. | backend | The worker's structured `path` for Read, Grep and Glob. goald counts reads and searches into the daily rollup. | 5 |
 | 7 | **API and CLI.** Decisions 13 and 14. | backend | The endpoints and permissions in `contracts/api/`, the handlers, `goal knowledge` and `goal memory`. | 3, 6 |
-| 8 | **Moving over.** Decision 16. | backend | The conversion of sources. Then a migration that drops the old tables and the `vector` extension, and the removal of `ports.Embedder`, the OpenAI embedder adapter and `GOAL_EMBED_*`. | 5, 7 |
+| 8 | **Moving over.** Decision 16. | backend | The conversion of sources. Then a migration that drops the old tables (no migration drops the `vector` extension: its administrator does, as the amendment of 2026-11-06 says), and the removal of `ports.Embedder`, the OpenAI embedder adapter and `GOAL_EMBED_*`. | 5, 7 |
 | 9 | **Knowledge pages.** | frontend | `features/knowledge`: the list with Find a file and Most read; Add a source with its kinds, the Check panel and the factory checkboxes; and the source page. | 7 |
 | 10 | **Knowledge in the definition editor.** | frontend | `features/factory-editor`: the Form view's Knowledge section (sources with `appliesTo` and `readWhen`, factory memory, the prompt preview) and `memory.yaml` in the YAML view. | 4, 7 |
 | 11 | **Everything else that showed knowledge.** | frontend | As the exported screens show them: the trace's knowledge reads, Needs you's failing source per factory, the secret page's uses, onboarding's Add knowledge card, and the phone screens. | 9, 10 |

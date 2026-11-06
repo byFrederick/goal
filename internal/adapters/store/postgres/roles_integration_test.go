@@ -57,12 +57,9 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 
 		var err error
 
-		if moved, err = grantAndTransfer(t.Context(), tx); err != nil {
-			return err
-		}
+		moved, err = grantAndTransfer(t.Context(), tx)
 
-		// The extension 00054 needs, which only the administrator creates.
-		return createExtensions(t.Context(), tx)
+		return err
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +71,7 @@ func TestInitRoles_UpgradesADatabaseFromBeforeTheRoles(t *testing.T) {
 		t.Errorf("moved %d objects to goal_owner; want 9", moved)
 	}
 
-	// The extension's own objects (pgvector's types and functions) stay the administrator's.
+	// Objects an extension owns would stay the administrator's.
 	var left int
 	if err := admin.QueryRow(t.Context(), `
 		SELECT (SELECT count(*) FROM pg_class c
