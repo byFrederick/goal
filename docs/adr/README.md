@@ -45,3 +45,4 @@ One line per ADR: its number, its title and the first part of its status. To add
 - [ADR 0040](0040-one-door-for-every-source.md): One door for every source: start times, follow-ups that say where they go, checks that ask an agent what to file, webhooks that work. Status: accepted.
 - [ADR 0041](0041-code-and-github-without-an-app.md): Code and GitHub without an App: optional code access, the repositories an item opens, write access per agent, webhooks the organization connects once. Status: accepted.
 - [ADR 0042](0042-starter-templates-are-committed-product-content.md): The install's starter templates are committed product content. Status: accepted.
+- [ADR 0043](0043-merge-stations-take-turns-per-target.md): Merge stations take turns per target. Status: accepted.
