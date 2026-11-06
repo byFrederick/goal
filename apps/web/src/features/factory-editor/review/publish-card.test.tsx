@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../../api/client';
 import type { Validation } from '../../../api/types';
 import { TooltipProvider } from '../../../ui/tooltip';
 import { PublishCard } from './publish-card';
@@ -99,6 +100,26 @@ describe('PublishCard', () => {
     expect(screen.getByText('v5 is published and running.')).toBeTruthy();
     expect(closeDraft).toHaveBeenCalledOnce();
     await waitFor(() => expect(publishDraft).toHaveBeenCalledOnce());
+  });
+
+  it('shows a busy button while the publish waits, ignores a second click and drops the busy state on a refusal', async () => {
+    let reject: (e: unknown) => void = () => {};
+    publishDraft.mockImplementationOnce(() => new Promise((_, r) => (reject = r)) as never);
+    renderCard();
+
+    const button = screen.getByRole('button', { name: 'Publish v5' });
+    fireEvent.click(button);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(await screen.findByText('Publishing v5…')).toBeTruthy();
+    fireEvent.click(button);
+    await waitFor(() => expect(publishDraft).toHaveBeenCalledOnce());
+
+    reject(new ApiError({ type: 'about:blank', title: 'Precondition failed', status: 412 } as never));
+    expect(await screen.findByText(/The draft changed while you reviewed/)).toBeTruthy();
+    const back = screen.getByRole('button', { name: 'Publish v5' });
+    expect(back.getAttribute('aria-busy')).toBeNull();
+    expect(publishDraft).toHaveBeenCalledOnce();
   });
 
   it('says what runs when there is no draft and nothing was just published', () => {
