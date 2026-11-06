@@ -3,7 +3,6 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"mime/multipart"
 	"net/http"
 	"slices"
@@ -279,14 +278,12 @@ func (h *harness) syncedOnASecret(t *testing.T) {
 	}
 }
 
-// Requests the source rules refuse answer their codes; a connection a source reads is not
-// deleted.
+// Requests the source rules refuse answer their codes.
 func TestKnowledge_SourceRefusals(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	h.createHandbook(t)
-	h.createGitHub(t, kindGitHub, "ghp_test")
 	h.createRepoSecret(t)
 
 	for _, tc := range []struct {
@@ -307,18 +304,10 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 		refused(t, tc.name, h.request(t, http.MethodPost, sourcesPath, tc.body, nil), tc.status, tc.code)
 	}
 
-	decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath,
-		`{"name":"repo-search","title":"Repository search","kind":"live","connection":"github"}`, nil), http.StatusCreated)
-
-	refused(t, "sync of a live source", h.request(t, http.MethodPost, sourcesPath+"/repo-search/sync", "", nil), http.StatusConflict, "knowledge-source-live")
 	refused(t, "patch of no source", h.request(t, http.MethodPatch, sourcesPath+"/nothing", `{"title":"x"}`, nil), http.StatusNotFound, "knowledge-source-not-found")
 	refused(t, "patch of an upload source's secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"`+repoSecret+`"}`, nil),
 		http.StatusBadRequest, "")
 	refused(t, "patch to an unknown secret", h.request(t, http.MethodPatch, handbookPath, `{"secret":"gone"}`, nil), http.StatusNotFound, "secret-not-found")
-
-	if err := h.conns.Delete(inOrg(t), kindGitHub, domain.LocalUser); !errors.Is(err, ports.ErrConflict) {
-		t.Errorf("delete of a connection a source reads = %v; want ports.ErrConflict", err)
-	}
 }
 
 // Uploads the knowledge base refuses answer their codes, and a refused file stores none of the

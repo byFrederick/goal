@@ -673,8 +673,7 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 
 	clock := porttest.NewClock(time.Now().UTC().Add(time.Second))
 	tenancy := porttest.NewTenancy(clock.Now)
-	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
-	kb := porttest.NewKnowledge(conns, tenancy)
+	kb := porttest.NewKnowledge(tenancy)
 
 	o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
 	if err != nil {
@@ -683,25 +682,7 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 
 	ctx := domain.WithOrg(t.Context(), o.ID)
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	fields := map[string]string{"host": h.host()}
-	if kind == kindGitHub {
-		fields["api_url"] = "https://" + h.host() + "/api/v3" // a kind with a login is tested on its host
-	}
-
-	if _, err := conns.Create(ctx, domain.NewConnection{Name: kind, Kind: kind, Fields: fields, Secrets: map[string]string{"token": token}}, admin); err != nil {
-		t.Fatal(err)
-	}
-
-	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 	kb.ReadSecrets(secrets)
 
 	if _, err := secrets.Create(ctx, domain.NewSecret{Name: docsToken, Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {
