@@ -429,9 +429,9 @@ export function ItemDecisions({
         </Menu>
       ) : null}
       {split === undefined && cancelHere ? (
-        <Button variant="rework" disabled={cancel.isPending} onClick={() => setCancelOpen(true)}>
+        <Button variant="rework" busy={cancel.isPending} busyLabel="Cancelling…" onClick={() => setCancelOpen(true)}>
           <Ban size={16} strokeWidth={1.75} aria-hidden="true" />
-          {cancel.isPending ? 'Cancelling…' : 'Cancel item'}
+          Cancel item
         </Button>
       ) : null}
       {split !== 'controls' && decisions && !mayDecide ? (

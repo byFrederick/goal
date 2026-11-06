@@ -33,10 +33,11 @@ export function ArchivedBanner() {
           <Button
             variant="raised"
             className="border border-line shadow-none"
-            disabled={restore.isPending}
+            busy={restore.isPending}
+            busyLabel="Restoring…"
             onClick={() => restore.mutate()}
           >
-            {restore.isPending ? 'Restoring…' : 'Restore'}
+            Restore
           </Button>
         ) : null}
       </div>
