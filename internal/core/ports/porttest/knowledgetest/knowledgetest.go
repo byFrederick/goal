@@ -81,6 +81,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 const (
 	// syncSecret is the secret every org's synced sources read with (setUp).
 	syncSecret = "sync-token"
+	// secretValue is the value of the suite's secrets.
+	secretValue = "test-token"
 	// docsSecret is the secret synced sources read with, and readerGitDocs their reader.
 	docsSecret    = "docs-token"
 	readerGitDocs = "gitdocs"
@@ -103,7 +105,7 @@ func (f *fixture) ctx() context.Context { return f.in(f.org) }
 func (f *fixture) setUp(org domain.OrgID) {
 	f.t.Helper()
 
-	n := domain.NewSecret{Name: syncSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}
+	n := domain.NewSecret{Name: syncSecret, Value: secretValue, Scope: domain.SecretScope{All: true}}
 	if _, err := f.Secrets.Create(f.in(org), n, admin); err != nil {
 		f.t.Fatalf("Create secret %s: %v", syncSecret, err)
 	}
@@ -305,7 +307,7 @@ func testSourceRules(f *fixture) {
 func testSecretSources(f *fixture) {
 	ctx := f.ctx()
 
-	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: secretValue, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		f.t.Fatalf("Create secret: %v", err)
 	}
 
@@ -684,7 +686,7 @@ func testNoOrg(f *fixture) {
 func testConvertSource(f *fixture) {
 	ctx := f.ctx()
 
-	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: secretValue, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		f.t.Fatalf("Create secret: %v", err)
 	}
 

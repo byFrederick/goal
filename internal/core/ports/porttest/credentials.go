@@ -52,7 +52,7 @@ func (c *Credentials) WithKey(key ports.MasterKey) *Credentials {
 }
 
 // UsedBy implements ports.Credentials.
-func (c *Credentials) UsedBy(ctx context.Context, name string) ([]string, error) {
+func (c *Credentials) UsedBy(ctx context.Context, _ string) ([]string, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return nil, domain.ErrNoOrg
 	}
