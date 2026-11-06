@@ -97,7 +97,7 @@ export function SelectBox({
 }
 
 /** The table cell's padding, shared by every row. */
-const cell = 'px-3 py-2 align-middle lg:max-xl:px-1';
+const cell = 'px-3 py-2 align-middle lg:overflow-clip lg:max-xl:px-1';
 
 /** Columns that give way below 1024 px, where the table scrolls in its own box; from lg every column shows. */
 export const hideBelowLg = 'hidden lg:table-cell';
@@ -156,7 +156,7 @@ export function ItemTableRow({
           {shortRef(item.ref)}
         </span>
       </td>
-      <td className={cn(cell, 'lg:w-full lg:min-w-24 lg:max-w-0', indent && 'pl-8')} title={item.title}>
+      <td className={cn(cell, '', indent && 'pl-8')} title={item.title}>
         <Link
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
@@ -179,13 +179,10 @@ export function ItemTableRow({
       <td className={cn(cell, hideBelowLg)}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
       </td>
-      <td
-        className={cn(cell, 'whitespace-nowrap lg:max-xl:max-w-20 lg:max-w-24 lg:truncate')}
-        title={humanize(item.station)}
-      >
+      <td className={cn(cell, 'whitespace-nowrap lg:truncate')} title={humanize(item.station)}>
         {humanize(item.station)}
       </td>
-      <td className={cn(cell, 'lg:max-xl:max-w-28')}>
+      <td className={cell}>
         <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
           <span
             className={cn(
@@ -202,7 +199,7 @@ export function ItemTableRow({
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap lg:max-xl:max-w-20 lg:max-w-24', hideBelowLg)}>
+      <td className={cn(cell, 'whitespace-nowrap', hideBelowLg)}>
         {item.agent ? (
           <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft">
             <span
@@ -294,7 +291,7 @@ export function AssemblyTableRow({
             </span>
           </span>
         </td>
-        <td colSpan={2} className={cn(cell, 'lg:max-w-0')}>
+        <td colSpan={2} className={cell}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"
