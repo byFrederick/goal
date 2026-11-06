@@ -295,17 +295,17 @@ function DeskState({
 }) {
   if (item.state === 'done') return null;
   if (wait) return <WaitLine waiting={wait} status={itemStatus(item)} className="text-meta" />;
-  // A chip wraps inside a narrow column instead of reaching past it.
-  const wraps = 'min-w-0 max-w-full shrink whitespace-normal';
+  // A chip stays on one line and ends in an ellipsis inside a narrow column; its title has the full text.
+  const wraps = 'min-w-0 max-w-full shrink whitespace-nowrap [&>span]:min-w-0 [&>span]:truncate';
   if (item.state === 'waiting_human' && decides)
     return (
-      <Chip tone="you" className={wraps}>
+      <Chip tone="you" className={wraps} title={state.text}>
         {state.text}
       </Chip>
     );
   if (state.tone === 'rework')
     return (
-      <Chip tone="rework" className={wraps}>
+      <Chip tone="rework" className={wraps} title={state.text}>
         {state.text}
       </Chip>
     );

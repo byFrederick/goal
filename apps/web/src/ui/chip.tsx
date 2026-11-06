@@ -34,6 +34,7 @@ export function Chip({
   size = 'md',
   dot = false,
   className,
+  title,
   children,
 }: {
   tone?: ChipTone;
@@ -41,10 +42,13 @@ export function Chip({
   /** Draws a status dot before the text, in the tone's colour. */
   dot?: boolean;
   className?: string;
+  /** The full text, for a chip that truncates. */
+  title?: string;
   children: ReactNode;
 }) {
   return (
     <span
+      title={title}
       className={cn(
         'inline-flex shrink-0 items-center gap-1 rounded-chip border font-control whitespace-nowrap',
         sizes[size],

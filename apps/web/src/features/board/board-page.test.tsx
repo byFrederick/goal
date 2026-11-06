@@ -220,14 +220,14 @@ describe('BoardPage', () => {
     expect(within(columns).queryByText(/jumps every queue|1 of 1 in use/)).toBeNull();
   });
 
-  it('fits every station from 1280 px with tracks that shrink to 144 px, and to 128 px from 1280 px', async () => {
+  it('keeps each column at least 200 px and lets the board scroll sideways by keyboard', async () => {
     renderBoardPage({ page: ShellBoard, org, factory, board: board() });
 
     const columns = await screen.findByRole('region', { name: 'Stations' });
     const grid = columns.firstElementChild as HTMLElement;
-    expect(grid.style.gridTemplateColumns).toBe('repeat(2, minmax(var(--col-min), 1fr))');
-    expect(grid.classList).toContain('[--col-min:144px]');
-    expect(grid.classList).toContain('xl:[--col-min:128px]');
+    expect(grid.style.gridTemplateColumns).toBe('repeat(2, minmax(200px, 1fr))');
+    expect(columns.getAttribute('tabindex')).toBe('0');
+    expect(columns.classList).toContain('overflow-x-auto');
   });
 
   it('shows only the Expedite chip in the phone lane', async () => {
