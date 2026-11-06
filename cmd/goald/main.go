@@ -192,7 +192,17 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	definitionStore := postgres.NewDefinitions(pool, objects, log)
-	kb := openKnowledge(s, store, connections, orgSecrets, objects, clock, engineConfig(s, "").LongestClaim(), log)
+
+	// The engine is built after the definitions it reads and the gateway; the load hook and the
+	// gateway's questions reach it through eng when they are called.
+	var eng *engine.Engine
+
+	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
+		return eng.SetLines(lines)
+	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
+
+	// Knowledge sync opens a source's secret for the factories the definitions list it in.
+	kb := openKnowledge(s, store, connections, orgSecrets, defs, objects, clock, engineConfig(s, "").LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -217,14 +227,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 	defer boxes.close()
-
-	// The engine is built after the definitions it reads and the gateway; the load hook and the
-	// gateway's questions reach it through eng when they are called.
-	var eng *engine.Engine
-
-	defs := definitions.New(definitionStore, store, func(_ context.Context, lines []domain.Line) error {
-		return eng.SetLines(lines)
-	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
 	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
 	// bundle; the engine's RunDefinition signs its token.
@@ -394,8 +396,10 @@ func engineConfig(s settings, gatewayURL string) engine.Config {
 // GOAL_WORKERS_AI_URL, what is neither text nor HTML is refused. A synced source is read with its secret by the
 // reader its config names, or by its connection kind's sync reader while it is still on a
 // connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
-// confluence (the spaces of a Confluence Cloud site).
-func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, objects ports.ObjectStore,
+// confluence (the spaces of a Confluence Cloud site). A source's secret opens only when every
+// factory listings lists the source in is in its scope (ADR 0041 decision 16).
+func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
+	listings knowledge.Listings, objects ports.ObjectStore,
 	clock ports.Clock, keep time.Duration, log *slog.Logger,
 ) knowledgeBase {
 	kb := postgres.NewKnowledge(store)
@@ -426,7 +430,7 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	return knowledgeBase{
 		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
-			Knowledge: kb, Connections: connections, Secrets: secrets, Hosts: store, Uploads: uploads,
+			Knowledge: kb, Connections: connections, Secrets: secrets, Hosts: store, Listings: listings, Uploads: uploads,
 			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers, Keep: keep,
 		}),
 	}

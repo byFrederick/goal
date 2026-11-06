@@ -1063,3 +1063,94 @@ func TestIngest_ListedEnterpriseHostSyncs(t *testing.T) {
 	lists, kind := w.docs.listings()
 	w.want("the reader's secret and code host", []any{w.docs.secret, lists, kind}, w.docs.secret == "s3cret", lists == 1, kind == "github")
 }
+
+// listings are the factories that list each source (knowledge.Listings).
+type listings map[string][]domain.FactoryID
+
+func (l listings) FactoriesListing(_ context.Context, source string) []domain.FactoryID {
+	return l[source]
+}
+
+// usedSecrets records the use each secret it opens is opened for.
+type usedSecrets struct {
+	knowledge.Secrets
+
+	mu   sync.Mutex
+	uses map[string]domain.SecretUse
+}
+
+func (u *usedSecrets) Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error) {
+	out, err := u.Secrets.Resolve(ctx, names, use)
+	if err == nil {
+		u.mu.Lock()
+		u.uses[names[0]] = use
+		u.mu.Unlock()
+	}
+
+	return out, err
+}
+
+// A source's secret opens when every factory listing the source is in its scope, audited for the
+// first of them; one factory out of scope fails the sync naming the secret and that factory, and a
+// source no factory lists reads only with a secret open to all, audited for no factory (ADR 0041
+// decision 16).
+func TestIngest_SyncOpensTheSecretForTheFactoriesListingIt(t *testing.T) {
+	t.Parallel()
+
+	const (
+		alpha domain.FactoryID = "0b6f1c9e-0000-7000-8000-00000000000a"
+		beta  domain.FactoryID = "0b6f1c9e-0000-7000-8000-00000000000b"
+		gamma domain.FactoryID = "0b6f1c9e-0000-7000-8000-00000000000c"
+	)
+
+	w := newWorld(t)
+	ctx := w.ctx()
+
+	if _, err := w.secrets.Create(ctx, domain.NewSecret{
+		Name: "alpha-beta", Value: "test-token-ab", Scope: domain.SecretScope{Factories: []domain.FactoryID{alpha, beta}},
+	}, admin); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.kb.DeleteSource(ctx, srcRunbooks, admin, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, n := range []domain.NewKnowledgeSource{
+		{Name: "both-listed", Title: "Both", Kind: domain.SourceRepository, Secret: "alpha-beta", Config: repoConfig},
+		{Name: "one-out", Title: "One out", Kind: domain.SourceRepository, Secret: "alpha-beta", Config: repoConfig},
+		{Name: "unlisted", Title: "Unlisted", Kind: domain.SourceRepository, Secret: "alpha-beta", Config: repoConfig},
+		{Name: "open", Title: "Open", Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
+		{Name: "open-unlisted", Title: "Open, unlisted", Kind: domain.SourceRepository, Secret: "docs-token", Config: repoConfig},
+	} {
+		if _, err := w.kb.CreateSource(ctx, n, admin); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	secrets := &usedSecrets{Secrets: w.secrets, uses: map[string]domain.SecretUse{}}
+	w.docs.set(map[string]string{deployMD: shipOnTuesdays})
+	w.syncDue(knowledge.NewIngestor(knowledge.IngestorConfig{
+		Knowledge: w.kb, Secrets: secrets, Hosts: w.tenancy, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: w.docs},
+		Listings: listings{"both-listed": {beta, alpha}, "one-out": {alpha, gamma}, "open": {gamma}},
+		Objects:  w.objects, Clock: w.clock, TempDir: t.TempDir(),
+	}))
+
+	for _, name := range []string{"both-listed", "open", "open-unlisted"} {
+		src := w.source(name)
+		w.want(name+" after its sync", src, src.Status == domain.SyncIdle, len(w.files(name)) == 1)
+	}
+
+	oneOut := w.source("one-out")
+	w.want("a source a factory outside the secret's scope lists", oneOut, oneOut.Status == domain.SyncFailed,
+		strings.Contains(oneOut.LastError, "alpha-beta"), strings.Contains(oneOut.LastError, string(gamma)))
+
+	unlisted := w.source("unlisted")
+	w.want("a source no factory lists, on a scoped secret", unlisted, unlisted.Status == domain.SyncFailed,
+		strings.Contains(unlisted.LastError, "alpha-beta"))
+
+	secrets.mu.Lock()
+	defer secrets.mu.Unlock()
+
+	w.want("the audited uses", secrets.uses, secrets.uses["alpha-beta"].Factory == beta, secrets.uses["docs-token"] == domain.SecretUse{})
+}
