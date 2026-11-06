@@ -7,8 +7,8 @@
   "main": "../../src/index.ts",
   "compatibility_date": "2026-10-01",
   "containers": [
-    { "class_name": "Goald", "image": "./echo.Dockerfile", "instance_type": "standard-1", "max_instances": 1 },
-    { "class_name": "Auth", "image": "./echo.Dockerfile", "instance_type": "basic", "max_instances": 1 },
+    { "class_name": "Goald", "image": "./echo.Dockerfile", "instance_type": "basic", "max_instances": 1 },
+    { "class_name": "Auth", "image": "./echo.Dockerfile", "instance_type": "lite", "max_instances": 1 },
     {
       "class_name": "RunBox",
       "scheduling_policy": "durable_object",
