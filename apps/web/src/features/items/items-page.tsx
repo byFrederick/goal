@@ -364,6 +364,7 @@ export function ItemsPage() {
                         scope="col"
                         className={cn(
                           'px-3 py-2 text-left font-medium whitespace-nowrap',
+                          column === 'Repositories' && 'hidden 2xl:table-cell',
                           column === 'Cost' && 'text-right',
                           (column === 'Agent' || column === 'Age') && hideBelowXl,
                           (column === 'Lane' || column === 'Cost') && hideBelowLg,

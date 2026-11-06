@@ -165,9 +165,10 @@ export function ItemTableRow({
         >
           {item.title}
         </Link>
+        {showRepositories ? <ItemRepositories item={item} className="mt-1 max-w-48 2xl:hidden" /> : null}
       </td>
       {showRepositories ? (
-        <td className={cn(cell, 'lg:max-w-48')}>
+        <td className={cn(cell, 'hidden 2xl:table-cell 2xl:max-w-48')}>
           <ItemRepositories item={item} className="max-w-48" />
         </td>
       ) : null}
@@ -283,7 +284,7 @@ export function AssemblyTableRow({
             </span>
           </span>
         </td>
-        <td colSpan={showRepositories ? 3 : 2} className={cn(cell, 'lg:max-w-0')}>
+        <td colSpan={2} className={cn(cell, 'lg:max-w-0')}>
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               to="/o/$org/f/$factory/items/$ref"
@@ -322,6 +323,7 @@ export function AssemblyTableRow({
             </span>
           </div>
         </td>
+        {showRepositories ? <td aria-hidden="true" className="hidden 2xl:table-cell" /> : null}
         <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />

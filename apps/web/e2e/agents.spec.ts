@@ -75,7 +75,7 @@ test('model, prompt, a skills.sh skill and built-in tools save with the draft', 
   await agent.getByRole('radio', { name: 'Preview' }).check();
   await expect(agent.getByRole('heading', { level: 5, name: 'frontend-engineer' })).toBeVisible();
   await expect(agent.getByText('Build the web change the spec asks for.')).toBeVisible();
-  await agent.getByRole('radio', { name: 'Write' }).check();
+  await agent.getByRole('group', { name: 'Prompt view' }).getByRole('radio', { name: 'Write' }).check();
 
   // A skills.sh skill: search, read its SKILL.md, add it.
   const picker = agent.getByRole('combobox', { name: 'Add a skill from the catalog' });

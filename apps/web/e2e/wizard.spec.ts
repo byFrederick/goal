@@ -78,8 +78,9 @@ test('a factory from a template, step by step (flow 1)', async ({ page }) => {
   const addType = page.getByRole('textbox', { name: 'Add a work type' });
   await addType.fill('finding');
   await addType.press('Enter');
-  await page.getByRole('textbox', { name: 'Repository URL' }).fill('https://github.com/acme/infra');
-  await page.getByRole('textbox', { name: 'Repository URL' }).blur();
+  await page.getByRole('button', { name: 'Add a repository' }).click();
+  await page.getByRole('textbox', { name: 'URL', exact: true }).fill('https://github.com/acme/infra');
+  await page.getByRole('textbox', { name: 'URL', exact: true }).blur();
   await expect(saved(page)).toBeVisible();
   await expect(page.getByRole('heading', { level: 1, name: 'cloud-costs' })).toBeVisible();
   await checkPage(page);

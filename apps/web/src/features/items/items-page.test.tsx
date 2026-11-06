@@ -360,7 +360,7 @@ describe('Items filters in the URL', () => {
       item({ id: 'b', ref: 'sre#2', title: 'Two', repositories: [{ repo: 'github.com/acme/docs', joined: 'filing' }] }),
     ]);
     const row = await rowOf('One');
-    expect(within(row).getByText('acme/api')).toBeTruthy();
+    expect(within(row).getAllByText('acme/api').length).toBeGreaterThan(0);
     const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers.indexOf('Repositories')).toBe(headers.indexOf('Title') + 1);
   });

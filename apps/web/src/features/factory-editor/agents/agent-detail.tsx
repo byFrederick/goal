@@ -181,8 +181,8 @@ export function CodeField({ agent, at }: { agent: ModelAgent; at: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <span aria-hidden="true" className="flex items-center gap-1 text-sm font-medium">
-          Code
+        <span className="flex items-center gap-1 text-sm font-medium">
+          <span aria-hidden="true">Code</span>
           <InfoTip about="Code">
             Write lets the agent push, open pull requests and merge in repositories whose access is write. Read only
             lets it read the code.

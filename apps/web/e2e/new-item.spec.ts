@@ -80,7 +80,7 @@ test('picks a repository and sends it with the item', async ({ page }) => {
   });
 
   await page.goto('/o/acme/f/goal');
-  await page.keyboard.press('c');
+  await openWithC(page);
   const dialog = page.getByRole('dialog', { name: 'New item' });
   await dialog.getByRole('textbox', { name: 'Title' }).fill('Check this week’s spend');
   await expect(dialog.getByText('acme/api')).toBeVisible();

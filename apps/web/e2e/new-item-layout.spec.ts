@@ -17,7 +17,11 @@ test.beforeEach(async ({ request }) => {
 /** Opens New item on the goal factory and picks a second repository, then opens Add again. */
 async function openWithTwoRepositories(page: Page) {
   await page.goto('/o/acme/f/goal');
-  await page.keyboard.press('c');
+  // The shortcut listens once the shell has mounted: press C until the composer opens.
+  await expect(async () => {
+    await page.keyboard.press('c');
+    await expect(page.getByRole('dialog', { name: 'New item' })).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 10_000 });
   const dialog = page.getByRole('dialog', { name: 'New item' });
   await expect(dialog).toBeVisible();
   const field = dialog.getByRole('group', { name: 'Repositories' });
