@@ -113,7 +113,7 @@ func TestDecodeWorkerLine_FinishedUsageOptional(t *testing.T) {
 
 	res = fin.Result()
 	if res.CPUSeconds != nil || res.PeakMemoryBytes != nil || res.Status != RunSucceeded {
-		t.Errorf("Result without usage = %v, %v, %s; want nil, nil, succeeded", res.CPUSeconds, res.PeakMemoryBytes, res.Status)
+		t.Errorf("Result without usage = cpu %v, peak %v, %s; want neither, succeeded", res.CPUSeconds, res.PeakMemoryBytes, res.Status)
 	}
 }
 
