@@ -13,6 +13,7 @@ import type {
   ItemFlow,
   OrgSummary,
 } from '../../api/types';
+import { expectBusyOnClick } from '../../test/busy';
 import { renderItemPage } from '../../test/route';
 import { AssemblyPage } from './assembly-page';
 
@@ -212,6 +213,17 @@ describe('Add a part dialog', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(success).toHaveBeenCalledWith('Added Ship the cache.');
+  });
+
+  it('shows Add part as busy while the request is pending and sends it once', async () => {
+    vi.mocked(addItemPart).mockImplementationOnce(() => new Promise(() => {}));
+    const dialog = await openDialog();
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Ship the cache' } });
+    fireEvent.change(within(dialog).getByLabelText('Brief'), { target: { value: 'Warm it.' } });
+
+    await expectBusyOnClick(within(dialog).getByRole('button', { name: 'Add part' }), 'Adding…');
+
+    expect(addItemPart).toHaveBeenCalledTimes(1);
   });
 
   it('Esc closes the dialog without a request', async () => {
