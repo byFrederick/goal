@@ -10,7 +10,7 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrgSummary } from '../../api/types';
 import { OnboardingLayout } from './onboarding-layout';
 import { isOrgOnboardingStep, previousStep } from './steps';
@@ -55,6 +55,20 @@ describe('the onboarding layout', () => {
       .getAllByRole('listitem')
       .filter((li) => li.getAttribute('aria-current') === 'step');
     expect(current.map((li) => li.textContent)).toEqual(['Factory']);
+  });
+
+  it('scrolls the current step into view, instantly and without moving the page, when the step changes', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    await renderLayout(<OnboardingLayout step="line" org={goal} />);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    expect(scroll.mock.contexts.at(-1)).toBe(
+      screen.getAllByRole('listitem').find((li) => li.getAttribute('aria-current') === 'step'),
+    );
+    cleanup();
+    scroll.mockClear();
+    await renderLayout(<OnboardingLayout step="first-item" org={goal} />);
+    expect((scroll.mock.contexts.at(-1) as HTMLElement).textContent).toBe('First item');
   });
 
   it('shows the Goal mark and name at the top, and "Save and finish later" to the organization home', async () => {

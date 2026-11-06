@@ -420,7 +420,7 @@ func (s *Store) InboxItems(ctx context.Context, factories []domain.FactoryID, li
 	for _, it := range match[:min(limit, len(match))] {
 		a := domain.AttentionItem{Item: clone(it)}
 		if it.State == domain.StateBlocked {
-			a.BlockedReason, a.Paused = s.blocker(it.ID)
+			a.BlockedReason, a.BlockedCode, a.Paused = s.blocker(it.ID)
 		}
 
 		out = append(out, a)
@@ -437,18 +437,19 @@ func needsPerson(it *domain.Item) bool {
 	return it.State == domain.StateWaitingHuman || it.State == domain.StateBlocked || (it.Class == domain.ClassExpedite && open)
 }
 
-// blocker is the reason of an item's latest blocked or paused event and whether it was a pause.
-// Callers hold s.mu.
-func (s *Store) blocker(id domain.ItemID) (string, bool) {
+// blocker is the reason and code of an item's latest blocked or paused event and whether it was
+// a pause. Callers hold s.mu.
+func (s *Store) blocker(id domain.ItemID) (reason, code string, paused bool) {
 	for _, e := range slices.Backward(s.events) {
 		if e.ItemID == id && (e.Kind == domain.EventBlocked || e.Kind == domain.EventPaused) {
-			reason, _ := e.Data["reason"].(string)
+			reason, _ = e.Data["reason"].(string)
+			code, _ = e.Data["code"].(string)
 
-			return reason, e.Kind == domain.EventPaused
+			return reason, code, e.Kind == domain.EventPaused
 		}
 	}
 
-	return "", false
+	return "", "", false
 }
 
 // Assemblies implements ports.Store.

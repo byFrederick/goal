@@ -844,6 +844,8 @@ export interface Definitions {
   laneNames: (factory: Factory) => string[];
   /** The agents of each station of the current version, by station id, as Station.LaneAgents names them. */
   stationAgents: (factory: Factory) => Record<string, string[]>;
+  /** The `spec.runtime.modelKey` of the factory's current version (its published factory.yaml), if it sets one. */
+  modelKey: (factory: Factory) => string | undefined;
   /** A file of the factory's draft, else of its current version. */
   fileText: (org: string, factory: string, path: string) => string | undefined;
 }
@@ -2007,6 +2009,20 @@ export function createDefinitions(deps: DefinitionsDeps): Definitions {
       const files = (def.draft ?? byId(def, def.current))?.files;
       const bytes = files?.get(path);
       return bytes ? decode(bytes) : undefined;
+    },
+
+    modelKey: (f) => {
+      const def = st().definitions[f.id];
+      const current = def?.versions.find((v) => v.id === def.current);
+      const text = decode(current?.files.get(yamlFile));
+      if (!text) return undefined;
+      try {
+        const key = (parseYaml(text) as { spec?: { runtime?: { modelKey?: unknown } } } | null)?.spec?.runtime
+          ?.modelKey;
+        return typeof key === 'string' && key !== '' ? key : undefined;
+      } catch {
+        return undefined;
+      }
     },
 
     connectionNames: (f) => {

@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router';
 import { useRef } from 'react';
 import type { InboxEntry, Watch } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
+import { blockedWords } from '../../shared/blocked-words';
 import { formatAge, humanize } from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
@@ -58,6 +59,10 @@ export function approvalTitle(approval: { agent: string; tool: string }): string
 
 /** The line under the title: the item and its station, or the factory when no item is involved. */
 function whereOf(entry: InboxEntry): string {
+  if (entry.kind === 'blocked') {
+    const words = blockedWords(entry.blocked?.code);
+    if (words) return words.sentence;
+  }
   const station = humanize(entry.station ?? entry.item?.station ?? '');
   if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
     const k = entry.knowledge_source;

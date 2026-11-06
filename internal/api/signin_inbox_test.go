@@ -15,7 +15,7 @@ func TestAPI_SignIn_InboxAndAttentionByPermission(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.seedInboxItems(t) // line's decision, question, tool approval, blocked, paused and expedite items
+	h.seedInboxItems(t) // line's decision, question, tool approval, blocked, coded, paused and expedite items
 
 	if err := h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer); err != nil {
 		t.Fatal(err)
