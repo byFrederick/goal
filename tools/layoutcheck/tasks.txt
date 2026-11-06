@@ -8,6 +8,8 @@ auth:image
 auth:schema-check
 auth:schema-diff
 build
+catalog:production
+catalog:templates:push
 check
 check:changed
 clean

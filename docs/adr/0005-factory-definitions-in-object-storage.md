@@ -1,6 +1,6 @@
 # ADR 0005 — Factory definitions in object storage
 
-Status: accepted · 2026-10-23 · Amends [ADR 0001](0001-technology-stack.md) and [ADR 0002](0002-jonah-evals.md) · Amended in 2.2: decisions 1, 2, 4, 5 and 7 are replaced by the [amendment](#amendment--22-versions-in-postgresql-content-as-blobs) at the end · Amended in phase 4: [no object versions, knowledge uploads](#amendment--phase-4-no-object-versions-knowledge-uploads) ([ADR 0008](0008-portable-runs-connections-and-knowledge.md))
+Status: accepted · 2026-10-23 · Amends [ADR 0001](0001-technology-stack.md) and [ADR 0002](0002-jonah-evals.md) · Amended in 2.2: decisions 1, 2, 4, 5 and 7 are replaced by the [amendment](#amendment--22-versions-in-postgresql-content-as-blobs) at the end · Amended in phase 4: [no object versions, knowledge uploads](#amendment--phase-4-no-object-versions-knowledge-uploads) ([ADR 0008](0008-portable-runs-connections-and-knowledge.md)) · Amended 2026-11-06: [the starter templates are committed](#amendment--2026-11-06-the-starter-templates-are-committed) ([ADR 0042](0042-starter-templates-are-committed-product-content.md))
 
 ## Context
 
@@ -93,3 +93,9 @@ Status: accepted · 2026-10-24 · changes the 2.2 amendment's decision 7 and its
 4. **The legacy import goes.** `internal/factorystore` and the import of pre-2.2 prefixes, which read object versions, are deleted; goald refuses to start while an organization still has an import pending, so an install upgrades through the release before first.
 
 **Consequences.** Deleted objects are gone for good: a mistaken delete is recovered from a bucket backup, not from an older version (definition blobs are never deleted by goald, so this concerns uploads and purges). The legacy prefixes of old installs are no longer read; they can be removed by hand.
+
+## Amendment — 2026-11-06: the starter templates are committed
+
+Status: accepted · 2026-11-06 · Changes decision 1's "No factory definition is committed here" · [ADR 0042](0042-starter-templates-are-committed-product-content.md)
+
+The install's starter templates are product content, committed under `deploy/catalog/templates/<name>/<version>/` and pushed into the bucket's `catalog/templates/` by the operator. They are the only definitions in the repository besides the test fixtures; no organization's factory is committed. ADR 0042 has the rules they follow.

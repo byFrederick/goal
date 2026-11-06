@@ -1,0 +1,4 @@
+apiVersion: goal/v1
+kind: Environment
+spec:
+  size: small
