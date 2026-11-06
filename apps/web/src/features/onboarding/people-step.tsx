@@ -231,7 +231,7 @@ function Ready({
       org={org}
       back={<Back org={org} search={search} factory={factoryId} />}
       action={
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <Button asChild size="lg" variant="ghost">
             <Link
               to="/o/$org/get-started/$step"

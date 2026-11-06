@@ -45,7 +45,7 @@ test('Review is accessible and fits the screen; the copy says runs finish on v8'
   await expect(page.getByRole('heading', { name: 'Publish v9' })).toBeVisible();
   await expect(page.getByText('3 changes', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Changes to factory.yaml' })).toContainText('@@ Line: build station');
-  await expect(publishButton(page)).toHaveText('Publish v9');
+  await expect(publishButton(page)).toHaveAccessibleName('Publish v9');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText(
     'You can roll back to any earlier version later.',
   );
@@ -109,7 +109,7 @@ test('Publish shows a busy button while the server waits, keeps its width, then 
   const busy = page.getByRole('button', { name: /^Publishing v9…$/ });
   await expect(busy).toHaveAttribute('aria-busy', 'true');
   await expect(busy).not.toHaveAttribute('disabled');
-  await expect(busy.locator('svg')).toBeVisible();
+  await expect(busy.locator('[data-slot="spinner"]')).toBeVisible();
   const during = await busy.boundingBox();
   expect(Math.abs((during?.width ?? 0) - (before?.width ?? 0))).toBeLessThanOrEqual(1);
 
