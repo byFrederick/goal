@@ -55,6 +55,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
     test('a Follow-ups to triage row is 44 px tall and opens its item from its centre', async ({ page }) => {
       await page.goto('/o/acme/f/software/intake');
       const row = page.getByRole('region', { name: 'Follow-ups to triage' }).getByRole('listitem').first();
+      // The page is taller than the phone: a click at coordinates needs the row on screen.
+      await row.scrollIntoViewIfNeeded();
       const box = await boxOf(row);
       expect(box.height, `triage row is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -70,7 +72,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     test('a Board card is 44 px tall and opens its item from away from the title', async ({ page }) => {
       await page.goto('/o/acme/f/goal/board');
-      const card = page.locator('article').first();
+      // The first article in the DOM is a desktop column's card, hidden on a phone.
+      const card = page.locator('article:visible').first();
+      await card.scrollIntoViewIfNeeded();
       const box = await boxOf(card);
       expect(box.height, `Board card is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
       await page.mouse.click(box.x + box.width - 4, box.y + box.height - 4);
