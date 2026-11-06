@@ -1,7 +1,7 @@
 // Small pieces the Knowledge pages share: a source's kind with its icon, a status with an icon
 // and words (never colour alone), the factories that may search a source, and Sync now.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, LoaderCircle } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { syncKnowledgeSource } from '../../api/knowledge';
@@ -15,6 +15,7 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { ChipText, Dot } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { SuccessLabel } from '../../ui/success-label';
 import { refusalText, type StatusLine } from './words';
 
 const dotTone: Record<Tone, string> = { ok: 'bg-ok', rework: 'bg-rework', muted: 'bg-muted' };
@@ -125,16 +126,14 @@ export function SyncNowButton({
       variant="white"
       size="sm"
       className={className}
-      disabled={pending}
-      aria-label={`${pending ? 'Asking…' : label}, ${source.title}`}
+      busy={pending}
+      busyLabel="Asking…"
+      aria-label={`${label}, ${source.title}`}
       onClick={() => sync.mutate(source)}
     >
-      {done && !pending ? (
-        <Check size={16} strokeWidth={1.75} aria-hidden="true" className="animate-success-check text-ok-ink" />
-      ) : null}
-      <span key={pending ? 'asking' : 'idle'} className="animate-text-states-swap">
-        {pending ? 'Asking…' : label}
-      </span>
+      <SuccessLabel done={done && !pending} doneLabel="Asked">
+        {label}
+      </SuccessLabel>
     </Button>
   );
 }

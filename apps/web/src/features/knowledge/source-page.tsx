@@ -354,10 +354,12 @@ function ReadByCard({ source, manage }: { source: KnowledgeSource; manage: boole
                 <Button
                   variant="primary"
                   className="h-11 md:h-8.5"
-                  disabled={picked.length === 0 || add.isPending}
+                  disabled={picked.length === 0}
+                  busy={add.isPending}
+                  busyLabel="Adding…"
                   onClick={() => add.mutate()}
                 >
-                  {add.isPending ? 'Adding…' : 'Add to drafts'}
+                  Add to drafts
                 </Button>
               </div>
             </div>
@@ -532,8 +534,15 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
       ) : null}
       {manage ? (
         <div className="flex justify-end border-t border-line pt-4">
-          <Button type="submit" variant="primary" className="h-11 md:h-10" disabled={!dirty || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save changes'}
+          <Button
+            type="submit"
+            variant="primary"
+            className="h-11 md:h-10"
+            disabled={!dirty}
+            busy={save.isPending}
+            busyLabel="Saving…"
+          >
+            Save changes
           </Button>
         </div>
       ) : null}
