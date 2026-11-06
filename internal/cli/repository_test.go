@@ -57,14 +57,25 @@ func (g *defGoald) createRepoSecret(t *testing.T) {
 }
 
 // grantApp makes the fake host answer that cliRepoToken reads acme/app, and pushes when push.
-func (g *defGoald) grantApp(push bool) {
+// ci, when set, is the host's CI check.
+func (g *defGoald) grantApp(push bool, ci ...ports.AccessCheck) {
 	a := ports.RepositoryAccess{Read: ports.AccessCheck{OK: true, Reason: appReadable}, Push: ports.AccessCheck{Reason: "GitHub grants the token no push to acme/app"}}
 	if push {
 		a.Push = ports.AccessCheck{OK: true, Reason: "GitHub grants the token push to acme/app"}
 	}
 
+	if len(ci) > 0 {
+		a.CI = ci[0]
+	}
+
 	g.codehost.SetAccess(cliRepo, cliRepoToken, a)
 }
+
+// The fake host's CI check reasons.
+const (
+	ciShown   = "GitHub shows the checks and statuses of acme/app"
+	ciRefused = "the token has no read access to Checks and Commit statuses in acme/app"
+)
 
 // testRepo runs goal repository test url --secret repoSecret with args.
 func (g *defGoald) testRepo(t *testing.T, url string, args ...string) (string, error) {
@@ -98,8 +109,9 @@ func (g *defGoald) keptTests(t *testing.T) []gen.FactoryRepositoryTest {
 }
 
 // goal repository test --factory tests on the factory's route, for the access --access names
-// (write by default): it prints the summary, the warning or note and both checks, exits 1 when the
-// token can't do what the access asks, and goald keeps each result under the factory.
+// (write by default): it prints the summary, the warning or note, read, push and the CI check on
+// its own line, exits 1 when the token can't do what the access asks, never for CI alone, and
+// goald keeps each result under the factory.
 func TestRepositoryTestCommand_Factory(t *testing.T) {
 	t.Parallel()
 
@@ -120,6 +132,28 @@ func TestRepositoryTestCommand_Factory(t *testing.T) {
 	}
 
 	expectOutput(t, "read", out, []string{"Can read", "warning: Goal won't push, but agents could"}, cliRepoToken)
+
+	g.grantApp(true, ports.AccessCheck{OK: true, Reason: ciShown})
+
+	out, err = g.testForAcme(t, cliRepo)
+	if err != nil {
+		t.Fatalf("a write test that reads CI = %v\n%s", err, out)
+	}
+
+	expectOutput(t, "CI readable", out, []string{"✓ push: GitHub grants", "  ✓ ci: " + ciShown}, cliRepoToken)
+
+	if push, ci := strings.Index(out, "push:"), strings.Index(out, "ci:"); push < 0 || ci < push {
+		t.Errorf("output = %q; want the ci line after push", out)
+	}
+
+	g.grantApp(true, ports.AccessCheck{Reason: ciRefused})
+
+	out, err = g.testForAcme(t, cliRepo)
+	if err != nil {
+		t.Fatalf("a write test that can't read CI = %v; want success: CI never fails the test\n%s", err, out)
+	}
+
+	expectOutput(t, "CI refused", out, []string{"Can read and push", "  ✗ ci: " + ciRefused}, cliRepoToken)
 
 	g.grantApp(false)
 
@@ -146,4 +180,14 @@ func TestRepositoryTestCommand_Factory(t *testing.T) {
 	if _, err := g.testRepo(t, cliRepo, "--access", "read"); !errors.Is(err, errFactoryRequired) {
 		t.Errorf("--access without --factory = %v; want errFactoryRequired", err)
 	}
+
+	// An owner pattern's answer has no ci, so no ci line.
+	g.codehost.SetOwnerAccess("github.com", "acme", cliRepoToken, ports.OwnerAccess{Readable: 2, Reason: "GitHub lists 2 repositories of acme"})
+
+	out, err = g.testForAcme(t, "https://github.com/acme/*", "--access", "read")
+	if err != nil {
+		t.Fatalf("an owner pattern test = %v\n%s", err, out)
+	}
+
+	expectOutput(t, "owner pattern", out, []string{"Can read 2 repositories in acme", "push: GitHub lists"}, "ci:")
 }
