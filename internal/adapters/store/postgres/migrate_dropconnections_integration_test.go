@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -16,6 +17,9 @@ import (
 
 // connectionsConverted is the release the refusal of 00133 names.
 const connectionsConverted = "run a release that converts connections (ADR 0037)"
+
+// acmeGit names the seeded server and secret.
+const acmeGit = "acme-git"
 
 // seedConnections is a database at 00132 with an organization that has a connection of a
 // platform kind, sealed under key id old, and a factory with a published version.
@@ -85,6 +89,23 @@ func (s seedConnections) rule(t *testing.T, revoked bool) uuid.UUID {
 	return id
 }
 
+// standingRuleIDs are the ids of every standing rule, in order.
+func (s seedConnections) standingRuleIDs(t *testing.T) []string {
+	t.Helper()
+
+	rows, err := s.owner.Query(t.Context(), `SELECT id::text FROM standing_rules ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return ids
+}
+
 func (s seedConnections) tableExists(t *testing.T, name string) bool {
 	t.Helper()
 
@@ -94,6 +115,23 @@ func (s seedConnections) tableExists(t *testing.T, name string) bool {
 	}
 
 	return ok
+}
+
+// assertConnectionsDropped checks that no connection table or connection_id column is left.
+func (s seedConnections) assertConnectionsDropped(t *testing.T) {
+	t.Helper()
+
+	for _, table := range []string{"connections", "connection_kinds"} {
+		if s.tableExists(t, table) {
+			t.Errorf("table %s after 00133; want it dropped", table)
+		}
+	}
+
+	var columns int
+	if err := s.owner.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns
+		WHERE table_name IN ('standing_rules', 'knowledge_sources') AND column_name = 'connection_id'`).Scan(&columns); err != nil || columns != 0 {
+		t.Errorf("%d connection_id columns after 00133, %v; want none", columns, err)
+	}
 }
 
 // Migration 00133 drops connections on a converted database: the revoked rules keyed by a
@@ -108,7 +146,7 @@ func TestMigrate_DropsConnections(t *testing.T) {
 
 	ctx := domain.WithOrg(t.Context(), s.org)
 	if _, err := NewSecrets(s.store, testKey(t, "k1")).Create(ctx,
-		domain.NewSecret{Name: "acme-git", Scope: domain.SecretScope{All: true}, Value: "test-token"}, domain.LocalUser); err != nil {
+		domain.NewSecret{Name: acmeGit, Scope: domain.SecretScope{All: true}, Value: "test-token"}, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,39 +164,14 @@ func TestMigrate_DropsConnections(t *testing.T) {
 
 	migrate(t, s.db.owner)
 
-	for _, table := range []string{"connections", "connection_kinds"} {
-		if s.tableExists(t, table) {
-			t.Errorf("table %s after 00133; want it dropped", table)
-		}
-	}
+	s.assertConnectionsDropped(t)
 
-	var columns int
-	if err := s.owner.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns
-		WHERE table_name IN ('standing_rules', 'knowledge_sources') AND column_name = 'connection_id'`).Scan(&columns); err != nil || columns != 0 {
-		t.Errorf("%d connection_id columns after 00133, %v; want none", columns, err)
-	}
-
-	var rules []string
-	rows, err := s.owner.Query(t.Context(), `SELECT id::text FROM standing_rules ORDER BY id`)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatal(err)
-		}
-
-		rules = append(rules, id)
-	}
-
-	if rows.Err() != nil || !slices.Equal(rules, []string{server.String()}) || slices.Contains(rules, revoked.String()) {
-		t.Errorf("standing rules after 00133 = %v, %v; want only the server rule %s", rules, rows.Err(), server)
+	if rules := s.standingRuleIDs(t); !slices.Equal(rules, []string{server.String()}) || slices.Contains(rules, revoked.String()) {
+		t.Errorf("standing rules after 00133 = %v; want only the server rule %s", rules, server)
 	}
 
 	got, err := NewKnowledge(s.store).Sources(ctx)
-	if err != nil || len(got) != 1 || string(got[0].ID) != source.String() || got[0].Secret != "acme-git" || got[0].Connection != "" {
+	if err != nil || len(got) != 1 || string(got[0].ID) != source.String() || got[0].Secret != acmeGit || got[0].Connection != "" {
 		t.Errorf("knowledge sources after 00133 = %+v, %v; want handbook, reading with secret acme-git", got, err)
 	}
 
@@ -175,10 +188,12 @@ func TestMigrate_DropsConnectionsRefusesUnconverted(t *testing.T) {
 	for name, seed := range map[string]func(*testing.T, seedConnections){
 		"a published factory without a conversion": func(*testing.T, seedConnections) {},
 		"an active rule keyed by a connection": func(t *testing.T, s seedConnections) {
+			t.Helper()
 			s.converted(t)
 			s.rule(t, false)
 		},
 		"a knowledge source with a connection and no secret": func(t *testing.T, s seedConnections) {
+			t.Helper()
 			s.converted(t)
 			s.exec(t, `INSERT INTO knowledge_sources (id, org_id, name, title, kind, connection_id, next_sync_at, created_by)
 				VALUES ($1, $2, 'tickets', 'Tickets', 'live', $3, NULL, 'user:local')`, uuid.Must(uuid.NewV7()), string(s.org), s.connection)

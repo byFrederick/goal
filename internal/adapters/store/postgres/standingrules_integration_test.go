@@ -51,8 +51,8 @@ func TestMigrate_StandingRulesServerKey(t *testing.T) {
 	factory := uuid.Must(uuid.NewV7())
 
 	for name, cols := range map[string][]any{
-		"both keys":                      {conn, factory, "default", "acme-git"},
-		"a server key without a factory": {nil, nil, "default", "acme-git"},
+		"both keys":                      {conn, factory, "default", acmeGit},
+		"a server key without a factory": {nil, nil, "default", acmeGit},
 		"no key":                         {nil, nil, nil, nil},
 	} {
 		_, err := admin.Exec(t.Context(), `INSERT INTO standing_rules
