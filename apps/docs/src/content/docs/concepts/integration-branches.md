@@ -39,6 +39,17 @@ The landing run opens a pull request from the integration branch into the defaul
 
 If the landing is rejected, the gate sends the assembly back to its `onReject` station. There, the work goes back on the integration branch and the pull request stays open.
 
+## One merge per target at a time
+
+An agent station with `action: merge` merges one item per merge target at a time. The merge target is the branch an item's pull request merges into:
+
+- A part of an assembly with an integration branch merges into that branch.
+- A standalone item, an assembly's landing and a part in `trunk` mode merge into the default branch. They share one turn per factory, even when they are in different repositories.
+
+While one item of a target is at the station, the other items with that target wait in its queue for their turn. They are not blocked: the Board card says `Waits for software#763 to land`, and the item page's Waiting section says which branch it lands on, with an ⓘ that explains the turn. The station's free slots still take items with other targets, so parts of different assemblies merge at the same time. When the item holding the turn is done, is sent back to an earlier station or is blocked, the next item in pull order takes the turn. An item whose merge is deferred back to the queue keeps its turn, and so does one that waits for a person to answer a question or approve a tool.
+
+The station's `merges` setting controls this. `serialize`, the default, takes turns. `allow` merges several items into the same target at once. See [stations and the flow](/docs/concepts/stations-and-flow/#merge-stations-take-turns).
+
 ## Related
 
 - [Assemblies and parts](/docs/concepts/assemblies-and-parts/) explains how the parts are made.

@@ -53,3 +53,23 @@ describe('waitingDetail', () => {
     expect(lines[0]).toContain(long);
   });
 });
+
+describe('a turn wait', () => {
+  const turn = (target?: string | null): ItemWaiting => ({
+    ...waiting('turn', [need({ ref: 'software#763', paths: [] })]),
+    ...(target === undefined ? {} : { target }),
+  });
+
+  it('says the item waits for the other to land', () => {
+    expect(waitingShort(turn('goal/a7-x'))).toBe('Waits for software#763 to land');
+  });
+
+  it('names the integration branch in the detail', () => {
+    expect(waitingDetail(turn('goal/a7-x'))).toBe('Waiting for software#763 to land on goal/a7-x');
+  });
+
+  it('names the default branch when the target is null or absent', () => {
+    expect(waitingDetail(turn(null))).toBe('Waiting for software#763 to land on the default branch');
+    expect(waitingDetail(turn())).toBe('Waiting for software#763 to land on the default branch');
+  });
+});

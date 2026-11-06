@@ -35,6 +35,19 @@ Two things can change this path. A [gate](/docs/concepts/gates-and-human-touches
 
 The station's output must pass the contract named by its `output` field and the commands in its `checks` before the item moves on.
 
+## Merge stations take turns
+
+An agent station with `action: merge` claims at most one item per merge target at a time, so the pull requests that land on one branch do not race each other's CI. The other items with that target wait in the queue until the item holding the turn is done, sent back or blocked. Items with other targets still take the free slots. [Integration branches](/docs/concepts/integration-branches/#one-merge-per-target-at-a-time) explains which branch is an item's target.
+
+A station's `merges` field sets this:
+
+| Value | What the station does |
+| --- | --- |
+| `serialize` | The default. One item per merge target at a time. |
+| `allow` | Several items into the same merge target at once. |
+
+`merges` applies only to a station with `action: merge`. Nothing is claimed at a human station, so there a person decides the order.
+
 ## Flow settings
 
 The line's rules for how work is released and paced sit in `board.flow`. Some of them are used today and some are not:
