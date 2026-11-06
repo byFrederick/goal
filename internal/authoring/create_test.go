@@ -149,7 +149,6 @@ func (h *harness) wantPromptInDraft(t *testing.T, f domain.FactoryID, agent map[
 	}
 }
 
-// agentStations are the line model's stations of kind agent.
 // The skeleton's end station is titled Done, as every starter template's is, so the Line step
 // shows a name instead of an empty field.
 func TestCreateFactory_BlankSkeletonEndsAtDone(t *testing.T) {
@@ -177,6 +176,7 @@ func TestCreateFactory_BlankSkeletonEndsAtDone(t *testing.T) {
 	}
 }
 
+// agentStations are the line model's stations of kind agent.
 func agentStations(line map[string]any) []map[string]any {
 	stations, _ := line["stations"].([]any)
 
