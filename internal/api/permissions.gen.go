@@ -246,7 +246,6 @@ var operationScopes = map[string]string{
 	"testEnvironment":            "definition:edit",
 	"testFactoryRepository":      "definition:edit",
 	"testNotificationSettings":   "org:manage",
-	"testRepository":             "factory:create",
 	"transferOwnership":          "org:transfer",
 	"tryIntakeTrigger":           "trigger:try",
 	"tryJonahProposal":           "definition:edit",

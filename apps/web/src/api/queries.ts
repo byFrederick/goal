@@ -101,7 +101,7 @@ import {
 import { getNotificationPreferences } from './notifications';
 import { getOrgNotificationSettings } from './org-notifications';
 import { getOrgPolicy } from './policy';
-import { listFactoryRepositoryTests, testRepository } from './repositories';
+import { listFactoryRepositoryTests } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
@@ -420,15 +420,6 @@ export const factoryRepositoryTestsQuery = (org: string, factory: string) =>
     queryKey: ['org', org, 'factories', factory, 'repository-tests'] as const,
     queryFn: ({ signal }) => listFactoryRepositoryTests(org, factory, signal),
     staleTime: 30_000,
-  });
-
-/** The read and push check of a repository's token (ADR 0037): a test that costs a request, so it is kept for a minute. */
-export const repositoryTestQuery = (org: string, url: string, secret: string) =>
-  queryOptions({
-    queryKey: ['org', org, 'repository-test', url, secret] as const,
-    queryFn: ({ signal }) => testRepository(org, { url, secret }, signal),
-    staleTime: 60_000,
-    retry: false,
   });
 
 /** The organization's notification settings (org:read). */

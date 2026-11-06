@@ -1,10 +1,13 @@
 package api_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -23,6 +26,21 @@ const (
 	accessRead           = "read"
 	codeRepoURLInvalid   = "repository-url-invalid"
 )
+
+// The repository a repository test tests and the secret it opens.
+const (
+	testedRepo     = "https://github.com/acme/app"
+	repoSecret     = "repo-token"
+	repoTokenValue = "ghp_repo-token-value-9d2e" //nolint:gosec // a made-up token for the fake code host
+)
+
+// createRepoSecret creates repo-token, open to all factories, holding repoTokenValue.
+func (h *harness) createRepoSecret(t *testing.T) {
+	t.Helper()
+
+	decode[gen.Secret](t, h.request(t, http.MethodPost, secretsPath,
+		`{"name":"`+repoSecret+`","value":"`+repoTokenValue+`","scope":{"all_factories":true}}`, nil), http.StatusCreated)
+}
 
 // repositoryTestsOf keeps repository tests of factories, org's.
 func repositoryTestsOf(org domain.OrgID, factories ...domain.FactoryID) *porttest.RepositoryTests {
@@ -315,5 +333,94 @@ func TestFactoryRepositoryTest_RetestNeverFailsReplace(t *testing.T) {
 
 	if kept := h.keptRepositoryTests(t); len(kept) != 1 || kept[0].Tested {
 		t.Errorf("kept = %s; want the untested retest", body(t, kept))
+	}
+}
+
+// enterpriseHost is a GitHub Enterprise host acme lists in the tests that add it.
+const enterpriseHost = "git.example.com"
+
+// countedSecrets counts the secrets it opens.
+type countedSecrets struct {
+	ports.OrgSecrets
+
+	resolves atomic.Int32
+}
+
+func (c *countedSecrets) Resolve(ctx context.Context, names []string, use domain.SecretUse) ([]domain.ResolvedSecret, error) {
+	c.resolves.Add(1)
+
+	return c.OrgSecrets.Resolve(ctx, names, use)
+}
+
+// listHosts sets acme's added code hosts to hosts.
+func (h *harness) listHosts(t *testing.T, hosts ...domain.CodeHost) {
+	t.Helper()
+
+	if _, err := h.tenancy.SetCodeHosts(domain.WithOrg(t.Context(), testOrg), domain.LocalUser, hosts); err != nil {
+		t.Fatalf("set code hosts: %v", err)
+	}
+}
+
+// A repository on a host acme doesn't list, a GitHub Enterprise host another organization lists
+// included, is refused with repository-host-unknown naming the host and Code hosts, before the
+// secret is opened or any code host is called.
+func TestFactoryRepositoryTest_UnlistedHostSendsNothing(t *testing.T) {
+	t.Parallel()
+
+	secrets := &countedSecrets{}
+	h := newHarnessLogged(t, nil, nil, func(_ *harness, d *api.Deps) {
+		secrets.OrgSecrets = d.OrgSecrets
+		d.OrgSecrets = secrets
+	})
+	h.createRepoSecret(t)
+
+	if _, err := h.tenancy.SetCodeHosts(domain.WithOrg(t.Context(), otherOrg), domain.LocalUser,
+		[]domain.CodeHost{{Host: enterpriseHost, Kind: domain.CodeHostGitHub}}); err != nil {
+		t.Fatalf("set the other organization's code hosts: %v", err)
+	}
+
+	h.listHosts(t, domain.CodeHost{Host: "ghe.example.com", Kind: domain.CodeHostGitHub})
+
+	for _, repo := range []string{"https://" + enterpriseHost + "/acme/app", "https://ghe.example.com:8443/acme/app"} {
+		r := h.testFactoryRepository(t, factoryRepoTestPath, repo, repoSecret, accessRead)
+		p := refused(t, repo, r, http.StatusBadRequest, "repository-host-unknown")
+
+		host := strings.TrimPrefix(strings.TrimSuffix(repo, "/acme/app"), "https://")
+		if d := valueOf(p.Detail); !strings.Contains(d, host) || !strings.Contains(d, "Code hosts") {
+			t.Errorf("%s: detail %q; want it to name %s and Code hosts", repo, d, host)
+		}
+	}
+
+	if n := secrets.resolves.Load(); n != 0 {
+		t.Errorf("the secret was opened %d times; want none", n)
+	}
+
+	if n := len(h.codehost.AccessTokens()); n != 0 {
+		t.Errorf("the code host was called %d times; want none", n)
+	}
+}
+
+// A repository on a GitHub Enterprise host acme lists as github goes to the github adapter with
+// the token, and answers its read and push checks for a read entry.
+func TestFactoryRepositoryTest_ListedEnterpriseHost(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createRepoSecret(t)
+	h.listHosts(t, domain.CodeHost{Host: enterpriseHost, Kind: domain.CodeHostGitHub})
+
+	repo := "https://GIT.example.com/acme/app"
+	h.codehost.SetAccess(repo, repoTokenValue, ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "GitHub shows acme/app to the token"},
+		Push: ports.AccessCheck{Reason: "GitHub grants the token no push to acme/app (permissions.push is false)"},
+	})
+
+	got := decode[gen.FactoryRepositoryTest](t, h.testFactoryRepository(t, factoryRepoTestPath, repo, repoSecret, accessRead), http.StatusOK)
+	if !got.Tested || !got.Ok || !got.Read.Ok || got.Push.Ok || !strings.Contains(got.Push.Reason, "no push") {
+		t.Errorf("test = %s; want read ok, push failed with the host's reason", body(t, got))
+	}
+
+	if tokens := h.codehost.AccessTokens(); len(tokens) != 1 || tokens[0] != repoTokenValue {
+		t.Errorf("the code host got %d tokens; want the secret's value once", len(tokens))
 	}
 }

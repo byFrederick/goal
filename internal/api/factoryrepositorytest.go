@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -20,6 +22,83 @@ import (
 // or a write entry. Each result is kept per factory and url, so pages read it instead of testing
 // on every view, and it is tested again when the secret's value is replaced. The opened value
 // reaches the code host only: every reason is scrubbed of it before it is answered or kept.
+
+// Errors of the repository test routes, answered with their codes by repositoryTestProblem.
+var (
+	errRepositoryHostUnknown = errors.New("repository host unknown")
+	errRepositoryURLInvalid  = errors.New("repository URL invalid")
+)
+
+// couldNotTest starts both checks' reasons when the host gave no answer.
+const couldNotTest = "couldn't test"
+
+// repositoryTestProblem answers the repository test rules with their codes.
+func repositoryTestProblem(err error) (gen.Problem, bool) {
+	for _, a := range []struct {
+		err  error
+		code string
+	}{
+		{errRepositoryHostUnknown, "repository-host-unknown"},
+		{errRepositoryURLInvalid, "repository-url-invalid"},
+	} {
+		if errors.Is(err, a.err) {
+			p := detailed(http.StatusBadRequest, err)
+			p.Code = optional(a.code)
+
+			return p, true
+		}
+	}
+
+	return gen.Problem{}, false
+}
+
+// repositoryURL is raw parsed as a repository's https URL without credentials, query or
+// fragment, with at least an owner and a name in its path; errRepositoryURLInvalid otherwise.
+func repositoryURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: it is not a URL, such as https://github.com/acme/app", errRepositoryURLInvalid)
+	}
+
+	if u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		len(strings.Split(strings.Trim(u.Path, "/"), "/")) < 2 {
+		// Redacted: a URL may carry a token in its user info.
+		return nil, fmt.Errorf("%w: %s is not a repository's https URL without credentials, such as https://github.com/acme/app",
+			errRepositoryURLInvalid, u.Redacted())
+	}
+
+	return u, nil
+}
+
+// repositoryCodeHost is the repository at u on the organization's code hosts (ADR 0041 decision
+// 1) and the adapter a token for it goes to: the one of the kind its host is listed as. A host
+// the organization doesn't list wraps errRepositoryHostUnknown; a URL that names no repository
+// on its host, errRepositoryURLInvalid.
+func (s *server) repositoryCodeHost(ctx context.Context, u *url.URL) (domain.CodeRepository, ports.CodeHost, error) {
+	added, err := s.orgs.CodeHosts(ctx)
+	if err != nil {
+		return domain.CodeRepository{}, nil, fmt.Errorf("list code hosts: %w", err)
+	}
+
+	host := strings.ToLower(u.Host)
+
+	repo, err := domain.ParseCodeRepository(domain.ListedCodeHosts(added), u.String())
+
+	switch {
+	case errors.Is(err, domain.ErrCodeHostUnlisted):
+		return domain.CodeRepository{}, nil, fmt.Errorf("%w: %s is not one of the organization's code hosts, so goald sends it no token; "+
+			"an owner can add it under Code hosts in the organization's settings", errRepositoryHostUnknown, host)
+	case err != nil:
+		return domain.CodeRepository{}, nil, fmt.Errorf("%w: %s is not a repository's URL, such as https://%s/acme/app", errRepositoryURLInvalid, u.Redacted(), host)
+	}
+
+	ch, ok := s.codehosts[string(repo.Host.Kind)]
+	if !ok {
+		return domain.CodeRepository{}, nil, fmt.Errorf("%w: %s is a %s host, and this goald has no %s code host", errRepositoryHostUnknown, host, repo.Host.Kind, repo.Host.Kind)
+	}
+
+	return repo, ch, nil
+}
 
 // The texts a factory repository test answers besides the host's reasons.
 const (

@@ -14,7 +14,7 @@ import { getDraftFile, openDraft, putDraftFile } from '../../api/definitions';
 import { defKeys, keys, templatesQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret } from '../../api/secrets';
-import type { FactoryRepositoryTest, OrgSummary, RepositoryTestResult, TemplateCode } from '../../api/types';
+import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
@@ -42,15 +42,6 @@ type Scope = 'organization' | 'some';
 
 /** What the template's line needs, as the access it starts on. */
 const startAccess: Record<TemplateCode, CodeAccess> = { none: 'none', read: 'read', write: 'write' };
-
-/** The check in words, still read by the factory's Repository section until the settings part moves it. */
-export function checkText(repo: string, result: RepositoryTestResult): { ok: boolean; text: string } {
-  if (!result.tested)
-    return { ok: false, text: 'Goal couldn’t test the token: the host gave no answer in 10 seconds.' };
-  if (!result.read.ok) return { ok: false, text: `Goal couldn’t clone ${repo}. ${result.read.reason}` };
-  if (!result.push.ok) return { ok: false, text: `Goal cloned ${repo} but can’t push a branch. ${result.push.reason}` };
-  return { ok: true, text: `Goal cloned ${repo} and can push a branch.` };
-}
 
 /** The reason a choice is disabled for a template, or undefined when it can be chosen. */
 export function disabledReason(code: TemplateCode, choice: CodeAccess): string | undefined {
