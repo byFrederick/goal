@@ -86,6 +86,11 @@ func (h *harness) claim(t *testing.T, slot int) domain.Item {
 func (h *harness) atMerge(t *testing.T) domain.Item {
 	t.Helper()
 
+	n := domain.NewSecret{Name: lineRepoSecret, Value: "line-repo-token-value", Scope: domain.SecretScope{All: true}}
+	if _, err := h.secrets.Create(inOrg(t), n, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
 	it := h.seed(t, stBuild, domain.StateQueued, t0)
 
 	return h.move(t, it, domain.Position{Station: stMerge, State: domain.StateWaitingHuman}, func(tr *ports.Transition) {

@@ -33,18 +33,20 @@ var (
 	// outside the limits.
 	ErrBadToolDecision = errors.New("bad tool decision")
 	// ErrAlwaysAllowNotOffered means Always allow on a call whose ask does not come from the
-	// organization connection's mode alone.
+	// environment file's mode of the tool.
 	ErrAlwaysAllowNotOffered = errors.New("always allow is not offered for this tool call")
 	// ErrStandingRuleRevoked means a revoke of a standing rule that is revoked already.
 	ErrStandingRuleRevoked = errors.New("standing rule is revoked already")
 )
 
-// RequestToolApproval records the call of an Ask-first connection tool that agent made in run,
-// the item's run in progress (ADR 0031 decision 4), and ends the run as Ask does: one transition
-// takes the lease with the outcome awaiting_approval, records tool_approval_requested and leaves
-// the item waiting_human at its station until DecideToolApproval. The call offers Always allow
-// when the organization connection's mode of the tool is ask. A malformed call, an open tool
-// approval or question, or an item not in progress is refused and records nothing.
+// RequestToolApproval records the call of an Ask-first MCP tool that agent made in run, the item's
+// run in progress (ADR 0031 decision 4), and ends the run as Ask does: one transition takes the
+// lease with the outcome awaiting_approval, records tool_approval_requested and leaves the item
+// waiting_human at its station until DecideToolApproval. connection names the call's MCP server in
+// the agent's environment file; the call offers Always allow when the file's mode of the tool is
+// ask (alwaysAllowOffered). A malformed call, a server the environment does not have
+// (ErrBadToolCall), a line not on secrets (domain.ErrNotOnSecrets), an open tool approval or
+// question, or an item not in progress is refused and records nothing.
 func (e *Engine) RequestToolApproval(ctx context.Context, id domain.ItemID, run domain.RunID, agent, connection, tool string,
 	input json.RawMessage,
 ) (domain.Item, error) {
@@ -53,7 +55,7 @@ func (e *Engine) RequestToolApproval(ctx context.Context, id domain.ItemID, run 
 		return domain.Item{}, fmt.Errorf("tool approval on item %s: %w", id, err)
 	}
 
-	it, _, err := e.itemAndLine(ctx, id)
+	it, l, err := e.itemAndLine(ctx, id)
 	if err != nil {
 		return domain.Item{}, fmt.Errorf("tool approval on item %s: %w", id, err)
 	}
@@ -71,12 +73,11 @@ func (e *Engine) RequestToolApproval(ctx context.Context, id domain.ItemID, run 
 		return domain.Item{}, fmt.Errorf("tool approval on item %s: item is %s: %w", id, it.State, ErrNotInProgress)
 	}
 
-	conn, err := e.connections.Get(ctx, connection)
+	offered, err := alwaysAllowOffered(l, agent, connection, tool)
 	if err != nil {
-		return domain.Item{}, fmt.Errorf("tool approval on item %s: connection %q: %w", id, connection, err)
+		return domain.Item{}, fmt.Errorf("tool approval on item %s: %w", id, err)
 	}
 
-	offered := conn.ToolModes[tool] == domain.ToolModeAsk
 	now := e.clock.Now()
 	requested := event(it, domain.EventToolApprovalRequested, now, agent, map[string]any{
 		domain.KeyConnection: connection, domain.KeyTool: tool, domain.KeyInput: canonical, domain.KeyAgent: agent,
@@ -113,8 +114,8 @@ func (e *Engine) RequestToolApproval(ctx context.Context, id domain.ItemID, run 
 // DecideToolApproval records a person's decision on an item's open tool approval and puts the
 // item back in its station's arrival state with its rework count unchanged. Approving grants the
 // call to the item's next run (domain.GrantedCalls); with alwaysAllow it first creates the
-// standing rule for the call's tool and agent role, keyed by its connection or, on secrets, by
-// the factory, the agent's environment and the MCP server, which a retry finds instead of
+// standing rule for the call's tool and agent role, keyed by the factory, the agent's
+// environment and the MCP server, which a retry finds instead of
 // creating another. Denying, with an optional note, puts the denial in the next run's brief. A
 // done or cancelled item is refused with ErrItemClosed.
 func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by domain.Actor, approve, alwaysAllow bool, note string) (domain.Item, error) {
@@ -161,16 +162,9 @@ func (e *Engine) DecideToolApproval(ctx context.Context, id domain.ItemID, by do
 	return got, nil
 }
 
-// alwaysAllow creates the standing rule for approval a's call. On a line on secrets the rule is
-// keyed by the item's factory, the calling agent's environment and the call's MCP server (ADR
-// 0037 decision 8); on connections by the call's connection.
+// alwaysAllow creates the standing rule for approval a's call, keyed by the item's factory, the
+// calling agent's environment and the call's MCP server (ADR 0037 decision 8).
 func (e *Engine) alwaysAllow(ctx context.Context, it domain.Item, l domain.Line, a domain.ToolApproval, by domain.Actor) error {
-	if !l.OnSecrets() {
-		_, err := e.connections.CreateStandingRule(ctx, domain.NewStandingRule{Connection: a.Connection, Tool: a.Tool, Agent: a.Agent, Item: it.ID}, by)
-
-		return err
-	}
-
 	env := domain.DefaultEnvironment
 	if spec, ok := l.Agent(a.Agent); ok && spec.Environment != "" {
 		env = spec.Environment
@@ -181,6 +175,29 @@ func (e *Engine) alwaysAllow(ctx context.Context, it domain.Item, l domain.Line,
 	}, by)
 
 	return err
+}
+
+// alwaysAllowOffered is whether agent's call of tool on the MCP server named server offers Always allow:
+// the tool's mode in the agent's environment file is ask, the one mode a standing rule lifts
+// (domain.ServerToolModes). It fails with domain.ErrNotOnSecrets for a line not on secrets, and
+// with ErrBadToolCall for a server the agent's environment lacks.
+func alwaysAllowOffered(l domain.Line, agent, server, tool string) (bool, error) {
+	spec, ok := l.Agent(agent)
+	if !ok {
+		spec = domain.AgentSpec{Name: agent} // the default environment, as alwaysAllow keys it
+	}
+
+	env, err := agentEnvironment(l, spec)
+	if err != nil {
+		return false, err
+	}
+
+	s, ok := env.MCP[server]
+	if !ok {
+		return false, fmt.Errorf("%w: agent %s's environment has no MCP server %q", ErrBadToolCall, agent, server)
+	}
+
+	return domain.ResolveToolMode(s.ToolModes(), tool) == domain.ToolModeAsk, nil
 }
 
 // validToolDecision refuses Always allow with a denial, a note with an approval and a note

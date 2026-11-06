@@ -183,18 +183,6 @@ func (l Line) Refusal() string {
 	}
 }
 
-// MergeConnections are the connections the line's merges may use (spec 4 §4.7): its
-// organization connections and its repository's, each once; those whose kind has a code host
-// serve the pull requests on the host of their git login.
-func (l Line) MergeConnections() []string {
-	names := slices.Clone(l.Connections)
-	if c := l.Runtime.Repository.Connection; c != "" && !slices.Contains(names, c) {
-		names = append(names, c)
-	}
-
-	return names
-}
-
 // Runtime is what every agent task of the factory shares.
 type Runtime struct {
 	Model string // default model; an agent's own Model wins
