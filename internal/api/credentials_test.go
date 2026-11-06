@@ -192,8 +192,7 @@ func TestCredentials_DeleteInUse(t *testing.T) {
 	h := newHarness(t)
 	h.createToken(t)
 
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-		`{"name":"github","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
+	h.createGitHub(t, "{{acme-token}}")
 
 	got := decode[gen.Credential](t, h.request(t, http.MethodGet, tokenPath, "", nil), http.StatusOK)
 	if !slices.Equal(got.UsedBy.Connections, []string{kindGitHub}) {
@@ -216,8 +215,7 @@ func TestCredentials_Import(t *testing.T) {
 	h := newHarness(t)
 	h.createToken(t)
 
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-		`{"name":"github","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
+	h.createGitHub(t, "{{acme-token}}")
 
 	text, err := json.Marshal("ACME_TOKEN=" + replacedValue + "\n# a comment\nSENTRY_TOKEN=\"" + importedValue + "\"\n")
 	if err != nil {

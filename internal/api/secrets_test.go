@@ -279,8 +279,11 @@ func TestAPI_SecretDeleteInUse(t *testing.T) {
 	h.createSecret(t)
 
 	for _, name := range []string{kindGitHub, "github-ci"} {
-		decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-			`{"name":"`+name+`","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
+		if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
+			Name: name, Kind: kindGitHub, Secrets: map[string]string{"token": "{{acme-token}}"},
+		}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	want := []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: kindGitHub}, {Kind: gen.SecretUseConnection, Name: "github-ci"}}
@@ -419,8 +422,7 @@ func TestAPI_SecretImport(t *testing.T) {
 	h := newHarness(t)
 	h.createSecret(t)
 
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-		`{"name":"github","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
+	h.createGitHub(t, "{{acme-token}}")
 
 	text, err := json.Marshal("ACME_TOKEN=" + secretReplacedValue + "\n# a comment\nSENTRY_TOKEN=\"" + secretImportedValue + "\"\n")
 	if err != nil {

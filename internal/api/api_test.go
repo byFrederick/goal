@@ -147,6 +147,21 @@ func inOrg(t *testing.T) context.Context {
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 
+// kindGitHub is the platform's github connection kind, and the name of the connection
+// createGitHub makes.
+const kindGitHub = "github"
+
+// createGitHub adds acme's github connection, whose token is secret.
+func (h *harness) createGitHub(t *testing.T, secret string) {
+	t.Helper()
+
+	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
+		Name: kindGitHub, Kind: kindGitHub, Secrets: map[string]string{"token": secret},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
 // address (GOAL_EGRESS_ADDRESSES).
 var testBoxSizes = []domain.BoxSize{
@@ -561,7 +576,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, StandingRules: h.standingRules, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, StandingRules: h.standingRules, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, UploadMaxBytes: testUploadMax, Clock: h.clock, KnowledgeObjects: h.kbRanges, KnowledgeCheck: h.ingestor,

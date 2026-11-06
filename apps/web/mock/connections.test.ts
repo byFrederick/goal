@@ -1,17 +1,20 @@
 import { readdirSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type {
-  Connection,
-  ConnectionKindList,
-  ConnectionList,
-  ConnectionTestResult,
-  Problem,
-  Validation,
-} from '@goal/api-client';
+import type { Connection, ConnectionKind, ConnectionTestResult, Problem, Validation } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { RepositoryList } from '../src/api/types.ts';
 import { createMockApi, type MockApi } from './api.ts';
+
+// The answers of the mock's connection routes, which goald's contract no longer has.
+type ConnectionKindList = { kinds: ConnectionKind[] };
+type ConnectionList = { connections: Connection[] };
+type RepositoryList = {
+  login: string;
+  owner: string;
+  owners: { login: string; kind: 'user' | 'organization' }[];
+  repositories: { full_name: string; clone_url: string; languages: string[]; updated_at: string }[];
+  truncated: boolean;
+};
 
 let api: MockApi;
 let server: Server;
