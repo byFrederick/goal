@@ -101,3 +101,21 @@ export function ordinal(n: number): string {
   const suffix = { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th';
   return `${n}${suffix}`;
 }
+
+/** CPU seconds as the Runs page says them: "42 s", "3.1 min", "1.2 h"; "—" for none. */
+export function formatCpuSeconds(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return '—';
+  if (seconds < 59.5) return `${Math.max(0, Math.round(seconds))} s`;
+  const min = seconds / 60;
+  if (min < 59.95) return `${min.toFixed(1)} min`;
+  return `${(min / 60).toFixed(1)} h`;
+}
+
+/** A peak memory in bytes as "512 MB", "1.2 GB" (1 GB is 1024 MB, as a box's limit is); "—" for none. */
+export function formatMemory(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return '—';
+  const mb = bytes / 1024 ** 2;
+  if (mb < 1) return `${Math.round(bytes / 1024)} KB`;
+  if (mb < 1000) return `${Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}

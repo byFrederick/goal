@@ -18,6 +18,7 @@ Each guide starts with the result you get and lists the steps to reach it. Comma
 - [Act on an item](./act-on-an-item/): answer a question, approve, deny, send back, merge, retry, move, note, pause, cancel or re-lane an item.
 - [Navigate and use shortcuts](./navigate-and-shortcuts/): find your way around the sidebar, the rail, the menus, search and the phone drawer, and see every keyboard shortcut.
 - [Read the Board, the item Timeline and Runs](./read-the-board-timeline-and-runs/): find what is moving, what is waiting and what each agent run did.
+- [Read Spend and box usage](./read-spend-and-box-usage/): see what agents cost over a window, and the CPU and memory their run boxes use by agent and station.
 - [Self-host with Docker Compose](./self-host-with-docker-compose/): run Goal on one machine with `goal up`.
 
 For what the terms mean, read the [concepts](/docs/concepts/). For every command, flag and endpoint, read the [reference](/docs/reference/).
