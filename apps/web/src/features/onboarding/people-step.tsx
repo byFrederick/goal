@@ -245,8 +245,8 @@ function Ready({
             type="button"
             size="lg"
             variant="primary"
-            disabled={invite.isPending}
-            aria-busy={invite.isPending || undefined}
+            busy={invite.isPending}
+            busyLabel={count === 1 ? 'Sending 1 invite…' : `Sending ${count} invites…`}
             onClick={() => void send()}
           >
             {label}
