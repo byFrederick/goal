@@ -160,7 +160,7 @@ export function ItemTableRow({
         <SelectBox label={`Select ${item.ref}`} checked={selected} onChange={() => onSelect(item.id)} />
       </td>
       <td className={cn(cell, 'whitespace-nowrap lg:overflow-visible')}>
-        <span className={refClass} title={item.ref}>
+        <span className={refClass} data-cell="ref" title={item.ref}>
           {shortRef(item.ref)}
         </span>
       </td>
@@ -169,6 +169,7 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
+          data-cell="title"
           className={cn(
             touchLink,
             'line-clamp-2 min-h-6 max-w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap',
@@ -319,7 +320,7 @@ export function AssemblyTableRow({
                 className={cn('transition-transform duration-200', !open && '-rotate-90')}
               />
             </button>
-            <span className={refClass} title={ref}>
+            <span className={refClass} data-cell="ref" title={ref}>
               {shortRef(ref)}
             </span>
           </span>
@@ -334,6 +335,7 @@ export function AssemblyTableRow({
             <span className="sr-only">Assembly, </span>
             <span
               className="min-w-0 line-clamp-2 max-w-64 whitespace-normal break-words lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
+              data-cell="title"
               title={title}
             >
               {title}

@@ -57,10 +57,12 @@ for (const { width, height } of [
     }
     // Title takes the leftover width: 30 characters of every title show, no ref is cut, and no
     // column is narrower than its minimum (a narrow table puts Type, Lane, Agent and Age under the title).
-    const titles = await shownTitleCharacters(table, 'tbody td a.truncate, tbody td a span.truncate');
+    const titles = await shownTitleCharacters(table, '[data-cell="title"]');
     expect(titles.length).toBeGreaterThan(0);
     for (const t of titles) expect(t.shown, `"${t.text}" shows ${t.shown} characters`).toBeGreaterThanOrEqual(t.needed);
-    expect(await cutRefs(table)).toEqual([]);
+    const refs = await cutRefs(table);
+    expect(refs.count).toBeGreaterThan(0);
+    expect(refs.cut).toEqual([]);
     const minimum: Record<string, number> = {
       Ref: 90,
       Title: 240,

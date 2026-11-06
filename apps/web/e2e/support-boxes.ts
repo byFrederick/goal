@@ -34,21 +34,42 @@ export async function shownTitleCharacters(scope: Locator, selector: string) {
         .filter((el) => el.getClientRects().length > 0)
         .map((el) => {
           const text = (el.textContent ?? '').trim();
-          const shown =
-            el.scrollWidth > el.clientWidth ? Math.floor((el.clientWidth / el.scrollWidth) * text.length) : text.length;
+          // The text's own width, from a Range: an inline link has no box width of its own, and its
+          // cell clips it, so the clip edge is the nearer of the element's edge (when it is a box)
+          // and the cell's content edge.
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const textBox = range.getBoundingClientRect();
+          const td = el.closest('td');
+          let clipRight = Number.POSITIVE_INFINITY;
+          if (td) clipRight = td.getBoundingClientRect().right - parseFloat(getComputedStyle(td).paddingRight);
+          if (getComputedStyle(el).display !== 'inline')
+            clipRight = Math.min(clipRight, el.getBoundingClientRect().right);
+          const room = Math.max(0, clipRight - textBox.left);
+          const shown = textBox.width > room ? Math.floor((room / textBox.width) * text.length) : text.length;
           return { text: text.slice(0, 40), shown, needed: Math.min(30, text.length) };
         }),
     selector,
   );
 }
 
-/** Refs whose text is wider than their box (cut off), found by the mono ref spans of a table. */
-export async function cutRefs(scope: Locator, selector = 'span.font-mono') {
-  return scope.evaluate(
-    (root, sel) =>
-      Array.from(root.querySelectorAll<HTMLElement>(sel))
-        .filter((el) => el.getClientRects().length > 0 && el.scrollWidth > el.clientWidth)
-        .map((el) => el.textContent),
-    selector,
-  );
+/**
+ * Refs that are cut off. A ref is cut when its right edge passes the content edge of its cell, or
+ * when the element itself overflows. Returns how many refs were found, so a selector that matches
+ * nothing fails the test instead of passing it.
+ */
+export async function cutRefs(scope: Locator, selector = '[data-cell="ref"]') {
+  return scope.evaluate((root, sel) => {
+    const found = Array.from(root.querySelectorAll<HTMLElement>(sel)).filter((el) => el.getClientRects().length > 0);
+    const cut = found
+      .filter((el) => {
+        if (el.scrollWidth > el.clientWidth) return true;
+        const td = el.closest('td');
+        if (!td || td === el) return false;
+        const contentRight = td.getBoundingClientRect().right - parseFloat(getComputedStyle(td).paddingRight);
+        return el.getBoundingClientRect().right > contentRight + 0.5;
+      })
+      .map((el) => el.textContent);
+    return { count: found.length, cut };
+  }, selector);
 }

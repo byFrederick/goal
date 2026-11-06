@@ -151,7 +151,9 @@ for (const width of [1024, 1280, 1440]) {
     const titles = await shownTitleCharacters(table, 'tbody td a.truncate');
     expect(titles.length).toBeGreaterThan(0);
     for (const t of titles) expect(t.shown, `"${t.text}" shows ${t.shown} characters`).toBeGreaterThanOrEqual(t.needed);
-    expect(await cutRefs(table, 'tbody td.text-muted.whitespace-nowrap')).toEqual([]);
+    const refs = await cutRefs(table, 'tbody td.text-muted.whitespace-nowrap');
+    expect(refs.count).toBeGreaterThan(0);
+    expect(refs.cut).toEqual([]);
     const scrolls = await table.locator('xpath=..').evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(scrolls).toBeLessThanOrEqual(0);
   });
