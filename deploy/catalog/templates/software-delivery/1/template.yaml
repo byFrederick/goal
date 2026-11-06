@@ -1,0 +1,8 @@
+title: Software delivery
+summary: Requests become small pull requests a reviewer merges.
+description: >-
+  A specifier turns each request into a short spec, a builder makes the change and opens a
+  pull request, and a person reviews and merges it.
+connectors: []
+changed: "2026-11-06"
+code: read

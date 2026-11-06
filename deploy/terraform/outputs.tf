@@ -1,5 +1,6 @@
 # What the control Worker's wrangler config (deploy/cloudflare) and the operator need: names and
-# ids, plus the sensitive values task db:production hands goal db (shown only by
+# ids, plus the sensitive values task db:production hands goal db and task catalog:production hands
+# goal catalog templates push (shown only by
 # `terraform output -raw <name>`, never by plan or apply).
 
 # Cloudflare: account
@@ -85,6 +86,20 @@ output "goal_pg_app_password" {
 output "goal_pg_auth_password" {
   description = "GOAL_PG_AUTH_PASSWORD, which goal db init gives goal_auth."
   value       = random_password.generated["goal_auth"].result
+  sensitive   = true
+}
+
+# Operator: goald's R2 keys, which task catalog:production hands goal catalog templates push
+# (sensitive; the same values as goald's store secrets, secrets.tf)
+output "goal_s3_access_key" {
+  description = "GOAL_S3_ACCESS_KEY: the bucket-scoped R2 token's id."
+  value       = module.r2_token.id
+  sensitive   = true
+}
+
+output "goal_s3_secret_key" {
+  description = "GOAL_S3_SECRET_KEY: the SHA-256 of the bucket-scoped R2 token's value."
+  value       = sha256(module.r2_token.value)
   sensitive   = true
 }
 
