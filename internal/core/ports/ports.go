@@ -463,6 +463,40 @@ type Store interface {
 	// DeleteSavedView deletes the factory's view id, or returns ErrNotFound. Deleting or purging
 	// the factory deletes its views.
 	DeleteSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID) error
+
+	// OpenCIWait opens a CI wait (ADR 0044 decision 9), checked by domain.NewCIWait.Check, and
+	// creates its commit's poll, due at n.StartedAt every domain.CIPollMinInterval, unless the
+	// organization already polls that host, repository and sha, in one transaction under the
+	// item's lock. It returns the wait with a new id. An unknown item is ErrNotFound, and an open
+	// wait of the same item, station, visit and repository is ErrConflict.
+	OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWait, error)
+
+	// ReplaceCIWaitSHA follows a moved head: it ends the open wait id as domain.CISuperseded at
+	// `at` and opens one like it on sha (and prURL, when set) started at `at`, in the same visit
+	// and round, in one transaction. It returns the new wait; ErrNotFound when id is not open.
+	ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWait, error)
+
+	// LeaseDueCIPolls leases to owner until now+lease up to limit of the organization's polls
+	// due by now (NextPollAt) that have an open wait and no live lease, earliest due first
+	// (FOR UPDATE SKIP LOCKED, so instances lease side by side). A poll whose lease ended is
+	// due again.
+	LeaseDueCIPolls(ctx context.Context, now time.Time, owner string, lease time.Duration, limit int) ([]domain.CIPoll, error)
+
+	// RecordCIPoll records what a poll read (domain.CIPollResult, checked) on the poll owner
+	// leased, and releases the lease. ErrLeaseLost when owner does not hold the poll.
+	RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner string, r domain.CIPollResult) error
+
+	// OpenCIWaits returns the item's open CI waits by start, each with its poll's latest state.
+	// An unknown item has none.
+	OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWait, error)
+
+	// EndCIWaits ends the open waits among ids with outcome at `at` and returns how many it
+	// ended; waits already ended and unknown ids are left out.
+	EndCIWaits(ctx context.Context, ids []domain.CIWaitID, outcome domain.CIOutcome, at time.Time) (int, error)
+
+	// CIRounds counts the distinct CI rounds of the item's waits, open or ended, in one visit to
+	// the station.
+	CIRounds(ctx context.Context, item domain.ItemID, station, visit string) (int, error)
 }
 
 // FlowStats is the read model of how work flows: spans of time items spend at stations and the
