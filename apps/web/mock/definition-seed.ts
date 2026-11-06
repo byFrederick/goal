@@ -121,7 +121,9 @@ spec:
     modelConnection: claude
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
-    repository: { url: "https://github.com/acme/goal", connection: github }
+    repositories:
+      - { name: goal, url: "https://github.com/acme/goal", token: "{{secret.github-token}}", access: write, default: true }
+      - { name: docs, url: "https://github.com/acme/docs", token: "{{secret.github-token}}", access: write }
     budget: { weeklyUsd: 1000, perItemUsd: 12, maxTurnsPerTask: 150, onExhausted: drain }
   connections:
     # pull requests and issues of the repository

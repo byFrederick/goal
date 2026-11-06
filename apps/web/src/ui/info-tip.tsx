@@ -34,7 +34,7 @@ export function InfoTip({
             setOpen(true);
           }}
           className={cn(
-            'press relative inline-flex size-6 flex-none items-center justify-center rounded-chip text-muted max-md:before:absolute max-md:before:-inset-2.5 max-md:before:content-[""] transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none',
+            'press relative inline-flex size-6 flex-none items-center justify-center rounded-chip text-muted before:absolute before:-inset-1 before:content-[""] max-md:before:-inset-2.5 transition-colors duration-(--duration-quick) hover:text-ink motion-reduce:transition-none',
             className,
           )}
         >
