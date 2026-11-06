@@ -80,6 +80,8 @@ async function expectItemRuns(page: Page) {
 
 test('a template with a model key set in the Line step starts its first item and runs it', async ({ page }) => {
   await newOrganization(page);
+  // Incident response allows No code; the first template (a code review) needs at least Read only.
+  await page.getByRole('radio', { name: /Incident response/ }).check();
   await page.getByRole('button', { name: /^Use / }).click();
   await expect(page).toHaveURL(/\/o\/acme\/get-started\/code\?.*factory=/);
   await reachLine(page);

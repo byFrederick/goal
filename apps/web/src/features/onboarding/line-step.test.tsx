@@ -402,6 +402,19 @@ describe('the model key', () => {
     expect(screen.queryByText(/\{\{/)).toBeNull();
   });
 
+  it('saves the model key before Continue leaves the step', async () => {
+    api.yaml = unkeyed;
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByText(missing);
+    typeKey('sk-ant-oat-test');
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    await screen.findByText('Saved as the secret model-key, open to this factory.');
+    const next = (await screen.findByRole('button', { name: 'Continue' })) as HTMLButtonElement;
+    await waitFor(() => expect(next.disabled).toBe(false));
+    fireEvent.click(next);
+    await waitFor(() => expect(api.puts.at(-1)).toContain('{{model-key}}'), { timeout: 1500 });
+  });
+
   it('asks for a key before saving', async () => {
     api.yaml = unkeyed;
     renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
