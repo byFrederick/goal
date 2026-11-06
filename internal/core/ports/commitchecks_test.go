@@ -20,23 +20,27 @@ var (
 )
 
 // checkSets are the commits the helpers are tested on: none registered yet, all pending, a mix and
-// all finished.
-var checkSets = map[string]ports.CommitChecks{
-	"no checks":    {Head: "4b825dc6"},
-	"all pending":  {Head: "4b825dc6", Checks: []ports.Check{pending, pending}},
-	"mixed":        {Head: "4b825dc6", Checks: []ports.Check{failed, pending, passed, running, failed2}},
-	"all finished": {Head: "4b825dc6", Checks: []ports.Check{passed, failed, neutral, failed2}},
+// all finished, each with what the helpers answer for it.
+var checkSets = []struct {
+	name        string
+	cc          ports.CommitChecks
+	finished    bool
+	done, total int
+	failed      []string
+}{
+	{"no checks", ports.CommitChecks{Head: "4b825dc6"}, false, 0, 0, nil},
+	{"all pending", ports.CommitChecks{Checks: []ports.Check{pending, pending}}, false, 0, 2, nil},
+	{"mixed", ports.CommitChecks{Checks: []ports.Check{failed, pending, passed, running, failed2}}, false, 3, 5, []string{"e2e", "migrate"}},
+	{"all finished", ports.CommitChecks{Checks: []ports.Check{passed, failed, neutral, failed2}}, true, 4, 4, []string{"e2e", "migrate"}},
 }
 
 // A commit no check has registered on yet is not finished: checks register seconds after a push.
 func TestCommitChecks_Finished(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]bool{"no checks": false, "all pending": false, "mixed": false, "all finished": true}
-
-	for name, cc := range checkSets {
-		if got := cc.Finished(); got != want[name] {
-			t.Errorf("%s: Finished() = %v; want %v", name, got, want[name])
+	for _, tt := range checkSets {
+		if got := tt.cc.Finished(); got != tt.finished {
+			t.Errorf("%s: Finished() = %v; want %v", tt.name, got, tt.finished)
 		}
 	}
 }
@@ -44,11 +48,9 @@ func TestCommitChecks_Finished(t *testing.T) {
 func TestCommitChecks_Counts(t *testing.T) {
 	t.Parallel()
 
-	want := map[string][2]int{"no checks": {0, 0}, "all pending": {0, 2}, "mixed": {3, 5}, "all finished": {4, 4}}
-
-	for name, cc := range checkSets {
-		if finished, total := cc.Counts(); finished != want[name][0] || total != want[name][1] {
-			t.Errorf("%s: Counts() = %d of %d; want %d of %d", name, finished, total, want[name][0], want[name][1])
+	for _, tt := range checkSets {
+		if done, total := tt.cc.Counts(); done != tt.done || total != tt.total {
+			t.Errorf("%s: Counts() = %d of %d; want %d of %d", tt.name, done, total, tt.done, tt.total)
 		}
 	}
 }
@@ -57,16 +59,14 @@ func TestCommitChecks_Counts(t *testing.T) {
 func TestCommitChecks_Failed(t *testing.T) {
 	t.Parallel()
 
-	want := map[string][]string{"no checks": nil, "all pending": nil, "mixed": {"e2e", "migrate"}, "all finished": {"e2e", "migrate"}}
-
-	for name, cc := range checkSets {
+	for _, tt := range checkSets {
 		var got []string
-		for _, c := range cc.Failed() {
+		for _, c := range tt.cc.Failed() {
 			got = append(got, c.Name)
 		}
 
-		if !slices.Equal(got, want[name]) {
-			t.Errorf("%s: Failed() = %v; want %v", name, got, want[name])
+		if !slices.Equal(got, tt.failed) {
+			t.Errorf("%s: Failed() = %v; want %v", tt.name, got, tt.failed)
 		}
 	}
 }
