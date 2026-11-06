@@ -4,7 +4,7 @@
 // refusing as goald does (field-unknown, field-required, connection-name-taken,
 // connection-kind-not-found, connection-in-use, connection-not-testable, connection-kind-invalid,
 // connection-kind-name-taken, connection-kind-in-use, a fresh sign-in for every change). The
-// platform's kinds are goald's own files (internal/connkind/kinds), read once. Secret values are
+// platform's kinds are copies of the files goald shipped (mock/kinds), read once. Secret values are
 // write-only: kept nowhere but as the names of the secret fields set. Each change and test is
 // audited and broadcast as `event: connection`. What uses a connection is read from the
 // factories' current versions (their spec.connections, model and repository connections), as
@@ -152,9 +152,9 @@ function testHostRefusal(kind: MockKind, fields: Record<string, string>): string
   return `test.url (from ${refs.join(', ')}) is on ${got}, not on ${host} or api.${host}, the host git signs in to: set it to that host's API`;
 }
 
-/** goald's platform kinds, from internal/connkind/kinds. */
+/** The platform kinds goald shipped, copied into mock/kinds when goald dropped connections. */
 function platformKinds(): MockKind[] {
-  const dir = new URL('../../../internal/connkind/kinds/', import.meta.url);
+  const dir = new URL('./kinds/', import.meta.url);
   return readdirSync(dir)
     .filter((f) => f.endsWith('.yaml'))
     .sort()
