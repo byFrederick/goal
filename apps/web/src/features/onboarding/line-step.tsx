@@ -26,6 +26,7 @@ import { WipStepper } from '../factory-editor/line/station-row';
 import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, type PreviewStation, previewSlots } from './factory-preview';
 import { AddHere, CardControls, useCardFlip } from './line-step-controls';
+import { ModelKeyCard, useModelKeySecret } from './model-key-card';
 import { OnboardingLayout } from './onboarding-layout';
 
 export function LineStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
@@ -158,13 +159,14 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
 
       <StationCards />
       <Models />
+      <ModelKeyCard org={org.id} factory={factory} />
     </OnboardingLayout>
   );
 }
 
 /**
  * Continue goes to Budget, which publishes. It is held while the line has no station that runs an agent and while
- * the draft's validation reports an error or has not answered yet, with one sentence saying what is missing.
+ * the draft's validation reports an error or has not answered yet, and while factory.yaml has no model key, with one sentence saying what is missing.
  */
 function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
   const editor = useLineEditor();
@@ -173,12 +175,15 @@ function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
   const sentenceId = useId();
   const noAgent = !editor.stations.some((s) => s.kind === 'agent');
   const invalid = validation?.problems.some((p) => p.severity === 'error') ?? false;
+  const modelKey = useModelKeySecret();
   const sentence = noAgent
     ? 'Add a station that runs an agent, then continue.'
     : invalid
       ? 'Fix the problems in this line, then continue.'
-      : undefined;
-  const held = sentence !== undefined || validation === undefined;
+      : modelKey.ready && modelKey.secret === undefined
+        ? 'Add the model key, then continue.'
+        : undefined;
+  const held = sentence !== undefined || validation === undefined || !modelKey.ready;
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {sentence ? (
