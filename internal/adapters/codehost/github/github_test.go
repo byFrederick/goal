@@ -1369,6 +1369,143 @@ func TestRepositoryAccess_Refusals(t *testing.T) {
 	}
 }
 
+// ciAnswer is what ciGitHub answers for one repository's CI probes: the status of its check runs
+// and of its combined status, 200 or a refusal with GitHub's message.
+type ciAnswer struct {
+	checkRuns, status int
+}
+
+// notAccessible is GitHub's message for a fine-grained token without a permission.
+const notAccessible = "Resource not accessible by personal access token"
+
+// ciGitHub is a stand-in GitHub with recorded answers: GET /repos/<repo> shows each repository of
+// answers with default branch main and push, and GET .../commits/main/check-runs and
+// .../commits/main/status answer as its ciAnswer says. Any other repository is 404. It records
+// each request with its query.
+func ciGitHub(t *testing.T, answers map[string]ciAnswer) (*httptest.Server, func() []string) {
+	t.Helper()
+
+	var (
+		mu       sync.Mutex
+		requests []string
+	)
+
+	refuse := func(w http.ResponseWriter, status int) {
+		if status == http.StatusFound {
+			w.Header().Set("Location", "https://example.com/elsewhere")
+		}
+
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{message: notAccessible, "documentation_url": "https://docs.github.com/rest"})
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+
+		requests = append(requests, r.Method+" "+r.URL.RequestURI())
+
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+		// /repos/<owner>/<repo>[/<probe>]
+		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/repos/"), "/", 3)
+		a, ok := ciAnswer{}, false
+
+		probe := ""
+		if len(parts) >= 2 {
+			a, ok = answers[parts[0]+"/"+parts[1]]
+		}
+
+		if len(parts) == 3 {
+			probe = parts[2]
+		}
+
+		switch {
+		case !ok:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: notFound})
+		case probe == "":
+			_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main", keyPermissions: map[string]bool{"pull": true, "push": true}})
+		case probe == "commits/main/check-runs" && a.checkRuns != http.StatusOK:
+			refuse(w, a.checkRuns)
+		case probe == "commits/main/check-runs":
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]any{{"name": "test", "status": "completed", "conclusion": "success"}}})
+		case probe == "commits/main/status" && a.status != http.StatusOK:
+			refuse(w, a.status)
+		case probe == "commits/main/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "pending", "total_count": 0, "statuses": []any{}})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{message: notFound})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return slices.Clone(requests)
+	}
+}
+
+// A token that can read the default branch head's check runs and commit status reads CI; a 403
+// from either fails CI with the fine-grained permissions it needs, another refusal with GitHub's
+// status and message, and a failed read leaves CI not checked. Read and Push never change with
+// CI, and every request is a GET that follows no redirect.
+func TestRepositoryAccess_CI(t *testing.T) {
+	t.Parallel()
+
+	srv, requests := ciGitHub(t, map[string]ciAnswer{
+		repoApp:           {checkRuns: http.StatusOK, status: http.StatusOK},
+		"acme/no-checks":  {checkRuns: http.StatusForbidden, status: http.StatusOK},
+		"acme/no-status":  {checkRuns: http.StatusOK, status: http.StatusForbidden},
+		"acme/empty":      {checkRuns: http.StatusConflict, status: http.StatusOK},
+		"acme/redirected": {checkRuns: http.StatusFound, status: http.StatusOK},
+	})
+	c := New(Config{APIURL: srv.URL})
+
+	for _, tc := range []struct {
+		name, repo string
+		read, ci   bool
+		reason     string
+	}{
+		{name: "reads CI", repo: repoApp, read: true, ci: true},
+		{name: "403 on check runs", repo: "acme/no-checks", read: true, reason: "read access to Checks and Commit statuses"},
+		{name: "403 on status", repo: "acme/no-status", read: true, reason: "read access to Checks and Commit statuses"},
+		{name: "empty repository", repo: "acme/empty", read: true, reason: "GitHub answered 409: " + notAccessible},
+		{name: "redirect", repo: "acme/redirected", read: true, reason: "GitHub answered 302"},
+		{name: "failed read", repo: "acme/gone", reason: "not checked: the token cannot read acme/gone"},
+	} {
+		got, err := c.RepositoryAccess(t.Context(), repoOf(t, "https://github.com/"+tc.repo), token)
+		if err != nil {
+			t.Fatalf("%s: err = %v", tc.name, err)
+		}
+
+		if got.Read.OK != tc.read || got.Push.OK != tc.read || got.CI.OK != tc.ci || got.CI.Reason == "" {
+			t.Errorf("%s: access = %+v; want read and push %v, CI %v with a reason", tc.name, got, tc.read, tc.ci)
+		}
+
+		if tc.reason != "" && !strings.Contains(got.CI.Reason, tc.reason) {
+			t.Errorf("%s: CI reason %q; want it to say %q", tc.name, got.CI.Reason, tc.reason)
+		}
+	}
+
+	sent := requests()
+	for _, want := range []string{"GET /repos/acme/app/commits/main/check-runs?per_page=1", "GET /repos/acme/app/commits/main/status"} {
+		if !slices.Contains(sent, want) {
+			t.Errorf("requests %v; want %s", sent, want)
+		}
+	}
+
+	for _, r := range sent {
+		if !strings.HasPrefix(r, "GET /repos/") {
+			t.Errorf("sent %s; want only reads of the repository", r)
+		}
+	}
+}
+
 // ownerRepo is one repository of the token's listing in ownerGitHub: its owner, and whether the
 // token can push to it.
 type ownerRepo struct {
