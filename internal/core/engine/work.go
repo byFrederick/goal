@@ -1145,9 +1145,13 @@ func (e *Engine) transition(ctx context.Context, log *slog.Logger, t ports.Trans
 	}
 }
 
-// agentEnvironment is the environment a's box gets: its own, or the default. It fails when the
-// version has no file for it.
+// agentEnvironment is the environment a's box gets: its own, or the default. It fails with
+// domain.ErrNotOnSecrets for a version on connections, and when the version has no file for it.
 func agentEnvironment(l domain.Line, a domain.AgentSpec) (domain.Environment, error) {
+	if !l.OnSecrets() {
+		return domain.Environment{}, fmt.Errorf("version %d: %w", l.Number, domain.ErrNotOnSecrets)
+	}
+
 	env, ok := l.Environment(a.Environment)
 	if !ok {
 		return domain.Environment{}, fmt.Errorf("agent %s gets environment %s, which version %d has no environments/%s.yaml for",
