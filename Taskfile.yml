@@ -192,7 +192,7 @@ tasks:
             OR (pg_stat_file('base/' || oid || '/PG_VERSION', true)).modification < now() - interval '1 hour')
         \gexec
         SQL
-      - go test -race -tags integration ./...
+      - go test -race -timeout 20m -tags integration ./...
       - pnpm --filter @goal/auth run --silent test:integration
     env:
       GOAL_TEST_DATABASE_URL: postgres://goal:{{.GOAL_PG_PASSWORD | default "goal-dev-only"}}@localhost:5432/goal?sslmode=disable

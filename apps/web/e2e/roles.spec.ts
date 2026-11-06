@@ -81,7 +81,7 @@ test.describe('a viewer', () => {
     await expect(page.getByRole('button', { name: 'Discard draft', exact: true })).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Definition sections' }).getByRole('link')).toHaveCount(5);
 
-    const name = page.getByRole('textbox', { name: 'Name', exact: true });
+    const name = page.getByRole('textbox', { name: 'Name', description: 'Lowercase, used in links and the rail' });
     await expect(name).toHaveValue('goal');
     await expect(name).toHaveAttribute('readonly', '');
     await expect(page.getByRole('button', { name: /^Remove work type/ })).toHaveCount(0);
@@ -147,7 +147,7 @@ test.describe('an editor', () => {
     await page.goto('/o/acme/f/goal/definition/basics');
     await expect(page.getByRole('link', { name: 'Review changes', exact: true }).first()).toBeVisible();
     await expect(page.getByText(/^View only/)).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: 'Name', exact: true })).not.toHaveAttribute('readonly', '');
+    await expect(page.getByRole('textbox', { name: 'Name', description: 'Lowercase, used in links and the rail' })).not.toHaveAttribute('readonly', '');
     await expect(page.getByText('You’re a viewer of goal')).toHaveCount(0);
     await expect(newFactory(page)).toHaveCount(0);
 
