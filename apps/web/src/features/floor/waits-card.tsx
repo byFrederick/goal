@@ -177,9 +177,10 @@ function WhatIf({
         <Button
           size="sm"
           className="self-start sm:self-auto"
-          aria-disabled={!canEdit || add.isPending || undefined}
+          busy={add.isPending}
+          busyLabel="Adding…"
+          aria-disabled={!canEdit || undefined}
           aria-describedby={canEdit ? undefined : reasonId}
-          aria-busy={add.isPending || undefined}
           onClick={() => {
             if (canEdit && !add.isPending) add.mutate();
           }}

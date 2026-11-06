@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
-import { cleanup, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { approveItem } from '../../api/client';
 import { inboxQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ItemCard, OrgSummary } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { NeedsYouCard } from './needs-you-card';
 
-afterEach(cleanup);
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/client')>()),
+  approveItem: vi.fn(),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: null };
 const factory = {
@@ -59,5 +68,24 @@ describe('NeedsYouCard actions', () => {
     expect(approve.className).toContain('bg-you');
     expect(approve.className).toContain('text-white');
     expect(approve.className).not.toContain('text-action-ink');
+  });
+
+  it('shows Approve as busy, not disabled, while the approval is pending', async () => {
+    vi.mocked(approveItem).mockReturnValue(new Promise(() => {}));
+    renderFactoryPage({
+      page: () => <NeedsYouCard />,
+      path: '/',
+      org,
+      factory,
+      seed: [[inboxQuery(org.id, factory.id).queryKey, { entries: [entry] }]],
+    });
+    const approve = await screen.findByRole('button', { name: 'Approve sre#2' });
+    fireEvent.click(approve);
+
+    await waitFor(() => expect(approve.getAttribute('aria-busy')).toBe('true'));
+    expect(approve.getAttribute('aria-disabled')).toBe('true');
+    expect((approve as HTMLButtonElement).disabled).toBe(false);
+    expect(approve.className).toContain('bg-you');
+    await waitFor(() => expect(approve.querySelector('[data-slot="busy"]')?.textContent).toBe('Approving…'));
   });
 });
