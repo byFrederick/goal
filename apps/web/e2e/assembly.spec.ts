@@ -122,3 +122,21 @@ for (const theme of ['light', 'dark'] as const) {
     await expectNoHorizontalScroll(page);
   });
 }
+
+for (const width of [1024, 1280, 1440]) {
+  test(`shows every Parts column inside the card at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/acme/f/goal/items/17');
+    const table = page.getByRole('table', { name: /^Parts of/ });
+    await expect(table).toBeVisible();
+    const card = await table.locator('xpath=..').boundingBox();
+    for (const name of ['Part', 'Ref', 'Title', 'Station', 'State', 'Cost', 'Pull request']) {
+      const header = table.getByRole('columnheader', { name, exact: true });
+      await expect(header).toBeVisible();
+      const at = await header.boundingBox();
+      expect(at && card && at.x + at.width <= card.x + card.width + 1, `${name} ends inside the card`).toBe(true);
+    }
+    const scrolls = await table.locator('xpath=..').evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(scrolls).toBeLessThanOrEqual(0);
+  });
+}

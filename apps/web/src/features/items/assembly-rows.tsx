@@ -98,8 +98,7 @@ export function SelectBox({
 /** The table cell's padding, shared by every row. */
 const cell = 'px-3 py-2 align-middle';
 
-/** Columns that give way below 1280 px, lowest priority first: Agent and Age below xl, Lane and Cost below lg. */
-export const hideBelowXl = 'hidden xl:table-cell';
+/** Columns that give way below 1024 px, where the table scrolls in its own box; from lg every column shows. */
 export const hideBelowLg = 'hidden lg:table-cell';
 
 /** The ref as the design shows it: the number after the factory prefix, with the hash kept. */
@@ -161,11 +160,11 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
-          className="line-clamp-2 min-h-6 w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+          className="line-clamp-2 min-h-6 max-w-[16rem] whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
         >
           {item.title}
         </Link>
-        {showRepositories ? <ItemRepositories item={item} className="mt-1 max-w-48 2xl:hidden" /> : null}
+        {showRepositories ? <ItemRepositories item={item} className="mt-1 max-w-full 2xl:hidden" /> : null}
       </td>
       {showRepositories ? (
         <td className={cn(cell, 'hidden 2xl:table-cell 2xl:max-w-48')}>
@@ -194,7 +193,7 @@ export function ItemTableRow({
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
-      <td className={cn(cell, 'whitespace-nowrap lg:max-w-28', hideBelowXl)}>
+      <td className={cn(cell, 'whitespace-nowrap lg:max-w-28', hideBelowLg)}>
         {item.agent ? (
           <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft" title={item.agent}>
             <span
@@ -209,7 +208,7 @@ export function ItemTableRow({
           <span className="text-muted">None yet</span>
         )}
       </td>
-      <td className={cn(cell, 'whitespace-nowrap text-right text-muted tabular-nums', hideBelowXl)}>
+      <td className={cn(cell, 'whitespace-nowrap text-right text-muted tabular-nums', hideBelowLg)}>
         {formatAge(item.age_seconds)}
       </td>
       <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
@@ -296,7 +295,7 @@ export function AssemblyTableRow({
               <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />
               <span className="sr-only">Assembly, </span>
               <span
-                className="line-clamp-2 w-64 whitespace-normal break-words lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+                className="line-clamp-2 max-w-[16rem] whitespace-normal break-words lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
                 title={title}
               >
                 {title}
@@ -327,8 +326,8 @@ export function AssemblyTableRow({
         <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
-        <td className={cn(cell, hideBelowXl)} aria-hidden="true" />
-        <td className={cn(cell, hideBelowXl)} aria-hidden="true" />
+        <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
+        <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
         <td className={cn(cell, 'whitespace-nowrap text-right font-medium tabular-nums', hideBelowLg)}>
           {formatUsd(cost)}
         </td>

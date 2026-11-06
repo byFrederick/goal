@@ -18,7 +18,7 @@ import { NotAvailable } from '../../ui/not-available';
 import { descriptionClass } from '../../ui/page-header';
 import { Skeleton } from '../../ui/skeleton';
 import { touchLink } from '../../ui/touch-target';
-import { AssemblyTableRow, hideBelowLg, hideBelowXl, ItemTableRow, listRows } from './assembly-rows';
+import { AssemblyTableRow, hideBelowLg, ItemTableRow, listRows } from './assembly-rows';
 import { BulkActions } from './bulk-actions';
 import {
   applyFilters,
@@ -366,8 +366,8 @@ export function ItemsPage() {
                           'px-3 py-2 text-left font-medium whitespace-nowrap',
                           column === 'Repositories' && 'hidden 2xl:table-cell',
                           column === 'Cost' && 'text-right',
-                          (column === 'Agent' || column === 'Age') && hideBelowXl,
-                          (column === 'Lane' || column === 'Cost') && hideBelowLg,
+                          (column === 'Lane' || column === 'Agent' || column === 'Age' || column === 'Cost') &&
+                            hideBelowLg,
                         )}
                       >
                         {column}
