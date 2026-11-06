@@ -74,6 +74,21 @@ describe('Add a source', () => {
     expect(create.mock.calls[0]?.[1]).toMatchObject({ sync_every_seconds: 0 });
   });
 
+  it('shows Add source as busy, not disabled, while the source is created, and does not submit twice', async () => {
+    renderKnowledge({ page: NewSourcePage, route: 'new', location: '/o/acme/knowledge/new?kind=repository', seed });
+
+    await userEvent.type(await screen.findByLabelText('Name'), 'runbooks');
+    await userEvent.type(screen.getByLabelText('When should agents read it?'), 'Before an alert.');
+    await userEvent.type(screen.getByPlaceholderText('https://github.com/acme/docs'), 'https://github.com/acme/ops');
+    const button = screen.getByRole('button', { name: 'Add source' });
+    await userEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.hasAttribute('disabled')).toBe(false);
+    await userEvent.click(button);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it('shows an optional Root page for Confluence and refuses an id that is not digits', async () => {
     renderKnowledge({ page: NewSourcePage, route: 'new', location: '/o/acme/knowledge/new?kind=confluence', seed });
 
