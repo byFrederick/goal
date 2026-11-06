@@ -9,9 +9,14 @@ export async function expectAccessible(page: Page) {
   // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
   // Looping animations (the skeleton pulse) never finish and are left alone.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-  // The failed trace (run 42096576406) shows sonner had marked the toast data-removed="true" after its 4 s, and
-  // axe measured it mid-removal at 1.03:1 (#e4e4e4 on #e0e0e0). Toasts stay in the scan; wait until none is
-  // entering or leaving. The view-transition wait is a guard: a transition paints the page from snapshots.
+  // Sonner removes a toast after 4 s, and the removal fades it to 1.03:1 (#e4e4e4 on #e0e0e0, run 42096576406's
+  // trace; run 42136073943 failed the same way after a wait for "no toast leaving"). A slow runner can let that
+  // timer fire while axe is scanning, after any wait has passed. Hovering a toast pauses sonner's timers, so a
+  // toast on screen stays at rest for the whole scan. Toasts stay in the scan; the pointer leaves afterwards.
+  const toast = page.locator('[data-sonner-toast]:not([data-removed="true"])').first();
+  const box = (await toast.count()) > 0 ? await toast.boundingBox({ timeout: 1000 }).catch(() => null) : null;
+  if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // The view-transition wait is a guard: a transition paints the page from snapshots.
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -39,6 +44,7 @@ export async function expectAccessible(page: Page) {
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
+  if (box) await page.mouse.move(0, 0);
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
