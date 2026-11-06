@@ -60,6 +60,11 @@ func (t RepositoryTest) Check() error {
 		return fmt.Errorf("a repository test's counts are not negative: %w", ErrInvalid)
 	}
 
+	return t.checkTexts()
+}
+
+// checkTexts refuses a text over MaxRepositoryTestText characters, wrapping ErrInvalid.
+func (t RepositoryTest) checkTexts() error {
 	for _, s := range []string{t.Summary, t.Warning, t.ReadReason, t.PushReason, t.CIReason} {
 		if utf8.RuneCountInString(s) > MaxRepositoryTestText {
 			return fmt.Errorf("a repository test's texts have at most %d characters: %w", MaxRepositoryTestText, ErrInvalid)

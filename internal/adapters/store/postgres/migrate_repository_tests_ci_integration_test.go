@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -23,33 +24,7 @@ func TestMigrate_RepositoryTestsCIAbsentBeforeMigration(t *testing.T) {
 	at := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
 	factory := uuid.NewString()
 
-	tx, err := owner.Begin(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() { _ = tx.Rollback(t.Context()) }() // a no-op after Commit
-
-	for _, row := range []struct {
-		sql  string
-		args []any
-	}{
-		{`SELECT set_config('goal.org_id', $1, true)`, []any{string(DefaultOrgID)}},
-		{`INSERT INTO factories (id, org_id, name, definition, definition_sha256) VALUES ($1, goal_org(), 'acme', '{}', 'sha')`, []any{factory}},
-		{
-			`INSERT INTO repository_tests (factory_id, url, access, secret, at, tested, ok, summary, read_ok, read_reason, push_ok, push_reason)
-			 VALUES ($1, 'github.com/acme/app', 'read', 'repo-token', $2, true, true, 'Can read', true, 'shown', false, 'no push')`,
-			[]any{factory, at},
-		},
-	} {
-		if _, err := tx.Exec(t.Context(), row.sql, row.args...); err != nil {
-			t.Fatalf("%s: %v", row.sql, err)
-		}
-	}
-
-	if err := tx.Commit(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	seedRepositoryTestBeforeCI(t, owner, factory, at)
 
 	migrate(t, db.owner)
 
@@ -75,5 +50,39 @@ func TestMigrate_RepositoryTestsCIAbsentBeforeMigration(t *testing.T) {
 
 	if got, err = tests.List(ctx, domain.FactoryID(factory)); err != nil || len(got) != 1 || got[0] != again {
 		t.Errorf("List after a new test = %+v, %v; want %+v", got, err, again)
+	}
+}
+
+// seedRepositoryTestBeforeCI keeps, as goal_owner at migration 00133, a factory and a passing
+// read test of acme/app in it, without a CI check.
+func seedRepositoryTestBeforeCI(t *testing.T, owner *pgxpool.Pool, factory string, at time.Time) {
+	t.Helper()
+
+	tx, err := owner.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() { _ = tx.Rollback(t.Context()) }() // a no-op after Commit
+
+	for _, row := range []struct {
+		sql  string
+		args []any
+	}{
+		{`SELECT set_config('goal.org_id', $1, true)`, []any{string(DefaultOrgID)}},
+		{`INSERT INTO factories (id, org_id, name, definition, definition_sha256) VALUES ($1, goal_org(), 'acme', '{}', 'sha')`, []any{factory}},
+		{
+			`INSERT INTO repository_tests (factory_id, url, access, secret, at, tested, summary, ok, read_reason, read_ok, push_ok, push_reason)
+			 VALUES ($1, 'github.com/acme/app', 'read', 'repo-token', $2, true, 'Can read', true, 'shown', true, false, 'no push')`,
+			[]any{factory, at},
+		},
+	} {
+		if _, err := tx.Exec(t.Context(), row.sql, row.args...); err != nil {
+			t.Fatalf("%s: %v", row.sql, err)
+		}
+	}
+
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -109,9 +109,8 @@ func (g *defGoald) keptTests(t *testing.T) []gen.FactoryRepositoryTest {
 }
 
 // goal repository test --factory tests on the factory's route, for the access --access names
-// (write by default): it prints the summary, the warning or note, read, push and the CI check on
-// its own line, exits 1 when the token can't do what the access asks, never for CI alone, and
-// goald keeps each result under the factory.
+// (write by default): it prints the summary, the warning or note, read and push, exits 1 when the
+// token can't do what the access asks, and goald keeps each result under the factory.
 func TestRepositoryTestCommand_Factory(t *testing.T) {
 	t.Parallel()
 
@@ -132,28 +131,6 @@ func TestRepositoryTestCommand_Factory(t *testing.T) {
 	}
 
 	expectOutput(t, "read", out, []string{"Can read", "warning: Goal won't push, but agents could"}, cliRepoToken)
-
-	g.grantApp(true, ports.AccessCheck{OK: true, Reason: ciShown})
-
-	out, err = g.testForAcme(t, cliRepo)
-	if err != nil {
-		t.Fatalf("a write test that reads CI = %v\n%s", err, out)
-	}
-
-	expectOutput(t, "CI readable", out, []string{"✓ push: GitHub grants", "  ✓ ci: " + ciShown}, cliRepoToken)
-
-	if push, ci := strings.Index(out, "push:"), strings.Index(out, "ci:"); push < 0 || ci < push {
-		t.Errorf("output = %q; want the ci line after push", out)
-	}
-
-	g.grantApp(true, ports.AccessCheck{Reason: ciRefused})
-
-	out, err = g.testForAcme(t, cliRepo)
-	if err != nil {
-		t.Fatalf("a write test that can't read CI = %v; want success: CI never fails the test\n%s", err, out)
-	}
-
-	expectOutput(t, "CI refused", out, []string{"Can read and push", "  ✗ ci: " + ciRefused}, cliRepoToken)
 
 	g.grantApp(false)
 
@@ -180,6 +157,38 @@ func TestRepositoryTestCommand_Factory(t *testing.T) {
 	if _, err := g.testRepo(t, cliRepo, "--access", "read"); !errors.Is(err, errFactoryRequired) {
 		t.Errorf("--access without --factory = %v; want errFactoryRequired", err)
 	}
+}
+
+// goal repository test --factory prints the CI check on its own line after push, with the host's
+// reason, and a failed one never fails the test. An answer without ci, an owner pattern's, prints
+// no ci line.
+func TestRepositoryTestCommand_FactoryCI(t *testing.T) {
+	t.Parallel()
+
+	g := publishedAcme(t)
+	g.createRepoSecret(t)
+
+	g.grantApp(true, ports.AccessCheck{OK: true, Reason: ciShown})
+
+	out, err := g.testForAcme(t, cliRepo)
+	if err != nil {
+		t.Fatalf("a write test that reads CI = %v\n%s", err, out)
+	}
+
+	expectOutput(t, "CI readable", out, []string{"✓ push: GitHub grants", "  ✓ ci: " + ciShown}, cliRepoToken)
+
+	if push, ci := strings.Index(out, "push:"), strings.Index(out, "ci:"); push < 0 || ci < push {
+		t.Errorf("output = %q; want the ci line after push", out)
+	}
+
+	g.grantApp(true, ports.AccessCheck{Reason: ciRefused})
+
+	out, err = g.testForAcme(t, cliRepo)
+	if err != nil {
+		t.Fatalf("a write test that can't read CI = %v; want success: CI never fails the test\n%s", err, out)
+	}
+
+	expectOutput(t, "CI refused", out, []string{"Can read and push", "  ✗ ci: " + ciRefused}, cliRepoToken)
 
 	// An owner pattern's answer has no ci, so no ci line.
 	g.codehost.SetOwnerAccess("github.com", "acme", cliRepoToken, ports.OwnerAccess{Readable: 2, Reason: "GitHub lists 2 repositories of acme"})

@@ -554,11 +554,10 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.conversions = conversionsOf(testOrg, acmeID, lineID)
 
 	h.platform = porttest.NewPlatform(h.keys)
-	h.notifications = porttest.NewNotificationPreferences()
+	h.notifications, h.repoTests = porttest.NewNotificationPreferences(), repositoryTestsOf(testOrg, acmeID, lineID)
 
 	connections := h.connections(t, tenancy)
 	h.intake.UseSecrets(h.secrets)
-	h.repoTests = repositoryTestsOf(testOrg, acmeID, lineID)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,

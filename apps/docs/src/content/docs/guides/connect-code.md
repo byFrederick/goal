@@ -13,6 +13,7 @@ Goal has no app to install. A token's own scope is the limit of what an agent ca
 
 - For a `read` entry, create a fine-grained token on GitHub with read-only repository permissions: Contents and Metadata as read-only, plus Issues and Pull requests as read-only when agents use `gh` or the GitHub tools to read them. Limit it to the repositories you list, or to the organization's repositories for an owner pattern.
 - For a `write` entry, add write access to Contents and Pull requests for the repositories that entry names, and nothing else.
+- When a station waits for CI ([Wait for CI](/docs/concepts/stations-and-flow/#wait-for-ci)), goald reads the CI of the repository with the entry's token. On GitHub, the token then needs read access to Checks and Commit statuses as well. On GitLab, it needs the `read_api` scope and a role in the project that can see its pipelines. A factory with no station that waits for CI needs neither.
 - Store each token as a secret and open it to the factory ([Access and secrets](/docs/concepts/access-and-secrets/)). One secret per access level keeps a write token away from agents that only read.
 - A public repository you only read needs no token.
 
@@ -21,6 +22,8 @@ Test the token before you publish. The answer says what it can do, and warns whe
 ```sh
 goal repository test https://github.com/acme/app --secret github-acme-read --factory acme-line --access read
 ```
+
+The test also checks whether the token can read the repository's CI, on its own `ci` line. A failed `ci` check doesn't fail the test, because only a station that waits for CI needs it; for such a factory, give the token the permission the line names. An owner pattern has no `ci` line, and neither does an answer Goal kept before it checked CI, until you test the repository again.
 
 The same test is in the web app, in factory settings' Repository section. Goal keeps the answer, and `goal factory show acme-line` lists it with each repository.
 
