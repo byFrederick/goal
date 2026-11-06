@@ -15,6 +15,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { StatStrip } from '../../ui/stat-strip';
 import { StatusIcon } from '../../ui/status-icon';
+import { touchLink } from '../../ui/touch-target';
 import { AssemblyActions } from './assembly-actions';
 import {
   agentRole,
@@ -214,7 +215,7 @@ function PartsTable({
                     to="/o/$org/f/$factory/items/$ref"
                     params={link(part)}
                     title={part.title}
-                    className="block truncate font-medium no-underline hover:underline"
+                    className={cn('block truncate font-medium no-underline hover:underline', touchLink)}
                   >
                     {part.title}
                   </Link>
