@@ -43,7 +43,7 @@ object, required.
     - `token`: string. The {{secret}} that clones, pushes, and reads and merges pull requests. Omit it for a public repository. It reaches the agent's environment only when an environment file names it.
     - `forge`: one of `"github"`, `"gitlab"`. The code host the URL is on. github.com is github and gitlab.com is gitlab; any other host needs forge.
     - `connection`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. Removed by ADR 0037 (moved-to-environment): set token. Accepted so versions published before still load and run until Goal converts them.
-  - `repositories`: array of object. The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other. Until Goal starts and merges runs in several repositories, publish refuses a second entry and access read.
+  - `repositories`: array of object. The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other.
     - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. Unique in the factory.
     - `url`: string matching `^https://[^/@]+/.+`, required. One repository (https://github.com/acme/app) or an owner's every repository (https://github.com/acme/\*), on a code host the organization lists. No credentials in the URL.
     - `token`: string. The {{secret}} that opens the repositories. Required for write; omit it for a public repository that is read.
@@ -118,7 +118,7 @@ object, required.
   - `tools`: object. Custom rules in Claude Code's permission syntax. builtins replaces them; an agent has one or the other.
     - `allow`: array of string.
     - `deny`: array of string.
-  - `code`: one of `"write"`, `"read"`. Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise. Until Goal supports it, publish refuses read.
+  - `code`: one of `"write"`, `"read"`. Whether the agent may push, open pull requests and merge (write) or only read the code. Default write when the factory has an entry that writes, read otherwise.
   - `builtins`: object. Built-in tools by group, each off, ask or allowed; an omitted group is off. ask is served as off until tool approvals cover built-in tools.
     - `read`: one of `"off"`, `"ask"`, `"allowed"`. Read, Grep, Glob
     - `edit`: one of `"off"`, `"ask"`, `"allowed"`. Edit, Write
@@ -197,6 +197,7 @@ object, required.
       - `min`: integer.
       - `run`: string.
     - `action`: one of `"merge"`. On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull\_request and pull\_requests fields of each station's latest output, the gate's own included), each through the factory's code host connection for its host; at a gate goald merges as the engine, and a refused merge blocks the item at the gate.
+    - `merges`: one of `"serialize"`, `"allow"`. Only on a station with action merge: how many items it integrates into the same merge target at once. A merge target is the branch an item's pull request merges into: the default branch for a standalone item or an assembly's landing, and the assembly's integration branch for a part. serialize (the default): one item per merge target at a time; allow: several at once.
     - `context`: array of one of `"inflight"`. What goald preloads into the feedback of every run at this station. inflight: an In flight section listing up to 30 of the factory's open items and assemblies with the paths each expects to change, ranked by overlap with the item.
     - `gate`: object.
       - `onReject`: string, required.

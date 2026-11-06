@@ -5078,19 +5078,21 @@ export interface components {
             /** @description The index of the picked choice in Item.question.choices */
             choice?: number;
         };
-        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones */
+        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones */
         ItemWaiting: {
             /**
-             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
              * @enum {string}
              */
-            kind: "after" | "files";
+            kind: "after" | "files" | "turn";
             /** @description Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first */
             items: string[];
             /** @description For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after */
             files: string[];
             /** @description The open needs of that kind, oldest edge first, the same ones as items */
             needs: components["schemas"]["ItemWaitingNeed"][];
+            /** @description For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files */
+            target?: string | null;
         };
         /** @description One open need that holds a waiting item */
         ItemWaitingNeed: {
@@ -5112,10 +5114,10 @@ export interface components {
             /** @description The other item's <factory name>#<number> */
             ref: string;
             /**
-             * @description planned by whoever split the work, linked by a person, or overlap (their files overlap)
+             * @description planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)
              * @enum {string}
              */
-            kind: "planned" | "linked" | "overlap";
+            kind: "planned" | "linked" | "overlap" | "turn";
             state: components["schemas"]["ItemState"];
             /** @description The edge's author, as an actor ref (<kind>:<id>, as in user:<id> or agent:<id>) */
             by: string;

@@ -209,6 +209,10 @@ var locatedCases = []struct {
 		code: codeUnknownAgent, section: domain.SectionLine, pointer: routeBackend,
 	},
 	{
+		name: "merges without action merge", doc: edited(workAgentLine, workAgentLine+"        merges: allow #here\n"),
+		code: "merges-without-merge-action", section: domain.SectionLine, pointer: "/line/stations/1/merges",
+	},
+	{
 		name: "route counts beyond the station's agents",
 		doc:  edited(workAgentLine, "        route: { backend: { agent: worker, agents: 2 }, frontend: worker } #here\n"),
 		code: "route-agents-exceed-station", section: domain.SectionLine, pointer: "/line/stations/1/route",
@@ -876,6 +880,47 @@ func TestCheck_AssemblyIntegration(t *testing.T) {
 
 			if indexOf(problems, tt.code) < 0 {
 				t.Errorf("problems %+v, want %s", problems, tt.code)
+			}
+		})
+	}
+}
+
+// merges is a setting of a station with action merge: on any other station Check refuses it,
+// naming the station.
+func TestCheck_StationMerges(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, doc string
+		message   string // the problem's message, "" for none
+	}{
+		{name: "allow on a merge station", doc: strings.Replace(mergeLine, "        action: merge\n", "        action: merge\n        merges: allow\n", 1)},
+		{name: "serialize on a human merge station", doc: edited(doneStation, "      - { id: land, kind: human, action: merge, merges: serialize }\n"+doneStation)},
+		{name: "allow on an agent station", doc: edited(workAgentLine, workAgentLine+"        merges: allow\n"), message: "station work: merges needs action merge"},
+		{name: "serialize on a gate that does not merge", doc: strings.Replace(mergeLine, "        action: merge\n", "        merges: serialize\n", 1), message: "station land: merges needs action merge"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, problems := Check(checkTree(tt.doc, nil))
+
+			i := indexOf(problems, codeMergesWithoutMergeAction)
+			if tt.message == "" {
+				if i >= 0 {
+					t.Errorf("problems %+v, want no %s", problems, codeMergesWithoutMergeAction)
+				}
+
+				return
+			}
+
+			if i < 0 {
+				t.Fatalf("problems %+v, want %s", problems, codeMergesWithoutMergeAction)
+			}
+
+			if p := problems[i]; p.Message != tt.message || !p.Blocking() {
+				t.Errorf("problem %+v, want a blocking error %q", p, tt.message)
 			}
 		})
 	}
