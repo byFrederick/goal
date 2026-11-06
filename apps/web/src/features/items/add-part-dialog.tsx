@@ -185,8 +185,8 @@ function AddPartForm({ titleRef, factoryId, itemKey, parts, stationLanes, onAdde
             Cancel
           </Button>
         </DialogClose>
-        <Button type="submit" variant="primary" disabled={add.isPending}>
-          {add.isPending ? 'Adding…' : 'Add part'}
+        <Button type="submit" variant="primary" busy={add.isPending} busyLabel="Adding…">
+          Add part
         </Button>
       </div>
     </form>
