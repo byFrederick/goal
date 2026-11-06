@@ -230,12 +230,10 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake, Hosts: store, Tests: postgres.NewEnvironmentTests(store)}, Log: log,
 	})
 	// The code host adapters: moving over tests a converted version's repository token with them,
-	// the engine merges with them and the API lists what a connection reaches.
-	hosts := codeHosts(s.AllowPrivateUpstreams)
+	// the engine merges with them and the API lists what a connection reaches. The standing rules
+	// (ADR 0031): the engine keeps and revokes them, the gateway, the API and moving over read them.
+	hosts, rules := codeHosts(s.AllowPrivateUpstreams), postgres.NewStandingRules(store)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
-	// Standing rules (ADR 0031 decision 7): the engine keeps and revokes them, the gateway's bundle
-	// and the API list them, and moving over re-keys them.
-	rules := postgres.NewStandingRules(store)
 	moveOver(ctx, store, connections, rules, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)

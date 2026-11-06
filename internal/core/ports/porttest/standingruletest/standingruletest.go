@@ -129,6 +129,46 @@ func (f *fixture) one(org domain.OrgID, action string) domain.AuditEntry {
 	return got[0]
 }
 
+// ruleKey is what a standing rule is kept for: its key, tool, agent role and item.
+type ruleKey struct {
+	connection     domain.ConnectionID
+	connectionName string
+	factory        domain.FactoryID
+	environment    string
+	server, tool   string
+	agent          string
+	item           domain.ItemID
+}
+
+func keyOf(r domain.StandingRule) ruleKey {
+	return ruleKey{r.ConnectionID, r.Connection, r.Factory, r.Environment, r.Server, r.Tool, r.Agent, r.ItemID}
+}
+
+// wantRule is the rule key(DefaultEnvironment, server, tool, agent) makes, approved on approvedOn.
+func wantRule(tool, agent string) domain.StandingRule {
+	return domain.StandingRule{Factory: ruleFactory, Environment: domain.DefaultEnvironment, Server: server, Tool: tool, Agent: agent, ItemID: approvedOn}
+}
+
+// revokedBy is the id of the actor who revoked r, "" while it is active.
+func revokedBy(r domain.StandingRule) string {
+	if r.RevokedBy == nil {
+		return ""
+	}
+
+	return r.RevokedBy.ID
+}
+
+// hasData reports whether e's data holds every entry of want.
+func hasData(e domain.AuditEntry, want map[string]any) bool {
+	for k, v := range want {
+		if e.Data[k] != v {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (f *fixture) expect(ok bool, format string, args ...any) {
 	f.t.Helper()
 
@@ -149,16 +189,14 @@ func testCreate(f *fixture) {
 	acme := f.NewOrg(f.t)
 
 	r := f.rule(acme, key(domain.DefaultEnvironment, server, toolComment, architect), admin)
-	f.expect(r.ID != "" && r.ConnectionID == "" && r.Connection == "" && r.Factory == ruleFactory && r.Environment == domain.DefaultEnvironment &&
-		r.Server == server && r.Tool == toolComment && r.Agent == architect && r.ItemID == approvedOn && r.CreatedBy.ID == admin.ID &&
-		!r.CreatedAt.IsZero() && r.Active(),
+	f.expect(r.ID != "" && keyOf(r) == keyOf(wantRule(toolComment, architect)) && r.CreatedBy.ID == admin.ID && !r.CreatedAt.IsZero() && r.Active(),
 		"CreateServerStandingRule = %+v; want an active rule keyed by server, created by admin", r)
 
 	e := f.one(acme, domain.AuditStandingRuleCreated)
-	f.expect(e.TargetKind == domain.AuditTargetStandingRule && e.TargetID == string(r.ID) && e.Actor.ID == admin.ID &&
-		e.Data["factory_id"] == string(ruleFactory) && e.Data["environment"] == domain.DefaultEnvironment && e.Data["server"] == server &&
-		e.Data["tool"] == toolComment && e.Data["agent"] == architect && e.Data["item_id"] == string(approvedOn),
-		"standing_rule.created = %+v", e)
+	f.expect(e.TargetKind == domain.AuditTargetStandingRule && e.TargetID == string(r.ID) && e.Actor.ID == admin.ID && hasData(e, map[string]any{
+		"factory_id": string(ruleFactory), "environment": domain.DefaultEnvironment, "server": server,
+		"tool": toolComment, "agent": architect, "item_id": string(approvedOn),
+	}), "standing_rule.created = %+v", e)
 
 	again := f.rule(acme, key(domain.DefaultEnvironment, server, toolComment, architect), editor)
 	f.expect(again.ID == r.ID && again.CreatedBy.ID == admin.ID, "CreateServerStandingRule of an active key = %+v; want the rule %s", again, r.ID)
@@ -206,13 +244,12 @@ func testRevoke(f *fixture) {
 		f.t.Fatalf("RevokeStandingRule: %v", err)
 	}
 
-	f.expect(got.ID == r.ID && !got.Active() && got.RevokedAt != nil && got.RevokedBy != nil && got.RevokedBy.ID == editor.ID &&
-		got.Server == server && got.Environment == domain.DefaultEnvironment && got.Factory == ruleFactory && got.ConnectionID == "",
+	f.expect(got.ID == r.ID && keyOf(got) == keyOf(r) && !got.Active() && got.RevokedAt != nil && revokedBy(got) == editor.ID,
 		"RevokeStandingRule = %+v; want the server rule revoked by the editor", got)
 
 	e := f.one(acme, domain.AuditStandingRuleRevoked)
 	f.expect(e.TargetKind == domain.AuditTargetStandingRule && e.TargetID == string(r.ID) && e.Actor.ID == editor.ID &&
-		e.Data["server"] == server && e.Data["factory_id"] == string(ruleFactory),
+		hasData(e, map[string]any{"server": server, "factory_id": string(ruleFactory)}),
 		"standing_rule.revoked = %+v", e)
 
 	_, err = f.r.RevokeStandingRule(ctx, r.ID, editor)
