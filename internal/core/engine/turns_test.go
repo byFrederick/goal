@@ -56,7 +56,7 @@ func (h *harness) queueForTurn(t *testing.T, s *scripted, n domain.NewItem) doma
 func (h *harness) queueAtMerge(t *testing.T, s *scripted, it domain.Item) domain.Item {
 	t.Helper()
 
-	url := fmt.Sprintf("https://github.com/acme/app/pull/%d", 100+it.Number)
+	url := prOf(it)
 	h.codehost.Add(prFrom(url, it))
 	s.set(it.ID, stReview, `{"decision":"approve","pull_request":"`+url+`"}`)
 
@@ -64,7 +64,9 @@ func (h *harness) queueAtMerge(t *testing.T, s *scripted, it domain.Item) domain
 }
 
 // prOf is the pull request queueAtMerge opened for it.
-func prOf(it domain.Item) string { return fmt.Sprintf("https://github.com/acme/app/pull/%d", 100+it.Number) }
+func prOf(it domain.Item) string {
+	return fmt.Sprintf("https://github.com/acme/app/pull/%d", 100+it.Number)
+}
 
 // mergeRuns counts the runs of an item at the merge station: its claims there.
 func (h *harness) mergeRuns(id domain.ItemID) int {

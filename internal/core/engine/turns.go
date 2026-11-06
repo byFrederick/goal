@@ -85,6 +85,17 @@ func (e *Engine) holdTurns(ctx context.Context, l domain.Line, st domain.Station
 
 	groups := turnGroups(l, waiting, open, needs, e.clock.Now())
 
+	// Stale edges go first, so a new edge on a holder never meets the holder's old edge as a cycle.
+	released := e.releaseTurns(ctx, l, waiting, open, needs, groups)
+
+	return errors.Join(released, e.takeTurns(ctx, groups, needs))
+}
+
+// releaseTurns removes the waiting items' turn edges whose needed item is not their group's
+// holder, naming why.
+func (e *Engine) releaseTurns(ctx context.Context, l domain.Line, waiting, open []domain.Item, needs map[domain.ItemID][]domain.OpenNeed,
+	groups map[domain.ItemID]*turnGroup,
+) error {
 	byID := make(map[domain.ItemID]domain.Item, len(open))
 	for _, o := range open {
 		byID[o.ID] = o
@@ -101,9 +112,16 @@ func (e *Engine) holdTurns(ctx context.Context, l domain.Line, st domain.Station
 				continue
 			}
 
-			errs = append(errs, e.releaseTurn(ctx, it, n.Item, turnReason(l, target, byID, n.Item)))
+			errs = append(errs, e.removeHeld(ctx, it, n.Item, turnReason(l, target, byID, n.Item), "turn released"))
 		}
 	}
+
+	return errors.Join(errs...)
+}
+
+// takeTurns gives every waiting item of a group with a holder a turn edge on it, unless it has one.
+func (e *Engine) takeTurns(ctx context.Context, groups map[domain.ItemID]*turnGroup, needs map[domain.ItemID][]domain.OpenNeed) error {
+	var errs []error
 
 	for _, g := range groups {
 		if g.holder == "" {
@@ -207,24 +225,6 @@ func turnReason(l domain.Line, target domain.ItemID, open map[domain.ItemID]doma
 	default:
 		return reasonTurnHolder
 	}
-}
-
-// releaseTurn removes it's turn edge on needs for reason. An edge already gone (another instance
-// removed it) is skipped.
-func (e *Engine) releaseTurn(ctx context.Context, it domain.Item, needs domain.ItemID, reason string) error {
-	err := e.store.RemoveEdge(ctx, it.ID, needs, domain.EngineActor, e.clock.Now(), reason)
-
-	switch {
-	case errors.Is(err, ports.ErrNotFound):
-		return nil
-	case err != nil:
-		return fmt.Errorf("item %s no longer waits for %s's turn: %w", it.ID, needs, err)
-	}
-
-	e.log.InfoContext(ctx, "turn released", slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)),
-		slog.String("needs", string(needs)), slog.String("reason", reason))
-
-	return nil
 }
 
 // addTurn records that it waits for holder's turn. An edge that would close a cycle, or that
