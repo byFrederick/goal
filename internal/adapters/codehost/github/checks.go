@@ -32,10 +32,12 @@ const (
 // commitSHA is a commit id as Checks accepts it.
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{4,64}$`)
 
-// etagged is the last answer of a URL with its ETag, for a conditional request.
+// etagged is the last answer of a URL with its ETag, for a conditional request. It keeps the
+// answer's Link too, since a 304 need not repeat it and the next page is read from it.
 type etagged struct {
 	etag string
 	body []byte
+	link string
 }
 
 type checkRunsJSON struct {
@@ -218,7 +220,7 @@ func (cl *Client) getCached(ctx context.Context, p pull, path string, out any, c
 }
 
 // conditional sends GET path with the ETag of its last answer, and answers a 304 with that
-// answer's body as a 200. It keeps each 200's ETag and body by URL.
+// answer's body and Link as a 200. It keeps each 200's ETag, body and Link by URL.
 func (cl *Client) conditional(ctx context.Context, p pull, path string) (int, []byte, http.Header, error) {
 	key := p.api + path
 
@@ -248,13 +250,20 @@ func (cl *Client) conditional(ctx context.Context, p pull, path string) (int, []
 
 	switch {
 	case res.StatusCode == http.StatusNotModified && cached:
-		return http.StatusOK, last.body, res.Header, nil
+		header := res.Header.Clone()
+		header.Del("Link")
+
+		if last.link != "" {
+			header.Set("Link", last.link)
+		}
+
+		return http.StatusOK, last.body, header, nil
 	case res.StatusCode == http.StatusOK && len(bytes.TrimSpace(body)) == 0:
 		return 0, nil, nil, errors.New("GitHub answered 200 with no body")
 	case res.StatusCode == http.StatusOK:
 		if etag := res.Header.Get("ETag"); etag != "" {
 			cl.etagsMu.Lock()
-			cl.etags[key] = etagged{etag: etag, body: body}
+			cl.etags[key] = etagged{etag: etag, body: body, link: res.Header.Get("Link")}
 			cl.etagsMu.Unlock()
 		}
 	}

@@ -386,6 +386,75 @@ func TestChecks_NotModified(t *testing.T) {
 	}
 }
 
+// A 304 need not repeat Link, so a page answered from the cache still links the next page its
+// first answer linked, and every page is read again.
+func TestChecks_NotModifiedPages(t *testing.T) {
+	t.Parallel()
+
+	var api string
+
+	f := &fakeChecks{handlers: map[string]http.HandlerFunc{
+		checkRunsPath: func(w http.ResponseWriter, r *http.Request) {
+			page := r.URL.Query().Get("page")
+			etag := `"runs-page-` + page + `"`
+
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+
+				return
+			}
+
+			w.Header().Set("ETag", etag)
+
+			if page == "2" {
+				answer(http.StatusOK, checkRuns(checkRun("two", "in_progress", "")))(w, r)
+
+				return
+			}
+
+			w.Header().Set("Link", `<`+api+checkRunsPath+`?filter=latest&per_page=100&page=2>; rel="next"`)
+			answer(http.StatusOK, checkRuns(checkRun("one", runCompleted, "success")))(w, r)
+		},
+		statusPath: answer(http.StatusOK, noStatuses),
+	}}
+	api = f.serve(t)
+
+	c := New(Config{APIURL: api})
+
+	if _, err := c.Checks(t.Context(), appRepo(t), token, headSHA, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := c.Checks(t.Context(), appRepo(t), token, headSHA, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+	for _, ch := range second.Checks {
+		names = append(names, ch.Name)
+	}
+
+	if !reflect.DeepEqual(names, []string{"one", "two"}) {
+		t.Errorf("checks after 304s = %v; want both pages, [one two]", names)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	sent := map[string]string{}
+
+	for _, r := range f.requests[3:] {
+		if r.URL.Path == checkRunsPath {
+			sent[r.URL.Query().Get("page")] = r.Header.Get("If-None-Match")
+		}
+	}
+
+	if want := map[string]string{"1": `"runs-page-1"`, "2": `"runs-page-2"`}; !reflect.DeepEqual(sent, want) {
+		t.Errorf("second check run reads sent If-None-Match %v; want %v", sent, want)
+	}
+}
+
 // With a pull request's URL, Checks reads the checks of its current head, not of the sha given.
 func TestChecks_PullRequestHead(t *testing.T) {
 	t.Parallel()
