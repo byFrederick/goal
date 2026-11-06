@@ -9,6 +9,29 @@ export async function expectAccessible(page: Page) {
   // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
   // Looping animations (the skeleton pulse) never finish and are left alone.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  // Sonner removes a toast after 4 s, and the removal fades it to 1.03:1 (#e4e4e4 on #e0e0e0, run 42096576406's
+  // trace; run 42136073943 failed the same way after a wait for "no toast leaving"). A slow runner can let that
+  // timer fire while axe is scanning, after any wait has passed. Hovering a toast pauses sonner's timers, so a
+  // toast on screen stays at rest for the whole scan. Toasts stay in the scan; the pointer leaves afterwards.
+  const toast = page.locator('[data-sonner-toast]:not([data-removed="true"])').first();
+  const box = (await toast.count()) > 0 ? await toast.boundingBox({ timeout: 1000 }).catch(() => null) : null;
+  if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // The view-transition wait is a guard: a transition paints the page from snapshots.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const doc = document as Document & { activeViewTransition?: unknown };
+        const transitioning =
+          doc.activeViewTransition !== undefined
+            ? doc.activeViewTransition !== null
+            : document.documentElement.matches(':active-view-transition');
+        const toastMoving = document.querySelectorAll(
+          '[data-sonner-toast][data-mounted="false"], [data-sonner-toast][data-removed="true"]',
+        ).length;
+        return !transitioning && toastMoving === 0;
+      }),
+    )
+    .toBe(true);
   const settled = () =>
     page.evaluate(() =>
       document
@@ -21,7 +44,19 @@ export async function expectAccessible(page: Page) {
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
+  if (box) await page.mouse.move(0, 0);
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+}
+
+/**
+ * Review, and any route view, has finished loading: its heading is shown and no skeleton (aria-busy) is
+ * left in the main region. Assert the screen's content after this with the default timeout, not a bare wait
+ * for a cold build, draft and lazy chunk on a saturated runner.
+ */
+export async function expectViewLoaded(page: Page) {
+  const main = page.locator('#main');
+  await expect(main.locator('[data-route-focus]').first()).toBeVisible({ timeout: 30_000 });
+  await expect(main.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 30_000 });
 }
 
 /**
