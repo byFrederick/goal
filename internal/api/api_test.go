@@ -91,7 +91,7 @@ spec:
   runtime:
     model: claude-fable-5-1
     modelConnection: claude
-    repository: { url: "https://github.com/acme/app.git", connection: repo }
+    repository: { url: "https://github.com/acme/app.git", connection: repo, token: "{{` + lineRepoSecret + `}}" }
     budget: { weeklyUsd: 70, perItemUsd: 4, maxTurnsPerTask: 80 }
   connections: [repo]
   contracts:
@@ -121,6 +121,12 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
+// lineRepoSecret is the secret line's runtime.repository.token names, which its merges sign in
+// with (atMerge creates it): the harness makes the secrets before the engine, which opens it.
+//
+//nolint:gosec // a secret's name, not a value
+const lineRepoSecret = "line-repo-token"
+
 // defaultEnvFile and defaultEnv are acme's default environment (ADR 0037).
 const (
 	defaultEnvFile = "environments/default.yaml"
@@ -146,6 +152,20 @@ func inOrg(t *testing.T) context.Context {
 }
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+
+// kindGitHub is the platform's github connection kind, and the name of acme's github connection.
+const kindGitHub = "github"
+
+// createGitHub adds acme's connection name, of the github kind, whose token is secret.
+func (h *harness) createGitHub(t *testing.T, name, secret string) {
+	t.Helper()
+
+	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
+		Name: name, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: secret},
+	}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
 // address (GOAL_EGRESS_ADDRESSES).
@@ -506,14 +526,14 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		t.Fatal(err)
 	}
 
-	h.catalog = templates
+	h.catalog, h.tenancy = templates, tenancy
+	connections := h.connections(t, tenancy)
 
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost}, Hosts: tenancy,
-		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h}, StandingRules: sharedStandingRules{h: h},
-		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
+		StandingRules: h.standingRules, OrgSecrets: h.secrets,
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -555,13 +575,12 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.platform = porttest.NewPlatform(h.keys)
 	h.notifications = porttest.NewNotificationPreferences()
 
-	connections := h.connections(t, tenancy)
 	h.intake.UseSecrets(h.secrets)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, StandingRules: h.standingRules, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, StandingRules: h.standingRules, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, UploadMaxBytes: testUploadMax, Clock: h.clock, KnowledgeObjects: h.kbRanges, KnowledgeCheck: h.ingestor,
@@ -640,61 +659,6 @@ func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
 	}
 
 	return d
-}
-
-// sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
-// as goald's one store keeps both: a rule Always allow creates is one the API lists and revokes.
-type sharedRules struct {
-	*porttest.Connections
-	h *harness
-}
-
-func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
-	return c.h.conns.CreateStandingRule(ctx, n, by)
-}
-
-// sharedStandingRules are the engine's standing rules, the API's (h.standingRules), which the harness
-// makes after the engine.
-type sharedStandingRules struct{ h *harness }
-
-func (r sharedStandingRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
-	return r.h.standingRules.StandingRules(ctx, includeRevoked)
-}
-
-func (r sharedStandingRules) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
-	return r.h.standingRules.CreateServerStandingRule(ctx, n, by)
-}
-
-func (r sharedStandingRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
-	return r.h.standingRules.RevokeStandingRule(ctx, id, by)
-}
-
-// engineConnections are the connections the engine's runs and merges get: acme's model connection
-// claude and its github connection repo, of goald's platform kinds.
-func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
-	t.Helper()
-
-	c := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := c.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, n := range []domain.NewConnection{
-		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-test"}},
-		{Name: "repo", Kind: "github", Secrets: map[string]string{"token": "ghp_test"}},
-	} {
-		if _, err := c.Create(inOrg(t), n, domain.LocalUser); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	return c
 }
 
 // connections makes h's connections, with goald's platform kinds, the secrets, the notification

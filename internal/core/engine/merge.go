@@ -156,7 +156,7 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 		return nil, fmt.Errorf("no output names a pull_request or pull_requests: %w", ports.ErrNotMergeable)
 	}
 
-	targets, err := e.mergeTargets(ctx, l, urls, domain.ConnectionUse{By: by, Item: it.ID})
+	targets, err := e.mergeTargets(ctx, l, urls)
 	if err != nil {
 		return nil, err
 	}
@@ -181,19 +181,13 @@ func (e *Engine) mergeAll(ctx context.Context, l domain.Line, it domain.Item, by
 }
 
 // mergeTarget is one pull request to merge, or a repository to read, with its repository on one
-// of the organization's code hosts, the token it is called with (an entry's, the connection
-// loginTargets picked, or runtime.repository.token) and the code host adapter of the host's kind.
+// of the organization's code hosts, the token it is called with (an entry's, or
+// runtime.repository.token) and the code host adapter of the host's kind.
 type mergeTarget struct {
 	url   string
 	repo  domain.CodeRepository
 	token string
 	host  ports.CodeHost
-}
-
-// codeHostConnection is one of a line's connections that can merge: its name and the host of its
-// git login.
-type codeHostConnection struct {
-	name, host string
 }
 
 // listedCodeHosts are the organization's code hosts (domain.ListedCodeHosts): the built-in ones,
@@ -250,11 +244,11 @@ func (e *Engine) codeRepositories(ctx context.Context, l domain.Line, urls []str
 // the most specific entry that covers it (domain.TokenEntry, reads false) is a write entry, or the
 // merge is refused, naming the repository, before anything is opened (ErrNoWriteEntry). That
 // entry's token signs in, opened once per entry for the line's factory through OrgSecrets; an
-// entry without one (the shorthand on connections) signs in as loginTargets picks. A line without
-// runtime.repositories is loginTargets' alone.
-func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
+// entry without one signs in with runtime.repository.token (repositoryTargets). A line without
+// runtime.repositories is repositoryTargets' alone.
+func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string) ([]mergeTarget, error) {
 	if len(l.Runtime.Repositories) == 0 {
-		return e.loginTargets(ctx, l, urls, use)
+		return e.repositoryTargets(ctx, l, urls)
 	}
 
 	targets, err := e.codeRepositories(ctx, l, urls)
@@ -296,7 +290,7 @@ func (e *Engine) mergeTargets(ctx context.Context, l domain.Line, urls []string,
 		rest[j] = targets[i].url
 	}
 
-	signed, err := e.loginTargets(ctx, l, rest, use)
+	signed, err := e.repositoryTargets(ctx, l, rest)
 	if err != nil {
 		return nil, err
 	}
@@ -355,70 +349,10 @@ func (e *Engine) entryToken(ctx context.Context, l domain.Line, entry domain.Rep
 	return domain.FillSecrets(entry.Token, values), nil
 }
 
-// loginTargets picks, for each pull request URL (or a repository URL), its repository on the
-// organization's code hosts (codeRepositories) and the first of the line's connections
-// (domain.Line.MergeConnections) whose kind names a code host goald has and whose git login is
-// for the URL's host, then opens the ones it picked for use and takes each one's token. A version
-// on secrets reads no connection: repositoryTargets picks for it.
-func (e *Engine) loginTargets(ctx context.Context, l domain.Line, urls []string, use domain.ConnectionUse) ([]mergeTarget, error) {
-	if l.OnSecrets() {
-		return e.repositoryTargets(ctx, l, urls)
-	}
-
-	targets, err := e.codeRepositories(ctx, l, urls)
-	if err != nil {
-		return nil, err
-	}
-
-	conns, err := e.codeHostConnections(ctx, l)
-	if err != nil {
-		return nil, fmt.Errorf("the code host connections: %w", err)
-	}
-
-	picked := make([]string, 0, len(targets))
-
-	for _, t := range targets {
-		i := slices.IndexFunc(conns, func(c codeHostConnection) bool { return c.host == t.repo.Host.Host })
-		if i < 0 {
-			return nil, refusal(l, fmt.Errorf("%s: no connection of the factory with a code host goald has is for %s: %w", t.url, t.repo.Host.Host, ErrNoCodeHost))
-		}
-
-		picked = append(picked, conns[i].name)
-	}
-
-	var unique []string
-	for _, n := range picked {
-		if !slices.Contains(unique, n) {
-			unique = append(unique, n)
-		}
-	}
-
-	resolved, err := e.connections.Resolve(ctx, unique, use)
-	if err != nil {
-		return nil, fmt.Errorf("open the code host connections: %w", err)
-	}
-
-	for i, name := range picked {
-		j := slices.IndexFunc(resolved, func(r domain.ResolvedConnection) bool { return r.Connection.Name == name })
-		if j < 0 {
-			return nil, fmt.Errorf("connection %s was not opened", name)
-		}
-
-		_, token, err := resolved[j].GitLogin()
-		if err != nil {
-			return nil, err
-		}
-
-		targets[i].token = token
-	}
-
-	return targets, nil
-}
-
 // repositoryLogin names the token of a version on secrets, in errors and logs.
 const repositoryLogin = "runtime.repository.token"
 
-// repositoryTargets are loginTargets on a version on secrets (ADR 0037 decision 7): every pull
+// repositoryTargets are the targets signed in with runtime.repository.token (ADR 0037 decision 7): every pull
 // request must be on the host of runtime.repository.url, one of the organization's code hosts,
 // whose kind picks the adapter; runtime.repository.forge, when set, must agree with it. The
 // runtime.repository.token signs in. The token is opened once for the line's factory through
@@ -477,40 +411,6 @@ func refusal(l domain.Line, err error) error {
 	}
 
 	return err
-}
-
-// codeHostConnections are the line's connections that can merge, from what members may see of
-// them (no secret is opened): those whose kind names a code host goald has, each with the host its
-// git login is for.
-func (e *Engine) codeHostConnections(ctx context.Context, l domain.Line) ([]codeHostConnection, error) {
-	var out []codeHostConnection
-
-	for _, name := range l.MergeConnections() {
-		c, err := e.connections.Get(ctx, name)
-		if err != nil {
-			return nil, fmt.Errorf("connection %s: %w", name, err)
-		}
-
-		k, err := e.connections.Kind(ctx, c.Kind)
-		if err != nil {
-			return nil, fmt.Errorf("connection %s: kind %s: %w", name, c.Kind, err)
-		}
-
-		if _, ok := e.codehosts[k.Spec.CodeHost]; !ok {
-			continue
-		}
-
-		host := strings.ToLower(k.Outline(c).GitHost())
-		if host == "" {
-			e.log.WarnContext(ctx, "a code host connection signs git in to no host", slog.String("connection", name))
-
-			continue
-		}
-
-		out = append(out, codeHostConnection{name: name, host: host})
-	}
-
-	return out, nil
 }
 
 // itemHeads are, for each repository key, the branches a pull request of it may come from (ADR 0041

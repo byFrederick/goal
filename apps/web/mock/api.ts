@@ -951,8 +951,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const stationsOf = (it: MockItem) => findFactory(it.factory)?.stations ?? [];
 
-  /** GET …/search (openapi.yaml searchOrg): the organization's items, agents, factories and connections. */
-  function searchOf(org: Org, url: URL, caller: Org, res: ServerResponse) {
+  /** GET …/search (openapi.yaml searchOrg): the organization's items, agents, factories and secrets. */
+  function searchOf(org: Org, url: URL, res: ServerResponse) {
     const q = (url.searchParams.get('q') ?? '').trim();
     if (q.length < 1 || q.length > 200)
       return problem(res, 400, 'Bad Request', 'q is 1 to 200 characters once trimmed');
@@ -991,9 +991,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         return [...at].map(([name, stations]) => ({ name, stations, factory_id: f.id, factory_name: f.name }));
       }),
       factories: factories.map((f) => ({ id: f.id, name: f.name, title: f.title || f.name })),
-      connections: caller.can?.includes('connection:read')
-        ? connections.outlines(org.id).map((c) => ({ name: c.name, kind: c.kind }))
-        : [],
       // goald answers secrets only with secret:read; the mock's caller holds every org permission
       // that matters here, so it finds them, metadata only.
       secrets: secrets.outlines(org.id).map((s) => ({ name: s.name, scope: s.scope, expires_at: s.expires_at })),
@@ -1863,7 +1860,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await orgNotifications.handle(org, rest, method, res, () => readBody(req))) return;
     if (standingRules.handle(org, rest, method, url, req, res)) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;
-    if (rest === '/search' && method === 'GET') return searchOf(org, url, forCaller(req, org), res);
+    if (rest === '/search' && method === 'GET') return searchOf(org, url, res);
     if (await jonah.handle(org, rest, method, url, res, () => readBody(req))) return;
     if (await views.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (await spend.handle(org, rest, method, url, res)) return;

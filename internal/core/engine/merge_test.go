@@ -151,8 +151,8 @@ func squashOf(url, conn string) porttest.MergeCall {
 	return porttest.MergeCall{URL: url, Token: loginToken(conn), Merge: ports.Merge{Method: engine.MergeSquash, HeadSHA: "updated-" + headSHA}}
 }
 
-// loginToken is the token the code host calls of conn are made with: its connection's token
-// (newConnections), or the repository token's value for repositoryLogin.
+// loginToken is the token the code host calls of entry conn are made with (addModelKey), or the
+// repository token's value for repositoryLogin.
 func loginToken(conn string) string {
 	return map[string]string{connGitHub: "github-token", connGitLab: "gitlab-token", repositoryLogin: githubTokenValue}[conn]
 }
@@ -246,9 +246,10 @@ func TestMerge_MergesThePullRequestThenApproves(t *testing.T) {
 	}
 }
 
-// Every pull request the outputs name is merged, each through the code host of the connection
-// for its URL's host, and the approval carries one merged event per pull request.
-func TestMerge_EveryPullRequestThroughItsHostsConnection(t *testing.T) {
+// Every pull request the outputs name is merged, each through the code host of its URL's host
+// with the token of the entry that covers it, and the approval carries one merged event per pull
+// request.
+func TestMerge_EveryPullRequestThroughItsHostsEntry(t *testing.T) {
 	t.Parallel()
 
 	output := `{"pull_request":"` + prURL + `","pull_requests":["` + mrURL + `","` + docsURL + `","` + prURL + `"]}`
@@ -269,11 +270,11 @@ func TestMerge_EveryPullRequestThroughItsHostsConnection(t *testing.T) {
 	}
 
 	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, connGitHub), squashOf(docsURL, connGitHub)}) {
-		t.Errorf("github merges %+v, want app#7 then docs#2 with the github connection", merges)
+		t.Errorf("github merges %+v, want app#7 then docs#2 with the github entry's token", merges)
 	}
 
 	if merges := h.gitlab.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(mrURL, connGitLab)}) {
-		t.Errorf("gitlab merges %+v, want web!3 with the gitlab connection", merges)
+		t.Errorf("gitlab merges %+v, want web!3 with the gitlab entry's token", merges)
 	}
 
 	var named []string
@@ -636,8 +637,7 @@ const (
 )
 
 // onSecrets makes l a version on secrets whose model key is {{claude-key}} and whose repository
-// is repo, with no runtime.repositories. Its organization connections stay, leftovers a version on
-// secrets never opens.
+// is repo, with no runtime.repositories.
 func onSecrets(l domain.Line, repo domain.Repository) domain.Line {
 	l.Runtime.ModelKey = "{{" + secClaude + "}}"
 	l.Runtime.Repository, l.Runtime.Repositories = repo, nil
@@ -904,6 +904,32 @@ func TestMerge_EachRepositoryWithItsEntrysToken(t *testing.T) {
 	if used := h.secretsUsedOutsideRuns(t); !slices.Contains(used, secGitHub) || !slices.Contains(used, secAcmeRead) {
 		t.Errorf("secrets used outside runs %v; want both entries' tokens", used)
 	}
+}
+
+// An entry of runtime.repositories without a token signs in with runtime.repository.token, as a
+// line without runtime.repositories does.
+func TestMerge_AnEntryWithoutATokenUsesTheRepositoryToken(t *testing.T) {
+	t.Parallel()
+
+	l := mergeLine(domain.ActionMerge)
+	l.Runtime.Repository = domain.Repository{URL: appRepo, Token: repositoryToken}
+	l.Runtime.Repositories = []domain.RepositoryEntry{{Name: connGitHub, URL: "https://github.com/acme/*", Access: domain.AccessWrite}}
+
+	h := newHarness(t, l, porttest.Succeed(`{"pull_request":"`+prURL+`"}`))
+	h.addSecrets(t)
+	h.codehost.Add(openPR(prURL))
+
+	it := h.atMerge(t)
+
+	if _, err := h.e.Merge(inOrg(t), it.ID, human, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if merges := h.codehost.Merges(); !reflect.DeepEqual(merges, []porttest.MergeCall{squashOf(prURL, repositoryLogin)}) {
+		t.Errorf("merges %+v, want app#7 with the repository token", merges)
+	}
+
+	h.expectRepositoryLogin(t, it.ID, h.codehost)
 }
 
 // A pull request whose head is a fork's, or a branch other than the item's, is refused before

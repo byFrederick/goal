@@ -32,7 +32,6 @@ describe('orgCanOf (contracts/api/permissions.yaml)', () => {
         'connection:read',
         'secret:read',
         'access:read',
-        'connection:browse',
         'knowledge:read',
       ].sort(),
     );

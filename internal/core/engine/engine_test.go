@@ -70,12 +70,11 @@ type harness struct {
 	contracts *porttest.Contracts
 	codehost  *porttest.CodeHost // the github code host
 	gitlab    *porttest.CodeHost // the gitlab code host
-	// connections hold the test organization's connections (connections_test.go).
-	connections ports.Connections
-	// rules are the standing rules of connections' store.
+	// backing is the store the porttest standing rules, secrets and knowledge base keep their
+	// rows in; it holds no connection, and the engine never gets it.
+	backing *porttest.Connections
+	// rules are the standing rules of backing's store.
 	rules ports.StandingRules
-	// credentials hold the test organization's credentials (credentials_test.go), none at first.
-	credentials *porttest.Credentials
 	// orgSecrets hold the test organization's secrets (environment_test.go), none at first.
 	orgSecrets *porttest.OrgSecrets
 	// minter mints the credentials of connections whose kind mints with mintAWS.
@@ -157,11 +156,9 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		t.Fatalf("the first organization is %s, want %s", org, testOrg)
 	}
 
-	conns := newConnections(t, h.tenancy)
-	h.connections = conns
-	h.rules = porttest.NewStandingRules(conns)
-	h.credentials = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
-	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
+	h.backing = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), h.tenancy)
+	h.rules = porttest.NewStandingRules(h.backing)
+	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy, h.backing)
 	h.addModelKey(t, testOrg)
 	h.minter = porttest.NewMinter(clock.Now)
 	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)
@@ -184,7 +181,7 @@ func (h *harness) addModelKey(t *testing.T, org domain.OrgID) {
 }
 
 // newOrg creates an organization and returns its id. Every organization after the first gets
-// the model key its lines run on (the first gets it in newHarness, with newConnections').
+// the model key its lines run on (the first gets it in newHarness).
 func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
 	t.Helper()
 
@@ -213,8 +210,8 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
-		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
-		Connections: h.connections, StandingRules: h.rules, Credentials: h.credentials, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab}, Hosts: h.tenancy,
+		Secrets:       porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
+		StandingRules: h.rules, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab}, Hosts: h.tenancy,
 		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
 		Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{

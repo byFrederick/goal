@@ -190,7 +190,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) and
 	// the organizations' secrets (ADR 0037, the same table) are sealed under the same master keys,
 	// and so are webhook endpoints' signing secrets (ADR 0026).
-	connections, credentials, orgSecrets, intake, err := openConnections(ctx, store, os.Getenv, log)
+	_, credentials, orgSecrets, intake, err := openConnections(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
 	}
@@ -250,13 +250,13 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// The engine runs each claim in a sandbox with the run's connections, merges with the
-	// factory's code host connections and, at its start and every ReapEvery, deletes the
+	// The engine runs each claim in a sandbox with its agent's environment and secrets, merges
+	// with the repository tokens on the organization's code hosts and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
+		Contracts: defs, Secrets: secrets, StandingRules: rules, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
@@ -287,8 +287,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
-		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
+		StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
+		ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),

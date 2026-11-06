@@ -116,9 +116,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Store: store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: clock,
 		CodeHosts:     map[string]ports.CodeHost{},
-		Connections:   engineConns,
 		StandingRules: porttest.NewStandingRules(engineConns),
-		Credentials:   porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +164,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Engine: e, Items: store, Factories: cache, Definitions: authors, Versions: defs, Orgs: tenancy, Audit: tenancy,
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
-		Builder: builder.New(objects, clock, builder.Config{}), Connections: conns, StandingRules: porttest.NewStandingRules(conns), ParseKind: connkind.Parse,
+		Builder: builder.New(objects, clock, builder.Config{}), StandingRules: porttest.NewStandingRules(conns),
 		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, RepositoryTests: repoTests, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
 		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads,
 		KnowledgeObjects: kbObjects, KnowledgeCheck: knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Secrets: secrets, Uploads: uploads, Objects: kbObjects, Clock: clock}),
