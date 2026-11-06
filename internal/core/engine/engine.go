@@ -425,9 +425,9 @@ func withDefaults(cfg Config) Config {
 	return cfg
 }
 
-// Run sweeps expired leases and pulls work every TickEvery until ctx ends, and reaps the
-// sandboxes of runs that are over when it starts and every ReapEvery, right after a sweep, so
-// the sandboxes of the leases it swept go at once. On return, every run this instance started
+// Run sweeps expired leases, polls CI for the open CI waits (PollCI) and pulls work every
+// TickEvery until ctx ends, and reaps the sandboxes of runs that are over when it starts and
+// every ReapEvery, right after a sweep, so the sandboxes of the leases it swept go at once. On return, every run this instance started
 // has finished or released its item.
 func (e *Engine) Run(ctx context.Context) error {
 	t := e.clock.NewTicker(e.cfg.TickEvery)
@@ -441,18 +441,7 @@ func (e *Engine) Run(ctx context.Context) error {
 			e.log.ErrorContext(ctx, "sweep leases", slog.Any("error", err))
 		}
 
-		if now := e.clock.Now(); reapedAt.IsZero() || now.Sub(reapedAt) >= e.cfg.ReapEvery {
-			reapedAt = now
-
-			n, err := e.ReapOrphans(ctx)
-			if n > 0 {
-				e.log.InfoContext(ctx, "reaped orphaned runs", slog.Int("runs", n))
-			}
-
-			if err != nil && ctx.Err() == nil {
-				e.log.ErrorContext(ctx, "reap orphaned runs", slog.Any("error", err))
-			}
-		}
+		reapedAt = e.reapDue(ctx, reapedAt)
 
 		if _, err := e.PollCI(ctx); err != nil && ctx.Err() == nil {
 			e.log.ErrorContext(ctx, "poll ci", slog.Any("error", err))
@@ -468,6 +457,26 @@ func (e *Engine) Run(ctx context.Context) error {
 		case <-t.C():
 		}
 	}
+}
+
+// reapDue reaps orphaned sandboxes when none were reaped yet (reapedAt zero) or ReapEvery has
+// passed since reapedAt, and returns when it last reaped.
+func (e *Engine) reapDue(ctx context.Context, reapedAt time.Time) time.Time {
+	now := e.clock.Now()
+	if !reapedAt.IsZero() && now.Sub(reapedAt) < e.cfg.ReapEvery {
+		return reapedAt
+	}
+
+	n, err := e.ReapOrphans(ctx)
+	if n > 0 {
+		e.log.InfoContext(ctx, "reaped orphaned runs", slog.Int("runs", n))
+	}
+
+	if err != nil && ctx.Err() == nil {
+		e.log.ErrorContext(ctx, "reap orphaned runs", slog.Any("error", err))
+	}
+
+	return now
 }
 
 // Wait blocks until every agent run started by this instance's ticks has finished.

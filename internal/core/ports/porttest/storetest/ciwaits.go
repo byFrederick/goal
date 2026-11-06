@@ -347,13 +347,20 @@ func testCIWaitsOpenOnPoll(f *fixture) {
 		t.Fatalf("OpenCIWaitsOnPoll = %+v; want the waits of %s then %s", ws, b.ID, a.ID)
 	}
 
-	if w := ws[1]; !w.Open() || w.Item != a.ID || w.Station != ciStation || w.Visit != ciVisit || w.SHA != ciSHA ||
-		w.Phase != domain.CIPhaseBefore || w.Round != 1 || !w.StartedAt.Equal(later.StartedAt) {
-		t.Errorf("OpenCIWaitsOnPoll's wait = %+v; want the fields of %+v", w, later)
-	}
+	sameCIWait(t, ws[1], later)
 
 	if ws, err := f.Store.OpenCIWaitsOnPoll(f.ctx(t), domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: "c0ffee99"}); err != nil || len(ws) != 0 {
 		t.Errorf("OpenCIWaitsOnPoll of a commit with no wait = %+v, %v; want none", ws, err)
+	}
+}
+
+// sameCIWait fails unless w is open with n's fields.
+func sameCIWait(t *testing.T, w domain.CIWaitRecord, n domain.NewCIWait) {
+	t.Helper()
+
+	if !w.Open() || w.Item != n.Item || w.Station != n.Station || w.Visit != n.Visit || w.Repo != n.Repo || w.SHA != n.SHA ||
+		w.Phase != n.Phase || w.Round != n.Round || !w.StartedAt.Equal(n.StartedAt) {
+		t.Errorf("OpenCIWaitsOnPoll's wait = %+v; want an open one with the fields of %+v", w, n)
 	}
 }
 
