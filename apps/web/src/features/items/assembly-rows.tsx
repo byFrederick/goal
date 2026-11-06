@@ -97,7 +97,7 @@ export function SelectBox({
 }
 
 /** The table cell's padding, shared by every row. */
-const cell = 'px-3 py-2 align-middle lg:max-xl:px-1.5';
+const cell = 'px-3 py-2 align-middle lg:max-xl:px-1';
 
 /** Columns that give way below 1024 px, where the table scrolls in its own box; from lg every column shows. */
 export const hideBelowLg = 'hidden lg:table-cell';
@@ -163,7 +163,7 @@ export function ItemTableRow({
           title={item.title}
           className={cn(
             touchLink,
-            'line-clamp-2 min-h-6 max-w-[16rem] whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap',
+            'line-clamp-2 min-h-6 max-w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap',
           )}
         >
           {item.title}
@@ -195,21 +195,25 @@ export function ItemTableRow({
             title={label.text}
           >
             {status ? <StatusIcon status={status} /> : null}
-            <span className="min-w-0 lg:max-xl:truncate">{label.text}</span>
+            <span className="min-w-0 lg:max-xl:truncate" title={label.text}>
+              {label.text}
+            </span>
           </span>
           {item.class_of_service === 'expedite' ? <Chip tone="expedite">Expedite</Chip> : null}
         </span>
       </td>
       <td className={cn(cell, 'whitespace-nowrap lg:max-xl:max-w-20 lg:max-w-24', hideBelowLg)}>
         {item.agent ? (
-          <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft" title={item.agent}>
+          <span className="inline-flex max-w-full items-center gap-2 text-secondary text-ink-soft">
             <span
               aria-hidden="true"
               className="grid size-6 flex-none place-items-center max-xl:lg:hidden rounded-full bg-run-tint text-meta font-semibold text-run-ink"
             >
               {monogram(item.agent)}
             </span>
-            <span className="min-w-0 lg:truncate">{item.agent}</span>
+            <span className="min-w-0 lg:truncate" title={item.agent}>
+              {item.agent}
+            </span>
           </span>
         ) : (
           <span className="text-muted">None yet</span>
@@ -302,7 +306,7 @@ export function AssemblyTableRow({
               <LayoutGrid size={14} strokeWidth={1.75} aria-hidden="true" className="flex-none text-ok-ink" />
               <span className="sr-only">Assembly, </span>
               <span
-                className="line-clamp-2 max-w-[16rem] whitespace-normal break-words lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
+                className="line-clamp-2 max-w-64 whitespace-normal break-words lg:line-clamp-none lg:max-w-none lg:truncate lg:whitespace-nowrap"
                 title={title}
               >
                 {title}
