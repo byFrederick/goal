@@ -9,6 +9,24 @@ export async function expectAccessible(page: Page) {
   // after it), then until finite entrance fades have ended on two checks in a row, or axe measures text mid-fade.
   // Looping animations (the skeleton pulse) never finish and are left alone.
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
+  // While a route's view transition runs, the page is painted from snapshots and axe's elementsFromPoint can
+  // return the page behind a toast instead of the toast's own fill. A toast entering or leaving has the same
+  // effect. Toasts stay in the scan; wait until they are at rest.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const doc = document as Document & { activeViewTransition?: unknown };
+        const transitioning =
+          doc.activeViewTransition !== undefined
+            ? doc.activeViewTransition !== null
+            : document.documentElement.matches(':active-view-transition');
+        const toastMoving = document.querySelectorAll(
+          '[data-sonner-toast][data-mounted="false"], [data-sonner-toast][data-removed="true"]',
+        ).length;
+        return !transitioning && toastMoving === 0;
+      }),
+    )
+    .toBe(true);
   const settled = () =>
     page.evaluate(() =>
       document
@@ -22,6 +40,17 @@ export async function expectAccessible(page: Page) {
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+}
+
+/**
+ * Review, and any route view, has finished loading: its heading is shown and no skeleton (aria-busy) is
+ * left in the main region. Assert the screen's content after this with the default timeout, not a bare wait
+ * for a cold build, draft and lazy chunk on a saturated runner.
+ */
+export async function expectViewLoaded(page: Page) {
+  const main = page.locator('#main');
+  await expect(main.locator('[data-route-focus]').first()).toBeVisible({ timeout: 30_000 });
+  await expect(main.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 30_000 });
 }
 
 /**
