@@ -59,7 +59,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await row.scrollIntoViewIfNeeded();
       const box = await boxOf(row);
       expect(box.height, `triage row is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      // locator.click waits for the row to stop moving and fails, naming the element, if another covers the point.
+      await row.click({ position: { x: box.width / 2, y: box.height / 2 } });
       await expect(page).toHaveURL(/\/items\//);
     });
 
@@ -79,7 +80,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(box.height, `Board card is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
       // The middle of the left edge, inside the padding: a corner point falls outside the card's rounded
       // corner, and the Move button at the right is its own target.
-      await page.mouse.click(box.x + 6, box.y + box.height / 2);
+      // The card slides in when it arrives: click waits for it to settle and fails naming any element in the way.
+      await card.click({ position: { x: 6, y: box.height / 2 } });
       await expect(page).toHaveURL(/\/items\//);
     });
 

@@ -64,6 +64,9 @@ for (const width of widths) {
 }
 
 test('set the lane of two checked items in dark mode', async ({ page, request }) => {
+  // The same height as the widths above: on a shorter page a row's ⓘ can sit under the sticky bulk bar, and axe
+  // measures it as partly covered.
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await setLaneOfTwo(page, request);
 
