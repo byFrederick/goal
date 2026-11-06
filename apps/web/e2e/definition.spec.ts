@@ -350,7 +350,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
         const count = await rows.count();
         for (let i = 0; i < count; i++) {
           const row = rows.nth(i);
-          const whoLocator = row.getByRole('combobox', { name: /^Who works at / });
+          const whoLocator = row.getByRole('combobox', { name: /^Who works here at / });
           const upLocator = row.getByRole('button', { name: /^Move .* up$/ });
           const who = (await whoLocator.count()) > 0 ? await whoLocator.first().boundingBox() : null;
           const up = (await upLocator.count()) > 0 ? await upLocator.first().boundingBox() : null;
