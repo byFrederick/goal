@@ -62,13 +62,16 @@ func TestCatalogSkills_SyncPrintsEachSkillAndFailsOnAny(t *testing.T) {
 	}
 }
 
+// templateFactoryYAML is a template folder's definition root.
+const templateFactoryYAML = "factory/factory.yaml"
+
 func TestCatalogTemplates_PushAndList(t *testing.T) {
 	t.Parallel()
 
 	template := strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1)
 	dir := filepath.Join(t.TempDir(), "acme-review")
 	writeFiles(t, dir, map[string]string{
-		"template.yaml": "title: Acme review\nsummary: Write, then approve\ncode: none\n", "factory/factory.yaml": template,
+		templateMetaFile: "title: Acme review\nsummary: Write, then approve\ncode: none\n", templateFactoryYAML: template,
 		"factory/agents/writer.md": "# writer\n", "factory/.DS_Store": "junk",
 		"factory/" + envPath: workingCopy()[envPath],
 	})
@@ -103,7 +106,7 @@ func TestCatalogTemplates_PushAndList(t *testing.T) {
 	}
 
 	// A template with a factory's own id is refused, the problem located in the folder.
-	writeFiles(t, dir, map[string]string{"factory/factory.yaml": factoryYAML})
+	writeFiles(t, dir, map[string]string{templateFactoryYAML: factoryYAML})
 	buf.Reset()
 
 	if up, err = readTemplate(dir, "acme-review", 2); err != nil {
@@ -121,8 +124,8 @@ func TestCatalogTemplates_PushRefusesChangedVersion(t *testing.T) {
 
 	dir := filepath.Join(t.TempDir(), "acme-review")
 	writeFiles(t, dir, map[string]string{
-		"template.yaml":            "title: Acme review\ncode: none\n",
-		"factory/factory.yaml":     strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
+		templateMetaFile:           "title: Acme review\ncode: none\n",
+		templateFactoryYAML:        strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
 		"factory/agents/writer.md": "# writer\n",
 		"factory/" + envPath:       workingCopy()[envPath],
 	})
@@ -140,7 +143,7 @@ func TestCatalogTemplates_PushRefusesChangedVersion(t *testing.T) {
 		t.Fatalf("push = %v\n%s", err, buf.String())
 	}
 
-	writeFiles(t, dir, map[string]string{"template.yaml": "title: Acme review, changed\ncode: none\n"})
+	writeFiles(t, dir, map[string]string{templateMetaFile: "title: Acme review, changed\ncode: none\n"})
 
 	if up, err = readTemplate(dir, "acme-review", 1); err != nil {
 		t.Fatal(err)
@@ -157,9 +160,9 @@ func TestCatalogTemplates_PushRefusesTemplateWithoutCode(t *testing.T) {
 
 	dir := filepath.Join(t.TempDir(), "acme-review")
 	writeFiles(t, dir, map[string]string{
-		"template.yaml":        "title: Acme review\n",
-		"factory/factory.yaml": strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
-		"factory/" + envPath:   workingCopy()[envPath],
+		templateMetaFile:     "title: Acme review\n",
+		templateFactoryYAML:  strings.Replace(factoryYAML, factoryID, "00000000-0000-0000-0000-000000000000", 1),
+		"factory/" + envPath: workingCopy()[envPath],
 	})
 
 	up, err := readTemplate(dir, "acme-review", 1)

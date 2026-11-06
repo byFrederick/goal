@@ -401,17 +401,22 @@ func (x *TemplateCatalog) Push(ctx context.Context, t TemplateUpload) (added boo
 		return false, nil
 	}
 
-	for _, p := range slices.Sorted(maps.Keys(t.Files)) {
-		if err := x.putNew(ctx, base+templateFiles+p, t.Files[p]); err != nil {
-			return false, err
-		}
-	}
-
-	if err := x.putNew(ctx, base+templateMeta, t.Meta); err != nil {
+	if err := x.write(ctx, base, t); err != nil {
 		return false, err
 	}
 
 	return true, nil
+}
+
+// write puts a new version's objects under base, each once, template.yaml last.
+func (x *TemplateCatalog) write(ctx context.Context, base string, t TemplateUpload) error {
+	for _, p := range slices.Sorted(maps.Keys(t.Files)) {
+		if err := x.putNew(ctx, base+templateFiles+p, t.Files[p]); err != nil {
+			return err
+		}
+	}
+
+	return x.putNew(ctx, base+templateMeta, t.Meta)
 }
 
 // storedAs reports whether the objects under a version's prefix are exactly want by key, byte
