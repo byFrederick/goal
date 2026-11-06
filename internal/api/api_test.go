@@ -512,8 +512,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost}, Hosts: tenancy,
-		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h}, StandingRules: sharedStandingRules{h: h},
-		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
+		StandingRules: sharedStandingRules{h: h},
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -642,17 +641,6 @@ func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
 	return d
 }
 
-// sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
-// as goald's one store keeps both: a rule Always allow creates is one the API lists and revokes.
-type sharedRules struct {
-	*porttest.Connections
-	h *harness
-}
-
-func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
-	return c.h.conns.CreateStandingRule(ctx, n, by)
-}
-
 // sharedStandingRules are the engine's standing rules, the API's (h.standingRules), which the harness
 // makes after the engine.
 type sharedStandingRules struct{ h *harness }
@@ -667,34 +655,6 @@ func (r sharedStandingRules) CreateServerStandingRule(ctx context.Context, n dom
 
 func (r sharedStandingRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
 	return r.h.standingRules.RevokeStandingRule(ctx, id, by)
-}
-
-// engineConnections are the connections the engine's runs and merges get: acme's model connection
-// claude and its github connection repo, of goald's platform kinds.
-func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
-	t.Helper()
-
-	c := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := c.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, n := range []domain.NewConnection{
-		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-test"}},
-		{Name: "repo", Kind: "github", Secrets: map[string]string{"token": "ghp_test"}},
-	} {
-		if _, err := c.Create(inOrg(t), n, domain.LocalUser); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	return c
 }
 
 // connections makes h's connections, with goald's platform kinds, the secrets, the notification

@@ -83,23 +83,6 @@ func TestLine_Refusal(t *testing.T) {
 	}
 }
 
-// A merge may use the line's connections and its repository's, each once.
-func TestLine_MergeConnections(t *testing.T) {
-	t.Parallel()
-
-	const repos = "repos"
-
-	l := Line{Connections: []string{repos, "datadog"}, Runtime: Runtime{Repository: Repository{Connection: "gitlab"}}}
-	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog", "gitlab"}) {
-		t.Errorf("MergeConnections = %v", got)
-	}
-
-	l.Runtime.Repository.Connection = repos
-	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog"}) {
-		t.Errorf("MergeConnections with the repository's listed = %v", got)
-	}
-}
-
 // A repository's host names its code host on github.com and gitlab.com, whatever the case;
 // forge names it on any host and wins over the host's.
 func TestRepository_CodeHost(t *testing.T) {

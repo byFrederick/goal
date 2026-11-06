@@ -252,13 +252,13 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// The engine runs each claim in a sandbox with the run's connections, merges with the
-	// factory's code host connections and, at its start and every ReapEvery, deletes the
+	// The engine runs each claim in a sandbox with its agent's environment and secrets, merges
+	// with the repository tokens on the organization's code hosts and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
+		Contracts: defs, Secrets: secrets, StandingRules: rules, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
 		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {

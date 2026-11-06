@@ -100,14 +100,8 @@ type Deps struct {
 	Contracts ports.Contracts
 	// Secrets resolves the gateway key (Config.GatewayKeyRef).
 	Secrets ports.Secrets
-	// Connections give each run its organization's connections (spec 4 §4.5), and merges the
-	// line's connections whose kind has a code host (§4.7).
-	Connections ports.Connections
 	// StandingRules keep a person's always-allow of a tool (ADR 0031 decision 7) and revoke one.
 	StandingRules ports.StandingRules
-	// Credentials fill the connections' secret fields that refer to one and give each agent the
-	// ones listed for it (ADR 0017 decisions 5 and 6).
-	Credentials ports.Credentials
 	// OrgSecrets give a run of a version on secrets the values its model key and its agent's
 	// environment refer to (ADR 0037 decision 10); nil fails every such run.
 	OrgSecrets ports.OrgSecrets
@@ -146,7 +140,7 @@ type Deps struct {
 
 func (d Deps) complete() bool {
 	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil &&
-		d.Connections != nil && d.StandingRules != nil && d.Credentials != nil && d.CodeHosts != nil && d.Clock != nil
+		d.StandingRules != nil && d.CodeHosts != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -236,22 +230,20 @@ const (
 
 // Engine runs factory lines. It is safe for concurrent use.
 type Engine struct {
-	store       ports.Store
-	orgs        Orgs
-	sandboxes   ports.Sandboxes
-	contracts   ports.Contracts
-	secrets     ports.Secrets
-	connections ports.Connections
-	rules       ports.StandingRules
-	credentials ports.Credentials
-	orgSecrets  ports.OrgSecrets
-	codehosts   map[string]ports.CodeHost
-	hosts       ports.CodeHosts
-	minters     map[string]ports.Minter
-	policies    ports.OrgPolicies
-	knowledge   KnowledgeSnapshots // nil without Deps.Knowledge
-	intake      ports.Intake
-	events      ports.SenderEvents
+	store      ports.Store
+	orgs       Orgs
+	sandboxes  ports.Sandboxes
+	contracts  ports.Contracts
+	secrets    ports.Secrets
+	rules      ports.StandingRules
+	orgSecrets ports.OrgSecrets
+	codehosts  map[string]ports.CodeHost
+	hosts      ports.CodeHosts
+	minters    map[string]ports.Minter
+	policies   ports.OrgPolicies
+	knowledge  KnowledgeSnapshots // nil without Deps.Knowledge
+	intake     ports.Intake
+	events     ports.SenderEvents
 	// holder names this instance's claims of delivery evaluations (deliveries.go).
 	holder string
 	audit  ports.Audit
@@ -327,8 +319,8 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		events: d.Events, holder: holder,
-		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections, rules: d.StandingRules,
-		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, rules: d.StandingRules,
+		orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
 		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }

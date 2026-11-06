@@ -491,7 +491,7 @@ func (w *world) oneRun(t *testing.T, line domain.Line) map[string]string {
 
 	e, err := engine.New(engine.Deps{
 		Store: w.store, Orgs: w.tenancy, Sandboxes: porttest.NewSandboxes(worker.Exec), Contracts: porttest.NewContracts(), Clock: w.clock,
-		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"}, Connections: w.conns, StandingRules: w.rules, Credentials: porttest.NewCredentials(w.key, w.tenancy, w.conns),
+		Secrets: porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"}, StandingRules: w.rules,
 		OrgSecrets: w.secrets, CodeHosts: map[string]ports.CodeHost{connGitHub: porttest.NewCodeHost()},
 		Audit: w.tenancy, NotificationOutbox: porttest.NewNotificationOutbox(), Logger: slog.New(slog.NewJSONHandler(logs, nil)),
 	}, engine.Config{
