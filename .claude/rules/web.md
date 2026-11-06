@@ -50,8 +50,7 @@ The UI is one product, so its look comes from one design system: [MASTER.md](../
 
 ## Review
 
-- Before approving a pull request that changes `apps/web/`, `packages/api-client/` or `contracts/`, read the ci workflow's e2e job (`task web:e2e`) on the pull request: it runs on pull requests into main and into an assembly's integration branch, and on pushes to main. Into main, approve only when all 12 shards are green next to `task check` and `task test-integration`.
-- On a pull request into an assembly branch the job runs the whole suite, so judge a part by its own specs in the report. Reject the part when one of its specs fails or the job has not reported; failures in other specs are not the part's.
+- Before approving a pull request that changes `apps/web/`, `packages/api-client/` or `contracts/`, read the ci workflow's e2e job (`task web:e2e`) on the pull request: it runs only on pull requests into main. Approve only when all 12 shards are green next to `task check` and `task test-integration`.
 
 ## Skills
 
