@@ -46,7 +46,7 @@ type turnGroup struct {
 
 // holdTurns makes a station that takes turns (domain.Station.TakesTurns) claim one item per merge
 // target at a time (ADR 0043). It groups the station's open items by turnTarget. The holder of
-// a group's turn is the item in progress there, or else the waiting item the group's turn edges
+// a group's turn is the item in progress or waiting on a person there, or else the waiting item the group's turn edges
 // already point to (so an item whose merge was deferred back to the queue keeps its turn), or
 // else the first waiting item in pull order with no open need but turn edges and no later start.
 // Every other waiting item of the group gets a turn edge on the holder, by the engine, so the
@@ -139,7 +139,7 @@ func (e *Engine) takeTurns(ctx context.Context, groups map[domain.ItemID]*turnGr
 }
 
 // turnGroups groups the station's waiting items by merge target and picks each group's holder:
-// the open item in progress at the station with the lowest number, else the waiting item the
+// the open item in progress or waiting on a person at the station with the lowest number, else the waiting item the
 // group's turn edges point to first in pull order, else the first waiting item that may be
 // claimed but for its turn edges.
 func turnGroups(l domain.Line, waiting, open []domain.Item, needs map[domain.ItemID][]domain.OpenNeed, now time.Time) map[domain.ItemID]*turnGroup {
@@ -159,7 +159,7 @@ func turnGroups(l domain.Line, waiting, open []domain.Item, needs map[domain.Ite
 		g.waiting = append(g.waiting, it)
 	}
 
-	running := slices.DeleteFunc(slices.Clone(open), func(o domain.Item) bool { return o.State != domain.StateInProgress })
+	running := slices.DeleteFunc(slices.Clone(open), func(o domain.Item) bool { return !holdsItsTurn(o.State) })
 	slices.SortFunc(running, func(a, b domain.Item) int { return cmp.Compare(a.Number, b.Number) })
 
 	for _, it := range running {
@@ -181,6 +181,14 @@ func turnGroups(l domain.Line, waiting, open []domain.Item, needs map[domain.Ite
 	}
 
 	return groups
+}
+
+// holdsItsTurn reports whether an open item in state s at the merge station holds its group's
+// turn whatever the edges say: it was claimed and is neither back in the queue nor blocked. That
+// is an item in progress, or one waiting on a person (a question or a tool approval), whose pull
+// request stays open until it resumes.
+func holdsItsTurn(s domain.ItemState) bool {
+	return s == domain.StateInProgress || s == domain.StateWaitingHuman
 }
 
 // pointedTo is the first waiting item, in pull order, that another waiting item of the group has

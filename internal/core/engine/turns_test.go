@@ -281,6 +281,48 @@ func TestEngine_TurnDeferredHolderKeepsItsTurn(t *testing.T) {
 	h.expectPosition(t, b.ID, isDone)
 }
 
+// A holder waiting on a person at the merge station (a question or a tool approval) keeps its
+// turn: its pull request is still open, so the item waiting behind it is not claimed until the
+// holder is answered and done.
+func TestEngine_TurnWaitingHumanHolderKeepsItsTurn(t *testing.T) {
+	t.Parallel()
+
+	h, s := turnHarness(t, turnLine(""))
+
+	a := h.queueForTurn(t, s, domain.NewItem{Title: "a"})
+	b := h.queueForTurn(t, s, domain.NewItem{Title: "b"})
+
+	if _, err := h.store.AddEdge(inOrg(t), domain.NewEdge{Item: b.ID, Needs: a.ID, Kind: domain.EdgeTurn, By: domain.EngineActor, At: h.clock.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	a = h.at(t, a, stReview, domain.StateWaitingHuman)
+
+	h.step(t)
+
+	if n := h.mergeRuns(b.ID); n != 0 {
+		t.Fatalf("b ran %d times at merge while a waited on a person, want 0", n)
+	}
+
+	h.expectPosition(t, b.ID, queuedAtMerge)
+	h.expectTurnOn(t, b.ID, a.ID)
+
+	if removed := h.eventsOf(b.ID, domain.EventEdgeRemoved); len(removed) != 0 {
+		t.Errorf("b's edge_removed events %+v, want none while a holds the turn", removed)
+	}
+
+	h.at(t, a, stReview, domain.StateQueued) // a is answered and goes on
+
+	h.step(t)
+
+	h.expectPosition(t, a.ID, isDone)
+	h.expectPosition(t, b.ID, queuedAtMerge)
+
+	h.step(t)
+
+	h.expectPosition(t, b.ID, isDone)
+}
+
 // A turn edge whose reason no longer holds is removed with an edge_removed event that says why:
 // the needed item is blocked, has left the station or has another merge target. The waiting items
 // then wait for the target's holder instead.
