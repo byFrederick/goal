@@ -94,6 +94,35 @@ describe('Approve on an item at a human station', () => {
   });
 });
 
+describe('A pending decision', () => {
+  it('shows Approve as busy, not disabled, while approveItem is pending', async () => {
+    vi.mocked(approveItem).mockReturnValue(new Promise(() => {}));
+    renderActions('approve');
+
+    const button = await screen.findByRole('button', { name: /^Approve/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => expect(button.querySelector('[data-slot="busy"]')?.textContent).toBe('Approving…'));
+  });
+
+  it('shows the merge confirm as busy, not disabled, while mergeItem is pending', async () => {
+    vi.mocked(mergeItem).mockReturnValue(new Promise(() => {}));
+    renderActions('merge');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge' }));
+    const confirm = await screen.findByRole('button', { name: 'Squash and merge' });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(confirm.getAttribute('aria-busy')).toBe('true'));
+    expect(confirm.getAttribute('aria-disabled')).toBe('true');
+    expect((confirm as HTMLButtonElement).disabled).toBe(false);
+    await waitFor(() => expect(confirm.querySelector('[data-slot="busy"]')?.textContent).toBe('Merging…'));
+  });
+});
+
 describe('Merge', () => {
   const open = async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Merge' }));
