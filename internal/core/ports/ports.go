@@ -835,6 +835,9 @@ type NewRun struct {
 	StartedAt           time.Time
 	// Kind is whose run it is; empty is domain.RunKindStation.
 	Kind domain.RunKind
+	// Size is the sandbox size the run's box opens with, recorded as the run's box size; empty
+	// records none.
+	Size domain.SandboxSize
 }
 
 // Assembly is a planning item's transition to state assembly and the parts its plan names.

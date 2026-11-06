@@ -96,6 +96,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Runs_FinishOnceAndAddCost", testRuns},
 		{"Runs_OldestFirstUpToLimitAndOneByID", testRunReads},
 		{"Runs_RecordBriefOutputAndHeads", testRunRecords},
+		{"Runs_RecordUsageAndBoxSize", testRunUsage},
 		{"OrgRuns_NewestFirstFilteredPagedAndSummed", testOrgRuns},
 		{"EachOrgRun_EveryRunInListOrderUpToMax", testEachOrgRun},
 		{"AppendEvents_InOrder", testAppendEvents},

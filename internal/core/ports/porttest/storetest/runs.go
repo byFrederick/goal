@@ -331,6 +331,82 @@ func testRunRecords(f *fixture) {
 	f.expectNoRunRecords(t, it.ID, in)
 }
 
+// testRunUsage: a run records the box size it started with, and the CPU seconds and peak memory
+// it finished with; a run whose worker reported no counters reads back with no values, not zero.
+func testRunUsage(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	t2 := t1.Add(time.Minute)
+
+	start := func(at time.Time, size domain.SandboxSize) domain.RunID {
+		id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+			FactoryID: f.factory, ItemID: it.ID, Station: stWork, Agent: agWorker, Model: model, StartedAt: at, Size: size,
+		})
+		if err != nil {
+			t.Fatalf("StartRun: %v", err)
+		}
+
+		return id
+	}
+
+	cpu, peak := 12.5, int64(536870912)
+	counted := start(t1, domain.SandboxLarge)
+
+	res := domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CPUSeconds: &cpu, PeakMemoryBytes: &peak}
+	if err := f.Store.FinishRun(f.ctx(t), counted, res, t1); err != nil {
+		t.Fatal(err)
+	}
+
+	bare := start(t2, domain.SandboxSmall)
+	if err := f.Store.FinishRun(f.ctx(t), bare, domain.RunResult{Status: domain.RunFailed, Error: "no"}, t2); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.Store.Run(f.ctx(t), counted)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.BoxSize != domain.SandboxLarge || got.Result.CPUSeconds == nil || *got.Result.CPUSeconds != cpu ||
+		got.Result.PeakMemoryBytes == nil || *got.Result.PeakMemoryBytes != peak {
+		t.Errorf("Run = box %q, cpu %v, peak %v; want large, %v, %d", got.BoxSize, got.Result.CPUSeconds, got.Result.PeakMemoryBytes, cpu, peak)
+	}
+
+	got, err = f.Store.Run(f.ctx(t), bare)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.BoxSize != domain.SandboxSmall || got.Result.CPUSeconds != nil || got.Result.PeakMemoryBytes != nil {
+		t.Errorf("Run without counters = box %q, cpu %v, peak %v; want small, nil, nil", got.BoxSize, got.Result.CPUSeconds, got.Result.PeakMemoryBytes)
+	}
+
+	runs, err := f.Store.Runs(f.ctx(t), it.ID, 10)
+	if err != nil || len(runs) != 2 {
+		t.Fatalf("Runs = %+v, %v; want two", runs, err)
+	}
+
+	if r := runs[0]; r.BoxSize != domain.SandboxLarge || r.Result.CPUSeconds == nil || r.Result.PeakMemoryBytes == nil {
+		t.Errorf("Runs' first = box %q, cpu %v, peak %v; want its size and usage", r.BoxSize, r.Result.CPUSeconds, r.Result.PeakMemoryBytes)
+	}
+
+	listed, _, err := f.Store.OrgRuns(f.ctx(t), ports.RunQuery{Factories: []domain.FactoryID{f.factory}, Since: t1, Until: t2.Add(time.Second), Limit: 10})
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("OrgRuns = %+v, %v; want two", listed, err)
+	}
+
+	if r := listed[1]; r.ID != counted || r.BoxSize != domain.SandboxLarge || r.Result.CPUSeconds == nil || r.Result.PeakMemoryBytes == nil {
+		t.Errorf("OrgRuns' oldest = %s, box %q, cpu %v, peak %v; want %s with its size and usage", r.ID, r.BoxSize, r.Result.CPUSeconds, r.Result.PeakMemoryBytes, counted)
+	}
+
+	// A caller that names no size records none.
+	got, err = f.Store.Run(f.ctx(t), f.startRun(t, it.ID, t2.Add(time.Second)))
+	if err != nil || got.BoxSize != "" {
+		t.Errorf("Run without a size = box %q, %v; want none", got.BoxSize, err)
+	}
+}
+
 // recordedRun starts a run of item at at, records in and finishes it with res.
 func (f *fixture) recordedRun(t *testing.T, item domain.ItemID, at time.Time, in domain.RunInput, res domain.RunResult) domain.RunID {
 	t.Helper()

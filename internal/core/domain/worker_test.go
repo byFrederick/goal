@@ -92,6 +92,31 @@ func TestDecodeWorkerLine_FinishedAndUnknownLines(t *testing.T) {
 	}
 }
 
+func TestDecodeWorkerLine_FinishedUsageOptional(t *testing.T) {
+	t.Parallel()
+
+	_, fin, err := DecodeWorkerLine([]byte(`{"type":"finished","at":"2026-11-06T10:00:00Z","status":"succeeded","output":{"a":1},"cpu_seconds":12.5,"peak_memory_bytes":536870912}`), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := fin.Result()
+	if res.CPUSeconds == nil || *res.CPUSeconds != 12.5 || res.PeakMemoryBytes == nil || *res.PeakMemoryBytes != 536870912 {
+		t.Errorf("Result's usage = %v, %v; want 12.5 and 536870912", res.CPUSeconds, res.PeakMemoryBytes)
+	}
+
+	// A worker that reports no counters: no value, not zero, and the run still succeeds.
+	_, fin, err = DecodeWorkerLine([]byte(`{"type":"finished","at":"2026-11-06T10:00:00Z","status":"succeeded","output":{"a":1}}`), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res = fin.Result()
+	if res.CPUSeconds != nil || res.PeakMemoryBytes != nil || res.Status != RunSucceeded {
+		t.Errorf("Result without usage = %v, %v, %s; want nil, nil, succeeded", res.CPUSeconds, res.PeakMemoryBytes, res.Status)
+	}
+}
+
 func TestWorkerFinished_DenialsAtTheLinesTime(t *testing.T) {
 	t.Parallel()
 
