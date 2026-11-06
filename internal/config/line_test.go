@@ -425,6 +425,9 @@ func TestLoad_RefusesUnknownStationMerges(t *testing.T) {
 	}
 }
 
+// stationWork is the agent station of baseFactory.
+const stationWork = "work"
+
 // A station's waitFor reaches the domain station in both forms, and a field left out takes its
 // default; a station without it does not wait for CI.
 func TestLine_CarriesStationWaitFor(t *testing.T) {
@@ -452,14 +455,12 @@ func TestLine_CarriesStationWaitFor(t *testing.T) {
 			t.Fatalf("%s: load: %v", tt.name, err)
 		}
 
-		stations := f.Line().Stations
-
-		work := stations[slices.IndexFunc(stations, func(s domain.Station) bool { return s.ID == "work" })]
+		work, _ := f.Line().Station(stationWork)
 		if work.WaitFor != tt.want || work.WaitsForCI() != (tt.waitFor != "") {
 			t.Errorf("%s: work waits for %+v (waits for CI %v), want %+v", tt.name, work.WaitFor, work.WaitsForCI(), tt.want)
 		}
 
-		if slices.ContainsFunc(stations, func(s domain.Station) bool { return s.ID != "work" && s.WaitsForCI() }) {
+		if stations := f.Line().Stations; slices.ContainsFunc(stations, func(s domain.Station) bool { return s.ID != stationWork && s.WaitsForCI() }) {
 			t.Errorf("%s: a station without waitFor waits for CI: %+v", tt.name, stations)
 		}
 	}
