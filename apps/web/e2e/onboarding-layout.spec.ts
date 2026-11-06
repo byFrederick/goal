@@ -87,7 +87,10 @@ test('gives the purpose buttons and the Budget sliders a 44 px target at 390 px'
   }
 
   await page.request.post('/__mock/reset');
-  await page.goto('/o/goal/get-started/budget');
+  await openCodeStep(page);
+  const factory = new URL(page.url()).searchParams.get('factory');
+  await page.goto(`/o/goal/get-started/budget?factory=${factory}`);
+  await expect(page.locator('#budget-day')).toBeVisible();
   for (const id of ['budget-day', 'budget-week', 'budget-item']) {
     const box = await page.locator(`#${id}`).boundingBox();
     expect(box?.height ?? 0, id).toBeGreaterThanOrEqual(44);

@@ -337,6 +337,7 @@ describe('Step 3, Connect your code: saving and testing', () => {
     fireEvent.click(next());
     expect(await screen.findByText('acme/app: Can read and push')).toBeTruthy();
     expect(document.activeElement).toBe(next());
+    expect(next()).not.toHaveAttribute('disabled');
     expect(screen.getByRole('status').textContent).toContain('Can read and push');
   });
 
@@ -350,6 +351,7 @@ describe('Step 3, Connect your code: saving and testing', () => {
     fireEvent.click(next());
     expect(await screen.findByText(/Can read but not push/)).toBeTruthy();
     expect(document.activeElement).toBe(next());
+    expect(next()).not.toHaveAttribute('disabled');
     fireEvent.click(next());
     expect(testFactoryRepository).toHaveBeenCalledTimes(1);
     expect(createSecret).toHaveBeenCalledTimes(1);
@@ -364,6 +366,7 @@ describe('Step 3, Connect your code: saving and testing', () => {
     fireEvent.click(next());
     expect(await screen.findByText('acme/app: Can read and push')).toBeTruthy();
     expect(document.activeElement).toBe(next());
+    expect(next()).not.toHaveAttribute('disabled');
   });
 
   it('starts on the access in the URL when the template allows it, and passes it on to the next step', async () => {
