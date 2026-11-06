@@ -77,7 +77,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await card.scrollIntoViewIfNeeded();
       const box = await boxOf(card);
       expect(box.height, `Board card is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
-      await page.mouse.click(box.x + box.width - 4, box.y + box.height - 4);
+      // The top-left corner: the Move button sits at the bottom right and is its own target.
+      await page.mouse.click(box.x + 6, box.y + 6);
       await expect(page).toHaveURL(/\/items\//);
     });
 
