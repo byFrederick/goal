@@ -31,8 +31,13 @@ test('a new organization starts empty, without code, and reaches the Floor with 
   await expect(page).toHaveURL(/\/o\/blank\/get-started\/line\?.*factory=/);
   await expectNoHorizontalScroll(page);
 
-  // Step 4: the blank line has one Work station and one agent, so Continue is open.
+  // Step 4: the blank line has one Work station and one agent; Continue opens once the model key is set.
   await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(page.getByText('Add the model key, then continue.')).toBeVisible();
+  await page.getByLabel('Model key', { exact: true }).fill('test-token');
+  await page.getByRole('button', { name: 'Save the key' }).click();
+  await expect(page.getByText('Saved as the secret model-key, open to this factory.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
   await page.getByRole('button', { name: 'Continue' }).click();
 
