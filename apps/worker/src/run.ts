@@ -1,5 +1,6 @@
 import type { SDKMessage, query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { agentQuery } from './agent.js';
+import { type MeterOptions, startMeter } from './cgroup.js';
 import { repositoryUrl } from './credential.js';
 import { applyEnvironment, type EnvironmentDeps } from './environment.js';
 import { EventMapper, type Finished, type FinishedRepository, type WorkerEvent } from './events.js';
@@ -26,6 +27,11 @@ export interface RunDeps {
   recorded?: () => Promise<string[]>;
   /** Where and how the spec's environment is applied before the agent starts; needed when the spec has one. */
   environment?: Omit<EnvironmentDeps, 'env'>;
+  /**
+   * The box's cgroup and prepare's starting CPU reading (src/cgroup.ts): every finished line then
+   * carries cpu_seconds and peak_memory_bytes where they can be read. Absent, neither field.
+   */
+  resources?: MeterOptions;
 }
 
 /**
@@ -39,14 +45,34 @@ export interface RunDeps {
  *
  * The agent's input is a stream: the task's prompt first, then each note left on the item while
  * it works. The stream ends at the result, so the query ends with it.
+ *
+ * With deps.resources, the box's cgroup is measured from the start (src/cgroup.ts), and the
+ * finished event carries cpu_seconds and peak_memory_bytes where they can be read; a counter that
+ * can't be read leaves its field out and changes nothing else.
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {
+  const meter = deps.resources ? startMeter(deps.resources) : undefined;
+  const finish = async (f: Finished) => deps.emit({ ...f, ...(await meter?.stop()) });
+  try {
+    return await runAgent(spec, files, deps, finish);
+  } finally {
+    await meter?.stop();
+  }
+}
+
+/** runTask's run, which ends with finish: the one finished event, given the box's usage. */
+async function runAgent(
+  spec: TaskSpec,
+  files: AgentFiles,
+  deps: RunDeps,
+  finish: (f: Finished) => Promise<void>,
+): Promise<number> {
   if (spec.environment) {
     try {
       if (!deps.environment) throw new Error('environment setup: the worker has no shell to apply it');
       await applyEnvironment(spec.environment, { ...deps.environment, env: deps.env });
     } catch (err) {
-      deps.emit(failed(deps.now, err instanceof Error ? err.message : String(err)));
+      await finish(failed(deps.now, err instanceof Error ? err.message : String(err)));
       return 1;
     }
     // A try's env is setup's alone (ADR 0039 decision 9): the agent starts without it.
@@ -84,13 +110,13 @@ export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps):
       }
     }
   } catch (err) {
-    deps.emit(await withPushes(spec, deps, failed(deps.now, err instanceof Error ? err.message : String(err))));
+    await finish(await withPushes(spec, deps, failed(deps.now, err instanceof Error ? err.message : String(err))));
     return 1;
   } finally {
     inbox.close();
   }
 
-  deps.emit(await withPushes(spec, deps, result ?? failed(deps.now, 'the agent ended without a result')));
+  await finish(await withPushes(spec, deps, result ?? failed(deps.now, 'the agent ended without a result')));
   return result ? 0 : 1;
 }
 
