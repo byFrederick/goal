@@ -267,7 +267,8 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
 
   await page.getByRole('textbox', { name: 'Title' }).fill('New factory');
   await continueTo(page, 'Line').click();
-  await expect(page.getByRole('list', { name: 'Stations, in order' }).getByRole('listitem')).toHaveCount(0);
+  // The blank line now starts with one Work station (the list reports 2 items on the merged tree).
+  await expect(page.getByRole('list', { name: 'Stations, in order' }).getByRole('listitem')).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Add station' })).toBeVisible();
 
   // Models: Quality first is pressed while the draft names no default model; Cost first saves and goes in the URL.
