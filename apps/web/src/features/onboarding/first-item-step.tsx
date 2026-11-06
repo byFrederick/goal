@@ -11,6 +11,8 @@ import { Check } from 'lucide-react';
 import { submitItem } from '../../api/client';
 import { eventsQuery, factoryQuery, intakeQuery, itemQuery, itemsQuery, versionModelQuery } from '../../api/queries';
 import type { Factory, FactoryModel, Intake, Item, ItemEvent, OrgSummary } from '../../api/types';
+import { BlockedSentence } from '../../shared/blocked-sentence';
+import { type BlockedWords, blockedWords } from '../../shared/blocked-words';
 import { modelOf } from '../../shared/definition/model';
 import { formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, pullRequestsOf } from '../../shared/item-state';
@@ -318,6 +320,11 @@ function clockOf(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** The plain words of a blocked event with a known code. */
+function blocked(e: ItemEvent): BlockedWords | undefined {
+  return e.kind === 'blocked' && typeof e.data.code === 'string' ? blockedWords(e.data.code) : undefined;
+}
+
 /** An event in words: "Created from the setup", "Spec accepted", "Moved it to Build". */
 function eventWords(e: ItemEvent, labelOf: (station: string) => string): string {
   if (e.kind === 'created' || e.kind === 'submitted') return 'Created from the setup';
@@ -427,7 +434,13 @@ function Ready({
               ) : (
                 <span aria-hidden="true" className="size-1.5 flex-none rounded-full bg-muted" />
               )}
-              <span className="min-w-0 break-words text-ink">{eventWords(e, labelOf)}</span>
+              <span className="min-w-0 break-words text-ink">
+                {blocked(e) ? (
+                  <BlockedSentence words={blocked(e) as BlockedWords} org={org.slug} factory={factory.name} />
+                ) : (
+                  eventWords(e, labelOf)
+                )}
+              </span>
             </li>
           ))}
         </ol>
