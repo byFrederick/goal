@@ -281,6 +281,50 @@ func testClaimSkipsOpenNeeds(f *fixture) {
 	}
 }
 
+// A turn edge by the engine is stored with its kind and gates a claim like any other: the item
+// waits while the holder of its turn is open and is claimed once the holder is done.
+func testEdgesTurnGatesAClaim(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	holder := f.create(t, domain.NewItem{Title: "holder"})
+	waits := f.create(t, domain.NewItem{Title: "waits", Priority: 5})
+
+	e, err := f.Store.AddEdge(ctx, domain.NewEdge{Item: waits.ID, Needs: holder.ID, Kind: domain.EdgeTurn, By: domain.EngineActor, At: t0})
+	if err != nil {
+		t.Fatalf("AddEdge of kind turn: %v", err)
+	}
+
+	if e.Kind != domain.EdgeTurn || e.By != domain.EngineActor.Ref() {
+		t.Errorf("AddEdge = %+v; want kind turn by %s", e, domain.EngineActor.Ref())
+	}
+
+	needs, err := f.Store.OpenNeeds(ctx, f.factory, []domain.ItemID{waits.ID})
+	if err != nil || len(needs[waits.ID]) != 1 || needs[waits.ID][0].Kind != domain.EdgeTurn || needs[waits.ID][0].Item != holder.ID {
+		t.Fatalf("OpenNeeds = %+v, %v; want the turn edge on holder", needs, err)
+	}
+
+	got, l := f.claim(t, work, 0, t1)
+	if got.ID != holder.ID {
+		t.Fatalf("claimed %q; want %q: %q waits for its turn", got.Title, holder.Title, waits.Title)
+	}
+
+	if _, _, err := f.Store.ClaimNext(ctx, ports.Claim{FactoryID: f.factory, Station: work, Slot: 1, Now: t1, ExpiresAt: t1.Add(ttl)}); !errors.Is(err, ports.ErrNoWork) {
+		t.Fatalf("ClaimNext while the holder is open = %v; want ErrNoWork", err)
+	}
+
+	if _, err := f.Store.Transition(ctx, ports.Transition{
+		ItemID: holder.ID, From: domain.Position{Station: stWork, State: domain.StateInProgress},
+		To: domain.Position{Station: stNext, State: domain.StateDone}, Lease: &l, Outcome: domain.LeaseAdvanced, At: t1, DoneAt: t1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, _ := f.claim(t, work, 1, t1); got.ID != waits.ID {
+		t.Fatalf("claimed %q after the holder is done; want %q", got.Title, waits.Title)
+	}
+}
+
 // webGlob is a glob both an overlapping item and an assembly's parts change.
 const webGlob = "web/**"
 

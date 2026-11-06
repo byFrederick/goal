@@ -148,6 +148,29 @@ func TestStation_LaneAgents(t *testing.T) {
 	}
 }
 
+// A merge station takes turns per merge target unless its merges is allow; a station that does
+// not merge never takes turns, whatever its merges says.
+func TestStation_TakesTurns(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		st   Station
+		want bool
+	}{
+		{"merge station by default", Station{Kind: KindAgent, Action: ActionMerge}, true},
+		{"merge station that serializes", Station{Kind: KindHuman, Action: ActionMerge, Merges: MergesSerialize}, true},
+		{"merge station that allows", Station{Kind: KindAgent, Action: ActionMerge, Merges: MergesAllow}, false},
+		{"agent station", Station{Kind: KindAgent}, false},
+		{"agent station with serialize", Station{Kind: KindAgent, Merges: MergesSerialize}, false},
+		{"human station", Station{Kind: KindHuman}, false},
+	} {
+		if got := tt.st.TakesTurns(); got != tt.want {
+			t.Errorf("%s: takes turns = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 // A name reads as words, the first capitalized: never the raw name of a definition.
 func TestStation_Humanize(t *testing.T) {
 	t.Parallel()
