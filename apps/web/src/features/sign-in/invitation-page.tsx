@@ -107,7 +107,6 @@ export function InvitationPage({ id }: { id: string }) {
 
   const inviter = i.inviterName || i.inviterEmail;
   const factories = (i.factories ?? []).map((f) => `${f.name}, ${f.role}`).join('; ');
-  const busy = join.isPending || join.isSuccess || decline.isPending;
 
   return (
     <AuthPage>
@@ -137,18 +136,20 @@ export function InvitationPage({ id }: { id: string }) {
         <Button
           variant="primary"
           size="lg"
-          aria-busy={join.isPending || join.isSuccess || undefined}
-          disabled={busy}
+          busy={join.isPending || join.isSuccess}
+          busyLabel={`Joining ${i.organizationName}…`}
+          disabled={decline.isPending}
           onClick={() => join.mutate(i)}
-          className="h-12 justify-center aria-busy:cursor-progress sm:flex-1"
+          className="h-12 justify-center sm:flex-1"
         >
-          {busy && !decline.isPending ? <Spinner /> : null}
-          {busy && !decline.isPending ? `Joining ${i.organizationName}…` : `Join ${i.organizationName}`}
+          Join {i.organizationName}
         </Button>
         <Button
           variant="white"
           size="lg"
-          disabled={busy}
+          busy={decline.isPending}
+          busyLabel="Declining…"
+          disabled={join.isPending || join.isSuccess}
           onClick={() => decline.mutate(i)}
           className="h-12 justify-center sm:px-6"
         >

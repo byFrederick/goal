@@ -159,8 +159,15 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
       <TopBarSlot
         actions={
           mayManage ? (
-            <Button type="submit" form={formId} variant="action" disabled={!dirty || save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save changes'}
+            <Button
+              type="submit"
+              form={formId}
+              variant="action"
+              busy={save.isPending}
+              busyLabel="Saving…"
+              disabled={!dirty}
+            >
+              Save changes
             </Button>
           ) : undefined
         }

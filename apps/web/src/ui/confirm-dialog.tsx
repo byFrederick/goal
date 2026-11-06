@@ -93,9 +93,11 @@ export function ConfirmDialog({
             <Button
               type="submit"
               variant={tone === 'danger' ? 'rework' : 'primary'}
-              disabled={!confirmed || pending || disabled}
+              busy={pending}
+              busyLabel={pendingLabel}
+              disabled={!confirmed || disabled}
             >
-              {pending ? (pendingLabel ?? confirmLabel) : confirmLabel}
+              {confirmLabel}
             </Button>
           </div>
         </form>

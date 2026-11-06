@@ -106,20 +106,35 @@ export function NotificationsSection() {
                   options={options}
                   onValueChange={setPicked}
                 />
-                <Button type="button" size="md" disabled={!value || test.isPending} onClick={() => test.mutate(value)}>
-                  {test.isPending ? 'Testing…' : 'Test'}
+                <Button
+                  type="button"
+                  size="md"
+                  busy={test.isPending}
+                  busyLabel="Testing…"
+                  disabled={!value}
+                  onClick={() => test.mutate(value)}
+                >
+                  Test
                 </Button>
                 <Button
                   type="button"
                   variant="action"
                   size="md"
-                  disabled={!value || value === saved || save.isPending}
+                  busy={save.isPending && save.variables !== null}
+                  busyLabel="Saving…"
+                  disabled={!value || value === saved}
                   onClick={() => save.mutate(value)}
                 >
                   Save
                 </Button>
                 {saved ? (
-                  <Button type="button" size="md" disabled={save.isPending} onClick={() => save.mutate(null)}>
+                  <Button
+                    type="button"
+                    size="md"
+                    busy={save.isPending && save.variables === null}
+                    busyLabel="Turning off…"
+                    onClick={() => save.mutate(null)}
+                  >
                     Turn off
                   </Button>
                 ) : null}

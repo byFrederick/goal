@@ -17,7 +17,6 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { Field, Input } from '../../ui/field';
-import { Spinner } from '../../ui/spinner';
 import { AuthHeading, AuthPage, LiveMessage } from './auth-page';
 import { formatUserCode, isWholeCode, requestTimes } from './device-code';
 
@@ -172,18 +171,11 @@ function CodeStep({ heading, invalid, onFound }: CodeStepProps) {
           type="submit"
           variant="primary"
           size="lg"
-          aria-busy={find.isPending || undefined}
-          className="w-full justify-center aria-busy:cursor-progress"
+          busy={find.isPending}
+          busyLabel="Checking…"
+          className="w-full justify-center"
         >
-          {find.isPending ? (
-            <>
-              <Spinner />
-              Checking…
-              <span className="sr-only">Loading</span>
-            </>
-          ) : (
-            'Continue'
-          )}
+          Continue
         </Button>
       </form>
     </AuthPage>
@@ -234,7 +226,6 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
   };
   const approve = useMutation({ ...authMutations.approveDevice, onSuccess: onApproved, onError });
   const deny = useMutation({ ...authMutations.denyDevice, onSuccess: onDenied, onError });
-  const busy = approve.isPending || deny.isPending;
   const failed = approve.error ?? deny.error;
   const who = me.user ? displayName(me.user) : 'you';
 
@@ -287,26 +278,25 @@ function ReviewStep({ heading, me, code, request, onApproved, onDenied, onInvali
         <Button
           variant="white"
           size="lg"
-          aria-busy={deny.isPending || undefined}
-          disabled={busy}
+          busy={deny.isPending}
+          busyLabel="Denying…"
+          disabled={approve.isPending}
           onClick={() => deny.mutate(code)}
-          className="flex-1 justify-center text-rework-ink aria-busy:cursor-progress"
+          className="flex-1 justify-center text-rework-ink"
         >
-          {deny.isPending ? <Spinner tone="dark" /> : null}
           Deny
         </Button>
         <Button
           variant="primary"
           size="lg"
-          aria-busy={approve.isPending || undefined}
-          disabled={busy}
+          busy={approve.isPending}
+          busyLabel="Approving…"
+          disabled={deny.isPending}
           onClick={() => approve.mutate(code)}
-          className="flex-1 justify-center aria-busy:cursor-progress"
+          className="flex-1 justify-center"
         >
-          {approve.isPending ? <Spinner /> : null}
           Approve
         </Button>
-        {busy ? <span className="sr-only">Loading</span> : null}
       </div>
       <p className="m-0 text-meta text-muted">
         Didn’t run <span className="font-mono">goal login</span> just now? Deny it. Nothing else happens.

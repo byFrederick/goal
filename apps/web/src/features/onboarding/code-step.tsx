@@ -15,7 +15,6 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
 import { Field, Input } from '../../ui/field';
-import { Spinner } from '../../ui/spinner';
 import { touchLink } from '../../ui/touch-target';
 import { type OnboardingSearch, repoOf, repositoryUrl } from './code-search';
 import { codeCard, organizationCard } from './factory-preview';
@@ -114,16 +113,11 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
           form="repository-form"
           size="lg"
           variant="primary"
-          disabled={failed || busy || (!passed && (url === undefined || !hasToken))}
+          busy={busy}
+          busyLabel="Testing the token…"
+          disabled={failed || (!passed && (url === undefined || !hasToken))}
         >
-          {busy ? (
-            <>
-              <Spinner />
-              Testing the token
-            </>
-          ) : (
-            'Continue'
-          )}
+          Continue
         </Button>
       }
       preview={{ organization: organizationCard(org, host), second: codeCard(repo, passed ? secret : undefined) }}
