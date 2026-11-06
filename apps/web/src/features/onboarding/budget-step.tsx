@@ -20,6 +20,8 @@ import { BudgetCard } from './budget-gauge';
 import { type OnboardingSearch, repoOf } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
+import { explainProblems, type PublishProblem, stepsToLink } from './publish-problems';
+import { stepLabel } from './steps';
 
 export function BudgetStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
   const factoryId = search.factory;
@@ -104,7 +106,7 @@ function DraftBudget({ org, search, factory }: { org: OrgSummary; search: Onboar
 /** A refused publish: its message, and the problems goald listed for it. */
 interface Refusal {
   message: string;
-  problems: string[];
+  problems: PublishProblem[];
 }
 
 function refusalOf(err: unknown): Refusal {
@@ -115,7 +117,7 @@ function refusalOf(err: unknown): Refusal {
     const listed = (err.problem as { problems?: DefinitionProblem[] }).problems ?? [];
     return {
       message: 'The factory has problems, so it is not published. Fix them, then continue.',
-      problems: listed.filter((p) => p.severity === 'error').map((p) => p.message),
+      problems: explainProblems(listed),
     };
   }
   if (err.code === 'draft-base-moved') {
@@ -125,6 +127,30 @@ function refusalOf(err: unknown): Refusal {
     return { message: 'The draft changed while you were here. Continue again.', problems: [] };
   }
   return { message: `Not published: ${(err.detail ?? err.title).replace(/\.$/, '')}.`, problems: [] };
+}
+
+/** A link to the step that fixes a refused publish; the factory and the code choice ride along, as on Back. */
+function FixLink({
+  org,
+  search,
+  factory,
+  step,
+}: {
+  org: OrgSummary;
+  search: OnboardingSearch;
+  factory: string;
+  step: 'factory' | 'code' | 'line';
+}) {
+  return (
+    <Link
+      to="/o/$org/get-started/$step"
+      params={{ org: org.slug, step }}
+      search={{ factory, url: search.url, secret: search.secret }}
+      className="font-medium underline underline-offset-2"
+    >
+      {`Go to the ${stepLabel(step)} step`}
+    </Link>
+  );
 }
 
 function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingSearch; factory: string }) {
@@ -243,16 +269,25 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       <BudgetFields />
 
       {refusal ? (
-        <Callout tone="rework">
-          <span>{refusal.message}</span>
-          {refusal.problems.length > 0 ? (
-            <ul className="m-0 mt-2 flex list-disc flex-col gap-1 pl-5">
-              {refusal.problems.map((problem) => (
-                <li key={problem}>{problem}</li>
-              ))}
-            </ul>
-          ) : null}
-        </Callout>
+        <div className="animate-fade-in motion-reduce:animate-none">
+          <Callout tone="rework">
+            <span>{refusal.message}</span>
+            {refusal.problems.length > 0 ? (
+              <ul className="m-0 mt-2 flex list-disc flex-col gap-1 pl-5">
+                {refusal.problems.map((problem) => (
+                  <li key={`${problem.step ?? ''}:${problem.sentence}`}>{problem.sentence}</li>
+                ))}
+              </ul>
+            ) : null}
+            {stepsToLink(refusal.problems).length > 0 ? (
+              <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                {stepsToLink(refusal.problems).map((step) => (
+                  <FixLink key={step} org={org} search={search} factory={factory} step={step} />
+                ))}
+              </span>
+            ) : null}
+          </Callout>
+        </div>
       ) : null}
     </OnboardingLayout>
   );
