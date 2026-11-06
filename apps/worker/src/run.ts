@@ -99,7 +99,7 @@ export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps):
  * agent pushes with its own git, so each head is the item branch's commit on the remote once it
  * ended. With spec.repositories, one entry per repository prepare cloned or the credential helper
  * answered for, by its URL, once; a repository the agent opened itself is looked up by URL and has
- * no starting head. Without them, the first repository's head alone, as before. A lookup that
+ * no starting head. Without them, no heads. A lookup that
  * finds nothing or fails leaves that head out.
  */
 async function withPushes(spec: TaskSpec, deps: RunDeps, f: Finished): Promise<Finished> {
@@ -110,21 +110,15 @@ async function withPushes(spec: TaskSpec, deps: RunDeps, f: Finished): Promise<F
       process.stderr.write(`goal-agent run: the pushed head: ${err instanceof Error ? err.message : String(err)}\n`);
       return undefined;
     });
-  if (!spec.repositories) {
-    if (!spec.branch) return f;
-    const head = await lookup(spec.branch);
-    return head ? { ...f, pushed_head: head } : f;
-  }
+  if (!spec.repositories) return f;
 
   const repositories: FinishedRepository[] = [];
   const seen = new Set<string>();
-  let first: string | undefined;
   for (const c of spec.repositories) {
     const key = repositoryUrl(c.url);
     if (seen.has(key)) continue;
     seen.add(key);
     const pushed = await lookup(c.branch, { cwd: c.path });
-    if (repositories.length === 0) first = pushed;
     repositories.push({
       repo: c.url,
       ...(c.base_commit ? { base_commit: c.base_commit } : {}),
@@ -142,7 +136,7 @@ async function withPushes(spec: TaskSpec, deps: RunDeps, f: Finished): Promise<F
     const pushed = branch ? await lookup(branch, { url }) : undefined;
     repositories.push({ repo: url, ...(pushed ? { pushed_head: pushed } : {}), wrote: pushed !== undefined });
   }
-  return { ...f, repositories, ...(first ? { pushed_head: first } : {}) };
+  return { ...f, repositories };
 }
 
 /** The commit `git ls-remote origin refs/heads/<branch>` printed for branch, if it printed one. */
