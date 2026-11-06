@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,12 +32,16 @@ const (
 	// CodeKnowledgeSecretNotInScope: a listed source reads with a secret whose factory scope
 	// leaves the factory out, so listing it would hand the factory that secret's reach.
 	CodeKnowledgeSecretNotInScope = "knowledge-secret-not-in-scope"
-	// CodeKnowledgeCopiesCheckout: a warning; a listed Repository source reads the factory's own
-	// repository, whose files its runs already have on the item's branch.
+	// CodeKnowledgeCopiesCheckout: a warning; a listed Repository source reads the only repository
+	// of a factory with exactly one, whose files its runs already have on the item's branch.
 	CodeKnowledgeCopiesCheckout = "knowledge-copies-checkout"
 	// CodeMergeNeedsCodeHost: a station merges, but runtime.repository has no token, so nothing
 	// could merge the item's pull requests.
 	CodeMergeNeedsCodeHost = "merge-needs-code-host"
+	// CodeRepositoryHostUnlisted: a repository's URL is on a host the organization doesn't list,
+	// neither built in nor added, so its token would go to a host of the author's choosing (ADR
+	// 0041 decision 1).
+	CodeRepositoryHostUnlisted = "repository-host-unlisted"
 	// CodeSecretSignsWebhook: a {{secret}} reference names a secret an organization webhook is
 	// signed by, which no run may hold, or it could forge deliveries (ADR 0040 decision 15).
 	CodeSecretSignsWebhook = "secret-signs-webhook"
@@ -65,8 +70,11 @@ type KnowledgeSources interface {
 // sets a variable the platform keeps (reserved-env) or holds a key as plain text (plain-key);
 // every knowledge source it lists exists (knowledge-source-unknown), reads with no secret closed
 // to the factory (knowledge-secret-not-in-scope) and, a warning, does not copy the factory's own
-// repository (knowledge-copies-checkout); and a merge station has a repository token to merge
-// with (merge-needs-code-host). It reads secrets' names and scopes, never a value.
+// repository (knowledge-copies-checkout); a merge station has a repository token to merge
+// with (merge-needs-code-host); and every repository is on a code host the organization lists
+// (repository-host-unlisted). It warns when an agent that only reads code, or a check, may call
+// GitHub MCP tools that write (github-tools-not-read-only) or whose access is untested
+// (github-tools-unknown). It reads secrets' names and scopes, never a value.
 type SecretsCheck struct {
 	Secrets ports.OrgSecrets
 	// Knowledge lists the organization's knowledge sources (goald wires the knowledge store); nil
@@ -75,6 +83,17 @@ type SecretsCheck struct {
 	// Webhooks lists the secrets the organization's webhooks are signed by (goald wires the
 	// intake store); nil is an organization without webhooks.
 	Webhooks WebhookSecrets
+	// Hosts lists the code hosts the organization added (goald wires the store's ports.CodeHosts);
+	// nil is an organization with the built-in hosts only.
+	Hosts OrgCodeHosts
+	// Tests lists the factory's kept environment tests (goald wires the store's
+	// ports.EnvironmentTests), which the GitHub tools warnings read; nil skips those warnings.
+	Tests EnvironmentTestList
+}
+
+// OrgCodeHosts lists the code hosts the organization of ctx added (ports.CodeHosts' CodeHosts).
+type OrgCodeHosts interface {
+	CodeHosts(ctx context.Context) ([]domain.CodeHost, error)
 }
 
 var _ Credentials = SecretsCheck{}
@@ -109,10 +128,31 @@ func (c SecretsCheck) Check(ctx context.Context, f *config.Factory) ([]domain.De
 		}
 	}
 
+	hosts := domain.BuiltInCodeHosts()
+
+	if c.Hosts != nil {
+		added, err := c.Hosts.CodeHosts(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list code hosts: %w", err)
+		}
+
+		hosts = append(hosts, added...)
+	}
+
 	r.references()
 	r.env()
 	r.knowledge(sources)
 	r.merge()
+	r.repositoryHosts(hosts)
+
+	if c.Tests != nil {
+		tests, err := c.Tests.List(ctx, domain.FactoryID(f.Metadata.ID))
+		if err != nil {
+			return nil, fmt.Errorf("list environment tests: %w", err)
+		}
+
+		r.gitHubTools(tests)
+	}
 
 	return r.out, nil
 }
@@ -242,18 +282,20 @@ func (r *secretsRun) knowledge(sources []domain.KnowledgeSource) {
 					"add the factory to the secret's scope on the Secrets page, or remove the source", name, src.Secret))
 		}
 
-		if repo := r.f.Spec.Runtime.Repository; repo != nil && src.CopiesCheckout(repo.URL) {
+		if repo, ok := r.f.Spec.Runtime.OnlyRepository(); ok && src.CopiesCheckout(repo.URL) {
 			r.add(at, domain.SeverityWarning, CodeKnowledgeCopiesCheckout, fmt.Sprintf(
-				"knowledge.sources: the source %s reads runtime.repository, %s, whose files every run already has on the item's branch",
+				"knowledge.sources: the source %s reads the factory's repository, %s, whose files every run already has on the item's branch",
 				name, repo.URL))
 		}
 	}
 }
 
-// merge reports each merge station of a factory whose repository has no token: nothing could
-// merge the item's pull requests. The fix takes the merge off the station.
+// merge reports each merge station of a factory with no repository that writes with a token:
+// nothing could merge the item's pull requests. The fix takes the merge off the station.
 func (r *secretsRun) merge() {
-	if repo := r.f.Spec.Runtime.Repository; repo != nil && repo.Token != "" {
+	if slices.ContainsFunc(r.f.Spec.Runtime.RepositoryEntries(), func(e config.RepositoryEntry) bool {
+		return e.Access == config.AccessWrite && e.Token != ""
+	}) {
 		return
 	}
 
@@ -266,5 +308,40 @@ func (r *secretsRun) merge() {
 		r.add(r.f.Locate("/"+strings.Join(p, "/")), domain.SeverityError, CodeMergeNeedsCodeHost, fmt.Sprintf(
 			"station %s: action merge needs runtime.repository.token, the {{secret}} that merges the item's pull requests", s.ID),
 			config.RemoveFix("Remove the merge step", p))
+	}
+}
+
+// repositoryHosts reports each repository, the shorthand or an entry, whose URL's host (with its
+// port, if it has one) is none of hosts: goald sends repository tokens only to listed hosts.
+func (r *secretsRun) repositoryHosts(hosts []domain.CodeHost) {
+	listed := func(raw string) (string, bool) {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			return "", true // the schema and the repositories check refuse it
+		}
+
+		h := strings.ToLower(u.Host)
+		_, ok := domain.ListedCodeHost(hosts, h)
+
+		return h, ok
+	}
+
+	unlisted := func(p, what, host string) {
+		r.add(r.f.Locate(p), domain.SeverityError, CodeRepositoryHostUnlisted, fmt.Sprintf(
+			"%s: %s is not one of the organization's code hosts, so its token would go to a host nobody listed; "+
+				"an owner adds it under Code hosts in the organization's settings", what, host))
+	}
+
+	rt := r.f.Spec.Runtime
+	if s := rt.Repository; s != nil {
+		if h, ok := listed(s.URL); !ok {
+			unlisted("/spec/runtime/repository/url", "runtime.repository", h)
+		}
+	}
+
+	for i, e := range rt.Repositories {
+		if h, ok := listed(e.URL); !ok {
+			unlisted("/spec/runtime/repositories/"+strconv.Itoa(i)+"/url", "repository "+e.Name, h)
+		}
 	}
 }

@@ -77,6 +77,8 @@ Publishing runs the validation again, and the new version runs from then on. If 
 goal factory push ./acme-line --publish --move build-old=build
 ```
 
+Publish also refuses a version that drops the `runtime.repositories` entry for a repository open items still use, and the error names those items by number, such as `#12`. Keep an entry that covers the repository, or finish or cancel the items first. Items that are done or cancelled don't count. Entries are matched by URL, so renaming an entry that keeps its URL removes nothing, and neither does replacing it with an owner pattern that covers the repository, such as `https://github.com/acme/*`.
+
 ## Review in the editor
 
 In the Definition editor, Review and publish shows, beside the changes of the open draft, the checks of the draft, or of the version that runs when no draft is open, and the four newest versions with a link to all of them. Before you publish, the Publish card lists the kept tests of the stations the draft reaches and shows each result as it arrives. A failing test, or one that could not run, warns with its reason and never blocks Publish. Each version in the list shows the watch on its change: the metric, its number before and after, and the verdict, or Watching while the watch is open. The top bar's Publish button is on every other section; on Review and publish the card's Publish button is the only one. After a publish the card says which version is published and running, and the next change opens a draft of the next version. Budgets are not part of this page; set them in Factory settings under Budgets and targets.
@@ -89,6 +91,19 @@ You can also change the line in the draft's form: open the factory's Definition 
 - Move a station with its up and down buttons, or focus its row and press Alt with the up or down arrow, or drag its number. The More menu inserts a station above or below, duplicates it or deletes it.
 - Open Rules under a row to set its checks, rework rule, merge step and note. A row that has a problem opens its rules for you.
 - Checks on this line, under the table, lists what passed, what to know and what must be fixed before you can publish.
+
+## Edit repositories and an agent's code in the app
+
+Open the factory's Definition and choose Basics. Under Runtime, Repositories lists the repositories runs may open (`runtime.repositories`). Each row has its name, its URL, its access, its token and whether it is the default.
+
+- **Access** is Read only or Read and write. Only a repository with write access lets agents push, open pull requests and merge, and it needs a token.
+- **Token** is one of the organization's secrets, written as `{{secret}}`. Leave it empty for a public repository you only read. **New secret…** in the list creates one.
+- **Default** marks the repository an item uses when it names none. The only repository is the default, and a URL that ends in `/*` (every repository of an owner) cannot be.
+- **Add a repository** adds a row, and **Remove** takes one out of the draft. A factory with none shows "No code. Agents work through their tools."
+
+A definition that still has the `runtime.repository` shorthand keeps its single URL and token field; the app does not convert it. Choose one form: publish refuses a definition that has both.
+
+An agent's **Code** is on its page in Agents, as Write or Read. Write lets the agent push, open pull requests and merge in repositories whose access is write. When you choose nothing, an agent writes if the factory has a repository that writes, and reads otherwise.
 
 ## Edit knowledge and factory memory in the app
 

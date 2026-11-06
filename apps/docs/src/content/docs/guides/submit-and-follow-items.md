@@ -17,8 +17,31 @@ goal run acme-line "Add a health check endpoint to the API" --type feature
 - `--body` adds a longer text to the brief.
 - `--priority N` sets the item's priority.
 - `--detach` submits the item and returns at once, without following it.
+- `--repo` names a repository the item works on. Repeat it for more: [Name an item's repositories](#name-an-items-repositories).
 
 `goal run` prints the new item's reference, such as `acme-line#3`. Use that reference in the other commands.
+
+## Name an item's repositories
+
+An item works on the repositories you name when you file it, in the order you name them; the first is its first repository. Each one must be covered by an entry of the factory's `runtime.repositories`.
+
+```sh
+goal run acme-line "Show the API version in the web app" --repo acme/web --repo api
+```
+
+Name a repository in any of these forms:
+
+- An entry's name, such as `api`, for an entry of one repository. An entry for an owner's every repository (`https://github.com/acme/*`) has no single repository, so name `owner/name` under it instead.
+- `owner/name`, such as `acme/web`, or `group/sub/name` on a host with nested groups. Goal looks it up under the hosts of the factory's entries. When it is on more than one of them, name the host too.
+- `host/owner/name`, such as `github.com/acme/web`, or an https URL, such as `https://github.com/acme/web.git`.
+
+Case and a trailing `.git` do not matter, and names that point at the same repository count once. An item has at most 10 repositories. An item that names none works on the factory's default entry's repository, or on none when the factory has no default entry. It keeps that repository from its first run, so changing the default entry later does not move it.
+
+An item's list grows as its agents work. When a run pushes a change to a repository the item does not have, that repository joins the item, joined `push`, until the item has 10. A repository a run only read, or one past the 10, does not join the item; the run still records it. When the factory maps `board.flow.outputs.repositories`, an agent's accepted output can also add the repositories it names there, joined `output`. An output whose names would give the item more than 10 repositories fails its check with the count, and the agent tries again.
+
+A value that matches none of the factory's entries is refused with a 400 problem that quotes the value as you gave it, and nothing is filed. So is an owner entry's name, an `owner/name` on more than one host, and an 11th repository.
+
+The API takes the same values as `repositories` when you submit an item. The item it answers with, and `GET /v1/orgs/{org}/items/{item}`, list its `repositories`: each one's `host/owner/name`, how it joined (`filing`, `default`, `push` or `output`) and when. Every item also answers with its `branch`, the git branch its changes live on.
 
 ## Start an item later
 
@@ -68,7 +91,7 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. The new item opens on the Board in the station where it entered the line. An item can also wait to start; the CLI and the API set a start, as [Start an item later](#start-an-item-later) shows.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. When the factory's running version has `runtime.repositories` entries, New item also has a Repositories field. It starts with the default entry's repository; choose Add to pick another, or to type `owner/name` under an entry that covers all of an owner's repositories, and Remove to drop one. An item takes up to 10. A repository no entry covers is refused on the field. The new item opens on the Board in the station where it entered the line. An item can also wait to start; the CLI and the API set a start, as [Start an item later](#start-an-item-later) shows.
 
 Agents can leave work for later too; see [Let agents leave follow-ups](../follow-ups/).
 

@@ -93,7 +93,9 @@ func tryOfToken(c domain.TaskClaims, try domain.PastTry, orig domain.Run) error 
 		return fmt.Errorf("%w: try %s is not of factory %s", errForbidden, try.ID, c.FactoryID)
 	case try.Station != c.Station || orig.Station != c.Station || orig.Agent != c.Agent:
 		return fmt.Errorf("%w: try %s is not of agent %s at %s", errForbidden, try.ID, c.Agent, c.Station)
-	case orig.Input.BranchHead == "":
+	}
+
+	if _, ok := orig.Input.TryRepository(); !ok {
 		return fmt.Errorf("%w: run %s recorded no commit", errForbidden, orig.ID)
 	}
 
@@ -120,15 +122,22 @@ func (g *Gateway) tryOf(ctx context.Context, c domain.TaskClaims, in domain.Past
 		}
 	}
 
-	if err := g.addRepository(ctx, line.Runtime.Repository, it.Branch(), "", line.Flow.Assemblies.FreshBase, &b); err != nil {
+	// The run's first recorded repository, at its recorded commits, read only (ADR 0041 decision 17).
+	row, ok := in.Run.Input.TryRepository()
+	if !ok {
+		return runBundle{}, fmt.Errorf("%w: run %s recorded no commit", errForbidden, in.Run.ID)
+	}
+
+	repo, ok := line.TryRepository(row)
+	if !ok {
+		return runBundle{}, fmt.Errorf("%w: version %s has no repository %s to try in", errForbidden, c.VersionID, row.Repo)
+	}
+
+	if err := g.addRepository(ctx, repo, it.Branch(), "", line.Flow.Assemblies.FreshBase, &b); err != nil {
 		return runBundle{}, err
 	}
 
-	if b.Repository == nil {
-		return runBundle{}, fmt.Errorf("%w: version %s has no repository to try in", errForbidden, c.VersionID)
-	}
-
-	b.Repository.Commit, b.Repository.BaseCommit = in.Run.Input.BranchHead, in.Run.Input.BaseHead
+	b.Repository.Commit, b.Repository.BaseCommit = row.BranchHead, row.BaseCommit
 
 	if err := g.addRules(ctx, c, it, &b); err != nil {
 		return runBundle{}, err

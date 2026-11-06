@@ -267,7 +267,11 @@ func TestServeRun_ServesTheRunsBundle(t *testing.T) {
 		Files:      map[string][]byte{"agent/prompt.md": []byte("# engineer\n"), "agent/output.schema.json": []byte(`{"type":"object"}`)},
 		Repository: &bundleRepository{URL: "https://github.com/acme/api.git", Branch: it.Branch(), FreshBase: domain.FreshBaseMerge},
 		Git:        []gitCredential{{Host: "github.com", Username: "x-access-token", PasswordEnv: "CODE_TOKEN"}},
-		Tools:      []string{"task@3.46.1", "npm:@acme/issues-cli@2.0.0"},
+		// The item has no rows, so it gets the default entry; on connections no entry has a token.
+		Repositories:     []bundleClone{{URL: "https://github.com/acme/api", Path: "/workspace", Branch: it.Branch(), Write: true}},
+		RepositoryLogins: []bundleLogin{},
+		ReadOnly:         []string{},
+		Tools:            []string{"task@3.46.1", "npm:@acme/issues-cli@2.0.0"},
 	}
 
 	if g, w := mustJSON(t, got), mustJSON(t, want); g != w {
@@ -1604,7 +1608,7 @@ spec:
 }
 
 // secretsBundleFiles are the files secretsBundleYAML needs besides factory.yaml.
-var secretsBundleFiles = map[string]string{"environments/default.yaml": "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
+var secretsBundleFiles = map[string]string{defaultEnvFile: "apiVersion: goal/v1\nkind: Environment\nspec:\n  size: medium\n"}
 
 // serveRunBundle serves the bundle of a run of a new item of the factory yaml describes.
 func serveRunBundle(t *testing.T, yaml string, files map[string]string) (runBundle, []byte) {
@@ -1958,5 +1962,130 @@ func TestServeRun_JonahBundleHoldsPublishedWatch(t *testing.T) {
 		if strings.Contains(string(b.Files[path]), "## Watch") {
 			t.Errorf("%s has a watch, want one only on a published proposal", path)
 		}
+	}
+}
+
+// entriesBundleYAML is a factory on secrets with two runtime.repositories entries: api, the
+// default, writes with {{github-token}}, and the owner's every repository reads with {{acme-read}};
+// its engineer's code is code.
+func entriesBundleYAML(code string) string {
+	return `apiVersion: goal/v1
+kind: Factory
+metadata: { id: ` + string(factoryID) + `, name: acme-bundle, purpose: Ship small changes to acme's API. }
+spec:
+  runtime:
+    model: claude-sonnet-5-5
+    modelKey: "{{claude-key}}"
+    repositories:
+      - { name: api, url: "https://github.com/acme/api", token: "{{github-token}}", access: write, default: true }
+      - { name: acme, url: "https://github.com/acme/*", token: "{{acme-read}}", access: read }
+  agents:
+    - { name: engineer, prompt: ./agents/engineer.md, code: ` + code + ` }
+  board:
+    stations:
+      - { id: spec, kind: human }
+      - { id: build, kind: agent, agent: engineer }
+      - { id: done, kind: done }
+`
+}
+
+// A station run's bundle carries the item's repositories in the order they joined, each with
+// where prepare clones it, the item's branch and whether the agent may push to it; a login per
+// entry with the variable of the token the agent's code picks; and the prefixes the run may not
+// write. The repository and its stored login stay as before, for today's prepare.
+func TestBundle_RepositoriesAndAccessOfTheItem(t *testing.T) {
+	t.Parallel()
+
+	const (
+		api = "https://github.com/acme/api"
+		lib = "https://github.com/acme/lib"
+		all = "https://github.com/acme/"
+	)
+
+	tests := []struct {
+		name     string
+		code     string
+		repos    []bundleClone
+		logins   []bundleLogin
+		readOnly []string
+	}{
+		{
+			name: "an agent that writes", code: "write",
+			repos: []bundleClone{{URL: api, Path: "/workspace", Write: true}, {URL: lib, Path: "/repos/acme/lib"}},
+			logins: []bundleLogin{
+				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: envAPIToken, Write: true},
+				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: envAcmeToken},
+			},
+			readOnly: []string{all},
+		},
+		{
+			name: "an agent that only reads", code: "read",
+			repos: []bundleClone{{URL: api, Path: "/workspace"}, {URL: lib, Path: "/repos/acme/lib"}},
+			logins: []bundleLogin{
+				{Prefix: api, Username: forgeUsers["github"], PasswordEnv: envAcmeToken},
+				{Prefix: all, Username: forgeUsers["github"], PasswordEnv: envAcmeToken},
+			},
+			readOnly: []string{api, all},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarnessWith(t, Config{}, harnessDeps{yaml: entriesBundleYAML(tt.code), files: secretsBundleFiles})
+			ctx := domain.WithOrg(t.Context(), h.claims().OrgID)
+
+			it, err := h.store.CreateItem(ctx, domain.NewItem{
+				FactoryID: factoryID, Title: "Add a health endpoint", Station: h.claims().Station, State: domain.StateQueued, CreatedAt: h.clock.Now(),
+				Repositories: []domain.ItemRepository{
+					{Repo: strings.TrimPrefix(api, "https://"), Joined: domain.JoinedFiling, Ordinal: 0},
+					{Repo: strings.TrimPrefix(lib, "https://"), Joined: domain.JoinedFiling, Ordinal: 1},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			c := h.claims()
+			c.ItemID = it.ID
+
+			status, _, body := request(t, http.MethodGet, h.runServer(t), h.token(t, c))
+			if status != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (%s)", status, body)
+			}
+
+			var got runBundle
+			if err := json.Unmarshal(body, &got); err != nil {
+				t.Fatal(err)
+			}
+
+			for i := range tt.repos {
+				tt.repos[i].Branch = it.Branch()
+			}
+
+			if g, w := mustJSON(t, got.Repositories), mustJSON(t, tt.repos); g != w {
+				t.Errorf("repositories\n got %s\nwant %s", g, w)
+			}
+
+			if g, w := mustJSON(t, got.RepositoryLogins), mustJSON(t, tt.logins); g != w {
+				t.Errorf("repository logins\n got %s\nwant %s", g, w)
+			}
+
+			if g, w := mustJSON(t, got.ReadOnly), mustJSON(t, tt.readOnly); g != w {
+				t.Errorf("read only\n got %s\nwant %s", g, w)
+			}
+
+			wantRepo := &bundleRepository{URL: api, Branch: it.Branch(), FreshBase: domain.FreshBaseRebase}
+			wantGit := []gitCredential{{Host: strings.Split(strings.TrimPrefix(api, "https://"), "/")[0], Username: forgeUsers["github"], PasswordEnv: domain.RepositoryTokenEnv, Store: true}}
+
+			if g, w := mustJSON(t, got.Repository), mustJSON(t, wantRepo); g != w {
+				t.Errorf("repository %s, want %s as before", g, w)
+			}
+
+			if g, w := mustJSON(t, got.Git), mustJSON(t, wantGit); g != w {
+				t.Errorf("git credentials %s, want %s as before", g, w)
+			}
+		})
 	}
 }

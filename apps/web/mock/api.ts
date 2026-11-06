@@ -62,6 +62,7 @@ import { parse } from 'yaml';
 import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.ts';
 import { createAccess } from './access.ts';
 import { authSettings, createMockAuth } from './auth.ts';
+import { createCodeHosts } from './code-hosts.ts';
 import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
 import { createEnvironments, serveCatalog } from './environments.ts';
@@ -330,6 +331,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     acme: acmeOrg,
   });
 
+  const codeHosts = createCodeHosts({ acme: acmeOrg });
+
   const orgNotifications = createOrgNotifications({
     secrets: (org) => secrets.outlines(org),
     acme: acmeOrg,
@@ -485,6 +488,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       agent: it.agent,
       pr_url: it.pr_url,
       pull_requests: stationsOf(it).find((s) => s.id === it.station)?.action === 'merge' ? pullRequestsOf(it) : [],
+      repositories: it.repositories ?? [],
       slot: run && copies > 1 ? run.slot + 1 : null,
       turn: run ? run.turn : null,
       summary: summaryOf(it),
@@ -1723,6 +1727,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       connections.reset(clock());
       secrets.reset(clock());
       orgNotifications.reset();
+      codeHosts.reset();
       standingRules.reset();
       knowledge.reset(clock());
       jonah.reset();
@@ -1854,6 +1859,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (access.handle(org, rest, method, url, res)) return;
     if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
+    if (await codeHosts.handle(org, rest, method, res, () => readBody(req))) return;
     if (await orgNotifications.handle(org, rest, method, res, () => readBody(req))) return;
     if (standingRules.handle(org, rest, method, url, req, res)) return;
     if (await knowledge.handle(org, rest, method, req, res, () => readBody(req))) return;

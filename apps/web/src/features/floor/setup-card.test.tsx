@@ -3,7 +3,6 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listMembers } from '../../api/client';
 import {
-  connectionsQuery,
   intakeQuery,
   invitationsQuery,
   itemsQuery,
@@ -12,16 +11,7 @@ import {
   orgNotificationsQuery,
   versionModelQuery,
 } from '../../api/queries';
-import type {
-  Connection,
-  Factory,
-  Intake,
-  IntakeTrigger,
-  ItemCard,
-  Member,
-  OrgSummary,
-  VersionModel,
-} from '../../api/types';
+import type { Factory, Intake, IntakeTrigger, ItemCard, Member, OrgSummary, VersionModel } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
 import { SetupCard, setupHiddenKey } from './setup-card';
 
@@ -57,7 +47,6 @@ const factory: Factory = {
 } as unknown as Factory;
 
 const member = { member_id: 'm-1' } as Member;
-const github = { id: 'c-gh', name: 'github', kind: 'github' } as Connection;
 const trigger = (name: string, on: string, enabled = true) => ({ name, on, enabled }) as IntakeTrigger;
 
 /** The published model at the picture's state: the repository, the line and a budget are set. */
@@ -92,7 +81,6 @@ const doneItem = { id: 'item-1', ref: 'software#1', number: 1, state: 'done' } a
 function seeds({
   members = [member],
   invitations = [],
-  connections = [github],
   slackSecret = null,
   knowledge = [],
   model = published,
@@ -101,7 +89,6 @@ function seeds({
 }: {
   members?: Member[];
   invitations?: unknown[];
-  connections?: Connection[];
   slackSecret?: string | null;
   knowledge?: unknown[];
   model?: VersionModel;
@@ -111,7 +98,6 @@ function seeds({
   return [
     [membersQuery(org.id).queryKey, members],
     [invitationsQuery(org.id).queryKey, invitations],
-    [connectionsQuery(org.id).queryKey, connections],
     [orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret }],
     [knowledgeSourcesQuery(org.id).queryKey, knowledge],
     [versionModelQuery(org.id, factory.id, 'current').queryKey, model],
@@ -153,9 +139,17 @@ describe('SetupCard', () => {
     expect(screen.getAllByText('Done')).toHaveLength(5);
     expect(screen.getAllByText('To do')).toHaveLength(4);
     expect(screen.getAllByRole('link')).toHaveLength(3);
-    expect(screen.getByText('GitHub, 1 repository')).toBeTruthy();
+    expect(screen.getByText('Code, read and write, 1 repository')).toBeTruthy();
     expect(screen.getByText('The line, 4 stations')).toBeTruthy();
     expect(screen.getByText('3 triggers')).toBeTruthy();
+  });
+
+  it('shows No code as a done row without an action', async () => {
+    renderCard(seeds({ model: { ...published, model: { ...published.model, basics: {} } } as VersionModel }));
+
+    await screen.findByRole('heading', { name: 'Finish setting up' });
+    expect(screen.getByText('No code')).toBeTruthy();
+    expect(screen.getByText('5 of 9 done')).toBeTruthy();
   });
 
   it('hides itself when all nine rows are done', async () => {

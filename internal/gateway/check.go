@@ -35,8 +35,10 @@ var editTools = []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "
 // the check's agent's prompt and skills, the fixed answer contract as its output schema, the
 // trigger's check brief as the brief and its input as spec.check. Its tools are the agent's but
 // the built-ins that edit or run, which are denied; its environment or connections are the
-// agent's, with every ask tool off, as no person can answer one; check.maxUsd is its max_usd. It
-// has no item, station, repository, rule, knowledge or granted call. A trigger the version does
+// agent's, with every ask tool off, as no person can answer one; check.maxUsd is its max_usd. Its
+// code is a reader's whatever its agent's (domain.Line.CheckCode, ADR 0041 decision 3): a login
+// per entry with a token, every entry's prefix read only and nothing to clone. It has no item,
+// station, repository, rule, knowledge or granted call. A trigger the version does
 // not have, one without a check or a check of another agent wraps errForbidden.
 func (g *Gateway) checkBundle(ctx context.Context, c domain.TaskClaims) (runBundle, error) {
 	if g.checks == nil {
@@ -98,6 +100,7 @@ func (g *Gateway) checkBundle(ctx context.Context, c domain.TaskClaims) (runBund
 	}
 
 	b.Files[path.Join("agent", "output.schema.json")] = []byte(domain.CheckAnswerSchema)
+	putCode(line, line.CheckCode(), "", &b)
 
 	if err := g.checkReach(ctx, c, line, agent, &b); err != nil {
 		return runBundle{}, err

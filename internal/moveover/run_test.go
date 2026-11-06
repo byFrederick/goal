@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -160,7 +161,7 @@ func newWorld(t *testing.T) *world {
 
 	w.mover = moveover.New(moveover.Deps{
 		Orgs: w.tenancy, Connections: w.conns, Secrets: w.secrets, Settings: w.settings, Knowledge: w.kb, Webhooks: w.intake, Definitions: w.defs, Publisher: authors,
-		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Tools: w.tools,
+		Conversions: w.conversions, CodeHosts: map[string]ports.CodeHost{connGitHub: w.hosts}, Hosts: w.tenancy, Tools: w.tools,
 		Clock: w.clock, Logger: slog.New(slog.NewJSONHandler(w.logs, nil)),
 	})
 
@@ -1482,6 +1483,175 @@ func (w *world) checkWebhookLogs(t *testing.T, values map[string]string) {
 	for _, v := range values {
 		if strings.Contains(logs, v) {
 			t.Error("a webhook's value reached the logs")
+		}
+	}
+}
+
+// The code hosts the tests' versions and sources use.
+const (
+	gheHost    = "ghe.example.com"
+	gitlabHost = "gitlab.example.net"
+	docsHost   = "git.example.org"
+)
+
+// repoOn is the production factory with its repository at url and forge.
+func repoOn(url, forge string) string {
+	return strings.Replace(productionFactory, `repository: { url: "https://github.com/acme/app.git", connection: github }`,
+		`repository: { url: "`+url+`", connection: github, forge: `+forge+` }`, 1)
+}
+
+// addRepoSource creates repository source name reading url with a secret, its code_host config
+// set when kind is not empty.
+func (w *world) addRepoSource(t *testing.T, name, url, kind string) {
+	t.Helper()
+
+	cfg := map[string]string{domain.SourceRepositoryKey: url}
+	if kind != "" {
+		cfg["code_host"] = kind
+	}
+
+	n := domain.NewKnowledgeSource{Name: name, Title: name, Kind: domain.SourceRepository, Secret: name + "-token", Config: cfg}
+	if _, err := w.kb.CreateSource(w.ctx(t), n, person); err != nil {
+		t.Fatalf("source %s: %v", name, err)
+	}
+}
+
+func (w *world) codeHosts(t *testing.T) []domain.CodeHost {
+	t.Helper()
+
+	got, err := w.tenancy.CodeHosts(w.ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return got
+}
+
+// The move-over seeds the hosts the organization's published versions and knowledge repository
+// sources use, each with its kind: a version's forge, a source's code_host. github.com and
+// gitlab.com are left out, and a host found twice with two kinds keeps the first, versions first.
+func TestOrg_SeedsCodeHostsFromVersionsAndKnowledge(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.publishOld(t, factoryUUID, "acme-software", files(repoOn("https://GHE.example.com/acme/app.git", "github")))
+	w.publishOld(t, refusedUUID, "acme-cloud", files(strings.NewReplacer(factoryUUID, refusedUUID, "acme-software", "acme-cloud").
+		Replace(repoOn("https://"+gitlabHost+"/acme/ops.git", "gitlab"))))
+
+	for _, name := range []string{"docs-token", "app-docs-token", "public-token"} {
+		w.addSecret(t, name, "source-token-for-tests")
+	}
+
+	w.addRepoSource(t, "docs", "https://"+docsHost+"/acme/docs", "gitlab")
+	w.addRepoSource(t, "app-docs", "https://"+gheHost+"/acme/app", "gitlab")
+	w.addRepoSource(t, "public", "https://github.com/acme/public", "")
+
+	tally, err := w.mover.Org(domain.WithActor(domain.WithOrg(t.Context(), w.org), moveover.Actor))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []domain.CodeHost{
+		{Host: gheHost, Kind: domain.CodeHostGitHub},
+		{Host: docsHost, Kind: domain.CodeHostGitLab},
+		{Host: gitlabHost, Kind: domain.CodeHostGitLab},
+	}
+	if got := w.codeHosts(t); !reflect.DeepEqual(got, want) {
+		t.Errorf("code hosts = %+v; want %+v", got, want)
+	}
+
+	if tally.Hosts != 3 {
+		t.Errorf("Tally.Hosts = %d; want 3", tally.Hosts)
+	}
+
+	entries, err := w.tenancy.AuditLog(w.ctx(t), ports.AuditQuery{Action: domain.AuditOrgCodeHostsSet, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 1 || entries[0].Actor.Ref() != moveover.Actor.Ref() {
+		t.Errorf("org.code_hosts_set entries = %+v; want one, by Goal", entries)
+	}
+
+	if logs := w.logs.String(); !strings.Contains(logs, `"msg":"code host not seeded","host":"`+gheHost+`"`) {
+		t.Errorf("the second kind of %s is not logged:\n%s", gheHost, logs)
+	}
+}
+
+// A second Run seeds nothing: a host an owner removed in between stays removed, and the moved
+// over line counts no host.
+func TestRun_SeedsCodeHostsOnce(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.addSecret(t, "docs-token", "source-token-for-tests")
+	w.addSecret(t, "ops-token", "source-token-for-tests")
+	w.addRepoSource(t, "docs", "https://"+docsHost+"/acme/docs", "gitlab")
+	w.addRepoSource(t, "ops", "https://"+gheHost+"/acme/ops", "github")
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if logs := w.logs.String(); !strings.Contains(logs, `"hosts":2`) {
+		t.Errorf("the first moved over line does not count two hosts:\n%s", logs)
+	}
+
+	kept := domain.CodeHost{Host: gheHost, Kind: domain.CodeHostGitHub}
+	if _, err := w.tenancy.SetCodeHosts(w.ctx(t), person, []domain.CodeHost{kept}); err != nil {
+		t.Fatal(err)
+	}
+
+	first := len(w.logs.String())
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := w.codeHosts(t); !reflect.DeepEqual(got, []domain.CodeHost{kept}) {
+		t.Errorf("after the second run = %+v; want only %+v, the removed host not back", got, kept)
+	}
+
+	if logs := w.logs.String()[first:]; !strings.Contains(logs, `"hosts":0`) {
+		t.Errorf("the second moved over line counts hosts:\n%s", logs)
+	}
+}
+
+// A host the seed cannot list, one with a port, one not reachable from the internet or one
+// without a kind, is logged with its host and why, never a token, and the others are seeded.
+func TestOrg_SkipsCodeHostItCannotList(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.publishOld(t, factoryUUID, "acme-software", files(repoOn("https://"+gheHost+":8443/acme/app.git", "github")))
+
+	for _, name := range []string{"lan-token", "bare-token", "docs-token"} {
+		w.addSecret(t, name, "source-token-for-tests")
+	}
+
+	w.addRepoSource(t, "lan", "https://git.corp.internal/acme/docs", "gitlab")
+	w.addRepoSource(t, "bare", "https://git.example.net/acme/docs", "")
+	w.addRepoSource(t, "docs", "https://"+docsHost+"/acme/docs", "gitlab")
+
+	tally, err := w.mover.Org(domain.WithActor(domain.WithOrg(t.Context(), w.org), moveover.Actor))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := w.codeHosts(t), []domain.CodeHost{{Host: docsHost, Kind: domain.CodeHostGitLab}}; !reflect.DeepEqual(got, want) || tally.Hosts != 1 {
+		t.Errorf("code hosts = %+v, %d added; want %+v, 1 added", got, tally.Hosts, want)
+	}
+
+	logs := w.logs.String()
+	for _, host := range []string{gheHost + ":8443", "git.corp.internal", "git.example.net"} {
+		if !strings.Contains(logs, `"msg":"code host not seeded","host":"`+host+`"`) {
+			t.Errorf("host %s is not logged as not seeded:\n%s", host, logs)
+		}
+	}
+
+	for _, secret := range []string{"source-token-for-tests", githubValue} {
+		if strings.Contains(logs, secret) {
+			t.Errorf("the logs hold a secret's value:\n%s", logs)
 		}
 	}
 }

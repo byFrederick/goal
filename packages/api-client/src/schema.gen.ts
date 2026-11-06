@@ -291,6 +291,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/orgs/{org}/code-hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * The code hosts the organization's repository tokens and knowledge secrets may go to
+         * @description The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+         */
+        get: operations["getCodeHosts"];
+        /**
+         * Replace the organization's added code hosts
+         * @description Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+         */
+        put: operations["setCodeHosts"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs/{org}/settings/notifications": {
         parameters: {
             query?: never;
@@ -1589,7 +1616,7 @@ export interface paths {
         put?: never;
         /**
          * Submit a work item to a factory's first station
-         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+         * @description With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
          */
         post: operations["submitItem"];
         delete?: never;
@@ -2323,7 +2350,7 @@ export interface paths {
         put?: never;
         /**
          * Test an environment's MCP servers or a template
-         * @description Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+         * @description Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
          */
         post: operations["testEnvironment"];
         delete?: never;
@@ -2332,23 +2359,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/orgs/{org}/repositories/test": {
+    "/v1/orgs/{org}/factories/{factory}/repositories/test": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description The organization's slug or id */
                 org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
             };
             cookie?: never;
         };
         get?: never;
         put?: never;
         /**
-         * Test a token's read and push access to a repository
-         * @description Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
+         * Test a token against a repository or an owner's repositories, for a factory
+         * @description Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
          */
-        post: operations["testRepository"];
+        post: operations["testFactoryRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orgs/{org}/factories/{factory}/repositories/tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a factory's kept repository tests
+         * @description The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+         */
+        get: operations["listFactoryRepositoryTests"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4460,6 +4514,33 @@ export interface components {
             /** @description The factory role people who join get; viewer when absent */
             join_role?: components["schemas"]["FactoryRole"];
         };
+        /**
+         * @description The API the host speaks, GitHub's or GitLab's
+         * @enum {string}
+         */
+        CodeHostKind: "github" | "gitlab";
+        CodeHost: {
+            /** @description A DNS name in lower case, such as ghe.example.com */
+            host: string;
+            kind: components["schemas"]["CodeHostKind"];
+            /** @description The REST API root goald derives: for GitHub, https://api.github.com for github.com, https://api.<name>.ghe.com for <name>.ghe.com and https://<host>/api/v3 for any other host; for GitLab, https://<host>/api/v4 */
+            api_base: string;
+            /** @description true for github.com and gitlab.com, which every organization lists */
+            built_in: boolean;
+        };
+        CodeHosts: {
+            /** @description The built-in hosts first, then the added ones sorted by host */
+            hosts: components["schemas"]["CodeHost"][];
+        };
+        CodeHostInput: {
+            /** @description A DNS name such as ghe.example.com; case is ignored */
+            host: string;
+            kind: components["schemas"]["CodeHostKind"];
+        };
+        CodeHostsInput: {
+            /** @description Every host the organization adds, without github.com and gitlab.com; empty removes them all */
+            hosts: components["schemas"]["CodeHostInput"][];
+        };
         /** @description Slot caps: how many agents may run at once across the organization's factories (max) and in each factory. null is no cap. */
         OrgSlots: {
             max: number | null;
@@ -4673,6 +4754,23 @@ export interface components {
             priority?: number;
             /** @description When the item may start; absent, as soon as it can */
             start?: components["schemas"]["Start"];
+            /** @description The repositories the item works on, in order, the first being its first repository (ADR 0041 decision 4). Each is a runtime.repositories entry's name, owner/name (or group/sub/name) under one of the entries' hosts, host/owner/name or an https URL, that an entry covers. Values naming the same repository count once. Absent or empty, the factory's default entry's, or none without a default entry */
+            repositories?: string[];
+        };
+        /** @description One repository of an item and how it joined it (ADR 0041 decision 4) */
+        ItemRepository: {
+            /** @description The repository's normalized host/owner/name in lower case, as in github.com/acme/api */
+            repo: string;
+            /**
+             * @description How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+             * @enum {string}
+             */
+            joined: "filing" | "default" | "push" | "output";
+            /**
+             * Format: date-time
+             * @description When it joined; absent for an older item's default entry, resolved when it is read
+             */
+            joined_at?: string;
         };
         /** @description When an item may start (ADR 0040): at a time, after a wait, after other items, or a time and items. at and in cannot both be set. The start is at most 365 days ahead. */
         Start: {
@@ -4893,6 +4991,10 @@ export interface components {
             question?: components["schemas"]["ItemQuestion"] | null;
             /** @description The tool call the item's agent asked to make that waits for a person's decision (ADR 0031); getItem and decideToolApproval only, absent or null when there is none */
             tool_approval?: components["schemas"]["ToolApproval"] | null;
+            /** @description The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it */
+            branch?: string;
+            /** @description The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only (ItemCard has them too). An item filed before repositories shows the factory's default entry's, and an item of a factory without code none */
+            repositories?: components["schemas"]["ItemRepository"][];
         };
         /** @description A run's call of an Ask-first connection tool that waits for a person, read from its tool_approval_requested event */
         ToolApproval: {
@@ -5490,6 +5592,8 @@ export interface components {
             rope_held: boolean;
             /** @description The item's human touches so far */
             touch_count: number;
+            /** @description As Item's repositories: the repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4). An item filed before repositories shows the factory's default entry's, and an item of a factory without code an empty array */
+            repositories: components["schemas"]["ItemRepository"][];
             /** @description The key of the station's lane (BoardLane.key) the item belongs to: the agent holding its lease while in progress, else the agent its station routes its lane to at an agent station, the person lane at a human station; absent or null at queue and done stations, or when the station has no route for the item's lane */
             board_lane?: string | null;
             /** @description For a part of an assembly (an item whose parent has parts), the assembly and the part's place in it; absent or null for any other item */
@@ -7976,7 +8080,13 @@ export interface components {
             connectors: string[];
             /** @description The day the version was made, as in 2026-10-09 */
             changed: string;
+            code: components["schemas"]["TemplateCode"];
         };
+        /**
+         * @description The code access a template needs; write when its line has a station that merges.
+         * @enum {string}
+         */
+        TemplateCode: "none" | "read" | "write";
         Template: components["schemas"]["TemplateSummary"] & {
             description: string;
             model: components["schemas"]["FactoryModel"];
@@ -8589,8 +8699,32 @@ export interface components {
             description: string;
             /** @description Its secret slots, in order */
             secrets: components["schemas"]["TemplateSecret"][];
+            /** @description Its non-secret parameters, in order. adds and test are the lines for every parameter's default; they never refer to a parameter */
+            parameters?: components["schemas"]["TemplateParameter"][];
             adds: components["schemas"]["TemplateAdds"];
             test: components["schemas"]["TemplateTest"] | null;
+        };
+        /** @description A non-secret value a template takes, such as a host; otherwise's lines may refer to it as {{name}} */
+        TemplateParameter: {
+            name: string;
+            title: string;
+            description: string;
+            default: string;
+            otherwise?: components["schemas"]["TemplateOtherwise"];
+        };
+        /** @description The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field */
+        TemplateOtherwise: {
+            tools?: string[];
+            env?: {
+                [key: string]: string;
+            };
+            files?: {
+                [key: string]: string;
+            };
+            mcp?: {
+                [key: string]: components["schemas"]["TemplateMCP"];
+            };
+            test?: components["schemas"]["TemplateTest"];
         };
         TemplateSecret: {
             /** @description The {{slot}} its values refer to */
@@ -8660,17 +8794,53 @@ export interface components {
             env?: {
                 [key: string]: string;
             };
+            /** @description The template's parameters' values, by name: a host name with an optional :port. A parameter without one takes its default */
+            parameters?: {
+                [key: string]: string;
+            };
         };
-        RepositoryTestRequest: {
-            /** @description The repository's https URL, such as https://github.com/acme/app */
+        FactoryRepositoryTestRequest: {
+            /** @description One repository's https URL, such as https://github.com/acme/app, or an owner pattern, such as https://github.com/acme/* */
             url: string;
             secret: components["schemas"]["SecretName"];
+            /**
+             * @description The access the factory's entry asks for, which picks the summary and the warning
+             * @enum {string}
+             */
+            access: "read" | "write";
         };
-        RepositoryTestResult: {
-            /** @description false when the host gave no answer within 10 seconds: read and push then say couldn't test */
+        FactoryRepositoryTestList: {
+            tests: components["schemas"]["FactoryRepositoryTest"][];
+        };
+        FactoryRepositoryTest: {
+            /** @description The repository tested, as its lower-case host/owner/name, or host/owner/* for an owner pattern */
+            url: string;
+            /** @enum {string} */
+            access: "read" | "write";
+            secret: components["schemas"]["SecretName"];
+            /**
+             * Format: date-time
+             * @description When it was tested
+             */
+            at: string;
+            /** @description false when the host gave no answer: summary then starts with couldn't test */
             tested: boolean;
+            /** @description Whether the token can do what access asks: read, or read and push */
+            ok: boolean;
+            /** @description One line, such as Can read, Can read 48 repositories in acme or Can read and push */
+            summary: string;
+            /** @description For a read entry whose token can also push: Goal won't push, but agents could. Use a read-only token. */
+            warning?: string;
+            /** @description For a write entry: the host reports no pull-request permission, so Goal can't check it */
+            note?: string;
             read: components["schemas"]["RepositoryCheck"];
             push: components["schemas"]["RepositoryCheck"];
+            /** @description For an owner pattern: how many of the owner's repositories the token can read */
+            readable?: number;
+            /** @description For an owner pattern: how many of them it can push to */
+            pushable?: number;
+            /** @description For an owner pattern: the count stopped at 1000, so there may be more */
+            truncated?: boolean;
         };
         NotificationSettings: {
             /** @description The name of the secret holding the Slack bot token that sends the organization's Slack notifications, slack-bot by convention; null while Slack is off */
@@ -8702,7 +8872,7 @@ export interface components {
         };
         ServerTest: {
             server: string;
-            /** @description False for a stdio server, which goald does not start */
+            /** @description False for a stdio server goald does not start: its command is not one the tool catalog ships, or a URL in its env is not on a listed code host; error says which */
             tested: boolean;
             ok: boolean;
             /** @description The tool names tools/list answered */
@@ -9014,7 +9184,7 @@ export interface components {
             connection?: string;
             /** @description The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories. */
             secret?: components["schemas"]["SecretName"];
-            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it). */
+            /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on one of the organization's code hosts; a sync on any other host fails before the secret is opened, and the kind the host is listed as replaces code_host), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it). */
             config?: {
                 [key: string]: string;
             };
@@ -9699,6 +9869,58 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCodeHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The code hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeHosts"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setCodeHosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeHostsInput"];
+            };
+        };
+        responses: {
+            /** @description The code hosts now listed, the built-in ones first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeHosts"];
+                };
             };
             default: components["responses"]["Problem"];
         };
@@ -12523,29 +12745,57 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    testRepository: {
+    testFactoryRepository: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description The organization's slug or id */
                 org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RepositoryTestRequest"];
+                "application/json": components["schemas"]["FactoryRepositoryTestRequest"];
             };
         };
         responses: {
-            /** @description The results */
+            /** @description The result, as kept */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RepositoryTestResult"];
+                    "application/json": components["schemas"]["FactoryRepositoryTest"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listFactoryRepositoryTests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The organization's slug or id */
+                org: components["parameters"]["OrgRef"];
+                /** @description The factory's metadata.id or metadata.name */
+                factory: components["parameters"]["FactoryRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The kept results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactoryRepositoryTestList"];
                 };
             };
             default: components["responses"]["Problem"];

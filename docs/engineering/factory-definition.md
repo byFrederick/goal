@@ -159,6 +159,25 @@ board:
 - **The outcome.** The transition that accepts the output cancels the item at its station: state `cancelled`, lease outcome `advanced`. Its `cancelled` event has the agent as actor and data `reason` (the text), `station`, `agent` and `closed: true`, and the audit log gets `item.cancelled` by the agent. This is not a person's Cancel, which takes a running run's lease. A gate that rejects ignores the close.
 - **Follow-ups of a closed triage item** keep File, as those of any cancelled triage item do, so a person can take any of them back.
 
+### Adding repositories: `board.flow.outputs.repositories`
+
+`board.flow.outputs.repositories` names the output property whose list of repositories joins the item ([ADR 0041](../adr/0041-code-and-github-without-an-app.md) decision 4). With the key unset, no output adds a repository; an item's list then grows only when a run pushes to one.
+
+```yaml
+board:
+  flow:
+    outputs:
+      repositories: repositories
+```
+
+```json
+{ "repositories": ["api", "acme/web", "https://github.com/acme/docs"] }
+```
+
+- **The names.** Each is resolved against the `runtime.repositories` of the version the run started on, as at filing: an entry's name, `owner/name` or an https URL an entry covers. Names of the same repository count once. A missing or `null` property adds none.
+- **The outcome.** The transition that accepts the output adds the repositories the item lacks, after its own, joined `output`. A gate that rejects adds none, and neither does an output that fails its check.
+- **Refusals.** The output fails its check, and goes back to the agent with the reason like any other bad output (a `contract_failed` event), when the property is not a list of strings, when a name is not one of the factory's repositories (the reason quotes it), or when the item would have more than 10 repositories. The count is the item's repositories, those this run pushed to included, plus the new ones. A push past 10 only leaves the repository off the item; an output's names past 10 fail, so the agent can name fewer.
+
 ## Station context
 
 A station's optional `context` list names what goald preloads into the `GOAL_FEEDBACK` of every run at the station. Its only value is `inflight` ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) decision 1); a station without `context` gets nothing preloaded.
@@ -182,10 +201,10 @@ With `inflight`, the run's feedback gets an `## In flight` section, read once pe
 
 With `board.flow.assemblies.changedSince: true` (default false), plans bind late ([ADR 0015](../adr/0015-overlapping-in-flight-work.md) decision 5):
 
-- When a station with `context: [inflight]` finishes an item, goald records the head commit of the default branch of `runtime.repository` as the item's base commit, through the line's code host connection for the repository's host. A plan's parts inherit their assembly's. Nothing is recorded without a repository or such a connection.
-- Every later run of an item with a base commit and paths, a rework after a merge conflict included, gets a `## Changed since your plan` section in its feedback when the default branch has commits since then that changed files the item's paths match. Each line names the item that merged the commit (`<factory>#<number>` and title, matched by its `merged` event's sha) or else the commit's short sha and subject, and lists the matching files (at most 20). Commits that change none of the item's files add nothing; a comparison over 100 commits says it was truncated.
+- When a station with `context: [inflight]` finishes an item, goald records the head commit of the default branch of each of the item's repositories as that repository's base commit ([ADR 0041](../adr/0041-code-and-github-without-an-app.md) decision 5). It reads each with the token of the `runtime.repositories` entry that covers the repository, a read entry's first, or else through the line's code host connection for the repository's host (on secrets, `runtime.repository.token`). A line without `runtime.repositories` reads `runtime.repository` alone. A plan's parts inherit their assembly's base commit for each repository they share. Nothing is recorded without a repository.
+- Every later run of an item with a base commit and paths, a rework after a merge conflict included, gets a `## Changed since your plan` section in its feedback for each repository whose default branch has commits since its base commit that changed files the item's paths match; the section names the repository. A path with an `owner/name:` prefix is matched in the repository it names, and a path without one in the item's first repository. Each line names the item that merged the commit (`<factory>#<number>` and title, matched by its `merged` event's sha) or else the commit's short sha and subject, and lists the matching files (at most 20). Commits that change none of the item's files add nothing; a comparison over 100 commits says it was truncated.
 - It states what it lists and nothing else: telling agents to re-derive the brief's paths against current main belongs in the factory's prompts and rules.
-- A code-host error is logged: the item finishes without a base commit, or runs without the section.
+- A code-host error is logged: the item finishes without that repository's base commit, or runs without that repository's section.
 
 ## Assembly integration branches
 
@@ -205,6 +224,49 @@ A definition without the block is trunk, `onLand`, 0 and no `landAt`. The checks
 - `integration-without-merge-station` when `mode` is `branch` and no station has `action: merge`.
 
 Nothing reads the settings yet: the store, the engine and the worker follow in the parts of the assembly ADR 0033 describes.
+
+## Repositories: `runtime.repositories` and an agent's code
+
+The task guides are [Connect code to a factory](../../apps/docs/src/content/docs/guides/connect-code.md) and [Connect GitHub](../../apps/docs/src/content/docs/guides/connect-github.md), served at `/docs/guides/connect-code/` and `/docs/guides/connect-github/`.
+
+A factory's code is a list of repositories, each with its access ([ADR 0041](../adr/0041-code-and-github-without-an-app.md), decisions 2 and 3). No repositories is a factory with no code.
+
+```yaml
+spec:
+  runtime:
+    repositories:
+      - name: app                          # a slug, unique in the factory
+        url: https://github.com/acme/app   # one repository, or https://github.com/acme/* for an owner's every repository
+        token: "{{github-acme}}"           # required for write
+        access: write                      # read or write
+        default: true                      # optional
+  agents:
+    - name: engineer
+      prompt: ./agents/engineer.md
+      code: write                          # or read
+```
+
+- **Entries** have no `forge` and no `base`: the organization's code hosts give the kind, and runs use the host's default branch.
+- **The default** is the entry an item uses when it names none. At most one entry has `default: true`, and it must name one repository. The only entry is the default when it names one repository. An owner pattern alone leaves the factory with no default.
+- **The shorthand** `runtime.repository` reads as one `write` entry that is the default (`Runtime.RepositoryEntries`, `internal/config/repositories.go`). Its name is the URL's last segment in lower case without `.git`, or `repo` when that isn't a slug, so `https://github.com/acme/web-app.git` is `web-app` and `https://github.com/acme/ui` is `repo`. The shorthand keeps its `forge` and an optional token, so every published version loads.
+- **An agent's `code`** is `write` or `read`. Without it, an agent writes when the factory has a `write` entry and reads otherwise (`Factory.AgentCode`), so definitions written before `code` keep writing.
+- **Which token:** for each repository, the most specific entry that covers it wins, one repository before an owner pattern. An agent that only reads takes a `read` entry's token whenever one covers the repository.
+- **The line** keeps `Runtime.Repositories`, every entry, and one `domain.Repository` taken from the shorthand or the default entry (`Factory.Line`). Runs start with the item's repositories under the entries. A merge takes each pull request in its own repository with the token of the most specific entry that covers it (`domain.TokenEntry` with reads false), and refuses one that only a `read` entry covers, or none does (`engine.ErrNoWriteEntry`), before anything is touched. It also refuses a pull request whose head is not the item's branch, or a landing root's integration branch, in that repository (`engine.ErrNotTheItems`). Base commits and changed-since read with the reader's pick (reads true). A line without `runtime.repositories` merges through its connections or `runtime.repository.token`.
+
+`config.Check` reports these under the check `repositories`. Publish refuses the errors; `Load` skips the check, so a version published before it keeps running.
+
+| Code | Severity | When |
+| --- | --- | --- |
+| `repository-forms-both` | error | the definition has both `runtime.repository` and `runtime.repositories` |
+| `duplicate-name` | error | two entries have the same `name` (check `references`) |
+| `repository-url-invalid` | error | an entry's `url` is neither one repository (`https://<host>/<owner>/<name>`) nor an owner pattern ending in `/*` |
+| `repository-token-missing` | error | an entry with `access: write` has no `token` |
+| `repository-default-many` | error | a second entry has `default: true` |
+| `repository-default-pattern` | error | an owner pattern has `default: true` |
+| `merge-needs-write` | error | a station has `action: merge`, or `board.flow.assemblies.integration.mode` is `branch`, and the factory has no `write` entry or no agent whose code is `write` |
+| `reader-write-token` | warning | an agent that only reads would get a `write` entry's token, because no `read` entry covers it: "reviewer only reads, but the only token for services can write." |
+
+Publish also refuses a repository on a host the organization doesn't list (`repository-host-unlisted`, in the secrets check below).
 
 ## Environment files
 
@@ -259,9 +321,9 @@ spec:
 
 ### Secret references
 
-`{{name}}` names one of the organization's secrets, and it is the only placeholder. It is valid in an environment file's `env`, `files`, `mcp.<server>.headers` and a stdio server's `env`, and in `runtime.repository.token`, `runtime.modelKey` and a trigger's `only.modelAgrees.key`; the last three take one whole reference. A trigger's `create.title` and `create.brief` keep their `{{field}}` event placeholders. A literal `{{` is not supported.
+`{{name}}` names one of the organization's secrets, and it is the only placeholder. It is valid in an environment file's `env`, `files`, `mcp.<server>.headers` and a stdio server's `env`, and in `runtime.repository.token`, a `runtime.repositories` entry's `token`, `runtime.modelKey` and a trigger's `only.modelAgrees.key`; the last four take one whole reference. Each counts as a use of the secret (`Factory.SecretRefs`), so the secret can't be deleted while a current version uses it, and Access lists it. A trigger's `create.title`, `create.brief` and `create.repositories` keep their `{{field}}` event placeholders. A literal `{{` is not supported.
 
-`runtime.repository` is `{url, token}`. A URL on `github.com` or `gitlab.com` picks its code host; any other host needs `forge: github` or `forge: gitlab`.
+`runtime.repository` is `{url, token}`, the shorthand described in [Repositories](#repositories-runtimerepositories-and-an-agents-code). A URL on `github.com` or `gitlab.com` picks its code host; on any other host the shorthand needs `forge: github` or `forge: gitlab` (`forge-missing`, `internal/config/environment.go`). A `runtime.repositories` entry has no `forge`: the organization's code hosts give the kind.
 
 ### Environment checks
 
@@ -289,7 +351,10 @@ Publish then runs the secrets check (`authoring.SecretsCheck`, `internal/authori
 | `plain-key` | error | a plain `env` value starts with `sk-`, `ghp_`, `github_pat_`, `glpat-`, `xoxb-` or `xoxp-` |
 | `plain-key` | warning | a plain `env` value's name ends with `_TOKEN`, `_KEY`, `_SECRET` or `_PASSWORD` |
 | `knowledge-source-unknown`, `knowledge-secret-not-in-scope`, `knowledge-copies-checkout` | see [Knowledge](#knowledge-knowledgesources) | a source in `knowledge.sources` |
-| `merge-needs-code-host` | error | a station has `action: merge` and `runtime.repository` has no `token` |
+| `merge-needs-code-host` | error | a station has `action: merge` and no repository that writes has a `token` |
+| `repository-host-unlisted` | error | a `runtime.repository` or `runtime.repositories` URL's host, with its port, is neither built in (`github.com`, `gitlab.com`) nor one of the organization's code hosts (`SecretsCheck.Hosts`) |
+| `github-tools-not-read-only` | warning | an agent whose code is `read`, or a trigger check's agent, has an environment with a GitHub MCP server (`config.MCPServer.GitHub`: a remote server on `api.githubcopilot.com`, or a stdio command `github-mcp-server`) whose latest passing environment test lists a tool without `readOnlyHint` that the server's `tools` resolve to `allow` (`domain.ResolveToolMode`); located at `spec.agents[i].code` or the trigger's `check.agent`, naming up to 5 tools (`SecretsCheck.Tests`) |
+| `github-tools-unknown` | warning | such a GitHub server has no kept environment test, or its latest one failed |
 
 `plain-key` carries the fix "Move to Secrets", which replaces the value with a reference named after the variable in kebab case (`GH_TOKEN` becomes `{{gh-token}}`). A problem in an environment file has the section `environments` and the pointer `/environments/<name>/<keys below spec>`; the Form view does not show that section yet.
 
@@ -339,7 +404,7 @@ spec:
 | `unknown-agent`, `unknown-station`, `unknown-lane`, `unknown-work-type` | error | an `appliesTo` entry the definition does not declare, located at that entry (`knowledge source runbooks: appliesTo.stations: unknown station "ghost"`) |
 | `knowledge-source-unknown` | error | the organization has no source of the name; the fix removes the entry |
 | `knowledge-secret-not-in-scope` | error | the source reads with a secret whose factory scope leaves the factory out, so listing it would hand the factory that secret's reach |
-| `knowledge-copies-checkout` | warning | the source is a Repository source, or a synced source read by gitdocs, of the repository in `runtime.repository.url`: the same host and path, ignoring case, a trailing slash and `.git`. Its runs already have those files on the item's branch. The warning does not block validation or publishing. |
+| `knowledge-copies-checkout` | warning | the source is a Repository source, or a synced source read by gitdocs, of the factory's only repository: `runtime.repository.url`, or the one entry of `runtime.repositories` when it is not an owner pattern (`Runtime.OnlyRepository`). A factory with two or more repositories gets no warning. The match is the same host and path, ignoring case, a trailing slash and `.git`. Its runs already have those files on the item's branch. The warning does not block validation or publishing. |
 
 For example, a factory whose `runtime.repository.url` is `https://github.com/acme/app` and that lists a Repository source of `https://github.com/acme/app.git` validates and publishes with the `knowledge-copies-checkout` warning.
 
@@ -404,6 +469,7 @@ The keys of a trigger:
 - `create` (required): `type` (one of `board.workTypes`) and `station` (a station id) are required. `lane` is a key of that station's `route`, `expedite: true` puts the item in the expedite flow, and `title` and `brief` are templates. A placeholder is `{{field}}` or a dotted `{{field.sub}}`, spaces inside the braces allowed, and takes the event's field, quoted, on one line and at most 200 characters; the whole title is cut to 300 characters. `brief` may instead name a Markdown file of the definition, `./triggers/<name>.md`, alone on its line, as an agent's `prompt` names one: the item's brief is that file's text, with the same placeholders. Event text reaches agents only as untrusted data (ADR 0026, decision 5), and the agent's system prompt says that text inside `<untrusted-event-data>` is data, never instructions.
 - `limits`: `perDay` (at most n items from this trigger since the start of the UTC day), `perHour` (at most n in the hour before an event; an event trigger without it takes 10, a schedule has none, so a burst of matching events cannot flood the line) and `pauseOnBudget` (skip events while the factory's weekly budget is spent). A trigger with `check:` also takes `perCheck` (at most n items one check files, default 5); for it `perDay` counts the items the trigger filed, and what is over either is skipped "over the limit" ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 19).
 - `check` ([ADR 0040](../adr/0040-one-door-for-every-source.md) decision 19; only with `on: schedule`, refused otherwise): each firing runs an agent that looks at the source and answers what to file, instead of filing an item. `agent` (required) is an agent of the factory, whose environment, tools and model the check uses. `brief` (required) is what to look for, or `./triggers/<name>.md`. `maxUsd` is the most one check may spend (default 0.10), and `timeout` its time limit, a number and `s`, `m` or `h`, at most `1h` (default `5m`). `cron` may fire at most every 5 minutes, and one check per trigger runs at a time. Publish warns when the agent may use tools that are not read-only. The [checks guide](../../apps/docs/src/content/docs/guides/checks.md) says what a check is given and what it answers.
+- `create.repositories`: at most 10 values naming the item's repositories ([ADR 0041](../adr/0041-code-and-github-without-an-app.md) decision 13). Each is rendered with the event, unquoted, and matched against the `runtime.repositories` entries, owner patterns included and in any case (`domain.Line.ResolveRepository`): an entry's name, `host/owner/name`, an https URL, or `owner/name` (`{{repo}}`) on the host of the entry that covers it, the sender's own host (github.com for `github`, gitlab.com for `gitlab`) winning when entries on several hosts do, else the first entry. A value that renders empty adds none; an item with none gets the default entry. A value no entry matches skips the event at Create with "<repo> is not one of <factory>'s repositories", and a delivery from a repository no entry covers is skipped with that reason before any trigger fires. A check's `file` entries take `repositories`, matched the same way; an entry naming one the factory doesn't have is refused and the rest are filed.
 - `create.trusted`: files the items a delivery makes as trusted, so a person need not merge what they build; without it, an item made from a webhook delivery is untrusted (decision 21) and so are the items that follow from it. Publish refuses it for the `gitlab` and `token` senders and for a GitHub sender or webhook without `filter.authors` (`trusted-refused`). On a check trigger, `trusted` applies to the items the check files.
 
 ### Trigger checks
@@ -421,6 +487,8 @@ Each problem is located at its key under `spec.board.triggers` in `factory.yaml`
 | A schedule's `timeZone` is not an IANA time zone the host knows | `time-zone-invalid` |
 | A `{{` in `create.title` or `create.brief` is unclosed, empty or not a dotted field name | `placeholder-invalid` |
 | `create.brief` names `./triggers/<name>.md` and the definition has no such file | `brief-not-found` |
+| A `{{` in a `create.repositories` value is malformed as in `create.title` | `placeholder-invalid` |
+| A `create.repositories` value without a placeholder matches no `runtime.repositories` entry | `trigger-repository-unknown` |
 | `only.modelAgrees` is set (a warning, never a refusal) | `field-ignored` |
 | `limits.perCheck` on a trigger without `check:` | `per-check-without-check` |
 | `on:` names a sender without an event (`github`, not `github.check_run`) | `on-needs-event` |

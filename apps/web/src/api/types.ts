@@ -98,6 +98,7 @@ export type {
   ItemFlow,
   ItemNoteFrom,
   ItemQuestion,
+  ItemRepository,
   ItemSpan,
   ItemStart,
   ItemState,
@@ -231,8 +232,9 @@ export type AccessView = Access['by'];
 export type SecretUse = Schemas['SecretUse'];
 export type SecretScope = Schemas['SecretScope'];
 export type NewSecret = Schemas['NewSecret'];
-export type RepositoryTestRequest = Schemas['RepositoryTestRequest'];
-export type RepositoryTestResult = Schemas['RepositoryTestResult'];
+export type FactoryRepositoryTest = Schemas['FactoryRepositoryTest'];
+export type FactoryRepositoryTestRequest = Schemas['FactoryRepositoryTestRequest'];
+export type TemplateCode = Schemas['TemplateCode'];
 export type RepositoryCheck = Schemas['RepositoryCheck'];
 export type SecretPatch = Schemas['SecretPatch'];
 export type SecretImport = Schemas['SecretImport'];
@@ -249,6 +251,10 @@ export type SecretImportOutcome = Schemas['SecretImportOutcome'];
 // The signed-in person's notification preferences (ADR 0023, decision 1): the events, their channels and the email.
 export type NotificationPreferences = Schemas['NotificationPreferences'];
 export type OrgNotificationSettings = Schemas['NotificationSettings'];
+export type CodeHost = Schemas['CodeHost'];
+export type CodeHosts = Schemas['CodeHosts'];
+export type CodeHostInput = Schemas['CodeHostInput'];
+export type CodeHostKind = Schemas['CodeHostKind'];
 export type NotificationTestResult = Schemas['NotificationTestResult'];
 export type NotificationEvents = Schemas['NotificationEvents'];
 export type NotificationChannels = Schemas['NotificationChannels'];

@@ -29,7 +29,7 @@ func TestCodeHosts_EveryPlatformCodeHostHasAnAdapter(t *testing.T) {
 	}
 }
 
-// A merge reaches the connection's host through the connection transport: public addresses
+// A merge reaches the repository's host through the connection transport: public addresses
 // only (threat row 4), so a connection whose host is goald's own network gets no request.
 func TestCodeHosts_ReachPublicAddressesOnly(t *testing.T) {
 	t.Parallel()
@@ -41,36 +41,16 @@ func TestCodeHosts_ReachPublicAddressesOnly(t *testing.T) {
 
 	host := strings.TrimPrefix(private.URL, "https://")
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	for name, ch := range codeHosts(false) {
-		var kind domain.ConnectionKind
-
-		for _, k := range kinds {
-			if k.Spec.CodeHost == name {
-				kind = k
-			}
-		}
-
-		conn := domain.ResolvedConnection{
-			Connection: domain.Connection{Name: name, Kind: kind.Name}, Kind: kind,
-			Values: map[string]string{"token": "a-token-never-sent", "host": host}, //nolint:gosec // a made-up token
-		}
-
-		login, err := conn.CodeHostLogin()
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
+		// Built by hand: the organization's list never holds a host with a port.
+		repo := domain.CodeRepository{Host: domain.CodeHost{Host: host, Kind: domain.CodeHostKind(name)}, Owner: "acme", Name: "app"}
 
 		url := "https://" + host + "/acme/app/pull/1"
 		if name == "gitlab" {
 			url = "https://" + host + "/acme/app/-/merge_requests/1"
 		}
 
-		if _, err := ch.PullRequest(t.Context(), login, url); err == nil || strings.Contains(err.Error(), "a-token-never-sent") {
+		if _, err := ch.PullRequest(t.Context(), repo, "a-token-never-sent", url); err == nil || strings.Contains(err.Error(), "a-token-never-sent") {
 			t.Errorf("%s: PullRequest on a loopback host = %v; want it refused, without the token", name, err)
 		}
 	}

@@ -414,6 +414,9 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		Model: "claude-sonnet-5-5", ModelConnection: "claude", Size: domain.SandboxLarge, Tools: []string{"go@1.26.10", "task@3.46.1"},
 		MaxTurnsPerTask: 50, PerItemUSD: 2.5,
 		Repository: domain.Repository{URL: "https://git.example.com/acme/line.git", Connection: "code"},
+		Repositories: []domain.RepositoryEntry{
+			{Name: "line", URL: "https://git.example.com/acme/line.git", Access: AccessWrite, Default: true},
+		},
 	}
 	if !reflect.DeepEqual(l.Runtime, wantRuntime) {
 		t.Errorf("runtime = %+v, want %+v", l.Runtime, wantRuntime)
@@ -440,7 +443,7 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 		{
 			Name: "architect", PromptPath: "./agents/architect.md", Model: "claude-opus-5-5",
 			Skills:      []domain.SkillRef{{Name: "acme-conventions", Source: "./skills/acme-conventions"}},
-			Connections: []string{"docs"}, ToolsAllow: []string{"Read", "Grep"},
+			Connections: []string{"docs"}, Code: domain.CodeWrite, ToolsAllow: []string{"Read", "Grep"},
 		},
 		{
 			Name: "engineer", PromptPath: "./agents/engineer.md",
@@ -448,9 +451,10 @@ func TestLine_CarriesWhatTheEngineNeeds(t *testing.T) {
 				{Name: "acme-conventions", Source: "./skills/acme-conventions"},
 				{Name: "golang-testing", Source: "skills.sh:samber/cc-skills-golang@golang-testing"},
 			},
-			ToolsAllow: []string{"Read", "Edit", "Bash"}, ToolsDeny: []string{"Bash(git push*)"},
+			Code: domain.CodeWrite, ToolsAllow: []string{"Read", "Edit", "Bash"}, ToolsDeny: []string{"Bash(git push*)"},
 		},
-		{Name: "reviewer", PromptPath: "./agents/reviewer.md"},
+		// No agent says its code, and the factory has an entry that writes (Factory.AgentCode).
+		{Name: "reviewer", PromptPath: "./agents/reviewer.md", Code: domain.CodeWrite},
 	}
 	if !reflect.DeepEqual(l.Agents, wantAgents) {
 		t.Errorf("agents =\n%+v\nwant\n%+v", l.Agents, wantAgents)
@@ -948,6 +952,28 @@ func TestLine_CarriesClose(t *testing.T) {
 	}
 }
 
+// board.flow.outputs.repositories maps the field whose repositories join the item onto the line;
+// an empty or non-string value is a schema problem.
+func TestLine_CarriesOutputRepositories(t *testing.T) {
+	t.Parallel()
+
+	f, err := Load(checkTree(baseFactory+"    flow:\n      outputs: { repositories: joining }\n", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if o := f.Line().Flow.Outputs; o.Repositories != "joining" {
+		t.Errorf("outputs = %+v; want repositories joining", o)
+	}
+
+	for _, flow := range []string{"outputs: { repositories: \"\" }", "outputs: { repositories: [a] }"} {
+		_, problems := Check(checkTree(baseFactory+"    flow:\n      "+flow+"\n", nil))
+		if !slices.ContainsFunc(problems, func(p domain.DefinitionProblem) bool { return p.Check == checkSchema && p.Blocking() }) {
+			t.Errorf("flow %s: problems %+v, want a schema problem", flow, problems)
+		}
+	}
+}
+
 // A station contract that declares the mapped follow-ups field declares it as a plain array, so a
 // follow-up never fails its run's checks: Load refuses a $ref, an item limit or required inner
 // fields, and takes strings, objects or both. Without the field mapped, the contract is not read.
@@ -993,6 +1019,101 @@ func TestLoad_RefusesStrictFollowUpsField(t *testing.T) {
 			unmapped := strings.TrimSuffix(mapped, "    flow:\n      outputs: { followUps: followups }\n")
 			if _, err := Load(checkTree(unmapped, map[string]string{answerContract: contract(tt.field)})); err != nil {
 				t.Errorf("Load without the field mapped = %v; want it loaded", err)
+			}
+		})
+	}
+}
+
+// The line's one repository is the default entry of runtime.repositories, and none when no entry
+// is the default, such as an owner pattern alone.
+func TestLine_RepositoryIsTheDefaultEntry(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, doc string
+		want      domain.Repository
+	}{
+		{name: "one repository", doc: withRepos(appEntry), want: domain.Repository{URL: urlApp, Token: "{{gh-token}}"}}, //nolint:gosec // a reference, not a secret
+		{name: "an owner pattern", doc: withRepos(ownerEntry)},
+		{name: "no code", doc: baseFactory},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := Load(checkTree(tt.doc, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.Line().Runtime.Repository; got != tt.want {
+				t.Errorf("repository = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+// The line carries every runtime.repositories entry, for items' repositories to match against,
+// with the default the single-repository entry gets; the default entry stays the line's
+// Repository, which run start reads.
+func TestLine_CarriesRepositoryEntries(t *testing.T) {
+	t.Parallel()
+
+	f := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{
+		{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite, Default: true},
+		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead},
+	}}}}
+
+	l := f.Line()
+
+	want := []domain.RepositoryEntry{
+		{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite, Default: true},
+		{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead},
+	}
+	if !reflect.DeepEqual(l.Runtime.Repositories, want) {
+		t.Errorf("repositories =\n%+v\nwant\n%+v", l.Runtime.Repositories, want)
+	}
+
+	if got := l.Runtime.Repository; got != (domain.Repository{URL: urlApp, Token: tokenRef}) {
+		t.Errorf("repository = %+v; want the default entry", got)
+	}
+
+	one := &Factory{Spec: Spec{Runtime: Runtime{Repositories: []RepositoryEntry{{Name: nameApp, URL: urlApp, Access: AccessRead}}}}}
+	if e, ok := one.Line().Runtime.DefaultEntry(); !ok || e.Name != nameApp {
+		t.Errorf("a single entry's default = %+v, %t; want app", e, ok)
+	}
+
+	if got := (&Factory{}).Line().Runtime.Repositories; got != nil {
+		t.Errorf("no code: repositories = %+v; want none", got)
+	}
+}
+
+// Each agent's code reaches the line as AgentCode gives it: what the agent says, else write when
+// the factory has an entry that writes and read otherwise.
+func TestLine_AgentsCarryTheirCode(t *testing.T) {
+	t.Parallel()
+
+	agents := []Agent{{Name: "builder"}, {Name: "reviewer", Code: CodeRead}}
+
+	for _, tt := range []struct {
+		name    string
+		entries []RepositoryEntry
+		want    []string
+	}{
+		{name: "an entry that writes", entries: []RepositoryEntry{{Name: nameApp, URL: urlApp, Token: tokenRef, Access: AccessWrite}}, want: []string{CodeWrite, CodeRead}},
+		{name: "read entries alone", entries: []RepositoryEntry{{Name: "labs", URL: "https://github.com/acme-labs/*", Access: AccessRead}}, want: []string{CodeRead, CodeRead}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := &Factory{Spec: Spec{Runtime: Runtime{Repositories: tt.entries}, Agents: agents}}
+
+			var got []string
+			for _, a := range f.Line().Agents {
+				got = append(got, a.Code)
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("codes = %q, want %q", got, tt.want)
 			}
 		})
 	}

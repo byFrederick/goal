@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +19,8 @@ const (
 	base = "c0ffee000001"
 	// storeFile is a file under the store paths the tests' items change.
 	storeFile = "internal/store/items.go"
+	// storeSubject is the subject of a commit that changes storeFile.
+	storeSubject = "Fix the store"
 	// storePlan splits an item into one part that changes the store.
 	storePlan = `{"plan":[{"key":"store","title":"Store","brief":"Add the table.","paths":["internal/store/**"]}]}`
 	// touchesStore is a spec output whose item changes the store.
@@ -164,6 +167,39 @@ func TestEngine_BaseCommitCodeHostErrorStillFinishes(t *testing.T) {
 	}
 }
 
+// A repository on a host the organization doesn't list gets no base commit, and the code host no
+// call, though a connection of the factory signs git in to that host; listed, it gets one.
+func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
+	t.Parallel()
+
+	const gheRepo = "https://ghe.example.com/acme/app"
+
+	for _, listed := range []bool{false, true} {
+		line := changedSinceLine()
+		line.Runtime.Repository = domain.Repository{URL: gheRepo, Connection: connGHE}
+		line.Connections = []string{connGHE}
+
+		h := newHarness(t, line, porttest.Succeed(touchesStore))
+		h.codehost.SetBranchHead(gheRepo, "", base)
+
+		if listed {
+			h.listHost(t, "ghe.example.com", domain.CodeHostGitHub)
+		}
+
+		it := h.submit(t, domain.NewItem{})
+		h.step(t) // spec
+
+		got, calls := h.item(t, it.ID).BaseCommit, h.codehost.LoginTokens()
+
+		switch {
+		case !listed && (got != "" || len(calls) != 0 || !strings.Contains(h.logs.String(), "base commit not recorded")):
+			t.Errorf("unlisted: base commit %q after %d code host calls; want no base commit, no call and the log saying why", got, len(calls))
+		case listed && (got != base || !slices.Equal(calls, []string{"ghe-token"})):
+			t.Errorf("listed: base commit %q with tokens %d; want %s read once with the ghe connection's token", got, len(calls), base)
+		}
+	}
+}
+
 // A plan's parts inherit the base commit their assembly was planned against.
 func TestEngine_PartsInheritBaseCommit(t *testing.T) {
 	t.Parallel()
@@ -249,6 +285,37 @@ func TestEngine_ChangedSinceSkipsUnrelatedCommits(t *testing.T) {
 	}
 }
 
+// A path prefixed with the item's first repository, owner/name:, still matches the commits that
+// changed its files, and a path in another repository matches none of them.
+func TestEngine_ChangedSinceStripsTheFirstRepositorysPrefix(t *testing.T) {
+	t.Parallel()
+
+	l := changedSinceLine()
+	l.Runtime.Repositories = []domain.RepositoryEntry{{Name: "app", URL: appRepo, Access: domain.AccessWrite, Default: true}}
+
+	h := newHarness(t, l, porttest.Succeed(`{"touches":["acme/app:internal/store/**","acme/web:docs/**"]}`))
+	h.codehost.SetBranchHead(appRepo, "", base)
+
+	h.submit(t, domain.NewItem{})
+	h.step(t) // spec, at base
+
+	h.land(ports.Commit{SHA: base},
+		ports.Commit{SHA: "c0ffee000012", Subject: "Fix the store's lock", Files: []string{"internal/store/lock.go"}},
+		ports.Commit{SHA: "c0ffee000013", Subject: "Update the docs", Files: []string{"docs/items.md"}},
+	)
+
+	h.step(t) // build
+
+	section := h.changedSinceOf(1)
+	if want := `- commit c0ffee000012 "Fix the store's lock": internal/store/lock.go`; !strings.Contains(section, want) {
+		t.Errorf("section lacks %q:\n%s", want, section)
+	}
+
+	if strings.Contains(section, "docs/items.md") {
+		t.Errorf("section lists a file for acme/web's paths, which are in another repository:\n%s", section)
+	}
+}
+
 func TestEngine_ChangedSinceCodeHostErrorLeavesItOut(t *testing.T) {
 	t.Parallel()
 
@@ -324,11 +391,11 @@ func TestEngine_OverlappingRequestsMergeInOrder(t *testing.T) {
 	s := newScripted()
 	h := newHarness(t, changedSinceGateLine(), s.agent)
 	h.codehost.SetBranchHead(appRepo, "", base)
-	h.codehost.Add(openPR(prURL))
-	h.codehost.Add(openPR(secondPR))
 
 	first := h.submit(t, domain.NewItem{Title: "Rename the items table"})
 	second := h.submit(t, domain.NewItem{Title: "Add an items index"})
+	h.codehost.Add(prFrom(prURL, first))
+	h.codehost.Add(prFrom(secondPR, second))
 
 	for it, pr := range map[domain.ItemID]string{first.ID: prURL, second.ID: secondPR} {
 		s.set(it, stSpec, touchesStore)
@@ -412,7 +479,7 @@ func TestEngine_ChangedSinceOnSecrets(t *testing.T) {
 	it := h.submit(t, domain.NewItem{})
 	h.step(t) // spec, at base
 
-	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000004", Subject: "Fix the store", Files: []string{storeFile}})
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000004", Subject: storeSubject, Files: []string{storeFile}})
 	h.step(t) // build
 
 	if section := h.changedSinceOf(1); !strings.Contains(section, `- commit c0ffee000004 "Fix the store": `+storeFile) {
@@ -420,4 +487,196 @@ func TestEngine_ChangedSinceOnSecrets(t *testing.T) {
 	}
 
 	h.expectRepositoryLogin(t, it.ID, h.codehost)
+}
+
+const (
+	// webRepo is the second repository of the per-repository tests' items.
+	webRepo = "https://github.com/acme/web"
+	// entryWeb is webRepo's entry.
+	entryWeb = "web-repo"
+	// webBase is webRepo's default branch's head when the tests' items are planned.
+	webBase = "beef00000001"
+)
+
+// twoRepositoryLine is changedSinceLine with runtime.repositories: appRepo, the default, signed
+// in with the github token, and webRepo with the acme-read token.
+func twoRepositoryLine() domain.Line {
+	l := changedSinceLine()
+	l.Runtime.Repositories = []domain.RepositoryEntry{
+		{Name: entryApp, URL: appRepo, Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: true},
+		{Name: entryWeb, URL: webRepo, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessWrite},
+	}
+
+	return l
+}
+
+// twoRepositoryHarness is a harness on twoRepositoryLine with both tokens stored.
+func twoRepositoryHarness(t *testing.T, w porttest.AgentFunc) *harness {
+	t.Helper()
+
+	h := newHarness(t, twoRepositoryLine(), w)
+	h.addSecrets(t)
+	h.addSecret(t, secAcmeRead, acmeReadValue)
+
+	return h
+}
+
+// repoBaseCommits are an item's base commits by repository key.
+func (h *harness) repoBaseCommits(t *testing.T, id domain.ItemID) map[string]string {
+	t.Helper()
+
+	rows, err := h.store.ItemRepositories(inOrg(t), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := make(map[string]string, len(rows))
+	for _, r := range rows {
+		out[r.Repo] = r.BaseCommit
+	}
+
+	return out
+}
+
+// Finishing an item with two repositories records each one's default-branch head on its row,
+// read with that repository's token, and the first's on the item; a repository whose head
+// cannot be read is logged and left without one, and the item still finishes.
+func TestEngine_BaseCommitPerRepository(t *testing.T) {
+	t.Parallel()
+
+	const appKey, webKey = "github.com/acme/app", "github.com/acme/web"
+
+	tests := []struct {
+		name     string
+		app, web string // the heads set; "" for none, which fails the read
+		wantItem string
+	}{
+		{name: "both", app: base, web: webBase, wantItem: base},
+		{name: "second fails", app: base, wantItem: base},
+		{name: "first fails", web: webBase},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := twoRepositoryHarness(t, porttest.Succeed(touchesStore))
+			if tt.app != "" {
+				h.codehost.SetBranchHead(appRepo, "", tt.app)
+			}
+
+			if tt.web != "" {
+				h.codehost.SetBranchHead(webRepo, "", tt.web)
+			}
+
+			it := h.submitRepos(t, "Two repositories", appKey, webKey)
+			h.step(t) // spec
+
+			got := h.item(t, it.ID)
+			if got.BaseCommit != tt.wantItem || got.Station != stBuild {
+				t.Errorf("item base commit %q at %s; want %q at build", got.BaseCommit, got.Station, tt.wantItem)
+			}
+
+			want := map[string]string{appKey: tt.app, webKey: tt.web}
+			if rows := h.repoBaseCommits(t, it.ID); !maps.Equal(rows, want) {
+				t.Errorf("rows' base commits %v; want %v", rows, want)
+			}
+
+			if tokens := h.codehost.LoginTokens(); !slices.Equal(tokens, []string{githubTokenValue, acmeReadValue}) {
+				t.Errorf("code host calls made with %d tokens, not the app's then the web's", len(tokens))
+			}
+
+			failed := tt.app == "" || tt.web == ""
+			if logs := h.logs.String(); failed != strings.Contains(logs, "base commit not recorded") {
+				t.Errorf("a read failed: %t, but the logs say otherwise:\n%s", failed, logs)
+			}
+		})
+	}
+}
+
+// A claim of an item with two repositories compares each one's base commit with its head: the
+// section names the first repository and lists its commits under the item's paths alone, since a
+// path without an `owner/name:` prefix is in the first repository.
+func TestEngine_ChangedSincePerRepository(t *testing.T) {
+	t.Parallel()
+
+	h := twoRepositoryHarness(t, porttest.Succeed(touchesStore))
+	h.codehost.SetBranchHead(appRepo, "", base)
+	h.codehost.SetBranchHead(webRepo, "", webBase)
+
+	it := h.submitRepos(t, "Two repositories", "github.com/acme/app", "github.com/acme/web")
+	h.step(t) // spec, at both bases
+
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000005", Subject: storeSubject, Files: []string{storeFile}})
+	h.codehost.AddCommits(webRepo, ports.Commit{SHA: webBase}, ports.Commit{SHA: "beef00000002", Subject: "Web store", Files: []string{storeFile}})
+	h.codehost.SetBranchHead(webRepo, "", "beef00000002")
+
+	h.step(t) // build
+
+	section := h.changedSinceOf(1)
+	for _, want := range []string{"the default branch of github.com/acme/app since " + base, `- commit c0ffee000005 "Fix the store": ` + storeFile} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section lacks %q:\n%s", want, h.feedback(1))
+		}
+	}
+
+	if strings.Contains(section, "beef00000002") {
+		t.Errorf("section lists the second repository's commit:\n%s", section)
+	}
+
+	if got := h.item(t, it.ID).Station; got != stDone {
+		t.Errorf("item at %s; want done", got)
+	}
+}
+
+// A path with an `owner/name:` prefix is compared in the repository it names, from that
+// repository's own base commit.
+func TestEngine_ChangedSincePerRepositoryPrefixedPath(t *testing.T) {
+	t.Parallel()
+
+	h := twoRepositoryHarness(t, porttest.Succeed(`{"touches":["acme/web:internal/store/**"]}`))
+	h.codehost.SetBranchHead(appRepo, "", base)
+	h.codehost.SetBranchHead(webRepo, "", webBase)
+
+	h.submitRepos(t, "Two repositories", "github.com/acme/app", "github.com/acme/web")
+	h.step(t) // spec, at both bases
+
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000007", Subject: storeSubject, Files: []string{storeFile}})
+	h.codehost.AddCommits(webRepo, ports.Commit{SHA: webBase}, ports.Commit{SHA: "beef00000003", Subject: "Web store", Files: []string{storeFile}})
+	h.codehost.SetBranchHead(webRepo, "", "beef00000003")
+
+	h.step(t) // build
+
+	section := h.changedSinceOf(1)
+	for _, want := range []string{"the default branch of github.com/acme/web since " + webBase, `- commit beef00000003 "Web store": ` + storeFile} {
+		if !strings.Contains(section, want) {
+			t.Errorf("section lacks %q:\n%s", want, h.feedback(1))
+		}
+	}
+
+	if strings.Contains(section, "c0ffee000007") {
+		t.Errorf("section lists the first repository's commit for a path in the second:\n%s", section)
+	}
+}
+
+// A row without a base commit falls back to the item's own for its first repository.
+func TestEngine_ChangedSinceFallsBackToTheItemsBaseCommit(t *testing.T) {
+	t.Parallel()
+
+	h := twoRepositoryHarness(t, porttest.Succeed(touchesStore)) // no heads: nothing recorded at spec
+
+	it := h.submitRepos(t, "Two repositories", "github.com/acme/app", "github.com/acme/web")
+	h.step(t) // spec
+
+	queued := domain.Position{Station: stBuild, State: domain.StateQueued}
+	if _, err := h.store.Transition(inOrg(t), ports.Transition{ItemID: it.ID, From: queued, To: queued, At: h.clock.Now(), BaseCommit: base}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.land(ports.Commit{SHA: base}, ports.Commit{SHA: "c0ffee000006", Subject: storeSubject, Files: []string{storeFile}})
+	h.step(t) // build
+
+	if section := h.changedSinceOf(1); !strings.Contains(section, `- commit c0ffee000006 "Fix the store": `+storeFile) {
+		t.Errorf("build's feedback lacks the store commit:\n%s", h.feedback(1))
+	}
 }

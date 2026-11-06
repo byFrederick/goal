@@ -1,6 +1,6 @@
 import { Check, ChevronRight } from 'lucide-react';
 import { DropdownMenu as M } from 'radix-ui';
-import type { ComponentProps } from 'react';
+import { type ComponentProps, useRef } from 'react';
 import { cn } from './cn';
 
 // A menu of actions or links on Radix DropdownMenu (C §10.11): role="menu", arrow keys and
@@ -25,15 +25,33 @@ export function MenuContent({
   side = 'right',
   align = 'start',
   sideOffset = 6,
+  onInteractOutside,
+  ref,
   ...props
 }: ComponentProps<typeof M.Content>) {
+  const node = useRef<HTMLDivElement | null>(null);
   return (
     <M.Portal>
       <M.Content
+        ref={(el) => {
+          node.current = el;
+          if (typeof ref === 'function') ref(el);
+          else if (ref) ref.current = el;
+        }}
         side={side}
         align={align}
         sideOffset={sideOffset}
         collisionPadding={8}
+        // A press on the menu's own trigger is never an outside press: React re-renders the menu open before the
+        // document's pointerdown listener runs, so the trigger's toggle would be followed by a dismiss. The trigger
+        // opens or closes the menu itself (MOTION.md rule 7).
+        onInteractOutside={(event) => {
+          const trigger = props['aria-labelledby'] ?? node.current?.getAttribute('aria-labelledby');
+          const target = event.target instanceof Element ? event.target : null;
+          if (trigger && target?.closest(`[id="${CSS.escape(trigger)}"]`)) event.preventDefault();
+          else if (node.current?.dataset.state === 'closed') event.preventDefault();
+          else onInteractOutside?.(event);
+        }}
         className={cn(
           'motion-panel motion-menu z-50 flex w-80 max-w-[calc(100vw-16px)] flex-col overflow-y-auto rounded-card bg-card p-1 text-ink shadow-pop outline-none',
           'max-h-[var(--radix-dropdown-menu-content-available-height)]',

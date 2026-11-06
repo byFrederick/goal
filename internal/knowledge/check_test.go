@@ -71,7 +71,7 @@ func TestCheck_ListsUnsavedSettings(t *testing.T) {
 	w.want("a secret open to some factories only", got, err == nil, strings.Contains(got.Error, "open to some factories only"), got.Files == 0, len(got.FirstFiles) == 0)
 
 	leaky := knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: w.kb, Secrets: w.secrets, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: leakyReader{}}, Clock: w.clock,
+		Knowledge: w.kb, Secrets: w.secrets, Hosts: w.tenancy, Uploads: w.uploads, Readers: map[string]ports.SourceReader{gitdocsSync: leakyReader{}}, Clock: w.clock,
 	})
 
 	got, err = leaky.Check(ctx, repo)

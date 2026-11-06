@@ -1,7 +1,7 @@
 // Onboarding step 2, Connect your code (canvas get-started/repository) against the mock (a repository URL, a write-only token, the host's answer): at 1440, 1280, 1024, 768
 // and 390 px, in light and dark, nothing goes past the viewport edge, no text is clipped, and a phone's
 // tap targets are 44 px. These specs are not run in the box (no browser); CI runs them.
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { expectAccessible, expectNoClippedElements, expectNoHorizontalScroll } from './support';
 
 const sizes = [
@@ -12,7 +12,14 @@ const sizes = [
   { width: 390, height: 844 },
 ];
 
-const path = '/o/goal/get-started/code';
+const path = '/o/goal/get-started/factory';
+
+/** Makes the factory on step 2, which opens the Code step. */
+async function openCodeStep(page: Page) {
+  await page.goto(path);
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
+}
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset');
@@ -24,7 +31,7 @@ for (const size of sizes) {
       test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
       await page.setViewportSize(size);
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto(path);
+      await openCodeStep(page);
       await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
 
       await expectNoHorizontalScroll(page);
@@ -40,14 +47,24 @@ for (const size of sizes) {
 test('keeps the 44 px tap targets on a phone', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(path);
+  await openCodeStep(page);
   await expect(page.getByRole('heading', { level: 1, name: 'Connect your code' })).toBeVisible();
   const targets = page
     .getByRole('main')
     .locator('a[href]:not(p a, dd a), button, input:not([type=hidden]), [role=combobox]');
   const boxes = await targets.evaluateAll((els) =>
     els.map((el) => {
-      const { width, height } = el.getBoundingClientRect();
+      // The hit area, not the drawn box: an input inside a label is hit through the label, and an
+      // absolutely positioned ::before with negative insets grows its element's box.
+      const label = el instanceof HTMLInputElement ? el.closest('label') : null;
+      const rect = (label ?? el).getBoundingClientRect();
+      let { width, height } = rect;
+      const before = getComputedStyle(el, '::before');
+      if (!label && before.position === 'absolute' && before.content !== 'none') {
+        const grow = (v: string) => Math.max(0, -(Number.parseFloat(v) || 0));
+        width += grow(before.left) + grow(before.right);
+        height += grow(before.top) + grow(before.bottom);
+      }
       return { name: (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30), width, height };
     }),
   );

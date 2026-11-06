@@ -41,6 +41,8 @@ type checked struct {
 	next  domain.Line
 	// close is the reason the output closes its item with (domain.CloseFrom); "" when it does not.
 	close string
+	// repositories are the keys the output adds to its item (repositoriesOf).
+	repositories []string
 }
 
 // claimed is an item this instance holds a lease on at an agent station.
@@ -71,6 +73,12 @@ type claimed struct {
 	// goes into, decided at the claim's start (integrate); both empty for the item's branch on the
 	// default branch, as for every item that is not a part on an integration branch.
 	branch, base string
+	// code is what the runs get of the item's repositories and the factory's entries, decided at
+	// the claim's start (Line.RunCode).
+	code domain.RunCode
+	// hostKind is the kind of the code host of a landing root's first repository (firstHostKind),
+	// which picks the command its landing note opens a pull request with; "" for GitHub's.
+	hostKind domain.CodeHostKind
 }
 
 // webTools are the Claude Code tools of the builtins.web group, which the organization policy's
@@ -229,7 +237,7 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 }
 
 // admitted finds the claim's agent (agentFor), applies the organization policy to it
-// (applyPolicy), decides its runs' branch and base (integrate) and reports whether it may run;
+// (applyPolicy), decides its runs' branch and base (integrate) and code (runCode) and reports whether it may run;
 // when not, the item is blocked (no agent, the policy could not be read, or the base could not
 // be decided) or waits for a person (the policy refuses its model).
 func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) bool {
@@ -252,6 +260,11 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 
 	if err == nil && refusal == "" {
 		err = e.integrate(ctx, log, c)
+	}
+
+	if err == nil && refusal == "" {
+		c.code, err = e.runCode(ctx, c.line, c.agent, c.item.ID)
+		c.hostKind = e.firstHostKind(ctx, log, *c)
 	}
 
 	switch {
@@ -394,7 +407,7 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, attempt int, err error) bool {
 	retryable := errors.Is(err, ports.ErrContractViolation) || errors.Is(err, domain.ErrBadVerdict) ||
 		errors.Is(err, domain.ErrBadPlan) || errors.Is(err, domain.ErrBadAfter) || errors.Is(err, domain.ErrBadClose) ||
-		errors.Is(err, errCheckFailed)
+		errors.Is(err, domain.ErrBadRepositories) || errors.Is(err, errCheckFailed)
 	if !retryable {
 		e.block(ctx, log, c, "check output: "+err.Error())
 		return false
@@ -419,8 +432,8 @@ func (e *Engine) outputFailed(ctx context.Context, log *slog.Logger, c claimed, 
 
 // check validates an output against the station's contract (of the version the run started
 // on), at a gate reads its verdict and, when the output is not a rejection, the items it says
-// the work follows (followed), its close (closeOf) and, when the current line materializes plans,
-// its plan. The current line is read once here and finish moves the item along the same one, so a
+// the work follows (followed), its close (closeOf), the repositories it adds to its item
+// (repositoriesOf) and, when the current line materializes plans, its plan. The current line is read once here and finish moves the item along the same one, so a
 // plan is assembled only by a line that parsed it.
 func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (checked, error) {
 	if c.station.Output != "" {
@@ -450,6 +463,10 @@ func (e *Engine) check(ctx context.Context, c claimed, output json.RawMessage) (
 	}
 
 	chk.close = reason
+
+	if chk.repositories, err = e.repositoriesOf(ctx, c, output); err != nil {
+		return checked{}, err
+	}
 
 	after, err := e.followed(ctx, c, output, chk.next.Flow.Dependencies.After)
 	if err != nil {
@@ -503,6 +520,25 @@ func closeOf(c claimed, output json.RawMessage, next domain.Line) (string, error
 	return reason, nil
 }
 
+// repositoriesOf are the repositories the output names in the field the line maps
+// (flow.outputs.repositories) that its item lacks, resolved against the version the run started
+// on: domain.ErrBadRepositories when one is not the factory's, or when they would give the item
+// more than domain.MaxItemRepositories with its rows, this run's pushes included (FinishRun joined
+// them before the check). None when the output names none.
+func (e *Engine) repositoriesOf(ctx context.Context, c claimed, output json.RawMessage) ([]string, error) {
+	keys, err := domain.RepositoriesFrom(output, c.line.Flow.Outputs.Repositories, c.line)
+	if err != nil || len(keys) == 0 {
+		return nil, err
+	}
+
+	have, err := e.store.ItemRepositories(ctx, c.item.ID)
+	if err != nil {
+		return nil, fmt.Errorf("repositories of item %s: %w", c.item.ID, err)
+	}
+
+	return domain.OutputRepositories(have, keys)
+}
+
 // runOnce runs the claim's next run with the shared run lifecycle (runTask) under the claim's
 // lease, in the claim's sandbox (b, created and prepared by the first run), and, when it
 // succeeded, checks its output, runs the station's checks and links a single item to the items
@@ -550,7 +586,7 @@ func (c claimed) request(brief string) domain.RunRequest {
 	r := domain.RunRequest{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
-		Repository: rt.Repository, Branch: c.branch, Base: c.base, ModelConnection: rt.ModelConnection,
+		Repository: rt.Repository, Branch: c.branch, Base: c.base, Code: c.code, ModelConnection: rt.ModelConnection,
 		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
 	}
 
@@ -682,11 +718,18 @@ func joinParts(parts ...string) string {
 }
 
 // workspaceNote tells the agent what its working directory holds, as the sandbox's prepare left
-// it, and whether git can push from it; nothing without a repository.
+// it, and whether git can push from it, then the item's repositories and how to open another
+// (codeNote); nothing for a factory with no code.
 func workspaceNote(c claimed, b *box, env runEnv) string {
 	r := c.line.Runtime.Repository
+	code := codeNote(c)
+
 	if r.URL == "" {
-		return ""
+		if code == "" {
+			return ""
+		}
+
+		return "## Workspace\n\n" + code
 	}
 
 	state := "a new branch from the default branch"
@@ -703,8 +746,13 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 		host = u.Host
 	}
 
-	note := fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
-		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host))
+	note := joinParts(fmt.Sprintf("## Workspace\n\nYour working directory is a clone of %s with branch `%s` checked out (%s). %s",
+		r.URL, cmp.Or(c.branch, c.item.Branch()), state, env.pushNote(host)), code)
+	if c.item.Landing() && c.agent.Code == domain.CodeRead {
+		return note + fmt.Sprintf("\n\nThis is the assembly's integration branch `%s`; it lands on the default branch. "+
+			"You only read code: push nothing and open no pull request.", c.branch)
+	}
+
 	// A landing root lands only at its landing station; anywhere else (build, after the landing
 	// was rejected) it is reworked on the integration branch, so a landing note there would have
 	// the agent check the landing instead of fixing what the rejection asks for.
@@ -718,9 +766,9 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 		return note + fmt.Sprintf("\n\nYou are landing the whole assembly: `%s` is its integration branch, which holds "+
 			"every part's merged work, and it lands on the default branch (origin/HEAD). First merge the default branch into `%s` "+
 			"and resolve any conflicts there; never rebase it. Then, if no pull request from `%s` into the default branch is open, "+
-			"open one with `gh pr create --base <default branch> --head %s`, and name it in your output's pull_request. "+
+			"open one with `%s`, and name it in your output's pull_request. "+
 			"When `%s` has no commits beyond the default branch, open none and report `\"pull_requests\": []` instead.",
-			c.branch, c.branch, c.branch, c.branch, c.branch)
+			c.branch, c.branch, c.branch, openCommand(c.hostKind, c.branch), c.branch) + eachRepository(c)
 	}
 
 	if c.base == "" {
@@ -728,10 +776,118 @@ func workspaceNote(c claimed, b *box, env runEnv) string {
 	}
 
 	refresh := cmp.Or(c.line.Flow.Assemblies.Integration.Refresh, domain.RefreshOnLand)
+	open := fmt.Sprintf("open your pull request into `%s`", c.base)
+
+	if c.agent.Code == domain.CodeRead {
+		open = "you only read code, so push nothing and open no pull request"
+	}
 
 	return note + fmt.Sprintf("\n\nThis part builds on its assembly's integration branch `%s`, not the default branch: "+
-		"open your pull request into `%s`. The integration branch takes in the default branch %s (refresh: %s).",
-		c.base, c.base, refreshWhen[refresh], refresh)
+		"%s. The integration branch takes in the default branch %s (refresh: %s).",
+		c.base, open, refreshWhen[refresh], refresh)
+}
+
+// eachRepository tells a landing with several repositories to land each of them, and is empty
+// for one.
+func eachRepository(c claimed) string {
+	if len(c.code.Clones) < 2 {
+		return ""
+	}
+
+	return fmt.Sprintf(" Do this in each of the item's repositories where `%s` has commits beyond its default branch, "+
+		"and name every pull request in your output's pull_requests.", c.branch)
+}
+
+// openCommand is the command that opens a pull request from branch into the default branch on a
+// code host of kind (ADR 0041 decision 7): glab on GitLab, gh on GitHub and when kind is unknown.
+func openCommand(kind domain.CodeHostKind, branch string) string {
+	if kind == domain.CodeHostGitLab {
+		return "glab mr create --target-branch <default branch> --source-branch " + branch
+	}
+
+	return "gh pr create --base <default branch> --head " + branch
+}
+
+// firstHostKind is the kind the organization lists the host of a landing root's first repository
+// as: its first clone's, else the line's repository's. "" for any other claim, for one with no
+// repository, and when the host is not listed or cannot be read, which is logged: the note then
+// names GitHub's command.
+func (e *Engine) firstHostKind(ctx context.Context, log *slog.Logger, c claimed) domain.CodeHostKind {
+	if !c.item.Landing() {
+		return ""
+	}
+
+	raw := c.line.Runtime.Repository.URL
+	if len(c.code.Clones) > 0 {
+		raw = c.code.Clones[0].URL
+	}
+
+	if raw == "" {
+		return ""
+	}
+
+	hosts, err := e.listedCodeHosts(ctx)
+	if err != nil {
+		log.WarnContext(ctx, "code host kind unknown", slog.Any("error", err))
+
+		return ""
+	}
+
+	repo, err := domain.ParseCodeRepository(hosts, raw)
+	if err != nil {
+		log.WarnContext(ctx, "code host kind unknown", slog.String("repository", raw), slog.Any("error", err))
+
+		return ""
+	}
+
+	return repo.Host.Kind
+}
+
+// codeNote lists the item's repositories, each with where it is and whether this agent may push
+// to it, on the item's branch, and says how to open any other repository the factory's entries
+// cover (ADR 0041 decisions 3 and 5); the list is left out for an item with none, and both for a
+// line with no entries.
+func codeNote(c claimed) string {
+	entries := c.line.Runtime.Repositories
+	if len(entries) == 0 {
+		return ""
+	}
+
+	var list string
+
+	if len(c.code.Clones) > 0 {
+		var sb strings.Builder
+
+		fmt.Fprintf(&sb, "The item's repositories, each on branch `%s` where a run already pushed it, else on the default branch:",
+			cmp.Or(c.branch, c.item.Branch()))
+
+		for _, r := range c.code.Clones {
+			access := "read only"
+			if r.Write {
+				access = "you may push"
+			}
+
+			fmt.Fprintf(&sb, "\n- %s at %s: %s", r.URL, r.Path, access)
+		}
+
+		list = sb.String()
+	}
+
+	urls := make([]string, len(entries))
+	for i, e := range entries {
+		urls[i] = e.URL
+	}
+
+	push := "Push only to a repository whose entry writes."
+	if c.agent.Code == domain.CodeRead {
+		push = "You only read code: never push to any repository."
+	}
+
+	open := fmt.Sprintf("To open another repository the factory's entries cover (%s), clone it with plain git into "+
+		"%s/<owner>/<name>, such as `git clone https://<host>/<owner>/<name> %s/<owner>/<name>`. %s",
+		strings.Join(urls, ", "), domain.ReposPath, domain.ReposPath, push)
+
+	return joinParts(list, open)
 }
 
 // refreshWhen says when an integration branch takes in the default branch, by its refresh.
@@ -742,7 +898,7 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 
 // finish moves an item whose output passed its checks, with an event for each declared rule the
 // output says was broken (violations) and the paths it lists in the field the line maps
-// (flow.dependencies.paths) and the follow-ups of run it holds (followUps), with the base commit it was planned against (baseCommit): through the gate's verdict when the
+// (flow.dependencies.paths), the follow-ups of run it holds (followUps) and the repositories it adds (chk.repositories), with the base commits it was planned against (baseCommits): through the gate's verdict when the
 // station has one, to cancelled at its station when its output closes the item (closeItem), into
 // state assembly when its output has a plan (assemble), otherwise to the next station. An approving gate whose action is merge leaves the merge to a person when the
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
@@ -755,9 +911,10 @@ func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run do
 	t := ports.Transition{
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		Lease: &c.lease, Outcome: domain.LeaseAdvanced, Lane: domain.LaneFrom(output), OutputStation: c.station.ID,
-		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), BaseCommit: e.baseCommit(ctx, log, c),
-		Output: output, At: e.clock.Now(), FollowUps: followUps(c, run, output),
+		Paths: domain.PathsFrom(output, c.line.Flow.Dependencies.Paths), Output: output, At: e.clock.Now(),
+		FollowUps: followUps(c, run, output), Repositories: chk.repositories,
 	}
+	t.BaseCommit, t.BaseCommits = e.baseCommits(ctx, log, c)
 	t.Events = e.violations(ctx, log, c, output, t.At)
 
 	var err error
@@ -850,27 +1007,38 @@ func (e *Engine) violations(ctx context.Context, log *slog.Logger, c claimed, ou
 
 // assemble makes the claimed item an assembly with the parts of its plan, queued at the station
 // that planned them; the item stays there, in state assembly. A part cannot plan an assembly
-// (assemblies do not nest), so its plan blocks it, as does a part domain.File refuses. A lost acknowledgement is only logged: the
-// store's Assemble is idempotent, so the parts exist at most once.
+// (assemblies do not nest), so its plan blocks it, as does a part domain.File refuses. Each part
+// gets the repositories its plan entry names, else the assembly's. A lost acknowledgement is only
+// logged: the store's Assemble is idempotent, so the parts exist at most once.
 func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a ports.Assembly) {
 	if c.item.ParentID != "" {
 		e.block(ctx, log, c, "a part cannot plan an assembly")
 		return
 	}
 
-	for _, p := range a.Parts {
-		if err := checkPart(c.line, c.item, a.By, p); err != nil {
+	repos, err := e.repositoryKeys(ctx, c.item.ID)
+	if err != nil {
+		log.ErrorContext(ctx, "assemble item; the lease will expire and requeue it", slog.Any("error", err))
+		return
+	}
+
+	parts := make([]domain.NewPart, len(a.Parts))
+
+	for i, p := range a.Parts {
+		if parts[i], err = checkPart(c.line, c.item, a.By, p, repos); err != nil {
 			e.block(ctx, log, c, "assemble: part "+p.Key+": "+err.Error())
 			return
 		}
 	}
+
+	a.Parts = parts
 
 	a.Transition.To = domain.Position{Station: c.station.ID, State: domain.StateAssembly}
 
 	ctx, cancel := cleanup(ctx)
 	defer cancel()
 
-	_, parts, err := e.store.Assemble(ctx, a)
+	_, filed, err := e.store.Assemble(ctx, a)
 
 	switch {
 	case errors.Is(err, ports.ErrLeaseLost), errors.Is(err, ports.ErrConflict):
@@ -880,7 +1048,7 @@ func (e *Engine) assemble(ctx context.Context, log *slog.Logger, c claimed, a po
 	case err != nil:
 		log.ErrorContext(ctx, "assemble item; the lease will expire and requeue it", slog.Any("error", err))
 	default:
-		log.InfoContext(ctx, "item assembled", slog.String("station", c.station.ID), slog.Int("parts", parts.Total))
+		log.InfoContext(ctx, "item assembled", slog.String("station", c.station.ID), slog.Int("parts", filed.Total))
 	}
 }
 

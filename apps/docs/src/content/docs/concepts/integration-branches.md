@@ -27,12 +27,15 @@ A line in `branch` mode needs a station that merges, and `landAt` must name a st
 - An assembly's integration branch is named `goal/a<root number>-<root title slug>`. The root is the assembly.
 - The branch is set once, when the first part's run starts, if the assembly has at least `minParts` parts and no pull request yet. After that it does not change. An assembly that has no branch runs on trunk to the end, even if the definition changes later.
 - Each part builds on the assembly's integration branch. A part whose pull request was already opened against another base keeps that base.
+- The assembly has its integration branch in each repository its parts work in, with the one name. When a part's run starts on the branch, the assembly takes the branch in each of the part's repositories, and a repository the assembly did not have joins it. The branch is set once in each repository, like the name.
 
 ## Landing
 
 When the last part is done or cancelled, the assembly does not close. It moves to its landing station and waits there in the queue.
 
-The landing run opens a pull request from the integration branch into the default branch. Approval at the gate merges it, as it would any item. On a version on secrets, goald merges it with `runtime.repository.token` (see [the repository and the model](/docs/concepts/access-and-secrets/#the-repository-and-the-model)). An assembly whose parts changed nothing can land with no pull request.
+The landing covers the union of the repositories of its done parts. As the assembly moves to its landing station, it takes the integration branch in each of them, so the landing run clones all of them. A repository only a cancelled part worked in is left out. An item has at most 10 repositories, so a repository past that limit is left out, and its part's change does not land.
+
+The landing run opens a pull request from the integration branch into the default branch, in each repository where the branch has changes. Its prompt names the command for the host of the assembly's first repository: `gh pr create --base <default branch> --head <branch>` on GitHub, and `glab mr create --target-branch <default branch> --source-branch <branch>` on GitLab. An agent that only reads is told to push nothing and open no pull request. Approval at the gate merges each pull request whose head is the integration branch in its repository, with the token of the entry that covers that repository (see [the repository and the model](/docs/concepts/access-and-secrets/#the-repository-and-the-model)). An assembly whose parts changed nothing can land with no pull request.
 
 If the landing is rejected, the gate sends the assembly back to its `onReject` station. There, the work goes back on the integration branch and the pull request stays open.
 

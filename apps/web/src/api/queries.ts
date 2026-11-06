@@ -53,6 +53,7 @@ import {
   listStandingRules,
   type RunsFilter,
 } from './client';
+import { getCodeHosts } from './code-hosts';
 import {
   type ConnectionFilter,
   getConnection,
@@ -100,7 +101,7 @@ import {
 import { getNotificationPreferences } from './notifications';
 import { getOrgNotificationSettings } from './org-notifications';
 import { getOrgPolicy } from './policy';
-import { testRepository } from './repositories';
+import { listFactoryRepositoryTests } from './repositories';
 import { type SearchQuery, searchOrg } from './search';
 import { getSecret, listSecretActivity, listSecrets } from './secrets';
 import { getOrgSpend } from './spend';
@@ -164,6 +165,8 @@ export const keys = {
   settings: (org: string) => ['org', org, 'settings'] as const,
   /** The organization's notification settings (the Slack secret). */
   orgNotifications: (org: string) => ['org', org, 'settings', 'notifications'] as const,
+  /** The organization's code hosts (ADR 0041). */
+  codeHosts: (org: string) => ['org', org, 'code-hosts'] as const,
   /** The organization's model and tool policy (ADR 0024), the Models and policies screen. */
   policy: (org: string) => ['org', org, 'policy'] as const,
   apiKeys: (org: string) => ['org', org, 'api-keys'] as const,
@@ -411,13 +414,12 @@ export const accessQuery = (org: string, by: AccessView) =>
     staleTime: 30_000,
   });
 
-/** The read and push check of a repository's token (ADR 0037): a test that costs a request, so it is kept for a minute. */
-export const repositoryTestQuery = (org: string, url: string, secret: string) =>
+/** The results kept for a factory's repositories (factory:read); reading tests nothing. */
+export const factoryRepositoryTestsQuery = (org: string, factory: string) =>
   queryOptions({
-    queryKey: ['org', org, 'repository-test', url, secret] as const,
-    queryFn: ({ signal }) => testRepository(org, { url, secret }, signal),
-    staleTime: 60_000,
-    retry: false,
+    queryKey: ['org', org, 'factories', factory, 'repository-tests'] as const,
+    queryFn: ({ signal }) => listFactoryRepositoryTests(org, factory, signal),
+    staleTime: 30_000,
   });
 
 /** The organization's notification settings (org:read). */
@@ -1038,4 +1040,12 @@ export const draftKeptTestsQuery = (org: string, factory: string) =>
   queryOptions({
     queryKey: [...keys.jonah(org, factory), 'draft-kept-tests'] as const,
     queryFn: ({ signal }) => getDraftKeptTests(org, factory, signal),
+  });
+
+/** The organization's code hosts, built in first (org:read). */
+export const codeHostsQuery = (org: string) =>
+  queryOptions({
+    queryKey: keys.codeHosts(org),
+    queryFn: ({ signal }) => getCodeHosts(org, signal),
+    staleTime: 30_000,
   });

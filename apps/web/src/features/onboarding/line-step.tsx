@@ -117,8 +117,8 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
         <Button asChild size="lg" variant="secondary">
           <Link
             to="/o/$org/get-started/$step"
-            params={{ org: org.slug, step: 'factory' }}
-            search={{ url: search.url, secret: search.secret, factory }}
+            params={{ org: org.slug, step: 'code' }}
+            search={{ url: search.url, secret: search.secret, template: search.template, factory }}
           >
             Back
           </Link>

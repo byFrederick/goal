@@ -118,7 +118,8 @@ func (e *Engine) fire(ctx context.Context, l domain.Line, t domain.Trigger, ev d
 // evaluate runs t on ev at now as intake does, and as a try does (ADR 0028 decision 1): When,
 // only.failuresInARow, only.dedupe, only.modelAgrees (last of only; the model check is removed, so
 // it skips every event that reaches it with domain.ModelCheckRemoved, ADR 0040 decision 18),
-// Create (it renders the item, creating nothing), then limits.perDay, limits.perHour and
+// Create (it renders the item, creating nothing, and skips the event when create.repositories
+// names a repository the factory doesn't have, ADR 0041 decision 13), then limits.perDay, limits.perHour and
 // limits.pauseOnBudget. It stops at the first step that skips the event, and only reads. Reasons
 // hold no event text, but for a dedupe skip's item id.
 func (e *Engine) evaluate(ctx context.Context, l domain.Line, t domain.Trigger, ev domain.IntakeEvent, now time.Time) (domain.TriggerEvaluation, error) {
@@ -148,6 +149,14 @@ func (e *Engine) evaluate(ctx context.Context, l domain.Line, t domain.Trigger, 
 		return out, err
 	}
 
+	repos, skip := l.ResolveRepositories(renderRepositories(t, ev), ev.Sender)
+	if skip != "" {
+		out.Skip(domain.StepCreate, skip)
+
+		return out, nil
+	}
+
+	it.Repositories = repos
 	out.Item = &it
 	out.Pass(domain.StepCreate, "")
 
@@ -294,6 +303,16 @@ func renderItem(l domain.Line, t domain.Trigger, ev domain.IntakeEvent) (domain.
 	}, nil
 }
 
+// renderRepositories are t's create.repositories rendered with ev's values, unquoted.
+func renderRepositories(t domain.Trigger, ev domain.IntakeEvent) []string {
+	out := make([]string, 0, len(t.Create.Repositories))
+	for _, r := range t.Create.Repositories {
+		out = append(out, domain.RenderEventTemplate(r, ev, false))
+	}
+
+	return out
+}
+
 // withUsedPayload is ev with the {{payload.<path>}} values t's templates read among its fields,
 // so the untrusted block holds what the item's title and brief were made from.
 func withUsedPayload(t domain.Trigger, ev domain.IntakeEvent) domain.IntakeEvent {
@@ -321,7 +340,7 @@ func fileFromTrigger(l domain.Line, t domain.Trigger, ev domain.IntakeEvent, it 
 	n, err := domain.File(l, domain.FileRequest{
 		Origin: domain.OriginTrigger, By: domain.EngineActor, Type: it.Type, Lane: it.Lane, Title: it.Title, Body: it.Body,
 		Station: it.Station, State: it.State, Class: it.Class, At: now, Source: itemSource(ev.Source), Trigger: t.Name,
-		Untrusted: ev.Webhook != "" && !t.Create.Trusted,
+		Untrusted: ev.Webhook != "" && !t.Create.Trusted, Repositories: it.Repositories,
 	})
 	if err != nil {
 		return domain.NewItem{}, fmt.Errorf("file the item: %w", err)

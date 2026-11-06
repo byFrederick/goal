@@ -244,6 +244,112 @@ func TestPublish_ItemsInProgressAtARemovedStationBlock(t *testing.T) {
 	}
 }
 
+// reviewRepo is the repository acmeYAML's runtime.repository names, as an item's row keys it.
+const reviewRepo = "git.example.com/acme/review"
+
+// repositoriesYAML is acmeYAML with runtime.repositories in place of the shorthand: one entry
+// that writes, named name, at url.
+func repositoriesYAML(name, url string) string {
+	return strings.Replace(acmeYAML,
+		`repository: { url: "https://git.example.com/acme/review.git", token: "{{code-token}}", forge: github }`,
+		fmt.Sprintf(`repositories: [{ name: %s, url: %q, token: "{{code-token}}", access: write }]`, name, url), 1)
+}
+
+// itemUsing files an item of f in state at the build station whose repositories are repos.
+func (h *harness) itemUsing(t *testing.T, f domain.FactoryID, state domain.ItemState, repos ...string) domain.Item {
+	t.Helper()
+
+	n := domain.NewItem{FactoryID: f, Type: "feature", Title: "An item", Station: "build", State: state, CreatedAt: h.clock.Now()}
+	for _, r := range repos {
+		n.Repositories = append(n.Repositories, domain.ItemRepository{Repo: r, Joined: domain.JoinedFiling})
+	}
+
+	it, err := h.items.CreateItem(h.ctx, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// currentID is the id of f's running version; f has an open draft.
+func (h *harness) currentID(t *testing.T, f domain.FactoryID) domain.DefinitionVersionID {
+	t.Helper()
+
+	d, err := h.svc.Draft(h.ctx, f)
+	if err != nil || d.Current == nil {
+		t.Fatalf("draft = %+v, %v; want a current version", d, err)
+	}
+
+	return d.Current.ID
+}
+
+func TestPublish_RemovedRepositoryWithOpenItemsBlocks(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	f := h.published(t)
+	a := h.itemUsing(t, f, domain.StateQueued, reviewRepo)
+	b := h.itemUsing(t, f, domain.StateInProgress, reviewRepo)
+	done := h.itemUsing(t, f, domain.StateDone, reviewRepo)
+	h.edit(t, f, repositoriesYAML("app", "https://git.example.com/acme/app"))
+	running := h.currentID(t, f)
+
+	_, err := h.svc.Publish(h.ctx, f, h.publishRequest(t, f))
+
+	invalid, ok := errors.AsType[*authoring.InvalidError](err)
+	if !ok {
+		t.Fatalf("publish = %v, want an InvalidError", err)
+	}
+
+	p, ok := problem(invalid.Problems, authoring.CodeItemsUseRemovedRepository)
+	if !ok || p.Check != authoring.CheckItems || p.Severity != domain.SeverityError {
+		t.Fatalf("problems = %+v; want an items-use-removed-repository error", invalid.Problems)
+	}
+
+	for _, want := range []string{reviewRepo, fmt.Sprintf("#%d", a.Number), fmt.Sprintf("#%d", b.Number)} {
+		if !strings.Contains(p.Message, want) {
+			t.Errorf("message %q does not name %s", p.Message, want)
+		}
+	}
+
+	if strings.Contains(p.Message, fmt.Sprintf("#%d", done.Number)) {
+		t.Errorf("message %q names the done item #%d", p.Message, done.Number)
+	}
+
+	if got := h.currentID(t, f); got != running {
+		t.Errorf("current = %s; want %s, the running version", got, running)
+	}
+}
+
+func TestPublish_RemovedRepositoryWithOnlyDoneItemsPublishes(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	f := h.published(t)
+	h.itemUsing(t, f, domain.StateDone, reviewRepo)
+	h.itemUsing(t, f, domain.StateCancelled, reviewRepo)
+	h.itemUsing(t, f, domain.StateQueued)
+	h.edit(t, f, repositoriesYAML("app", "https://git.example.com/acme/app"))
+
+	if v := h.publish(t, f); v.Number != 2 {
+		t.Errorf("published version %d; want 2", v.Number)
+	}
+}
+
+func TestPublish_RenamedRepositoryEntryPublishes(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	f := h.published(t)
+	h.itemUsing(t, f, domain.StateInProgress, reviewRepo)
+	h.edit(t, f, repositoriesYAML("main", "https://GIT.example.com/acme/Review"))
+
+	if v := h.publish(t, f); v.Number != 2 {
+		t.Errorf("published version %d; want 2", v.Number)
+	}
+}
+
 func TestRestore_MovesThePointerBack(t *testing.T) {
 	t.Parallel()
 
@@ -805,4 +911,54 @@ func (h *harness) storedCounts(t *testing.T, f domain.FactoryID) []*domain.Versi
 	}
 
 	return out
+}
+
+// A definition with several entries, one that only reads, and an agent that only reads publishes
+// (ADR 0041 decisions 2 and 3): the reader's tokens and its GitHub tools are warnings only.
+func TestPublish_SeveralEntriesAndAReaderPublishWithWarnings(t *testing.T) {
+	t.Parallel()
+
+	tests := porttest.NewEnvironmentTests()
+	h := newHarness(t, withSecretsCheck(func(c *authoring.SecretsCheck) { c.Tests = tests }))
+	h.secret(t, "code-read", domain.SecretScope{All: true})
+
+	yaml := strings.Replace(withCode("read"),
+		`repository: { url: "https://git.example.com/acme/review.git", token: "{{code-token}}", forge: github }`,
+		`repositories: [`+
+			`{ name: services, url: "https://git.example.com/acme/*", token: "{{code-token}}", access: write, default: false }, `+
+			`{ name: docs, url: "https://git.example.com/acme/docs", token: "{{code-read}}", access: read }]`, 1)
+
+	files := acmeFiles(yaml)
+	files[envFile] = []byte(gitHubEnv("{}"))
+
+	f := h.imported(t, files)
+
+	org, _ := domain.OrgFrom(h.ctx)
+	tests.AddFactory(org, f)
+
+	val, err := h.svc.ValidateDraft(h.ctx, f, authoring.ValidateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := codes(val.Problems)
+	for _, want := range []string{"reader-write-token", authoring.CodeGitHubToolsUnknown} {
+		if !slices.Contains(got, want) {
+			t.Errorf("problems %v; want %s", got, want)
+		}
+	}
+
+	if p, ok := problem(val.Problems, "reader-write-token"); ok && p.Message != "engineer only reads, but the only token for services can write." {
+		t.Errorf("reader-write-token says %q", p.Message)
+	}
+
+	for _, p := range val.Problems {
+		if p.Severity == domain.SeverityError {
+			t.Errorf("error %s: %s; want warnings only", p.Code, p.Message)
+		}
+	}
+
+	if v := h.publish(t, f); v.Number != 1 {
+		t.Errorf("published version %d; want 1", v.Number)
+	}
 }

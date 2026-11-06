@@ -146,16 +146,16 @@ func (e AndonKind) Valid() bool {
 
 // Defines values for AuthMode.
 const (
-	None    AuthMode = "none"
-	Session AuthMode = "session"
+	AuthModeNone    AuthMode = "none"
+	AuthModeSession AuthMode = "session"
 )
 
 // Valid indicates whether the value is a known member of the AuthMode enum.
 func (e AuthMode) Valid() bool {
 	switch e {
-	case None:
+	case AuthModeNone:
 		return true
-	case Session:
+	case AuthModeSession:
 		return true
 	default:
 		return false
@@ -372,6 +372,24 @@ const (
 func (e CloneStartKind) Valid() bool {
 	switch e {
 	case CloneStartKindClone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CodeHostKind.
+const (
+	CodeHostKindGithub CodeHostKind = "github"
+	CodeHostKindGitlab CodeHostKind = "gitlab"
+)
+
+// Valid indicates whether the value is a known member of the CodeHostKind enum.
+func (e CodeHostKind) Valid() bool {
+	switch e {
+	case CodeHostKindGithub:
+		return true
+	case CodeHostKindGitlab:
 		return true
 	default:
 		return false
@@ -678,6 +696,42 @@ func (e FactoryHealth) Valid() bool {
 	case FactoryHealthRunning:
 		return true
 	case FactoryHealthStopped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FactoryRepositoryTestAccess.
+const (
+	FactoryRepositoryTestAccessRead  FactoryRepositoryTestAccess = "read"
+	FactoryRepositoryTestAccessWrite FactoryRepositoryTestAccess = "write"
+)
+
+// Valid indicates whether the value is a known member of the FactoryRepositoryTestAccess enum.
+func (e FactoryRepositoryTestAccess) Valid() bool {
+	switch e {
+	case FactoryRepositoryTestAccessRead:
+		return true
+	case FactoryRepositoryTestAccessWrite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for FactoryRepositoryTestRequestAccess.
+const (
+	FactoryRepositoryTestRequestAccessRead  FactoryRepositoryTestRequestAccess = "read"
+	FactoryRepositoryTestRequestAccessWrite FactoryRepositoryTestRequestAccess = "write"
+)
+
+// Valid indicates whether the value is a known member of the FactoryRepositoryTestRequestAccess enum.
+func (e FactoryRepositoryTestRequestAccess) Valid() bool {
+	switch e {
+	case FactoryRepositoryTestRequestAccessRead:
+		return true
+	case FactoryRepositoryTestRequestAccessWrite:
 		return true
 	default:
 		return false
@@ -1116,6 +1170,30 @@ func (e ItemLinkKind) Valid() bool {
 	}
 }
 
+// Defines values for ItemRepositoryJoined.
+const (
+	ItemRepositoryJoinedDefault ItemRepositoryJoined = "default"
+	ItemRepositoryJoinedFiling  ItemRepositoryJoined = "filing"
+	ItemRepositoryJoinedOutput  ItemRepositoryJoined = "output"
+	ItemRepositoryJoinedPush    ItemRepositoryJoined = "push"
+)
+
+// Valid indicates whether the value is a known member of the ItemRepositoryJoined enum.
+func (e ItemRepositoryJoined) Valid() bool {
+	switch e {
+	case ItemRepositoryJoinedDefault:
+		return true
+	case ItemRepositoryJoinedFiling:
+		return true
+	case ItemRepositoryJoinedOutput:
+		return true
+	case ItemRepositoryJoinedPush:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ItemState.
 const (
 	ItemStateAssembly     ItemState = "assembly"
@@ -1391,16 +1469,16 @@ func (e LeadTimeBridgeStatus) Valid() bool {
 
 // Defines values for LineReleasePolicy.
 const (
-	DrumBufferRope LineReleasePolicy = "drum-buffer-rope"
-	Push           LineReleasePolicy = "push"
+	LineReleasePolicyDrumBufferRope LineReleasePolicy = "drum-buffer-rope"
+	LineReleasePolicyPush           LineReleasePolicy = "push"
 )
 
 // Valid indicates whether the value is a known member of the LineReleasePolicy enum.
 func (e LineReleasePolicy) Valid() bool {
 	switch e {
-	case DrumBufferRope:
+	case LineReleasePolicyDrumBufferRope:
 		return true
-	case Push:
+	case LineReleasePolicyPush:
 		return true
 	default:
 		return false
@@ -1929,6 +2007,27 @@ func (e TeardownRunOutcome) Valid() bool {
 	case TeardownRunOutcomeRunning:
 		return true
 	case TeardownRunOutcomeSentBack:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TemplateCode.
+const (
+	TemplateCodeNone  TemplateCode = "none"
+	TemplateCodeRead  TemplateCode = "read"
+	TemplateCodeWrite TemplateCode = "write"
+)
+
+// Valid indicates whether the value is a known member of the TemplateCode enum.
+func (e TemplateCode) Valid() bool {
+	switch e {
+	case TemplateCodeNone:
+		return true
+	case TemplateCodeRead:
+		return true
+	case TemplateCodeWrite:
 		return true
 	default:
 		return false
@@ -3289,6 +3388,45 @@ type CloneStart struct {
 // CloneStartKind defines model for CloneStart.Kind.
 type CloneStartKind string
 
+// CodeHost defines model for CodeHost.
+type CodeHost struct {
+	// ApiBase The REST API root goald derives: for GitHub, https://api.github.com for github.com, https://api.<name>.ghe.com for <name>.ghe.com and https://<host>/api/v3 for any other host; for GitLab, https://<host>/api/v4
+	ApiBase string `json:"api_base"`
+
+	// BuiltIn true for github.com and gitlab.com, which every organization lists
+	BuiltIn bool `json:"built_in"`
+
+	// Host A DNS name in lower case, such as ghe.example.com
+	Host string `json:"host"`
+
+	// Kind The API the host speaks, GitHub's or GitLab's
+	Kind CodeHostKind `json:"kind"`
+}
+
+// CodeHostInput defines model for CodeHostInput.
+type CodeHostInput struct {
+	// Host A DNS name such as ghe.example.com; case is ignored
+	Host string `json:"host"`
+
+	// Kind The API the host speaks, GitHub's or GitLab's
+	Kind CodeHostKind `json:"kind"`
+}
+
+// CodeHostKind The API the host speaks, GitHub's or GitLab's
+type CodeHostKind string
+
+// CodeHosts defines model for CodeHosts.
+type CodeHosts struct {
+	// Hosts The built-in hosts first, then the added ones sorted by host
+	Hosts []CodeHost `json:"hosts"`
+}
+
+// CodeHostsInput defines model for CodeHostsInput.
+type CodeHostsInput struct {
+	// Hosts Every host the organization adds, without github.com and gitlab.com; empty removes them all
+	Hosts []CodeHostInput `json:"hosts"`
+}
+
 // CompareSide One side of a comparison; id, number and state are null for a starting tree no version holds
 type CompareSide struct {
 	Id *string `json:"id"`
@@ -4097,6 +4235,9 @@ type EnvironmentTestTemplate struct {
 	Env  *map[string]string `json:"env,omitempty"`
 	Name string             `json:"name"`
 
+	// Parameters The template's parameters' values, by name: a host name with an optional :port. A parameter without one takes its default
+	Parameters *map[string]string `json:"parameters,omitempty"`
+
 	// Secrets The secret each slot takes, by slot
 	Secrets map[string]SecretName `json:"secrets"`
 }
@@ -4253,6 +4394,69 @@ type FactoryOverviewList struct {
 	// Window The window asked for, as in 7d
 	Window string `json:"window"`
 }
+
+// FactoryRepositoryTest defines model for FactoryRepositoryTest.
+type FactoryRepositoryTest struct {
+	Access FactoryRepositoryTestAccess `json:"access"`
+
+	// At When it was tested
+	At time.Time `json:"at"`
+
+	// Note For a write entry: the host reports no pull-request permission, so Goal can't check it
+	Note *string `json:"note,omitempty"`
+
+	// Ok Whether the token can do what access asks: read, or read and push
+	Ok   bool            `json:"ok"`
+	Push RepositoryCheck `json:"push"`
+
+	// Pushable For an owner pattern: how many of them it can push to
+	Pushable *int            `json:"pushable,omitempty"`
+	Read     RepositoryCheck `json:"read"`
+
+	// Readable For an owner pattern: how many of the owner's repositories the token can read
+	Readable *int `json:"readable,omitempty"`
+
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret SecretName `json:"secret"`
+
+	// Summary One line, such as Can read, Can read 48 repositories in acme or Can read and push
+	Summary string `json:"summary"`
+
+	// Tested false when the host gave no answer: summary then starts with couldn't test
+	Tested bool `json:"tested"`
+
+	// Truncated For an owner pattern: the count stopped at 1000, so there may be more
+	Truncated *bool `json:"truncated,omitempty"`
+
+	// Url The repository tested, as its lower-case host/owner/name, or host/owner/* for an owner pattern
+	Url string `json:"url"`
+
+	// Warning For a read entry whose token can also push: Goal won't push, but agents could. Use a read-only token.
+	Warning *string `json:"warning,omitempty"`
+}
+
+// FactoryRepositoryTestAccess defines model for FactoryRepositoryTest.Access.
+type FactoryRepositoryTestAccess string
+
+// FactoryRepositoryTestList defines model for FactoryRepositoryTestList.
+type FactoryRepositoryTestList struct {
+	Tests []FactoryRepositoryTest `json:"tests"`
+}
+
+// FactoryRepositoryTestRequest defines model for FactoryRepositoryTestRequest.
+type FactoryRepositoryTestRequest struct {
+	// Access The access the factory's entry asks for, which picks the summary and the warning
+	Access FactoryRepositoryTestRequestAccess `json:"access"`
+
+	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
+	Secret SecretName `json:"secret"`
+
+	// Url One repository's https URL, such as https://github.com/acme/app, or an owner pattern, such as https://github.com/acme/*
+	Url string `json:"url"`
+}
+
+// FactoryRepositoryTestRequestAccess The access the factory's entry asks for, which picks the summary and the warning
+type FactoryRepositoryTestRequestAccess string
 
 // FactoryRole A ladder, each including the one before
 type FactoryRole string
@@ -4811,6 +5015,9 @@ type Item struct {
 	Assembly *PartOf `json:"assembly,omitempty"`
 	Body     string  `json:"body"`
 
+	// Branch The git branch the item's changes live on, as in goal/12-add-a-flag; goald always sets it
+	Branch *string `json:"branch,omitempty"`
+
 	// CameFrom Where a follow-up's or a trigger's item came from (ADR 0040 decision 2): the follow-ups filed as it, or its trigger; getItem only, absent unless origin is follow-up or trigger
 	CameFrom       *ItemCameFrom  `json:"came_from,omitempty"`
 	ClassOfService ClassOfService `json:"class_of_service"`
@@ -4858,8 +5065,11 @@ type Item struct {
 	Question *ItemQuestion `json:"question,omitempty"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string `json:"ref"`
-	ReworkCount int    `json:"rework_count"`
+	Ref string `json:"ref"`
+
+	// Repositories The repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4); submitItem and getItem only (ItemCard has them too). An item filed before repositories shows the factory's default entry's, and an item of a factory without code none
+	Repositories *[]ItemRepository `json:"repositories,omitempty"`
+	ReworkCount  int               `json:"rework_count"`
 
 	// Start When the item may start, absent when it may start now; it waits at the first station until then (ADR 0040). Its after items are its needs
 	Start *ItemStart `json:"start,omitempty"`
@@ -4972,8 +5182,11 @@ type ItemCard struct {
 	PullRequests []string `json:"pull_requests"`
 
 	// Ref <factory name>#<number>, as in goal#2
-	Ref         string `json:"ref"`
-	ReworkCount int    `json:"rework_count"`
+	Ref string `json:"ref"`
+
+	// Repositories As Item's repositories: the repositories the item works on, in the order they joined, the first being its first repository (ADR 0041 decision 4). An item filed before repositories shows the factory's default entry's, and an item of a factory without code an empty array
+	Repositories []ItemRepository `json:"repositories"`
+	ReworkCount  int              `json:"rework_count"`
 
 	// RopeHeld Held at a queue station by the drum-buffer-rope release; always false until it is enforced
 	RopeHeld bool `json:"rope_held"`
@@ -5106,6 +5319,21 @@ type ItemQuestion struct {
 	// Text The question
 	Text string `json:"text"`
 }
+
+// ItemRepository One repository of an item and how it joined it (ADR 0041 decision 4)
+type ItemRepository struct {
+	// Joined How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+	Joined ItemRepositoryJoined `json:"joined"`
+
+	// JoinedAt When it joined; absent for an older item's default entry, resolved when it is read
+	JoinedAt *time.Time `json:"joined_at,omitempty"`
+
+	// Repo The repository's normalized host/owner/name in lower case, as in github.com/acme/api
+	Repo string `json:"repo"`
+}
+
+// ItemRepositoryJoined How it joined: named at filing, the default entry's, an agent pushed to it, or a station's output named it
+type ItemRepositoryJoined string
 
 // ItemSpan A stretch of time the item spent at one station in one state and rework round
 type ItemSpan struct {
@@ -6029,6 +6257,9 @@ type NewItem struct {
 	Lane     *string `json:"lane,omitempty"`
 	Priority *int    `json:"priority,omitempty"`
 
+	// Repositories The repositories the item works on, in order, the first being its first repository (ADR 0041 decision 4). Each is a runtime.repositories entry's name, owner/name (or group/sub/name) under one of the entries' hosts, host/owner/name or an https URL, that an entry covers. Values naming the same repository count once. Absent or empty, the factory's default entry's, or none without a default entry
+	Repositories *[]string `json:"repositories,omitempty"`
+
 	// Start When the item may start; absent, as soon as it can
 	Start *Start `json:"start,omitempty"`
 	Title string `json:"title"`
@@ -6039,7 +6270,7 @@ type NewItem struct {
 
 // NewKnowledgeSource defines model for NewKnowledgeSource.
 type NewKnowledgeSource struct {
-	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on github.com or gitlab.com, or on the host code_host names: github or gitlab), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it).
+	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on one of the organization's code hosts; a sync on any other host fails before the secret is opened, and the kind the host is listed as replaces code_host), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it).
 	Config *map[string]string `json:"config,omitempty"`
 
 	// Connection The connection a live source reads
@@ -6929,24 +7160,6 @@ type RepositoryOwner struct {
 // RepositoryOwnerKind defines model for RepositoryOwner.Kind.
 type RepositoryOwnerKind string
 
-// RepositoryTestRequest defines model for RepositoryTestRequest.
-type RepositoryTestRequest struct {
-	// Secret 3 to 40 lowercase letters, digits and inner dashes, starting with a letter, unique in the organization
-	Secret SecretName `json:"secret"`
-
-	// Url The repository's https URL, such as https://github.com/acme/app
-	Url string `json:"url"`
-}
-
-// RepositoryTestResult defines model for RepositoryTestResult.
-type RepositoryTestResult struct {
-	Push RepositoryCheck `json:"push"`
-	Read RepositoryCheck `json:"read"`
-
-	// Tested false when the host gave no answer within 10 seconds: read and push then say couldn't test
-	Tested bool `json:"tested"`
-}
-
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
 	// ExpectedCurrentVersionId The version the caller saw running
@@ -7333,7 +7546,7 @@ type ServerTest struct {
 	Ok     bool    `json:"ok"`
 	Server string  `json:"server"`
 
-	// Tested False for a stdio server, which goald does not start
+	// Tested False for a stdio server goald does not start: its command is not one the tool catalog ships, or a URL in its env is not on a listed code host; error says which
 	Tested bool `json:"tested"`
 
 	// Tools The tool names tools/list answered
@@ -7658,9 +7871,12 @@ type Template struct {
 	Agents int `json:"agents"`
 
 	// Changed The day the version was made, as in 2026-10-09
-	Changed     string   `json:"changed"`
-	Connectors  []string `json:"connectors"`
-	Description string   `json:"description"`
+	Changed string `json:"changed"`
+
+	// Code The code access a template needs; write when its line has a station that merges.
+	Code        TemplateCode `json:"code"`
+	Connectors  []string     `json:"connectors"`
+	Description string       `json:"description"`
 
 	// Model The factory model the Visual editor edits: factory.yaml's sections with snake_case keys (the YAML's camelCase keys). It mirrors the YAML leniently: a key the YAML lacks is absent, and a value the schema refuses appears as it is, with a problem.
 	Model    FactoryModel `json:"model"`
@@ -7683,6 +7899,9 @@ type TemplateAdds struct {
 	Tools []string `json:"tools"`
 }
 
+// TemplateCode The code access a template needs; write when its line has a station that merges.
+type TemplateCode string
+
 // TemplateList defines model for TemplateList.
 type TemplateList struct {
 	Templates []TemplateSummary `json:"templates"`
@@ -7699,6 +7918,28 @@ type TemplateMCP struct {
 
 // TemplateMCPTools defines model for TemplateMCP.Tools.
 type TemplateMCPTools string
+
+// TemplateOtherwise The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field
+type TemplateOtherwise struct {
+	Env   *map[string]string      `json:"env,omitempty"`
+	Files *map[string]string      `json:"files,omitempty"`
+	Mcp   *map[string]TemplateMCP `json:"mcp,omitempty"`
+
+	// Test An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values
+	Test  *TemplateTest `json:"test,omitempty"`
+	Tools *[]string     `json:"tools,omitempty"`
+}
+
+// TemplateParameter A non-secret value a template takes, such as a host; otherwise's lines may refer to it as {{name}}
+type TemplateParameter struct {
+	Default     string `json:"default"`
+	Description string `json:"description"`
+	Name        string `json:"name"`
+
+	// Otherwise The lines used instead of the template's own when the parameter's value is not its default: each field present replaces the template's whole field
+	Otherwise *TemplateOtherwise `json:"otherwise,omitempty"`
+	Title     string             `json:"title"`
+}
 
 // TemplateSecret defines model for TemplateSecret.
 type TemplateSecret struct {
@@ -7731,13 +7972,16 @@ type TemplateSummary struct {
 	Agents int `json:"agents"`
 
 	// Changed The day the version was made, as in 2026-10-09
-	Changed    string   `json:"changed"`
-	Connectors []string `json:"connectors"`
-	Name       string   `json:"name"`
-	Stations   int      `json:"stations"`
-	Summary    string   `json:"summary"`
-	Title      string   `json:"title"`
-	Version    int      `json:"version"`
+	Changed string `json:"changed"`
+
+	// Code The code access a template needs; write when its line has a station that merges.
+	Code       TemplateCode `json:"code"`
+	Connectors []string     `json:"connectors"`
+	Name       string       `json:"name"`
+	Stations   int          `json:"stations"`
+	Summary    string       `json:"summary"`
+	Title      string       `json:"title"`
+	Version    int          `json:"version"`
 }
 
 // TemplateTest An HTTP test request; its values may hold {{slot}} and ${VAR} of the template's plain env values
@@ -7859,6 +8103,9 @@ type ToolTemplate struct {
 	// Description One line
 	Description string `json:"description"`
 	Name        string `json:"name"`
+
+	// Parameters Its non-secret parameters, in order. adds and test are the lines for every parameter's default; they never refer to a parameter
+	Parameters *[]TemplateParameter `json:"parameters,omitempty"`
 
 	// Secrets Its secret slots, in order
 	Secrets []TemplateSecret `json:"secrets"`
@@ -9367,6 +9614,9 @@ type DeleteOrgJSONRequestBody = OrgDeletion
 // CreateAPIKeyJSONRequestBody defines body for CreateAPIKey for application/json ContentType.
 type CreateAPIKeyJSONRequestBody = NewApiKey
 
+// SetCodeHostsJSONRequestBody defines body for SetCodeHosts for application/json ContentType.
+type SetCodeHostsJSONRequestBody = CodeHostsInput
+
 // PutConnectionKindJSONRequestBody defines body for PutConnectionKind for application/json ContentType.
 type PutConnectionKindJSONRequestBody = ConnectionKindFile
 
@@ -9445,6 +9695,9 @@ type TryJonahProposalJSONRequestBody = TryProposalRequest
 // KeepTestJSONRequestBody defines body for KeepTest for application/json ContentType.
 type KeepTestJSONRequestBody = KeepTestRequest
 
+// TestFactoryRepositoryJSONRequestBody defines body for TestFactoryRepository for application/json ContentType.
+type TestFactoryRepositoryJSONRequestBody = FactoryRepositoryTestRequest
+
 // RestoreVersionJSONRequestBody defines body for RestoreVersion for application/json ContentType.
 type RestoreVersionJSONRequestBody = RestoreRequest
 
@@ -9519,9 +9772,6 @@ type CreatePersonalTokenJSONRequestBody = NewPersonalToken
 
 // PutOrgPolicyJSONRequestBody defines body for PutOrgPolicy for application/json ContentType.
 type PutOrgPolicyJSONRequestBody = OrgPolicyInput
-
-// TestRepositoryJSONRequestBody defines body for TestRepository for application/json ContentType.
-type TestRepositoryJSONRequestBody = RepositoryTestRequest
 
 // CreateSecretJSONRequestBody defines body for CreateSecret for application/json ContentType.
 type CreateSecretJSONRequestBody = NewSecret
@@ -10045,6 +10295,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+	//
+	// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+	//
+	// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+	GetCodeHosts(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetCodeHostsWithBody Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHostsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetCodeHosts Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHosts(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListConnectionKinds The connection kinds the organization can make connections of
 	//
@@ -10615,7 +10890,7 @@ type ClientInterface interface {
 
 	// TestEnvironmentWithBody Test an environment's MCP servers or a template
 	//
-	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10624,7 +10899,7 @@ type ClientInterface interface {
 
 	// TestEnvironment Test an environment's MCP servers or a template
 	//
-	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10691,7 +10966,7 @@ type ClientInterface interface {
 
 	// SubmitItemWithBody Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10700,7 +10975,7 @@ type ClientInterface interface {
 
 	// SubmitItem Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10861,6 +11136,31 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
 	PurgeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestFactoryRepositoryWithBody Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepositoryWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepository(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListFactoryRepositoryTests List a factory's kept repository tests
+	//
+	// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+	ListFactoryRepositoryTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ResumeFactory Start a paused factory again
 	//
@@ -11591,24 +11891,6 @@ type ClientInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 	PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TestRepositoryWithBody Test a token's read and push access to a repository
-	//
-	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-	TestRepositoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TestRepository Test a token's read and push access to a repository
-	//
-	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-	TestRepository(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -12404,6 +12686,61 @@ func (c *Client) SearchSkills(ctx context.Context, org OrgRef, params *SearchSki
 // Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 func (c *Client) GetSkillFiles(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSkillFilesRequest(c.Server, org, owner, repo, skill)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+//
+// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+//
+// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+func (c *Client) GetCodeHosts(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCodeHostsRequest(c.Server, org)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetCodeHostsWithBody Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *Client) SetCodeHostsWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetCodeHostsRequestWithBody(c.Server, org, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// SetCodeHosts Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *Client) SetCodeHosts(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetCodeHostsRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -13664,7 +14001,7 @@ func (c *Client) ValidateDraft(ctx context.Context, org OrgRef, factory FactoryR
 
 // TestEnvironmentWithBody Test an environment's MCP servers or a template
 //
-// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13683,7 +14020,7 @@ func (c *Client) TestEnvironmentWithBody(ctx context.Context, org OrgRef, factor
 
 // TestEnvironment Test an environment's MCP servers or a template
 //
-// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13840,7 +14177,7 @@ func (c *Client) ListItems(ctx context.Context, org OrgRef, factory FactoryRef, 
 
 // SubmitItemWithBody Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13859,7 +14196,7 @@ func (c *Client) SubmitItemWithBody(ctx context.Context, org OrgRef, factory Fac
 
 // SubmitItem Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -14231,6 +14568,61 @@ func (c *Client) PauseFactory(ctx context.Context, org OrgRef, factory FactoryRe
 // Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
 func (c *Client) PurgeFactory(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPurgeFactoryRequest(c.Server, org, factory)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestFactoryRepositoryWithBody Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *Client) TestFactoryRepositoryWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestFactoryRepositoryRequestWithBody(c.Server, org, factory, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *Client) TestFactoryRepository(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestFactoryRepositoryRequest(c.Server, org, factory, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListFactoryRepositoryTests List a factory's kept repository tests
+//
+// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+func (c *Client) ListFactoryRepositoryTests(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListFactoryRepositoryTestsRequest(c.Server, org, factory)
 	if err != nil {
 		return nil, err
 	}
@@ -15881,44 +16273,6 @@ func (c *Client) PutOrgPolicyWithBody(ctx context.Context, org OrgRef, params *P
 // Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 func (c *Client) PutOrgPolicy(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutOrgPolicyRequest(c.Server, org, params, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// TestRepositoryWithBody Test a token's read and push access to a repository
-//
-// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-func (c *Client) TestRepositoryWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTestRepositoryRequestWithBody(c.Server, org, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// TestRepository Test a token's read and push access to a repository
-//
-// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-func (c *Client) TestRepository(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTestRepositoryRequest(c.Server, org, body)
 	if err != nil {
 		return nil, err
 	}
@@ -17681,6 +18035,87 @@ func NewGetSkillFilesRequest(server string, org OrgRef, owner SkillName, repo Sk
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetCodeHostsRequest constructs an http.Request for the GetCodeHosts method
+func NewGetCodeHostsRequest(server string, org OrgRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/code-hosts", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetCodeHostsRequest calls the generic SetCodeHosts builder with application/json body
+func NewSetCodeHostsRequest(server string, org OrgRef, body SetCodeHostsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetCodeHostsRequestWithBody(server, org, "application/json", bodyReader)
+}
+
+// NewSetCodeHostsRequestWithBody constructs an http.Request for the SetCodeHosts method, with any body, and a specified content type
+func NewSetCodeHostsRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/code-hosts", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -22171,6 +22606,101 @@ func NewPurgeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*htt
 	return req, nil
 }
 
+// NewTestFactoryRepositoryRequest calls the generic TestFactoryRepository builder with application/json body
+func NewTestFactoryRepositoryRequest(server string, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestFactoryRepositoryRequestWithBody(server, org, factory, "application/json", bodyReader)
+}
+
+// NewTestFactoryRepositoryRequestWithBody constructs an http.Request for the TestFactoryRepository method, with any body, and a specified content type
+func NewTestFactoryRepositoryRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/repositories/test", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListFactoryRepositoryTestsRequest constructs an http.Request for the ListFactoryRepositoryTests method
+func NewListFactoryRepositoryTestsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/repositories/tests", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewResumeFactoryRequest constructs an http.Request for the ResumeFactory method
 func NewResumeFactoryRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
 	var err error
@@ -25713,53 +26243,6 @@ func NewPutOrgPolicyRequestWithBody(server string, org OrgRef, params *PutOrgPol
 	return req, nil
 }
 
-// NewTestRepositoryRequest calls the generic TestRepository builder with application/json body
-func NewTestRepositoryRequest(server string, org OrgRef, body TestRepositoryJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewTestRepositoryRequestWithBody(server, org, "application/json", bodyReader)
-}
-
-// NewTestRepositoryRequestWithBody constructs an http.Request for the TestRepository method, with any body, and a specified content type
-func NewTestRepositoryRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/repositories/test", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewListRunsRequest constructs an http.Request for the ListRuns method
 func NewListRunsRequest(server string, org OrgRef, params *ListRunsParams) (*http.Request, error) {
 	var err error
@@ -27932,6 +28415,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files (the `GetSkillFiles` operationId).
 	GetSkillFilesWithResponse(ctx context.Context, org OrgRef, owner SkillName, repo SkillName, skill SkillName, reqEditors ...RequestEditorFn) (*GetSkillFilesResponse, error)
 
+	// GetCodeHostsWithResponse The code hosts the organization's repository tokens and knowledge secrets may go to
+	//
+	// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+	GetCodeHostsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetCodeHostsResponse, error)
+
+	// SetCodeHostsWithBodyWithResponse Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHostsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error)
+
+	// SetCodeHostsWithResponse Replace the organization's added code hosts
+	//
+	// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+	SetCodeHostsWithResponse(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error)
+
 	// ListConnectionKindsWithResponse The connection kinds the organization can make connections of
 	//
 	// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
@@ -28563,7 +29073,7 @@ type ClientWithResponsesInterface interface {
 
 	// TestEnvironmentWithBodyWithResponse Test an environment's MCP servers or a template
 	//
-	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28572,7 +29082,7 @@ type ClientWithResponsesInterface interface {
 
 	// TestEnvironmentWithResponse Test an environment's MCP servers or a template
 	//
-	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+	// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28651,7 +29161,7 @@ type ClientWithResponsesInterface interface {
 
 	// SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28660,7 +29170,7 @@ type ClientWithResponsesInterface interface {
 
 	// SubmitItemWithResponse Submit a work item to a factory's first station
 	//
-	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+	// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28851,6 +29361,33 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/purge (the `PurgeFactory` operationId).
 	PurgeFactoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*PurgeFactoryResponse, error)
+
+	// TestFactoryRepositoryWithBodyWithResponse Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error)
+
+	// TestFactoryRepositoryWithResponse Test a token against a repository or an owner's repositories, for a factory
+	//
+	// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+	TestFactoryRepositoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error)
+
+	// ListFactoryRepositoryTestsWithResponse List a factory's kept repository tests
+	//
+	// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+	ListFactoryRepositoryTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListFactoryRepositoryTestsResponse, error)
 
 	// ResumeFactoryWithResponse Start a paused factory again
 	//
@@ -29667,24 +30204,6 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PUT /v1/orgs/{org}/policy (the `PutOrgPolicy` operationId).
 	PutOrgPolicyWithResponse(ctx context.Context, org OrgRef, params *PutOrgPolicyParams, body PutOrgPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutOrgPolicyResponse, error)
-
-	// TestRepositoryWithBodyWithResponse Test a token's read and push access to a repository
-	//
-	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-	TestRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error)
-
-	// TestRepositoryWithResponse Test a token's read and push access to a repository
-	//
-	// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-	TestRepositoryWithResponse(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error)
 
 	// ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
 	//
@@ -31062,6 +31581,102 @@ func (r GetSkillFilesResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetSkillFilesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetCodeHostsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CodeHosts
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetCodeHostsResponse) GetJSON200() *CodeHosts {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetCodeHostsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetCodeHostsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCodeHostsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCodeHostsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetCodeHostsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type SetCodeHostsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *CodeHosts
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r SetCodeHostsResponse) GetJSON200() *CodeHosts {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r SetCodeHostsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r SetCodeHostsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r SetCodeHostsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetCodeHostsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r SetCodeHostsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -34805,6 +35420,102 @@ func (r PurgeFactoryResponse) ContentType() string {
 	return ""
 }
 
+type TestFactoryRepositoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FactoryRepositoryTest
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r TestFactoryRepositoryResponse) GetJSON200() *FactoryRepositoryTest {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r TestFactoryRepositoryResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r TestFactoryRepositoryResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r TestFactoryRepositoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestFactoryRepositoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r TestFactoryRepositoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListFactoryRepositoryTestsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *FactoryRepositoryTestList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListFactoryRepositoryTestsResponse) GetJSON200() *FactoryRepositoryTestList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListFactoryRepositoryTestsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListFactoryRepositoryTestsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListFactoryRepositoryTestsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListFactoryRepositoryTestsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListFactoryRepositoryTestsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ResumeFactoryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -38147,54 +38858,6 @@ func (r PutOrgPolicyResponse) ContentType() string {
 	return ""
 }
 
-type TestRepositoryResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *RepositoryTestResult
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r TestRepositoryResponse) GetJSON200() *RepositoryTestResult {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r TestRepositoryResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r TestRepositoryResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r TestRepositoryResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TestRepositoryResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r TestRepositoryResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type ListRunsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -40311,6 +40974,51 @@ func (c *ClientWithResponses) GetSkillFilesWithResponse(ctx context.Context, org
 	return ParseGetSkillFilesResponse(rsp)
 }
 
+// GetCodeHostsWithResponse The code hosts the organization's repository tokens and knowledge secrets may go to
+//
+// The organization's code hosts (ADR 0041, decision 1): github.com and gitlab.com, built in and always first, then the GitHub Enterprise and self-managed GitLab hosts its owners added, sorted by host. Each host comes with the API base goald derives for it.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/code-hosts (the `GetCodeHosts` operationId).
+func (c *ClientWithResponses) GetCodeHostsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*GetCodeHostsResponse, error) {
+	rsp, err := c.GetCodeHosts(ctx, org, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCodeHostsResponse(rsp)
+}
+
+// SetCodeHostsWithBodyWithResponse Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *ClientWithResponses) SetCodeHostsWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error) {
+	rsp, err := c.SetCodeHostsWithBody(ctx, org, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetCodeHostsResponse(rsp)
+}
+
+// SetCodeHostsWithResponse Replace the organization's added code hosts
+//
+// Replaces the hosts the organization added with hosts: a host not in the list is removed, and a host already added takes the kind sent. Only an owner may set them, with a sign-in from the last 10 minutes. A host is a DNS name with no scheme, port or path, reachable from the internet, because goald dials public addresses only (ADR 0009): an IP address, localhost, a single-label name or a name under .local, .internal or .localhost is 400 code-host-invalid, as are an unknown kind, a host sent twice and more than 20 hosts. github.com and gitlab.com are always listed and never sent: either is 400 code-host-built-in. Audited as org.code_hosts_set with the hosts before and after; sending the hosts already stored changes nothing.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
+func (c *ClientWithResponses) SetCodeHostsWithResponse(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error) {
+	rsp, err := c.SetCodeHosts(ctx, org, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetCodeHostsResponse(rsp)
+}
+
 // ListConnectionKindsWithResponse The connection kinds the organization can make connections of
 //
 // The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
@@ -41353,7 +42061,7 @@ func (c *ClientWithResponses) ValidateDraftWithResponse(ctx context.Context, org
 
 // TestEnvironmentWithBodyWithResponse Test an environment's MCP servers or a template
 //
-// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41368,7 +42076,7 @@ func (c *ClientWithResponses) TestEnvironmentWithBodyWithResponse(ctx context.Co
 
 // TestEnvironmentWithResponse Test an environment's MCP servers or a template
 //
-// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each remote MCP server, or only the one server names, is called with tools/list, its headers' {{secret}} references opened inside goald for the factory (audited as secret.used without a run), through public addresses only, following no redirect, within 10 seconds; stdio servers answer tested false. With template, the template's remote MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
+// Tests the environment of the draft (of the current version while no draft is open), or of the version the body names (draft, current or a number). Each MCP server, or only the one server names, is called with tools/list within 10 seconds, its headers' or env's {{secret}} references opened inside goald for the factory (audited as secret.used without a run): a remote one through public addresses only, following no redirect; a stdio one started in goald with only its env, a fixed PATH and an empty HOME. goald starts a stdio server only when its command is exactly one the tool catalog ships and every URL in its env is on a code host the organization lists; any other answers tested false with why, and nothing is opened. With template, the template's MCP servers and HTTP test run instead, with the secrets the body puts in its slots and its plain env values changed by env. Each server's result is kept per factory, environment and server, and read by GET /v1/orgs/{org}/access. A test that fails is an answer, not an error; its error is scrubbed of every value the test opened. 404 environment-not-found, environment-server-not-found or template-not-found; 400 environment-test-invalid for a template slot without a secret; 503 secrets-unavailable while goald has no master key.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41501,7 +42209,7 @@ func (c *ClientWithResponses) ListItemsWithResponse(ctx context.Context, org Org
 
 // SubmitItemWithBodyWithResponse Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41516,7 +42224,7 @@ func (c *ClientWithResponses) SubmitItemWithBodyWithResponse(ctx context.Context
 
 // SubmitItemWithResponse Submit a work item to a factory's first station
 //
-// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, or an after item that is cancelled, unknown or of another factory.
+// With start, the item waits at the first station until it may start (ADR 0040): its at has passed and its after items are done. in becomes at when the item is filed, and each open after item becomes a linked dependency by the caller; a done one is met and left out. repositories name the repositories it works on (ADR 0041 decision 4); none gives it the factory's default entry's. Problems: 400 for what the line does not take, a start with both at and in, a bad time or wait, a start more than 365 days ahead, an after item that is cancelled, unknown or of another factory, a repository that matches none of the factory's runtime.repositories entries, names an owner's entry or is on more than one of its hosts (each problem quotes the value given), or more than 10 repositories.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41838,6 +42546,51 @@ func (c *ClientWithResponses) PurgeFactoryWithResponse(ctx context.Context, org 
 		return nil, err
 	}
 	return ParsePurgeFactoryResponse(rsp)
+}
+
+// TestFactoryRepositoryWithBodyWithResponse Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *ClientWithResponses) TestFactoryRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error) {
+	rsp, err := c.TestFactoryRepositoryWithBody(ctx, org, factory, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestFactoryRepositoryResponse(rsp)
+}
+
+// TestFactoryRepositoryWithResponse Test a token against a repository or an owner's repositories, for a factory
+//
+// Tests what the token in the named secret can do at url, one repository or an owner pattern ending in /* (every repository of an account, organization or GitLab group), through the code host's API and never git, and keeps the result for the factory (ADR 0041 decision 8). The url's host must be one of the organization's code hosts. The secret is opened inside goald for the factory (audited as secret.used), as the environment test does. For a read entry the summary is "Can read", or for an owner pattern how many repositories the token can read ("Can read 48 repositories in acme", "at least 1000" past the adapter's limit); when the token can also push, warning says "Goal won't push, but agents could. Use a read-only token." For a write entry the summary is "Can read and push", and note says the host reports no pull-request permission, so Goal can't check it. A check that fails is an answer, not an error. A host that gives no answer within 10 seconds answers tested false with "couldn't test". The result replaces the factory's kept one for the same url, and is tested again whenever the secret's value is replaced. No answer, reason or problem carries the token. 404 factory-not-found or secret-not-found; 400 repository-host-unknown for a host the organization doesn't list and repository-url-invalid for a URL that names no repository or owner, both before the secret is opened, and secret-not-allowed for a secret not open to this factory; 503 secrets-unavailable while goald has no master key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/orgs/{org}/factories/{factory}/repositories/test (the `TestFactoryRepository` operationId).
+func (c *ClientWithResponses) TestFactoryRepositoryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body TestFactoryRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestFactoryRepositoryResponse, error) {
+	rsp, err := c.TestFactoryRepository(ctx, org, factory, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestFactoryRepositoryResponse(rsp)
+}
+
+// ListFactoryRepositoryTestsWithResponse List a factory's kept repository tests
+//
+// The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /v1/orgs/{org}/factories/{factory}/repositories/tests (the `ListFactoryRepositoryTests` operationId).
+func (c *ClientWithResponses) ListFactoryRepositoryTestsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListFactoryRepositoryTestsResponse, error) {
+	rsp, err := c.ListFactoryRepositoryTests(ctx, org, factory, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListFactoryRepositoryTestsResponse(rsp)
 }
 
 // ResumeFactoryWithResponse Start a paused factory again
@@ -43208,36 +43961,6 @@ func (c *ClientWithResponses) PutOrgPolicyWithResponse(ctx context.Context, org 
 	return ParsePutOrgPolicyResponse(rsp)
 }
 
-// TestRepositoryWithBodyWithResponse Test a token's read and push access to a repository
-//
-// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-func (c *ClientWithResponses) TestRepositoryWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error) {
-	rsp, err := c.TestRepositoryWithBody(ctx, org, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTestRepositoryResponse(rsp)
-}
-
-// TestRepositoryWithResponse Test a token's read and push access to a repository
-//
-// Tests, before any factory exists, whether the token in the named secret can read the repository at url and push to it, through the code host's API (github.com: GET /repos/{owner}/{repo} and its permissions.push; gitlab.com: GET /projects/:id and its access level, Developer or more pushes), never git. The secret is opened inside goald without a factory (audited as secret.used), so it must be open to all factories. Each check answers ok with a one-line reason from the host; a check that fails is an answer, not an error. For a classic GitHub token, permissions.push reflects the account's role, not the token's scopes, so push ok can be optimistic; a fine-grained token answers its own grant. A host that gives no answer within 10 seconds answers tested false with "couldn't test". No answer, reason or problem carries the token. 404 secret-not-found; 400 repository-host-unknown for a host other than github.com and gitlab.com, repository-url-invalid for a URL that names no repository, and secret-not-allowed for a secret limited to some factories; 503 secrets-unavailable while goald has no master key.
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/repositories/test (the `TestRepository` operationId).
-func (c *ClientWithResponses) TestRepositoryWithResponse(ctx context.Context, org OrgRef, body TestRepositoryJSONRequestBody, reqEditors ...RequestEditorFn) (*TestRepositoryResponse, error) {
-	rsp, err := c.TestRepository(ctx, org, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTestRepositoryResponse(rsp)
-}
-
 // ListRunsWithResponse The organization's agent runs across the factories the caller sees, newest first
 //
 // The runs that started in [since, until) in the factories the caller may read, or in the one named by factory, newest first (by start, then id), paged by next_cursor. When since is absent it is the start of the current UTC day; when until is absent it is the end of that day; since must be before until. The summary covers the same factories and window whatever status and q say. A wide window is a scan of every run in it: keep it short.
@@ -44605,6 +45328,72 @@ func ParseGetSkillFilesResponse(rsp *http.Response) (*GetSkillFilesResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SkillFiles
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCodeHostsResponse parses an HTTP response from a GetCodeHostsWithResponse call
+func ParseGetCodeHostsResponse(rsp *http.Response) (*GetCodeHostsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCodeHostsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CodeHosts
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetCodeHostsResponse parses an HTTP response from a SetCodeHostsWithResponse call
+func ParseSetCodeHostsResponse(rsp *http.Response) (*SetCodeHostsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetCodeHostsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CodeHosts
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -47231,6 +48020,72 @@ func ParsePurgeFactoryResponse(rsp *http.Response) (*PurgeFactoryResponse, error
 	return response, nil
 }
 
+// ParseTestFactoryRepositoryResponse parses an HTTP response from a TestFactoryRepositoryWithResponse call
+func ParseTestFactoryRepositoryResponse(rsp *http.Response) (*TestFactoryRepositoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestFactoryRepositoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactoryRepositoryTest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListFactoryRepositoryTestsResponse parses an HTTP response from a ListFactoryRepositoryTestsWithResponse call
+func ParseListFactoryRepositoryTestsResponse(rsp *http.Response) (*ListFactoryRepositoryTestsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListFactoryRepositoryTestsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactoryRepositoryTestList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseResumeFactoryResponse parses an HTTP response from a ResumeFactoryWithResponse call
 func ParseResumeFactoryResponse(rsp *http.Response) (*ResumeFactoryResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -49613,39 +50468,6 @@ func ParsePutOrgPolicyResponse(rsp *http.Response) (*PutOrgPolicyResponse, error
 	return response, nil
 }
 
-// ParseTestRepositoryResponse parses an HTTP response from a TestRepositoryWithResponse call
-func ParseTestRepositoryResponse(rsp *http.Response) (*TestRepositoryResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TestRepositoryResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RepositoryTestResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseListRunsResponse parses an HTTP response from a ListRunsWithResponse call
 func ParseListRunsResponse(rsp *http.Response) (*ListRunsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -50939,6 +51761,12 @@ type ServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(w http.ResponseWriter, r *http.Request, org OrgRef, owner SkillName, repo SkillName, skill SkillName)
+	// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+	// (GET /v1/orgs/{org}/code-hosts)
+	GetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef)
+	// SetCodeHosts Replace the organization's added code hosts
+	// (PUT /v1/orgs/{org}/code-hosts)
+	SetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListConnectionKinds The connection kinds the organization can make connections of
 	// (GET /v1/orgs/{org}/connection-kinds)
 	ListConnectionKinds(w http.ResponseWriter, r *http.Request, org OrgRef)
@@ -51185,6 +52013,12 @@ type ServerInterface interface {
 	// PurgeFactory Delete an archived, idle factory for good
 	// (POST /v1/orgs/{org}/factories/{factory}/purge)
 	PurgeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+	// (POST /v1/orgs/{org}/factories/{factory}/repositories/test)
+	TestFactoryRepository(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
+	// ListFactoryRepositoryTests List a factory's kept repository tests
+	// (GET /v1/orgs/{org}/factories/{factory}/repositories/tests)
+	ListFactoryRepositoryTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
@@ -51389,9 +52223,6 @@ type ServerInterface interface {
 	// PutOrgPolicy Replace the organization's policy
 	// (PUT /v1/orgs/{org}/policy)
 	PutOrgPolicy(w http.ResponseWriter, r *http.Request, org OrgRef, params PutOrgPolicyParams)
-	// TestRepository Test a token's read and push access to a repository
-	// (POST /v1/orgs/{org}/repositories/test)
-	TestRepository(w http.ResponseWriter, r *http.Request, org OrgRef)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(w http.ResponseWriter, r *http.Request, org OrgRef, params ListRunsParams)
@@ -52117,6 +52948,58 @@ func (siw *ServerInterfaceWrapper) GetSkillFiles(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSkillFiles(w, r, org, owner, repo, skill)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCodeHosts operation middleware
+func (siw *ServerInterfaceWrapper) GetCodeHosts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCodeHosts(w, r, org)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetCodeHosts operation middleware
+func (siw *ServerInterfaceWrapper) SetCodeHosts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetCodeHosts(w, r, org)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -55723,6 +56606,76 @@ func (siw *ServerInterfaceWrapper) PurgeFactory(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// TestFactoryRepository operation middleware
+func (siw *ServerInterfaceWrapper) TestFactoryRepository(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestFactoryRepository(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFactoryRepositoryTests operation middleware
+func (siw *ServerInterfaceWrapper) ListFactoryRepositoryTests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "org" -------------
+	var org OrgRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "factory" -------------
+	var factory FactoryRef
+
+	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFactoryRepositoryTests(w, r, org, factory)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ResumeFactory operation middleware
 func (siw *ServerInterfaceWrapper) ResumeFactory(w http.ResponseWriter, r *http.Request) {
 
@@ -58456,32 +59409,6 @@ func (siw *ServerInterfaceWrapper) PutOrgPolicy(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
-// TestRepository operation middleware
-func (siw *ServerInterfaceWrapper) TestRepository(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.TestRepository(w, r, org)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListRuns operation middleware
 func (siw *ServerInterfaceWrapper) ListRuns(w http.ResponseWriter, r *http.Request) {
 
@@ -60009,6 +60936,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/settings", wrapper.UpdateOrgSettings)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.ClearSignupDomain)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/signup-domain", wrapper.SetSignupDomain)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/code-hosts", wrapper.GetCodeHosts)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/code-hosts", wrapper.SetCodeHosts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.GetNotificationSettings)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications", wrapper.SetNotificationSettings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/settings/notifications/test", wrapper.TestNotificationSettings)
@@ -60106,7 +61035,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon", wrapper.PullAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/andon/clear", wrapper.ClearAndon)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/environments/{environment}/test", wrapper.TestEnvironment)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/repositories/test", wrapper.TestRepository)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/repositories/test", wrapper.TestFactoryRepository)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/repositories/tests", wrapper.ListFactoryRepositoryTests)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.ListWebhookEndpoints)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.CreateWebhookEndpoint)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}", wrapper.DeleteWebhookEndpoint)
@@ -60942,6 +61872,85 @@ type GetSkillFilesdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response GetSkillFilesdefaultApplicationProblemPlusJSONResponse) VisitGetSkillFilesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCodeHostsRequestObject struct {
+	Org OrgRef `json:"org"`
+}
+
+type GetCodeHostsResponseObject interface {
+	VisitGetCodeHostsResponse(w http.ResponseWriter) error
+}
+
+type GetCodeHosts200JSONResponse CodeHosts
+
+func (response GetCodeHosts200JSONResponse) VisitGetCodeHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCodeHostsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetCodeHostsdefaultApplicationProblemPlusJSONResponse) VisitGetCodeHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCodeHostsRequestObject struct {
+	Org  OrgRef `json:"org"`
+	Body *SetCodeHostsJSONRequestBody
+}
+
+type SetCodeHostsResponseObject interface {
+	VisitSetCodeHostsResponse(w http.ResponseWriter) error
+}
+
+type SetCodeHosts200JSONResponse CodeHosts
+
+func (response SetCodeHosts200JSONResponse) VisitSetCodeHostsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetCodeHostsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response SetCodeHostsdefaultApplicationProblemPlusJSONResponse) VisitSetCodeHostsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -64193,6 +65202,87 @@ func (response PurgeFactorydefaultApplicationProblemPlusJSONResponse) VisitPurge
 	return err
 }
 
+type TestFactoryRepositoryRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+	Body    *TestFactoryRepositoryJSONRequestBody
+}
+
+type TestFactoryRepositoryResponseObject interface {
+	VisitTestFactoryRepositoryResponse(w http.ResponseWriter) error
+}
+
+type TestFactoryRepository200JSONResponse FactoryRepositoryTest
+
+func (response TestFactoryRepository200JSONResponse) VisitTestFactoryRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestFactoryRepositorydefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response TestFactoryRepositorydefaultApplicationProblemPlusJSONResponse) VisitTestFactoryRepositoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFactoryRepositoryTestsRequestObject struct {
+	Org     OrgRef     `json:"org"`
+	Factory FactoryRef `json:"factory"`
+}
+
+type ListFactoryRepositoryTestsResponseObject interface {
+	VisitListFactoryRepositoryTestsResponse(w http.ResponseWriter) error
+}
+
+type ListFactoryRepositoryTests200JSONResponse FactoryRepositoryTestList
+
+func (response ListFactoryRepositoryTests200JSONResponse) VisitListFactoryRepositoryTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFactoryRepositoryTestsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListFactoryRepositoryTestsdefaultApplicationProblemPlusJSONResponse) VisitListFactoryRepositoryTestsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ResumeFactoryRequestObject struct {
 	Org     OrgRef     `json:"org"`
 	Factory FactoryRef `json:"factory"`
@@ -67242,46 +68332,6 @@ func (response PutOrgPolicydefaultApplicationProblemPlusJSONResponse) VisitPutOr
 	return err
 }
 
-type TestRepositoryRequestObject struct {
-	Org  OrgRef `json:"org"`
-	Body *TestRepositoryJSONRequestBody
-}
-
-type TestRepositoryResponseObject interface {
-	VisitTestRepositoryResponse(w http.ResponseWriter) error
-}
-
-type TestRepository200JSONResponse RepositoryTestResult
-
-func (response TestRepository200JSONResponse) VisitTestRepositoryResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type TestRepositorydefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response TestRepositorydefaultApplicationProblemPlusJSONResponse) VisitTestRepositoryResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
 type ListRunsRequestObject struct {
 	Org    OrgRef `json:"org"`
 	Params ListRunsParams
@@ -68896,6 +69946,12 @@ type StrictServerInterface interface {
 	// GetSkillFiles A catalog skill's files at its pinned commit, to vendor into a draft
 	// (GET /v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files)
 	GetSkillFiles(ctx context.Context, request GetSkillFilesRequestObject) (GetSkillFilesResponseObject, error)
+	// GetCodeHosts The code hosts the organization's repository tokens and knowledge secrets may go to
+	// (GET /v1/orgs/{org}/code-hosts)
+	GetCodeHosts(ctx context.Context, request GetCodeHostsRequestObject) (GetCodeHostsResponseObject, error)
+	// SetCodeHosts Replace the organization's added code hosts
+	// (PUT /v1/orgs/{org}/code-hosts)
+	SetCodeHosts(ctx context.Context, request SetCodeHostsRequestObject) (SetCodeHostsResponseObject, error)
 	// ListConnectionKinds The connection kinds the organization can make connections of
 	// (GET /v1/orgs/{org}/connection-kinds)
 	ListConnectionKinds(ctx context.Context, request ListConnectionKindsRequestObject) (ListConnectionKindsResponseObject, error)
@@ -69142,6 +70198,12 @@ type StrictServerInterface interface {
 	// PurgeFactory Delete an archived, idle factory for good
 	// (POST /v1/orgs/{org}/factories/{factory}/purge)
 	PurgeFactory(ctx context.Context, request PurgeFactoryRequestObject) (PurgeFactoryResponseObject, error)
+	// TestFactoryRepository Test a token against a repository or an owner's repositories, for a factory
+	// (POST /v1/orgs/{org}/factories/{factory}/repositories/test)
+	TestFactoryRepository(ctx context.Context, request TestFactoryRepositoryRequestObject) (TestFactoryRepositoryResponseObject, error)
+	// ListFactoryRepositoryTests List a factory's kept repository tests
+	// (GET /v1/orgs/{org}/factories/{factory}/repositories/tests)
+	ListFactoryRepositoryTests(ctx context.Context, request ListFactoryRepositoryTestsRequestObject) (ListFactoryRepositoryTestsResponseObject, error)
 	// ResumeFactory Start a paused factory again
 	// (POST /v1/orgs/{org}/factories/{factory}/resume)
 	ResumeFactory(ctx context.Context, request ResumeFactoryRequestObject) (ResumeFactoryResponseObject, error)
@@ -69346,9 +70408,6 @@ type StrictServerInterface interface {
 	// PutOrgPolicy Replace the organization's policy
 	// (PUT /v1/orgs/{org}/policy)
 	PutOrgPolicy(ctx context.Context, request PutOrgPolicyRequestObject) (PutOrgPolicyResponseObject, error)
-	// TestRepository Test a token's read and push access to a repository
-	// (POST /v1/orgs/{org}/repositories/test)
-	TestRepository(ctx context.Context, request TestRepositoryRequestObject) (TestRepositoryResponseObject, error)
 	// ListRuns The organization's agent runs across the factories the caller sees, newest first
 	// (GET /v1/orgs/{org}/runs)
 	ListRuns(ctx context.Context, request ListRunsRequestObject) (ListRunsResponseObject, error)
@@ -70033,6 +71092,65 @@ func (sh *strictHandler) GetSkillFiles(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSkillFilesResponseObject); ok {
 		if err := validResponse.VisitGetSkillFilesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCodeHosts operation middleware
+func (sh *strictHandler) GetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request GetCodeHostsRequestObject
+
+	request.Org = org
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCodeHosts(ctx, request.(GetCodeHostsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCodeHosts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCodeHostsResponseObject); ok {
+		if err := validResponse.VisitGetCodeHostsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetCodeHosts operation middleware
+func (sh *strictHandler) SetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef) {
+	var request SetCodeHostsRequestObject
+
+	request.Org = org
+
+	var body SetCodeHostsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetCodeHosts(ctx, request.(SetCodeHostsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetCodeHosts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetCodeHostsResponseObject); ok {
+		if err := validResponse.VisitSetCodeHostsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -72368,6 +73486,67 @@ func (sh *strictHandler) PurgeFactory(w http.ResponseWriter, r *http.Request, or
 	}
 }
 
+// TestFactoryRepository operation middleware
+func (sh *strictHandler) TestFactoryRepository(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request TestFactoryRepositoryRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	var body TestFactoryRepositoryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestFactoryRepository(ctx, request.(TestFactoryRepositoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestFactoryRepository")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestFactoryRepositoryResponseObject); ok {
+		if err := validResponse.VisitTestFactoryRepositoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListFactoryRepositoryTests operation middleware
+func (sh *strictHandler) ListFactoryRepositoryTests(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
+	var request ListFactoryRepositoryTestsRequestObject
+
+	request.Org = org
+	request.Factory = factory
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListFactoryRepositoryTests(ctx, request.(ListFactoryRepositoryTestsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListFactoryRepositoryTests")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListFactoryRepositoryTestsResponseObject); ok {
+		if err := validResponse.VisitListFactoryRepositoryTestsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ResumeFactory operation middleware
 func (sh *strictHandler) ResumeFactory(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
 	var request ResumeFactoryRequestObject
@@ -74397,39 +75576,6 @@ func (sh *strictHandler) PutOrgPolicy(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutOrgPolicyResponseObject); ok {
 		if err := validResponse.VisitPutOrgPolicyResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// TestRepository operation middleware
-func (sh *strictHandler) TestRepository(w http.ResponseWriter, r *http.Request, org OrgRef) {
-	var request TestRepositoryRequestObject
-
-	request.Org = org
-
-	var body TestRepositoryJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.TestRepository(ctx, request.(TestRepositoryRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "TestRepository")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(TestRepositoryResponseObject); ok {
-		if err := validResponse.VisitTestRepositoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

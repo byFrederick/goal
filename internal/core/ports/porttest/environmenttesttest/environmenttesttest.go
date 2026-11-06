@@ -41,6 +41,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		test func(t *testing.T, h Harness)
 	}{
 		{"Record_LatestReplaces", testLatestReplaces},
+		{"Record_KeepsReadOnly", testKeepsReadOnly},
 		{"Record_InvalidRefused", testInvalid},
 		{"Record_UnknownFactoryNotFound", testUnknownFactory},
 		{"List_ByFactory", testListByFactory},
@@ -81,6 +82,37 @@ func testLatestReplaces(t *testing.T, h Harness) {
 	}
 }
 
+func testKeepsReadOnly(t *testing.T, h Harness) {
+	t.Helper()
+
+	org := h.NewOrg(t)
+	f := h.NewFactory(t, org)
+	ctx := domain.WithOrg(t.Context(), org)
+
+	first := domain.EnvironmentTest{
+		Factory: f, Environment: defaultEnv, Server: linear, At: at, OK: true,
+		Tools: []string{"create_issue", "get_issue", "list_issues"}, ReadOnly: []string{"get_issue", "list_issues"},
+	}
+	if err := h.Tests.Record(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := h.Tests.List(ctx, f)
+	if err != nil || len(got) != 1 || !slices.Equal(got[0].ReadOnly, first.ReadOnly) {
+		t.Fatalf("List = %+v, %v; want the read-only tools %v", got, err, first.ReadOnly)
+	}
+
+	second := domain.EnvironmentTest{Factory: f, Environment: defaultEnv, Server: linear, At: at.Add(time.Hour), OK: true, Tools: []string{"create_issue"}}
+	if err := h.Tests.Record(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = h.Tests.List(ctx, f)
+	if err != nil || len(got) != 1 || len(got[0].ReadOnly) != 0 {
+		t.Errorf("List after a test without read-only tools = %+v, %v; want none kept", got, err)
+	}
+}
+
 func testInvalid(t *testing.T, h Harness) {
 	t.Helper()
 
@@ -93,6 +125,7 @@ func testInvalid(t *testing.T, h Harness) {
 		{Factory: f, Environment: defaultEnv, Server: linear, At: at, OK: true, Error: "x"}, // passed with one
 		{Factory: f, Environment: "Default", Server: linear, At: at, OK: true},
 		{Factory: f, Environment: defaultEnv, Server: linear, OK: true},
+		{Factory: f, Environment: defaultEnv, Server: linear, At: at, OK: true, Tools: []string{"a"}, ReadOnly: []string{"b"}},
 	} {
 		if err := h.Tests.Record(ctx, bad); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("Record(%+v) = %v; want ErrInvalid", bad, err)

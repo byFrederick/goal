@@ -55,3 +55,38 @@ test('the picker leaves out a factory where the person may not add items', async
   await expect(list.getByRole('option', { name: 'sre' })).toHaveCount(1);
   await expect(list.getByRole('option', { name: 'support' })).toHaveCount(0);
 });
+
+test('picks a repository and sends it with the item', async ({ page }) => {
+  // The running version names two repositories; the mock's own definition names none.
+  await page.route('**/versions/current/model', (route) =>
+    route.fulfill({
+      json: {
+        model: {
+          basics: {
+            repositories: [
+              { name: 'api', url: 'https://github.com/acme/api', access: 'write', default: true },
+              { name: 'web', url: 'https://github.com/acme/web', access: 'read' },
+            ],
+          },
+        },
+        ranges: {},
+      },
+    }),
+  );
+  let body: { repositories?: string[] } | undefined;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/factories\/[^/]+\/items$/.test(request.url())) body = request.postDataJSON();
+  });
+
+  await page.goto('/o/acme/f/goal');
+  await openWithC(page);
+  const dialog = page.getByRole('dialog', { name: 'New item' });
+  await dialog.getByRole('textbox', { name: 'Title' }).fill('Check this week’s spend');
+  await expect(dialog.getByText('acme/api')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Add' }).click();
+  await page.getByRole('option', { name: 'acme/web' }).click();
+  await dialog.getByRole('button', { name: 'Create item' }).click();
+
+  await expect(page).toHaveURL(/\/o\/acme\/f\/goal\/items\//);
+  expect(body?.repositories).toEqual(['acme/api', 'acme/web']);
+});

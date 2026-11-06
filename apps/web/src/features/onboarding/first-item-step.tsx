@@ -349,7 +349,8 @@ function Ready({
     stations.map((s) => s.id),
   )[0];
   const pullNumber = pullRequest ? /\/pull\/(\d+)/.exec(pullRequest)?.[1] : undefined;
-  const repo = repoOf(search.url);
+  const named = repoOf(search.url);
+  const repo = named && !named.endsWith('/*') ? named : undefined;
   const station = labelOf(item.station);
 
   return (
@@ -424,10 +425,6 @@ function Ready({
           <span className="font-semibold tabular-nums text-ink">{formatUsd(item.cost_usd)}</span>
         </div>
       </section>
-
-      <p className="m-0 text-secondary text-muted">
-        Review merges it when it passes. Nothing else in the repository changes.
-      </p>
     </OnboardingLayout>
   );
 }

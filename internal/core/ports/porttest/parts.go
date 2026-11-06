@@ -80,7 +80,7 @@ func (s *Store) assemble(org domain.OrgID, a ports.Assembly) (domain.Item, domai
 	filed := make([]domain.AuditEntry, 0, len(a.Parts))
 
 	for _, p := range a.Parts {
-		part, audit := s.file(org, partOf(it, p, a.By, t.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
+		part, audit := s.file(org, partOf(it, p, a.By, t.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit, baseCommits: s.repoBaseCommits(it.ID)})
 		ids[p.Key] = part.ID
 
 		filed = append(filed, audit)
@@ -208,7 +208,7 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 	}
 
 	// A new part has no dependents, so its needs close no cycle.
-	part, filed := s.file(org, partOf(it, p, n.By, n.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit})
+	part, filed := s.file(org, partOf(it, p, n.By, n.At), filedPart{key: p.Key, paths: p.Paths, baseCommit: it.BaseCommit, baseCommits: s.repoBaseCommits(it.ID)})
 
 	for _, k := range p.Needs {
 		s.edges = append(s.edges, domain.Edge{Item: part.ID, Needs: ids[k], Kind: domain.EdgePlanned, By: n.By.Ref(), At: n.At})
@@ -223,12 +223,13 @@ func (s *Store) addPart(org domain.OrgID, n ports.NewAssemblyPart) (domain.Item,
 }
 
 // partOf is part p of the assembly it, filed by the actor given at at, as the PostgreSQL store's
-// insertPart makes it.
+// insertPart makes it: its branch names the factory its assembly's does.
 func partOf(it *domain.Item, p domain.NewPart, by domain.Actor, at time.Time) domain.NewItem {
 	return domain.NewItem{
 		FactoryID: it.FactoryID, ParentID: it.ID, Type: it.Type, Lane: p.Lane, Title: p.Title, Body: p.Brief,
 		Priority: it.Priority, Station: it.Station, State: domain.StateQueued, Class: it.Class, CreatedAt: at,
 		Origin: domain.OriginPlan, CreatedBy: by, Generation: it.Generation, Untrusted: it.Untrusted,
+		FactoryName: domain.BranchFactory(it.StoredBranch), Repositories: slices.Clone(p.Filed),
 	}
 }
 
@@ -277,7 +278,8 @@ func (s *Store) partsOf(parent domain.ItemID) domain.Parts {
 // line's done station, where a finished single item lands; cancelled, it keeps its own, as a
 // cancelled single item does. An assembly with an integration branch that would close done
 // lands instead: it moves to its landing station, queued, with an assembly_landing event, for
-// that station to merge the branch. Callers hold s.mu.
+// that station to merge the branch, and takes its integration branch in every repository of its
+// done parts (joinIntegration). Callers hold s.mu.
 func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if part.PartKey == "" || !closed(part.State) {
 		return
@@ -299,6 +301,7 @@ func (s *Store) closeAssembly(part *domain.Item, at time.Time, cancel bool) {
 	if parts.Done > 0 && !cancel && parent.IntegrationBranch != "" {
 		parent.State, parent.Station = domain.StateQueued, parent.IntegrationLandAt
 		started(parent, before.Station, at)
+		s.joinIntegration(parent.ID, s.doneRepositories(parts), parent.IntegrationBranch, at)
 
 		s.trackSpan(parent, &before, at)
 		s.append(domain.Event{
@@ -462,4 +465,69 @@ func (s *Store) SetIntegrationBranch(ctx context.Context, root domain.ItemID, br
 	it.IntegrationBranch, it.IntegrationLandAt, it.UpdatedAt = branch, landAt, at
 
 	return true, nil
+}
+
+// repoBaseCommits are item's base commits by repository, for its parts to copy. s.mu is held.
+func (s *Store) repoBaseCommits(item domain.ItemID) map[string]string {
+	out := map[string]string{}
+
+	for _, r := range s.repos[item] {
+		if r.BaseCommit != "" {
+			out[r.Repo] = r.BaseCommit
+		}
+	}
+
+	return out
+}
+
+// JoinIntegrationRepositories implements ports.Store.
+func (s *Store) JoinIntegrationRepositories(ctx context.Context, root domain.ItemID, repos []string, branch string, at time.Time) ([]string, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if branch == "" {
+		return nil, fmt.Errorf("integration repositories of %s: a branch is required: %w", root, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.changes.signal()
+	defer s.mu.Unlock()
+
+	if _, ok := s.visible(root, org); !ok {
+		return nil, fmt.Errorf("integration repositories of %s: %w", root, ports.ErrNotFound)
+	}
+
+	return s.joinIntegration(root, repos, branch, at), nil
+}
+
+// joinIntegration gives root a row for each of repos it lacks (domain.JoinIntegration) and sets
+// branch on each of repos' rows that has no integration branch, returning the repositories left
+// out. Callers hold s.mu.
+func (s *Store) joinIntegration(root domain.ItemID, repos []string, branch string, at time.Time) []string {
+	joins, left := domain.JoinIntegration(s.orderedRepos(root), repos, at)
+	s.repos[root] = append(s.repos[root], joins...)
+
+	for i, r := range s.repos[root] {
+		if r.IntegrationBranch == "" && slices.Contains(repos, r.Repo) {
+			s.repos[root][i].IntegrationBranch = branch
+		}
+	}
+
+	return left
+}
+
+// doneRepositories are the repositories of parts' done items, in plan order and each item's
+// first-joined order: what an assembly's landing covers. Callers hold s.mu.
+func (s *Store) doneRepositories(parts domain.Parts) []string {
+	var out []string
+
+	for _, p := range parts.Items {
+		if p.State == domain.StateDone {
+			out = append(out, domain.ItemRepositoryKeys(s.orderedRepos(p.ID))...)
+		}
+	}
+
+	return out
 }

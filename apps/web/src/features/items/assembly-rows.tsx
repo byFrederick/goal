@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ItemCard } from '../../api/types';
 import { refParam, useFactoryParams } from '../../shared/factory';
 import { formatAge, formatUsd, humanize } from '../../shared/format';
+import { ItemRepositories } from '../../shared/item-repositories';
 import { describeState, itemStatus, toneText } from '../../shared/item-state';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -126,6 +127,7 @@ export function ItemTableRow({
   selected,
   onSelect,
   indent = false,
+  showRepositories = false,
 }: {
   item: ItemCard;
   decides: boolean;
@@ -133,6 +135,8 @@ export function ItemTableRow({
   onSelect: (id: string) => void;
   /** A part sits under its assembly: its title is indented. */
   indent?: boolean;
+  /** The list names several repositories: a Repositories cell after the title. */
+  showRepositories?: boolean;
 }) {
   const params = useFactoryParams();
   const label = describeState(item, { decides });
@@ -157,11 +161,17 @@ export function ItemTableRow({
           to="/o/$org/f/$factory/items/$ref"
           params={{ ...params, ref: refParam(item.ref) }}
           title={item.title}
-          className="line-clamp-2 w-64 whitespace-normal break-words font-medium text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
+          className="line-clamp-2 min-h-6 w-64 whitespace-normal break-words font-medium leading-6 text-ink no-underline hover:text-run-ink lg:line-clamp-none lg:w-auto lg:truncate lg:whitespace-nowrap"
         >
           {item.title}
         </Link>
+        {showRepositories ? <ItemRepositories item={item} className="mt-1 max-w-48 2xl:hidden" /> : null}
       </td>
+      {showRepositories ? (
+        <td className={cn(cell, 'hidden 2xl:table-cell 2xl:max-w-48')}>
+          <ItemRepositories item={item} className="max-w-48" />
+        </td>
+      ) : null}
       <td className={cell}>{item.type ? <Chip tone="plain">{item.type}</Chip> : null}</td>
       <td className={cn(cell, hideBelowLg)}>
         {item.lane ? <Chip tone="plain">{item.lane}</Chip> : <span className="text-muted">Not set</span>}
@@ -220,12 +230,14 @@ export function AssemblyTableRow({
   decides,
   selected,
   onSelect,
+  showRepositories = false,
 }: {
   row: Extract<ListRow, { kind: 'assembly' }>;
   decides: boolean;
   /** The ids of the parts checked in the list. */
   selected: ReadonlySet<string>;
   onSelect: (ids: string[]) => void;
+  showRepositories?: boolean;
 }) {
   const params = useFactoryParams();
   const [open, setOpen] = useState(true);
@@ -311,6 +323,7 @@ export function AssemblyTableRow({
             </span>
           </div>
         </td>
+        {showRepositories ? <td aria-hidden="true" className="hidden 2xl:table-cell" /> : null}
         <td className={cn(cell, hideBelowLg)} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
         <td className={cell} aria-hidden="true" />
@@ -327,6 +340,7 @@ export function AssemblyTableRow({
               item={part}
               decides={decides}
               indent
+              showRepositories={showRepositories}
               selected={selected.has(part.id)}
               onSelect={(id) => onSelect([id])}
             />

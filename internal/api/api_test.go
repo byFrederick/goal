@@ -373,6 +373,11 @@ func (r reads) Assemblies(ctx context.Context, f domain.FactoryID, ids []domain.
 	return r.Store.Assemblies(ctx, f, ids)
 }
 
+func (r reads) ItemsRepositories(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error) {
+	r.seam.record("ItemsRepositories")
+	return r.Store.ItemsRepositories(ctx, ids)
+}
+
 func (r reads) OpenNeeds(ctx context.Context, f domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error) {
 	r.seam.record("OpenNeeds")
 	return r.Store.OpenNeeds(ctx, f, ids)
@@ -505,7 +510,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
-		CodeHosts:   map[string]ports.CodeHost{"github": h.codehost},
+		CodeHosts: map[string]ports.CodeHost{"github": h.codehost}, Hosts: tenancy,
 		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
 		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
@@ -562,7 +567,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		OrgPolicies: porttest.NewOrgPolicies([]string{modelOpus, modelHaiku}, tenancy, h.clock.Now), BoxSizes: testBoxSizes, EgressAddresses: testEgressAddresses,
 		NotificationPreferences: h.notifications, NotificationSettings: h.notifySettings, SlackMessenger: h.slack,
 		DraftRequests: h.drafts,
-		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, Conversions: h.conversions,
+		Catalog:       h.catalog, EnvironmentTests: h.envTests, ToolLister: h.tools, RepositoryTests: repositoryTestsOf(testOrg, acmeID, lineID), Conversions: h.conversions,
 	}
 	if in != nil {
 		deps.Authorizer, deps.Identity, deps.Access = api.NewPermissions(h.clock), in.identity, in.identity
@@ -698,7 +703,7 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
 	h.kbRanges, h.kbDocs = &rangeCounter{ObjectStore: h.kbObjects}, &docsReader{}
 	h.ingestor = knowledge.NewIngestor(knowledge.IngestorConfig{
-		Knowledge: h.kb, Secrets: h.secrets, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
+		Knowledge: h.kb, Secrets: h.secrets, Hosts: h.tenancy, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
 		Objects: h.kbObjects, Clock: h.clock, TempDir: t.TempDir(),
 	})
 

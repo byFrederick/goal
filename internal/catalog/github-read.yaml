@@ -1,0 +1,32 @@
+apiVersion: goal/v1
+kind: Template
+metadata:
+  name: github-read
+  title: GitHub, read-only
+  description: The gh CLI and GitHub's MCP server in its read-only mode, for agents that only read.
+spec:
+  secrets:
+    - {slot: token, title: Token, description: "A read-only fine-grained token: only the repositories agents read, with read permissions.", suggest: github-read-token}
+  parameters:
+    - name: host
+      title: Host
+      description: github.com, or your GitHub Enterprise Server's host name.
+      default: github.com
+      otherwise:
+        tools: [gh, "github:github/github-mcp-server"]
+        env:
+          GH_HOST: "{{host}}"
+          GH_ENTERPRISE_TOKEN: "{{token}}"
+        mcp:
+          github:
+            command: [github-mcp-server, stdio, --read-only]
+            env: {GITHUB_PERSONAL_ACCESS_TOKEN: "{{token}}", GITHUB_HOST: "https://{{host}}"}
+        test: {method: GET, url: "https://{{host}}/api/v3/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}
+  tools: [gh]
+  env:
+    GH_TOKEN: "{{token}}"
+  mcp:
+    github:
+      url: https://api.githubcopilot.com/mcp/
+      headers: {Authorization: "Bearer {{token}}", X-MCP-Readonly: "true"}
+  test: {method: GET, url: "https://api.github.com/user", headers: {Authorization: "Bearer {{token}}"}, expect: 200}

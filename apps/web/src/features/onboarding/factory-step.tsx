@@ -1,8 +1,7 @@
-// Step 3, "Start your first factory" (docs/design/screens/get-started/template.jpg, ADR 0032 decision 4). The
+// Step 2, "Start your first factory" (docs/design/screens/get-started/template.jpg, ADR 0032 decision 4). The
 // catalog's templates as cards (the first is chosen), the factory's name and what it does, and "Use <template>",
-// which creates the factory from the template with POST /factories. The repository entered in step 2 and its
-// token secret then go into the new draft, as RepositoryField saves them, with the purpose; only then does
-// Continue reach step 4 with ?factory=<id>. The template list, the create call and the draft are the wizard's
+// which creates the factory from the template with POST /factories. The purpose then goes into the new draft;
+// only then does Continue reach step 3 (Code, ADR 0041 decision 9) with ?factory=<id>&template=<name>. The template list, the create call and the draft are the wizard's
 // (factory-editor/start and draft): nothing here is a second copy of them.
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -18,8 +17,7 @@ import { Chip } from '../../ui/chip';
 import { Field, Input, Textarea } from '../../ui/field';
 import { NotAvailable } from '../../ui/not-available';
 import { RadioCards } from '../../ui/radio-cards';
-import { patchRepository } from '../factory-editor/basics/repository-field';
-import { type AnyEdit, setBasics } from '../factory-editor/draft/ops';
+import { setBasics } from '../factory-editor/draft/ops';
 import { DraftSessionProvider, useDraft, useDraftSession } from '../factory-editor/draft/use-draft';
 import { stationLabel } from '../factory-editor/line/labels';
 import { nameProblem, newFactoryRequest, suggestedName } from '../factory-editor/start/start-choice';
@@ -38,17 +36,18 @@ import { OnboardingLayout } from './onboarding-layout';
 /** The catalog's name of the blank start, which the card "Start empty" picks. */
 const blank = 'blank';
 
-/** What step 3 hands on once the factory exists: the factory and what the person wrote here. */
+/** What this step hands on once the factory exists: the factory, its template and what the person wrote here. */
 interface Created {
   factory: Factory;
+  template: string;
   purpose: string;
 }
 
 type Panel = ReturnType<typeof previewSlots>;
 
-/** The URL state the steps carry: the Code step's choice, and the factory once step 3 made it. */
-function searchOf(search: OnboardingSearch, factory?: string): OnboardingSearch {
-  return { url: search.url, secret: search.secret, factory };
+/** The URL state the steps carry: the factory once this step made it, its template, and the Code step's choice. */
+function searchOf(search: OnboardingSearch, factory?: string, template?: string): OnboardingSearch {
+  return { url: search.url, secret: search.secret, template: template ?? search.template, factory };
 }
 
 export function FactoryStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
@@ -119,16 +118,14 @@ function ContinueFactory({ org, search }: { org: OrgSummary; search: OnboardingS
       org={org}
       back={
         <Button asChild size="lg" variant="secondary">
-          <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'code' }} search={searchOf(search)}>
-            Back
-          </Link>
+          <Link to="/get-started">Back</Link>
         </Button>
       }
       action={
         <Button asChild size="lg" variant="primary">
           <Link
             to="/o/$org/get-started/$step"
-            params={{ org: org.slug, step: 'line' }}
+            params={{ org: org.slug, step: 'code' }}
             search={searchOf(search, search.factory)}
           >
             Continue
@@ -142,7 +139,7 @@ function ContinueFactory({ org, search }: { org: OrgSummary; search: OnboardingS
     >
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-kpi tracking-display">Start your first factory</h1>
-        <p className="m-0 text-heading font-normal text-ink-soft">Your factory is made. Shape its line next.</p>
+        <p className="m-0 text-heading font-normal text-ink-soft">Your factory is made. Connect its code next.</p>
       </div>
     </OnboardingLayout>
   );
@@ -214,16 +211,16 @@ function CreateFactory({
       void client.invalidateQueries({ queryKey: keys.factories(org.id) });
       void client.invalidateQueries({ queryKey: keys.overviews(org.id) });
       const text = purpose.trim();
-      // Nothing to save beyond the factory itself: step 4 opens at once.
-      if (!search.url && text === '') {
+      // Nothing to save beyond the factory itself: the Code step opens at once.
+      if (text === '') {
         void navigate({
           to: '/o/$org/get-started/$step',
-          params: { org: org.slug, step: 'line' },
-          search: searchOf(search, factory.id),
+          params: { org: org.slug, step: 'code' },
+          search: searchOf(search, factory.id, picked),
         });
         return;
       }
-      onCreated({ factory, purpose: text });
+      onCreated({ factory, template: picked, purpose: text });
     },
     onError: (err) => {
       if (err instanceof ApiError && err.code === 'name-taken') {
@@ -260,9 +257,7 @@ function CreateFactory({
       org={org}
       back={
         <Button asChild size="lg" variant="secondary">
-          <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'code' }} search={searchOf(search)}>
-            Back
-          </Link>
+          <Link to="/get-started">Back</Link>
         </Button>
       }
       action={
@@ -376,8 +371,7 @@ function TemplateLine({ summary, stations }: { summary: string; stations: Previe
 }
 
 /**
- * The created factory's setup, written into its draft: the repository (as RepositoryField saves it) and the
- * purpose. A save that fails stays on this step with Retry; the factory is not made a second time.
+ * The created factory's setup, written into its draft: the purpose. A save that fails stays on this step with Retry; the factory is not made a second time.
  */
 function SaveSetup({
   org,
@@ -415,37 +409,24 @@ function SaveDraft({
   const error = useDraft((s) => s.error);
   const dirty = useDraft((s) => s.sections.basics.dirty);
   const [sent, setSent] = useState(false);
-  const url = search.url;
-  const secret = search.secret;
 
-  // Once the draft is open, the setup goes in as one save: the repository, then the purpose.
+  // Once the draft is open, the purpose goes in as one save.
   useEffect(() => {
     if (!ready || sent) return;
-    let basics = session.getSnapshot().sections.basics.local;
-    const edits: AnyEdit[] = [];
-    if (url) {
-      const e = setBasics(
-        basics,
-        'repository',
-        patchRepository(basics.repository, { url, ...(secret ? { token: `{{${secret}}}` } : {}) }),
-      );
-      edits.push(e);
-      basics = e.value;
-    }
-    if (created.purpose !== '') edits.push(setBasics(basics, 'purpose', created.purpose));
-    session.edit(edits);
+    const basics = session.getSnapshot().sections.basics.local;
+    session.edit([setBasics(basics, 'purpose', created.purpose)]);
     setSent(true);
-  }, [ready, sent, session, url, secret, created.purpose]);
+  }, [ready, sent, session, created.purpose]);
 
-  // Saved, with nothing waiting in the draft: step 4 can open it.
+  // Saved, with nothing waiting in the draft: the Code step can open it.
   useEffect(() => {
     if (!sent || status !== 'saved' || dirty) return;
     void navigate({
       to: '/o/$org/get-started/$step',
-      params: { org: org.slug, step: 'line' },
-      search: searchOf(search, created.factory.id),
+      params: { org: org.slug, step: 'code' },
+      search: searchOf(search, created.factory.id, created.template),
     });
-  }, [sent, status, dirty, navigate, org.slug, search, created.factory.id]);
+  }, [sent, status, dirty, navigate, org.slug, search, created.factory.id, created.template]);
 
   const failed = sent && (error !== null || status === 'failed' || status === 'offline');
   return (

@@ -18,9 +18,10 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Items reads the item a run works on; ports.Store satisfies it.
+// Items reads the item a run works on and its repositories; ports.Store satisfies it.
 type Items interface {
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
+	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 }
 
 // runBundle is the body of GET /run: what a run's sandbox needs to prepare and run its agent
@@ -37,6 +38,15 @@ type runBundle struct {
 	// Git configures a credential helper per login: the repository connection's and those of the
 	// agent's connections.
 	Git []gitCredential `json:"git_credentials"`
+	// Repositories, RepositoryLogins and ReadOnly are a station run's code (domain.RunCode, ADR
+	// 0041 decisions 3 and 5): the item's repositories to clone, a login per entry with a token,
+	// and the URL prefixes the run may not write, each [] when it has none. Prepare clones them by
+	// path, signs git in per repository path with the logins and refuses pushes under ReadOnly
+	// (apps/worker/README.md). A check's are its code (domain.Line.CheckCode): no clone, and every
+	// prefix read only. Every other run's bundle has them null.
+	Repositories     []bundleClone `json:"repositories"`
+	RepositoryLogins []bundleLogin `json:"repository_logins"`
+	ReadOnly         []string      `json:"read_only"`
 	// Tools are mise tool specs installed after the repository's own: on secrets the agent's
 	// environment's, in file order; otherwise the runtime's, then the CLI tools of the agent's
 	// connections.
@@ -204,6 +214,27 @@ type bundleRepository struct {
 	FreshBase  domain.FreshBase `json:"fresh_base,omitempty"`
 	Commit     string           `json:"commit,omitempty"`
 	BaseCommit string           `json:"base_commit,omitempty"`
+}
+
+// bundleClone is one of the item's repositories: its https URL, where prepare clones it (the
+// first at /workspace, each other at /repos/<owner>/<name>), the item's branch, which prepare
+// checks out where a run already pushed it, and whether the agent may push to it.
+type bundleClone struct {
+	URL    string `json:"url"`
+	Path   string `json:"path"`
+	Branch string `json:"branch"`
+	Write  bool   `json:"write"`
+}
+
+// bundleLogin is the git login of one entry: git uses it for every URL under Prefix (one
+// repository, or an owner's every repository ending in /), with Username and the value of the
+// variable PasswordEnv, the token the agent's code picks (domain.RepositoryEntryTokenEnv). Write
+// is whether the run may push under Prefix.
+type bundleLogin struct {
+	Prefix      string `json:"prefix"`
+	Username    string `json:"username"`
+	PasswordEnv string `json:"password_env"`
+	Write       bool   `json:"write"`
 }
 
 // gitCredential is a login git uses for https://<Host>: Username and the value of the variable
@@ -472,6 +503,10 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 	}
 
 	if err := g.addRepository(ctx, line.Runtime.Repository, branch, base, line.Flow.Assemblies.FreshBase, &b); err != nil {
+		return runBundle{}, err
+	}
+
+	if err := g.addCode(ctx, line, agent, it.ID, branch, &b); err != nil {
 		return runBundle{}, err
 	}
 
@@ -766,6 +801,63 @@ func (g *Gateway) addRepository(
 	}
 
 	return nil
+}
+
+// addCode puts the run's code in b as the engine decided it at run start (engine.runCode): the
+// item's repositories, an item with no rows using the default entry, each on branch, a login per
+// entry with a token and the prefixes the run may not write.
+func (g *Gateway) addCode(ctx context.Context, line domain.Line, agent domain.AgentSpec, item domain.ItemID, branch string, b *runBundle) error {
+	rows, err := g.items.ItemRepositories(ctx, item)
+	if err != nil {
+		return fmt.Errorf("repositories of item %s: %w", item, err)
+	}
+
+	putCode(line, line.RunCode(agent, domain.ResolveItemRepositories(rows, line)), branch, b)
+
+	return nil
+}
+
+// putCode puts code, a run's under line's entries, in b: its clones, each on branch, a login per
+// entry with a token naming the variable of the token it picks, and the prefixes the run may not
+// write, each [] when it has none.
+func putCode(line domain.Line, code domain.RunCode, branch string, b *runBundle) {
+	b.Repositories, b.RepositoryLogins, b.ReadOnly = []bundleClone{}, []bundleLogin{}, nonNil(code.ReadOnly)
+
+	for _, r := range code.Clones {
+		b.Repositories = append(b.Repositories, bundleClone{URL: r.URL, Path: r.Path, Branch: branch, Write: r.Write})
+	}
+
+	for _, l := range code.Logins {
+		b.RepositoryLogins = append(b.RepositoryLogins, bundleLogin{
+			Prefix: l.Prefix, Username: entryUser(line.Runtime.Repository, l.Prefix),
+			PasswordEnv: domain.RepositoryEntryTokenEnv(l.TokenEntry), Write: l.Write,
+		})
+	}
+}
+
+// fallbackUser is the user name of a token on a host whose forge neither its name nor
+// runtime.repository.forge says: GitLab needs it for an OAuth token and takes it with any other,
+// and GitHub takes any user name with a token.
+const fallbackUser = "oauth2"
+
+// entryUser is the user name git signs in to the host of prefix with: the one its forge takes (the
+// host's name says it, or the shorthand repo's forge on its host), else fallbackUser.
+func entryUser(repo domain.Repository, prefix string) string {
+	u, err := url.Parse(prefix)
+	if err != nil {
+		return fallbackUser
+	}
+
+	forge := config.KnownForge(u.Hostname())
+	if host, f := repo.CodeHost(); forge == "" && strings.EqualFold(host, u.Host) {
+		forge = f
+	}
+
+	if user, ok := forgeUsers[forge]; ok {
+		return user
+	}
+
+	return fallbackUser
 }
 
 // addEnvironment describes the agent's environment file in b on a version on secrets, as the

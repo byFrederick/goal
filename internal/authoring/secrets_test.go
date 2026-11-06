@@ -93,7 +93,7 @@ func TestSecretsCheck(t *testing.T) {
 		},
 		{
 			name: "a knowledge source the organization lacks", yaml: strings.Replace(acmeYAML, "  agents:\n", "  knowledge: { sources: [handbook] }\n  agents:\n", 1),
-			code: authoring.CodeKnowledgeSourceUnknown, file: yamlFile, pointer: "/basics/knowledge_sources/0", inPlaces: []string{"handbook"},
+			code: authoring.CodeKnowledgeSourceUnknown, file: yamlFile, pointer: firstSourcePointer, inPlaces: []string{"handbook"},
 			fixes: []domain.ProblemFix{{Label: "Remove handbook", Section: domain.SectionBasics, Patch: []domain.PatchOp{{Op: "remove", Path: "/knowledge_sources/0"}}}},
 		},
 		{
@@ -284,12 +284,21 @@ func TestSecretsCheck_KnowledgeSources(t *testing.T) {
 		},
 		{
 			name: "a repository source of the factory's own repository", yaml: withSources("- self"),
-			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: "/basics/knowledge_sources/0",
-			inPlaces: []string{"self", "runtime.repository"},
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: firstSourcePointer,
+			inPlaces: []string{"self", "https://git.example.com/acme/review.git"},
 		},
 		{
+			name: "a repository source of the factory's one entry of runtime.repositories", yaml: withRepositories(withSources("- self"),
+				`{ name: review, url: "https://git.example.com/acme/review", token: "{{code-token}}", access: write }`),
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: firstSourcePointer,
+			inPlaces: []string{"self", "https://git.example.com/acme/review"},
+		},
+		{name: "a repository source of one of the factory's two repositories", yaml: withRepositories(withSources("- self"),
+			`{ name: review, url: "https://git.example.com/acme/review", token: "{{code-token}}", access: write }`,
+			`{ name: docs, url: "https://git.example.com/acme/docs", token: "{{code-token}}", access: read }`)},
+		{
 			name: "a synced repository source of the factory's own repository", yaml: withSources("- { name: self-synced, appliesTo: { agents: [engineer] } }"),
-			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: "/basics/knowledge_sources/0",
+			code: authoring.CodeKnowledgeCopiesCheckout, severity: domain.SeverityWarning, file: yamlFile, pointer: firstSourcePointer,
 			inPlaces: []string{"self-synced"},
 		},
 		{name: "a repository source while the factory has no repository", yaml: strings.Replace(withSources("- self"),
@@ -311,4 +320,80 @@ func TestSecretsCheck_KnowledgeSources(t *testing.T) {
 			wantSecretsProblem(t, tt, v)
 		})
 	}
+}
+
+// firstSourcePointer is where the first entry of knowledge.sources shows in the editor.
+const firstSourcePointer = "/basics/knowledge_sources/0"
+
+// withRepositories is yaml with runtime.repositories' entries in place of runtime.repository.
+func withRepositories(yaml string, entries ...string) string {
+	return strings.Replace(yaml, "    repository: { url: \"https://git.example.com/acme/review.git\", token: \"{{code-token}}\", forge: github }\n",
+		"    repositories: ["+strings.Join(entries, ", ")+"]\n", 1)
+}
+
+// withRepository is acmeYAML whose repository is the runtime YAML lines repo.
+func withRepository(repo string) string {
+	return strings.Replace(acmeYAML,
+		"    repository: { url: \"https://git.example.com/acme/review.git\", token: \"{{code-token}}\", forge: github }\n", repo, 1)
+}
+
+// A repository token goes only to a code host the organization lists: the built-in github.com
+// and gitlab.com, or one an owner added. A URL on any other host is refused at its key.
+func TestSecretsCheck_RepositoryHosts(t *testing.T) {
+	t.Parallel()
+
+	tests := []secretsRow{
+		{name: "the shorthand on an added host", yaml: acmeYAML},
+		{name: "the shorthand on github.com", yaml: withRepository("    repository: { url: \"https://github.com/acme/review\", token: \"{{code-token}}\" }\n")},
+		{name: "an entry on gitlab.com", yaml: withRepository(
+			"    repositories: [{ name: review, url: \"https://gitlab.com/acme/review\", token: \"{{code-token}}\", access: write }]\n")},
+		{name: "an owner pattern on an added host", yaml: withRepository(
+			"    repositories: [{ name: acme, url: \"https://GIT.example.com/acme/*\", token: \"{{code-token}}\", access: write }]\n")},
+		{
+			name: "the shorthand on a host nobody listed",
+			yaml: withRepository("    repository: { url: \"https://git.example.org/acme/review.git\", token: \"{{code-token}}\", forge: github }\n"),
+			code: authoring.CodeRepositoryHostUnlisted, file: yamlFile, pointer: "/basics/repository/url",
+			inPlaces: []string{"git.example.org", "Code hosts"},
+		},
+		{
+			name: "an entry on a host nobody listed",
+			yaml: withRepository(
+				"    repositories: [{ name: review, url: \"https://git.example.org/acme/review\", token: \"{{code-token}}\", access: write }]\n"),
+			code: authoring.CodeRepositoryHostUnlisted, file: yamlFile, inPlaces: []string{"review", "git.example.org"},
+		},
+		{
+			name: "an entry on a listed host's other port",
+			yaml: withRepository(
+				"    repositories: [{ name: review, url: \"https://git.example.com:8443/acme/review\", token: \"{{code-token}}\", access: write }]\n"),
+			code: authoring.CodeRepositoryHostUnlisted, file: yamlFile, inPlaces: []string{"git.example.com:8443"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t)
+
+			v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(tt.yaml))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			wantSecretsProblem(t, tt, v)
+		})
+	}
+
+	t.Run("without the organization's hosts, only the built-in ones", func(t *testing.T) {
+		t.Parallel()
+
+		h := newHarness(t, withSecretsCheck(func(c *authoring.SecretsCheck) { c.Hosts = nil }))
+
+		v, err := h.svc.ValidateFiles(h.ctx, acmeFiles(acmeYAML))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		wantSecretsProblem(t, secretsRow{code: authoring.CodeRepositoryHostUnlisted, file: yamlFile, pointer: "/basics/repository/url"}, v)
+	})
 }

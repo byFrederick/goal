@@ -16,6 +16,7 @@ import { ProblemFixes } from '../frame/problem-fixes';
 import { EditedMark } from '../frame/section-shell';
 import { useProblems } from '../frame/use-editor';
 import { useModelKey } from './model-key';
+import { RepositoriesField } from './repositories-field';
 import { RepositoryField } from './repository-field';
 import { TokenField } from './token-field';
 
@@ -140,7 +141,10 @@ export function RuntimeFields({ basics }: { basics: BasicsSection }) {
           />
           {toolProblems.length > 0 ? <ProblemFixes pointer="/basics/tools" /> : null}
         </div>
-        <RepositoryField basics={basics} />
+        {basics.repository ? <RepositoryField basics={basics} /> : null}
+        {basics.repository && !basics.repositories ? null : (
+          <RepositoriesField basics={basics} shorthand={Boolean(basics.repository)} />
+        )}
       </div>
     </div>
   );

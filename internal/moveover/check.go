@@ -61,7 +61,7 @@ func (m *Mover) check(ctx context.Context, factory domain.FactoryID, tree map[st
 			}
 
 			tctx, cancel := context.WithTimeout(ctx, m.timeout())
-			r, err := environmentcheck.Server(tctx, m.d.Tools, open, s.URL, s.Headers, nil)
+			r, err := environmentcheck.Server(tctx, m.d.Tools, open, ports.MCPEndpoint{URL: s.URL, Headers: s.Headers}, nil, nil)
 
 			cancel()
 
@@ -89,10 +89,18 @@ func (m *Mover) repository(ctx context.Context, r config.Repository, open enviro
 
 	repo := u.Redacted()
 
-	host, ok := m.d.CodeHosts[cmp.Or(r.Forge, config.KnownForge(u.Hostname()))]
+	kind := cmp.Or(r.Forge, config.KnownForge(u.Hostname()))
+
+	host, ok := m.d.CodeHosts[kind]
 	if !ok {
 		return []string{fmt.Sprintf("repository %s: goald can test a token on github.com, gitlab.com or a host runtime.repository.forge names, not on %s",
 			repo, u.Hostname())}, nil
+	}
+
+	// The host as the seed lists it from the version (codeHosts), which runs after this check.
+	on, err := domain.ParseCodeRepository([]domain.CodeHost{{Host: strings.ToLower(u.Host), Kind: domain.CodeHostKind(kind)}}, r.URL)
+	if err != nil {
+		return []string{fmt.Sprintf("repository %s is not a repository's URL: fix runtime.repository.url", repo)}, nil
 	}
 
 	names := environmentcheck.Referenced(map[string]string{"token": r.Token})
@@ -112,7 +120,7 @@ func (m *Mover) repository(ctx context.Context, r config.Repository, open enviro
 	tctx, cancel := context.WithTimeout(ctx, m.timeout())
 	defer cancel()
 
-	access, err := host.RepositoryAccess(tctx, r.URL, values[names[0]])
+	access, err := host.RepositoryAccess(tctx, on, values[names[0]])
 
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):

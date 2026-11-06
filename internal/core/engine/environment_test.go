@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"maps"
 	"slices"
@@ -695,5 +696,154 @@ func TestPushNote_RepositoryToken(t *testing.T) {
 	want := "Git signs in to " + gitHost + " with the repository token."
 	if feedback := h.oneAgentRun(t, it).Env["GOAL_FEEDBACK"]; !strings.Contains(feedback, want) {
 		t.Errorf("feedback %q does not say %q", feedback, want)
+	}
+}
+
+// Repository entries of the entry tests: app writes with {{github-token}}, the owner's every
+// repository reads with {{acme-read}}.
+const (
+	secAcmeRead    = "acme-read"
+	acmeReadValue  = "acme-read-token-for-tests-3233"
+	entryApp       = "app"
+	entryAcme      = "acme"
+	envEntryApp    = "GOAL_REPOSITORY_TOKEN_APP"
+	envEntryAcme   = "GOAL_REPOSITORY_TOKEN_ACME"
+	repoAcmeLib    = "https://" + gitHost + "/acme/lib"
+	keyAcmeLib     = gitHost + "/acme/lib"
+	repoAcmeOwners = "https://" + gitHost + "/acme/*"
+)
+
+// entriesLine is secretsLine with runtime.repositories: app, the default, writes, and acme reads;
+// its agent's code is code.
+func entriesLine(code string) domain.Line {
+	line := withEnvironment(secretsLine(), agWorker, envBrowser)
+	line.Runtime.Repositories = []domain.RepositoryEntry{
+		{Name: entryApp, URL: repoURL, Token: "{{" + secGitHub + "}}", Access: domain.AccessWrite, Default: true},
+		{Name: entryAcme, URL: repoAcmeOwners, Token: "{{" + secAcmeRead + "}}", Access: domain.AccessRead},
+	}
+
+	for i := range line.Agents {
+		line.Agents[i].Code = code
+	}
+
+	return line
+}
+
+// submitWith files an item naming repos, each an entry's name or owner/name.
+func (h *harness) submitWith(t *testing.T, title string, repos ...string) domain.Item {
+	t.Helper()
+
+	it, err := h.e.Submit(inOrg(t), domain.FileRequest{
+		FactoryID: factoryID, Origin: domain.OriginPerson, Type: typeFeature, Title: title, Repositories: repos,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return it
+}
+
+// Each entry token the agent's code picks is opened once, with the run's other secrets, and goes
+// to prepare alone in its entry's GOAL_REPOSITORY_TOKEN_<NAME>; the first clone's token stays in
+// GOAL_REPOSITORY_TOKEN. No entry token reaches the agent's env, and each is scrubbed.
+func TestSecretEnv_EntryTokensGoToPrepareOnly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		code        string
+		wantPrepare map[string]string
+		noPrepare   []string
+	}{
+		{
+			name: "an agent that writes", code: domain.CodeWrite,
+			wantPrepare: map[string]string{
+				envEntryApp: githubTokenValue, envEntryAcme: acmeReadValue, domain.RepositoryTokenEnv: githubTokenValue,
+			},
+		},
+		{
+			// The reader takes acme's read token for app too, so app's write token is never opened.
+			name: "an agent that only reads", code: domain.CodeRead,
+			wantPrepare: map[string]string{envEntryAcme: acmeReadValue, domain.RepositoryTokenEnv: acmeReadValue},
+			noPrepare:   []string{envEntryApp},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, entriesLine(tt.code), func(_ context.Context, _ porttest.ExecCall, stdout io.Writer) domain.RunResult {
+				_, _ = io.WriteString(stdout, `{"type":"message","at":"2026-10-23T09:00:02Z","text":"read `+acmeReadValue+`"}`+"\n")
+				return domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`)}
+			})
+			h.addSecrets(t)
+			h.addSecret(t, secTickets, ticketsKeyValue)
+			h.addSecret(t, secAcmeRead, acmeReadValue)
+			it := h.submitWith(t, anItem, entryApp, "acme/lib")
+
+			h.step(t)
+
+			h.preparedTokens(t, tt.wantPrepare, tt.noPrepare)
+			h.agentHasNoRepositoryToken(t, it)
+
+			want := []string{secAcmeRead, secClaude, secGitHub, secTickets}
+			if tt.code == domain.CodeRead {
+				want = []string{secAcmeRead, secClaude, secTickets}
+			}
+
+			if got := h.secretsUsed(t, agWorker); !slices.Equal(got, want) {
+				t.Errorf("secret.used of %v; want one each of %v", got, want)
+			}
+
+			h.notReported(t, it, acmeReadValue)
+		})
+	}
+}
+
+// preparedTokens fails the test unless prepare got each of want's variables with its value, and
+// none of not.
+func (h *harness) preparedTokens(t *testing.T, want map[string]string, not []string) {
+	t.Helper()
+
+	prepare := h.worker.Prepares()[0].Env
+	for name, v := range want {
+		if prepare[name] != v {
+			t.Errorf("prepare's %s is not the token its entry's pick names", name)
+		}
+	}
+
+	for _, name := range not {
+		if _, ok := prepare[name]; ok {
+			t.Errorf("prepare got %s, a token the agent's code does not pick", name)
+		}
+	}
+}
+
+// agentHasNoRepositoryToken fails the test when the agent's env has a repository token variable or
+// value.
+func (h *harness) agentHasNoRepositoryToken(t *testing.T, it domain.Item) {
+	t.Helper()
+
+	for name, v := range h.oneAgentRun(t, it).Env {
+		if strings.HasPrefix(name, domain.RepositoryTokenEnv) || strings.Contains(v, githubTokenValue) || strings.Contains(v, acmeReadValue) {
+			t.Errorf("the agent's %s holds a repository token", name)
+		}
+	}
+}
+
+// notReported fails the test when value reached goald's logs or the item's events.
+func (h *harness) notReported(t *testing.T, it domain.Item, value string) {
+	t.Helper()
+
+	reported := []string{h.logs.String()}
+	for _, e := range h.store.Events(it.ID) {
+		reported = append(reported, mustJSON(t, e.Data))
+	}
+
+	for _, r := range reported {
+		if strings.Contains(r, value) {
+			t.Errorf("a secret's value reached what the run reports:\n%s", r)
+		}
 	}
 }

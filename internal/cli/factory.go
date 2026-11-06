@@ -58,7 +58,7 @@ type pulled struct {
 	Manifest map[string]string `json:"manifest"`
 }
 
-// factory runs goal factory validate|push|pull|list|publish|versions|restore|archive|delete|ask.
+// factory runs goal factory validate|push|pull|list|show|publish|versions|restore|archive|delete|ask.
 func factory(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	if len(args) == 0 {
 		return errUsage
@@ -73,6 +73,8 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 		return factoryPull(ctx, out, getenv, rest)
 	case "list":
 		return factoryList(ctx, out, getenv, rest)
+	case "show":
+		return factoryShow(ctx, out, getenv, rest)
 	case "publish":
 		return factoryPublish(ctx, out, getenv, rest)
 	case "versions":
@@ -794,6 +796,174 @@ func factoryList(ctx context.Context, out *printer, getenv func(string) string, 
 	}
 
 	return nil
+}
+
+// factoryShow runs goal factory show <factory>: what goal factory list shows of it, then each
+// repository of its current version (ADR 0041 decision 18) with its access, the default marked,
+// and the test goald kept for its url, or not tested; kept tests of no entry come after. It only
+// reads kept results; goal repository test --factory tests.
+func factoryShow(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
+	fs := newFlags("factory show")
+	org := addOrgFlag(fs)
+
+	pos, err := parseInterspersed(fs, args)
+	if err != nil || len(pos) != 1 {
+		return errUsage
+	}
+
+	c, err := connect(ctx, getenv, *org)
+	if err != nil {
+		return err
+	}
+
+	f, err := getFactory(ctx, c, pos[0])
+	if err != nil {
+		return err
+	}
+
+	out.printf("%s  %s  %s\n", f.Name, f.Id, describeFactory(*f))
+
+	if f.Current == nil {
+		out.printf("%s has no published version, so no repositories yet\n", f.Name)
+		return nil
+	}
+
+	entries, err := currentRepositories(ctx, c, f)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.ListFactoryRepositoryTestsWithResponse(ctx, c.org, f.Id)
+	if err != nil {
+		return apiDown(err)
+	}
+
+	if res.JSON200 == nil {
+		return problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	printRepositories(out, fmt.Sprintf("%s v%d", f.Name, f.Current.Number), entries, res.JSON200.Tests)
+
+	return nil
+}
+
+// currentRepositories are the runtime.repositories entries of f's current version, read from its
+// factory.yaml: runtime.repository as one write entry, the default (config.Runtime's rule).
+func currentRepositories(ctx context.Context, c orgClient, f *gen.Factory) ([]config.RepositoryEntry, error) {
+	res, err := c.GetVersionFileWithResponse(ctx, c.org, f.Id, strconv.Itoa(f.Current.Number), config.FileName)
+	if err != nil {
+		return nil, apiDown(err)
+	}
+
+	if res.StatusCode() != http.StatusOK {
+		return nil, problem(res.HTTPResponse, res.ApplicationproblemJSONDefault)
+	}
+
+	type entry struct {
+		Name    string `yaml:"name"`
+		URL     string `yaml:"url"`
+		Access  string `yaml:"access"`
+		Default bool   `yaml:"default"`
+	}
+
+	var doc struct {
+		Spec struct {
+			Runtime struct {
+				Repository *struct {
+					URL string `yaml:"url"`
+				} `yaml:"repository"`
+				Repositories []entry `yaml:"repositories"`
+			} `yaml:"runtime"`
+		} `yaml:"spec"`
+	}
+
+	if err := yaml.Unmarshal(res.Body, &doc); err != nil {
+		return nil, fmt.Errorf("%s v%d's %s: %w", f.Name, f.Current.Number, config.FileName, err)
+	}
+
+	var rt config.Runtime
+
+	if r := doc.Spec.Runtime.Repository; r != nil {
+		rt.Repository = &config.Repository{URL: r.URL}
+	}
+
+	for _, e := range doc.Spec.Runtime.Repositories {
+		rt.Repositories = append(rt.Repositories, config.RepositoryEntry{Name: e.Name, URL: e.URL, Access: e.Access, Default: e.Default})
+	}
+
+	return rt.RepositoryEntries(), nil
+}
+
+// printRepositories prints the entries of version, each with the kept test of its url, then the
+// kept tests that match no entry.
+func printRepositories(out *printer, version string, entries []config.RepositoryEntry, tests []gen.FactoryRepositoryTest) {
+	if len(entries) == 0 {
+		out.printf("%s has no repositories\n", version)
+	}
+
+	kept := make(map[string]gen.FactoryRepositoryTest, len(tests))
+	for _, t := range tests {
+		kept[t.Url] = t
+	}
+
+	if len(entries) > 0 {
+		out.printf("repositories of %s (* the default):\n", version)
+	}
+
+	for _, e := range entries {
+		name := e.Name
+		if e.Default {
+			name += " *"
+		}
+
+		out.printf("  %-24s %-5s  %s\n", name, e.Access, e.URL)
+
+		key, ok := repositoryTestKey(e.URL)
+		t, tested := kept[key]
+
+		if !ok || !tested {
+			out.printf("    not tested\n")
+			continue
+		}
+
+		delete(kept, key)
+		printKeptTest(out, t)
+	}
+
+	if len(kept) == 0 {
+		return
+	}
+
+	out.printf("kept tests of no repository of %s:\n", version)
+
+	for _, k := range slices.Sorted(maps.Keys(kept)) {
+		out.printf("  %-24s %s\n", k, kept[k].Access)
+		printKeptTest(out, kept[k])
+	}
+}
+
+// printKeptTest prints a kept repository test: its summary, secret and time, then its warning or
+// note.
+func printKeptTest(out *printer, t gen.FactoryRepositoryTest) {
+	out.printf("    %s %s with secret %s, tested %s\n", mark(t.Tested && t.Ok), t.Summary, t.Secret, stamp(t.At))
+	printTestNotes(out, "      ", t)
+}
+
+// repositoryTestKey is the url goald keeps a repository test of raw under: domain.RepositoryKey for one
+// repository, host/owner/* in lower case for an owner pattern; false for a url that is neither.
+func repositoryTestKey(raw string) (string, bool) {
+	prefix, pattern := strings.CutSuffix(strings.TrimSuffix(raw, "/"), "/*")
+	if !pattern {
+		return domain.RepositoryKey(raw)
+	}
+
+	// The owner is checked as a repository's would be, with a name it can't have.
+	k, ok := domain.RepositoryKey(prefix + "/_")
+	if !ok {
+		return "", false
+	}
+
+	return strings.TrimSuffix(k, "_") + "*", true
 }
 
 // listScope is goal factory list's request and what it lists: the archived factories or the others.

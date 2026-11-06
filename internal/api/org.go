@@ -16,7 +16,7 @@ import (
 )
 
 // Orgs are the install's organizations as the API reads and changes them, with their sign-up
-// domains; ports.Tenancy and ports.SignupDomains satisfy it. Org, Orgs and CreateOrg need no organization in ctx; the others act on the one
+// domains and code hosts; ports.Tenancy, ports.SignupDomains and ports.CodeHosts satisfy it. Org, Orgs and CreateOrg need no organization in ctx; the others act on the one
 // in ctx.
 type Orgs interface {
 	Orgs(ctx context.Context) ([]domain.OrgSummary, error)
@@ -26,6 +26,7 @@ type Orgs interface {
 	DeleteOrg(ctx context.Context, by domain.Actor, now time.Time) error
 	FactorySlots(ctx context.Context) (map[domain.FactoryID]int, error)
 	ports.SignupDomains
+	ports.CodeHosts
 }
 
 // errOrgNotFound answers an unknown or deleted organization alike: 404 with one body.

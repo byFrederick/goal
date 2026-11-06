@@ -77,12 +77,35 @@ func (e *MergeConflictError) Is(target error) bool { return target == ErrMergeCo
 // instances at once.
 type Store interface {
 	// CreateItem files an item domain.File checked: it inserts it with the next per-factory number
-	// (origin person when n.Origin is ""), and appends a created event and an item.filed audit
+	// (origin person when n.Origin is ""), its branch (domain.ItemBranch of n.FactoryName) and
+	// n.Repositories joined at n.CreatedAt, and appends a created event and an item.filed audit
 	// entry by n.CreatedBy (the engine when zero), in one transaction.
 	CreateItem(ctx context.Context, n domain.NewItem) (domain.Item, error)
 
 	// Item returns one item, or ErrNotFound.
 	Item(ctx context.Context, id domain.ItemID) (domain.Item, error)
+
+	// ItemRepositories returns an item's repositories in first-joined order: those joined at
+	// filing in the order named, then the rest by when they joined, then by ordinal. An unknown
+	// item, or one filed without any, has none; run start resolves those to the line's default
+	// entry (domain.ResolveItemRepositories) and records it (JoinItemRepositories).
+	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
+
+	// ItemsRepositories returns the repositories of each of items that has any, by item, each
+	// item's in ItemRepositories' order, in one read: a page of cards. Unknown ids and ids that
+	// are not UUIDs have none.
+	ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error)
+
+	// JoinItemRepositories adds to item the repositories of keys it lacks, joined as joined at
+	// time at with the next ordinals, under the item's lock, until it has
+	// domain.MaxItemRepositories (domain.AppendRepositories); the rest are left out without an
+	// error. An unknown item is ErrNotFound.
+	JoinItemRepositories(ctx context.Context, item domain.ItemID, joined domain.RepositoryJoin, keys []string, at time.Time) error
+
+	// OpenItemRepositories returns the repositories the factory's open items (not done, not
+	// cancelled) use, one per item and repository, by repository then item number. Publish
+	// reads it to refuse a version that drops the entry such an item needs.
+	OpenItemRepositories(ctx context.Context, factory domain.FactoryID) ([]domain.RepositoryUse, error)
 
 	// FollowUps returns the follow-ups kept for an item (Transition.FollowUps), oldest first and
 	// in output order within a run, each filed one with the factory and number of the item it was
@@ -231,6 +254,16 @@ type Store interface {
 	// assembly_landing event instead of closing it done.
 	SetIntegrationBranch(ctx context.Context, root domain.ItemID, branch, landAt string, at time.Time) (set bool, err error)
 
+	// JoinIntegrationRepositories gives the assembly root its integration branch in each of repos
+	// (RepositoryKey), its parts' repositories (ADR 0041 decision 5), in one transaction under
+	// root's lock: each repository root lacks joins filing at time at with the next ordinal
+	// (domain.JoinIntegration), and each of repos' rows gets branch as its integration_branch
+	// where it has none, so a second call with another branch changes no row that has one. It
+	// returns the repositories left out past domain.MaxItemRepositories. closeAssembly does the
+	// same, in its own transaction, for every repository of the assembly's done parts when it
+	// lands. An empty branch is domain.ErrInvalid, an unknown item ErrNotFound.
+	JoinIntegrationRepositories(ctx context.Context, root domain.ItemID, repos []string, branch string, at time.Time) (left []string, err error)
+
 	// Parts returns an assembly's parts in plan order and how many are done. An unknown item has
 	// none.
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
@@ -279,7 +312,10 @@ type Store interface {
 
 	// FinishRun records a run's result, adds its cost to the item and appends a run_finished
 	// event with its status, error, cost and turns. Finishing a run twice is a no-op.
-	// It also keeps the run's own output and the head it pushed (res.PushedHead).
+	// It also keeps the run's own output and each repository's pushed head (res.Repositories),
+	// and the repositories the run wrote to join its item as joined push at endedAt, in the same
+	// transaction, until the item has domain.MaxItemRepositories (ADR 0041 decision 5); those
+	// past the cap, and those the run only read, stay only on the run.
 	FinishRun(ctx context.Context, id domain.RunID, res domain.RunResult, endedAt time.Time) error
 
 	// RecordRunInput records what a run was given: its brief and the heads before prepare's
@@ -579,6 +615,26 @@ type SignupDomains interface {
 	ClearSignupDomain(ctx context.Context, by domain.Actor) error
 }
 
+// CodeHosts keep the code hosts each organization added (ADR 0041, decision 1): the GitHub
+// Enterprise and self-managed GitLab hosts its repository tokens and knowledge secrets may go to,
+// besides the built-in domain.BuiltInCodeHosts, which are never stored. Every method acts on the
+// organization in ctx (domain.WithOrg).
+type CodeHosts interface {
+	// CodeHosts returns the organization's added hosts, sorted by host.
+	CodeHosts(ctx context.Context) ([]domain.CodeHost, error)
+	// SetCodeHosts replaces the added hosts with hosts (already checked with
+	// domain.CheckCodeHosts) for by, appends org.code_hosts_set with the hosts before and after,
+	// and returns the hosts now stored, sorted by host; setting what is stored changes nothing
+	// and appends nothing.
+	SetCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) ([]domain.CodeHost, error)
+	// SeedCodeHosts adds hosts (already checked with domain.CheckCodeHost) the first time it is
+	// called for the organization, and never again, so a host an owner removes later stays
+	// removed (ADR 0041 decision 19). A host already listed keeps its kind; when it adds a host it
+	// appends one org.code_hosts_set by by. seeded reports whether this call was the first,
+	// whether or not it added a host. Concurrent calls, on any instance, seed once.
+	SeedCodeHosts(ctx context.Context, by domain.Actor, hosts []domain.CodeHost) (seeded bool, err error)
+}
+
 // NewOrg is an organization to create.
 type NewOrg struct {
 	Slug, Name, Mark string
@@ -837,8 +893,13 @@ type Transition struct {
 	// Paths, when non-nil, replaces the item's paths (the file globs it is expected to change);
 	// an empty non-nil slice clears them and nil keeps them.
 	Paths []string
-	// BaseCommit, when non-empty, replaces the item's base commit; empty keeps it.
+	// BaseCommit, when non-empty, replaces the item's base commit (its first repository's, ADR
+	// 0041 decision 5); empty keeps it.
 	BaseCommit string
+	// BaseCommits are base commits by repository (domain.RepositoryKey): each sets the base commit
+	// of the item's row for that repository. A repository absent, with an empty sha, or that is
+	// not one of the item's keeps its row as it is.
+	BaseCommits map[string]string
 	// Output, when set, is stored as the item's output for OutputStation.
 	OutputStation string
 	Output        json.RawMessage
@@ -853,6 +914,11 @@ type Transition struct {
 	// domain.FollowUpKey matches a follow-up already kept for the item is skipped, so a rerun
 	// or a retry of the transaction keeps each text once.
 	FollowUps []domain.FollowUp
+	// Repositories are the keys (domain.RepositoryKey) an accepted output adds to the item, joined
+	// output at At with the change (ADR 0041 decision 4): those the item lacks, until it has
+	// domain.MaxItemRepositories (domain.AppendRepositories). The engine refuses an output past
+	// the cap at its check, so the store's cap only drops a key when a push joined meanwhile.
+	Repositories []string
 }
 
 // ItemNotices streams a notice of every item event as it is committed, from any goald
@@ -902,64 +968,88 @@ type OrgEvent struct {
 	Data json.RawMessage
 }
 
-// CodeHost reaches the API of a code host (GitHub, GitLab) from goald with a code host login
-// (domain.CodeHostLogin): a host and a token, which callers build today from the git login of a
-// connection whose kind names the adapter (domain.ResolvedConnection.CodeHostLogin,
-// domain.KindSpec.CodeHost). The token is sent only to the login's host. A pull request's
-// repository comes from its URL, which must be on that host (otherwise an error wrapping
-// ErrNotMergeable, before anything is sent). Adapters follow no redirects and never put the token
-// in errors or logs.
+// CodeHost reaches the API of a code host (GitHub, GitLab) from goald for one repository at a
+// time (ADR 0041, decision 7): a domain.CodeRepository, on a host of the organization's list
+// (domain.ParseCodeRepository), and the token that signs in to it. The token is sent only to the
+// repository's host, at its API base (domain.CodeHostAPIBase). An adapter refuses, before anything
+// is sent, a repository whose host is of another kind than its own or that names no owner or
+// name, an empty token, and a pull request URL that is not one of the repository's (an error
+// wrapping ErrNotMergeable). Adapters follow no redirects and never put the token in errors or
+// logs.
 type CodeHost interface {
-	// PullRequest returns the state of the pull request (a GitLab merge request) at url.
-	PullRequest(ctx context.Context, login domain.CodeHostLogin, url string) (PullRequest, error)
+	// PullRequest returns the state of the pull request (a GitLab merge request) at url in repo.
+	PullRequest(ctx context.Context, repo domain.CodeRepository, token, url string) (PullRequest, error)
 
-	// Merge merges the pull request at url only while its head is still m.HeadSHA, and never
-	// forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
+	// Merge merges the pull request at url in repo only while its head is still m.HeadSHA, and
+	// never forces: a pull request the host refuses to merge is an error wrapping ErrNotMergeable.
 	// It returns the merge commit's SHA.
-	Merge(ctx context.Context, login domain.CodeHostLogin, url string, m Merge) (string, error)
+	Merge(ctx context.Context, repo domain.CodeRepository, token, url string, m Merge) (string, error)
 
-	// UpdateBranch brings the head branch of the pull request at url up to date with its base
-	// (GitHub merges the base into it; GitLab rebases it) only while its head is still headSHA,
-	// and never forces. Changes that conflict are an error wrapping ErrMergeConflict (a
+	// UpdateBranch brings the head branch of the pull request at url in repo up to date with its
+	// base (GitHub merges the base into it; GitLab rebases it) only while its head is still
+	// headSHA, and never forces. Changes that conflict are an error wrapping ErrMergeConflict (a
 	// *MergeConflictError); a moved head, a closed pull request or one the host refuses to update is
 	// an error wrapping ErrNotMergeable. Both hosts update asynchronously: nil means the host
 	// accepted the update, and the head changes later, so callers read the pull request again
 	// before merging. GitLab's rebase takes no expected head, so there the check is the adapter's
 	// own read just before it: best effort against a push landing in between.
-	UpdateBranch(ctx context.Context, login domain.CodeHostLogin, url, headSHA string) error
+	UpdateBranch(ctx context.Context, repo domain.CodeRepository, token, url, headSHA string) error
 
-	// DeleteBranch deletes a branch of the repository the pull request at url merges into; a
-	// branch that is already gone is not an error.
-	DeleteBranch(ctx context.Context, login domain.CodeHostLogin, url, branch string) error
+	// DeleteBranch deletes a branch of repo, which the pull request at url merges into; a branch
+	// that is already gone is not an error.
+	DeleteBranch(ctx context.Context, repo domain.CodeRepository, token, url, branch string) error
 
-	// BranchHead returns the SHA of the head commit of branch in the repository at repo
-	// (https://<host>/<owner>/<repo>, optionally ending in .git), which must be on login's host
-	// (otherwise an error, before anything is sent). An empty branch means the repository's
-	// default branch. An unknown repository or branch is an error wrapping ErrNotFound. It only
-	// reads.
-	BranchHead(ctx context.Context, login domain.CodeHostLogin, repo, branch string) (string, error)
+	// BranchHead returns the SHA of the head commit of branch in repo. An empty branch means the
+	// repository's default branch. An unknown repository or branch is an error wrapping
+	// ErrNotFound. It only reads.
+	BranchHead(ctx context.Context, repo domain.CodeRepository, token, branch string) (string, error)
 
-	// Compare returns the commits of the repository at repo (as for BranchHead) reachable from
-	// head and not from base, oldest first, each with its subject and the paths it changed. It
-	// returns at most MaxCompareCommits, the oldest ones, and sets Comparison.Truncated when there
-	// are more. An unknown repository or commit is an error wrapping ErrNotFound. It only reads.
-	Compare(ctx context.Context, login domain.CodeHostLogin, repo, base, head string) (Comparison, error)
+	// Compare returns the commits of repo reachable from head and not from base, oldest first,
+	// each with its subject and the paths it changed. It returns at most MaxCompareCommits, the
+	// oldest ones, and sets Comparison.Truncated when there are more. An unknown repository or
+	// commit is an error wrapping ErrNotFound. It only reads.
+	Compare(ctx context.Context, repo domain.CodeRepository, token, base, head string) (Comparison, error)
 
-	// Repositories returns the account login's token signs in as, the owners it can list
-	// repositories of (the account and its organizations) and the repositories of owner (the
-	// account when owner is empty): at most MaxRepositories, the most recently updated first, with
-	// RepositoryList.Truncated set when there are more. An unknown owner is an error wrapping
-	// ErrNotFound; a host that cannot list them, one wrapping errors.ErrUnsupported. It only reads.
-	Repositories(ctx context.Context, login domain.CodeHostLogin, owner string) (RepositoryList, error)
+	// Repositories returns the account token signs in as on host (one of the organization's
+	// list), the owners it can list repositories of (the account and its organizations) and the
+	// repositories of owner (the account when owner is empty): at most MaxRepositories, the most
+	// recently updated first, with RepositoryList.Truncated set when there are more. An unknown
+	// owner is an error wrapping ErrNotFound; a host that cannot list them, one wrapping
+	// errors.ErrUnsupported. It only reads.
+	Repositories(ctx context.Context, host domain.CodeHost, token, owner string) (RepositoryList, error)
 
-	// RepositoryAccess reports what token can do in the repository at repo
-	// (https://<host>/<owner>/<repo>, optionally ending in .git), without a connection: whether it
-	// can read the repository and whether it can push to it, each with a one-line reason from the
-	// host. The token is sent only to repo's host. A refusal the host answers (an unknown
-	// repository, a bad token, no push) is in the result; err is a repo that is not a repository
-	// URL (wrapping domain.ErrInvalid), or a host that gave no answer it could read. It only reads.
-	RepositoryAccess(ctx context.Context, repo, token string) (RepositoryAccess, error)
+	// RepositoryAccess reports what token can do in repo: whether it can read the repository and
+	// whether it can push to it, each with a one-line reason from the host. A refusal the host
+	// answers (an unknown repository, a bad token, no push) is in the result; err is a host that
+	// gave no answer it could read. It only reads.
+	RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (RepositoryAccess, error)
+
+	// OwnerAccess reports what token can do in the repositories of owner on host (one of the
+	// organization's list), for an owner pattern such as https://github.com/acme/* (ADR 0041,
+	// decision 8): how many of them it can read and how many it can push to, with a one-line
+	// reason from the host. owner is an account, an organization or a GitLab group path (subgroups
+	// included). The count stops once the adapter has seen MaxOwnerRepositories repositories, and
+	// OwnerAccess.Truncated says so. A refusal the host answers (a bad token, an unknown owner, no
+	// repositories) is in the result, with Readable 0; err is a host that gave no answer it could
+	// read (no answer, a 5xx). An empty token or owner, an owner that is no account or group path
+	// and a host of another kind than the adapter's are refused, wrapping domain.ErrInvalid, before
+	// anything is sent. The token goes only to the host's domain.CodeHostAPIBase, redirects are
+	// not followed, and it only reads.
+	OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (OwnerAccess, error)
 }
+
+// OwnerAccess is what CodeHost.OwnerAccess found a token can do in an owner's repositories.
+type OwnerAccess struct {
+	// Readable and Pushable count the owner's repositories the token can read and push to.
+	Readable, Pushable int
+	// Truncated reports that the count stopped at MaxOwnerRepositories: there may be more.
+	Truncated bool
+	// Reason is the host's answer in one line.
+	Reason string
+}
+
+// MaxOwnerRepositories bounds the repositories one CodeHost.OwnerAccess looks at.
+const MaxOwnerRepositories = 1000
 
 // RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
 type RepositoryAccess struct {

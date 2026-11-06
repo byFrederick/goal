@@ -51,6 +51,9 @@ type Deps struct {
 	// CodeHosts are the code host adapters by forge (github, gitlab): a converted version's
 	// repository token is tested on its repository's.
 	CodeHosts map[string]ports.CodeHost
+	// Hosts are the organization's code hosts, seeded once with the hosts its published versions
+	// and knowledge repository sources already use (ADR 0041 decision 19).
+	Hosts ports.CodeHosts
 	// Tools lists a converted environment file's remote MCP servers' tools.
 	Tools ports.ToolLister
 	// CheckTimeout bounds each check's call to a host; CheckTimeout when zero.
@@ -79,6 +82,8 @@ type Tally struct {
 	Slack bool
 	// Webhooks are the factory webhook endpoints moved to the organization.
 	Webhooks int
+	// Hosts are the code hosts the seed added to the organization's list.
+	Hosts int
 }
 
 // Run converts every organization once, under the install's conversion lock, and logs one line
@@ -103,7 +108,7 @@ func (m *Mover) Run(ctx context.Context) error {
 			m.d.Logger.InfoContext(ctx, "moved over", slog.String("org", string(org)),
 				slog.Int("converted", t.Converted), slog.Int("refused", t.Refused), slog.Int("secrets", t.Secrets), slog.Int("sources", t.Sources),
 				slog.Int("kinds", t.Kinds), slog.Int("live", t.Live), slog.Int("due", t.Due), slog.Bool("slack", t.Slack),
-				slog.Int("webhooks", t.Webhooks))
+				slog.Int("webhooks", t.Webhooks), slog.Int("hosts", t.Hosts))
 		}
 
 		return nil
@@ -123,7 +128,8 @@ func (m *Mover) Run(ctx context.Context) error {
 // notification setting, then its synced knowledge sources still on a connection, then each factory with no conversion
 // recorded whose current version is on connections, and last its knowledge sources into ADR 0038's
 // kinds, after the factories so a factory listing a live source still publishes its conversion,
-// and last its factory webhook endpoints into the organization's webhooks.
+// then its factory webhook endpoints into the organization's webhooks, and last, once, its code
+// hosts from the hosts its versions and knowledge sources use.
 func (m *Mover) Org(ctx context.Context) (Tally, error) {
 	var t Tally
 
@@ -152,7 +158,11 @@ func (m *Mover) Org(ctx context.Context) (Tally, error) {
 		return t, err
 	}
 
-	return t, m.webhooks(ctx, &t)
+	if err := m.webhooks(ctx, &t); err != nil {
+		return t, err
+	}
+
+	return t, m.codeHosts(ctx, &t)
 }
 
 // webhooks moves the organization's factory webhook endpoints to the organization, each open to
@@ -576,7 +586,7 @@ func (m *Mover) sourcePatch(ctx context.Context, src domain.KnowledgeSource, con
 	config[domain.SourceReaderKey] = rc.Kind.Spec.Sync
 
 	if rc.Kind.Spec.CodeHost != "" {
-		config["code_host"] = rc.Kind.Spec.CodeHost
+		config[sourceCodeHostKey] = rc.Kind.Spec.CodeHost
 	}
 
 	for _, f := range rc.Kind.Spec.Fields {

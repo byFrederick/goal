@@ -51,7 +51,7 @@ func TestRunEnv_MCPHeaderRendersSecretVariable(t *testing.T) {
 		},
 	}
 
-	got, err := e.secretEnv(ctx, domain.SecretUse{Factory: factory, Agent: "worker", Run: "run-1"}, "", env, domain.Repository{})
+	got, err := e.secretEnv(ctx, domain.SecretUse{Factory: factory, Agent: "worker", Run: "run-1"}, "", env, domain.Repository{}, domain.RunCode{})
 	if err != nil {
 		t.Fatal(err)
 	}

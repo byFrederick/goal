@@ -16,6 +16,7 @@ import type {
   GateTally,
   ItemEvent,
   ItemQuestion,
+  ItemRepository,
   ItemSpan,
   ItemState,
   Org,
@@ -57,6 +58,8 @@ export interface MockItem {
   done_at?: string;
   agent: string | null;
   pr_url: string | null;
+  /** The repositories it works in and how each joined (ItemCard.repositories). */
+  repositories?: ItemRepository[];
   /** Its spans at stations, kept as goald's trigger keeps item_spans (trackSpan). */
   spans: ItemSpan[];
   /** The files it changes (its plan's touches), which a files wait compares. Not on Item. */
@@ -249,6 +252,8 @@ interface Seed {
   agent?: string;
   rework?: number;
   pr?: number;
+  /** The repositories the item works in and how each joined. */
+  repositories?: ItemRepository[];
   /** The person who created the item (a key of the directory): the item's owner. */
   owner?: keyof typeof directory;
   createdMin: number;
@@ -1863,6 +1868,27 @@ const softwareSeeds: Seed[] = [
   })),
 ];
 
+// The Software factory builds in several repositories: its board and Items list show them (ADR 0041).
+const goalRepositories: Record<number, ItemRepository[]> = {
+  17: [{ repo: 'github.com/acme/goal', joined: 'default' }],
+  18: [
+    { repo: 'github.com/acme/goal', joined: 'default' },
+    { repo: 'github.com/acme/docs', joined: 'filing' },
+  ],
+  19: [
+    { repo: 'github.com/acme/goal', joined: 'default' },
+    { repo: 'github.com/acme/deploy-config', joined: 'push' },
+    { repo: 'github.com/acme/docs', joined: 'output' },
+  ],
+  20: [{ repo: 'github.com/acme/docs', joined: 'filing' }],
+  21: [{ repo: 'github.com/acme/deploy-config', joined: 'filing' }],
+};
+
+function withRepositories(seed: Seed): Seed {
+  const repositories = goalRepositories[seed.number];
+  return repositories ? { ...seed, repositories } : seed;
+}
+
 function uuid(prefix: number, n: number): string {
   const hex = (prefix * 1000 + n).toString(16).padStart(12, '0');
   return `00000000-0000-4000-8000-${hex}`;
@@ -1895,6 +1921,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
       agent: seed.agent ?? null,
       pr_url: seed.pr ? `${repo}/pull/${seed.pr}` : null,
       ...(seed.paths ? { paths: seed.paths } : {}),
+      ...(seed.repositories ? { repositories: seed.repositories } : {}),
       ...(seed.waitsOn ? { waitsOn: seed.waitsOn } : {}),
       ...(seed.followUps
         ? {
@@ -2364,7 +2391,7 @@ export function seed(now = Date.now()): MockState {
     },
   });
 
-  build(goalFactory, 0, [...goalSeeds, ...runsPage.software], now, state);
+  build(goalFactory, 0, [...goalSeeds.map(withRepositories), ...runsPage.software], now, state);
   build(sreFactory, 1, [...sreSeeds, ...runsPage.sre], now, state);
   build(supportFactory, 2, runsPage.support, now, state);
   build(softwareFactory, 4, [...softwareSeeds, ...manyPartsSeeds], now, state);

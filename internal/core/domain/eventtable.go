@@ -3,7 +3,6 @@ package domain
 import (
 	"bytes"
 	"encoding/json"
-	"net/url"
 	"slices"
 	"strings"
 )
@@ -220,21 +219,14 @@ func (o WebhookOpening) Admits(repo string) bool {
 		repo != "" && slices.ContainsFunc(o.Repositories, func(r string) bool { return strings.EqualFold(r, repo) })
 }
 
-// RepositoryName is the owner/name of l's runtime repository, from its URL's path without .git;
-// "" when it has none.
-func (l Line) RepositoryName() string {
-	u, err := url.Parse(l.Runtime.Repository.URL)
-	if err != nil || u.Host == "" {
-		return ""
+// HasRepository reports whether a delivery from repo (owner/name) belongs to l (ADR 0041
+// decision 13): repo is "" (the event names none), l has no repository, or one of its
+// runtime.repositories entries covers it, owner patterns included and in any case
+// (ResolveRepository).
+func (l Line) HasRepository(repo string) bool {
+	if _, ok := l.ResolveRepository(repo, ""); ok {
+		return true
 	}
 
-	return strings.TrimSuffix(strings.Trim(u.Path, "/"), ".git")
-}
-
-// HasRepository reports whether a delivery from repo belongs to l (ADR 0041 decision 13): repo is
-// "" (the event names none), l has no repository, or it is l's, in any case.
-func (l Line) HasRepository(repo string) bool {
-	own := l.RepositoryName()
-
-	return repo == "" || own == "" || strings.EqualFold(repo, own)
+	return strings.TrimSpace(repo) == "" || len(l.repositoryEntries()) == 0
 }

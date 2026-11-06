@@ -1,4 +1,4 @@
-// Settings of a factory (canvas "Settings"): the title, with Save changes in the top bar, then General, Repository, Runtime,
+// Settings of a factory (canvas "Settings"): the title, with Save changes in the top bar, then General, Code, Runtime,
 // Budgets and targets, Flow, Jonah, Notifications, People with access and the Danger zone, with a list of the sections at the right
 // from 1024 px. The four groups between General and People edit the factory definition through a draft
 // session, the same one the Definition editor uses, and Save changes publishes it. The Danger zone shows the rows the caller may use:
@@ -17,6 +17,7 @@ import { holds } from '../../shared/permissions';
 import { SectionCard } from '../../ui/card';
 import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
 import { BudgetsSection } from './budgets-section';
+import { CodeSection } from './code-section';
 import { DangerZone } from './danger-zone';
 import { FlowSection } from './flow-section';
 import { GeneralCard } from './general';
@@ -24,13 +25,12 @@ import { JonahSection } from './jonah-section';
 import { NotificationsSection } from './notifications-section';
 import { PauseRow } from './pause-row';
 import { PeopleCard } from './people';
-import { RepositorySection } from './repository-section';
 import { RuntimeSection } from './runtime-section';
 import { SaveChangesAction, SaveRefusal, useSaveChanges } from './save-changes';
 
 const sections = [
   { id: 'general', label: 'General' },
-  { id: 'repository', label: 'Repository' },
+  { id: 'code', label: 'Code' },
   { id: 'runtime', label: 'Runtime' },
   { id: 'budgets', label: 'Budgets and targets' },
   { id: 'flow', label: 'Flow' },
@@ -114,7 +114,7 @@ function SettingsBody({
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
         <div className="flex min-w-0 flex-col gap-4">
           <GeneralCard factory={factory} />
-          <RepositorySection />
+          <CodeSection />
           <RuntimeSection />
           <BudgetsSection />
           <FlowSection />

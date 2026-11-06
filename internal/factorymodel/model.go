@@ -139,6 +139,7 @@ var sections = map[Section][]binding{
 		{"size", []string{keySpec, keyRuntime, "size"}, renamedShape},
 		{keyTools, []string{keySpec, keyRuntime, keyTools}, verbatimShape},
 		{"repository", []string{keySpec, keyRuntime, "repository"}, repositoryShape},
+		{"repositories", []string{keySpec, keyRuntime, "repositories"}, repositoriesShape},
 		{"knowledge_sources", []string{keySpec, keyKnowledge, "sources"}, verbatimShape},
 		// Removed in phase 4 (field-removed): here so their quick fixes can take them out.
 		{"runner", []string{keySpec, keyRuntime, "runner"}, renamedShape},

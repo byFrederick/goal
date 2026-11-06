@@ -411,6 +411,7 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 
 	readOnlyEnv := baseEnvironment + "  mcp:\n    pager: { url: \"https://pager.example.com/mcp\", tools: { \"*\": off, \"get_*\": ask } }\n"
 	openEnv := baseEnvironment + "  mcp:\n    pager: { url: \"https://pager.example.com/mcp\", tools: { \"get_*\": allow } }\n"
+	gitHubEnv := baseEnvironment + "  mcp:\n    github: { url: \"https://api.githubcopilot.com/mcp/\" }\n"
 
 	for _, tt := range []struct {
 		name, doc string
@@ -421,6 +422,7 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 		{"edit allowed", replaced(withCheck("*/5 * * * *", checkAgent, ""), agentPrompt, agentPrompt+"      builtins: { read: allowed, edit: allowed }\n"), "", "builtins.edit"},
 		{"run allowed", replaced(withCheck("*/5 * * * *", checkAgent, ""), agentPrompt, agentPrompt+"      builtins: { run: allowed }\n"), "", "builtins.run"},
 		{"an MCP tool allowed", withCheck("*/5 * * * *", checkAgent, ""), openEnv, "mcp pager"},
+		{"a GitHub server, judged by the secrets check", withCheck("*/5 * * * *", checkAgent, ""), gitHubEnv, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -438,6 +440,53 @@ func TestCheck_TriggerCheckWarnsWriteTools(t *testing.T) {
 			case tt.want != "" && (len(got) != 1 || got[0].Severity != domain.SeverityWarning || !strings.Contains(got[0].Message, tt.want)):
 				t.Errorf("warnings = %+v; want one naming %q", got, tt.want)
 			}
+		})
+	}
+}
+
+// create.repositories is a template place: {{repo}} and an entry's name pass, a fixed value no
+// entry matches is an error naming the trigger, and a malformed placeholder is
+// placeholder-invalid.
+func TestCheck_TriggerRepositories(t *testing.T) {
+	t.Parallel()
+
+	const (
+		alert       = "        create: { type: fix, station: inbox }\n"
+		deployAlert = "trigger deploy-alert"
+	)
+
+	// doc is withTriggers whose deploy-alert names repos, on a factory with one entry (publish
+	// refuses a second until software#720).
+	doc := func(entry, repos string) string {
+		return replaced(withTriggers(alert, "        create: { type: fix, station: inbox, repositories: "+repos+" } #here\n"),
+			runtimeModel, runtimeModel+"    repositories:\n      "+entry+"\n")
+	}
+
+	rows := []struct {
+		name, doc, code string
+		message         []string
+	}{
+		{name: "the event's repository and an entry's name", doc: doc(appEntry, `["{{repo}}", App]`)},
+		{name: "repositories an owner pattern covers", doc: doc(ownerEntry, `["{{repo}}", "acme/web", "https://github.com/acme/api.git"]`)},
+		{
+			name: "an owner pattern's name", doc: doc(ownerEntry, `[acme]`),
+			code: codeTriggerRepository, message: []string{deployAlert, `"acme"`},
+		},
+		{
+			name: "a fixed value no entry matches", doc: doc(appEntry, `["{{repo}}", legacy]`),
+			code: codeTriggerRepository, message: []string{deployAlert, `"legacy"`, "runtime.repositories"},
+		},
+		{
+			name: "a malformed placeholder", doc: doc(appEntry, `["{{repo name}}"]`),
+			code: codePlaceholderInvalid, message: []string{deployAlert, "create.repositories"},
+		},
+	}
+
+	for _, tt := range rows {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			checkOneProblem(t, tt.doc, tt.code, tt.message)
 		})
 	}
 }

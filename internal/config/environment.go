@@ -61,6 +61,42 @@ type MCPServer struct {
 	Tools   map[string]string `json:"tools,omitempty"`
 }
 
+// The remote server and the stdio binary of GitHub's MCP server (internal/catalog's github and
+// github-read templates).
+const (
+	gitHubMCPHost   = "api.githubcopilot.com"
+	gitHubMCPBinary = "github-mcp-server"
+)
+
+// GitHub reports whether s is GitHub's MCP server: a remote one on api.githubcopilot.com, or a
+// stdio one whose command's first word has the base name github-mcp-server. A GitHub Enterprise
+// remote URL or a renamed binary is not recognized.
+func (s MCPServer) GitHub() bool {
+	if s.URL != "" {
+		u, err := url.Parse(s.URL)
+
+		return err == nil && strings.EqualFold(u.Hostname(), gitHubMCPHost)
+	}
+
+	if len(s.Command) == 0 {
+		return false
+	}
+
+	first := strings.Fields(s.Command[0])
+
+	return len(first) > 0 && path.Base(first[0]) == gitHubMCPBinary
+}
+
+// ToolModes is s's tools as domain modes, for domain.ResolveToolMode.
+func (s MCPServer) ToolModes() map[string]domain.ConnectionToolMode {
+	out := make(map[string]domain.ConnectionToolMode, len(s.Tools))
+	for p, m := range s.Tools {
+		out[p] = domain.ConnectionToolMode(m)
+	}
+
+	return out
+}
+
 // environmentFile is an environment file as decoded: its spec and the name it says it has.
 type environmentFile struct {
 	Metadata struct {
@@ -208,16 +244,18 @@ type SecretRef struct {
 // factoryRefPlaces are the factory.yaml keys a {{secret}} may be in (ADR 0037 decision 6); a *
 // is any one key or index. Every other key that has one is a secret-placement problem.
 var factoryRefPlaces = [][]string{
-	{keySpec, "runtime", "repository", "token"},
-	{keySpec, "runtime", "modelKey"},
-	{keySpec, keyBoard, "triggers", "*", "only", "modelAgrees", "key"},
+	{keySpec, keyRuntime, "repository", "token"},
+	{keySpec, keyRuntime, "repositories", "*", "token"},
+	{keySpec, keyRuntime, "modelKey"},
+	{keySpec, keyBoard, keyTriggers, "*", "only", "modelAgrees", "key"},
 }
 
 // factoryTemplatePlaces are the factory.yaml keys whose {{field}} placeholders take an event's
 // fields, so they are not secret references.
 var factoryTemplatePlaces = [][]string{
-	{keySpec, keyBoard, "triggers", "*", "create", "title"},
-	{keySpec, keyBoard, "triggers", "*", "create", "brief"},
+	{keySpec, keyBoard, keyTriggers, "*", keyCreate, "title"},
+	{keySpec, keyBoard, keyTriggers, "*", keyCreate, "brief"},
+	{keySpec, keyBoard, keyTriggers, "*", keyCreate, "repositories", "*"},
 }
 
 // environmentRefPlaces are the keys of an environment file a {{secret}} may be in.
@@ -490,7 +528,7 @@ func (c *checker) forge() {
 		return
 	}
 
-	base := at("spec", "runtime", "repository")
+	base := at("spec", keyRuntime, "repository")
 	forge := append(slices.Clone(base), "forge")
 	section, _ := ModelPointer(forge)
 
@@ -509,9 +547,10 @@ func (c *checker) forge() {
 }
 
 // factoryPlacement checks factory.yaml's {{…}}: a {{secret}} only in the keys decision 6 allows,
-// where it is written well, and the event placeholders of a trigger's title and brief left to
-// the triggers check. runtime.modelKey and modelAgrees.key are one whole reference; a
-// repository token that has none is the removed form env-reference-removed.
+// where it is written well, and the event placeholders of a trigger's title, brief and
+// repositories left to the triggers check. runtime.modelKey, modelAgrees.key and a runtime.repositories entry's token
+// are one whole reference; a runtime.repository token that has none is the removed form
+// env-reference-removed.
 func (c *checker) factoryPlacement() {
 	walkScalars(c.f.doc.root, nil, func(p []string, value string) {
 		braces := strings.Contains(value, "{{") || strings.Contains(value, "}}")
@@ -521,10 +560,11 @@ func (c *checker) factoryPlacement() {
 		case !matchesAny(p, factoryRefPlaces):
 			if braces {
 				c.errorf(checkEnvironments, codeSecretPlacement, p,
-					"%s: a {{secret}} reference is valid only in runtime.repository.token, runtime.modelKey, a trigger's modelAgrees.key "+
+					"%s: a {{secret}} reference is valid only in runtime.repository.token, a runtime.repositories entry's token, "+
+						"runtime.modelKey, a trigger's modelAgrees.key "+
 						"and environment files; a literal {{ is not supported", displayPath(p[1:]))
 			}
-		case p[len(p)-1] == "token" && !braces:
+		case slices.Equal(p, []string{keySpec, keyRuntime, "repository", "token"}) && !braces:
 			// env-reference-removed
 		case !wholeReference(value):
 			c.errorf(checkEnvironments, codeReferenceInvalid, p,
