@@ -920,7 +920,7 @@ the catalog's skills: key, commit, installs
 goal catalog templates push <dir> --version N [--name NAME]
 ```
 
-add a template version (&lt;dir&gt;/template.yaml and the definition in &lt;dir&gt;/factory/; NAME defaults to the folder's name) to the bucket's template catalog
+add a template version (&lt;dir&gt;/template.yaml and the definition in &lt;dir&gt;/factory/; NAME defaults to the folder's name) to the bucket's template catalog; a version already there unchanged succeeds, a changed one is refused
 
 Flags: `--version N`, `--name NAME`.
 
