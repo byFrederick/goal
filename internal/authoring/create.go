@@ -61,7 +61,7 @@ type Created struct {
 const nilFactoryID = "00000000-0000-0000-0000-000000000000"
 
 // CreateFactory creates a factory with its first draft (B §8.1): from the blank template (or,
-// when the catalog has none, a skeleton naming no station or agent), a catalog template, a
+// when the catalog has none, a skeleton with one Work station and one agent), a catalog template, a
 // clone of another factory's version, or imported files. factory.yaml's metadata.id becomes a
 // new id (kept only with KeepID), and its name and title the request's, edited in place so
 // comments survive; connection credential keys are dropped. Clones share the source's blobs and
@@ -214,14 +214,20 @@ func (s *Service) cloneStart(ctx context.Context, st Start) (starting, error) {
 	}, nil
 }
 
-// skeleton is the blank definition when the catalog has no blank template: factory.yaml with
-// apiVersion, kind, metadata and an empty runtime, and the default environment with its size
-// only (ADR 0037), since a station, agent or tool name in Go would make the code define
-// factories. The Line section starts empty.
+// skeleton is the blank definition when the catalog has no blank template, the smallest one
+// that publishes as it is: factory.yaml with apiVersion, kind, metadata, an empty runtime, one
+// agent (worker, its prompt in agents/worker.md) and a line of an agent station titled Work
+// that runs it and the done station the line must end at; and the default environment with its
+// size only (ADR 0037). The names are this default tree's alone: no code reads them.
 func skeleton() map[string][]byte {
 	return map[string][]byte{
 		config.FileName: []byte("apiVersion: goal/v1\nkind: Factory\nmetadata:\n  id: " + nilFactoryID + "\n  name: new-factory\n" +
-			"spec:\n  runtime: {}\n"),
+			"spec:\n  runtime: {}\n" +
+			"  agents:\n    - name: worker\n      prompt: ./agents/worker.md\n" +
+			"  board:\n    stations:\n" +
+			"      - { id: work, name: Work, kind: agent, agent: worker }\n" +
+			"      - { id: done, kind: done }\n"),
+		"agents/worker.md": []byte("Do the work the item describes, then summarize what you did.\n"),
 		path.Join(config.EnvironmentsDir, config.DefaultEnvironment+".yaml"): []byte(
 			"apiVersion: goal/v1\nkind: Environment\nspec:\n  size: " + string(domain.SandboxMedium) + "\n"),
 	}
