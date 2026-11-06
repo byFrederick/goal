@@ -104,11 +104,15 @@ function Row({
             className="flex min-w-0 text-meta text-muted"
           >
             <span className="shrink-0 whitespace-pre">{senderLabel(webhook.sender)}, </span>
-            <span className="truncate font-mono">{webhook.address}</span>
+            <span title={webhook.address} className="truncate font-mono">
+              {webhook.address}
+            </span>
           </span>
           <span title={webhook.secret} className="flex min-w-0 text-meta text-muted">
             <span className="shrink-0 whitespace-pre">Secret </span>
-            <span className="truncate font-mono">{webhook.secret}</span>
+            <span title={webhook.secret} className="truncate font-mono">
+              {webhook.secret}
+            </span>
           </span>
         </Link>
         <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 max-lg:order-last max-lg:col-span-2">
