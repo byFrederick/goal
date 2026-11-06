@@ -404,50 +404,72 @@ describe('runTask', () => {
 
 describe('runTask pushed head', () => {
   const head = 'c'.repeat(40);
-  const onBranch = parseSpec(JSON.stringify({ ...spec, branch: 'goal/1-add-a-health-endpoint' }));
+  const branch = 'goal/1-add-a-health-endpoint';
+  const url = 'https://github.com/acme/app';
+  // A try: one read-only entry at /workspace, as prepare writes it.
+  const tried = parseSpec(
+    JSON.stringify({
+      ...spec,
+      branch,
+      repositories: [
+        { url, path: '/workspace', branch, write: false, base_commit: 'a'.repeat(40), branch_head: 'b'.repeat(40) },
+      ],
+    }),
+  );
+  const listed = (events: unknown[]) => (events.at(-1) as { repositories?: unknown[] }).repositories;
 
-  it("reports the item branch's head on the remote when the agent ended", async () => {
+  it("reports the repository's head on the remote when the agent ended, in the list only", async () => {
     const asked: string[] = [];
-    const remoteHead = async (branch: string) => {
-      asked.push(branch);
+    const remoteHead = async (b: string) => {
+      asked.push(b);
       return head;
     };
 
-    const { code, events } = await run([success], { spec: onBranch, remoteHead });
+    const { code, events } = await run([success], { spec: tried, remoteHead });
 
     expect(code).toBe(0);
-    expect(asked).toEqual(['goal/1-add-a-health-endpoint']);
-    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded', pushed_head: head });
+    expect(asked).toEqual([branch]);
+    expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
+    expect(events.at(-1)).not.toHaveProperty('pushed_head');
+    expect(listed(events)).toEqual([
+      { repo: url, base_commit: 'a'.repeat(40), branch_head: 'b'.repeat(40), pushed_head: head, wrote: true },
+    ]);
   });
 
   it('reports it after a crash too, as the agent may have pushed before', async () => {
-    const { code, events } = await run([], { spec: onBranch, remoteHead: async () => head, throws: new Error('boom') });
+    const { code, events } = await run([], { spec: tried, remoteHead: async () => head, throws: new Error('boom') });
 
     expect(code).toBe(1);
-    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom', pushed_head: head });
+    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom' });
+    expect(listed(events)).toHaveLength(1);
   });
 
-  it('leaves it out when the lookup fails or finds no branch, and the run ends as it would', async () => {
+  it('leaves the head out when the lookup fails or finds no branch, and the run ends as it would', async () => {
     for (const remoteHead of [async () => undefined, () => Promise.reject(new Error('git ls-remote exited 128'))]) {
-      const { code, events } = await run([success], { spec: onBranch, remoteHead });
+      const { code, events } = await run([success], { spec: tried, remoteHead });
 
       expect(code).toBe(0);
       expect(events.at(-1)).toMatchObject({ type: 'finished', status: 'succeeded' });
-      expect(events.at(-1)).not.toHaveProperty('pushed_head');
+      expect(listed(events)).toEqual([
+        { repo: url, base_commit: 'a'.repeat(40), branch_head: 'b'.repeat(40), wrote: false },
+      ]);
     }
   });
 
-  it('never looks without a repository', async () => {
+  it('never looks for a spec without repositories, and reports no heads', async () => {
     const asked: string[] = [];
-    const { events } = await run([success], {
-      remoteHead: async (b) => {
-        asked.push(b);
-        return head;
-      },
-    });
+    const remoteHead = async (b: string) => {
+      asked.push(b);
+      return head;
+    };
+    const withBranch = parseSpec(JSON.stringify({ ...spec, branch }));
 
+    for (const s of [undefined, withBranch]) {
+      const { events } = await run([success], { ...(s ? { spec: s } : {}), remoteHead });
+      expect(events.at(-1)).not.toHaveProperty('pushed_head');
+      expect(events.at(-1)).not.toHaveProperty('repositories');
+    }
     expect(asked).toEqual([]);
-    expect(events.at(-1)).not.toHaveProperty('pushed_head');
   });
 });
 
@@ -509,7 +531,8 @@ describe('runTask repositories', () => {
       { branch, at: { url: 'https://github.com/acme/docs' } },
     ]);
     const finished = events.at(-1);
-    expect(finished).toMatchObject({ type: 'finished', status: 'succeeded', pushed_head: pushed });
+    expect(finished).toMatchObject({ type: 'finished', status: 'succeeded' });
+    expect(finished).not.toHaveProperty('pushed_head');
     expect(finished).toHaveProperty('repositories', [
       { repo: 'https://github.com/acme/app', base_commit: base, branch_head: before, pushed_head: pushed, wrote: true },
       // The remote's branch is the head prepare saw: nothing new was pushed.
@@ -546,7 +569,8 @@ describe('runTask repositories', () => {
     });
 
     expect(code).toBe(1);
-    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom', pushed_head: pushed });
+    expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom' });
+    expect(events.at(-1)).not.toHaveProperty('pushed_head');
     expect((events.at(-1) as { repositories: unknown[] }).repositories).toHaveLength(2);
   });
 });

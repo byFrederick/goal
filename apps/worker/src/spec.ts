@@ -250,7 +250,7 @@ const taskFields = z.object({
   branch: z.string().optional(),
   /**
    * The item's repositories prepare cloned (ADR 0041 decision 5), the first at /workspace; absent
-   * for a run whose bundle had no repositories, which reports one pushed head as before.
+   * for a run whose bundle had no repository, which reports no heads.
    */
   repositories: z.array(ClonedRepository).optional(),
   /** Definition mode (ADR 0021): the run changes the factory's draft files in /workspace for this request. */
