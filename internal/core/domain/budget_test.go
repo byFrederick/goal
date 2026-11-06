@@ -53,3 +53,57 @@ func TestRuntime_BudgetForAWindowIsItsShareOfTheWeek(t *testing.T) {
 		t.Errorf("BudgetFor without a budget = %v; want 0", got)
 	}
 }
+
+func TestBudgetResumesAt(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	ago := func(d time.Duration, usd float64) RunCost { return RunCost{StartedAt: now.Add(-d), CostUSD: usd} }
+
+	tests := []struct {
+		name   string
+		runs   []RunCost
+		weekly float64
+		want   time.Time // zero: no resumes_at
+	}{
+		{
+			name: "the oldest run's departure is enough", runs: []RunCost{ago(time.Hour, 4), ago(6*day, 4), ago(3*day, 4)}, weekly: 10,
+			want: now.Add(day),
+		},
+		{
+			name: "two departures are needed under a low cap", runs: []RunCost{ago(6*day, 6), ago(3*day, 3), ago(time.Hour, 3)}, weekly: 4,
+			want: now.Add(4 * day),
+		},
+		{
+			name: "a raised cap resumes earlier", runs: []RunCost{ago(6*day, 6), ago(3*day, 3), ago(time.Hour, 3)}, weekly: 7,
+			want: now.Add(day),
+		},
+		{
+			name: "only the newest run's departure gets below the cap", runs: []RunCost{ago(6*day, 1), ago(time.Hour, 10)}, weekly: 10,
+			want: now.Add(BudgetWindow - time.Hour),
+		},
+		{
+			name: "runs before the window count for nothing", runs: []RunCost{ago(8*day, 100), ago(2*day, 10)}, weekly: 10,
+			want: now.Add(5 * day),
+		},
+		{
+			name: "a run that started exactly a window ago leaves at now", runs: []RunCost{ago(BudgetWindow, 10)}, weekly: 10,
+			want: now,
+		},
+		{name: "a budget not used up has none", runs: []RunCost{ago(day, 9.99)}, weekly: 10},
+		{name: "no budget has none", runs: []RunCost{ago(day, 1000)}, weekly: 0},
+		{name: "no runs have none", weekly: 10},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := BudgetResumesAt(tc.runs, tc.weekly, now)
+			if ok != !tc.want.IsZero() || !got.Equal(tc.want) {
+				t.Errorf("BudgetResumesAt(%v, %v) = %v, %v; want %v", tc.runs, tc.weekly, got, ok, tc.want)
+			}
+		})
+	}
+}

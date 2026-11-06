@@ -114,6 +114,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"StationLoads_CountNoOpenAssembly", testStationLoadsCountNoOpenAssembly},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
 		{"SpendSince_WindowBoundsAndFactoryIsolation", testSpendSince},
+		{"RunCostsSince_SameRunsAsSpendSince", testRunCostsSince},
+		{"BudgetExhaustion_FirstSinceKeptUntilCleared", testBudgetExhaustion},
 		{"Attention_CountsWaitingBlockedAndTheOpenAndon", testAttention},
 		{"InboxItems_DecisionsBlockedAndExpediteNewestChangeFirst", testInboxItems},
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
