@@ -10,6 +10,8 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../api/client';
+import { createSecret, getSecret, patchSecret, replaceSecretValue } from '../../api/secrets';
 import type { Factory, OrgSummary, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
 import { OrgContext } from '../../shared/org';
@@ -25,7 +27,13 @@ const api = vi.hoisted(() => ({
   factory: null as unknown,
   saves: [] as { section: string; value: unknown }[],
   problems: [] as { severity: string; pointer?: string; message: string }[],
+  yaml: '',
+  puts: [] as string[],
+  secrets: { create: undefined as unknown, existing: { scope: { all_factories: false, factories: [] as string[] } } },
 }));
+
+const keyed = "apiVersion: goal/v1\nspec:\n  runtime:\n    modelKey: '{{model-key}}'\n";
+const unkeyed = 'apiVersion: goal/v1\nspec:\n  runtime: {}\n';
 
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
@@ -34,6 +42,19 @@ vi.mock(import('../../api/definitions'), async (original) => ({
     async () => ({ ok: true, revision: 1, counts: {}, checks: [], problems: api.problems }) as never,
   ),
   getDraft: vi.fn(async () => ({ base: null, revision: 1 }) as never),
+  listDraftFiles: vi.fn(async () => [{ path: 'factory.yaml', sha256: 's1', size: 10 }] as never),
+  getDraftFile: vi.fn(async () => ({ text: api.yaml, sha256: 's1' })),
+  putDraftFile: vi.fn(async (_o: string, _f: string, _p: string, text: string) => {
+    api.puts.push(text);
+    return {
+      etag: 'n',
+      revision: 3,
+      updated_at: '2026-10-28T10:00:00Z',
+      sections: [],
+      change_count: 1,
+      problem_count: 0,
+    };
+  }),
   getDraftModel: vi.fn(
     async () =>
       ({
@@ -55,6 +76,17 @@ vi.mock(import('../../api/definitions'), async (original) => ({
       };
     },
   ),
+}));
+
+vi.mock(import('../../api/secrets'), async (original) => ({
+  ...(await original()),
+  createSecret: vi.fn(async () => {
+    if (api.secrets.create) throw api.secrets.create;
+    return {} as never;
+  }),
+  getSecret: vi.fn(async () => api.secrets.existing as never),
+  patchSecret: vi.fn(async () => ({}) as never),
+  replaceSecretValue: vi.fn(async () => ({}) as never),
 }));
 
 vi.mock(import('../../api/builder'), async (original) => ({
@@ -132,6 +164,10 @@ beforeEach(() => {
   // jsdom has no scrollIntoView; the line editor scrolls a focused control into view.
   Element.prototype.scrollIntoView = vi.fn();
   api.saves = [];
+  api.puts = [];
+  api.yaml = keyed;
+  api.secrets.create = undefined;
+  api.secrets.existing = { scope: { all_factories: false, factories: [] } };
   api.problems = [];
   setFactory();
   setDraft();
@@ -333,6 +369,63 @@ describe('shaping the line', () => {
     await waitFor(() =>
       expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
     );
+  });
+});
+
+describe('the model key', () => {
+  const missing = 'Add the model key, then continue.';
+  const typeKey = (value: string) =>
+    fireEvent.change(screen.getByLabelText('Model key', { selector: 'input' }), { target: { value } });
+
+  it('holds Continue without a key, saves one open to this factory and writes the reference', async () => {
+    api.yaml = unkeyed;
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    expect(await screen.findByText(missing)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
+
+    typeKey('sk-ant-oat-test');
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    await waitFor(() => expect(screen.queryByText(missing)).toBeNull());
+    expect(createSecret).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({
+        name: 'model-key',
+        value: 'sk-ant-oat-test',
+        scope: { all_factories: false, factories: [factoryId] },
+      }),
+    );
+    expect(await screen.findByText('Saved as the secret model-key, open to this factory.')).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+    );
+    await waitFor(() => expect(api.puts.at(-1)).toContain('{{model-key}}'), { timeout: 4000 });
+    expect(screen.queryByText(/\{\{/)).toBeNull();
+  });
+
+  it('asks for a key before saving', async () => {
+    api.yaml = unkeyed;
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByText(missing);
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    expect(await screen.findByText('Paste the model key.')).toBeTruthy();
+    expect(createSecret).not.toHaveBeenCalled();
+  });
+
+  it('offers the existing secret when the name is taken, and never writes its value', async () => {
+    api.yaml = unkeyed;
+    api.secrets.create = new ApiError({ title: 'Conflict', status: 409, code: 'secret-name-taken', detail: 'taken' });
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByText(missing);
+    typeKey('sk-ant-api-test');
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Use the existing secret' }));
+    await waitFor(() => expect(screen.queryByText(missing)).toBeNull());
+    expect(patchSecret).toHaveBeenCalledWith('org-1', 'model-key', {
+      scope: { all_factories: false, factories: [factoryId] },
+    });
+    expect(getSecret).toHaveBeenCalled();
+    expect(replaceSecretValue).not.toHaveBeenCalled();
+    expect(createSecret).toHaveBeenCalledTimes(1);
   });
 });
 
