@@ -142,6 +142,7 @@ describe('SetupCard', () => {
     expect(screen.getByText('Code, read and write, 1 repository')).toBeTruthy();
     expect(screen.getByText('The line, 4 stations')).toBeTruthy();
     expect(screen.getByText('3 triggers')).toBeTruthy();
+    expect(screen.getByText('First item done')).toBeTruthy();
   });
 
   it('shows No code as a done row without an action', async () => {

@@ -140,7 +140,11 @@ describe('setupRows', () => {
     expect(row(setupRows(empty), 'triggers')).toMatchObject({ done: false, text: '0 triggers' });
   });
 
-  it('marks the first item merged once an item of the factory is done', () => {
+  it('words the first-item row so it fits a line without code', () => {
+    expect(row(setupRows(empty), 'first-item').text).toBe('First item done');
+  });
+
+  it('marks the first item done once an item of the factory is done', () => {
     expect(row(setupRows(empty), 'first-item').done).toBe(false);
     expect(row(setupRows({ ...empty, finishedItems: 1 }), 'first-item').done).toBe(true);
   });
