@@ -571,3 +571,34 @@ func TestRunTask_GradeOnSecrets(t *testing.T) {
 
 	h.noConnectionUsed(t)
 }
+
+// A Jonah run, a grade and a check of a version on connections, whose requests name the model
+// connection and no model key, fail with what to do before any prepare, opening no connection or
+// credential (ADR 0037 decision 19).
+func TestRunTask_RefusesVersionOnConnections(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]domain.RunRequest{"jonah": jonahRequest(), "grade": gradeRequest(), "check": checkRequest()}
+
+	for name, req := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h := checkHarness(t, onConnections(lineOf(agentStation(stWork, agWorker, 1, 1))), porttest.Succeed(`{}`), checkTrigger(incidents))
+			h.store.AddFactory(testOrg, factoryID)
+
+			req.ModelConnection, req.ModelKey = connModel, ""
+
+			_, err := h.e.RunTask(t.Context(), req)
+			if !errors.Is(err, domain.ErrNotOnSecrets) || !strings.Contains(err.Error(), "publish a version on environment files and secrets (ADR 0037)") {
+				t.Fatalf("RunTask = %v; want ErrNotOnSecrets with its fix", err)
+			}
+
+			if n := len(h.worker.Prepares()); n != 0 {
+				t.Errorf("%d prepares; want none", n)
+			}
+
+			h.noConnectionUsed(t)
+		})
+	}
+}

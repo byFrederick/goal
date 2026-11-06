@@ -315,22 +315,27 @@ func TestRun_PrepareFailureFailsTheRun(t *testing.T) {
 	h.noSandboxes(t)
 }
 
-// Since the cutover a version runs on connections only: one that still has a form connections
-// replaced, or names no model connection, blocks its items with what to do, before any run, box
-// or connection is opened (spec 4 §14, step 5).
-func TestRun_RefusesAVersionThatDoesNotRunOnConnections(t *testing.T) {
+// A version whose runs cannot start blocks its items with what to do, before any run, box,
+// connection or credential is opened: one on connections (ADR 0037 decision 19), one that still
+// has a form connections replaced, and one on secrets that names no model key.
+func TestClaim_RefusesVersionOnConnections(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
 		edit func(*domain.Line)
-		want string
+		want []string
 	}{
 		{
-			name: "a removed form", want: "spec.runtime.repository.token (env-reference-removed)",
-			edit: func(l *domain.Line) { l.Removed = []string{"spec.runtime.repository.token (env-reference-removed)"} },
+			name: "on connections", edit: func(l *domain.Line) { *l = onConnections(*l) },
+			want: []string{"version 1", "on connections", "publish a version on environment files and secrets (ADR 0037)"},
 		},
-		{name: "no model connection", want: "runtime.modelConnection", edit: func(l *domain.Line) { l.Runtime.ModelConnection = "" }},
+		{
+			name: "a removed form",
+			edit: func(l *domain.Line) { l.Removed = []string{"spec.runtime.repository.token (env-reference-removed)"} },
+			want: []string{"spec.runtime.repository.token (env-reference-removed)", "publish a version on environment files and secrets (ADR 0037)"},
+		},
+		{name: "no model key", edit: func(l *domain.Line) { l.Runtime.ModelKey = "" }, want: []string{"version 1", "runtime.modelKey"}},
 	}
 
 	for _, tt := range tests {
@@ -349,15 +354,17 @@ func TestRun_RefusesAVersionThatDoesNotRunOnConnections(t *testing.T) {
 			}
 
 			reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
-			if !strings.Contains(reason, tt.want) || !strings.Contains(reason, "publish a version on environment files and secrets (ADR 0037)") {
-				t.Errorf("blocked reason %q; want it to name %q and the fix", reason, tt.want)
+			for _, w := range tt.want {
+				if !strings.Contains(reason, w) {
+					t.Errorf("blocked reason %q; want %q in it", reason, w)
+				}
 			}
 
-			used, err := h.tenancy.AuditLog(inOrg(t), ports.AuditQuery{Limit: 10, Action: domain.AuditConnectionUsed})
-			if runs := h.runs(t, testOrg, it.ID); len(runs) != 0 || len(h.worker.Prepares()) != 0 || err != nil || len(used) != 0 {
-				t.Errorf("%d runs, %d prepares, connections used %+v (%v); want none", len(runs), len(h.worker.Prepares()), used, err)
+			if runs := h.runs(t, testOrg, it.ID); len(runs) != 0 || len(h.worker.Prepares()) != 0 {
+				t.Errorf("%d runs, %d prepares; want none", len(runs), len(h.worker.Prepares()))
 			}
 
+			h.noConnectionUsed(t)
 			h.noSandboxes(t)
 		})
 	}

@@ -17,6 +17,7 @@ import (
 // The test organization's secrets (ADR 0037) and their values.
 const (
 	secClaude  = "claude-key"
+	secModel   = "model-key"
 	secGitHub  = "github-token"
 	secDB      = "db-pass"
 	secTickets = "tickets-key"

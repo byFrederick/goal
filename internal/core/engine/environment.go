@@ -15,6 +15,55 @@ import (
 // errNoOrgSecrets fails a run on secrets on a goald built without them.
 var errNoOrgSecrets = errors.New("this goald has no secrets store")
 
+// runEnv is what one run's commands get from its version's secrets (ADR 0037), each exec only
+// what it needs: prepare the repository tokens, the agent the model key and its environment, a
+// check nothing.
+type runEnv struct {
+	// prepare is goal-agent prepare's: the repository token and the entry tokens (secretEnv).
+	prepare map[string]string
+	// repositoryLogin is whether prepare got the repository token, which signs git in to the
+	// repository's host for the agent's push too.
+	repositoryLogin bool
+	// agent is goal-agent run's: the model key and the environment's env.
+	agent map[string]string
+	// secrets are every secret value the run's commands get, scrubbed from what they report.
+	secrets []string
+	// files are the paths of the environment's files with the variable of agent each one's
+	// content is in (domain.FileEnv), and mcp its MCP servers rendered to name GOAL_SECRET_<NAME>
+	// variables of agent instead of values (domain.MCPServer.Rendered); the run bundle carries
+	// them to the worker.
+	files map[string]string
+	mcp   map[string]domain.MCPServer
+}
+
+// runEnv opens what req's run gets from its version's secrets (secretEnv): of its runs a
+// station's opens the repository token and the entry tokens its code picks, and a check's the
+// entry tokens alone, since it has no repository; a Jonah review clones nothing. A request with no
+// model key is of a version on connections, which no run reads any more (ADR 0037 decision 19):
+// it fails with domain.ErrNotOnSecrets, opening no connection or credential.
+func (e *Engine) runEnv(ctx context.Context, req domain.RunRequest, run domain.RunID) (runEnv, error) {
+	if req.ModelKey == "" {
+		return runEnv{}, fmt.Errorf("version %s: %w", req.Version, domain.ErrNotOnSecrets)
+	}
+
+	repo, code := req.Repository, req.Code
+	if req.Kind == domain.RunKindJonah {
+		repo, code = domain.Repository{}, domain.RunCode{}
+	}
+
+	return e.secretEnv(ctx, domain.SecretUse{Factory: req.FactoryID, Agent: req.Agent, Run: run}, req.ModelKey, req.Environment, repo, code)
+}
+
+// pushNote tells the agent whether git can push to the repository's host: with the repository
+// token, or not at all.
+func (env runEnv) pushNote(host string) string {
+	if env.repositoryLogin {
+		return "Git signs in to " + host + " with the repository token."
+	}
+
+	return "It holds no git credentials for " + host + "."
+}
+
 // secretEnv resolves a run of a version on secrets (ADR 0037 decisions 7 and 10): the {{secret}}
 // references of modelKey and of the environment's env, files, MCP headers and stdio servers' env
 // are opened together, once, through OrgSecrets.Resolve, which checks each scope against use's
@@ -52,7 +101,7 @@ func (e *Engine) secretEnv(
 		return runEnv{}, err
 	}
 
-	out := runEnv{prepare: map[string]string{}, agent: map[string]string{}, gitHosts: map[string]string{}}
+	out := runEnv{prepare: map[string]string{}, agent: map[string]string{}}
 
 	for _, n := range names {
 		if v := values[n]; v != "" {

@@ -257,3 +257,41 @@ func TestHitRatesOf_CountsEachResult(t *testing.T) {
 		t.Errorf("HitRatesOf of no checks = %+v; want zero", got)
 	}
 }
+
+// An agent is triable on a version on secrets whose environment for it has no MCP servers and no
+// files; a version on connections has no triable agent.
+func TestLine_TriableAgent(t *testing.T) {
+	t.Parallel()
+
+	const agent = "backend"
+
+	onSecrets := func(env Environment) Line {
+		return Line{
+			Runtime: Runtime{ModelKey: testModelKey}, Agents: []AgentSpec{{Name: agent}},
+			Environments: []Environment{env},
+		}
+	}
+
+	tests := []struct {
+		name string
+		line Line
+		want bool
+	}{
+		{name: "env only", line: onSecrets(Environment{Name: DefaultEnvironment, Env: map[string]string{"CI": "1"}}), want: true},
+		{name: "an MCP server", line: onSecrets(Environment{Name: DefaultEnvironment, MCP: map[string]MCPServer{"docs": {URL: "https://example.com/mcp"}}})},
+		{name: "a file", line: onSecrets(Environment{Name: DefaultEnvironment, Files: map[string]string{"~/.npmrc": "x"}})},
+		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}, Agents: []AgentSpec{{Name: agent}}}},
+		{name: "no such agent", line: onSecrets(Environment{Name: DefaultEnvironment})},
+	}
+
+	for _, tt := range tests {
+		name := agent
+		if tt.name == "no such agent" {
+			name = "frontend"
+		}
+
+		if got := tt.line.TriableAgent(name); got != tt.want {
+			t.Errorf("%s: TriableAgent = %v; want %v", tt.name, got, tt.want)
+		}
+	}
+}
