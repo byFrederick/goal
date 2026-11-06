@@ -44,6 +44,7 @@ func TestLine_Refusal(t *testing.T) {
 		name string
 		line Line
 		want []string // in the reason; none for a line that runs
+		code string   // RefusalCode
 	}{
 		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}}},
 		{
@@ -62,11 +63,15 @@ func TestLine_Refusal(t *testing.T) {
 			name: "environments without a model key", line: Line{
 				Number: 4, Runtime: Runtime{ModelConnection: testModelConn}, Environments: []Environment{{Name: DefaultEnvironment}},
 			},
-			want: []string{"version 4", "runtime.modelKey"},
+			want: []string{"version 4", "runtime.modelKey"}, code: BlockModelKeyMissing,
 		},
 	}
 
 	for _, tt := range tests {
+		if got := tt.line.RefusalCode(); got != tt.code {
+			t.Errorf("%s: refusal code %q; want %q", tt.name, got, tt.code)
+		}
+
 		got := tt.line.Refusal()
 		if (got == "") != (len(tt.want) == 0) {
 			t.Errorf("%s: refusal %q; want one: %v", tt.name, got, len(tt.want) > 0)
