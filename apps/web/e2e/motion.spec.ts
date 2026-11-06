@@ -1,7 +1,7 @@
 // Overlay motion (MOTION.md, the catalogue rows for menus and dialogs). A menu and a dialog open on a CSS
 // transition and stay mounted while they close; closing one while it is still opening continues from the
 // opacity it has, not from 0. Under reduced motion the fade stays and the scale goes. Runs on the members
-// page as an owner, where a row's "More" menu and the Invite dialog open.
+// page as an owner, where the organization menu and the Invite dialog open.
 import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test';
 
 async function signedInAsOwner(request: APIRequestContext) {
@@ -26,6 +26,15 @@ function transitionsOf(locator: Locator) {
 }
 
 /**
+ * Stretches the overlay durations, so the opening transition outlasts the round trips between the test and
+ * the page and the test closes the panel while it opens, however loaded the machine is. The transitions
+ * and the rule under test are the same; only their length changes.
+ */
+async function slowOverlays(page: Page) {
+  await page.addStyleTag({ content: ':root { --duration-quick: 3s; --duration-fast: 3s; }' });
+}
+
+/**
  * Closes the panel while its opening transition runs. The opacity transition is paused a fifth of the way
  * in and Escape closes the panel. The opacity sampled from then on starts where the open stopped, falls
  * without jumping to 0, and the panel leaves the page only once its close has run.
@@ -46,18 +55,34 @@ async function closeWhileOpening(page: Page, selector: string) {
     return Number(getComputedStyle(el).opacity);
   }, selector);
 
-  await page.keyboard.press('Escape');
-
-  const samples = await page.evaluate(async (sel) => {
-    const values: number[] = [];
-    for (let frame = 0; frame < 60; frame++) {
-      const el = document.querySelector<HTMLElement>(sel);
-      if (!el) break;
-      values.push(Number(getComputedStyle(el).opacity));
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
-    return values;
+  // The sampler is armed before Escape and reads the opacity the moment the panel's data-state turns to
+  // "closed", then once a frame. The first read is where the close starts, so it does not depend on how
+  // long the key press takes to reach the page (a reversed transition is shortened and can end before a
+  // second round trip).
+  await page.evaluate((sel) => {
+    const el = document.querySelector<HTMLElement>(sel);
+    if (!el) throw new Error(`${sel} is not on the page`);
+    const closed = new Promise<void>((resolve) => {
+      const watch = new MutationObserver(() => {
+        if (el.getAttribute('data-state') !== 'closed') return;
+        watch.disconnect();
+        resolve();
+      });
+      watch.observe(el, { attributes: true, attributeFilter: ['data-state'] });
+    });
+    (window as unknown as { sampled: Promise<number[]> }).sampled = closed.then(async () => {
+      const values: number[] = [];
+      for (let frame = 0; frame < 60; frame++) {
+        const panel = document.querySelector<HTMLElement>(sel);
+        if (!panel) break;
+        values.push(Number(getComputedStyle(panel).opacity));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return values;
+    });
   }, selector);
+  await page.keyboard.press('Escape');
+  const samples = await page.evaluate(() => (window as unknown as { sampled: Promise<number[]> }).sampled);
 
   expect(before).toBeGreaterThan(0);
   expect(before).toBeLessThan(1);
@@ -74,10 +99,11 @@ test('a menu opens on a transition from its trigger, and closing it while it ope
 }) => {
   await signedInAsOwner(page.request);
   await page.goto('/o/acme/members');
-  await page
-    .getByRole('button', { name: /^More for / })
-    .first()
-    .click();
+  await slowOverlays(page);
+  // The organization menu opens at every width. Below 768 px the sidebar is the drawer the Goal mark opens;
+  // a member row's More menu is only there beside a table, which the narrow layouts replace with cards.
+  if ((page.viewportSize()?.width ?? 0) < 768) await page.getByRole('button', { name: 'Open menu' }).click();
+  await page.getByRole('button', { name: /organization, switch organization$/ }).click();
 
   const menu = page.getByRole('menu');
   await expect(menu).toBeVisible();
@@ -92,6 +118,7 @@ test('a menu opens on a transition from its trigger, and closing it while it ope
 test('a dialog opens on a transition, and closing it while it opens continues from its opacity', async ({ page }) => {
   await signedInAsOwner(page.request);
   await page.goto('/o/acme/members');
+  await slowOverlays(page);
   await page.getByRole('button', { name: /^Invite/ }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Invite people to Acme' });

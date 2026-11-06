@@ -85,7 +85,7 @@ export function BulkActions({
   return (
     <section
       aria-label="Bulk actions"
-      className="flex flex-wrap items-center gap-2 rounded-card bg-panel px-4 py-3 text-ink"
+      className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-card border border-line bg-panel px-4 py-3 text-ink"
     >
       <span className="mr-2 text-body font-semibold">{items.length} selected</span>
       {canOperate ? (

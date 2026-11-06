@@ -9,7 +9,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 const heading = (page: Page) => page.getByRole('heading', { level: 1, name: 'Spend and billing' });
-// The window control and Export CSV sit in the top bar (the phone top bar below 768 px), never in the body.
+// The window control sits in the top bar from 768 px and in the page below it; Export CSV is always in the top bar.
 const windowControl = (page: Page) => page.getByRole('radio', { name: 'This week' });
 
 for (const width of [375, 768, 1440]) {
@@ -47,11 +47,11 @@ for (const width of [375, 768, 1440]) {
 
     test('keeps the window in the URL', async ({ page }) => {
       await page.goto('/o/acme/spend');
-      await page.getByRole('radio', { name: 'This month' }).check();
+      await page.getByRole('radio', { name: 'This month' }).click();
       await expect(page).toHaveURL(/[?&]window=month(&|$)/);
       await expect(page.getByRole('radio', { name: 'This month' })).toBeChecked();
 
-      await page.getByRole('radio', { name: 'Last 90 days' }).check();
+      await page.getByRole('radio', { name: 'Last 90 days' }).click();
       await expect(page).toHaveURL(/[?&]window=90d(&|$)/);
     });
 

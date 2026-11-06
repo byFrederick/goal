@@ -21,7 +21,8 @@ import { TriageCard } from './triage-card';
 import { TriggersTable } from './triggers-table';
 import { WebhooksCard } from './webhooks-card';
 
-export function IntakePage() {
+/** `crumb` is the last crumb the page lays over it: New trigger names itself while the picker is open. */
+export function IntakePage({ crumb }: { crumb?: string }) {
   const org = useOrg();
   const factory = useFactory();
   const [window, setWindow] = useState<IntakeWindow>('30d');
@@ -33,22 +34,24 @@ export function IntakePage() {
 
   if (query.isPending) return <IntakeSkeleton />;
   if (query.isError) return <ErrorScreen error={query.error} reset={() => void query.refetch()} />;
-  return <Ready intake={query.data} window={window} onWindowChange={setWindow} />;
+  return <Ready intake={query.data} window={window} onWindowChange={setWindow} crumb={crumb} />;
 }
 
 function Ready({
   intake,
   window,
   onWindowChange,
+  crumb,
 }: {
   intake: Intake;
   window: IntakeWindow;
   onWindowChange: (window: IntakeWindow) => void;
+  crumb: string | undefined;
 }) {
   const comingUp = intake.coming_up ?? [];
   return (
     <>
-      <IntakeActions />
+      <IntakeActions crumb={crumb} />
       <div className="flex flex-col gap-5">
         <h1 className="m-0 text-page-title">Intake</h1>
         <ComingUp items={comingUp} total={intake.coming_up_total ?? comingUp.length} />
@@ -72,10 +75,11 @@ function Ready({
 }
 
 /** The top bar's actions: Webhooks (its page comes with the Webhooks item) and New trigger, the primary one last. A phone's bar keeps New trigger only; the webhooks card links to Webhooks. */
-function IntakeActions() {
+function IntakeActions({ crumb }: { crumb: string | undefined }) {
   const params = useFactoryParams();
   return (
     <TopBarSlot
+      crumb={crumb}
       actions={[
         <Button key="webhooks" asChild variant="secondary" data-desktop-only>
           <Link to="/o/$org/f/$factory/intake/webhooks" params={params}>

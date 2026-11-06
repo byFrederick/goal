@@ -92,7 +92,7 @@ import { type SearchSource, search } from './search.ts';
 import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
 import { createStandingRules } from './standing-rules.ts';
-import { starterItem } from './starter.ts';
+import { starterTitles } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
@@ -1824,7 +1824,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         can: orgCan,
       };
       state.orgs.push(org);
-      // The person who made it is its owner, so a signed-in caller sees it in their list.
+      // Whoever creates an organization owns it (ADR 0032 decision 1), so it is listed for them.
       const who = auth.who(req);
       if (who) {
         state.people.members[org.id] = [
@@ -2269,10 +2269,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           spans: [],
         };
         state.items.push(it);
-        if (title === starterItem.title) {
+        if (starterTitles.includes(title)) {
           // The mock runs no agent, so the starter item runs its whole course at once: created nine minutes ago,
           // its spec accepted, moved to Build and merged at Done, with $0.84 spent. Seconds from its creation. The
-          // Floor's checklist then counts "First item merged" (the setup flow ends at 6 of 9, frontend.md).
+          // Floor then hides the new-factory checklist, as it does once an item has merged (frontend.md, "New factory row").
           const at = (s: number) => new Date(clock() - (540 - s) * 1000).toISOString();
           it.created_at = at(0);
           emit(it, 'created', 'engine', {}, at(0));
@@ -2343,6 +2343,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (!action && method === 'GET')
       return json(res, 200, {
         ...full(it),
+        ...partOfOf(it),
         flow: flowOf(it),
         touches: itemTouchesOf(it),
         ...(waitingOf(it) ? { waiting: waitingOf(it) } : {}),

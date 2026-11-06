@@ -16,6 +16,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { NotAvailable } from '../../ui/not-available';
 import { Stepper } from '../../ui/stepper';
+import { touchLink } from '../../ui/touch-target';
 import { WorkingLine } from '../../ui/working-line';
 import { FollowUpsCard, NotesCard } from './follow-ups-card';
 import { ItemTabs, panelId, tabId } from './item-tabs';
@@ -260,11 +261,14 @@ export function ItemPage() {
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(item.assembly.ref) }}
               aria-label={`${item.assembly.title}, part ${item.assembly.part} of ${item.assembly.parts}`}
-              className="min-w-0 max-w-full no-underline hover:text-link"
+              className={cn('min-w-0 max-w-full no-underline hover:text-link', touchLink)}
             >
               <Chip tone="plain" className="max-w-full">
                 <LayoutGrid size={12} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-                <span className="truncate">
+                <span
+                  className="truncate"
+                  title={`${item.assembly.title}, part ${item.assembly.part} of ${item.assembly.parts}`}
+                >
                   {item.assembly.title}, part {item.assembly.part} of {item.assembly.parts}
                 </span>
               </Chip>
@@ -307,9 +311,9 @@ export function ItemPage() {
               id={panelId}
               role="tabpanel"
               aria-labelledby={tabId('timeline')}
-              className="order-6 hidden animate-fade-in flex-col gap-4 @[720px]:order-none @[720px]:flex"
+              className="order-6 flex animate-fade-in flex-col gap-4 @[720px]:order-none"
             >
-              <p aria-live="polite" className="m-0 inline-flex items-center gap-2 text-sm text-link">
+              <p aria-live="polite" className="m-0 hidden items-center gap-2 text-sm text-link @[720px]:inline-flex">
                 {run ? (
                   <>
                     <span aria-hidden="true" className="size-2 rounded-full bg-run ring-4 ring-run-tint" />
@@ -322,7 +326,10 @@ export function ItemPage() {
               </p>
               <FollowUpsCard item={item} />
               <NotesCard notes={item.notes ?? []} />
-              <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+              {/* A narrow page shows the latest steps in its own card; the full list needs the width. */}
+              <div className="hidden flex-col gap-4 @[720px]:flex">
+                <TraceList entries={trace.entries} itemState={item.state} status={runsStatus} />
+              </div>
             </section>
           ) : null}
           {tab === 'trace' ? (

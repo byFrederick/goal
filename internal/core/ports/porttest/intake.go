@@ -1409,10 +1409,10 @@ func (in *Intake) ComingUp(ctx context.Context, factory domain.FactoryID, limit 
 	return all[:min(len(all), max(limit, 0))], len(all), nil
 }
 
-// comingUpLocked is it as coming up, when it is open, hasn't started and has a start or an open
-// planned or linked need. Callers hold in.store.mu.
+// comingUpLocked is it as coming up, when it is open, hasn't started, isn't an assembly's part
+// and has a start or an open planned or linked need. Callers hold in.store.mu.
 func (in *Intake) comingUpLocked(org domain.OrgID, it *domain.Item) (domain.ComingUp, bool) {
-	if !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
+	if it.ParentID != "" || !it.StartedAt.IsZero() || it.State == domain.StateDone || it.State == domain.StateCancelled {
 		return domain.ComingUp{}, false
 	}
 

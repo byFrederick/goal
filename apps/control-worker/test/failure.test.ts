@@ -1,13 +1,15 @@
 // What a public request gets when goald cannot answer it. The errors are the ones production logged
 // during the deploy rollovers of 2026-11-02 (docs/engineering/cloudflare-operations.md).
 
-import { createScheduledController, env } from 'cloudflare:test';
+import { createScheduledController, env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index.js';
 import { type FakeContainer, fakeFor } from './fake.js';
+import { Auth, Goald } from './worker.js';
 
 const goald = () => fakeFor(env.GOALD.idFromName('goald'));
+const goaldStub = () => env.GOALD.get(env.GOALD.idFromName('goald'));
 const page = { headers: { accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8', cookie: 'session=test-token' } };
 
 /** failOnce makes the container's port throw error on its next fetch, then answer with ok. */
@@ -149,5 +151,145 @@ describe('booting goald', () => {
     const res = await exports.default.fetch('https://goal.example.com/o/acme/needs-you', page);
     expect(res.status).toBe(200);
     expect(c.started).toHaveLength(1);
+  });
+});
+
+/** lines are the JSON lines a console spy saw, parsed. */
+function lines(spy: ReturnType<typeof vi.spyOn>): Record<string, unknown>[] {
+  return spy.mock.calls.flatMap(([line]: unknown[]) => {
+    try {
+      return [JSON.parse(String(line)) as Record<string, unknown>];
+    } catch {
+      return [];
+    }
+  });
+}
+
+// A restart is a new instance of the class on the same Durable Object, its container still
+// running: the tests build one inside the object, as Cloudflare does after it resets one.
+describe('when Cloudflare restarts a Durable Object', () => {
+  let info: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    info = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    info.mockRestore();
+  });
+
+  it('sets the inactivity timeout again when a restarted goald finds its container running', async () => {
+    const cases = [
+      { ns: env.GOALD, Service: Goald, service: 'goald', idleMs: 15 * 60_000 },
+      { ns: env.AUTH, Service: Auth, service: 'auth', idleMs: 30 * 60_000 },
+    ];
+    for (const { ns, Service, service, idleMs } of cases) {
+      const id = ns.idFromName(service);
+      const stub = ns.get(id);
+      const c = fakeFor(id);
+      c.port = () => new Response('ok');
+      await stub.ensure();
+      c.idleMs = undefined;
+      c.started = [];
+      const fetched = { calls: 0 };
+      c.port = () => {
+        fetched.calls++;
+        return new Response('ok');
+      };
+      const monitors = c.monitors;
+
+      // Only the constructor runs: no forward(), no ensure().
+      await runInDurableObject(stub, (_, state) => {
+        new Service(state, env);
+      });
+      // blockConcurrencyWhile holds the next call until the timeout is set.
+      await runInDurableObject(stub, () => {});
+
+      expect(c.idleMs).toBe(idleMs);
+      expect(c.started).toHaveLength(0);
+      expect(fetched.calls).toBe(0);
+      expect(c.monitors).toBe(monitors + 1);
+      expect(lines(info)).toContainEqual({ msg: 'container found running', service });
+    }
+  });
+
+  it('keeps an alarm set on goald, which a restarted Durable Object wakes to', async () => {
+    await goaldStub().ensure();
+
+    expect(await runDurableObjectAlarm(goaldStub())).toBe(true);
+
+    const next = await runInDurableObject(goaldStub(), (_, state) => state.storage.getAlarm());
+    expect(next).not.toBeNull();
+  });
+
+  it('answers within bootMs when a health check hangs', { timeout: 15_000 }, async () => {
+    const c = goald();
+    await goaldStub().ensure();
+    const health = { calls: 0 };
+    c.port = (_port, request) => {
+      if (new URL(request.url).pathname !== '/v1/health') return new Response('page');
+      health.calls++;
+      // The first check never answers; the next one does.
+      if (health.calls === 1) return new Promise<Response>(() => {});
+      return new Response('ok');
+    };
+
+    // A restarted goald boots against its running container on its first call.
+    const started = Date.now();
+    await runInDurableObject(goaldStub(), (_, state) => new Goald(state, env).ensure());
+
+    expect(health.calls).toBe(2);
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+});
+
+describe('when a container stops', () => {
+  let info: ReturnType<typeof vi.spyOn>;
+  let warned: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    info = vi.spyOn(console, 'log').mockImplementation(() => {});
+    warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    info.mockRestore();
+    warned.mockRestore();
+  });
+
+  it('logs one line with the exit code and the reason', async () => {
+    const cases: { stop: (c: FakeContainer) => void; exitCode: number | null; reason: string }[] = [
+      { stop: (c) => c.exit(0), exitCode: 0, reason: 'exited' },
+      { stop: (c) => c.exit(137), exitCode: 137, reason: 'exited with code 137' },
+      { stop: (c) => c.exit(0, new Error('the host went away')), exitCode: null, reason: 'the host went away' },
+    ];
+    // An object of its own: the restart tests above left extra instances watching goald's container.
+    const id = env.GOALD.idFromName('stops');
+    const c = fakeFor(id);
+    for (const { stop, exitCode, reason } of cases) {
+      await env.GOALD.get(id).ensure();
+      warned.mockClear();
+
+      stop(c);
+
+      await vi.waitFor(() => expect(lines(warned)).toHaveLength(1));
+      expect(lines(warned)[0]).toEqual({ msg: 'container stopped', service: 'goald', exitCode, reason });
+    }
+  });
+
+  it('logs a line when it starts a container, and none carries a setting', async () => {
+    const c = goald();
+    await c.destroy();
+    await vi.waitFor(() => expect(warned).toHaveBeenCalled());
+
+    await exports.default.fetch('https://goal.example.com/o/acme/needs-you?tab=all', page);
+
+    expect(lines(info)).toContainEqual({ msg: 'container started', service: 'goald' });
+    for (const spy of [info, warned]) {
+      const text = JSON.stringify(spy.mock.calls);
+      for (const secret of ['master-key-for-tests', 'test-token', 'app-password-for-tests', 'tab=all']) {
+        expect(text).not.toContain(secret);
+      }
+    }
   });
 });

@@ -738,6 +738,9 @@ export const intakeKeys = {
   trigger: (org: string, f: string, trigger: string) => [...intakeKeys.triggers(org, f), trigger] as const,
   /** factory.yaml as the page reads it: the draft's, or the running version's (one per version id). */
   definition: (org: string, f: string, source: string) => [...intakeKeys.root(org, f), 'definition', source] as const,
+  /** One environment file as the picker reads it, for the draft or the running version. */
+  environment: (org: string, f: string, source: string, name: string) =>
+    [...intakeKeys.root(org, f), 'environment', source, name] as const,
 };
 
 /** One trigger of the current definition, with this week's results and its recent events. */
@@ -796,6 +799,24 @@ export const definitionTextQuery = (org: string, factory: Factory) =>
             : { text: '', sha256: '' },
         staleTime: Number.POSITIVE_INFINITY,
       });
+
+/** An environment file of the definition (`environments/<name>.yaml`): the draft's, or the running version's. */
+export const environmentTextQuery = (org: string, factory: Factory, name: string) =>
+  queryOptions({
+    queryKey: intakeKeys.environment(org, factory.id, factory.draft ? 'draft' : (factory.current?.id ?? 'none'), name),
+    queryFn: async ({ signal }) => {
+      const path = `environments/${name}.yaml`;
+      try {
+        if (factory.draft) return await getDraftFile(org, factory.id, path, signal);
+        return factory.current
+          ? await getVersionFile(org, factory.id, 'current', path, signal)
+          : { text: '', sha256: '' };
+      } catch {
+        // An agent can name an environment whose file is missing: it reaches no server.
+        return { text: '', sha256: '' };
+      }
+    },
+  });
 
 export const factoryQuery = (org: string, factory: string) =>
   queryOptions({ queryKey: defKeys.factory(org, factory), queryFn: ({ signal }) => getFactory(org, factory, signal) });

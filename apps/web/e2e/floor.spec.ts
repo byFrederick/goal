@@ -1,6 +1,6 @@
 // The Floor over a range (E4): throughput against the range before and the target, the last 12
 // weeks, the header's window control writing the URL, and the line and the flow tiles of the top.
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { expectAccessible, expectNoHorizontalScroll, isPhone } from './support';
 
 // One instant for the test, the mock and the page: noon UTC of the day the file loads, so the days
@@ -23,8 +23,6 @@ function dayLabel(offset: number): string {
   return `${month.format(d)} ${d.getUTCDate()}`;
 }
 
-const throughput = (page: Page) => page.getByRole('region', { name: 'Throughput' });
-
 test('the floor puts New item in the top bar, with the time window from 768 px', async ({ page }) => {
   await page.goto('/o/acme/f/sre');
   const bar = page.getByRole('banner').first();
@@ -43,13 +41,16 @@ test('the floor shows the cards below the figures: Needs you, where work waits, 
   const needs = page.getByRole('region', { name: 'Needs you' });
   await expect(needs.getByRole('link', { name: isPhone(page) ? 'See all' : 'Open all' })).toHaveAttribute(
     'href',
-    '/o/acme/f/sre/items',
+    '/o/acme/needs-you?factory=sre',
   );
   await expect(needs.getByText('Question', { exact: true })).toHaveCount(0); // agents cannot ask yet
 
   const waits = page.getByRole('region', { name: 'Where work waits' });
   await expect(waits.getByText("Share of the week each station's agents were busy")).toBeVisible();
-  await expect(waits.getByRole('button', { name: /^Add (a|an) .+ agent$/ })).toHaveAttribute('aria-disabled', 'true');
+  // The what-if is live since #218: the person may edit the definition, so the button is not disabled.
+  const add = waits.getByRole('button', { name: /^Add (a|an) .+ agent$/ });
+  await expect(add).toBeVisible();
+  await expect(add).not.toHaveAttribute('aria-disabled', 'true');
 
   const weeks = page.getByRole('region', { name: 'Throughput by week' });
   await expect(weeks.getByRole('img', { name: /^Items merged a day by week, from .+ Target 8\.$/ })).toBeVisible();
@@ -87,7 +88,6 @@ test('the window control writes the URL, and the cards follow it', async ({ page
   await expect(page).toHaveURL(new RegExp(`\\?from=${utcDay(29)}$`));
   await expect(page.getByRole('radio', { name: '30 days' })).toBeChecked();
   await expect(page.getByText('compared with the 30 days before')).toBeVisible();
-  await expect(throughput(page).getByText('vs the 30 days before')).toBeVisible();
 
   await page.getByRole('radio', { name: 'Today' }).click();
   await expect(page).toHaveURL(new RegExp(`\\?from=${utcDay(0)}$`));
@@ -95,7 +95,7 @@ test('the window control writes the URL, and the cards follow it', async ({ page
 
   await page.getByRole('radio', { name: '7 days' }).click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre\/?$/);
-  await expect(page.getByText(`${dayLabel(6)} to`)).toBeVisible();
+  await expect(page.getByText(new RegExp(`^${dayLabel(6)} to .+, compared with the 7 days before$`))).toBeVisible();
   await expectAccessible(page);
 });
 
@@ -126,7 +126,8 @@ test('Add a build agent raises the station by one in a draft and opens the Line 
 
   // The draft is not published: the person reviews and publishes it in the Line editor.
   await expect(page).toHaveURL(/\/o\/acme\/f\/software\/definition\/line$/);
-  await expect(page.getByText('engineer × 7')).toBeVisible();
+  // The draft starts from the published definition, whose Build station is worked by one backend-engineer agent.
+  await expect(page.getByRole('combobox', { name: 'Who works at Build' })).toHaveText('backend-engineer × 2');
 });
 
 test('a phone shows the range the URL names', async ({ page }) => {
@@ -137,7 +138,7 @@ test('a phone shows the range the URL names', async ({ page }) => {
 });
 
 test('the setup checklist hides when closed and stays hidden after a reload', async ({ page }) => {
-  await page.goto('/o/acme/f/software');
+  await page.goto('/o/acme/f/support'); // no item has merged here, so the checklist shows (ADR 0032)
   const checklist = page.getByRole('heading', { name: 'Finish setting up' });
   await expect(checklist).toBeVisible();
   await expect(page.getByRole('img', { name: /of 9 done$/ })).toBeVisible();

@@ -1,7 +1,7 @@
 // New item from the sidebar (MASTER.md "The shell"): C, or the button, opens the composer with a
 // factory picker. The picker starts on the open factory, is empty elsewhere, and lists only the
 // factories the person may add items to.
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 // One instant for the test, the mock and the page (the same as floor.spec.ts).
 const now = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
@@ -10,9 +10,18 @@ test.beforeEach(async ({ request }) => {
   await request.post('/__mock/reset', { data: { now: now.toISOString() } });
 });
 
+// The shortcut listens once the shell has mounted, which is after the page's load event. Press C until
+// the composer opens; once it is open, a further C does nothing (a dialog is open).
+async function openWithC(page: Page) {
+  await expect(async () => {
+    await page.keyboard.press('c');
+    await expect(page.getByRole('dialog', { name: 'New item' })).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 10_000 });
+}
+
 test('C opens the composer on the open factory and creates the item there', async ({ page }) => {
   await page.goto('/o/acme/f/goal');
-  await page.keyboard.press('c');
+  await openWithC(page);
 
   const dialog = page.getByRole('dialog', { name: 'New item' });
   await expect(dialog).toBeVisible();
@@ -25,7 +34,7 @@ test('C opens the composer on the open factory and creates the item there', asyn
 
 test('elsewhere the picker starts empty and asks for a factory', async ({ page }) => {
   await page.goto('/o/acme');
-  await page.keyboard.press('c');
+  await openWithC(page);
 
   const dialog = page.getByRole('dialog', { name: 'New item' });
   const picker = dialog.getByRole('combobox', { name: 'Factory' });
@@ -38,7 +47,7 @@ test('elsewhere the picker starts empty and asks for a factory', async ({ page }
 
 test('the picker leaves out a factory where the person may not add items', async ({ page }) => {
   await page.goto('/o/acme');
-  await page.keyboard.press('c');
+  await openWithC(page);
 
   const picker = page.getByRole('dialog', { name: 'New item' }).getByRole('combobox', { name: 'Factory' });
   await picker.click();

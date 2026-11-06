@@ -5,3 +5,13 @@ export const starterItem = {
   type: 'feature',
   body: 'Add a short contributing guide to README.md, one file and two criteria.',
 };
+
+/** The code-review template's starter item: the mock's submit answers for it the same way (api.ts). */
+export const reviewStarterItem = {
+  title: 'Review the newest open pull request',
+  type: 'review',
+  body: 'Read the newest open pull request against the team conventions and say what to change, in two or three points.',
+};
+
+/** Every title the mock treats as a starter item: it runs its whole course at once. */
+export const starterTitles: readonly string[] = [starterItem.title, reviewStarterItem.title];

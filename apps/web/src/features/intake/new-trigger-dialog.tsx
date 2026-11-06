@@ -1,11 +1,18 @@
 // New trigger, step 1 of 2: what starts it (intake-new, MASTER.md's two-pane picker). The left pane lists the
 // sources; the right pane has the chosen source's events. Continue goes to the trigger page with the choice in
 // the address. On phones the panes take turns, with Back from the details.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
-import { connectionsQuery, definitionTextQuery, defKeys, intakeKeys, intakeQuery } from '../../api/queries';
+import {
+  connectionsQuery,
+  definitionTextQuery,
+  defKeys,
+  environmentTextQuery,
+  intakeKeys,
+  intakeQuery,
+} from '../../api/queries';
 import type { TriggerSuggestion } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
@@ -19,6 +26,8 @@ import { Leaving, useLeaving } from '../../ui/leaving';
 import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
 import { Stepper } from '../../ui/stepper';
+import { agentEnvironments } from '../factory-editor/environments/agent-environment';
+import { defaultEnvironment, readEnv } from '../factory-editor/environments/env-file';
 import { OpenDraftError, setTriggerEnabled } from './set-trigger-enabled';
 import {
   defaultEvent,
@@ -45,7 +54,7 @@ export function NewTriggerDialog() {
   const definition = useQuery(definitionTextQuery(org.id, factory));
   const text = definition.data?.text ?? '';
   const board = readBoard(text);
-  const tools = checkTools(board.agents);
+  const servers = useCheckServers(text, board.agents);
   // The organization's own connections decide the Connected and Not connected groups; until they load, none is.
   const { data: connections } = useQuery(connectionsQuery(org.id));
   const connectedKinds = new Set((connections ?? []).map((c) => c.kind));
@@ -57,6 +66,7 @@ export function NewTriggerDialog() {
   const [tool, setTool] = useState<string | null>(null);
   /** Phones show one pane at a time: the sources, then the chosen source's details. */
   const [detailsShown, setDetailsShown] = useState(false);
+  const shownServers = servers.servers.filter((s) => s.label.toLowerCase().includes(filter.trim().toLowerCase()));
 
   const panel = useRef<HTMLDivElement>(null);
   const leave = () => navigate({ to: '/o/$org/f/$factory/intake', params });
@@ -65,7 +75,7 @@ export function NewTriggerDialog() {
   const agent =
     tool === null
       ? board.agents[0]?.name
-      : (board.agents.find((a) => a.tools.includes(tool))?.name ?? board.agents[0]?.name);
+      : (servers.servers.find((s) => s.name === tool)?.agent ?? board.agents[0]?.name);
   const href =
     on === null
       ? null
@@ -105,7 +115,7 @@ export function NewTriggerDialog() {
               )}
             >
               <legend className="sr-only">Sources</legend>
-              <label className="mb-2 flex h-9 items-center gap-2 rounded-control border border-rule bg-card px-3 text-ink-soft">
+              <label className="mb-2 flex h-11 items-center gap-2 rounded-control ring-1 ring-inset ring-rule md:h-9 bg-card px-3 text-ink-soft">
                 <Search aria-hidden="true" className="size-4 flex-none" />
                 <span className="sr-only">Search sources</span>
                 <input
@@ -113,7 +123,7 @@ export function NewTriggerDialog() {
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Search sources"
-                  className="min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
+                  className="h-full min-w-0 flex-1 bg-transparent text-body text-ink outline-none placeholder:text-muted"
                 />
               </label>
               {groups.map((group) => {
@@ -143,29 +153,42 @@ export function NewTriggerDialog() {
                   </div>
                 );
               })}
-              {tools.filter((t) => t.toLowerCase().includes(filter.trim().toLowerCase())).length > 0 ? (
+              {servers.loading || shownServers.length > 0 ? (
                 <div className="flex flex-col gap-1">
                   <h3 className="m-0 px-2 pt-2 pb-1 text-meta font-semibold text-muted">Check with an agent</h3>
-                  {tools
-                    .filter((t) => t.toLowerCase().includes(filter.trim().toLowerCase()))
-                    .map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        aria-pressed={source === 'check' && tool === t}
-                        onClick={() => {
-                          setSource('check');
-                          setTool(t);
-                          setDetailsShown(true);
-                        }}
-                        className="press flex h-11 min-w-0 shrink-0 grow items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink transition-colors duration-(--duration-fast) ease-out hover:bg-hover aria-pressed:bg-hover md:h-10"
-                      >
-                        <span title={t} className="min-w-0 flex-1 truncate">
-                          {t}
-                        </span>
-                        <Chip>its tool</Chip>
-                      </button>
-                    ))}
+                  <Skeleton
+                    ready={!servers.loading}
+                    placeholder={
+                      <div className="flex flex-col gap-1">
+                        {['one', 'two'].map((k) => (
+                          <div key={k} className="flex h-11 items-center px-2 md:h-10">
+                            <span className="h-4 w-28 rounded-chip bg-hover" />
+                          </div>
+                        ))}
+                      </div>
+                    }
+                  >
+                    <div className="flex flex-col gap-1">
+                      {shownServers.map((t) => (
+                        <button
+                          key={t.name}
+                          type="button"
+                          aria-pressed={source === 'check' && tool === t.name}
+                          onClick={() => {
+                            setSource('check');
+                            setTool(t.name);
+                            setDetailsShown(true);
+                          }}
+                          className="press flex h-11 min-w-0 shrink-0 grow items-center gap-3 rounded-control px-2 text-left text-body font-medium text-ink transition-colors duration-(--duration-fast) ease-out hover:bg-hover aria-pressed:bg-hover md:h-10"
+                        >
+                          <span title={t.label} className="min-w-0 flex-1 truncate">
+                            {t.label}
+                          </span>
+                          <Chip>its tool</Chip>
+                        </button>
+                      ))}
+                    </div>
+                  </Skeleton>
                 </div>
               ) : null}
             </fieldset>
@@ -181,7 +204,11 @@ export function NewTriggerDialog() {
               </Button>
               <div className="flex items-center gap-3">
                 <h3 className="m-0 text-heading">
-                  {chosen.key === 'github' ? 'GitHub events' : tool !== null ? tool : chosen.label}
+                  {chosen.key === 'github'
+                    ? 'GitHub events'
+                    : tool !== null
+                      ? (servers.servers.find((s) => s.name === tool)?.label ?? tool)
+                      : chosen.label}
                 </h3>
                 {chosen.key === 'check' ? (
                   <InfoTip about="Check with an agent">
@@ -219,9 +246,40 @@ export function NewTriggerDialog() {
   );
 }
 
-/** The tools the factory's agents have on, each once, in the order the definition lists them. */
-function checkTools(agents: readonly { tools: readonly string[] }[]): string[] {
-  return [...new Set(agents.flatMap((a) => a.tools))];
+interface CheckServer {
+  /** The server's name in the environment file. */
+  name: string;
+  /** What the row says: the source's own label when the picker has one for the name, else the name. */
+  label: string;
+  /** The first agent whose environment has the server: the check's agent. */
+  agent: string;
+}
+
+/**
+ * The MCP servers the factory's agents reach, each once, in the order the agents list them. An agent's
+ * environment is the file factory.yaml names (default when it names none); `loading` holds until the files
+ * of those environments are read.
+ */
+function useCheckServers(
+  text: string,
+  agents: readonly { name: string }[],
+): { servers: CheckServer[]; loading: boolean } {
+  const org = useOrg();
+  const factory = useFactory();
+  const byAgent = agentEnvironments(text);
+  const envOf = (agent: string) => byAgent[agent] ?? defaultEnvironment;
+  const names = [...new Set(agents.map((a) => envOf(a.name)))];
+  const files = useQueries({ queries: names.map((name) => environmentTextQuery(org.id, factory, name)) });
+  const loading = files.some((f) => f.data === undefined && !f.isError);
+  const mcp = new Map(names.map((name, i) => [name, Object.keys(readEnv(files[i]?.data?.text ?? '').mcp)]));
+  const servers: CheckServer[] = [];
+  for (const agent of agents) {
+    for (const name of mcp.get(envOf(agent.name)) ?? []) {
+      if (servers.some((s) => s.name === name)) continue;
+      servers.push({ name, label: pickerSources.find((s) => s.key === name)?.label ?? name, agent: agent.name });
+    }
+  }
+  return { servers, loading };
 }
 
 /** The trigger's event key for a choice; null when the source has none to choose here (a webhook is chosen later). */

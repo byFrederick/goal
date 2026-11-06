@@ -211,10 +211,9 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await page.getByRole('link', { name: 'Go to the Floor' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/f\//);
 
-  // The Floor's checklist: the flow sent an invite and finished the starter item, so seven of nine are done.
-  // Slack and knowledge are still to do, and their rows link to the pages that do them.
-  await expect(page.getByRole('heading', { name: 'Finish setting up' })).toBeVisible();
-  await expect(page.getByRole('img', { name: '7 of 9 done' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Connect' })).toHaveAttribute('href', '/o/goal/secrets?new=true');
-  await expect(page.getByRole('link', { name: 'Add' })).toHaveAttribute('href', '/o/goal/knowledge/new');
+  // The checklist is for a new factory: the starter item finished, so the Floor shows no checklist and no
+  // "How work gets in" row, and the line keeps the full width (frontend.md, "New factory row"; #441).
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Finish setting up' })).toHaveCount(0);
+  await expect(page.getByRole('img', { name: /of 9 done/ })).toHaveCount(0);
 });

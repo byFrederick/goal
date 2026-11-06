@@ -9,6 +9,7 @@ You end knowing where each item is, why it is waiting, and what an agent run did
 
 Open a factory's Board at `/o/<org>/f/<factory>/board`.
 
+- **Your role:** when your role on the factory is viewer or approver, a chip next to the title says so, such as "You’re a viewer of sre". On a phone it sits under the top bar. Editors, admins and owners see no chip.
 - **Columns** are the line's stations, in the order work moves through them. Each card is an item.
 - **Lanes** split each column by agent role, so you can see which role has the work.
 - **Cards** show what the run on the item is doing now, and its plan's steps when it has one.

@@ -28,7 +28,7 @@ It lists the items that have not started (when each may start, or the needs it w
 
 ## Items that have not started
 
-An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
+An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. An assembly's parts are not listed, since the assembly's plan orders them: the assembly's page shows each part and what it waits for. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
 
 ## Triggers
 
@@ -82,7 +82,7 @@ On the web, a trigger that is off in the definition appears in the Triggers tabl
 
 The New trigger dialog lists the same suggestions under "Or turn on a suggestion from the factory's definition", each with the station it creates items at. **Turn on** publishes a new version with the trigger on, and the row leaves the list. The block is absent when the definition has no disabled triggers. The onboarding Intake step offers the same suggestions as its starter triggers.
 
-New trigger's **Built in** group lists Schedule and **Check with an agent**. A second group, also called Check with an agent, lists each tool the factory's agents have on. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the factory's first agent that has the tool. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
+New trigger's **Built in** group lists Schedule and **Check with an agent**. A second group, also called Check with an agent, lists each MCP server the agents' environments give them, such as GitHub, Cloudflare or Context7, and never a built-in tool or a permission pattern. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the first agent whose environment has that server. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
 
 ## Try a trigger on a past event
 

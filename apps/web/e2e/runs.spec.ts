@@ -21,17 +21,17 @@ test('shows the pictured rows and the four tiles', async ({ page }) => {
 
   await expect(page.getByText('Every time an agent worked on an item, in all factories.')).toBeVisible();
   await expect(page.getByRole('row', { name: /Fix flaky TestLeaseExpiry/ })).toContainText('Running');
-  await expect(page.getByRole('row', { name: /Checkout API p95/ })).toContainText('Stopped');
+  await expect(page.getByRole('row', { name: /#311 Checkout API p95/ })).toContainText('Stopped');
   await expect(page.getByText(/running now$/)).toBeVisible();
   await expect(page.getByText(/^Showing \d+ of \d+ runs today\.$/)).toBeVisible();
 });
 
 test('reads the filters from the URL and writes the outcome back', async ({ page }) => {
-  await openRuns(page, `${runs}?status=failed&factory=sre`);
+  await openRuns(page, `${runs}?status=failed&factory=goal`);
   await expect(page.getByRole('button', { name: /Failed/ })).toHaveAttribute('aria-pressed', 'true');
 
   await page.getByRole('button', { name: /^All \d+/ }).click();
-  await expect(page).toHaveURL(/\/o\/acme\/runs\?factory=sre$/);
+  await expect(page).toHaveURL(/\/o\/acme\/runs\?factory=goal$/);
 });
 
 test('downloads the runs CSV from Export CSV, and the page stays put', async ({ page }) => {
@@ -51,7 +51,8 @@ test('keeps the controls that are not built yet disabled', async ({ page }) => {
   // Waiting on you is not built yet: disabled, and it does nothing.
   const waiting = page.getByRole('button', { name: /Waiting on you/ }).first();
   await expect(waiting).toHaveAttribute('aria-disabled', 'true');
-  await waiting.click();
+  // Playwright counts aria-disabled as not enabled and waits on a click, so the press is forced to prove it does nothing.
+  await waiting.click({ force: true });
   await expect(page).toHaveURL(/\/o\/acme\/runs$/);
 });
 

@@ -23,7 +23,14 @@ import { NewTokenDialog } from './new-token-dialog';
 export const personalTokensAnchor = 'personal-tokens';
 
 /** The caller's own tokens, New token and Revoke…. */
-export function PersonalTokensSection({ org }: { org: OrgSummary }) {
+export function PersonalTokensSection({
+  org,
+  settled = true,
+}: {
+  org: OrgSummary;
+  /** The sections above have their data, so the page has its height. */
+  settled?: boolean;
+}) {
   const client = useQueryClient();
   const grants = useOrgGrants();
   const manage = useOrgHolds('personal_token:manage');
@@ -37,10 +44,11 @@ export function PersonalTokensSection({ org }: { org: OrgSummary }) {
   const hash = useLocation({ select: (l) => l.hash });
 
   useEffect(() => {
-    if (hash.replace(/^#/, '') !== personalTokensAnchor || !heading.current) return;
+    if (hash.replace(/^#/, '') !== personalTokensAnchor || !heading.current || !settled) return;
+    // Scrolled once the sections above have loaded: they grow the page, and an earlier scroll lands short.
     heading.current.scrollIntoView({ block: 'start' });
     heading.current.focus({ preventScroll: true });
-  }, [hash]);
+  }, [hash, settled]);
 
   const revoke = useMutation({
     mutationFn: (t: PersonalToken) => revokePersonalToken(org.id, t.id),

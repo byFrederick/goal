@@ -39,6 +39,9 @@ vi.mock('sonner', () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // phoneWidth() sets a matchMedia that must not narrow the next test: jsdom has none.
+  // @ts-expect-error restoring the jsdom default
+  delete window.matchMedia;
 });
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 2, role: null };
@@ -242,6 +245,31 @@ describe('Needs you: filters live in the URL', () => {
 
     const row = await screen.findByRole('link', { name: /Merge the cache fix/ });
     expect(row.getAttribute('aria-current')).toBe('page');
+  });
+});
+
+describe('Needs you: the item an alert names', () => {
+  it('opens the item by its number, the canonical address of its page', async () => {
+    const blocked: InboxEntry = {
+      ...decision,
+      id: 'blocked:item-5',
+      kind: 'blocked',
+      item: card({ id: 'item-5', ref: 'software#5', number: 5, title: 'Show spend per factory', station: 'build' }),
+      station: 'build',
+      action: null,
+      approval: null,
+      blocked: { reason: 'No test environment', paused: false },
+    };
+    renderPage({
+      search: { entry: 'blocked:item-5' },
+      seed: [
+        [inboxQuery(org.id).queryKey, inbox([blocked])],
+        [factoriesQuery(org.id).queryKey, factories()],
+      ],
+    });
+
+    const open = await screen.findByRole('link', { name: 'Open software#5' });
+    expect(open.getAttribute('href')).toMatch(/\/items\/5$/);
   });
 });
 
@@ -679,6 +707,27 @@ describe('Needs you on a phone', () => {
 
     expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /Alerts/ })).toBeTruthy();
+  });
+
+  it('shows only the list, with no entry beside it and no Approve button', async () => {
+    phoneWidth();
+    renderPage();
+
+    expect(await screen.findByRole('list', { name: /Waiting on you/ })).toBeTruthy();
+    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull();
+  });
+
+  it('leaves J, K and A alone while only the list shows, so a key never acts on an entry out of sight', async () => {
+    phoneWidth();
+    const { router } = renderPage();
+    await screen.findByRole('list', { name: /Waiting on you/ });
+
+    for (const key of ['j', 'k', 'a', 'd']) fireEvent.keyDown(document.body, { key });
+
+    expect(router.state.location.href).not.toContain('entry=');
+    expect(approveItem).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
 

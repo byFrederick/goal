@@ -31,7 +31,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) src ON NOT w.triage
 WHERE w.factory_id = $1 AND w.started_at IS NULL AND w.state NOT IN ('done', 'cancelled')
-  AND (w.start_at IS NOT NULL OR cardinality(n.needs) > 0)
+  AND w.parent_id IS NULL AND (w.start_at IS NOT NULL OR cardinality(n.needs) > 0)
 ORDER BY w.start_at NULLS LAST, w.created_at, w.id
 LIMIT $2
 `
@@ -49,7 +49,8 @@ type ComingUpItemsRow struct {
 	Total         int64
 }
 
-// The factory's open items that haven't started (started_at IS NULL, the claim filters' rule) and
+// The factory's open items that haven't started (started_at IS NULL, the claim filters' rule),
+// aren't an assembly's part (their plan orders them; the assembly's page shows their waits) and
 // have a start or an open planned or linked need: those with a start first, soonest first, then
 // the rest oldest first. Each comes with the numbers of those needs, oldest edge first, the
 // factory and number of the item whose follow-up filed it (empty and 0 for none; any factory of the

@@ -50,7 +50,7 @@ function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean
   );
   const when = item.start ? formatStart(item.start.at) : null;
   return (
-    <li className={cn('border-t border-line first:border-t-0', arrived && 'motion-safe:animate-item-in')}>
+    <li className={cn('relative border-t border-line first:border-t-0', arrived && 'motion-safe:animate-item-in')}>
       <Leaving leaving={leaving}>
         <div className={cn(rowClass, 'border-t-0 max-md:items-start')}>
           <span className="flex flex-col text-body font-medium tabular-nums md:col-span-1">
@@ -72,20 +72,20 @@ function ComingUpRow({ item, arrived }: { item: IntakeComingUp; arrived: boolean
             <Link
               to="/o/$org/f/$factory/items/$ref"
               params={{ ...params, ref: refParam(item.ref) }}
-              className="truncate font-medium text-ink no-underline hover:text-run-ink"
+              className="truncate font-medium text-ink no-underline after:absolute after:inset-0 after:content-[''] hover:text-run-ink"
               title={item.title}
             >
               {item.title}
             </Link>
             <span className="flex min-w-0 items-center gap-2 text-secondary text-muted">
               <CornerDownRight size={12} strokeWidth={1.75} aria-hidden="true" className="flex-none" />
-              <span className="min-w-0 break-words">
+              <span className="relative z-10 min-w-0 break-words">
                 <CameFrom item={item} />
                 {when && item.needs.length > 0 ? `, then waits for ${plural(item.needs.length, 'open item')}` : null}
               </span>
             </span>
           </span>
-          <span className="flex items-center gap-2 max-md:col-start-2 max-md:row-span-2 max-md:row-start-1">
+          <span className="relative z-10 flex items-center gap-2 max-md:col-start-2 max-md:row-span-2 max-md:row-start-1">
             {item.start ? (
               <>
                 <StartNowButton

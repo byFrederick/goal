@@ -482,9 +482,10 @@
     min-height: 100dvh;
   }
 
-  /* Below 768 px a factory's tab bar is fixed to the bottom: focus scrolled into view clears it. */
+  /* Below 768 px the top bar is sticky and a factory's tab bar is fixed to the bottom: focus or a click scrolled into view clears both. */
   @media (width < 48rem) {
     html {
+      scroll-padding-top: 4rem;
       scroll-padding-bottom: 5rem;
     }
   }

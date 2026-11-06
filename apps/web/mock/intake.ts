@@ -114,7 +114,7 @@ interface FileTrigger {
   on: string;
   cron?: string;
   timeZone?: string;
-  create: { type: string; station: string; expedite?: boolean };
+  create: { type: string; station: string; expedite?: boolean; title?: string };
 }
 
 /**
@@ -150,8 +150,24 @@ function triggersOf(yamlText: string): IntakeTrigger[] {
   });
 }
 
+/** The triggers the definition ships disabled, again as suggestions (the contract's rule): what the onboarding Intake step offers. */
+function suggestionsOf(yamlText: string, triggers: readonly IntakeTrigger[]): Intake['suggestions'] {
+  const list = (parse(yamlText) as { spec?: { board?: { triggers?: FileTrigger[] } } } | null)?.spec?.board?.triggers;
+  const titles = new Map((Array.isArray(list) ? list : []).map((t) => [t.name, t.create.title ?? ''] as const));
+  return triggers
+    .filter((t) => !t.enabled)
+    .map((t) => ({
+      name: t.name,
+      source: t.source,
+      on: t.on,
+      when: t.when,
+      create: { ...t.create, title: titles.get(t.name) ?? '' },
+    }));
+}
+
 /** The intake of the factory with this name, from its current version's factory.yaml when it has no fixture. */
 export function intakeOf(factory: string, yamlText: string): Intake {
   if (factory === 'software') return software;
-  return { items: 0, from: null, to: null, sources: none, suggestions: [], triggers: triggersOf(yamlText) };
+  const triggers = triggersOf(yamlText);
+  return { items: 0, from: null, to: null, sources: none, suggestions: suggestionsOf(yamlText, triggers), triggers };
 }

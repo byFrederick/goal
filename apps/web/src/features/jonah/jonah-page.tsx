@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Play, Settings } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError, queueJonahReview } from '../../api/client';
 import { jonahOverviewQuery, keys, proposalsQuery } from '../../api/queries';
@@ -323,6 +323,14 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
   const navigate = useNavigate();
   const actions = topBarActions(params);
   const list = useQuery(proposalsQuery(org.id, factory.id, state));
+  // The radio shows the choice on the click; the URL catches up once the navigation settles, and back and forward
+  // set the choice again from it.
+  const [chosen, setChosen] = useState(state);
+  const [seen, setSeen] = useState(state);
+  if (seen !== state) {
+    setSeen(state);
+    setChosen(state);
+  }
 
   const filters: SegmentedOption<'all' | ProposalState>[] = [
     { value: 'all', label: 'All' },
@@ -337,14 +345,15 @@ export function JonahProposalsPage({ state }: { state?: ProposalState | undefine
       <SegmentedControl
         label="Proposal state"
         options={filters}
-        value={state ?? 'all'}
-        onChange={(value) =>
+        value={chosen ?? 'all'}
+        onChange={(value) => {
+          setChosen(value === 'all' ? undefined : value);
           void navigate({
             to: '/o/$org/f/$factory/jonah/proposals',
             params,
             search: { state: value === 'all' ? undefined : value },
-          })
-        }
+          });
+        }}
       />
       <Skeleton ready={!list.isPending} placeholder={<PanelShape rows={3} row="h-28" />}>
         {list.isError ? (

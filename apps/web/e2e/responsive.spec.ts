@@ -134,13 +134,21 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     name: 'Board',
     open: async (page) => {
       await page.goto('/o/acme/f/goal/board');
-      await expect(page.getByRole('region', { name: 'Stations' })).toBeVisible();
+      // The stations are columns in a region from 768 px, and tabs on a phone.
+      await expect(
+        page.getByRole('region', { name: 'Stations' }).or(page.getByRole('tablist', { name: 'Stations' })),
+      ).toBeVisible();
       await page.waitForLoadState('networkidle');
     },
   },
   {
     name: 'Account',
     open: async (page) => {
+      // Save changes is the top bar's action of a signed-in person; the mock's default has no session.
+      const signedIn = await page.request.post('/__mock/reset', {
+        data: { auth: { mode: 'session', signed_in: 'fresh', email: 'f.cruz@example.com' } },
+      });
+      expect(signedIn.ok()).toBe(true);
       await page.goto('/account');
       await expect(page.getByRole('heading', { level: 1, name: 'Your account' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Save changes' }).filter({ visible: true })).toBeVisible();
@@ -179,7 +187,7 @@ const pages: { name: string; open: (page: Page) => Promise<void> }[] = [
     open: async (page) => {
       await page.goto('/o/acme/secrets');
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Secrets' }).or(page.getByText('Every key agents use')),
+        page.getByRole('heading', { level: 1, name: 'Secrets' }).or(page.getByText('Every key agents use')).first(),
       ).toBeVisible();
       await expect(page.getByRole('radio', { name: /Expiring/ })).toBeVisible();
     },

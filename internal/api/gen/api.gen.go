@@ -4757,7 +4757,7 @@ type InboxTriggerCheck struct {
 
 // Intake defines model for Intake.
 type Intake struct {
-	// ComingUp Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first; always answered
+	// ComingUp Up to 50 open items that haven't started (no started_at, the claim filters' rule): those with a start first, soonest first, then those that wait only for their open needs, oldest first. An assembly's parts are left out: their plan orders them, and the assembly's page shows each part and what it waits for. Always answered
 	ComingUp *[]IntakeComingUp `json:"coming_up,omitempty"`
 
 	// ComingUpTotal How many items coming_up counts
