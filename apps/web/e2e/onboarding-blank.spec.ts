@@ -49,7 +49,7 @@ test('a new organization starts empty, without code, and reaches the Floor with 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/o\/blank\/get-started\/people\?.*factory=/);
   await expectNoHorizontalScroll(page);
-  await page.getByRole('button', { name: 'Skip for now' }).click();
+  await page.getByRole('link', { name: 'Skip for now' }).click();
   await expect(page).toHaveURL(/\/o\/blank\/get-started\/first-item\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Watch your first item' })).toBeVisible();
   await expectNoHorizontalScroll(page);
