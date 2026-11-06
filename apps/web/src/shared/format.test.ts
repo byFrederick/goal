@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatBytes,
   formatCpuSeconds,
   formatDuration,
   formatDurationCompact,
   formatHours,
+  formatMemory,
   formatUsdCost,
   ordinal,
 } from './format';
@@ -61,19 +61,19 @@ describe('formatUsdCost', () => {
 });
 
 describe('formatCpuSeconds', () => {
-  it('says seconds under a minute, minutes from a minute up, and — for null', () => {
+  it('says CPU seconds as seconds, minutes or hours, and a dash for none', () => {
     expect(formatCpuSeconds(42)).toBe('42 s');
     expect(formatCpuSeconds(186)).toBe('3.1 min');
-    expect(formatCpuSeconds(60)).toBe('1 min');
+    expect(formatCpuSeconds(7200)).toBe('2.0 h');
     expect(formatCpuSeconds(null)).toBe('—');
   });
 });
 
-describe('formatBytes', () => {
-  it('scales by 1024 and shows — for null', () => {
-    expect(formatBytes(512 * 1024 ** 2)).toBe('512 MB');
-    expect(formatBytes(Math.round(1.2 * 1024 ** 3))).toBe('1.2 GB');
-    expect(formatBytes(1024 ** 3)).toBe('1 GB');
-    expect(formatBytes(null)).toBe('—');
+describe('formatMemory', () => {
+  it('says peak memory in KB, MB or GB, and a dash for none', () => {
+    expect(formatMemory(512 * 1024)).toBe('512 KB');
+    expect(formatMemory(300 * 1024 ** 2)).toBe('300 MB');
+    expect(formatMemory(1.2 * 1024 ** 3)).toBe('1.2 GB');
+    expect(formatMemory(null)).toBe('—');
   });
 });

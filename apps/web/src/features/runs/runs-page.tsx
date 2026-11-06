@@ -15,10 +15,10 @@ import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, refParam } from '../../shared/factory';
 import {
-  formatBytes,
   formatClock,
   formatCpuSeconds,
   formatDuration,
+  formatMemory,
   formatUsdCompact,
   humanize,
 } from '../../shared/format';
@@ -509,7 +509,7 @@ export function RunsPage() {
                           {formatCpuSeconds(run.cpu_seconds)}
                         </td>
                         <td className="hidden px-3 py-2 text-right tabular-nums xl:table-cell">
-                          {formatBytes(run.peak_memory_bytes)}
+                          {formatMemory(run.peak_memory_bytes)}
                         </td>
                         <td className="hidden px-3 py-2 xl:table-cell">
                           {run.box_size ? humanize(run.box_size) : '—'}

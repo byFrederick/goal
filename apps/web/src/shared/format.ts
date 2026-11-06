@@ -59,27 +59,6 @@ export function formatHours(h: number): string {
   return formatDuration(h * 3_600_000);
 }
 
-/** CPU time of a run: "42 s" under a minute, "3.1 min" from a minute up; — when the box did not measure it. */
-export function formatCpuSeconds(seconds: number | null): string {
-  if (seconds === null) return '—';
-  if (seconds < 60) return `${Math.round(seconds)} s`;
-  return `${Math.round(seconds / 6) / 10} min`;
-}
-
-/** A byte count in binary units: "512 MB", "1.2 GB"; — when the box did not measure it. */
-export function formatBytes(bytes: number | null): string {
-  if (bytes === null) return '—';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let i = 0;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i++;
-  }
-  const text = i === 0 || value >= 100 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
-  return `${text} ${units[i]}`;
-}
-
 export function formatPercent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }
@@ -121,4 +100,22 @@ export function ordinal(n: number): string {
   if (tens >= 11 && tens <= 13) return `${n}th`;
   const suffix = { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th';
   return `${n}${suffix}`;
+}
+
+/** CPU seconds as the Runs page says them: "42 s", "3.1 min", "1.2 h"; "—" for none. */
+export function formatCpuSeconds(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return '—';
+  if (seconds < 59.5) return `${Math.max(0, Math.round(seconds))} s`;
+  const min = seconds / 60;
+  if (min < 59.95) return `${min.toFixed(1)} min`;
+  return `${(min / 60).toFixed(1)} h`;
+}
+
+/** A peak memory in bytes as "512 MB", "1.2 GB" (1 GB is 1024 MB, as a box's limit is); "—" for none. */
+export function formatMemory(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return '—';
+  const mb = bytes / 1024 ** 2;
+  if (mb < 1) return `${Math.round(bytes / 1024)} KB`;
+  if (mb < 1000) return `${Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
 }
