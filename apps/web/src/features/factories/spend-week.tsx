@@ -7,7 +7,9 @@ import { Link } from '@tanstack/react-router';
 import type { FactoryOverviewList, OrgSummary } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import { formatUsd } from '../../shared/format';
+import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/meter';
+import { touchLinkWide } from '../../ui/touch-target';
 
 export function SpendWeek({
   org,
@@ -70,7 +72,7 @@ export function SpendWeek({
         <Link
           to="/o/$org/spend"
           params={{ org: org.slug }}
-          className="font-control text-run-ink no-underline hover:underline"
+          className={cn(touchLinkWide, 'font-control text-run-ink no-underline hover:underline')}
         >
           Spend and billing
         </Link>
