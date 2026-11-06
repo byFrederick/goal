@@ -377,7 +377,9 @@ function SuggestionRow({ suggestion }: { suggestion: TriggerSuggestion }) {
           <span className="min-w-0 flex-1 text-secondary text-ink">{titleOf(suggestion.name)}</span>
           <Button
             size="sm"
-            disabled={turnOn.isPending || leaving}
+            disabled={leaving}
+            busy={turnOn.isPending}
+            busyLabel="Turning on…"
             onClick={() => {
               if (blocked) {
                 setNotice(draftOpenNotice);
