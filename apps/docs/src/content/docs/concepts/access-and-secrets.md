@@ -111,7 +111,7 @@ A repository test tells you what a token can do for one of the factory's entries
 The answers:
 
 - **A `read` entry** answers "Can read". For an owner pattern it counts the repositories the token can read: "Can read 48 repositories in acme", or "at least 1000" when there are more than Goal counts. When the token can also push, the answer warns: "Goal won't push, but agents could. Use a read-only token."
-- **A `write` entry** answers "Can read and push", or says which of the two fails with the host's reason. The host reports no pull-request permission, so Goal can't check it, and the answer notes that.
+- **A `write` entry** answers "Can read and push", or says which of the two fails with the host's reason. The host reports no pull-request permission, so Goal can't check it, and the answer notes that. For a classic GitHub token, push reflects the account's role rather than the token's scopes; a fine-grained token answers its own grant.
 - **A host that doesn't answer** within 10 seconds gives "couldn't test".
 
 Each answer is kept per factory and URL, the newest replacing the one before, and `GET /v1/orgs/{org}/factories/{factory}/repositories/tests` lists them for anyone who can read the factory. A test runs again when someone clicks Test, and when the secret's value is replaced. No answer holds the token.
@@ -193,7 +193,7 @@ Access also shows the secret the organization's Slack notifications use, when th
 ## From the command line
 
 - `goal secret list`, `show`, `create`, `replace`, `delete` and `import` manage the organization's secrets. A value comes only from stdin or the import file and is never shown. `goal credential` and `goal connection` moved: each prints where its commands went and exits 2.
-- `goal repository test <url> --secret <name>`, without `--factory`, checks, before any factory exists, whether the secret's token can read a repository on one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts) and push to it. A repository on any other host is refused (`repository-host-unknown`) before the secret is opened. goald asks the code host's API, never git, and prints each check with the host's reason. A host that gives no answer within 10 seconds answers "couldn't test". For a classic GitHub token, push ok reflects the account's role rather than the token's scopes; a fine-grained token answers its own grant. Owners and admins can run it, and the secret must be open to all factories. The API route is `POST /v1/orgs/{org}/repositories/test`. With `--factory` it tests for that factory and keeps the answer ([Testing a repository's token](#testing-a-repositorys-token)).
+- `goal repository test <url> --secret <name> --factory <factory>` tests a token for one of the factory's entries and keeps the answer ([Testing a repository's token](#testing-a-repositorys-token)). Without `--factory` it says the flag is required and exits 1 without calling goald.
 
 Flags and output are in the [CLI reference](../../reference/).
 
