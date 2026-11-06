@@ -21,7 +21,7 @@ The design and its reasons are in [architecture.md](../../docs/engineering/archi
 
 - Never write a factory, station, agent or work-type name in Go, SQL or TypeScript, because domain behavior lives in factory definitions.
 - Key factories, rows and bucket prefixes by `metadata.id` (a UUID), never by name, since names change and ids do not.
-- Keep only JSON Schemas and the `acme` fixtures in `internal/config/testdata` in the repository; definitions live in the bucket and PostgreSQL.
+- Keep only JSON Schemas, the `acme` fixtures in `internal/config/testdata` and the install's starter templates in `deploy/catalog/templates/` ([ADR 0042](../../docs/adr/0042-starter-templates-are-committed-product-content.md)) in the repository; definitions live in the bucket and PostgreSQL. A committed template version never changes: a change is a new version folder.
 
 ## State
 
