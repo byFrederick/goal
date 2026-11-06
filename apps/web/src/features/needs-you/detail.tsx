@@ -276,7 +276,14 @@ function ActionBar({
   const call = entry.tool_approval;
   return (
     <div className={phone ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-2'}>
-      <Button variant="approve" onClick={onApprove} disabled={pending} className={full}>
+      <Button
+        variant="approve"
+        onClick={onApprove}
+        busy={pending}
+        busyLabel={busyVerb[merge ? 'merge' : 'approve']}
+        disabled={approved}
+        className={full}
+      >
         <SuccessLabel done={approved} doneLabel={merge ? 'Merged' : 'Approved'}>
           {merge ? 'Merge' : 'Approve'}
           <kbd className="ml-2 font-control text-meta opacity-80">A</kbd>
@@ -287,7 +294,7 @@ function ActionBar({
           Edit, then approve
         </Button>
       </NotAvailable>
-      <Button variant="secondary" onClick={onDeny} disabled={pending} className={full}>
+      <Button variant="secondary" onClick={onDeny} disabled={pending || approved} className={full}>
         Deny
         <kbd className="font-control text-meta text-muted">D</kbd>
       </Button>
@@ -488,3 +495,5 @@ function RecentEvents({ itemId }: { itemId: string }) {
     </section>
   );
 }
+
+const busyVerb = { approve: 'Approving…', merge: 'Merging…' } as const;

@@ -69,8 +69,8 @@ export function DenyDialog({
             <DialogClose asChild>
               <Button variant="secondary">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="danger-fill" disabled={pending}>
-              {pending ? 'Denying…' : 'Deny'}
+            <Button type="submit" variant="danger-fill" busy={pending} busyLabel="Denying…">
+              Deny
             </Button>
           </div>
         </form>
