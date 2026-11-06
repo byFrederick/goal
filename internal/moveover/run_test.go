@@ -858,6 +858,30 @@ func TestRun_TokenWithoutPushNotPublished(t *testing.T) {
 	w.checkNoValue(t, c)
 }
 
+// A converted version whose token can read and push but not read CI is published: only Read and
+// Push are checked, as only a factory that waits for CI needs it, and that wait blocks itself.
+func TestRun_TokenWithoutCIPublished(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.publishOld(t, factoryUUID, "acme-software", files(productionFactory))
+	w.hosts.SetAccess(repoURL, githubValue, ports.RepositoryAccess{
+		Read: ports.AccessCheck{OK: true, Reason: "can read"},
+		Push: ports.AccessCheck{OK: true, Reason: "can push"},
+		CI:   ports.AccessCheck{Reason: "GitHub answered 403: Resource not accessible by personal access token"},
+	})
+
+	if err := w.mover.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	w.checkPublished(t)
+
+	if c := w.conversion(t, factoryUUID); c.Refused() {
+		t.Errorf("conversion %+v refused; want it published without a CI problem", c)
+	}
+}
+
 // A remote MCP server whose tools/list fails keeps the version from publishing; the refusal
 // names the environment file, the server and its error, scrubbed of the key.
 func TestRun_MCPServerFailureBlocksPublish(t *testing.T) {

@@ -516,7 +516,7 @@ func (c *CodeHost) RepositoryAccess(ctx context.Context, repo domain.CodeReposit
 	if !ok {
 		reason := "the host answered 404: Not Found"
 
-		return ports.RepositoryAccess{Read: ports.AccessCheck{Reason: reason}, Push: ports.AccessCheck{Reason: reason}}, nil
+		return ports.RepositoryAccess{Read: ports.AccessCheck{Reason: reason}, Push: ports.AccessCheck{Reason: reason}, CI: ports.AccessCheck{Reason: reason}}, nil
 	}
 
 	return a, nil

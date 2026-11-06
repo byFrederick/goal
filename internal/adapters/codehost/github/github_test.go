@@ -1411,8 +1411,8 @@ func ciGitHub(t *testing.T, answers map[string]ciAnswer) (*httptest.Server, func
 		// /repos/<owner>/<repo>[/<probe>]
 		parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/repos/"), "/", 3)
 		a, ok := ciAnswer{}, false
-
 		probe := ""
+
 		if len(parts) >= 2 {
 			a, ok = answers[parts[0]+"/"+parts[1]]
 		}
@@ -1426,15 +1426,15 @@ func ciGitHub(t *testing.T, answers map[string]ciAnswer) (*httptest.Server, func
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]any{message: notFound})
 		case probe == "":
-			_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main", keyPermissions: map[string]bool{"pull": true, "push": true}})
+			_, _ = io.WriteString(w, `{"name":"app","default_branch":"main","permissions":{"pull":true,"push":true}}`)
 		case probe == "commits/main/check-runs" && a.checkRuns != http.StatusOK:
 			refuse(w, a.checkRuns)
 		case probe == "commits/main/check-runs":
-			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]any{{"name": "test", "status": "completed", "conclusion": "success"}}})
+			_, _ = io.WriteString(w, `{"total_count":1,"check_runs":[{"id":1,"name":"test","status":"completed","conclusion":"success"}]}`)
 		case probe == "commits/main/status" && a.status != http.StatusOK:
 			refuse(w, a.status)
 		case probe == "commits/main/status":
-			_ = json.NewEncoder(w).Encode(map[string]any{"state": "pending", "total_count": 0, "statuses": []any{}})
+			_, _ = io.WriteString(w, `{"state":"pending","sha":"0123456789abcdef0123456789abcdef01234567","total_count":0,"statuses":[]}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_ = json.NewEncoder(w).Encode(map[string]any{message: notFound})

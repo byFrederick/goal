@@ -963,6 +963,162 @@ func TestRepositoryAccess(t *testing.T) {
 	}
 }
 
+// ciProject is one project of ciGitLab: what GraphQL answers as its jobsEnabled, and its REST
+// builds_access_level, nil when the answer has no such field.
+type ciProject struct {
+	jobsEnabled bool
+	builds      *string
+}
+
+// ciGitLab is a stand-in GitLab with recorded answers: GET /api/v4/projects/:id shows each of
+// projects with Developer access and its builds_access_level, POST /api/graphql answers the
+// project's jobsEnabled for a Bearer token, and any other project is 404. It records each
+// request with its GraphQL body.
+func ciGitLab(t *testing.T, projects map[string]ciProject) (*httptest.Server, func() []string) {
+	t.Helper()
+
+	var (
+		mu       sync.Mutex
+		requests []string
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+
+		mu.Lock()
+
+		requests = append(requests, strings.TrimSpace(r.Method+" "+r.URL.EscapedPath()+" "+string(body)))
+
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/graphql":
+			var q struct {
+				Query     string            `json:"query"`
+				Variables map[string]string `json:"variables"`
+			}
+
+			if r.Header.Get("Authorization") != "Bearer "+token || json.Unmarshal(body, &q) != nil || !strings.Contains(q.Query, "jobsEnabled") {
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: unauthorized})
+
+				return
+			}
+
+			p, ok := projects[q.Variables["fullPath"]]
+			if !ok {
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"project": nil}})
+
+				return
+			}
+
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"project": map[string]any{"jobsEnabled": p.jobsEnabled}}})
+		case r.Method == http.MethodGet && r.Header.Get("PRIVATE-TOKEN") == token:
+			full, _ := url.PathUnescape(strings.TrimPrefix(r.URL.EscapedPath(), "/api/v4/projects/"))
+
+			p, ok := projects[full]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: "404 Project Not Found"})
+
+				return
+			}
+
+			answer := map[string]any{"permissions": map[string]any{"project_access": map[string]int{"access_level": 30}}}
+			if p.builds != nil {
+				answer["builds_access_level"] = *p.builds
+			}
+
+			_ = json.NewEncoder(w).Encode(answer)
+		default:
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{keyMessage: unauthorized})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return slices.Clone(requests)
+	}
+}
+
+// ciCase is one RepositoryAccess call of TestRepositoryAccess_CI and what it must answer: read and
+// push alike, the CI check and a word of its reason.
+type ciCase struct {
+	name, repo string
+	read, ci   bool
+	reason     string
+}
+
+// check calls RepositoryAccess on c and checks the answer against tc, and that the token is in no
+// CI reason.
+func (tc ciCase) check(t *testing.T, c *Client) {
+	t.Helper()
+
+	got, err := c.RepositoryAccess(t.Context(), repoOf(t, "https://gitlab.com/"+tc.repo), token)
+	if err != nil {
+		t.Fatalf("%s: err = %v", tc.name, err)
+	}
+
+	if got.Read.OK != tc.read || got.Push.OK != tc.read || got.CI.OK != tc.ci || got.CI.Reason == "" {
+		t.Errorf("%s: access = %+v; want read and push %v, CI %v with a reason", tc.name, got, tc.read, tc.ci)
+	}
+
+	if tc.reason != "" && !strings.Contains(got.CI.Reason, tc.reason) {
+		t.Errorf("%s: CI reason %q; want it to say %q", tc.name, got.CI.Reason, tc.reason)
+	}
+
+	if strings.Contains(got.CI.Reason, token) {
+		t.Errorf("%s: CI reason %q has the token", tc.name, got.CI.Reason)
+	}
+}
+
+// A project whose jobs GraphQL shows as enabled has CI the token can read. When they are not,
+// builds_access_level decides: disabled is CI that is off, and passes; any other value, or none,
+// fails with the scope and role the token needs. A failed read leaves CI not checked. Read and
+// Push never change with CI, and the GraphQL query goes to /api/graphql beside the REST API.
+func TestRepositoryAccess_CI(t *testing.T) {
+	t.Parallel()
+
+	disabled, private := "disabled", "private"
+
+	srv, requests := ciGitLab(t, map[string]ciProject{
+		"acme/app":      {jobsEnabled: true, builds: &private},
+		"acme/ci-off":   {builds: &disabled},
+		"acme/hidden":   {builds: &private},
+		"acme/no-field": {},
+	})
+	c := New(Config{APIURL: srv.URL + "/api/v4"})
+
+	for _, tc := range []ciCase{
+		{name: "jobs enabled", repo: "acme/app", read: true, ci: true},
+		{name: "CI off", repo: "acme/ci-off", read: true, ci: true, reason: "CI is off for this project"},
+		{name: "pipelines hidden", repo: "acme/hidden", read: true, reason: "read_api and a role that can see pipelines"},
+		{name: "no builds_access_level", repo: "acme/no-field", read: true, reason: "read_api and a role that can see pipelines"},
+		{name: "failed read", repo: "acme/gone", reason: "not checked: the token cannot read acme/gone"},
+	} {
+		tc.check(t, c)
+	}
+
+	sent := requests()
+	if !slices.ContainsFunc(sent, func(r string) bool {
+		return strings.HasPrefix(r, "POST /api/graphql ") && strings.Contains(r, `"fullPath":"acme/app"`)
+	}) {
+		t.Errorf("requests %v; want a GraphQL query of acme/app", sent)
+	}
+
+	for _, r := range sent {
+		if !strings.HasPrefix(r, "GET /api/v4/projects/") && !strings.HasPrefix(r, "POST /api/graphql ") {
+			t.Errorf("sent %s; want only project reads and the GraphQL query", r)
+		}
+	}
+}
+
 // A URL that is no project's is refused before anything is sent, and a token GitLab echoes is in
 // no reason.
 func TestRepositoryAccess_Refusals(t *testing.T) {
