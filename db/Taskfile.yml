@@ -11,7 +11,7 @@ tasks:
       - sqlc generate -f db/sqlc.yaml
 
   migrate-check:
-    desc: Apply all migrations to a throwaway PostgreSQL 18 with pgvector (in Docker, or a local cluster without Docker)
+    desc: Apply all migrations to a throwaway PostgreSQL 18 (in Docker, or a local cluster without Docker)
     cmds:
       - task: migrate-check:{{.MIGRATE_WITH}}
 
