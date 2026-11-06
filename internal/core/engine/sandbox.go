@@ -53,11 +53,6 @@ type prepared struct {
 	// Repositories are the repositories prepare checked out, each with its base commit and the
 	// branch head before prepare brought the branch up to date (ADR 0041 decision 5).
 	Repositories []domain.WorkerRepository `json:"repositories"`
-	// BranchHead and BaseHead are the single repository's heads, as a prepare without Repositories
-	// reports them; absent without a repository. Accepted for one deploy, so an older worker
-	// image works.
-	BranchHead string `json:"branch_head"`
-	BaseHead   string `json:"base_head"`
 }
 
 // open creates the run's sandbox when it has none (a claim's first run) and prepares it with env
