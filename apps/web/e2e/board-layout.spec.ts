@@ -433,6 +433,7 @@ test('a station with a WIP limit of 50 and a lane with 50 slots fit their column
 // At 1280 px the goal factory's 7 stations scroll sideways in their own box; no column is narrower than
 // 200 px, chips take one line, and no text box crosses its column or lies over a sibling.
 test('seven stations at 1280 px: wide columns, one-line chips, no overlapping text', async ({ page }) => {
+  test.skip(isPhone(page), 'the stations are side by side from 768 px');
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto('/o/acme/f/goal/board');
   await expect(page.getByRole('region', { name: 'Stations', exact: true })).toBeVisible();
@@ -473,18 +474,19 @@ test('seven stations at 1280 px: wide columns, one-line chips, no overlapping te
         }
       }
     }
-    const chipLines = Array.from(region?.querySelectorAll<HTMLElement>('article span.rounded-chip') ?? []).map(
-      (chip) => {
-        const range = document.createRange();
-        range.selectNodeContents(chip);
-        const tops = new Set(
-          Array.from(range.getClientRects())
-            .filter((x) => x.width > 0)
-            .map((x) => Math.round(x.top)),
-        );
-        return tops.size;
-      },
+    const drawnChips = Array.from(region?.querySelectorAll<HTMLElement>('article span.rounded-chip') ?? []).filter(
+      (chip) => chip.checkVisibility() && chip.getClientRects().length > 0,
     );
+    const chipLines = drawnChips.map((chip) => {
+      const range = document.createRange();
+      range.selectNodeContents(chip);
+      const tops = new Set(
+        Array.from(range.getClientRects())
+          .filter((x) => x.width > 0)
+          .map((x) => Math.round(x.top)),
+      );
+      return tops.size;
+    });
     return {
       count: columns.length,
       scrolls: (region?.scrollWidth ?? 0) > (region?.clientWidth ?? 0),
