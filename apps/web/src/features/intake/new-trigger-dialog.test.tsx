@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { connectionsQuery, intakeKeys, keys } from '../../api/queries';
+import { intakeKeys, keys, orgQuery, webhooksQuery } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
-import { connectionFixture } from '../../test/connection-fixture';
 import { renderFactoryPage } from '../../test/route';
 import { NewTriggerDialog } from './new-trigger-dialog';
 import { setTriggerEnabled } from './set-trigger-enabled';
@@ -68,15 +67,18 @@ const factory: Factory = {
 
 const withDefinition = { ...factory, current: { id: 'v1', number: 1 } } as unknown as Factory;
 
-function renderPicker(kinds: string[] = ['github', 'cloudflare'], suggestions: unknown[] = []) {
-  const connections = kinds.map((kind) => connectionFixture({ name: `${kind}-acme`, kind }));
+/** A webhook as the list answers it; only the sender and whether it is enabled matter here. */
+const webhookOf = (sender: string, enabled = true) => ({ id: `id-${sender}`, name: `${sender}-acme`, sender, enabled });
+
+function renderPicker(webhooks: unknown[] = [webhookOf('github')], suggestions: unknown[] = []) {
   return renderFactoryPage({
     page: () => <NewTriggerDialog />,
     path: 'intake/new',
     org,
     factory: withDefinition,
     seed: [
-      [connectionsQuery(org.id).queryKey, connections],
+      [orgQuery(org.id).queryKey, { ...org, can: ['webhook:read'] }],
+      [webhooksQuery(org.id).queryKey, webhooks],
       [intakeKeys.definition(org.id, factory.id, 'v1'), { text: definition, sha256: 'sha' }],
       [intakeKeys.environment(org.id, factory.id, 'v1', 'default'), { text: environments.default, sha256: 'a' }],
       [intakeKeys.environment(org.id, factory.id, 'v1', 'research'), { text: environments.research, sha256: 'b' }],
@@ -100,7 +102,7 @@ describe('New trigger picker', () => {
     expect((await screen.findAllByText('Not available yet')).length).toBeGreaterThan(0);
   });
 
-  it("groups the sources by the organization's own connections", async () => {
+  it("groups the sources by the organization's webhooks", async () => {
     renderPicker([]);
     await screen.findByRole('dialog', { name: 'New trigger' });
 
@@ -115,8 +117,17 @@ describe('New trigger picker', () => {
     expect(within(notConnected).queryByRole('link', { name: 'Connect Slack' })).toBeNull();
   });
 
-  it('puts a source under Connected only when its connection exists and it is built', async () => {
-    renderPicker(['github', 'slack']);
+  it('keeps GitHub under Not connected when its webhook is disabled', async () => {
+    renderPicker([webhookOf('github', false)]);
+    await screen.findByRole('dialog', { name: 'New trigger' });
+
+    expect(screen.queryByRole('heading', { name: 'Connected' })).toBeNull();
+    const notConnected = screen.getByRole('heading', { name: 'Not connected' }).parentElement as HTMLElement;
+    expect(within(notConnected).getByRole('link', { name: 'Connect GitHub' })).toBeTruthy();
+  });
+
+  it('puts a source under Connected only when its enabled webhook exists and it is built', async () => {
+    renderPicker([webhookOf('github'), webhookOf('slack')]);
     await screen.findByRole('dialog', { name: 'New trigger' });
 
     const connected = screen.getByRole('heading', { name: 'Connected' }).parentElement as HTMLElement;
@@ -244,7 +255,7 @@ describe('New trigger picker', () => {
   });
 
   it('groups the sources, links Connect for those not connected and filters them by search', async () => {
-    renderPicker(['github']);
+    renderPicker([webhookOf('github')]);
     await screen.findByRole('dialog', { name: 'New trigger' });
 
     for (const title of ['Built in', 'Connected', 'Not connected']) {
