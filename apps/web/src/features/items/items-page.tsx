@@ -363,7 +363,7 @@ export function ItemsPage() {
                         key={column}
                         scope="col"
                         className={cn(
-                          'px-3 py-2 text-left font-medium whitespace-nowrap',
+                          'px-3 py-2 text-left font-medium whitespace-nowrap lg:max-xl:px-2',
                           column === 'Repositories' && 'hidden 2xl:table-cell',
                           column === 'Cost' && 'text-right',
                           (column === 'Lane' || column === 'Agent' || column === 'Age' || column === 'Cost') &&
