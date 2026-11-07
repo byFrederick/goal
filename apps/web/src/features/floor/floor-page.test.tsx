@@ -12,6 +12,8 @@ import {
   metricsQuery,
   overviewQuery,
   touchesQuery,
+  versionFileQuery,
+  versionQuery,
   weeklyQuery,
 } from '../../api/queries';
 import type {
@@ -370,6 +372,7 @@ function renderFloor({
   touches = touchesNow,
   subject = factory,
   merged = true,
+  keyless = false,
 }: {
   entries?: InboxEntry[];
   line?: Board;
@@ -385,6 +388,8 @@ function renderFloor({
   subject?: Factory;
   /** An item has merged: a mature factory. False seeds a new one, which shows the setup checklist. */
   merged?: boolean;
+  /** The published line has an environment file and no model key. */
+  keyless?: boolean;
 } = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
@@ -415,6 +420,23 @@ function renderFloor({
       [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
       [overviewQuery(org.id, '1d').queryKey, today],
       [overviewQuery(org.id, '7d').queryKey, week],
+      ...(keyless
+        ? [
+            [
+              versionQuery(org.id, factory.id, 'current').queryKey,
+              {
+                files: [
+                  { path: 'factory.yaml', sha256: 'sha-1', size: 1 },
+                  { path: 'environments/default.yaml', sha256: 'sha-2', size: 1 },
+                ],
+              },
+            ] as const,
+            [
+              versionFileQuery(org.id, factory.id, 'current', 'factory.yaml', 'sha-1').queryKey,
+              { text: 'spec:\n  runtime:\n    image: x\n', sha256: 'sha-1' },
+            ] as const,
+          ]
+        : []),
       ...(activity ? [[activityQuery(org.id, factory.id).queryKey, activity] as const] : []),
     ],
   });
@@ -463,6 +485,13 @@ describe('FloorPage', () => {
 
     expect(await screen.findByText('Line running')).toBeTruthy();
     expect(screen.getByText('Oct 20 to 26, compared with the 7 days before')).toBeTruthy();
+  });
+
+  it('says the line needs a model key, not that it is running, when environments exist and the key does not', async () => {
+    renderFloor({ keyless: true });
+
+    expect(await screen.findByText('Needs a model key')).toBeTruthy();
+    expect(screen.queryByText('Line running')).toBeNull();
   });
 
   it('shows the andon state in place of the running chip while an andon pull is open', async () => {
