@@ -237,7 +237,7 @@ export function NeedsYouPage() {
             search={{ type: search.type, factory: search.factory }}
             resetScroll={false}
             aria-label="Back to Needs you"
-            className="text-link no-underline hover:text-run-ink"
+            className="inline-flex items-center justify-center text-link no-underline hover:text-run-ink max-md:min-h-11 max-md:min-w-11"
           >
             Back
           </Link>

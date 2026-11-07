@@ -92,5 +92,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
         expect(height, `${name} is ${height}px tall`).toBeGreaterThanOrEqual(44);
       }
     });
+
+    test("a Needs you entry's Back link, crumb links and ⓘ are 44 px at 375 px", async ({ page, request }) => {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await request.post('/__mock/reset', { data: { usedUpBudget: 'sre' } });
+      await page.goto('/o/acme/needs-you?factory=sre');
+      const list = page.getByRole('list', { name: /Waiting on you/ });
+      await list.getByRole('link', { name: /sre#4/ }).click();
+      const crumb = page.getByRole('navigation', { name: 'Where it waits' });
+      await expectTarget44(page.getByRole('link', { name: 'Back to Needs you' }), 'Back');
+      await expectTarget44(crumb.getByRole('link').first(), 'Factory link');
+      await expectTarget44(crumb.getByRole('link').nth(1), 'Item link');
+
+      await page.getByRole('link', { name: 'Back to Needs you' }).click();
+      await list.getByRole('link', { name: /Weekly budget used up/ }).click();
+      await expectTarget44(page.getByRole('link', { name: 'Back to Needs you' }), 'Back');
+      await expectTarget44(page.getByRole('button', { name: 'About the weekly budget' }), 'ⓘ');
+    });
   });
 }
