@@ -169,10 +169,15 @@ func itemEntry(f *config.Factory, l domain.Line, a domain.AttentionItem, card ge
 	return e
 }
 
-// lineEntries are the entries of a factory's line: its open andon pull or, while it runs, the gates
-// one rejection away from the policy's rework rate.
+// lineEntries are the entries of a factory's line: its used-up weekly budget, and its open andon
+// pull or, while it runs, the gates one rejection away from the policy's rework rate.
 func (w workInbox) lineEntries(ctx context.Context, f *config.Factory) ([]gen.InboxEntry, error) {
 	l := f.Line()
+
+	budget, err := w.budgetEntries(ctx, f)
+	if err != nil {
+		return nil, err
+	}
 
 	open, err := w.s.items.OpenAndon(ctx, l.FactoryID)
 	if err != nil {
@@ -183,12 +188,12 @@ func (w workInbox) lineEntries(ctx context.Context, f *config.Factory) ([]gen.In
 		e := entryOf(f, gen.InboxEntryKindAndon, strconv.FormatInt(open.ID, 10), open.PulledAt)
 		e.Station, e.Andon = optional(open.Station), andonOf(open)
 
-		return []gen.InboxEntry{e}, nil
+		return append(budget, e), nil
 	}
 
 	policy := l.Flow.Andon
 	if policy == nil {
-		return nil, nil
+		return budget, nil
 	}
 
 	pulls, err := w.s.items.AndonPulls(ctx, l.FactoryID, 1) // none is open: the latest is the last clear
@@ -207,7 +212,7 @@ func (w workInbox) lineEntries(ctx context.Context, f *config.Factory) ([]gen.In
 	}
 
 	now := w.s.clock.Now()
-	out := []gen.InboxEntry{}
+	out := budget
 
 	for _, t := range tallies {
 		if !t.Warning {
@@ -224,6 +229,25 @@ func (w workInbox) lineEntries(ctx context.Context, f *config.Factory) ([]gen.In
 	}
 
 	return out, nil
+}
+
+// budgetEntries is the entry of a factory whose weekly budget is used up against its current
+// version's cap, since when it is (now before the engine records it); none while it has room.
+func (w workInbox) budgetEntries(ctx context.Context, f *config.Factory) ([]gen.InboxEntry, error) {
+	l := f.Line()
+	if !l.Runtime.HasWeeklyBudget() {
+		return []gen.InboxEntry{}, nil
+	}
+
+	b, used, err := w.s.weeklyBudget(ctx, l, w.s.clock.Now())
+	if err != nil || used == nil {
+		return []gen.InboxEntry{}, err
+	}
+
+	e := entryOf(f, gen.InboxEntryKindBudget, f.Metadata.ID, used.since)
+	e.Budget = &gen.InboxBudget{SpentUsd: b.SpentUSD, WeeklyUsd: b.WeeklyUSD, Since: used.since, ResumesAt: used.resumesAt}
+
+	return []gen.InboxEntry{e}, nil
 }
 
 // conversionEntries are the factories Goal could not convert to secrets and environment files

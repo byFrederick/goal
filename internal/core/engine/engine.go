@@ -282,6 +282,10 @@ type Engine struct {
 	// the spend afresh and logs what it finds.
 	budgetMu  sync.Mutex
 	exhausted map[domain.FactoryID]bool
+	// recorded holds, for each factory, whether its weekly budget was used up when this instance
+	// last wrote that to the store (recordBudget), so it writes only on a change. A factory not
+	// in it is written on its next tick. The store's record is the state the screens read.
+	recorded map[domain.FactoryID]bool
 	// warned holds the factories whose budget event this instance queued and whose spend is still
 	// at or over 80%, so the outbox is not asked again each tick. Also only a hint: the outbox
 	// itself queues once per factory per budget window, whichever instance asks.
@@ -330,7 +334,7 @@ func New(d Deps, cfg Config) (*Engine, error) {
 		events: d.Events, holder: holder,
 		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
 		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
-		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
+		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, recorded: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }
 
