@@ -180,6 +180,7 @@ export function PreviewCard({
   detail,
   icon,
   active = false,
+  className,
 }: {
   label: string;
   value: string;
@@ -187,12 +188,14 @@ export function PreviewCard({
   /** Drawn before the value, e.g. the GitHub mark on the Code card. */
   icon?: ReactNode;
   active?: boolean;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
         'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-hover p-4',
         active && 'border-run ring-4 ring-run/25',
+        className,
       )}
     >
       <span className="text-meta text-ink-soft">{label}</span>

@@ -5,6 +5,7 @@
 // (setTriggersEnabled), then goes to step 7. A trigger whose source needs an endpoint the factory lacks
 // (problem.kind missing_connection) shows Connect and its switch stays off. Its four states: loading, error
 // (with Retry), empty (no starter triggers) and ready.
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import { defKeys, factoryQuery, intakeKeys, intakeQuery, versionModelQuery } fro
 import type { Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
 import { describeWhen } from '../../shared/cron-words';
 import { type ModelStation, modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { humanize } from '../../shared/format';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -25,7 +27,7 @@ import { OpenDraftError, setTriggersEnabled } from '../intake/set-trigger-enable
 import { sourceIcon } from '../intake/triggers-table';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 
@@ -270,8 +272,8 @@ function Ready({
       preview={{
         ...previewSlots({
           organization: organizationCard(org, window.location.host),
-          code: codeCard(repoOf(search.url), search.secret),
-          factory: <FactoryCard name={factory.name} purpose={basics.purpose ?? ''} stations={panelStations} />,
+          code: codeCard({ url: search.url, secret: search.secret, done: true }),
+          factory: <FactoryCard name={factoryTitle(factory)} purpose={basics.purpose ?? ''} stations={panelStations} />,
         }),
         cards: (
           <>

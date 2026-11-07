@@ -4,7 +4,7 @@
 // factory.yaml through the draft session, which autosaves it. A name that is taken never has its value
 // replaced: the card offers the existing secret or a new name, as the Code step does.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useId, useMemo, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { keys } from '../../api/queries';
 import { createSecret } from '../../api/secrets';
@@ -28,6 +28,7 @@ export function useModelKeySecret(): { secret: string | undefined; ready: boolea
 }
 
 export function ModelKeyCard({ org, factory }: { org: string; factory: string }) {
+  const titleId = useId();
   const session = useDraftSession();
   const client = useQueryClient();
   const { secret: current, ready } = useModelKeySecret();
@@ -93,6 +94,7 @@ export function ModelKeyCard({ org, factory }: { org: string; factory: string })
 
   return (
     <SectionCard
+      headingId={titleId}
       title="Model key"
       description="Every agent runs on this key. Paste a Claude subscription token or an Anthropic API key."
     >
@@ -120,7 +122,7 @@ export function ModelKeyCard({ org, factory }: { org: string; factory: string })
 
         {showForm ? (
           <form onSubmit={submit} noValidate className="flex animate-fade-in flex-col gap-3">
-            <Field label="Model key" error={emptyError} help="Goal saves it as a secret, open to this factory only.">
+            <Field labelledBy={titleId} error={emptyError} help="Goal saves it as a secret, open to this factory only.">
               <SecretInput
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
