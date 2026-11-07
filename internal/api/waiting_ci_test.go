@@ -12,12 +12,15 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// The repository and commits of TestAPI_WaitingForCI.
+// The repository, commits and checks of TestAPI_WaitingForCI.
 const (
 	ciRepo      = "github.com/acme/app"
 	ciFailedSHA = "aaa111"
 	ciSHA       = "bbb222"
 	ciTestsURL  = "https://github.com/acme/app/actions/runs/2"
+	ciLint      = "lint"
+	ciTest      = "test"
+	ciUnit      = "unit"
 )
 
 // A part queued at build, a station with waitFor: ci, whose first CI round failed and whose open
@@ -37,7 +40,7 @@ func TestAPI_WaitingForCI(t *testing.T) {
 
 	first := h.openCIWait(t, part, ciFailedSHA, 1)
 	h.recordChecks(t, ciFailedSHA, ports.Check{
-		Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed, URL: ciTestsURL, FailedJobs: []string{"unit"},
+		Name: ciTest, State: ports.CheckFinished, Result: ports.CheckFailed, URL: ciTestsURL, FailedJobs: []string{ciUnit},
 	})
 
 	if _, err := h.store.EndCIWaits(inOrg(t), []domain.CIWaitID{first.ID}, domain.CIFailed, h.clock.Now()); err != nil {
@@ -46,23 +49,23 @@ func TestAPI_WaitingForCI(t *testing.T) {
 
 	h.openCIWait(t, part, ciSHA, 2)
 	h.recordChecks(t, ciSHA,
-		ports.Check{Name: "lint", State: ports.CheckFinished, Result: ports.CheckPassed},
-		ports.Check{Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed, URL: ciTestsURL, FailedJobs: []string{"unit", "race"}},
+		ports.Check{Name: ciLint, State: ports.CheckFinished, Result: ports.CheckPassed},
+		ports.Check{Name: ciTest, State: ports.CheckFinished, Result: ports.CheckFailed, URL: ciTestsURL, FailedJobs: []string{ciUnit, "race"}},
 		ports.Check{Name: "e2e", State: ports.CheckRunning},
 	)
 
 	passed, failed := gen.CICheckResultPassed, gen.CICheckResultFailed
 	url, pr := ciTestsURL, prURL
 	failedTest := gen.CICheck{
-		Repo: ciRepo, Name: "test", State: gen.CICheckStateFinished, Result: &failed, Url: &url, FailedJobs: []string{"unit"},
+		Repo: ciRepo, Name: ciTest, State: gen.CICheckStateFinished, Result: &failed, Url: &url, FailedJobs: []string{ciUnit},
 	}
 	want := &gen.ItemWaiting{
 		Kind: gen.WaitingCI, Items: []string{}, Files: []string{}, Needs: []gen.ItemWaitingNeed{},
 		Ci: &gen.ItemWaitingCI{
 			Commits: []gen.CICommit{{Repo: ciRepo, Sha: ciSHA, Url: &pr}},
 			Checks: []gen.CICheck{
-				{Repo: ciRepo, Name: "lint", State: gen.CICheckStateFinished, Result: &passed, FailedJobs: []string{}},
-				{Repo: ciRepo, Name: "test", State: gen.CICheckStateFinished, Result: &failed, Url: &url, FailedJobs: []string{"unit", "race"}},
+				{Repo: ciRepo, Name: ciLint, State: gen.CICheckStateFinished, Result: &passed, FailedJobs: []string{}},
+				{Repo: ciRepo, Name: ciTest, State: gen.CICheckStateFinished, Result: &failed, Url: &url, FailedJobs: []string{ciUnit, "race"}},
 				{Repo: ciRepo, Name: "e2e", State: gen.CICheckStateRunning, FailedJobs: []string{}},
 			},
 			Finished: 2, Total: 3,

@@ -29,35 +29,7 @@ func TestWaitingFor(t *testing.T) {
 		Paths: []string{"web/src/**", itemsQuery, "internal/api/**", queriesGlob},
 	}
 
-	at := time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
-	wait := func(id CIWaitID, visit string, round int, outcome CIOutcome) CIWaitRecord {
-		w := CIWaitRecord{ID: id, NewCIWait: NewCIWait{
-			Item: "i", Station: "review", Visit: visit, Repo: "github.com/acme/app", SHA: "abc123",
-			Phase: CIPhaseBefore, Round: round, StartedAt: at.Add(time.Duration(round) * time.Minute),
-		}}
-		if outcome != "" {
-			w.EndedAt, w.Outcome = w.StartedAt.Add(30*time.Second), outcome
-		}
-
-		return w
-	}
-	open := wait("w2", "v1", 2, "")
-	openOther := wait("w3", "v1", 2, "")
-	openOther.Repo = "gitlab.com/acme/lib"
-	failed := wait("w1", "v1", 1, CIFailed)
-	timedOut := wait("w1", "v1", 1, CITimedOut)
-	passed := wait("w1", "v1", 1, CIPassed)
-	otherVisit := wait("w0", "v0", 1, CIFailed)
-
-	tests := []struct {
-		name   string
-		item   Item
-		needs  []OpenNeed
-		target string
-		ci     []CIWaitRecord
-		want   Waiting
-		ok     bool
-	}{
+	tests := append([]waitingCase{
 		{name: "not waiting", item: Item{State: StateInProgress}, needs: []OpenNeed{planned}},
 		{name: "no open needs", item: queued},
 		{
@@ -103,6 +75,43 @@ func TestWaitingFor(t *testing.T) {
 			},
 			ok: true,
 		},
+	}, ciWaitingCases(queued, planned, overSQL, turn)...)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := WaitingFor(tt.item, tt.needs, tt.target, tt.ci)
+			if ok != tt.ok || !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("WaitingFor = %+v, %v; want %+v, %v", got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+// waitingCase is a case of TestWaitingFor.
+type waitingCase struct {
+	name   string
+	item   Item
+	needs  []OpenNeed
+	target string
+	ci     []CIWaitRecord
+	want   Waiting
+	ok     bool
+}
+
+// ciWaitingCases are the cases of TestWaitingFor with CI waits: kind ci, the needs that win over
+// it, and which ended wait is the failure.
+func ciWaitingCases(queued Item, planned, overSQL, turn OpenNeed) []waitingCase {
+	open := ciWait("w2", "v1", 2, "")
+	openOther := ciWait("w3", "v1", 2, "")
+	openOther.Repo = "gitlab.com/acme/lib"
+	failed := ciWait("w1", "v1", 1, CIFailed)
+	timedOut := ciWait("w1", "v1", 1, CITimedOut)
+	passed := ciWait("w1", "v1", 1, CIPassed)
+	otherVisit := ciWait("w0", "v0", 1, CIFailed)
+
+	return []waitingCase{
 		{
 			name: "ci only", item: queued, ci: []CIWaitRecord{open, openOther},
 			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open, openOther}}, ok: true,
@@ -142,15 +151,20 @@ func TestWaitingFor(t *testing.T) {
 			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+// ciWait is a before wait on appKey in round of visit, started round minutes after 09:00, open
+// when outcome is empty and otherwise ended with it.
+func ciWait(id CIWaitID, visit string, round int, outcome CIOutcome) CIWaitRecord {
+	at := time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
+	w := CIWaitRecord{ID: id, NewCIWait: NewCIWait{
+		Item: "i", Station: stationBuild, Visit: visit, Repo: appKey, SHA: "abc123",
+		Phase: CIPhaseBefore, Round: round, StartedAt: at.Add(time.Duration(round) * time.Minute),
+	}}
 
-			got, ok := WaitingFor(tt.item, tt.needs, tt.target, tt.ci)
-			if ok != tt.ok || !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("WaitingFor = %+v, %v; want %+v, %v", got, ok, tt.want, tt.ok)
-			}
-		})
+	if outcome != "" {
+		w.EndedAt, w.Outcome = w.StartedAt.Add(30*time.Second), outcome
 	}
+
+	return w
 }
