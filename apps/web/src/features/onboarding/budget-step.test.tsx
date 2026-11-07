@@ -177,14 +177,16 @@ describe('step 5, set budgets and targets', () => {
     expect(screen.getByText('~$31')).toBeTruthy();
     expect(screen.getByText(/at about \$3\.10 each for a typical item/)).toBeTruthy();
 
-    const exhausted = screen.getByRole('group', { name: /When a budget runs out/ });
+    const exhausted = screen.getByRole('group', { name: 'When a budget runs out' });
     expect(within(exhausted).getByRole('radio', { name: /Finish what's started/ })).toBeTruthy();
     expect(
       screen.getByText('Running items finish; nothing new starts until the last 7 days’ spend is under the budget.'),
     ).toBeTruthy();
     expect(screen.queryByText(/until tomorrow/)).toBeNull();
     const tip = within(exhausted).getByRole('button', { name: 'About when a budget runs out' });
-    expect(tip.getAttribute('aria-describedby')).toBeTruthy();
+    const described = tip.getAttribute('aria-describedby');
+    expect(described).toBeTruthy();
+    expect(document.getElementById(described ?? '')?.textContent).toContain('no reset at midnight');
     expect(within(exhausted).getByRole('radio', { name: /Stop everything/ })).toBeTruthy();
 
     expect(screen.getByRole('textbox', { name: 'Target, items a day' })).toBeTruthy();

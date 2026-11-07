@@ -70,6 +70,7 @@ export function BudgetFields() {
       <Estimate itemsPerDay={itemsPerDay} />
 
       <RadioCards
+        groupName="When a budget runs out"
         legend={
           <span className="flex items-center gap-1">
             When a budget runs out

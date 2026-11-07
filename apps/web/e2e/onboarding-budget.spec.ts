@@ -41,7 +41,7 @@ for (const width of widths) {
     const tip = page.getByRole('button', { name: 'About when a budget runs out' });
     if (width === 375) expect((await tip.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     await tip.click();
-    await expect(page.getByRole('tooltip')).toContainText('no reset at midnight');
+    await expect(page.locator('[data-radix-popper-content-wrapper]')).toContainText('no reset at midnight');
 
     await expectNoHorizontalScroll(page);
   });

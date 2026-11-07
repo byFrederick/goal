@@ -21,7 +21,7 @@ export function dayShare(week: number): number {
   return Math.round(week / 7);
 }
 
-/** "4 times the average": how far the most one item may cost is above the average cost. */
+/** "4 times the average": how far the most one agent run may cost is above the average cost. */
 export function timesAverage(perItem: number): number {
   return Math.round(perItem / averageItemUsd);
 }

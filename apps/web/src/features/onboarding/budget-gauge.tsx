@@ -1,4 +1,4 @@
-// The Budget card of the dark panel (docs/design/screens/get-started/budget.jpg): a half-circle gauge . The arc is the andon panel's
+// The Budget card of the dark panel (docs/design/screens/get-started/budget.jpg): a half-circle gauge of the week's budget out of $2,000. The arc is the andon panel's
 // tokens; its colour is run, not amber, because MASTER.md keeps amber for the constraint.
 import { formatUsdCompact } from '../../shared/format';
 import { dayShareHint, gaugeFraction } from './budget-hints';
