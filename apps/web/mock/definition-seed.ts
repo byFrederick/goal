@@ -119,6 +119,7 @@ spec:
   runtime:
     model: claude-opus-5-5
     modelConnection: claude
+    modelKey: "{{secret.anthropic}}"
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
     repositories:
