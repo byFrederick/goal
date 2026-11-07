@@ -133,7 +133,7 @@ describe('the sidebar’s New item picker', () => {
       within(list)
         .getAllByRole('option')
         .map((o) => o.textContent),
-    ).toEqual(['Choose a factory', 'goal', 'sre']);
+    ).toEqual(['Choose a factory', 'Goal', 'Sre']);
   });
 
   it('renders loading as busy and disabled, with the picker saying Loading', async () => {
@@ -193,7 +193,7 @@ describe('Create item while submitItem is pending', () => {
     renderPicker(writable);
     fireEvent.click(await newItemButton());
     fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Factory' }), { key: 'Enter' });
-    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'goal' }));
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Goal' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Check the budget' } });
     const submit = screen.getByRole('button', { name: 'Create item' });
     fireEvent.click(submit);
@@ -213,7 +213,7 @@ describe('the Start control', () => {
     renderPicker(writable);
     fireEvent.click(await newItemButton());
     fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Factory' }), { key: 'Enter' });
-    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'goal' }));
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Goal' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Check the budget' } });
   }
 
@@ -302,7 +302,7 @@ describe('New item’s Repositories field', () => {
     });
     fireEvent.click(await newItemButton());
     fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Factory' }), { key: 'Enter' });
-    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'goal' }));
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Goal' }));
     fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Check the budget' } });
   }
   const field = () => screen.findByRole('group', { name: /Repositories/ });

@@ -12,6 +12,7 @@ import { pageTitle } from '../app/route-focus';
 import { FloorSkeleton } from '../app/route-skeletons';
 import { FloorPage } from '../features/floor/floor-page';
 import { type FloorSearch, floorSearch, rangeOf } from '../features/floor/range';
+import { factoryTitle } from '../shared/factory';
 
 export const Route = createFileRoute('/o/$org/f/$factory/')({
   pendingComponent: FloorSkeleton,
@@ -30,6 +31,6 @@ export const Route = createFileRoute('/o/$org/f/$factory/')({
       ensureLoaded(queryClient, constraintQuery(org.id, factory.id, deps)),
     ]);
   },
-  head: ({ match: { context } }) => pageTitle('Floor', context.factory.name, context.org.name),
+  head: ({ match: { context } }) => pageTitle('Floor', factoryTitle(context.factory), context.org.name),
   component: FloorPage,
 });

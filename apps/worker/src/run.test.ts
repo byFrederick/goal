@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CanUseTool, Options, query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { untrustedDataSection } from './agent.js';
 import type { Shell } from './environment.js';
 import type { WorkerEvent } from './events.js';
@@ -98,6 +98,7 @@ async function run(
     remoteHead?: RunDeps['remoteHead'];
     recorded?: RunDeps['recorded'];
     environment?: RunDeps['environment'];
+    resources?: RunDeps['resources'];
   } = {},
 ) {
   const { fake, calls } = scripted(messages, opts);
@@ -113,6 +114,7 @@ async function run(
     ...(opts.remoteHead ? { remoteHead: opts.remoteHead } : {}),
     ...(opts.recorded ? { recorded: opts.recorded } : {}),
     ...(opts.environment ? { environment: opts.environment } : {}),
+    ...(opts.resources ? { resources: opts.resources } : {}),
   });
   for (const call of calls) await call.read;
   return { code, events, calls };
@@ -572,6 +574,86 @@ describe('runTask repositories', () => {
     expect(events.at(-1)).toMatchObject({ status: 'failed', error: 'boom' });
     expect(events.at(-1)).not.toHaveProperty('pushed_head');
     expect((events.at(-1) as { repositories: unknown[] }).repositories).toHaveLength(2);
+  });
+});
+
+describe('runTask box usage', () => {
+  let dir: string;
+  let root: string;
+  let startFile: string;
+  const log = vi.fn();
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'goal-run-cgroup-'));
+    root = join(dir, 'cgroup');
+    startFile = join(dir, 'cpu-start-usec');
+    await mkdir(root);
+    log.mockReset();
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  /** The cgroup as the agent ends: cpu.stat's usage_usec and memory.peak. */
+  const fixtures = async () => {
+    await writeFile(startFile, '1500000');
+    await writeFile(join(root, 'cpu.stat'), 'usage_usec 9000000\nuser_usec 6000000\nsystem_usec 3000000\n');
+    await writeFile(join(root, 'memory.peak'), '805306368\n');
+  };
+
+  it('reports the CPU seconds since prepare and the peak memory on the finished line', async () => {
+    await fixtures();
+
+    const { code, events } = await run([success], { resources: { root, startFile, log } });
+
+    expect(code).toBe(0);
+    expect(events.at(-1)).toMatchObject({
+      type: 'finished',
+      status: 'succeeded',
+      at: at.toISOString(),
+      cpu_seconds: 7.5,
+      peak_memory_bytes: 805_306_368,
+      memory_source: 'cgroup',
+    });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('reports them on a failed finished line too: a crash or no result', async () => {
+    await fixtures();
+
+    const crashed = await run([], { throws: new Error('boom'), resources: { root, startFile, log } });
+    expect(crashed.code).toBe(1);
+    expect(crashed.events.at(-1)).toMatchObject({ status: 'failed', error: 'boom', cpu_seconds: 7.5 });
+
+    const silent = await run([], { resources: { root, startFile, log } });
+    expect(silent.events).toEqual([
+      expect.objectContaining({ type: 'finished', status: 'failed', peak_memory_bytes: 805_306_368 }),
+    ]);
+  });
+
+  it('leaves both out when the counters or the start file are missing, and the run ends as it would', async () => {
+    const { code, events } = await run([success], { resources: { root, startFile, log } });
+
+    expect(code).toBe(0);
+    const last = events.at(-1);
+    expect(last).toMatchObject({ type: 'finished', status: 'succeeded', at: at.toISOString() });
+    expect(last).not.toHaveProperty('cpu_seconds');
+    expect(last).not.toHaveProperty('peak_memory_bytes');
+    expect(last).not.toHaveProperty('memory_source');
+    // No line added, none changed: the same events as a run that measures nothing.
+    expect(events).toEqual((await run([success])).events);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves cpu_seconds out without the start file, and keeps the peak memory', async () => {
+    await fixtures();
+    await rm(startFile);
+
+    const { events } = await run([success], { resources: { root, startFile, log } });
+
+    expect(events.at(-1)).not.toHaveProperty('cpu_seconds');
+    expect(events.at(-1)).toMatchObject({ peak_memory_bytes: 805_306_368 });
   });
 });
 

@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { ApiError, archiveFactory, pauseFactory, purgeFactory } from '../../api/client';
 import { defKeys, keys } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { refreshFactory } from './refresh';
@@ -50,7 +51,9 @@ export function DangerZone({ org, factory, archives, deletes }: DangerZoneProps)
     onSuccess: (answer) => {
       client.setQueryData(detailKey, answer);
       setArchiveOpen(false);
-      toast.success(`Archived ${factory.name}`, { description: 'It stays readable, paused. Restore brings it back.' });
+      toast.success(`Archived ${factoryTitle(factory)}`, {
+        description: 'It stays readable, paused. Restore brings it back.',
+      });
     },
     onSettled: () => refreshFactory(client, org.id, factory.id),
   });
@@ -64,7 +67,7 @@ export function DangerZone({ org, factory, archives, deletes }: DangerZoneProps)
       // Leave the factory's page before its queries go, so nothing on it refetches a deleted factory.
       await navigate({ to: '/o/$org', params: { org: org.slug }, replace: true });
       client.removeQueries({ queryKey: keys.factory(org.id, factory.id) });
-      toast.success(`Deleted ${factory.name}`, {
+      toast.success(`Deleted ${factoryTitle(factory)}`, {
         description: 'Its items, runs, events and versions are gone. The audit history stays.',
       });
     },
@@ -141,7 +144,7 @@ export function DangerZone({ org, factory, archives, deletes }: DangerZoneProps)
       <ConfirmDialog
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
-        title={`Archive ${factory.name}?`}
+        title={`Archive ${factoryTitle(factory)}?`}
         description={
           needsPause
             ? 'It is running. Pause first stops it taking work, then archives it: it leaves the sidebar and the Factories home and stays readable, with its items and versions.'
@@ -162,7 +165,7 @@ export function DangerZone({ org, factory, archives, deletes }: DangerZoneProps)
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        title={`Delete ${factory.name}?`}
+        title={`Delete ${factoryTitle(factory)}?`}
         description="Its items, runs, events and versions go too. The audit history stays."
         confirmLabel="Delete factory"
         pendingLabel="Deleting…"

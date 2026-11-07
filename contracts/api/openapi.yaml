@@ -100,10 +100,7 @@ tags:
       repositories. Owners and admins list and read webhooks (webhook:read) and create, change and
       delete them (webhook:manage, after a recent sign-in, never with a key or a personal token);
       only webhook:manage reads a delivery's headers and body, since an organization webhook
-      carries every repository's events. The factory routes list the endpoints open to the
-      factory and their deliveries to anyone who sees the factory; a factory endpoint's signing
-      secret is sealed under the platform's master key and shown only in the answers that create
-      it and rotate it. Deliveries are kept 30 days.
+      carries every repository's events. Deliveries are kept 30 days.
   - name: views
     description: >-
       A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
@@ -1179,8 +1176,8 @@ paths:
         waits on nothing else. An item has at most one entry (question, then decision, then blocked,
         then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients
         that do not know them render as a generic row. When more entries exist than limit, the
-        most recent ones are kept and truncated is true. Entries are ordered by kind (decision and
-        question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
+        most recent ones are kept and truncated is true. Entries are ordered by since, newest first,
+        then by id, whatever their kind. The default limit, 200, is
         enough for every screen to count what it groups (the Floor's Needs you card, the phone's
         Items view).
       parameters:
@@ -2260,10 +2257,10 @@ paths:
       operationId: getIntake
       x-goal-scope: intake:read
       tags: [intake]
-      summary: Where the factory's newest items came from, and its triggers
+      summary: The factory's newest items, its origins and its triggers
       description: >-
-        The sources of the factory's newest `items` items (by creation) with the UTC days the
-        oldest and the newest of them were created, and every trigger of the current definition
+        How many of the factory's newest `items` items (by creation) there are, with the UTC days
+        the oldest and the newest of them were created, and every trigger of the current definition
         in definition order, each with the items it created on each of the last 7 UTC days and
         its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it
         on `item` and `definition` stream events.
@@ -2277,7 +2274,7 @@ paths:
         - name: items
           in: query
           required: false
-          description: How many of the newest items the sources count (default 48)
+          description: How many of the newest items `items`, `from` and `to` count (default 48)
           schema: { type: integer, minimum: 1, maximum: 500, default: 48 }
         - name: window
           in: query
@@ -3032,146 +3029,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FactoryRepositoryTestList" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-    get:
-      operationId: listWebhookEndpoints
-      x-goal-scope: factory:read
-      tags: [webhooks]
-      summary: The webhook endpoints open to the factory
-      description: >-
-        By name, the factory's own endpoints and the organization's webhooks open to it, each with
-        its address, kind, sender, the name of its signing secret, the triggers of the factory's
-        current definition it feeds (those whose on is webhook.<name> or starts with
-        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one
-        release beside listWebhooks.
-      responses:
-        "200":
-          description: The endpoints
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WebhookEndpointList" }
-        default: { $ref: "#/components/responses/Problem" }
-    post:
-      operationId: createWebhookEndpoint
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: Create a webhook endpoint
-      description: >-
-        A factory endpoint with a new signing secret, answered here once and never again: copy it
-        to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400
-        webhook-invalid for a name that is not a slug or an unknown kind; 409
-        webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while
-        goald has no master key. Needs a sign-in from the last 10 minutes.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/NewWebhookEndpoint" }
-      responses:
-        "201":
-          description: The endpoint with its signing secret
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CreatedWebhookEndpoint" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-    delete:
-      operationId: deleteWebhookEndpoint
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: Delete a webhook endpoint and its deliveries
-      description: >-
-        Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to
-        the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a
-        sign-in from the last 10 minutes.
-      responses:
-        "204": { description: Deleted }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-    post:
-      operationId: rotateWebhookSecret
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: Replace an endpoint's signing secret
-      description: >-
-        A new signing secret, answered here once and never again; the old one stops opening at
-        once, so the sender's requests are refused until it has the new one. 404
-        webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is
-        replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
-        from the last 10 minutes.
-      responses:
-        "200":
-          description: The endpoint with its new signing secret
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CreatedWebhookEndpoint" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-    get:
-      operationId: listWebhookDeliveries
-      x-goal-scope: factory:read
-      tags: [webhooks]
-      summary: One page of an endpoint's deliveries, newest first
-      description: >-
-        What the endpoint received in the last 30 days, each with its outcome, without its
-        headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did
-        not answer; 404 webhook-not-found.
-      parameters:
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-        - name: after
-          in: query
-          description: The next_after of the previous page; deliveries received before it
-          schema: { type: string }
-      responses:
-        "200":
-          description: Deliveries, newest first
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WebhookDeliveryPage" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-      - name: delivery
-        in: path
-        required: true
-        description: The delivery's id
-        schema: { type: string }
-    get:
-      operationId: getWebhookDelivery
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: One delivery with its request
-      description: >-
-        The request as received: its headers (names lower-cased, never a signature header) and its
-        body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found
-        for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-      responses:
-        "200":
-          description: The delivery
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/webhooks:
     parameters:
@@ -4946,12 +4803,6 @@ components:
       required: true
       description: The organization webhook's name or id
       schema: { type: string }
-    WebhookEndpointRef:
-      name: endpoint
-      in: path
-      required: true
-      description: The webhook endpoint's id, the one in its address /hooks/{id}
-      schema: { type: string }
     UserRef:
       name: user
       in: path
@@ -5926,7 +5777,9 @@ components:
       description: >-
         Who did something: a person (kind user; id "local" is the local user, named "Local user
         (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an
-        agent or a job
+        agent or a job. Under sign-in a person is named as the sidebar names them (their name, or
+        their email while they have none), or "A former member" once they have left the
+        organization; their id stays the same
       required: [kind, id, name]
       properties:
         kind: { type: string, enum: [user, service, agent, system] }
@@ -7959,24 +7812,11 @@ components:
               per_day: { type: number, format: double, description: done divided by 7 }
     Intake:
       type: object
-      required: [items, from, to, sources, triggers, suggestions]
+      required: [items, from, to, triggers, suggestions]
       properties:
-        items: { type: integer, description: How many items the sources count, at most the items asked for }
+        items: { type: integer, description: How many of the factory's newest items there are, at most the items asked for }
         from: { type: string, format: date, nullable: true, description: The UTC day the oldest of them was created; null without items }
         to: { type: string, format: date, nullable: true, description: The UTC day the newest of them was created; null without items }
-        sources:
-          type: object
-          description: >-
-            How many of the items came from each source, zero included. Items whose creator
-            recorded no source count in items only.
-          required: [people, cli, api, schedule, webhook, github]
-          properties:
-            people: { type: integer }
-            cli: { type: integer }
-            api: { type: integer }
-            schedule: { type: integer }
-            webhook: { type: integer }
-            github: { type: integer }
         triggers:
           type: array
           description: The current definition's board.triggers, in definition order
@@ -8591,7 +8431,7 @@ components:
       description: >-
         One agent run: one container working one item at one station. Its full transcript is not
         kept (phase 2.2); the item's events carry the trace.
-      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version]
+      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version, cpu_seconds, peak_memory_bytes, box_size]
       properties:
         id: { type: string }
         item_id: { type: string }
@@ -8617,6 +8457,38 @@ components:
           type: integer
           nullable: true
           description: That version's number ("ran on v9"); null when the run has no version
+        cpu_seconds:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The CPU time the run's box used, in seconds; null while the run is running, when the
+            box could not read it or for a run from before it was recorded
+        peak_memory_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: The most memory the run's box used at once; null when cpu_seconds would be
+        peak_memory_source:
+          allOf: [{ $ref: "#/components/schemas/MemorySource" }]
+          nullable: true
+          description: >-
+            How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for
+            a run from before the source was recorded
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The box size the run ran in; null for a run from before box sizes were recorded
+    MemorySource:
+      type: string
+      description: >-
+        How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole
+        machine's used memory, read when the box's cgroup has no memory figures
+      enum: [cgroup, machine]
+    SandboxSize:
+      type: string
+      description: How much CPU and memory a run's box gets (a factory's runtime.size)
+      enum: [small, medium, large]
     OrgRunList:
       type: object
       required: [runs, next_cursor, summary]
@@ -8768,7 +8640,7 @@ components:
       properties:
         waiting_on_you:
           type: integer
-          description: Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you)
+          description: What waits on the caller across the organization (the sum of factories[].waiting_on_you)
         factories:
           type: array
           items: { $ref: "#/components/schemas/FactoryAttention" }
@@ -8777,7 +8649,7 @@ components:
       required: [factory_id, waiting_on_you, blocked_items, andon, connections_blocked]
       properties:
         factory_id: { type: string }
-        waiting_on_you: { type: integer, description: Items waiting for a human decision (every decision; phase 2.2 has no identity) }
+        waiting_on_you: { type: integer, description: "The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up" }
         blocked_items: { type: integer }
         andon:
           description: The open andon pull, or null while the line runs
@@ -8870,6 +8742,7 @@ components:
         - rework_usd
         - rework_share
         - budgets
+        - usage
       properties:
         window: { $ref: "#/components/schemas/SpendWindow" }
         since: { type: string, format: date-time, description: "The window's start, 00:00 UTC" }
@@ -8916,6 +8789,7 @@ components:
           type: array
           description: One per factory goald runs that the caller sees and that is not archived, by name
           items: { $ref: "#/components/schemas/SpendBudget" }
+        usage: { $ref: "#/components/schemas/SpendUsage" }
     SpendDay:
       type: object
       required: [day, usd, by_factory]
@@ -8939,6 +8813,63 @@ components:
         factory_id: { type: string }
         agent: { type: string, description: The agent's name in its factory }
         usd: { type: number, format: double }
+    SpendUsage:
+      type: object
+      description: >-
+        The CPU time and peak memory of the window's runs (a run counts by when it started), over
+        the runs that reported either, for the factories the caller sees. Each row groups the runs
+        of a factory's agent or station in boxes of one size; a group none of whose runs reported
+        a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one
+        last.
+      required: [by_agent, by_station]
+      properties:
+        by_agent:
+          type: array
+          items: { $ref: "#/components/schemas/AgentUsage" }
+        by_station:
+          type: array
+          items: { $ref: "#/components/schemas/StationUsage" }
+    AgentUsage:
+      type: object
+      required: [factory_id, agent, box_size, runs, cpu_seconds_p50, cpu_seconds_p90, peak_memory_bytes_p50, peak_memory_bytes_p90]
+      properties:
+        factory_id: { type: string }
+        agent: { type: string, description: The agent's name in its factory }
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The runs' box size; null for runs from before box sizes were recorded
+        runs: { type: integer, description: The runs that reported a CPU time or a peak memory }
+        cpu_seconds_p50:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The median CPU seconds of the runs that reported one, interpolated between the closest
+            runs (percentile_cont); null when none did
+        cpu_seconds_p90: { type: number, format: double, nullable: true, description: The 90th percentile, as cpu_seconds_p50 }
+        peak_memory_bytes_p50:
+          type: integer
+          format: int64
+          nullable: true
+          description: The median peak memory of the runs that reported one, rounded to a byte; null when none did
+        peak_memory_bytes_p90: { type: integer, format: int64, nullable: true, description: The 90th percentile, as peak_memory_bytes_p50 }
+    StationUsage:
+      description: AgentUsage by station
+      type: object
+      required: [factory_id, station, box_size, runs, cpu_seconds_p50, cpu_seconds_p90, peak_memory_bytes_p50, peak_memory_bytes_p90]
+      properties:
+        factory_id: { type: string }
+        station: { type: string, description: The station's id in its factory }
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The runs' box size; null for runs from before box sizes were recorded
+        runs: { type: integer, description: The runs that reported a CPU time or a peak memory }
+        cpu_seconds_p50: { type: number, format: double, nullable: true, description: As AgentUsage's }
+        cpu_seconds_p90: { type: number, format: double, nullable: true, description: As AgentUsage's }
+        peak_memory_bytes_p50: { type: integer, format: int64, nullable: true, description: As AgentUsage's }
+        peak_memory_bytes_p90: { type: integer, format: int64, nullable: true, description: As AgentUsage's }
     ModelSpend:
       type: object
       required: [model, usd]
@@ -9031,7 +8962,10 @@ components:
           allOf:
             - $ref: "#/components/schemas/ConstraintSummary"
         waiting: { $ref: "#/components/schemas/WaitingSummary" }
-        spend_usd: { type: number, format: double, description: Cost of the agent runs started in the window }
+        spend_usd:
+          type: number
+          format: double
+          description: The cost of every agent run of the factory started in the window, Jonah's and other runs without an item included, as Spend's budget rows count it; a running run counts with its cost so far
         budget_usd:
           type: number
           format: double
@@ -9095,7 +9029,7 @@ components:
       properties:
         entries:
           type: array
-          description: Ordered by kind, then oldest first
+          description: Ordered by since, newest first, then by id
           items: { $ref: "#/components/schemas/InboxEntry" }
         truncated: { type: boolean, description: More entries exist than limit; the most recent were kept }
     InboxEntryKind:
@@ -10237,58 +10171,6 @@ components:
       additionalProperties:
         type: array
         items: { type: string }
-    WebhookKind:
-      type: string
-      enum: [generic, github]
-      description: >-
-        How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex
-        HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's
-        X-Hub-Signature-256 and X-GitHub-Event.
-    NewWebhookEndpoint:
-      type: object
-      required: [name, kind]
-      properties:
-        name: { type: string, description: "A slug unique within the factory, the one a trigger's on: webhook.<name> names" }
-        kind: { $ref: "#/components/schemas/WebhookKind" }
-    WebhookEndpointList:
-      type: object
-      required: [endpoints]
-      properties:
-        endpoints:
-          type: array
-          items: { $ref: "#/components/schemas/WebhookEndpoint" }
-    WebhookEndpoint:
-      type: object
-      description: A webhook endpoint open to the factory, never its signing secret
-      required: [id, name, kind, sender, address, secret_name, created_at, rotated_at, triggers, days]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        kind:
-          allOf: [{ $ref: "#/components/schemas/WebhookKind" }]
-          description: A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
-        sender:
-          allOf: [{ $ref: "#/components/schemas/WebhookSender" }]
-          description: Its sender; a factory endpoint of kind generic reads as standard
-        address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
-        secret_name:
-          type: string
-          description: >-
-            A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the
-            endpoint, so no secret has this name; an organization webhook's is the name of the
-            organization secret that signs it.
-        created_at: { type: string, format: date-time }
-        rotated_at: { type: string, format: date-time, nullable: true, description: When its secret was last replaced; null when it never was }
-        triggers:
-          type: array
-          description: The names of the current definition's triggers it feeds, in definition order
-          items: { type: string }
-        days:
-          type: array
-          description: The last 7 UTC days, oldest first, today last, each zero-filled
-          minItems: 7
-          maxItems: 7
-          items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
     WebhookSender:
       type: string
       enum: [github, gitlab, standard, pagerduty, sentry, token]
@@ -10427,22 +10309,6 @@ components:
         day: { type: string, format: date, description: The UTC day }
         delivered: { type: integer, description: Deliveries accepted, with or without an item created }
         refused: { type: integer }
-    CreatedWebhookEndpoint:
-      description: >-
-        An endpoint with its signing secret, answered only by createWebhookEndpoint and
-        rotateWebhookSecret and never readable again.
-      allOf:
-        - $ref: "#/components/schemas/WebhookEndpoint"
-        - type: object
-          required: [secret]
-          properties:
-            secret:
-              type: string
-              pattern: "^[0-9a-f]{64}$"
-              description: >-
-                The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give
-                this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret
-                field takes it.
     WebhookDeliveryOutcome:
       type: string
       enum: [refused, accepted, created]

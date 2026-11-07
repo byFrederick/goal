@@ -66,7 +66,7 @@ test('a new key shows its secret once, then lists only its hint', async ({ page 
   await d.getByLabel('Name').fill('release-pipeline');
   await expect(d.getByText('The audit log shows its actions as release-pipeline (API key).')).toBeVisible();
   await d.getByLabel('Only these').check();
-  await d.getByLabel('goal', { exact: true }).check();
+  await d.getByLabel('Goal', { exact: true }).check();
   await d.getByText('CI: submit work').click();
   await expect(d.getByLabel('See factories')).toBeChecked();
   await expect(d.getByLabel('Submit items')).toBeChecked();

@@ -86,3 +86,19 @@ describe('StatStrip narrow', () => {
     expect(cells[2]?.className).not.toMatch(/(^|\s)(md:)?border-l/);
   });
 });
+
+describe('StatStrip neutral delta', () => {
+  it('draws a delta with no good flag in muted, and keeps the note beside it', () => {
+    render(
+      <StatStrip
+        label="Flow"
+        stats={[{ label: 'Sent back', value: 5, note: 'No target set', delta: { text: '0' } }]}
+      />,
+    );
+
+    const delta = screen.getByText('0', { selector: 'span.text-muted' });
+    expect(delta.className).not.toContain('text-ok-ink');
+    expect(delta.className).not.toContain('text-rework-ink');
+    expect(screen.getByText('No target set')).toBeTruthy();
+  });
+});

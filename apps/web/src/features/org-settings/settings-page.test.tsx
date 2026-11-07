@@ -148,7 +148,7 @@ describe('Organization settings page', () => {
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Acme');
     expect((screen.getByLabelText('Address') as HTMLInputElement).value).toBe('acme');
     expect(screen.getByText('Factories')).toBeTruthy();
-    for (const factory of ['goal', 'sre', 'support']) {
+    for (const factory of ['Goal', 'Sre', 'Support']) {
       expect(screen.getByLabelText(factory)).toBeTruthy();
     }
   });
@@ -318,7 +318,7 @@ describe('saving General and Slots', () => {
 
   it('marks an invalid slot cap at its field and does not send it', async () => {
     renderPage();
-    const sre = screen.getByLabelText('sre');
+    const sre = screen.getByLabelText('Sre');
     fireEvent.change(sre, { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(sre.getAttribute('aria-invalid')).toBe('true');

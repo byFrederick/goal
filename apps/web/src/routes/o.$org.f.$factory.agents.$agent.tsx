@@ -6,6 +6,7 @@ import { AgentSkeleton } from '../app/route-skeletons';
 import { NotFoundScreen } from '../app/states';
 import { AgentScreen } from '../features/agents/agent-screen';
 import { type AgentSearch, agentViewOf } from '../features/agents/views';
+import { factoryTitle } from '../shared/factory';
 
 // $agent is the agent's name as the factory's definition declares it. The page reads its statistics
 // here; the definition's cards (skills, tool policy) read the version that runs and show their own
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/o/$org/f/$factory/agents/$agent')({
       throw err;
     }
   },
-  head: ({ match: { context }, params }) => pageTitle(params.agent, context.factory.name, context.org.name),
+  head: ({ match: { context }, params }) => pageTitle(params.agent, factoryTitle(context.factory), context.org.name),
   component: AgentScreen,
   notFoundComponent: () => <NotFoundScreen what="agent" />,
 });

@@ -153,7 +153,7 @@ func (q *Queries) EvidenceEvents(ctx context.Context, arg EvidenceEventsParams) 
 }
 
 const evidenceItems = `-- name: EvidenceItems :many
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, f.finished_at::timestamptz AS finished_at
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, f.finished_at::timestamptz AS finished_at
 FROM (
   SELECT d.id, d.done_at AS finished_at FROM work_items d
   WHERE d.factory_id = $1 AND d.state = 'done'
@@ -225,7 +225,6 @@ func (q *Queries) EvidenceItems(ctx context.Context, arg EvidenceItemsParams) ([
 			&i.WorkItem.Paths,
 			&i.WorkItem.BaseCommit,
 			&i.WorkItem.Trigger,
-			&i.WorkItem.Source,
 			&i.WorkItem.IntegrationBranch,
 			&i.WorkItem.IntegrationLandAt,
 			&i.WorkItem.Origin,
@@ -250,7 +249,7 @@ func (q *Queries) EvidenceItems(ctx context.Context, arg EvidenceItemsParams) ([
 }
 
 const evidenceRuns = `-- name: EvidenceRuns :many
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs WHERE item_id = ANY($1::uuid[]) ORDER BY item_id, started_at, id
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs WHERE item_id = ANY($1::uuid[]) ORDER BY item_id, started_at, id
 `
 
 // The runs of the items, by item, oldest first (agent_runs_item_id_idx).
@@ -284,6 +283,10 @@ func (q *Queries) EvidenceRuns(ctx context.Context, itemIds []uuid.UUID) ([]Agen
 			&i.Kind,
 			&i.Brief,
 			&i.Output,
+			&i.CpuSeconds,
+			&i.PeakMemoryBytes,
+			&i.BoxSize,
+			&i.PeakMemorySource,
 		); err != nil {
 			return nil, err
 		}

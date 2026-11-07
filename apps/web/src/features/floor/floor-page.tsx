@@ -1,7 +1,15 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query';
 import { useSearch } from '@tanstack/react-router';
-import { boardQuery, constraintQuery, itemsQuery, metricsQuery, overviewQuery } from '../../api/queries';
+import {
+  boardQuery,
+  constraintQuery,
+  itemsQuery,
+  metricsQuery,
+  overviewQuery,
+  versionModelQuery,
+} from '../../api/queries';
 import { TopBarSlot } from '../../app/top-bar';
+import { modelOf } from '../../shared/definition/model';
 import { useFactory } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { ActivityCard } from './activity-card';
@@ -11,6 +19,7 @@ import { LineNow } from './line-now';
 import { NeedsYouCard } from './needs-you-card';
 import { rangeOf } from './range';
 import { SetupCard } from './setup-card';
+import { hasCode } from './setup-progress';
 import { WaitsCard } from './waits-card';
 import { WaysInCard } from './ways-in-card';
 import { WeeklyCard } from './weekly-card';
@@ -33,6 +42,9 @@ export function FloorPage() {
   // The week's finished items for the line's Done station; the Spend tile reads the same query.
   const week = useQuery(overviewQuery(org.id, '7d'));
   const weekRow = week.data?.factories.find((f) => f.factory.id === factory.id);
+  // Whether the line has code decides "merged" or "done"; until the model answers, "done" is true for every line.
+  const model = useQuery({ ...versionModelQuery(org.id, factory.id, 'current'), select: (v) => modelOf(v.model) });
+  const merges = model.data ? hasCode(model.data) : false;
   // The lead time the what-if measures against: the range's p85, once an item finished in it.
   const leadTimeP85 = metrics.items_done === 0 ? null : (metrics.lead_time_hours?.p85 ?? null);
   const doneThisWeek = weekRow ? weekRow.throughput.days.reduce((sum, day) => sum + day.done, 0) : null;
@@ -42,14 +54,23 @@ export function FloorPage() {
       <TopBarSlot actions={<FloorTopBarActions factory={factory} board={board} metrics={metrics} />} />
       <FloorHeader board={board} metrics={metrics} />
 
-      <LineNow board={board} constraint={constraint.constraint ?? board.constraint} doneThisWeek={doneThisWeek} />
+      <LineNow
+        board={board}
+        constraint={constraint.constraint ?? board.constraint}
+        doneThisWeek={doneThisWeek}
+        merges={merges}
+      />
       <FlowStats metrics={metrics} />
       <NewFactoryRow />
 
       <div className={grid}>
         <NeedsYouCard />
-        <WaitsCard range={range} leadTimeP85={leadTimeP85} />
-        <WeeklyCard range={range} />
+        <WaitsCard
+          range={range}
+          leadTimeP85={leadTimeP85}
+          wipLimitOf={(station) => board.stations.find((s) => s.id === station)?.wip_limit ?? null}
+        />
+        <WeeklyCard range={range} merges={merges} />
         <ActivityCard />
       </div>
     </div>

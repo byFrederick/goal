@@ -14,7 +14,7 @@
 // allows (Org.can); the people routes (members, invitations, factory roles, transfer) answer as
 // goald does, a fresh-only change asking for a recent sign-in (the factory routes do not filter by
 // factory role under sign-in).
-// The organizations' API keys are keys.ts's; their connections and connection kinds connections.ts's;
+// The organizations' API keys are keys.ts's;
 // their knowledge bases knowledge.ts's.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
@@ -63,7 +63,6 @@ import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.t
 import { createAccess } from './access.ts';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createCodeHosts } from './code-hosts.ts';
-import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
 import { createEnvironments, serveCatalog } from './environments.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
@@ -97,7 +96,6 @@ import { runStarterCourse, starterTitles } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
-import { createWebhooks } from './webhooks.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -282,8 +280,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const subscribers = new Set<Subscriber>();
   const definitions = createDefinitions({
     state: () => state,
-    // Read at request time: the connections are made just below.
-    connections: (org) => connections.outlines(org),
     knowledgeSources: (org) => knowledge.names(org),
     knowledgeIndex: (org, name) => knowledge.indexOf(org, name),
     broadcast: (org, event, data) => {
@@ -299,22 +295,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     person: (req) => auth.who(req)?.person,
     member: (org, user) => state.people.members[org]?.some((m) => m.userId === user) ?? false,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
-    acme: acmeOrg,
-  });
-
-  const connections = createConnections({
-    clock,
-    actor: (req) => auth.actor(req),
-    stale: (req, res) => stale(req, res),
-    factories: (org) => state.factories.filter((f) => f.org_id === org),
-    names: (factory) => definitions.connectionNames(factory),
-    audit: (org, by, action, target, data, at) => auditAs(org, by, action, target, data, at),
-    broadcast: (org, event, data) => {
-      for (const sub of subscribers) {
-        if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      }
-    },
-    sources: (org, name) => knowledge.readers(org, name),
     acme: acmeOrg,
   });
 
@@ -352,7 +332,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     actor: (req) => auth.actor(req),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     listedBy: (factory) => definitions.knowledgeSourceNames(factory),
-    connectionSync: (org, name) => connections.syncOf(org, name),
+    // goald serves no organization connections (ADR 0037): no name resolves.
+    connectionSync: () => undefined,
     audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
@@ -376,10 +357,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     clock,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     acme: acmeOrg,
-  });
-  const webhooks = createWebhooks({
-    clock,
-    factories: (org) => state.factories.filter((f) => f.org_id === org),
   });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
@@ -1019,10 +996,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   // The policy answers: the install's models and box sizes, the acme facts and the revision (policy.ts).
   const policy = createPolicy({ clock, factoriesOf: (org) => factoriesOf(org) });
 
+  /** What a factory's runs without an item cost on the UTC days from `from` to `to` (day starts, in ms). */
+  const looseSpend = (f: Factory, from: number, to: number): number =>
+    state.looseRuns
+      .filter((r) => r.factory === f.name && Date.parse(r.started_at) >= from && Date.parse(r.started_at) < to + dayMs)
+      .reduce((n, r) => n + r.cost_usd, 0);
+
   // The spend figures: the factories the organization has, with the andon pull that stops one (spend.ts).
   const spend = createSpend({
     clock,
     factoriesOf,
+    weeklyOf: (f) => state.weeklyBudget[f.name],
+    spendOf: (f, from, to) => cents(metricsOf(flowInput(f), { from, to }, false).spend_usd + looseSpend(f, from, to)),
     reasonOf: (_org, f) => {
       const last = state.andon[f.name]?.at(-1);
       return last && last.cleared_at === null ? last.reason : null;
@@ -1169,7 +1154,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         items_by_type: types.map((type) => ({ type, count: waiting.filter((it) => it.type === type).length })),
         tool_approvals: [],
       },
-      spend_usd: metrics.spend_usd,
+      spend_usd: cents(metrics.spend_usd + looseSpend(f, today - (days - 1) * dayMs, today)),
       budget_usd: weekly === null ? null : cents((weekly * days) / 7),
       touches: {
         current: touchHeadlineOf(finishedIn(finishedOf(f), today - (days - 1) * dayMs, clock())),
@@ -1426,10 +1411,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       stats: state.stationStats[f.name] ?? {},
       agents: Object.fromEntries(Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.agents])),
       slots: Object.fromEntries(
-        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [
-          id,
-          c.wip_limit ?? Math.max(c.agents.length, 1),
-        ]),
+        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.copies ?? Math.max(c.agents.length, 1)]),
       ),
       waiting: Object.fromEntries(
         f.stations.map((s) => [
@@ -1775,7 +1757,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
-      connections.reset(clock());
       secrets.reset(clock());
       orgNotifications.reset();
       codeHosts.reset();
@@ -1783,7 +1764,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       knowledge.reset(clock());
       jonah.reset();
       views.reset();
-      webhooks.reset();
       policy.reset();
       // Spend is derived from the budgets and the clock: it keeps no state to reset.
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
@@ -1909,7 +1889,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await environments.handle(org, rest, method, res, () => readBody(req))) return;
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
-    if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (access.handle(org, rest, method, url, res)) return;
     if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
     if (await codeHosts.handle(org, rest, method, res, () => readBody(req))) return;
@@ -1922,7 +1901,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (orgWebhooks.handle(org.id, rest, method, res)) return;
-    if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {

@@ -97,9 +97,7 @@ type Item struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DoneAt    time.Time // zero until the item reaches the done station
-	// Source is where the item came from and Trigger the trigger that created it; "" when its
-	// creator did not say.
-	Source  ItemSource
+	// Trigger is the trigger that created the item; "" when no trigger did.
 	Trigger string
 	// Origin is where the item came from (person, plan, trigger or follow-up), Via how a person
 	// filed it ("" otherwise) and CreatedBy the filer's actor ref ("" for items filed before ADR
@@ -265,9 +263,7 @@ type NewItem struct {
 	State     ItemState
 	Class     ClassOfService
 	CreatedAt time.Time
-	// Source is where the item came from and Trigger the trigger that created it, for Intake; ""
-	// when the creator does not say.
-	Source  ItemSource
+	// Trigger is the trigger that created the item, for Intake; "" when no trigger did.
 	Trigger string
 	// Origin, Via, Generation and Untrusted are as on Item; the store writes OriginPerson when
 	// Origin is "". CreatedBy files it: the created event's actor and the item.filed audit entry's,

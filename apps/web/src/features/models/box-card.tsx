@@ -4,6 +4,7 @@
 // that is not a whole number of hours round-trips without loss.
 import { useEffect, useState } from 'react';
 import type { OrgPolicyView } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { SectionCard } from '../../ui/card';
 import { Input } from '../../ui/field';
 import { gigabytes, hoursOf, minutesOf, type PolicyForm } from './form';
@@ -29,7 +30,7 @@ export function BoxCard({
               {box.vcpu} vCPU, {gigabytes(box.memory_bytes)} GB
             </span>
             <span className="text-meta text-muted">
-              {box.factories.length === 0 ? 'Not used' : box.factories.map((f) => f.name).join(', ')}
+              {box.factories.length === 0 ? 'Not used' : box.factories.map((f) => factoryTitle(f)).join(', ')}
             </span>
           </li>
         ))}

@@ -85,7 +85,7 @@ func (f *fixture) listed(factory domain.FactoryID) []string {
 func (f *fixture) expectNew(w domain.WebhookEndpoint) {
 	f.t.Helper()
 
-	if !w.OrgLevel() || w.Sender != domain.SenderGitHub || !w.Enabled || len(w.Openings) != 0 || w.Secret != hookToken || w.SecretID == "" {
+	if w.Sender != domain.SenderGitHub || !w.Enabled || len(w.Openings) != 0 || w.Secret != hookToken || w.SecretID == "" {
 		f.t.Fatalf("created = %+v; want an enabled github webhook, open to none, signed by %s", w, hookToken)
 	}
 
@@ -154,11 +154,10 @@ func (f *fixture) onlyWebhook(id domain.WebhookEndpointID) {
 	}
 }
 
-// Reserved and taken names, a secret or factory the organization lacks, and a factory's endpoint
-// patched as a webhook are refused; a webhook has no sealed secret to rotate or open.
+// Reserved and taken names and a secret or factory the organization lacks are refused.
 func testWebhookRules(f *fixture) {
 	t := f.t
-	legacy := f.endpoint(hooks, domain.WebhookGeneric)
+	f.webhook(hooks)
 	w := f.webhook(orgHook)
 	sec := f.secret("pagerduty-signing")
 
@@ -171,7 +170,6 @@ func testWebhookRules(f *fixture) {
 		{"an unknown sender", domain.NewWebhook{Name: "pages", Sender: "slack", Secret: sec.Name}, domain.ErrInvalid},
 		{"token settings on github", domain.NewWebhook{Name: "pages", Sender: domain.SenderGitHub, Secret: sec.Name, Token: domain.TokenSettings{Header: "X-Token"}}, domain.ErrInvalid},
 		{"another webhook's name", domain.NewWebhook{Name: orgHook, Sender: domain.SenderPagerDuty, Secret: sec.Name}, ports.ErrNameTaken},
-		{"a factory endpoint's name", domain.NewWebhook{Name: hooks, Sender: domain.SenderPagerDuty, Secret: sec.Name}, ports.ErrNameTaken},
 		{"no such secret", domain.NewWebhook{Name: "pages", Sender: domain.SenderPagerDuty, Secret: "ghost-secret"}, ports.ErrNotFound},
 	}
 
@@ -192,7 +190,7 @@ func testWebhookRules(f *fixture) {
 		{"a reserved name", w.ID, domain.WebhookPatch{Name: &reserved}, domain.ErrInvalid},
 		{"no such factory", w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: "00000000-0000-4000-8000-ffffffffffff"}}}, ports.ErrNotFound},
 		{"a factory both opened and closed", w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: f.factory}}, Close: []domain.FactoryID{f.factory}}, domain.ErrInvalid},
-		{"a factory's endpoint", legacy.Endpoint.ID, domain.WebhookPatch{Close: []domain.FactoryID{f.factory}}, ports.ErrNotFound},
+		{"no such webhook", "00000000-0000-7000-8000-00000000dead", domain.WebhookPatch{Close: []domain.FactoryID{f.factory}}, ports.ErrNotFound},
 	}
 
 	for _, c := range patches {
@@ -201,16 +199,8 @@ func testWebhookRules(f *fixture) {
 		}
 	}
 
-	if _, err := f.in.RotateSecret(f.ctx(), w.ID); !errors.Is(err, domain.ErrInvalid) {
-		t.Errorf("RotateSecret of a webhook = %v; want ErrInvalid", err)
-	}
-
-	if _, err := f.in.OpenSecret(f.ctx(), w.ID); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("OpenSecret of a webhook = %v; want ErrNotFound", err)
-	}
-
-	if list, err := f.in.Webhooks(f.ctx()); err != nil || len(list) != 1 {
-		t.Errorf("Webhooks after the refusals = %+v, %v; want the one", list, err)
+	if list, err := f.in.Webhooks(f.ctx()); err != nil || len(list) != 2 {
+		t.Errorf("Webhooks after the refusals = %+v, %v; want the two", list, err)
 	}
 }
 

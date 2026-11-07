@@ -498,7 +498,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		h.publishImport(t, authors, files)
 	}
 
-	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
+	h.intake = porttest.NewIntake(h.store)
 
 	h.drafts = porttest.NewDraftRequests(tenancy, h.clock.Now)
 	h.drafts.AddFactory(testOrg, acmeID)
@@ -907,15 +907,14 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 		name   string
 		h      *harness
 		header http.Header
-		want   domain.ItemSource
 		via    domain.Via
 		by     string
 	}{
-		{"a browser session", h.harness, cookie(ownerToken), domain.ItemFromPeople, domain.ViaWeb, "user:" + string(ownerID)},
-		{"goal login's session", h.harness, bearer(freshCLIToken), domain.ItemFromCLI, domain.ViaCLI, "user:" + string(ownerID)},
-		{"a personal token of the owner", h.harness, bearer(pat.Secret), domain.ItemFromCLI, domain.ViaCLI, "user:" + string(ownerID)},
-		{"the ci-deploy API key", h.harness, bearer(key.Secret), domain.ItemFromAPI, domain.ViaAPI, "service:" + key.Key.Id},
-		{"the local user of GOAL_AUTH=none", newHarness(t), nil, domain.ItemFromPeople, domain.ViaWeb, domain.LocalUser.Ref()},
+		{"a browser session", h.harness, cookie(ownerToken), domain.ViaWeb, "user:" + string(ownerID)},
+		{"goal login's session", h.harness, bearer(freshCLIToken), domain.ViaCLI, "user:" + string(ownerID)},
+		{"a personal token of the owner", h.harness, bearer(pat.Secret), domain.ViaCLI, "user:" + string(ownerID)},
+		{"the ci-deploy API key", h.harness, bearer(key.Secret), domain.ViaAPI, "service:" + key.Key.Id},
+		{"the local user of GOAL_AUTH=none", newHarness(t), nil, domain.ViaWeb, domain.LocalUser.Ref()},
 	}
 
 	for _, c := range cases {
@@ -932,10 +931,6 @@ func TestAPI_SubmitRecordsItsSource(t *testing.T) {
 		it, err := c.h.store.Item(inOrg(t), domain.ItemID(made.Id))
 		if err != nil {
 			t.Fatal(err)
-		}
-
-		if it.Source != c.want {
-			t.Errorf("submit with %s: source %q, want %q", c.name, it.Source, c.want)
 		}
 
 		if it.Origin != domain.OriginPerson || it.Via != c.via || it.CreatedBy != c.by {
