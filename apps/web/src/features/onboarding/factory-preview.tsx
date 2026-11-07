@@ -28,7 +28,16 @@ const maxSlots = 12;
 
 /** The organization card, first in the grid. */
 export function organizationCard(org: OrgSummary, host: string): ReactNode {
-  return <PreviewCard label="Organization" value={org.name} detail={`${host}/o/${org.slug}`} />;
+  // The address breaks only after a slash, never inside a word.
+  const detail = (
+    <>
+      {host}/<wbr />
+      o/
+      <wbr />
+      {org.slug}
+    </>
+  );
+  return <PreviewCard label="Organization" value={org.name} detail={detail} />;
 }
 
 /** The code card: the repository entered in step 2 and the secret that holds its token. */

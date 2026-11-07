@@ -17,6 +17,13 @@ for (const colorScheme of ['light', 'dark'] as const) {
     });
 
     test('Home links are 44 px', async ({ page }) => {
+      // The seed has no archived factory, and the link shows only with one: archive one in the answer.
+      await page.route(/\/factories\?archived=true/, async (route) => {
+        const response = await route.fetch({ url: route.request().url().replace('archived=true', 'archived=false') });
+        const { factories } = await response.json();
+        const [first] = factories;
+        await route.fulfill({ json: { factories: [{ ...first, archived_at: '2026-10-25T00:00:00Z' }] } });
+      });
       await page.goto('/o/acme');
       const main = page.getByRole('main');
       await expectTarget44(main.getByRole('link', { name: 'Archived factories' }), 'Archived factories');
