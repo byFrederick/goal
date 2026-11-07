@@ -1,4 +1,0 @@
-exit 2
---- stdout
---- stderr
-goal: goal connection moved: see Access (goal access), Secrets (goal secret) and the factory's environment files

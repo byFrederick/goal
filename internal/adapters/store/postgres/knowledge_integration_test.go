@@ -26,8 +26,8 @@ func TestKnowledge_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return knowledgetest.Harness{
-			Knowledge: NewKnowledge(d.store), Connections: NewConnections(d.store, testKey(t, "k1")),
-			Secrets: NewSecrets(d.store, testKey(t, "k1")), Audit: d.store,
+			Knowledge: NewKnowledge(d.store),
+			Secrets:   NewSecrets(d.store, testKey(t, "k1")), Audit: d.store,
 			NewOrg: func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
 			Pin: func(t *testing.T, org domain.OrgID, snap domain.KnowledgeSnapshotID) {
 				t.Helper()
@@ -90,23 +90,12 @@ func knowledgeDoc(t *testing.T, d connectionsDB, org domain.OrgID, text string) 
 	}
 }
 
-func syncingKind(t *testing.T, d connectionsDB) {
-	t.Helper()
-
-	if err := NewConnections(d.store, testKey(t, "k1")).SyncPlatformKinds(t.Context(), []domain.ConnectionKind{{
-		Name: "kb-docs", Title: "Docs", Platform: true, Spec: domain.KindSpec{Sync: "gitdocs"},
-	}}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // Spec 4 §11.2 row 1: as goal_app, organization B never reads A's chunks; nor does it see A's
 // sources or documents, or write into them.
 func TestKnowledge_RLSAcrossOrgs(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
-	syncingKind(t, d)
 
 	acme, labs := newOrgID(t, d.store), newOrgID(t, d.store)
 	knowledgeDoc(t, d, acme, "acme's secret runbook")
@@ -250,7 +239,6 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	t.Parallel()
 
 	d := newConnectionsDB(t)
-	syncingKind(t, d)
 
 	deleted := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
 	org := newOrgID(t, d.store)
@@ -265,8 +253,8 @@ func TestPurgeOrg_RemovesKnowledge(t *testing.T) {
 	}
 
 	var n int
-	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_uploads) + (SELECT count(*) FROM connections)`).Scan(&n); err != nil || n != 0 {
-		t.Errorf("%d knowledge and connection rows left, %v; want none", n, err)
+	if err := d.admin.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM knowledge_sources) + (SELECT count(*) FROM knowledge_uploads)`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d knowledge rows left, %v; want none", n, err)
 	}
 }
 

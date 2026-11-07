@@ -70,14 +70,10 @@ type harness struct {
 	contracts *porttest.Contracts
 	codehost  *porttest.CodeHost // the github code host
 	gitlab    *porttest.CodeHost // the gitlab code host
-	// connections hold the test organization's connections (connections_test.go).
-	connections ports.Connections
-	// credentials hold the test organization's credentials (credentials_test.go), none at first.
-	credentials *porttest.Credentials
+	// rules are the organizations' standing rules, none at first.
+	rules ports.StandingRules
 	// orgSecrets hold the test organization's secrets (environment_test.go), none at first.
 	orgSecrets *porttest.OrgSecrets
-	// minter mints the credentials of connections whose kind mints with mintAWS.
-	minter *porttest.Minter
 	// policies is the organization policy (policy_test.go); nil applies none.
 	policies ports.OrgPolicies
 	// knowledge holds the test organization's knowledge snapshots (knowledge_test.go); nil pins none.
@@ -155,19 +151,30 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 		t.Fatalf("the first organization is %s, want %s", org, testOrg)
 	}
 
-	conns := newConnections(t, h.tenancy)
-	h.connections = conns
-	h.credentials = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
-	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy, conns)
-	h.minter = porttest.NewMinter(clock.Now)
+	h.rules = porttest.NewStandingRules(h.tenancy)
+	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy)
+	h.addModelKey(t, testOrg)
 	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)
 	h.e = h.engine(t, h.store)
 
 	return h
 }
 
+// addModelKey creates in org the secrets lineOf's model key, repoLine's repository token and
+// mergeLine's entry tokens name, valued modelKey, codeToken and the github and gitlab tokens.
+func (h *harness) addModelKey(t *testing.T, org domain.OrgID) {
+	t.Helper()
+
+	for name, value := range map[string]string{secModel: modelKey, secRepo: codeToken, secGitHubEntry: "github-token", secGitLabEntry: "gitlab-token"} {
+		n := domain.NewSecret{Name: name, Value: value, Scope: domain.SecretScope{All: true}}
+		if _, err := h.orgSecrets.Create(domain.WithOrg(t.Context(), org), n, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // newOrg creates an organization and returns its id. Every organization after the first gets
-// the model connection its lines run on (the first gets all of newConnections').
+// the model key its lines run on (the first gets it in newHarness).
 func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
 	t.Helper()
 
@@ -176,11 +183,8 @@ func (h *harness) newOrg(t *testing.T, slug string) domain.OrgID {
 		t.Fatal(err)
 	}
 
-	if h.connections != nil {
-		model := domain.NewConnection{Name: connModel, Kind: "model-key", Secrets: map[string]string{"key": modelKey}}
-		if _, err := h.connections.Create(domain.WithOrg(t.Context(), o.ID), model, domain.LocalUser); err != nil {
-			t.Fatal(err)
-		}
+	if h.orgSecrets != nil {
+		h.addModelKey(t, o.ID)
 	}
 
 	return o.ID
@@ -199,9 +203,9 @@ func (h *harness) engineWith(t *testing.T, store ports.Store, maxRuns int, lines
 
 	e, err := engine.New(engine.Deps{
 		Store: store, Orgs: h.tenancy, Sandboxes: h.sandboxes, Contracts: h.contracts, Clock: h.clock,
-		Secrets:     porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
-		Connections: h.connections, Credentials: h.credentials, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab}, Hosts: h.tenancy,
-		Minters: map[string]ports.Minter{mintAWS: h.minter}, Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
+		Secrets:       porttest.Secrets{"GOAL_GATEWAY_KEY": "k3y"},
+		StandingRules: h.rules, OrgSecrets: h.orgSecrets, CodeHosts: map[string]ports.CodeHost{codeHostGitHub: h.codehost, codeHostGitLab: h.gitlab}, Hosts: h.tenancy,
+		Policies: h.policies, Knowledge: h.snapshots(), Intake: h.intake, Events: h.events,
 		Audit: h.tenancy, NotificationOutbox: h.outbox, Logger: slog.New(slog.NewJSONHandler(h.logs, nil)),
 	}, engine.Config{
 		Lines:          lines,
@@ -395,7 +399,9 @@ func (h *harness) eventsOf(id domain.ItemID, kind domain.EventKind) []domain.Eve
 	return out
 }
 
-// lineOf builds a line inbox → stations... → done with the agents the tests use.
+// lineOf builds a line inbox → stations... → done with the agents the tests use, on secrets: its
+// model key is {{model-key}}, which every organization of the harness holds, and its default
+// environment is empty.
 func lineOf(stations ...domain.Station) domain.Line {
 	all := append([]domain.Station{{ID: stInbox, Kind: domain.KindQueue}}, stations...)
 	all = append(all, domain.Station{ID: stDone, Kind: domain.KindDone})
@@ -411,11 +417,20 @@ func lineOf(stations ...domain.Station) domain.Line {
 		Name:          testFactory,
 		VersionID:     v1,
 		Number:        1,
-		Runtime:       domain.Runtime{Model: "claude-sonnet-5-5", ModelConnection: connModel, MaxTurnsPerTask: 40, PerItemUSD: 3},
+		Runtime:       domain.Runtime{Model: "claude-sonnet-5-5", ModelKey: "{{" + secModel + "}}", MaxTurnsPerTask: 40, PerItemUSD: 3},
+		Environments:  []domain.Environment{{Name: domain.DefaultEnvironment}},
 		Stations:      all,
 		Agents:        agents,
 		ExpediteTypes: []string{typeIncident},
 	}
+}
+
+// onConnections makes l a version published before the conversion to secrets: its model is the
+// model connection's and it has no model key or environment, so no run of it starts.
+func onConnections(l domain.Line) domain.Line {
+	l.Runtime.ModelConnection, l.Runtime.ModelKey, l.Environments = connModel, "", nil
+
+	return l
 }
 
 func agentStation(id, agent string, agents, wip int) domain.Station {

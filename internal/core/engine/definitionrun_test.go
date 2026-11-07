@@ -32,7 +32,7 @@ const definitionOutput = `{"summary":"Gave review a 4th reviewer","changed":[{"p
 // draft request's box may get.
 func definitionLine() domain.Line {
 	l := lineOf(agentStation(stWork, agReviewer, 1, 1))
-	l.Runtime.Repository = domain.Repository{URL: "https://" + gitHost + "/acme/api.git", Connection: connGit}
+	l.Runtime.Repository = domain.Repository{URL: "https://" + gitHost + "/acme/api.git", Token: "{{" + secRepo + "}}"}
 	l.Connections = []string{connTracker}
 
 	for i := range l.Agents {
@@ -42,7 +42,28 @@ func definitionLine() domain.Line {
 	return l
 }
 
-func TestRunDefinition_ModelConnectionOnly(t *testing.T) {
+// A draft request of a version on connections fails with what to do before any box is opened,
+// opening no connection or credential (ADR 0037 decision 19).
+func TestRunDefinition_RefusesVersionOnConnections(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, onConnections(definitionLine()), porttest.Succeed(definitionOutput))
+
+	_, err := h.e.RunDefinition(inOrg(t), ports.DefinitionTask{Request: draftRequest(), Revision: 5})
+	if !errors.Is(err, domain.ErrNotOnSecrets) || !strings.Contains(err.Error(), "version 1") {
+		t.Fatalf("RunDefinition = %v; want ErrNotOnSecrets naming version 1", err)
+	}
+
+	if n := len(h.worker.Prepares()); n != 0 {
+		t.Errorf("%d prepares; want none", n)
+	}
+
+	h.noConnectionUsed(t)
+	h.noSandboxes(t)
+}
+
+// A draft request runs in a box of its own and returns what the agent changed.
+func TestRunDefinition_RunsInItsOwnBox(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t, definitionLine(), func(context.Context, porttest.ExecCall, io.Writer) domain.RunResult {
@@ -71,7 +92,7 @@ func TestRunDefinition_ModelConnectionOnly(t *testing.T) {
 }
 
 // checkDefinitionBox checks that the request ran in one box of its own, with no item and no
-// station, and that prepare got only the gateway's env and run only the model connection's.
+// station, and that prepare got only the gateway's env and run only the model key.
 func checkDefinitionBox(t *testing.T, h *harness, req domain.DraftRequest) {
 	t.Helper()
 
@@ -85,17 +106,17 @@ func checkDefinitionBox(t *testing.T, h *harness, req domain.DraftRequest) {
 		t.Errorf("sandbox = %+v, want the request's run with no item and no station", box)
 	}
 
-	// prepare gets the task token and no git password; run gets the model connection's env alone.
+	// prepare gets the task token and no git password; run gets the model key alone.
 	if keys := slices.Sorted(maps.Keys(prepares[0].Env)); !slices.Equal(keys, []string{"GOAL_GATEWAY_TOKEN", "GOAL_GATEWAY_URL"}) {
 		t.Errorf("prepare env = %v, want only the gateway's", keys)
 	}
 
-	if keys := slices.Sorted(maps.Keys(runs[0].Env)); !slices.Equal(keys, []string{"GOAL_GATEWAY_URL", envModelKey}) {
-		t.Errorf("run env = %v, want only the model connection's", keys)
+	if keys := slices.Sorted(maps.Keys(runs[0].Env)); !slices.Equal(keys, []string{domain.EnvAnthropicAPIKey, "GOAL_GATEWAY_URL"}) {
+		t.Errorf("run env = %v, want only the model key's", keys)
 	}
 
-	if runs[0].Env[envModelKey] != modelKey {
-		t.Errorf("run env %s is not the model connection's key", envModelKey)
+	if runs[0].Env[domain.EnvAnthropicAPIKey] != modelKey {
+		t.Errorf("run env %s is not the model key", domain.EnvAnthropicAPIKey)
 	}
 }
 

@@ -332,7 +332,8 @@ func policyLine() domain.Line {
 }
 
 // The run's task token names exactly its run: the gateway serves its bundle (the agent's prompt,
-// skills, tools, model and budget) and tools from it.
+// skills, tools, model and budget) and tools from it. It names no connection, though the agent
+// lists one: a version on secrets gives its tools through the environment.
 func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 	t.Parallel()
 
@@ -345,7 +346,7 @@ func TestRun_GatewayTokenIsScopedToTheTask(t *testing.T) {
 
 	want := domain.TaskClaims{
 		Audience: domain.TaskAudience, OrgID: testOrg, FactoryID: factoryID, VersionID: v1, ItemID: it.ID, Station: stWork, Agent: agWorker, RunID: h.runs(t, testOrg, it.ID)[0].ID,
-		Connections: []string{"github"}, Model: "claude-opus-5-5", ExpiresAt: claims.ExpiresAt,
+		Model: "claude-opus-5-5", ExpiresAt: claims.ExpiresAt,
 	}
 	if !reflect.DeepEqual(claims, want) {
 		t.Errorf("token claims = %+v, want %+v", claims, want)

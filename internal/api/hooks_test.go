@@ -72,7 +72,7 @@ func newHookRig(t *testing.T, sender domain.WebhookSender, token domain.TokenSet
 	store.AddFactory(testOrg, acmeID)
 
 	r := &hookRig{
-		intake: porttest.NewIntake(key, store), secrets: porttest.NewOrgSecrets(key, newTenancy(t), nil),
+		intake: porttest.NewIntake(key, store), secrets: porttest.NewOrgSecrets(key, newTenancy(t)),
 		clock: porttest.NewClock(time.Now()), names: &namesStub{named: true}, logs: &bytes.Buffer{},
 	}
 	r.intake.UseSecrets(r.secrets)

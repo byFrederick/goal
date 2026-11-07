@@ -4,7 +4,7 @@ The intake store: the `webhook_endpoints`, `webhook_deliveries` and `trigger_fir
 
 ## Also change
 
-The `Intake` port (`internal/core/ports/intake.go`) and its domain types (`internal/core/domain/intake.go`, `webhooks.go`), `ConvertEndpoints` and the move-over's webhooks step (`internal/moveover/run.go`) when a factory endpoint's columns change, so the conversion to organization webhooks still reads them, its in-memory fake (`internal/core/ports/porttest/intake.go`) and the conformance suite `porttest/intaketest`, which runs against both; `goal_connection_key_ids` and `postgres.Rekey` when the sealed secret's columns change, so goald's start-up key check and `goal db rekey` still cover endpoints
+The `Intake` port (`internal/core/ports/intake.go`) and its domain types (`internal/core/domain/intake.go`, `webhooks.go`), its in-memory fake (`internal/core/ports/porttest/intake.go`) and the conformance suite `porttest/intaketest`, which runs against both; `goal_connection_key_ids` and `postgres.Rekey` when the sealed secret's columns change, so goald's start-up key check and `goal db rekey` still cover endpoints
 
 ## Run
 

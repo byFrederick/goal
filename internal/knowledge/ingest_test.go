@@ -196,7 +196,6 @@ type world struct {
 	t       *testing.T
 	org     domain.OrgID
 	tenancy *porttest.Tenancy
-	conns   *porttest.Connections
 	secrets *porttest.OrgSecrets
 	kb      ports.Knowledge
 	objects *porttest.ObjectStore
@@ -213,9 +212,8 @@ func newWorld(t *testing.T) *world {
 		t: t, clock: porttest.NewClock(time.Now().UTC().Add(time.Second)), objects: porttest.NewObjectStore(), docs: &reader{},
 	}
 	w.tenancy = porttest.NewTenancy(w.clock.Now)
-	w.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), w.tenancy)
-	w.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), w.tenancy, w.conns)
-	kb := porttest.NewKnowledge(w.conns, w.tenancy)
+	w.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), w.tenancy)
+	kb := porttest.NewKnowledge(w.tenancy)
 	kb.ReadSecrets(w.secrets)
 	w.kb = kb
 	w.uploads = knowledge.NewUploads(w.kb, w.objects, 0)

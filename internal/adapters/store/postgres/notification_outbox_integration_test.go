@@ -86,27 +86,6 @@ func (o outboxOrg) slackSetting(t *testing.T) {
 	}
 }
 
-// slackConnection gives the organization a connection of a kind named slack, which no longer
-// turns Slack on.
-func (o outboxOrg) slackConnection(t *testing.T) {
-	t.Helper()
-
-	if err := inOrgTx(t, o.d.app, o.org, func(tx pgx.Tx) error {
-		kind := newUUID(t)
-		if _, err := tx.Exec(t.Context(), `INSERT INTO connection_kinds (id, name, spec, spec_sha256, created_by)
-			VALUES ($1, 'slack', '{}', repeat('0', 64), 'system:test')`, kind); err != nil {
-			return err
-		}
-
-		_, err := tx.Exec(t.Context(), `INSERT INTO connections (id, name, kind_id, created_by, updated_by)
-			VALUES ($1, 'team-slack', $2, 'system:test', 'system:test')`, newUUID(t), kind)
-
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // prefer saves user's channels for event, the other events keeping their defaults.
 func (o outboxOrg) prefer(t *testing.T, user string, event domain.NotificationEvent, ch domain.NotificationChannels) {
 	t.Helper()
@@ -254,14 +233,13 @@ func TestNotificationOutbox_ApprovalRecipients(t *testing.T) {
 	}
 }
 
-// Without the Slack notification setting no Slack row is queued, whatever connections exist, so
-// approvals at their defaults queue none; and the person whose decision put the item there
+// Without the Slack notification setting no Slack row is queued, so approvals at their defaults
+// queue none; and the person whose decision put the item there
 // (data.actor) hears nothing of it.
 func TestNotificationOutbox_NoSlackWithoutTheSettingAndNotTheActor(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
-	o.slackConnection(t)
 
 	it := o.item(t)
 	if err := o.toWaiting(t, it, nil, domain.EventWaitingHuman); err != nil {

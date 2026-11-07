@@ -358,7 +358,7 @@ func TestAccess_SlackNotificationsExpiry(t *testing.T) {
 func TestAccess_SlackNotificationsMissingSecret(t *testing.T) {
 	t.Parallel()
 
-	stale := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), newTenancy(t), nil)
+	stale := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), newTenancy(t))
 	settings := porttest.NewNotificationSettings(stale, newTenancy(t))
 
 	if _, err := stale.Create(inOrg(t), domain.NewSecret{Name: "slack-bot", Value: "xoxb-test-token"}, domain.LocalUser); err != nil {

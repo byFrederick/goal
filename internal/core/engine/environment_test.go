@@ -16,10 +16,17 @@ import (
 
 // The test organization's secrets (ADR 0037) and their values.
 const (
-	secClaude  = "claude-key"
-	secGitHub  = "github-token"
-	secDB      = "db-pass"
-	secTickets = "tickets-key"
+	secClaude = "claude-key"
+	secModel  = "model-key"
+	secRepo   = "repo-token"
+
+	secGitHubEntry = "github-entry"
+	secGitLabEntry = "gitlab-entry"
+	secGHEEntry    = "ghe-entry"
+	gheTokenValue  = "ghe-token-for-tests-3435" //nolint:gosec // a test value
+	secGitHub      = "github-token"
+	secDB          = "db-pass"
+	secTickets     = "tickets-key"
 
 	apiKeyValue      = "sk-ant-api03-key-for-tests-2223"   //nolint:gosec // a test value
 	oauthTokenValue  = "sk-ant-oat01-token-for-tests-2425" //nolint:gosec // a test value
@@ -42,7 +49,7 @@ const envGatewayURL = "GOAL_GATEWAY_URL"
 // run on secrets never opens.
 func secretsLine() domain.Line {
 	line := lineOf(agentStation(stWork, agWorker, 1, 1))
-	line.Runtime.ModelConnection, line.Runtime.ModelKey = "", "{{"+secClaude+"}}"
+	line.Runtime.ModelKey = "{{" + secClaude + "}}"
 	line.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit, Token: "{{" + secGitHub + "}}"}
 	line.Connections = []string{connTracker}
 	line.Agents = agentConnections(line.Agents, agWorker, connTracker)
@@ -430,7 +437,7 @@ func TestRunTask_JonahOnSecrets(t *testing.T) {
 	h.addSecrets(t)
 
 	req := jonahRequest()
-	req.ModelConnection, req.ModelKey = "", "{{"+secClaude+"}}"
+	req.ModelKey = "{{" + secClaude + "}}"
 
 	if _, err := h.e.RunTask(t.Context(), req); err != nil {
 		t.Fatalf("RunTask: %v", err)

@@ -1,6 +1,6 @@
 // Package gateway is Goal's MCP server for runs (spec 4 §5.9): the run bundle (GET /run) and one
 // MCP endpoint (streamable HTTP) for Goal's own tools, authorized by the run's task token. It
-// proxies no connection and adds no credential: a run uses its organization connections directly
+// proxies no upstream and adds no credential: a run uses its environment's upstreams directly
 // from its box, MCP servers included, with the env the engine gave it.
 //
 // # Auth
@@ -16,13 +16,12 @@
 //
 // ServeRun answers GET /run with the bundle of the run in the token, which goal-agent prepare
 // writes to /goal in the run's sandbox: the task (spec.json: brief, earlier outputs, model, tool
-// rules, limits, the agent's connections), the agent's prompt, skills and output schema from the
+// rules, limits), the agent's prompt, skills and output schema from the
 // definition version the run started on, the repository and the item's branch to check out, the
 // git credentials to configure, each naming the environment variable that holds its password,
-// and the tools to install. It describes the run's organization connections from what anyone may
-// see of them (domain.ConnectionKind.Outline): env names, MCP servers whose headers name env
-// variables (${NAME}, expanded by Claude Code in the box), git logins, CLI tools and docs. The
-// bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
+// and the tools to install. It describes the agent's environment file as the engine resolved it:
+// variable names, MCP servers whose headers name env variables (${NAME}, expanded by Claude Code
+// in the box), files, setup and tools. The bundle holds no secret, and it proxies nothing: everything it describes is used from the box.
 // Its rules are the factory rules of the run's version that apply to its agent, station and item's lane and work type (ADR 0014; Definitions.Rules), each with the hash of its
 // rule file and the file the worker writes; the first bundle served to a run that any rule
 // applies to appends domain.EventRulesApplied with their names and hashes, and a bundle fetched
@@ -163,11 +162,9 @@ type Events interface {
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 }
 
-// Connections reads an organization's connections and kinds without their secret values, and its
-// standing rules, for the run bundle; ports.Connections satisfies it.
-type Connections interface {
-	Get(ctx context.Context, name string) (domain.Connection, error)
-	Kind(ctx context.Context, name string) (domain.ConnectionKind, error)
+// StandingRules reads an organization's standing rules, which the run bundle offers its tools
+// that ask first; ports.StandingRules satisfies it.
+type StandingRules interface {
 	// StandingRules are the organization's standing rules, the revoked ones with includeRevoked.
 	StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error)
 }
@@ -183,11 +180,11 @@ type Deps struct {
 	Definitions Definitions
 	// Items gives the run bundle the item's brief, earlier outputs and branch.
 	Items Items
-	// Connections describe the run's organization connections in its bundle.
-	Connections Connections
-	Events      Events
-	Clock       ports.Clock
-	Logger      *slog.Logger
+	// StandingRules mark the bundle's tools that ask first and have a standing rule.
+	StandingRules StandingRules
+	Events        Events
+	Clock         ports.Clock
+	Logger        *slog.Logger
 	// Knowledge and Objects give runs the knowledge snapshots their tokens pin, and their prompt's
 	// Knowledge section (knowledge.go); without Knowledge every pinned source reads as not synced,
 	// and without Objects no snapshot is served and no top folder listed.
@@ -259,17 +256,17 @@ var implementation = &mcp.Implementation{Name: "goal-gateway", Version: "1"}
 
 // Gateway serves the MCP endpoint. It is an http.Handler, safe for concurrent use.
 type Gateway struct {
-	defs        Definitions
-	items       Items
-	connections Connections
-	policies    Policies
-	events      Events
-	clock       ports.Clock
-	log         *slog.Logger
-	knowledge   Knowledge // nil without Deps.Knowledge
-	objects     Objects   // nil without Deps.Objects
-	questions   Questions
-	approvals   ToolApprovals
+	defs      Definitions
+	items     Items
+	rules     StandingRules
+	policies  Policies
+	events    Events
+	clock     ports.Clock
+	log       *slog.Logger
+	knowledge Knowledge // nil without Deps.Knowledge
+	objects   Objects   // nil without Deps.Objects
+	questions Questions
+	approvals ToolApprovals
 	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
 	draftRequests DraftRequests
 	drafts        Drafts
@@ -286,9 +283,9 @@ type Gateway struct {
 
 // New returns a gateway; goald mounts it at its MCP path.
 func New(d Deps, cfg Config) (*Gateway, error) {
-	if d.Definitions == nil || d.Items == nil || d.Connections == nil || d.Policies == nil || d.Events == nil || d.Clock == nil ||
+	if d.Definitions == nil || d.Items == nil || d.StandingRules == nil || d.Policies == nil || d.Events == nil || d.Clock == nil ||
 		d.Questions == nil || d.ToolApprovals == nil {
-		return nil, errors.New("gateway: Definitions, Items, Connections, Policies, Events, Clock, Questions and ToolApprovals are required")
+		return nil, errors.New("gateway: Definitions, Items, StandingRules, Policies, Events, Clock, Questions and ToolApprovals are required")
 	}
 
 	if len(cfg.Key) == 0 {
@@ -298,7 +295,7 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
 
 	g := &Gateway{
-		defs: d.Definitions, items: d.Items, connections: d.Connections, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
+		defs: d.Definitions, items: d.Items, rules: d.StandingRules, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
 		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
 		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, checks: d.Checks, cfg: cfg,
 	}

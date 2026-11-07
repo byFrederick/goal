@@ -39,7 +39,7 @@ export const pickerSources: readonly PickerSource[] = [
 
 /**
  * The picker's groups, top to bottom. Built in sources need no connection. Another source is Connected when
- * the organization has a connection of its kind and the source is built; a source not built yet is never
+ * the organization has an enabled webhook of its sender and the source is built; a source not built yet is never
  * Connected, and only a built one can be connected from here.
  */
 export function pickerGroups(

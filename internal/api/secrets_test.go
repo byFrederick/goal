@@ -270,37 +270,6 @@ func TestAPI_SecretMemberMayOnlyRead(t *testing.T) {
 	}
 }
 
-// A secret a connection refers to as {{name}} lists the connection in its uses and is not
-// deleted: the 409 names each use (ADR 0037 decision 4).
-func TestAPI_SecretDeleteInUse(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createSecret(t)
-
-	for _, name := range []string{kindGitHub, "github-ci"} {
-		decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-			`{"name":"`+name+`","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
-	}
-
-	want := []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: kindGitHub}, {Kind: gen.SecretUseConnection, Name: "github-ci"}}
-
-	if got := decode[gen.Secret](t, h.request(t, http.MethodGet, secretPath, "", nil), http.StatusOK); !slices.Equal(got.Uses, want) {
-		t.Errorf("uses = %+v; want %+v", got.Uses, want)
-	}
-
-	p := refused(t, "delete in use", h.request(t, http.MethodDelete, secretPath, "", nil), http.StatusConflict, "secret-in-use")
-	if p.Uses == nil || !slices.Equal(*p.Uses, want) {
-		t.Errorf("problem uses = %+v; want %+v", p.Uses, want)
-	}
-
-	if !strings.Contains(valueOf(p.Detail), "github-ci") {
-		t.Errorf("problem detail = %q; want it to name the connections", valueOf(p.Detail))
-	}
-
-	decode[gen.Secret](t, h.request(t, http.MethodGet, secretPath, "", nil), http.StatusOK)
-}
-
 // A secret a knowledge source reads with lists the source in its uses and is not deleted: the 409
 // names it. Once the source is gone, the secret deletes.
 func TestAPI_SecretDeleteRefusedWhileASourceUsesIt(t *testing.T) {
@@ -419,9 +388,6 @@ func TestAPI_SecretImport(t *testing.T) {
 	h := newHarness(t)
 	h.createSecret(t)
 
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-		`{"name":"github","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
-
 	text, err := json.Marshal("ACME_TOKEN=" + secretReplacedValue + "\n# a comment\nSENTRY_TOKEN=\"" + secretImportedValue + "\"\n")
 	if err != nil {
 		t.Fatal(err)
@@ -465,7 +431,7 @@ func expectDryRun(t *testing.T, dry gen.SecretImportResult) {
 	t.Helper()
 
 	want := []gen.SecretImportOutcome{
-		{Name: secretName, Exists: true, Uses: []gen.SecretUse{{Kind: gen.SecretUseConnection, Name: kindGitHub}}},
+		{Name: secretName, Exists: true, Uses: []gen.SecretUse{}},
 		{Name: "sentry-token", Uses: []gen.SecretUse{}},
 	}
 

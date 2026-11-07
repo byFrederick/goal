@@ -124,8 +124,6 @@ usage:
                                                   --expires 1d to 90d, default 90d). The secret is printed
                                                   once, alone on stdout: store it as GOAL_API_KEY
   goal key revoke <name|id>                       revoke a key: anything using it stops working at once
-  goal connection ...                             moved to goal access, goal secret and environment files;
-                                                  prints where and exits 2
   goal secret list                                the organization's secrets: factories, what uses them,
                                                   last use and expiry (never a value)
   goal secret show <name>                         one secret: source, description, factories, what uses
@@ -143,7 +141,6 @@ usage:
                                                   open to no factory, a name that exists is skipped
                                                   unless --on-conflict replace); prints each name as new
                                                   or exists (--dry-run) or what was done with it
-  goal credential ...                             moved to goal secret; prints where and exits 2
   goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
                                                   call tools/list on the environment's remote MCP
                                                   servers (default: default) from goald, with their
@@ -196,8 +193,8 @@ usage:
                                                   (--from: the items it came from, comma-separated;
                                                   --publish: publish the draft after it)
   goal memory rm <factory> <n>                    remove the n-th fact from the draft's memory.yaml
-  goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
-                                                  and connections, by group, best first (--limit: per
+  goal search "<query>" [--limit N] [--json]      search the organization's items, agents and
+                                                  factories, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
                                                   it came)
   goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--limit N] [--cursor C] [--json]

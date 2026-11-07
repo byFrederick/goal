@@ -146,8 +146,6 @@ const usage = `usage:
                                                   --expires 1d to 90d, default 90d). The secret is printed
                                                   once, alone on stdout: store it as GOAL_API_KEY
   goal key revoke <name|id>                       revoke a key: anything using it stops working at once
-  goal connection ...                             moved to goal access, goal secret and environment files;
-                                                  prints where and exits 2
   goal secret list                                the organization's secrets: factories, what uses them,
                                                   last use and expiry (never a value)
   goal secret show <name>                         one secret: source, description, factories, what uses
@@ -165,7 +163,6 @@ const usage = `usage:
                                                   open to no factory, a name that exists is skipped
                                                   unless --on-conflict replace); prints each name as new
                                                   or exists (--dry-run) or what was done with it
-  goal credential ...                             moved to goal secret; prints where and exits 2
   goal env test <factory> [<env>] [--server <name>] [--version draft|current|N]
                                                   call tools/list on the environment's remote MCP
                                                   servers (default: default) from goald, with their
@@ -218,8 +215,8 @@ const usage = `usage:
                                                   (--from: the items it came from, comma-separated;
                                                   --publish: publish the draft after it)
   goal memory rm <factory> <n>                    remove the n-th fact from the draft's memory.yaml
-  goal search "<query>" [--limit N] [--json]      search the organization's items, agents, factories
-                                                  and connections, by group, best first (--limit: per
+  goal search "<query>" [--limit N] [--json]      search the organization's items, agents and
+                                                  factories, by group, best first (--limit: per
                                                   group, 1 to 20, default 5; --json: goald's answer as
                                                   it came)
   goal runs [--factory F] [--status S] [--since T] [--until T] [--search Q] [--limit N] [--cursor C] [--json]
@@ -375,24 +372,17 @@ func Usage() string { return usage }
 var errUsage = errors.New(usage)
 
 // Run runs the command line args (without the program name) and returns the exit code: 2 for a
-// command line that names no valid command or a command that moved, exitNoPerm when goald
+// command line that names no valid command, exitNoPerm when goald
 // refuses a credential or permission, 1 for any other error and 0 on success.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string, readBuildInfo buildInfoFunc) int {
 	out := &printer{w: stdout, e: stderr, in: stdin}
 	err := errors.Join(run(ctx, args, out, getenv, readBuildInfo), out.err)
 
-	var (
-		refused *accessError
-		moved   *movedError
-	)
+	var refused *accessError
 
 	switch {
 	case errors.Is(err, errUsage):
 		_, _ = fmt.Fprintln(stderr, err)
-
-		return 2
-	case errors.As(err, &moved):
-		_, _ = fmt.Fprintln(stderr, "goal:", moved)
 
 		return 2
 	case errors.As(err, &refused):
@@ -407,11 +397,6 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 	return 0
 }
-
-// movedError is a command that moved: Run prints where it went, without the usage, and exits 2.
-type movedError struct{ msg string }
-
-func (e *movedError) Error() string { return e.msg }
 
 // command is a command, or a group of them, given its arguments.
 type command func(ctx context.Context, out *printer, getenv func(string) string, args []string) error
@@ -442,7 +427,7 @@ func dispatch(ctx context.Context, args []string, out *printer, getenv func(stri
 	if handler, ok := map[string]command{
 		"run": runItem, "follow": followItem, "item": showItem, verbNote: noteItem, verbAnswer: answerItem, verbMove: moveItem, verbLane: laneItem, verbStart: startItem, verbPause: pauseItem, verbCancel: cancelItem, verbDeny: denyItem,
 		"status": status, "factory": factory, "up": up, "org": orgCommand, "key": keyCommand, "andon": andon, "admin": adminCommand, "catalog": catalogCommand,
-		"connection": connectionCommand, "secret": secretCommand, "env": envCommand, "access": access, "credential": credentialCommand, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalMoved, "bake-off": bakeOffMoved, "spend": spend,
+		"secret": secretCommand, "env": envCommand, "access": access, "policy": policyCommand, "knowledge": knowledgeCommand, "memory": memoryCommand, "repository": repositoryCommand, "search": search, "runs": runs, "eval": evalMoved, "bake-off": bakeOffMoved, "spend": spend,
 		"judge": judgeMoved, "jonah": jonahCommand, cmdTest: testCommand, "agent": agentCommand, "intake": intakeCommand, "triggers": triggersCommand, "webhooks": webhooksCommand, cmdStandingRules: standingRulesCommand,
 	}[cmd]; ok {
 		return handler(ctx, out, getenv, rest)
