@@ -53,6 +53,7 @@ func (e *Engine) budgets(ctx context.Context, lines map[domain.FactoryID]domain.
 		}
 
 		e.noteBudget(ctx, l, b)
+		e.recordBudget(ctx, l, b, now)
 		e.warnBudget(ctx, l, b, now)
 
 		switch {
@@ -109,6 +110,44 @@ func (e *Engine) noteBudget(ctx context.Context, l domain.Line, b domain.BudgetS
 		slog.Time("since", b.Since), slog.Int(budgetGauge, gauge))
 }
 
+// recordBudget keeps the store's record of since when the factory's weekly budget is used up
+// (ports.Store.MarkBudgetExhausted), which the screens read: marked with now when the budget is
+// used up, cleared once it has room again. It writes when the state differs from what this
+// instance last wrote, which includes the first tick it sees the line, so a restart clears a
+// mark left behind. The store keeps the first since, whichever instance marks it. A failure is
+// logged and the write tried again on the next tick.
+func (e *Engine) recordBudget(ctx context.Context, l domain.Line, b domain.BudgetStatus, now time.Time) {
+	e.budgetMu.Lock()
+	was, known := e.recorded[l.FactoryID]
+	e.budgetMu.Unlock()
+
+	if known && was == b.Exhausted {
+		return
+	}
+
+	octx := domain.WithOrg(ctx, l.OrgID)
+
+	var err error
+	if b.Exhausted {
+		err = e.store.MarkBudgetExhausted(octx, l.FactoryID, now)
+	} else {
+		err = e.store.ClearBudgetExhausted(octx, l.FactoryID)
+	}
+
+	e.budgetMu.Lock()
+	defer e.budgetMu.Unlock()
+
+	if err != nil {
+		delete(e.recorded, l.FactoryID)
+		e.log.WarnContext(ctx, "budget_record_failed", slog.String("org_id", string(l.OrgID)),
+			slog.String("factory", string(l.FactoryID)), slog.Bool("exhausted", b.Exhausted), slog.String("error", err.Error()))
+
+		return
+	}
+
+	e.recorded[l.FactoryID] = b.Exhausted
+}
+
 // budgetWarnShare is the share of the weekly budget whose spend raises the budget event.
 const budgetWarnShare = 0.8
 
@@ -158,6 +197,7 @@ func (e *Engine) forgetBudgets(lines map[domain.FactoryID]domain.Line) {
 	}
 
 	maps.DeleteFunc(e.exhausted, unloaded)
+	maps.DeleteFunc(e.recorded, unloaded)
 	maps.DeleteFunc(e.warned, unloaded)
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { expectNoClippedElements, expectNoHorizontalScroll, openNavigation, orgNav } from './support';
+import { expectNoClippedElements, expectNoHorizontalScroll, isPhone, openNavigation, orgNav } from './support';
 import { boxOf } from './support-boxes';
 
 // Needs you (/o/acme/needs-you): the list, the split detail and the phone's approve view, against the
@@ -244,4 +244,60 @@ test('the three watch_worse buttons are the same height', async ({ page }) => {
     await boxOf(page.getByRole('link', { name: /^Open the .* Floor$/ }).first()),
   ].map((box) => box.height);
   expect(new Set(heights).size).toBe(1);
+});
+
+// A used-up weekly budget: the mock caps the sre factory's week at a cent (POST /__mock/reset {usedUpBudget}).
+const needsCount = async (page: import('@playwright/test').Page) => {
+  await openNavigation(page);
+  const text =
+    (await orgNav(page)
+      .getByRole('link', { name: /^Needs you/ })
+      .first()
+      .innerText()) ?? '';
+  if (isPhone(page)) {
+    // On a phone the navigation is a dialog over the page: close it so the list can be clicked.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+  }
+  return Number(/\d+/.exec(text)?.[0] ?? 0);
+};
+
+test('a used-up weekly budget is an Alert with its resume time, counted in the sidebar, with the settings link', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/o/acme/needs-you');
+  await expect(page.getByRole('list', { name: /Waiting on you/ })).toBeVisible();
+  const before = await needsCount(page);
+
+  await request.post('/__mock/reset', { data: { usedUpBudget: 'sre' } });
+  await page.goto('/o/acme/needs-you?type=alert');
+  const list = page.getByRole('list', { name: /Waiting on you/ });
+  const row = list.getByRole('link', { name: /Weekly budget used up · \$[\d,.]+ of \$0\.01/ });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText(/Resumes about \w{3} \d{2}:\d{2}/);
+  expect(await needsCount(page)).toBe(before + 1);
+  await expectNoHorizontalScroll(page);
+  await expectNoClippedElements(page);
+
+  await row.click();
+  const detail = page.getByRole('article');
+  await expect(detail.getByRole('heading', { name: /^Weekly budget used up · / })).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'About the weekly budget' })).toBeVisible();
+  await detail.getByRole('link', { name: 'Change the weekly budget' }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/f\/sre\/settings#budgets$/);
+  await expect(page.locator('#budgets')).toBeInViewport();
+});
+
+test('someone who cannot edit the factory reads who can, with no link', async ({ page, request }) => {
+  await request.post('/__mock/reset', { data: { usedUpBudget: 'sre', role: 'viewer' } });
+  await page.goto('/o/acme/needs-you?type=alert');
+  await page
+    .getByRole('list', { name: /Waiting on you/ })
+    .getByRole('link', { name: /Weekly budget used up/ })
+    .click();
+  const detail = page.getByRole('article');
+  await expect(detail.getByText('Factory editors and organization admins can change the weekly budget.')).toBeVisible();
+  await expect(detail.getByRole('link', { name: 'Change the weekly budget' })).toHaveCount(0);
+  await expectNoHorizontalScroll(page);
 });

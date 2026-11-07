@@ -42,12 +42,14 @@ type Store struct {
 	edges     []domain.Edge // item needs, in the order they were added
 	followUps []domain.FollowUp
 	// repos are each item's repositories, in the order they joined.
-	repos   map[domain.ItemID][]domain.ItemRepository
-	joined  []domain.FollowUpID // follow-ups in the order they joined a triage item
-	views   map[domain.SavedViewID]savedViewRecord
-	jonah   jonahRows
-	ids     int
-	changes changes
+	repos  map[domain.ItemID][]domain.ItemRepository
+	joined []domain.FollowUpID // follow-ups in the order they joined a triage item
+	views  map[domain.SavedViewID]savedViewRecord
+	jonah  jonahRows
+	// exhausted holds since when each factory's weekly budget is used up (MarkBudgetExhausted).
+	exhausted map[domain.FactoryID]time.Time
+	ids       int
+	changes   changes
 }
 
 // andonRecord is one andon pull of a factory of an organization.
@@ -73,6 +75,7 @@ func NewStore() *Store {
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 		views:     map[domain.SavedViewID]savedViewRecord{},
 		jonah:     jonahRows{runKinds: map[domain.RunID]domain.RunKind{}},
+		exhausted: map[domain.FactoryID]time.Time{},
 	}
 }
 
@@ -153,6 +156,7 @@ func (s *Store) purge(org domain.OrgID) {
 			delete(s.factories, id)
 			delete(s.numbers, id)
 			delete(s.factCaps, id)
+			delete(s.exhausted, id)
 		}
 	}
 
