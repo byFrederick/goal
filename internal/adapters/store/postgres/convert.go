@@ -93,6 +93,7 @@ func runFrom(r db.AgentRun) domain.Run {
 			Status: domain.RunStatus(r.Status), CostUSD: r.CostUsd, Turns: int(r.Turns), InputTokens: r.InputTokens,
 			OutputTokens: r.OutputTokens, SessionID: deref(r.SessionID), Error: deref(r.Error),
 			Output: rawJSON(r.Output), CPUSeconds: r.CpuSeconds, PeakMemoryBytes: r.PeakMemoryBytes,
+			PeakMemorySource: domain.MemorySource(deref(r.PeakMemorySource)),
 		},
 		Input:   domain.RunInput{Brief: deref(r.Brief)},
 		BoxSize: domain.SandboxSize(deref(r.BoxSize)),

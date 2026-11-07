@@ -7,12 +7,12 @@ You end knowing what your agents cost over a window, which factories and agents 
 
 ## What Spend shows
 
-Pick a window at the top: **This week**, **This month** or **Last 90 days**. The window is in the URL, so you can share it. Every figure on the page follows it.
+Pick a window at the top: **This week**, **This month** or **Last 90 days**. The window is in the URL, so you can share it. Every figure on the page follows it, except the budgets, which always use the last 7 days. With **This week** selected, the first figure is the spend since Monday (UTC).
 
 - **Spend:** the total for the window, this month against last month, the cost per merged item and the share spent on rework.
 - **Spend by day:** each day's cost, split by factory.
 - **By agent** and **By model:** where the money went.
-- **Budgets:** each factory's daily and weekly caps against today and the week. The caps are set in the factory definition, so this page shows them and does not edit them.
+- **Budgets:** each factory's weekly budget against its last 7 days of spend, and today's spend against a day's share of it (the weekly budget ÷ 7, shown as "about $357 a day"). The budget is set in the factory definition, so this page shows it and does not edit it. At 100% the factory drains: running items finish, and nothing new starts until the last 7 days' spend is under the budget.
 - **Payers:** which connections pay for the models.
 
 **Export CSV** downloads the window's cost by factory, agent and model. It does not include box usage.
@@ -29,7 +29,7 @@ Switch between **Agents** and **Stations** above the table. Each row is one agen
 | Box | The box size the runs used: Small, Medium or Large. **Unknown** for runs from before Goal recorded box sizes. |
 | Runs | How many runs reported a CPU time or a peak memory. |
 | CPU median, CPU P90 | CPU time per run, from prepare to the run's end. |
-| Memory median, Memory P90 | The most memory a run held at once. |
+| Memory median, Memory P90 | The most memory a run held at once. Goal reads the peak of the box's own cgroup where the box has one, and otherwise the machine's memory in use during the run, which includes the box's own system processes and can read a little higher. |
 
 Rows are sorted by CPU P90, largest first. On a phone each row stacks, with its column names beside the figures.
 

@@ -614,6 +614,7 @@ describe('runTask box usage', () => {
       at: at.toISOString(),
       cpu_seconds: 7.5,
       peak_memory_bytes: 805_306_368,
+      memory_source: 'cgroup',
     });
     expect(log).not.toHaveBeenCalled();
   });
@@ -639,6 +640,7 @@ describe('runTask box usage', () => {
     expect(last).toMatchObject({ type: 'finished', status: 'succeeded', at: at.toISOString() });
     expect(last).not.toHaveProperty('cpu_seconds');
     expect(last).not.toHaveProperty('peak_memory_bytes');
+    expect(last).not.toHaveProperty('memory_source');
     // No line added, none changed: the same events as a run that measures nothing.
     expect(events).toEqual((await run([success])).events);
     expect(log).toHaveBeenCalledTimes(1);

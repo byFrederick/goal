@@ -27,13 +27,18 @@ const dist = join(import.meta.dirname, '..', 'dist');
 const buildOf = (html: string) => /name="goal-build" content="([0-9a-f]{16})"/.exec(html)?.[1] ?? '';
 
 // A copy of the build under a new id: index.html's meta and the worker's cache name change.
-function makeBuild(root: string, name: string, from: string): string {
+function makeBuild(root: string, name: string, from: string, silent = false): string {
   const dir = join(root, name);
   cpSync(dist, dir, { recursive: true });
   const id = randomBytes(8).toString('hex');
   for (const file of ['index.html', 'sw.js']) {
     const path = join(dir, file);
     writeFileSync(path, readFileSync(path, 'utf8').split(from).join(id));
+  }
+  // A worker from before the GET_BUILD check: it never answers.
+  if (silent) {
+    const sw = join(dir, 'sw.js');
+    writeFileSync(sw, readFileSync(sw, 'utf8').split('GET_BUILD').join('NO_BUILD'));
   }
   return id;
 }
@@ -55,10 +60,11 @@ test.beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), 'goal-pwa-update-'));
   const a = buildOf(readFileSync(join(dist, 'index.html'), 'utf8'));
   expect(a).toMatch(/^[0-9a-f]{16}$/);
-  ids.a = makeBuild(root, 'a', a);
+  ids.base = makeBuild(root, 'base', a);
+  ids.a = makeBuild(root, 'a', a, true);
   ids.b = makeBuild(root, 'b', a);
   ids.c = makeBuild(root, 'c', a);
-  current = 'a';
+  current = 'base';
   const preview = new URL(info.project.use.baseURL ?? 'http://127.0.0.1:4174');
   server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -105,14 +111,20 @@ test.afterAll(async () => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 
-test('the toast shows only for a newer build than the page runs', async ({ page }, info) => {
+test('a stale toast does not stay, and Reload loads the newest build', async ({ page }, info) => {
   test.skip(!['phone-375', 'desktop-1440'].includes(info.project.name), 'runs at 375 and 1440 px only');
-  // Build A: the first visit installs the worker, which claims the page.
+  // The base build: the first visit installs the worker, which claims the page.
   await page.goto(`${origin}/`);
-  expect(await page.locator('meta[name="goal-build"]').getAttribute('content')).toBe(ids.a);
+  expect(await page.locator('meta[name="goal-build"]').getAttribute('content')).toBe(ids.base);
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
 
-  // Build B, then a navigation: the page runs B, the waiting worker is B's, nothing shows.
+  // Build A, whose worker never answers GET_BUILD, is left waiting and its toast ignored.
+  current = 'a';
+  await page.goto(`${origin}/`);
+  expect(await page.locator('meta[name="goal-build"]').getAttribute('content')).toBe(ids.a);
+  await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration())?.waiting != null);
+
+  // Build B, then a navigation: the page runs B, A's worker is replaced by B's, no toast remains.
   current = 'b';
   await page.goto(`${origin}/`);
   expect(await page.locator('meta[name="goal-build"]').getAttribute('content')).toBe(ids.b);
@@ -121,10 +133,11 @@ test('the toast shows only for a newer build than the page runs', async ({ page 
     return keys.length === 1 && keys[0] === `goal-shell-${id}`;
   }, ids.b);
   await expect(page.getByText(TOAST)).toHaveCount(0);
-  expect(await page.locator('meta[name="goal-build"]').getAttribute('content')).toBe(ids.b);
 
-  // Build C without navigating: the update check finds a newer build and offers it.
+  // Build C without navigating: the update check finds a newer build, and Reload loads it.
   current = 'c';
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect(page.getByText(TOAST)).toBeVisible();
+  await page.getByRole('button', { name: 'Reload' }).click();
+  await expect(page.locator('meta[name="goal-build"]')).toHaveAttribute('content', ids.c ?? '');
 });

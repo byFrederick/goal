@@ -1,26 +1,21 @@
-// The four figures over the top of the screen, as the shared stat strip: the window's spend against the
-// weekly budgets (the progress bar only for the week, whose budgets are weekly), this month against last,
+// The four figures over the top of the screen, as the shared stat strip: the window's spend (the budgets
+// compare only with the rolling 7 days, so they are in the Budgets card, not here), this month against last,
 // the cost per merged item over eight weeks, and what the rework cost. A figure goald did not give shows
 // "—", never 0.
 import type { OrgSpend } from '../../api/types';
 import { type Stat, StatStrip } from '../../ui/stat-strip';
-import { money, monthName, monthToDate, preciseMoney, spendLabel, sumOf } from './view';
+import { money, monthName, monthToDate, preciseMoney, spendLabel, spendTileLabel } from './view';
 
 /** The figure as text, or null (the strip's dash) when goald did not give it. */
 const given = (n: number | null, format: (n: number) => string): string | null => (n === null ? null : format(n));
 
 export function SpendStats({ spend }: { spend: OrgSpend }) {
-  const weeklyCaps = sumOf(spend.budgets.map((b) => b.weekly_usd));
-  const capped = spend.window === 'week' && weeklyCaps !== null && weeklyCaps > 0;
   const reworkPct = spend.rework_share === null ? null : Math.round(spend.rework_share * 100);
 
   const stats: Stat[] = [
     {
-      label: spendLabel[spend.window],
+      label: spendTileLabel[spend.window],
       value: money(spend.total_usd),
-      unit: capped ? `of ${money(weeklyCaps)}` : undefined,
-      target: capped ? 'All factory budgets' : undefined,
-      progress: capped ? spend.total_usd / weeklyCaps : undefined,
     },
     {
       label: 'This month',

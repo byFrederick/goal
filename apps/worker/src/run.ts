@@ -28,8 +28,9 @@ export interface RunDeps {
   /** Where and how the spec's environment is applied before the agent starts; needed when the spec has one. */
   environment?: Omit<EnvironmentDeps, 'env'>;
   /**
-   * The box's cgroup and prepare's starting CPU reading (src/cgroup.ts): every finished line then
-   * carries cpu_seconds and peak_memory_bytes where they can be read. Absent, neither field.
+   * The box's cgroup, /proc paths and prepare's starting CPU reading (src/cgroup.ts): every finished
+   * line then carries cpu_seconds, peak_memory_bytes and memory_source where they can be read. Absent,
+   * none of them.
    */
   resources?: MeterOptions;
 }
@@ -46,8 +47,8 @@ export interface RunDeps {
  * The agent's input is a stream: the task's prompt first, then each note left on the item while
  * it works. The stream ends at the result, so the query ends with it.
  *
- * With deps.resources, the box's cgroup is measured from the start (src/cgroup.ts), and the
- * finished event carries cpu_seconds and peak_memory_bytes where they can be read; a counter that
+ * With deps.resources, the box is measured from the start (src/cgroup.ts), and the finished event
+ * carries cpu_seconds, peak_memory_bytes and memory_source where they can be read; a counter that
  * can't be read leaves its field out and changes nothing else.
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {

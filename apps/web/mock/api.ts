@@ -1005,6 +1005,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const spend = createSpend({
     clock,
     factoriesOf,
+    weeklyOf: (f) => state.weeklyBudget[f.name],
+    spendOf: (f, from, to) => metricsOf(flowInput(f), { from, to }, false).spend_usd,
     reasonOf: (_org, f) => {
       const last = state.andon[f.name]?.at(-1);
       return last && last.cleared_at === null ? last.reason : null;

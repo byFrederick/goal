@@ -48,7 +48,8 @@ describe('the spend screen, ready', () => {
     expect(screen.getAllByRole('radio', { name: 'This month' })).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: 'Export CSV' })).toHaveLength(1);
     const strip = await screen.findByRole('region', { name: 'Spend this week' });
-    expect(within(strip).getByText('Spend this week')).toBeTruthy();
+    expect(within(strip).getByText('Since Monday')).toBeTruthy();
+    expect(within(strip).queryByText(/All factory budgets|^of \$/)).toBeNull();
     expect(within(strip).getByText('$1,940')).toBeTruthy();
     expect(within(strip).getByText(/September \$2,310/)).toBeTruthy();
     expect(within(strip).getByText('$3.40')).toBeTruthy();
@@ -115,7 +116,7 @@ describe('the spend screen, ready', () => {
   it('draws the charts in ink on a hover track and the days in factory colours, with no pattern', async () => {
     const { container } = renderSpend();
 
-    await screen.findByText('Spend this week');
+    await screen.findByText('Since Monday');
     const rows = screen.getAllByRole('meter').filter((m) => /: \$/.test(m.getAttribute('aria-label') ?? ''));
     expect(rows.length).toBeGreaterThan(0);
     for (const m of rows) {
@@ -137,7 +138,7 @@ describe('the spend screen, ready', () => {
     expect(within(section).getByText('Software')).toBeTruthy();
     expect(within(section).getByText('Stopped')).toBeTruthy();
     expect(within(section).getByText('Andon pulled, no runs today')).toBeTruthy();
-    expect(within(section).getByText('64% today')).toBeTruthy();
+    expect(within(section).getByText('84% today')).toBeTruthy();
     expect(within(section).getByText('At 80%')).toBeTruthy();
     expect(within(section).getByText('At 100%')).toBeTruthy();
     expect(within(section).getByText('Per item')).toBeTruthy();
@@ -182,7 +183,7 @@ describe('the spend screen, ready', () => {
       new ApiError({ title: 'Export too large', status: 413, detail: 'More than 100000 rows; pick a shorter window.' }),
     );
     renderSpend();
-    await screen.findByText('Spend this week');
+    await screen.findByText('Since Monday');
 
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
 
@@ -317,7 +318,7 @@ describe('Box usage', () => {
     expect(box.getByRole('columnheader', { name: 'Station' })).toBeTruthy();
   });
 
-  it('explains median, P90, the CPU span and the left-out runs in the ⓘ, with no paragraph', async () => {
+  it('explains median, P90, the CPU span, memory and the left-out runs in the ⓘ, with no paragraph', async () => {
     renderSpend();
     const box = await section();
     const tip = box.getByRole('button', { name: 'About Box usage' });
@@ -326,6 +327,8 @@ describe('Box usage', () => {
     expect(text).toMatch(/Median/);
     expect(text).toMatch(/P90/);
     expect(text).toMatch(/prepare to the run’s end/);
+    expect(text).toMatch(/peak of the box’s own cgroup/);
+    expect(text).toMatch(/machine’s memory in use during the run/);
     expect(text).toMatch(/couldn’t measure are left out/);
   });
 
