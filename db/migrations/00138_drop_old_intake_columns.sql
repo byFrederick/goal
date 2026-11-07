@@ -21,10 +21,10 @@ DECLARE
   remedy CONSTANT text := 'run ADR 0040''s release first, then this one';
 BEGIN
   IF EXISTS (SELECT 1 FROM webhook_endpoints WHERE sender IS NULL OR secret_id IS NULL) THEN
-    RAISE EXCEPTION 'migration 00136 drops the factory webhook endpoints'' sealed secrets, but an endpoint has no sender or secret: %', remedy;
+    RAISE EXCEPTION 'migration 00138 drops the factory webhook endpoints'' sealed secrets, but an endpoint has no sender or secret: %', remedy;
   END IF;
   IF EXISTS (SELECT 1 FROM webhook_endpoints WHERE factory_id IS NOT NULL) THEN
-    RAISE EXCEPTION 'migration 00136 drops webhook_endpoints.factory_id, but an endpoint still belongs to a factory: %', remedy;
+    RAISE EXCEPTION 'migration 00138 drops webhook_endpoints.factory_id, but an endpoint still belongs to a factory: %', remedy;
   END IF;
 END
 $$;

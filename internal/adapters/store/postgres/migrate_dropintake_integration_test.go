@@ -14,7 +14,7 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// intakeReleased is the release the refusal of 00136 names.
+// intakeReleased is the release the refusal of 00138 names.
 const intakeReleased = "run ADR 0040's release first, then this one"
 
 // endpointKeyID is the master key id the seeded endpoints' own sealed secrets are under.
@@ -58,7 +58,7 @@ func (s seedIntake) factoryEndpoint(t *testing.T) uuid.UUID {
 	return id
 }
 
-// droppedColumns are the columns of work_items and webhook_endpoints 00136 drops that are still
+// droppedColumns are the columns of work_items and webhook_endpoints 00138 drops that are still
 // there.
 func (s seedIntake) droppedColumns(t *testing.T) []string {
 	t.Helper()
@@ -79,7 +79,7 @@ func (s seedIntake) droppedColumns(t *testing.T) []string {
 	return columns
 }
 
-// Migration 00136 drops work_items.source and the factory endpoints' columns on a database that
+// Migration 00138 drops work_items.source and the factory endpoints' columns on a database that
 // ran ADR 0040's release: the organization's webhook still reads, goal_connection_key_ids lists
 // only the secrets' key ids, and a webhook's name is still unique in its organization and none of
 // the reserved names.
@@ -98,34 +98,34 @@ func TestMigrate_DropsOldIntakeColumns(t *testing.T) {
 	migrate(t, s.db.owner)
 
 	if columns := s.droppedColumns(t); len(columns) != 0 {
-		t.Errorf("columns after 00136 = %v; want none of them", columns)
+		t.Errorf("columns after 00138 = %v; want none of them", columns)
 	}
 
 	var nullable int
 	if err := s.owner.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns
 		WHERE table_name = 'webhook_endpoints' AND column_name IN ('sender', 'secret_id') AND is_nullable = 'YES'`).Scan(&nullable); err != nil || nullable != 0 {
-		t.Errorf("%d nullable sender and secret_id columns after 00136, %v; want none", nullable, err)
+		t.Errorf("%d nullable sender and secret_id columns after 00138, %v; want none", nullable, err)
 	}
 
 	ctx := domain.WithOrg(t.Context(), s.org)
 	if got, err := NewIntake(s.store).Endpoint(ctx, s.webhook.ID); err != nil || got.Name != "github-acme" || got.Sender != domain.SenderGitHub {
-		t.Errorf("Endpoint after 00136 = %+v, %v; want the github-acme webhook", got, err)
+		t.Errorf("Endpoint after 00138 = %+v, %v; want the github-acme webhook", got, err)
 	}
 
 	if ids, err := ConnectionKeyIDs(t.Context(), s.store); err != nil || !slices.Equal(ids, []string{"k1"}) {
-		t.Errorf("ConnectionKeyIDs after 00136 = %v, %v; want only the secret's k1", ids, err)
+		t.Errorf("ConnectionKeyIDs after 00138 = %v, %v; want only the secret's k1", ids, err)
 	}
 
 	for _, name := range []string{"github-acme", "schedule"} {
 		if _, err := s.owner.Exec(t.Context(), `INSERT INTO webhook_endpoints (id, org_id, name, sender, secret_id)
 			SELECT $1, org_id, $2, sender, secret_id FROM webhook_endpoints WHERE id = $3`,
 			uuid.Must(uuid.NewV7()), name, string(s.webhook.ID)); err == nil {
-			t.Errorf("a second webhook named %s after 00136 was accepted; want it refused", name)
+			t.Errorf("a second webhook named %s after 00138 was accepted; want it refused", name)
 		}
 	}
 }
 
-// Migration 00136 refuses a database ADR 0040's release has not run on, before it changes
+// Migration 00138 refuses a database ADR 0040's release has not run on, before it changes
 // anything: it names the release to run first, and the columns are still there.
 func TestMigrate_DropsOldIntakeColumnsRefusesUnreleased(t *testing.T) {
 	t.Parallel()
@@ -154,7 +154,7 @@ func TestMigrate_DropsOldIntakeColumnsRefusesUnreleased(t *testing.T) {
 			}
 
 			if columns := s.droppedColumns(t); len(columns) != 6 {
-				t.Errorf("columns after a refused 00136 = %v; want all six kept", columns)
+				t.Errorf("columns after a refused 00138 = %v; want all six kept", columns)
 			}
 		})
 	}

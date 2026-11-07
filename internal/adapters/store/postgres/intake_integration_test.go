@@ -269,7 +269,7 @@ func seedWebhook(t *testing.T, d connectionsDB, org domain.OrgID, name string) d
 // factory the organization does not have (00117 grants the conversion UPDATE on sender and
 // secret_id); the database refuses a reserved name, a webhook without a secret and the delete of
 // a secret a webhook uses, and a rename of the secret follows; goal_connection_key_ids lists the
-// secret's key id only (00136); the purge removes both.
+// secret's key id only (00138); the purge removes both.
 func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 	t.Parallel()
 
