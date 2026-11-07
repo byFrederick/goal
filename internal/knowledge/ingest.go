@@ -367,10 +367,6 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 		return in.secretReader(ctx, spec, src.Config[domain.SourceReaderKey])
 	}
 
-	if src.Connection != "" {
-		return spec, nil, fmt.Errorf("source %s reads with connection %s, which goald no longer reads: give it a secret", src.Name, src.Connection)
-	}
-
 	return spec, nil, fmt.Errorf("source %s names no secret to read with: give it one", src.Name)
 }
 

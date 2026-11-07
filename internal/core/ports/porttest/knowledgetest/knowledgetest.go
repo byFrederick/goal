@@ -212,13 +212,13 @@ func testSources(f *fixture) {
 
 	up := f.upload(handbook)
 	f.want("upload source", up, up.Kind == domain.SourceUpload, up.Status == domain.SyncIdle, up.SyncEvery == domain.DefaultSyncEvery,
-		up.NextSyncAt != nil && !up.NextSyncAt.Before(before), up.Connection == "", up.CreatedBy.Ref() == admin.Ref())
+		up.NextSyncAt != nil && !up.NextSyncAt.Before(before), up.CreatedBy.Ref() == admin.Ref())
 
 	synced := f.source(f.org, domain.NewKnowledgeSource{
 		Name: runbooks, Title: "Runbooks", Kind: domain.SourceSynced, Secret: syncSecret,
 		Config: map[string]string{domain.SourceReaderKey: readerGitDocs, "branch": "main"}, SyncEvery: new(30 * time.Minute),
 	})
-	f.want("synced source", synced, synced.Secret == syncSecret, synced.Connection == "", synced.SyncEvery == 30*time.Minute,
+	f.want("synced source", synced, synced.Secret == syncSecret, synced.SyncEvery == 30*time.Minute,
 		synced.Config["branch"] == "main")
 
 	all, err := f.Knowledge.Sources(ctx)
@@ -270,11 +270,8 @@ func testSourceRules(f *fixture) {
 		"bad name":           {domain.NewKnowledgeSource{Name: "Hand Book", Title: "x", Kind: domain.SourceUpload}, domain.ErrInvalid},
 		"no title":           {domain.NewKnowledgeSource{Name: "notitle", Kind: domain.SourceUpload}, domain.ErrInvalid},
 		"bad kind":           {domain.NewKnowledgeSource{Name: "odd", Title: "x", Kind: "pushed"}, domain.ErrInvalid},
-		"upload connection":  {domain.NewKnowledgeSource{Name: "upl", Title: "x", Kind: domain.SourceUpload, Connection: "docs"}, domain.ErrInvalid},
+		"live":               {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: "live"}, domain.ErrInvalid},
 		"synced without one": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced}, domain.ErrInvalid},
-		// No connection is left (ADR 0037), so every one a source names is unknown.
-		"synced connection": {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceSynced, Connection: "docs"}, ports.ErrNotFound},
-		"live connection":   {domain.NewKnowledgeSource{Name: newName, Title: "x", Kind: domain.SourceLive, Connection: "chat"}, ports.ErrNotFound},
 		"too often": {
 			domain.NewKnowledgeSource{
 				Name: newName, Title: "x", Kind: domain.SourceSynced, Secret: syncSecret,
@@ -333,7 +330,7 @@ func testSecretSources(f *fixture) {
 	}
 
 	src := f.source(f.org, onSecret)
-	if src.Secret != docsSecret || src.Connection != "" || src.Config[domain.SourceReaderKey] != readerGitDocs {
+	if src.Secret != docsSecret || src.Config[domain.SourceReaderKey] != readerGitDocs {
 		f.t.Errorf("source = %+v; want it on secret %s with its reader", src, docsSecret)
 	}
 
@@ -355,7 +352,7 @@ func testSecretSources(f *fixture) {
 	moved, err := f.Knowledge.UpdateSource(ctx, handbook, domain.KnowledgeSourcePatch{
 		Secret: &renamed, Config: map[string]string{domain.SourceReaderKey: readerGitDocs},
 	}, admin)
-	if err != nil || moved.Secret != renamed || moved.Connection != "" {
+	if err != nil || moved.Secret != renamed {
 		f.t.Errorf("move over = %+v, %v; want it on the secret", moved, err)
 	}
 
@@ -722,7 +719,7 @@ func testConvertSource(f *fixture) {
 
 	repo, err := f.Knowledge.ConvertSource(ctx, handbook, domain.SourceRepository, admin)
 	f.must(err)
-	f.want("the converted repository source", repo, repo.Kind == domain.SourceRepository, repo.Connection == "", repo.Secret == docsSecret,
+	f.want("the converted repository source", repo, repo.Kind == domain.SourceRepository, repo.Secret == docsSecret,
 		reflect.DeepEqual(repo.Config, map[string]string{"paths": "docs/**/*.md"}), repo.NextSyncAt != nil && !repo.NextSyncAt.After(time.Now()))
 	f.want("the source as read", f.get(f.org, handbook), f.get(f.org, handbook).Kind == domain.SourceRepository)
 

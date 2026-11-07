@@ -101,11 +101,6 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
 
-	if n.Connection != "" {
-		// No connection is left to read (00135), so every name is unknown.
-		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: connection %q: %w", n.Connection, ports.ErrNotFound)
-	}
-
 	id, err := newID()
 	if err != nil {
 		return domain.KnowledgeSource{}, err
@@ -356,14 +351,12 @@ func dropUnheld(ctx context.Context, q *db.Queries, blobs []string, drop ports.D
 
 // SyncNow implements ports.Knowledge.
 func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
-	kind, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (string, error) { return q.SyncKnowledgeSourceNow(ctx, name) })
+	_, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (string, error) { return q.SyncKnowledgeSourceNow(ctx, name) })
 	switch {
 	case notFound(err):
 		return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
 	case err != nil:
 		return fmt.Errorf("sync knowledge source %q: %w", name, err)
-	case kind == string(domain.SourceLive):
-		return fmt.Errorf("knowledge source %q is live and never syncs: %w", name, domain.ErrInvalid)
 	default:
 		return nil
 	}

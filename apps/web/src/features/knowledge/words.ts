@@ -13,9 +13,8 @@ export interface StatusLine {
   detail?: string;
 }
 
-/** "Indexed", "Synced", "Syncing", "Sync failed" (with why), "Live, not indexed", or not yet. */
+/** "Indexed", "Synced", "Syncing", "Sync failed" (with why), or not yet. */
 export function sourceStatus(s: KnowledgeSource): StatusLine {
-  if (s.kind === 'live') return { tone: 'muted', text: 'Live, not indexed' };
   if (s.status === 'syncing') return { tone: 'muted', text: 'Syncing' };
   if (s.status === 'failed') {
     const kept = s.last_synced_at ? ` The files from ${formatDay(s.last_synced_at)} stay as they were.` : '';
@@ -47,7 +46,6 @@ function ago(iso: string, now: number): string {
  * "Next in 15 min"; an upload's "When files are added"; "Running" while it syncs.
  */
 export function syncTimes(s: KnowledgeSource, now: number): { last: string; next?: string } {
-  if (s.kind === 'live') return { last: 'Searched at question time' };
   if (s.status === 'syncing') return { last: 'Running' };
   const last = s.last_synced_at ? ago(s.last_synced_at, now) : 'Not yet';
   if (s.kind === 'upload') return { last, next: 'When files are added' };

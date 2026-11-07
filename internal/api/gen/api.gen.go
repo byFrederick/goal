@@ -1428,7 +1428,6 @@ func (e KnowledgeSourceStatus) Valid() bool {
 // Defines values for KnowledgeSourceKind.
 const (
 	KnowledgeSourceKindConfluence KnowledgeSourceKind = "confluence"
-	KnowledgeSourceKindLive       KnowledgeSourceKind = "live"
 	KnowledgeSourceKindRepository KnowledgeSourceKind = "repository"
 	KnowledgeSourceKindSynced     KnowledgeSourceKind = "synced"
 	KnowledgeSourceKindUpload     KnowledgeSourceKind = "upload"
@@ -1438,8 +1437,6 @@ const (
 func (e KnowledgeSourceKind) Valid() bool {
 	switch e {
 	case KnowledgeSourceKindConfluence:
-		return true
-	case KnowledgeSourceKindLive:
 		return true
 	case KnowledgeSourceKindRepository:
 		return true
@@ -5528,7 +5525,7 @@ type KnowledgeCheckInput struct {
 	// Factories The factories that would read it (each one's metadata.id or metadata.name)
 	Factories *[]string `json:"factories,omitempty"`
 
-	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced is the kind before the cut-over
 	Kind KnowledgeSourceKind `json:"kind"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
@@ -5647,17 +5644,14 @@ type KnowledgeSnapshotSummary struct {
 // KnowledgeSource One source of the organization's knowledge base (spec 4 §4.8)
 type KnowledgeSource struct {
 	// Config What its reader reads (a repository, a branch and path globs; Confluence spaces and, with root_page, only one page's tree). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email.
-	Config map[string]string `json:"config"`
-
-	// Connection The connection a live source reads, or a synced one not yet on a secret; absent for an upload source
-	Connection *string   `json:"connection,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	Config    map[string]string `json:"config"`
+	CreatedAt time.Time         `json:"created_at"`
 
 	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor  `json:"created_by"`
 	Id        string `json:"id"`
 
-	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced is the kind before the cut-over
 	Kind         KnowledgeSourceKind `json:"kind"`
 	LastError    *string             `json:"last_error,omitempty"`
 	LastSyncedAt *time.Time          `json:"last_synced_at"`
@@ -5668,13 +5662,13 @@ type KnowledgeSource struct {
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
 	Name KnowledgeSourceName `json:"name"`
 
-	// NextSyncAt When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync
+	// NextSyncAt When it is due next; null for an on-demand source (sync_every_seconds 0) until someone presses Sync
 	NextSyncAt *time.Time `json:"next_sync_at"`
 
 	// ReadWhen The line that tells agents when to open it; empty when it has none
 	ReadWhen string `json:"read_when"`
 
-	// Secret The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection
+	// Secret The secret a synced source reads with, opened at each sync; absent for an upload source
 	Secret *string `json:"secret,omitempty"`
 
 	// Status syncing while a goald holds it; failed after a sync that stopped (last_error says why)
@@ -5712,7 +5706,7 @@ type KnowledgeSourceEntry struct {
 	ReadWhen *string `json:"readWhen,omitempty"`
 }
 
-// KnowledgeSourceKind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+// KnowledgeSourceKind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced is the kind before the cut-over
 type KnowledgeSourceKind string
 
 // KnowledgeSourceList defines model for KnowledgeSourceList.
@@ -6204,10 +6198,7 @@ type NewKnowledgeSource struct {
 	// Config What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on one of the organization's code hosts; a sync on any other host fails before the secret is opened, and the kind the host is listed as replaces code_host), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it).
 	Config *map[string]string `json:"config,omitempty"`
 
-	// Connection The connection a live source reads
-	Connection *string `json:"connection,omitempty"`
-
-	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+	// Kind upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced is the kind before the cut-over
 	Kind KnowledgeSourceKind `json:"kind"`
 
 	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
@@ -6800,7 +6791,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a knowledge source naming a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -7582,36 +7573,30 @@ type SpendUsage struct {
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
 
-// StandingRule Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by an organization connection, for every factory of the organization (connection_id set), or, for a factory on secrets, by one MCP server of one environment of one factory (factory_id, environment and server set, connection_id null; ADR 0037 decision 8)
+// StandingRule Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by one MCP server of one environment of one factory (ADR 0037 decision 8)
 type StandingRule struct {
 	// Agent The agent's role, its name in the definition, as in architect
-	Agent string `json:"agent"`
-
-	// Connection The connection's name; null once the connection is deleted, and for a rule keyed by server
-	Connection *string `json:"connection"`
-
-	// ConnectionId The connection the rule is keyed by; null for a rule keyed by server
-	ConnectionId *string   `json:"connection_id"`
-	CreatedAt    time.Time `json:"created_at"`
+	Agent     string    `json:"agent"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
-	// Environment The environment file's name of a rule keyed by server, as in default; null for a connection's rule
-	Environment *string `json:"environment"`
+	// Environment The environment file's name, as in default
+	Environment string `json:"environment"`
 
-	// FactoryId The factory of a rule keyed by server; null for a connection's rule
-	FactoryId *string `json:"factory_id"`
-	Id        string  `json:"id"`
+	// FactoryId The factory the rule is keyed by
+	FactoryId string `json:"factory_id"`
+	Id        string `json:"id"`
 
 	// ItemId The item it was approved on
 	ItemId    string     `json:"item_id"`
 	RevokedAt *time.Time `json:"revoked_at"`
 	RevokedBy *Actor     `json:"revoked_by"`
 
-	// Server The MCP server's name in the environment file (mcp.<server>) of a rule keyed by server; null for a connection's rule
-	Server *string `json:"server"`
-	Tool   string  `json:"tool"`
+	// Server The MCP server's name in the environment file (mcp.<server>)
+	Server string `json:"server"`
+	Tool   string `json:"tool"`
 }
 
 // StandingRuleList defines model for StandingRuleList.
@@ -11399,7 +11384,7 @@ type ClientInterface interface {
 
 	// CreateKnowledgeSourceWithBody Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -11408,7 +11393,7 @@ type ClientInterface interface {
 
 	// CreateKnowledgeSource Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -11431,7 +11416,7 @@ type ClientInterface interface {
 
 	// UpdateKnowledgeSourceWithBody Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -11440,7 +11425,7 @@ type ClientInterface interface {
 
 	// UpdateKnowledgeSource Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -11463,7 +11448,7 @@ type ClientInterface interface {
 
 	// SyncKnowledgeSource Sync a source now
 	//
-	// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
+	// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends.
 	//
 	// Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 	SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -15176,7 +15161,7 @@ func (c *Client) ListKnowledgeSources(ctx context.Context, org OrgRef, params *L
 
 // CreateKnowledgeSourceWithBody Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes any type of body and a specified content type.
 //
@@ -15195,7 +15180,7 @@ func (c *Client) CreateKnowledgeSourceWithBody(ctx context.Context, org OrgRef, 
 
 // CreateKnowledgeSource Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -15248,7 +15233,7 @@ func (c *Client) GetKnowledgeSource(ctx context.Context, org OrgRef, source Sour
 
 // UpdateKnowledgeSourceWithBody Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 //
 // Takes any type of body and a specified content type.
 //
@@ -15267,7 +15252,7 @@ func (c *Client) UpdateKnowledgeSourceWithBody(ctx context.Context, org OrgRef, 
 
 // UpdateKnowledgeSource Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -15320,7 +15305,7 @@ func (c *Client) GetKnowledgeFile(ctx context.Context, org OrgRef, source Source
 
 // SyncKnowledgeSource Sync a source now
 //
-// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
+// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends.
 //
 // Corresponds with POST /v1/orgs/{org}/knowledge/sources/{source}/sync (the `SyncKnowledgeSource` operationId).
 func (c *Client) SyncKnowledgeSource(ctx context.Context, org OrgRef, source SourceRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -28323,7 +28308,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateKnowledgeSourceWithBodyWithResponse Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28332,7 +28317,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateKnowledgeSourceWithResponse Add a source to the knowledge base
 	//
-	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+	// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28359,7 +28344,7 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateKnowledgeSourceWithBodyWithResponse Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28368,7 +28353,7 @@ type ClientWithResponsesInterface interface {
 
 	// UpdateKnowledgeSourceWithResponse Change a source's title, config or schedule
 	//
-	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+	// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28395,7 +28380,7 @@ type ClientWithResponsesInterface interface {
 
 	// SyncKnowledgeSourceWithResponse Sync a source now
 	//
-	// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
+	// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -40878,7 +40863,7 @@ func (c *ClientWithResponses) ListKnowledgeSourcesWithResponse(ctx context.Conte
 
 // CreateKnowledgeSourceWithBodyWithResponse Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40893,7 +40878,7 @@ func (c *ClientWithResponses) CreateKnowledgeSourceWithBodyWithResponse(ctx cont
 
 // CreateKnowledgeSourceWithResponse Add a source to the knowledge base
 //
-// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+// An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40938,7 +40923,7 @@ func (c *ClientWithResponses) GetKnowledgeSourceWithResponse(ctx context.Context
 
 // UpdateKnowledgeSourceWithBodyWithResponse Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40953,7 +40938,7 @@ func (c *ClientWithResponses) UpdateKnowledgeSourceWithBodyWithResponse(ctx cont
 
 // UpdateKnowledgeSourceWithResponse Change a source's title, config or schedule
 //
-// config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+// config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -40998,7 +40983,7 @@ func (c *ClientWithResponses) GetKnowledgeFileWithResponse(ctx context.Context, 
 
 // SyncKnowledgeSourceWithResponse Sync a source now
 //
-// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
+// The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends.
 //
 // Returns a wrapper object for the known response body format(s).
 //

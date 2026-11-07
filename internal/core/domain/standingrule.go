@@ -70,18 +70,12 @@ func CheckToolModes(modes map[string]ConnectionToolMode) error {
 type StandingRuleID string
 
 // StandingRule lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is
-// keyed by an organization connection, for every factory of the organization (ConnectionID set),
-// or, on secrets, by one MCP server of one environment of one factory (ADR 0037 decision 8:
-// Factory, Environment and Server set, ConnectionID ""). It is never deleted: revoking it sets
-// RevokedAt and RevokedBy, and deleting its connection revokes a connection's rule.
+// keyed by one MCP server of one environment of one factory (ADR 0037 decision 8). It is never
+// deleted: revoking it sets RevokedAt and RevokedBy.
 type StandingRule struct {
-	ID           StandingRuleID
-	ConnectionID ConnectionID
-	// Connection is the connection's name, or "" once the connection is deleted or for a rule
-	// keyed by server.
-	Connection string
-	// Factory, Environment and Server key a rule on secrets: the environment file's name and its
-	// MCP server's name (mcp.<server>).
+	ID StandingRuleID
+	// Factory, Environment and Server key the rule: the factory, the environment file's name and
+	// its MCP server's name (mcp.<server>).
 	Factory     FactoryID
 	Environment string
 	Server      string
@@ -98,28 +92,6 @@ type StandingRule struct {
 
 // Active reports whether r is not revoked.
 func (r StandingRule) Active() bool { return r.RevokedAt == nil && r.RevokedBy == nil }
-
-// NewStandingRule is a standing rule to create: the connection by name, the tool, the agent role
-// and the item it is approved on.
-type NewStandingRule struct {
-	Connection, Tool, Agent string
-	Item                    ItemID
-}
-
-// Check enforces n's names and item id. The error wraps ErrInvalid.
-func (n NewStandingRule) Check() error {
-	errs := []error{CheckConnectionName(n.Connection), CheckToolName(n.Tool)}
-
-	if !namePattern.MatchString(n.Agent) {
-		errs = append(errs, fmt.Errorf("agent %q must be an agent's name in the definition: %w", n.Agent, ErrInvalid))
-	}
-
-	if !uuidPattern.MatchString(string(n.Item)) {
-		errs = append(errs, fmt.Errorf("item %q is not an item id: %w", n.Item, ErrInvalid))
-	}
-
-	return errors.Join(errs...)
-}
 
 // NewServerStandingRule is a standing rule to create on secrets (ADR 0037 decision 8): the
 // factory, the environment file's name, its MCP server's name, the tool, the agent role and the

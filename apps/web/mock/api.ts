@@ -332,8 +332,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     actor: (req) => auth.actor(req),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     listedBy: (factory) => definitions.knowledgeSourceNames(factory),
-    // goald serves no organization connections (ADR 0037): no name resolves.
-    connectionSync: () => undefined,
     audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {

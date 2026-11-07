@@ -263,7 +263,7 @@ func (h *harness) syncedOnASecret(t *testing.T) {
 
 	synced := decode[gen.KnowledgeSource](t, h.request(t, http.MethodPost, sourcesPath, `{"name":"runbooks","title":"Runbooks","kind":"synced",
 "secret":"`+repoSecret+`","config":{"reader":"gitdocs","repository":"https://github.com/acme/docs"}}`, nil), http.StatusCreated)
-	if deref(synced.Secret) != repoSecret || synced.Connection != nil || synced.Config["reader"] != "gitdocs" {
+	if deref(synced.Secret) != repoSecret || synced.Config["reader"] != "gitdocs" {
 		t.Errorf("created synced = %s; want it on secret %s with its reader", body(t, synced), repoSecret)
 	}
 
@@ -292,13 +292,11 @@ func TestKnowledge_SourceRefusals(t *testing.T) {
 		code       string
 	}{
 		{"name taken", `{"name":"handbook","title":"Again","kind":"upload"}`, http.StatusConflict, "knowledge-source-name-taken"},
-		{"upload with a connection", `{"name":"notes","title":"Notes","kind":"upload","connection":"github"}`, http.StatusBadRequest, ""},
-		{"synced on a connection", `{"name":"models","title":"Models","kind":"synced","connection":"github","config":{"reader":"gitdocs"}}`, http.StatusBadRequest, ""},
 		{"synced on no secret", `{"name":"models","title":"Models","kind":"synced"}`, http.StatusBadRequest, ""},
 		{"synced without a reader", `{"name":"models","title":"Models","kind":"synced","secret":"` + repoSecret + `"}`, http.StatusBadRequest, ""},
 		{"unknown secret", `{"name":"wiki","title":"Wiki","kind":"synced","secret":"wiki","config":{"reader":"confluence"}}`, http.StatusNotFound, "secret-not-found"},
-		{"live with a secret", `{"name":"wiki","title":"Wiki","kind":"live","connection":"github","secret":"` + repoSecret + `"}`, http.StatusBadRequest, ""},
-		{"unknown connection", `{"name":"wiki","title":"Wiki","kind":"live","connection":"wiki"}`, http.StatusNotFound, "connection-not-found"},
+		{"live, a kind no longer offered", `{"name":"wiki","title":"Wiki","kind":"live"}`, http.StatusBadRequest, ""},
+		{"a kind not in the list", `{"name":"wiki","title":"Wiki","kind":"notes"}`, http.StatusBadRequest, ""},
 		{"schedule too short", `{"name":"often","title":"Often","kind":"upload","sync_every_seconds":60}`, http.StatusBadRequest, ""},
 	} {
 		refused(t, tc.name, h.request(t, http.MethodPost, sourcesPath, tc.body, nil), tc.status, tc.code)

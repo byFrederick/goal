@@ -41,7 +41,7 @@ Limits keep every box fast. A sync that goes past one fails and names it.
 | One file | 5 MB |
 | Sources a factory lists | 10 |
 
-When you upgrade to knowledge as files, goald converts each source once, at its start. A synced source that reads with a secret becomes a `repository` source (the `gitdocs` reader) or a `confluence` source. It keeps its name, its secret and its config, without `reader`. Live sources are deleted: give their MCP servers to agents in the factory's environment files instead. Uploads keep their originals. Every source then syncs once, and runs read its files from the next claim on. A factory keeps listing a converted source by its name, so no definition changes. A factory that listed a live source gets a `knowledge-source-unknown` error at its next publish, with a fix that removes the line. A synced source that goald can't convert stays as it is, and goald logs why (`knowledge source not converted`).
+When you upgrade to knowledge as files, goald converts each source once, at its start. A synced source that reads with a secret becomes a `repository` source (the `gitdocs` reader) or a `confluence` source. It keeps its name, its secret and its config, without `reader`. Uploads keep their originals. Every source then syncs once, and runs read its files from the next claim on. A factory keeps listing a converted source by its name, so no definition changes. A synced source that goald can't convert stays as it is, and goald logs why (`knowledge source not converted`).
 
 ### A synced source's secret and config
 
@@ -56,8 +56,6 @@ A synced source names a secret (`goal secret`, [Access and secrets](../access-an
 goal knowledge add runbooks --kind synced --secret docs-token \
   --config reader=gitdocs --config repository=https://github.com/acme/docs
 ```
-
-Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move stays on its connection, and goald logs why: for example, when that secret is open to some factories only, since goald moves a source only onto a secret open to every factory. goald no longer reads connections, so a synced source still on one fails each sync with an error that names it, such as `source docs reads with connection acme-wiki, which goald no longer reads: give it a secret`, until you give it a secret.
 
 ## What runs get
 

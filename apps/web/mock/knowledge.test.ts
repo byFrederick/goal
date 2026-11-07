@@ -49,7 +49,7 @@ async function upload<T>(source: string, files: Record<string, string>): Promise
 }
 
 describe('the mock knowledge base', () => {
-  it('starts acme with the six sources of the knowledge picture, one of each kind but live', async () => {
+  it('starts acme with the six sources of the knowledge picture, one of each kind', async () => {
     const { body } = await call<KnowledgeSourceList>(sources);
     expect(body.sources.map((s) => [s.name, s.kind, s.status, s.latest_snapshot?.files ?? 0])).toEqual([
       ['brand-guide', 'upload', 'idle', 2],
@@ -130,13 +130,6 @@ describe('the mock knowledge base', () => {
   it('refuses as goald does', async () => {
     const refusals: [string, string, unknown, number, string?][] = [
       [sources, 'POST', { name: 'dashboards', title: 'Again', kind: 'upload' }, 409, 'knowledge-source-name-taken'],
-      [
-        sources,
-        'POST',
-        { name: 'wiki', title: 'Wiki', kind: 'synced', connection: 'wiki' },
-        404,
-        'connection-not-found',
-      ],
       [sources, 'POST', { name: 'notes', title: 'Notes', kind: 'upload', sync_every_seconds: 60 }, 400],
       [`${sources}/nothing`, 'GET', undefined, 404, 'knowledge-source-not-found'],
     ];
@@ -147,16 +140,6 @@ describe('the mock knowledge base', () => {
     await call(sources, 'POST', { name: 'handbook', title: 'Handbook', kind: 'upload' });
     const deck = await upload<Problem>('handbook', { 'deck.key': 'PK' });
     expect([deck.status, deck.body.code]).toEqual([415, 'unsupported-document-type']);
-  });
-
-  it('refuses a source that names a connection, as goald serves none', async () => {
-    const res = await call<Problem>(sources, 'POST', {
-      name: 'repo-search',
-      title: 'Repository search',
-      kind: 'live',
-      connection: 'github',
-    });
-    expect([res.status, res.body.code]).toEqual([404, 'connection-not-found']);
   });
 
   it('answers a check with the first files, at most 8 and no more than the file count', async () => {
