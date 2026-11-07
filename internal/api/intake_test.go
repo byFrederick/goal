@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,13 +27,13 @@ const (
 	typeFix     = "fix"
 )
 
-// intakeItem creates an item of acme from source (and trigger, when set) at the instant given.
-func (h *harness) intakeItem(t *testing.T, source domain.ItemSource, trigger string, at time.Time) domain.Item {
+// intakeItem creates an item of acme from trigger (none when "") at the instant given.
+func (h *harness) intakeItem(t *testing.T, trigger string, at time.Time) domain.Item {
 	t.Helper()
 
 	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: acmeID, Type: typeFix, Title: "from " + string(source), Station: stInbox, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
+		FactoryID: acmeID, Type: typeFix, Title: "from " + cmp.Or(trigger, "a person"), Station: stInbox, State: domain.StateQueued,
+		Class: domain.ClassStandard, CreatedAt: at, Trigger: trigger,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -68,12 +69,12 @@ func TestIntake_NewestItems(t *testing.T) {
 	h := newHarness(t)
 
 	for range 2 { // older than the newest 48
-		h.intakeItem(t, domain.ItemFromAPI, "", oct(10, 0))
+		h.intakeItem(t, "", oct(10, 0))
 	}
 
 	start := oct(20, 0)
 	for i := range 48 {
-		h.intakeItem(t, domain.ItemFromPeople, "", start.Add(time.Duration(i)*time.Hour))
+		h.intakeItem(t, "", start.Add(time.Duration(i)*time.Hour))
 	}
 
 	var in gen.Intake
@@ -153,10 +154,10 @@ func TestIntake_NewestItemsCountUnknownSources(t *testing.T) {
 	h := newHarness(t)
 
 	for i := range 3 {
-		h.intakeItem(t, "", "", oct(20, i))
+		h.intakeItem(t, "", oct(20, i))
 	}
 
-	h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(21, 2))
+	h.intakeItem(t, flakyName, oct(21, 2))
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK {
@@ -175,20 +176,20 @@ func TestIntake_TriggerStats(t *testing.T) {
 
 	h := newHarness(t) // now is Oct 23, 09:00 UTC
 
-	old := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(16, 8)) // before the week and the 7 days
+	old := h.intakeItem(t, flakyName, oct(16, 8)) // before the week and the 7 days
 	h.fire(t, flakyName, "TestOld", old.ID, "", oct(16, 8))
 
-	c := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(21, 10))
+	c := h.intakeItem(t, flakyName, oct(21, 10))
 	h.fire(t, flakyName, "TestOrgRLS", c.ID, "", oct(21, 10))
 	h.fire(t, flakyName, "TestLeaseExpiry", "", "only.failuresInARow: failed once", oct(22, 12))
 
-	a := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(23, 1))
+	a := h.intakeItem(t, flakyName, oct(23, 1))
 	h.fire(t, flakyName, "TestBoardStream", a.ID, "", oct(23, 1))
 
-	b := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(23, 8))
+	b := h.intakeItem(t, flakyName, oct(23, 8))
 	h.fire(t, flakyName, "TestLeaseExpiry", b.ID, "", oct(23, 8))
 
-	nightly := h.intakeItem(t, domain.ItemFromSchedule, nightlyName, oct(23, 4))
+	nightly := h.intakeItem(t, nightlyName, oct(23, 4))
 	h.fire(t, nightlyName, "", nightly.ID, "", oct(23, 4))
 
 	h.mergedAndSpent(t, a, b, 1.5)
@@ -497,7 +498,7 @@ func TestTryTrigger_Skipped(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	today := h.intakeItem(t, domain.ItemFromSchedule, nightlyName, h.clock.Now().Add(-time.Hour))
+	today := h.intakeItem(t, nightlyName, h.clock.Now().Add(-time.Hour))
 	f := h.scheduled(t, today.ID, h.clock.Now().Add(-time.Hour))
 
 	var got gen.TriggerTry
@@ -781,7 +782,7 @@ func TestIntake_OriginsByWindow(t *testing.T) {
 		{domain.OriginFollowUp, 40 * 24 * time.Hour},
 		{domain.OriginPlan, 100 * 24 * time.Hour},
 	} {
-		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, Source: domain.ItemFromPeople, CreatedAt: t0.Add(-n.age)})
+		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, CreatedAt: t0.Add(-n.age)})
 	}
 
 	for _, c := range []struct{ query, want string }{

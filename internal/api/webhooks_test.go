@@ -702,7 +702,7 @@ func (h *harness) evaluatedDelivery(t *testing.T, w domain.WebhookEndpointID) (d
 		row = cmp.Or(row, r.Row)
 	}
 
-	item := h.intakeItem(t, domain.ItemFromGitHub, "flaky-test-on-main", t0)
+	item := h.intakeItem(t, "flaky-test-on-main", t0)
 
 	claimed, err := h.intake.ClaimEvaluations(inOrg(t), "goald-a", t0, time.Minute, 10)
 	if err != nil || len(claimed) != 1 {

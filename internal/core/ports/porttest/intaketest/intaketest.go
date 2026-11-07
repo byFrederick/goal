@@ -148,20 +148,20 @@ func (f *fixture) deliveries(id domain.WebhookEndpointID) []domain.WebhookDelive
 	return got
 }
 
-// item creates an item of the fixture's factory with source and trigger, at at.
-func (f *fixture) item(source domain.ItemSource, trigger string, at time.Time) domain.Item {
+// item creates an item of the fixture's factory with trigger, at at.
+func (f *fixture) item(trigger string, at time.Time) domain.Item {
 	f.t.Helper()
 
 	it, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
 		FactoryID: f.factory, Type: typeFix, Title: "a flaky test", Station: station, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
+		Class: domain.ClassStandard, CreatedAt: at, Trigger: trigger,
 	})
 	if err != nil {
 		f.t.Fatalf("CreateItem: %v", err)
 	}
 
-	if it.Source != source || it.Trigger != trigger {
-		f.t.Errorf("CreateItem's item has source %q, trigger %q; want %q, %q", it.Source, it.Trigger, source, trigger)
+	if it.Trigger != trigger {
+		f.t.Errorf("CreateItem's item has trigger %q; want %q", it.Trigger, trigger)
 	}
 
 	return it
@@ -258,7 +258,7 @@ func testDeleteEndpoint(f *fixture) {
 func testSignatureHeaders(f *fixture) {
 	t := f.t
 	s := f.endpoint(hooks)
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 
 	d, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{
 		EndpointID: s.ID, ReceivedAt: t0,
@@ -374,7 +374,7 @@ func testDeliveryDays(f *fixture) {
 	f.refuse(a, day.Add(24*time.Hour-time.Microsecond))
 	f.refuse(b, t0)
 
-	it := f.item(domain.ItemFromWebhook, "", t0)
+	it := f.item("", t0)
 	if _, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{EndpointID: b, ReceivedAt: t0, Outcome: domain.DeliveryCreated, ItemID: it.ID}); err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +429,7 @@ func testDeliveryRules(f *fixture) {
 		t.Errorf("a delivery to an unknown endpoint = %v; want ErrNotFound", err)
 	}
 
-	it := f.item(domain.ItemFromWebhook, "", t0)
+	it := f.item("", t0)
 
 	for _, n := range []domain.NewWebhookDelivery{
 		{EndpointID: s.ID, ReceivedAt: t0, Outcome: "lost"},
@@ -475,7 +475,7 @@ func testPrune(f *fixture) {
 // first; another trigger, or another key, records its own.
 func testFiringIdempotent(f *fixture) {
 	t := f.t
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 
 	first, fresh := f.fire(flaky, "check-run-1", "unit", it.ID, t0)
 	if !fresh || first.ID == "" || first.ItemID != it.ID || first.Outcome != domain.FiringCreated || !first.At.Equal(t0) {
@@ -507,7 +507,7 @@ func testFiringRules(f *fixture) {
 		t.Errorf("a firing from slack = %v; want ErrInvalid", err)
 	}
 
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 
 	_, _, err = f.in.RecordFiring(f.ctx(), domain.TriggerFiring{
 		FactoryID: f.factory, Trigger: flaky, Source: domain.TriggerGitHub, EventKey: "github.check_run.failed", IdempotencyKey: "e1",
@@ -523,11 +523,11 @@ func testCreatedSince(f *fixture) {
 	t := f.t
 	day := t0.Truncate(24 * time.Hour)
 
-	f.fire(flaky, "yesterday", "", f.item(domain.ItemFromGitHub, flaky, day.Add(-time.Hour)).ID, day.Add(-time.Hour))
-	f.fire(flaky, "midnight", "", f.item(domain.ItemFromGitHub, flaky, day).ID, day)
-	f.fire(flaky, "noon", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0)
+	f.fire(flaky, "yesterday", "", f.item(flaky, day.Add(-time.Hour)).ID, day.Add(-time.Hour))
+	f.fire(flaky, "midnight", "", f.item(flaky, day).ID, day)
+	f.fire(flaky, "noon", "", f.item(flaky, t0).ID, t0)
 	f.fire(flaky, "skipped", "", "", t0)
-	f.fire(nightly, "other", "", f.item(domain.ItemFromSchedule, nightly, t0).ID, t0)
+	f.fire(nightly, "other", "", f.item(nightly, t0).ID, t0)
 
 	if n, err := f.in.CreatedSince(f.ctx(), f.factory, flaky, day); err != nil || n != 2 {
 		t.Errorf("CreatedSince = %d, %v; want 2", n, err)
@@ -538,7 +538,7 @@ func testCreatedSince(f *fixture) {
 // once it is done or cancelled, for another trigger or value, or for an empty value.
 func testDedupe(f *fixture) {
 	t := f.t
-	a := f.item(domain.ItemFromGitHub, flaky, t0)
+	a := f.item(flaky, t0)
 	f.fire(flaky, "e1", "unit", a.ID, t0)
 	f.fire(flaky, "e2", "", "", t0)
 
@@ -559,7 +559,7 @@ func testDedupe(f *fixture) {
 	f.close(a, domain.StateDone)
 	check(flaky, "unit", "")
 
-	b := f.item(domain.ItemFromGitHub, flaky, t0.Add(time.Minute))
+	b := f.item(flaky, t0.Add(time.Minute))
 	f.fire(flaky, "e3", "unit", b.ID, t0.Add(time.Minute))
 	check(flaky, "unit", b.ID)
 
@@ -570,7 +570,7 @@ func testDedupe(f *fixture) {
 // Firing reads the trigger's firing by its idempotency key, and none for another trigger or key.
 func testFiringByKey(f *fixture) {
 	t := f.t
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 	want, _ := f.fire(flaky, "check-run-1", "unit", it.ID, t0)
 
 	got, ok, err := f.in.Firing(f.ctx(), f.factory, flaky, "check-run-1")
@@ -609,7 +609,7 @@ func testFailureStreak(f *fixture) {
 	streak(flaky, "", 1)
 	streak(nightly, "unit", 0)
 
-	it := f.item(domain.ItemFromGitHub, flaky, t0.Add(4*time.Minute))
+	it := f.item(flaky, t0.Add(4*time.Minute))
 	f.fire(flaky, "e5", "unit", it.ID, t0.Add(4*time.Minute))
 	streak(flaky, "unit", 0)
 
@@ -661,12 +661,12 @@ func testTallies(f *fixture) {
 	t := f.t
 	since := t0.Add(-7 * 24 * time.Hour)
 
-	f.item(domain.ItemFromGitHub, flaky, since.Add(-time.Hour)) // before the window
-	a := f.item(domain.ItemFromGitHub, flaky, t0)
-	b := f.item(domain.ItemFromGitHub, flaky, t0)
-	f.item(domain.ItemFromSchedule, nightly, t0)
-	f.item(domain.ItemFromPeople, "", t0)
-	f.item("", "", t0)
+	f.item(flaky, since.Add(-time.Hour)) // before the window
+	a := f.item(flaky, t0)
+	b := f.item(flaky, t0)
+	f.item(nightly, t0)
+	f.item("", t0)
+	f.item("", t0)
 
 	if err := f.Store.AppendEvents(f.ctx(), domain.Event{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventMerged, Station: station, Actor: domain.ActorEngine,
@@ -681,7 +681,7 @@ func testTallies(f *fixture) {
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
 		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: t0, Source: domain.ItemFromGitHub, Trigger: flaky,
+		Class: domain.ClassStandard, CreatedAt: t0, Trigger: flaky,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -703,16 +703,16 @@ func testNewestItems(f *fixture) {
 		t.Errorf("NewestItems of no items = %+v, %v; want none", got, err)
 	}
 
-	f.item(domain.ItemFromPeople, "", t0.Add(-4*time.Hour)) // older than the newest 4
-	f.item(domain.ItemFromCLI, "", t0.Add(-3*time.Hour))
-	f.item(domain.ItemFromGitHub, flaky, t0.Add(-2*time.Hour))
-	f.item(domain.ItemFromGitHub, flaky, t0.Add(-time.Hour))
-	f.item("", "", t0)
+	f.item("", t0.Add(-4*time.Hour)) // older than the newest 4
+	f.item("", t0.Add(-3*time.Hour))
+	f.item(flaky, t0.Add(-2*time.Hour))
+	f.item(flaky, t0.Add(-time.Hour))
+	f.item("", t0)
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
 		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour), Source: domain.ItemFromAPI,
+		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -732,12 +732,12 @@ func testTriggerDays(f *fixture) {
 	t := f.t
 	day1 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 
-	f.fire(flaky, "before", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(-2*time.Hour))
-	f.fire(flaky, "e1", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0)
-	f.fire(flaky, "e2", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(time.Hour))
-	f.fire(flaky, "e3", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(13*time.Hour)) // 01:00 the next day
+	f.fire(flaky, "before", "", f.item(flaky, t0).ID, t0.Add(-2*time.Hour))
+	f.fire(flaky, "e1", "", f.item(flaky, t0).ID, t0)
+	f.fire(flaky, "e2", "", f.item(flaky, t0).ID, t0.Add(time.Hour))
+	f.fire(flaky, "e3", "", f.item(flaky, t0).ID, t0.Add(13*time.Hour)) // 01:00 the next day
 	f.fire(flaky, "skipped", "", "", t0)
-	f.fire(nightly, "n1", "", f.item(domain.ItemFromSchedule, nightly, t0).ID, t0)
+	f.fire(nightly, "n1", "", f.item(nightly, t0).ID, t0)
 
 	got, err := f.in.TriggerDays(f.ctx(), f.factory, t0.Add(-time.Hour))
 	want := []domain.TriggerDay{
@@ -758,8 +758,8 @@ func testTriggerDays(f *fixture) {
 // Firings are the trigger's own, newest first, with their items' numbers and merged events.
 func testFirings(f *fixture) {
 	t := f.t
-	a := f.item(domain.ItemFromGitHub, flaky, t0)
-	b := f.item(domain.ItemFromGitHub, flaky, t0)
+	a := f.item(flaky, t0)
+	b := f.item(flaky, t0)
 
 	if err := f.Store.AppendEvents(f.ctx(), domain.Event{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventMerged, Station: station, Actor: domain.ActorEngine,
@@ -861,7 +861,7 @@ func testIsolatedReads(f *fixture) {
 	t := f.t
 	s := f.endpoint(hooks)
 	f.deliver(s.ID, t0)
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 	f.fire(flaky, "e1", "unit", it.ID, t0)
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))

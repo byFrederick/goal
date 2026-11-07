@@ -272,7 +272,7 @@ func checkItems(l domain.Line, t domain.Trigger, a domain.CheckAnswer, now time.
 
 		r := domain.FileRequest{
 			Origin: domain.OriginTrigger, By: agent, Type: typ, Lane: cmp.Or(f.Lane, t.Create.Lane), Title: f.Title, Body: f.Brief,
-			Priority: f.Priority, Station: st.ID, State: st.Arrival(), Class: class, At: now, Source: domain.ItemFromSchedule,
+			Priority: f.Priority, Station: st.ID, State: st.Arrival(), Class: class, At: now,
 			Trigger: t.Name, Untrusted: !t.Create.Trusted, Start: checkStart(f.Start), Repositories: repos,
 		}
 

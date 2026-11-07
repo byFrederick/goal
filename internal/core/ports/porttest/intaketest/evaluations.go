@@ -175,7 +175,7 @@ func testFireHoldsLimits(f *fixture) {
 	fire := func(key string) (domain.TriggerFiring, bool) {
 		item := domain.NewItem{
 			FactoryID: f.factory, Type: typeFix, Title: "Fix " + key, Station: station, State: domain.StateQueued, Class: domain.ClassStandard,
-			CreatedAt: t0, Source: domain.ItemFromGitHub, Trigger: flaky, Origin: domain.OriginTrigger, Untrusted: true,
+			CreatedAt: t0, Trigger: flaky, Origin: domain.OriginTrigger, Untrusted: true,
 		}
 
 		got, fresh, err := f.in.Fire(f.ctx(), domain.TriggerFiring{
@@ -295,7 +295,7 @@ func testEvaluationsOf(f *fixture) {
 		domain.NewDeliveryEvaluation{FactoryID: other, Triggers: []string{nightly}, Skip: skip})
 	f.receiveEvaluated(w.ID, "d-unasked", domain.NewDeliveryEvaluation{FactoryID: f.factory, Triggers: []string{flaky}, Skip: skip})
 
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 
 	claimed, err := f.in.ClaimEvaluations(f.ctx(), "goald-a", t0, time.Minute, 10)
 	if err != nil || len(claimed) != 1 {

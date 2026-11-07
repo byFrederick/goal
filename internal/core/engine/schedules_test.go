@@ -37,8 +37,8 @@ func TestSchedules_FireOncePerInstantAcrossInstances(t *testing.T) {
 		t.Fatalf("Firing of the 09:00 instant = %v, %v; want it recorded", ok, err)
 	}
 
-	if it := h.item(t, f.ItemID); it.Title != `Sweep for "2026-10-23T09:00:00Z"` || it.Source != domain.ItemFromSchedule || f.Source != domain.TriggerSchedule {
-		t.Errorf("item %q from %s, firing from %s; want the schedule's", it.Title, it.Source, f.Source)
+	if it := h.item(t, f.ItemID); it.Title != `Sweep for "2026-10-23T09:00:00Z"` || f.Source != domain.TriggerSchedule {
+		t.Errorf("item %q, firing from %s; want the schedule's", it.Title, f.Source)
 	}
 
 	// The next instant fires once more; a tick with no instant in its window fires nothing.

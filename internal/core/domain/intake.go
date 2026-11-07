@@ -192,20 +192,6 @@ type TriageSource struct {
 	FollowUps int
 }
 
-// ItemSource is where a work item came from, for Intake.
-type ItemSource string
-
-// The sources an item may come from: people in the UI, the CLI, the API, or a trigger's schedule,
-// webhook or GitHub event.
-const (
-	ItemFromPeople   ItemSource = "people"
-	ItemFromCLI      ItemSource = "cli"
-	ItemFromAPI      ItemSource = "api"
-	ItemFromSchedule ItemSource = "schedule"
-	ItemFromWebhook  ItemSource = "webhook"
-	ItemFromGitHub   ItemSource = "github"
-)
-
 // TriggerSource is what kind of event reached a trigger.
 type TriggerSource string
 
