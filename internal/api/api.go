@@ -120,6 +120,7 @@ type Items interface {
 	RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error)
 	BudgetExhaustedSince(ctx context.Context, factory domain.FactoryID) (time.Time, bool, error)
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
+	SpendByFactory(ctx context.Context, since, until time.Time) ([]domain.FactorySpend, error)
 	EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
 		each func(domain.AgentModelSpend) error) error
 	ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]domain.ItemTime, error)

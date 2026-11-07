@@ -60,7 +60,13 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 	slices.Sort(leadTime)
 	m.LeadTimeP50, m.LeadTimeP85 = percentile(leadTime, 0.5), percentile(leadTime, 0.85)
 	m.AssembliesDone, m.AssemblyLeadTimeP50, m.AssemblyLeadTimeP85 = s.assemblyLeadTime(org, q)
-	m.SpendUSD = s.spend(org, q.FactoryID, q.Since, q.Until, q.Type)
+	// FlowSpend joins each run's item, so a run without one (Jonah's) counts for nothing here.
+	for _, r := range s.runs {
+		if r.ItemID != "" && s.runVisible(r, org) && r.FactoryID == q.FactoryID &&
+			inWindow(r.StartedAt, q.Since, q.Until) && ofType(s.items[r.ItemID], q.Type) {
+			m.SpendUSD += r.Result.CostUSD
+		}
+	}
 
 	return m, nil
 }

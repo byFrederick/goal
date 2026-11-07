@@ -156,6 +156,46 @@ func TestAPI_OverviewWindowsAndBudgets(t *testing.T) {
 	}
 }
 
+// Home's spend today counts every run of the factory, as Spend's today does: an item run and a
+// Jonah run without an item, both started today, and not yesterday's.
+func TestAPI_OverviewSpendCountsRunsWithoutAnItem(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t) // the clock reads 2026-10-23 09:00 UTC
+	h.spendRun(t, lineID, agBackend, runModel, time.Date(2026, 10, 23, 7, 0, 0, 0, time.UTC), 0.5)
+	h.spendRun(t, lineID, agBackend, runModel, time.Date(2026, 10, 22, 23, 0, 0, 0, time.UTC), 8) // yesterday
+	h.lineJonahRun(t, 0.25)                                                                       // an hour ago, no item
+
+	var o gen.FactoryOverviewList
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/overview?window=1d", "", &o); code != http.StatusOK {
+		t.Fatalf("overview = %d", code)
+	}
+
+	var sp gen.OrgSpend
+	if code := h.call(t, http.MethodGet, orgSpendPath, "", &sp); code != http.StatusOK {
+		t.Fatalf("spend = %d", code)
+	}
+
+	home := -1.0
+	for _, f := range o.Factories {
+		if f.Factory.Id == lineID {
+			home = f.SpendUsd
+		}
+	}
+
+	today := -1.0
+	for _, b := range sp.Budgets {
+		if b.Factory.Id == lineID {
+			today = b.TodayUsd
+		}
+	}
+
+	if home != 0.75 || today != 0.75 || o.SpendUsd != 0.75 {
+		t.Errorf("line's spend today: overview %.4f (org %.4f), spend %.4f; want 0.75 each, the Jonah run's 0.25 included",
+			home, o.SpendUsd, today)
+	}
+}
+
 // A factory never published is on the Factories home as a draft (the wizard resumes from there),
 // with nothing to measure yet.
 func TestAPI_OverviewListsFactoriesNeverPublishedAsDrafts(t *testing.T) {

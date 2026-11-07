@@ -132,6 +132,11 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		return nil, err
 	}
 
+	spend, err := s.overviewSpend(ctx, w, now)
+	if err != nil {
+		return nil, err
+	}
+
 	out := gen.GetFactoryOverview200JSONResponse{
 		Window: w.name(), Since: openapi_types.Date{Time: w.from}, Until: openapi_types.Date{Time: w.to},
 		Factories: make([]gen.FactoryOverview, 0, len(fs)),
@@ -144,6 +149,7 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 		}
 
 		o.Touches = touches[domain.FactoryID(f.Metadata.ID)]
+		o.SpendUsd = spend[domain.FactoryID(f.Metadata.ID)]
 
 		out.WaitingOnYou += o.Waiting.OnYou
 		out.SpendUsd += o.SpendUsd
@@ -167,6 +173,22 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 	if took := time.Since(started); took > slowOverview || len(fs) > overviewFactories {
 		s.log.WarnContext(ctx, "slow factory overview", slog.String("org_id", string(orgOf(ctx).ID)),
 			slog.Int("factories", len(fs)), slog.Duration("took", took))
+	}
+
+	return out, nil
+}
+
+// overviewSpend is the cost of every run of each factory started in the window w as of now, Jonah's
+// and other runs without an item included, as Spend's budget rows count it.
+func (s *server) overviewSpend(ctx context.Context, w dayRange, now time.Time) (map[domain.FactoryID]float64, error) {
+	rows, err := s.items.SpendByFactory(ctx, w.from, w.until(now))
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[domain.FactoryID]float64, len(rows))
+	for _, r := range rows {
+		out[r.FactoryID] = r.USD
 	}
 
 	return out, nil
@@ -198,8 +220,8 @@ func (s *server) overviewTouches(ctx context.Context, fs []*config.Factory, w da
 }
 
 // overview summarizes one factory over the window w as of now: its health, throughput against
-// the previous window of the same length, the constraint now, the decisions waiting and the
-// spend against its budget.
+// the previous window of the same length, the constraint now, the decisions waiting and its
+// budget; the caller sets its spend (overviewSpend).
 func (s *server) overview(
 	ctx context.Context, rec ports.FactoryRecord, f *config.Factory, a domain.Attention, w dayRange, now time.Time,
 ) (gen.FactoryOverview, error) {
@@ -222,7 +244,7 @@ func (s *server) overview(
 
 	days := float64(w.days())
 	o := gen.FactoryOverview{
-		Factory: s.factoryOf(ctx, rec, f), Health: gen.FactoryHealthRunning, Andon: andonOf(a.Andon), SpendUsd: cur.SpendUSD,
+		Factory: s.factoryOf(ctx, rec, f), Health: gen.FactoryHealthRunning, Andon: andonOf(a.Andon),
 		Throughput: gen.Throughput{
 			PerDay: float64(cur.ItemsDone) / days, PreviousPerDay: float64(prev.ItemsDone) / days, Days: donePerDay(w, cur),
 		},

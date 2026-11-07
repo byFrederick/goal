@@ -296,7 +296,8 @@ func showUsage(rows []domain.RunUsage) string {
 
 // Each factory's spend in [since, until): every run started in it counts, a run without an item
 // (Jonah's) too, one started exactly at since counts, a running one counts with 0 so far, one a
-// second before since or at until does not. One row per factory, by factory id; another
+// second before since or at until does not, while FlowMetrics' spend leaves out the run without
+// an item. One row per factory, by factory id; another
 // organization's runs count for nothing, and an empty window finds nothing.
 func testSpendByFactory(f *fixture) {
 	t := f.t
@@ -338,6 +339,11 @@ func testSpendByFactory(f *fixture) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("SpendByFactory = %+v, want %+v", got, want)
+	}
+
+	// FlowMetrics' spend, per item, counts the item runs alone.
+	if m, err := f.Flow.FlowMetrics(f.ctx(t), ports.FlowQuery{FactoryID: f1, Since: since, Until: until}, ""); err != nil || m.SpendUSD != 1.75 {
+		t.Errorf("FlowMetrics of f1 spent %v, %v; want 1.75, without the Jonah run", m.SpendUSD, err)
 	}
 
 	if got, err := f.Spend.SpendByFactory(f.ctx(t), until.Add(time.Hour), until.Add(2*time.Hour)); err != nil || len(got) != 0 {
