@@ -60,15 +60,25 @@ func (s *Store) FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt 
 	slices.Sort(leadTime)
 	m.LeadTimeP50, m.LeadTimeP85 = percentile(leadTime, 0.5), percentile(leadTime, 0.85)
 	m.AssembliesDone, m.AssemblyLeadTimeP50, m.AssemblyLeadTimeP85 = s.assemblyLeadTime(org, q)
-	// FlowSpend joins each run's item, so a run without one (Jonah's) counts for nothing here.
+	m.SpendUSD = s.itemSpend(org, q)
+
+	return m, nil
+}
+
+// itemSpend is the cost of q's factory's runs started in its window on items of its type. As
+// FlowSpend joins each run's item, a run without one (Jonah's) counts for nothing here, unlike
+// SpendByFactory. Callers hold s.mu.
+func (s *Store) itemSpend(org domain.OrgID, q ports.FlowQuery) float64 {
+	var usd float64
+
 	for _, r := range s.runs {
 		if r.ItemID != "" && s.runVisible(r, org) && r.FactoryID == q.FactoryID &&
 			inWindow(r.StartedAt, q.Since, q.Until) && ofType(s.items[r.ItemID], q.Type) {
-			m.SpendUSD += r.Result.CostUSD
+			usd += r.Result.CostUSD
 		}
 	}
 
-	return m, nil
+	return usd
 }
 
 // assemblyLeadTime is how many assemblies (items with parts) of q were done in its window and

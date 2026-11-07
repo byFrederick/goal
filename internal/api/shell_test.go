@@ -177,6 +177,7 @@ func TestAPI_OverviewSpendCountsRunsWithoutAnItem(t *testing.T) {
 	}
 
 	home := -1.0
+
 	for _, f := range o.Factories {
 		if f.Factory.Id == lineID {
 			home = f.SpendUsd
@@ -184,6 +185,7 @@ func TestAPI_OverviewSpendCountsRunsWithoutAnItem(t *testing.T) {
 	}
 
 	today := -1.0
+
 	for _, b := range sp.Budgets {
 		if b.Factory.Id == lineID {
 			today = b.TodayUsd

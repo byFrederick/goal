@@ -4207,7 +4207,7 @@ type FactoryOverview struct {
 	// Health running; stopped while an andon pull is open; draft when the factory has no published version yet
 	Health FactoryHealth `json:"health"`
 
-	// SpendUsd Cost of the agent runs started in the window
+	// SpendUsd The cost of every agent run of the factory started in the window, Jonah's and other runs without an item included, as Spend's budget rows count it; a running run counts with its cost so far
 	SpendUsd   float64    `json:"spend_usd"`
 	Throughput Throughput `json:"throughput"`
 
