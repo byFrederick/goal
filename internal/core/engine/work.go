@@ -148,7 +148,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
 		default:
-			e.finish(ctx, log, c, res.RunID, res.Output, chk)
+			e.settle(ctx, log, c, res, chk)
 			return
 		}
 
@@ -244,10 +244,20 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 
 // ready reports whether the claim's run may start: at a station that waits for CI, only once
 // CI on the item's commits has finished, keeping what CI said for its brief (ciGate, ADR 0044
-// decision 2), and then only once it is admitted.
+// decision 2), and then only once it is admitted. When the claim's CI wait held a run's outcome
+// and CI passed (ADR 0044 decision 3), no run starts: the outcome is applied (applyHeld).
 func (e *Engine) ready(ctx context.Context, log *slog.Logger, c *claimed) bool {
-	var ok bool
-	if c.ci, ok = e.ciGate(ctx, log, *c); !ok {
+	var (
+		held domain.RunID
+		ok   bool
+	)
+
+	if c.ci, held, ok = e.ciGate(ctx, log, *c); !ok {
+		return false
+	}
+
+	if held != "" {
+		e.applyHeld(ctx, log, *c, held)
 		return false
 	}
 
@@ -914,6 +924,14 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 	domain.RefreshEachPart: "before each part runs",
 }
 
+// settle finishes the claim's succeeded run res, unless the item is held for CI on what it
+// pushed first (holdForCI).
+func (e *Engine) settle(ctx context.Context, log *slog.Logger, c claimed, res domain.RunResult, chk checked) {
+	if !e.holdForCI(ctx, log, c, res.RunID, chk) {
+		e.finish(ctx, log, c, res.RunID, res.Output, chk)
+	}
+}
+
 // finish moves an item whose output passed its checks, with an event for each declared rule the
 // output says was broken (violations) and the paths it lists in the field the line maps
 // (flow.dependencies.paths), the follow-ups of run it holds (followUps) and the repositories it adds (chk.repositories), with the base commits it was planned against (baseCommits): through the gate's verdict when the
@@ -922,7 +940,8 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
 // a pull request is only not mergeable yet (deferMerge). The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
-// moves along v2.
+// moves along v2. At a station that waits for CI, settle first holds an output that would move the
+// item forward after its run pushed (holdForCI), and applyHeld finishes it once CI passed.
 func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run domain.RunID, output json.RawMessage, chk checked) {
 	next, v := chk.next, chk.verdict
 

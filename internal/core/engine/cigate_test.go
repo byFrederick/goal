@@ -178,7 +178,7 @@ func TestCIGate_UnreadableBlocks(t *testing.T) {
 	it := h.atReview(t, "", map[string]string{appKey: ciSHA})
 
 	h.step(t) // opens the wait
-	h.codehost.SetChecks(appRepo, ciSHA, porttest.ChecksAnswer{Err: &ports.CINotReadableError{Permission: "read access to Checks and Commit statuses"}})
+	h.codehost.SetChecks(appRepo, ciSHA, porttest.ChecksAnswer{Err: &ports.CINotReadableError{Permission: ghCIPermission}})
 	pollCI(t, h.e)
 	h.step(t)
 
@@ -196,7 +196,7 @@ func TestCIGate_UnreadableBlocks(t *testing.T) {
 	}
 
 	reason, _ := blocked[0].Data["reason"].(string)
-	for _, want := range []string{appKey, ciSHA, "connection " + connGitHub, "read access to Checks and Commit statuses"} {
+	for _, want := range []string{appKey, ciSHA, "connection " + connGitHub, ghCIPermission} {
 		if !strings.Contains(reason, want) {
 			t.Errorf("block reason %q lacks %q", reason, want)
 		}

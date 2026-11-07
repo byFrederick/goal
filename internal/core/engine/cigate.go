@@ -39,26 +39,31 @@ type ciCommit struct {
 //     item blocks for a person, naming the token and the permission it needs (ciUnreadable);
 //   - a commit with no ended wait: a before wait opens on it and the item goes back to its
 //     station's queue, which the claim skips until the poller ends the wait;
-//   - every commit's wait ended: the run starts, its brief listing each commit's checks.
-func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (string, bool) {
+//   - every commit's wait ended, and the visit's latest round of after waits holds a run whose
+//     CI passed or got none (heldRun, ADR 0044 decision 3): no run starts, and the held run's
+//     output is applied (applyHeld);
+//   - every commit's wait ended otherwise: the run starts, its brief listing each commit's checks.
+//
+// It returns the section, the held run to apply ("" for none) and whether to go on.
+func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (string, domain.RunID, bool) {
 	if !c.station.WaitsForCI() {
-		return "", true
+		return "", "", true
 	}
 
 	commits, err := e.ciCommits(ctx, log, c.line, c.item)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
-		return "", false
+		return "", "", false
 	}
 
 	if len(commits) == 0 {
-		return "", true
+		return "", "", true
 	}
 
 	waits, err := e.store.CIWaits(ctx, c.item.ID, c.station.ID)
 	if err != nil {
 		e.block(ctx, log, c, fmt.Sprintf("read the item's CI waits: %v", err))
-		return "", false
+		return "", "", false
 	}
 
 	var (
@@ -70,7 +75,7 @@ func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (strin
 	reset, err := e.latestMoveOrRetry(ctx, c.item.ID)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
-		return "", false
+		return "", "", false
 	}
 
 	for _, cm := range commits {
@@ -89,15 +94,19 @@ func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (strin
 	switch {
 	case len(unreadable) > 0:
 		e.block(ctx, log, c, strings.Join(unreadable, " "))
-		return "", false
+		return "", "", false
 	case len(pending) > 0:
 		e.waitForCI(ctx, log, c, pending)
-		return "", false
+		return "", "", false
+	}
+
+	if run, ok := heldRun(waits, ciAfterVisit(reset), commits); ok {
+		return "", run, true
 	}
 
 	log.InfoContext(ctx, "ci gate passed", slog.Int("commits", len(settled)))
 
-	return ciSection(settled), true
+	return ciSection(settled), "", true
 }
 
 // ciCommits are the commits the item's CI is waited on (ADR 0044 decision 4): for each
@@ -112,9 +121,14 @@ func (e *Engine) ciCommits(ctx context.Context, log *slog.Logger, l domain.Line,
 		return nil, fmt.Errorf("read the item's runs: %w", err)
 	}
 
-	commits := pushedHeads(runs)
+	return e.withPullRequests(ctx, log, l, it, pushedHeads(runs)), nil
+}
+
+// withPullRequests puts on each of commits that is in the repository of one of the item's pull
+// requests that pull request's URL and current head, as ciCommits does.
+func (e *Engine) withPullRequests(ctx context.Context, log *slog.Logger, l domain.Line, it domain.Item, commits []ciCommit) []ciCommit {
 	if len(commits) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	for _, url := range it.PullRequests(l) {
@@ -137,7 +151,7 @@ func (e *Engine) ciCommits(ctx context.Context, log *slog.Logger, l domain.Line,
 		}
 	}
 
-	return commits, nil
+	return commits
 }
 
 // pushedHeads are the latest pushed head of each repository runs (oldest first) wrote to, in the
