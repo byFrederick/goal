@@ -190,8 +190,8 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/budget\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Set budgets and targets' })).toBeVisible();
-  await expect(page.getByRole('slider', { name: 'A day' })).toHaveValue('150');
-  await expect(page.getByText('fits about 48 items')).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'A week' })).toHaveValue('800');
+  await expect(page.getByText('about $114 a day', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: /Finish what's started/ })).toBeChecked();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
