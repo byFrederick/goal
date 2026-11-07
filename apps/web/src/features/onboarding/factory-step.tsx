@@ -3,6 +3,7 @@
 // which creates the factory from the template with POST /factories. The purpose then goes into the new draft;
 // only then does Continue reach step 3 (Code, ADR 0041 decision 9) with ?factory=<id>&template=<name>. The template list, the create call and the draft are the wizard's
 // (factory-editor/start and draft): nothing here is a second copy of them.
+
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
@@ -11,6 +12,7 @@ import { createFactory } from '../../api/definitions';
 import { factoriesQuery, keys, templateQuery } from '../../api/queries';
 import type { Factory, OrgSummary, TemplateSummary } from '../../api/types';
 import { modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -79,7 +81,9 @@ export function FactoryStep({ org, search }: { org: OrgSummary; search: Onboardi
         preview={previewSlots({
           organization,
           code,
-          factory: <FactoryCard name={created.factory.name} purpose={created.purpose} stations={stationsOf(picked)} />,
+          factory: (
+            <FactoryCard name={factoryTitle(created.factory)} purpose={created.purpose} stations={stationsOf(picked)} />
+          ),
         })}
       />
     );

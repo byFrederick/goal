@@ -1,8 +1,10 @@
 // The dark panel of steps 7 and 8 (docs/design/screens/get-started/invite.jpg and first-item.jpg): the
 // organization, code and factory cards as step 6 leaves them, then the budget, intake and people cards, and on
 // step 8 the running item under them. The factory's item badge marks the station the item is at.
+
 import type { Factory, FactoryModel, Intake, OrgSummary } from '../../api/types';
 import { modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { stationLabel } from '../factory-editor/line/labels';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
@@ -52,7 +54,7 @@ export function stepPanel({
       code: codeCard(repoOf(search.url), search.secret),
       factory: (
         <FactoryCard
-          name={factory.name}
+          name={factoryTitle(factory)}
           purpose={basics.purpose ?? ''}
           stations={panelStations}
           item={item ? { station: item.station, number: item.number } : undefined}
