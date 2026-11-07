@@ -239,9 +239,8 @@ describe('Runtime', () => {
 
 describe('Budgets and targets', () => {
   it.each([
-    ['Each day', 'daily_usd', '25'],
     ['Each week', 'weekly_usd', '120'],
-    ['Each item', 'per_item_usd', '4.5'],
+    ['Each run', 'per_item_usd', '4.5'],
   ])('writes %s to review.budget.%s', async (label, key, typed) => {
     await renderSettings();
     const input = screen.getByLabelText(label);
@@ -253,9 +252,14 @@ describe('Budgets and targets', () => {
     expect(review.budget.on_exhausted).toBe('drain');
   });
 
-  it('writes turns per item to review.budget.max_turns_per_task', async () => {
+  it('has no daily budget field', async () => {
     await renderSettings();
-    const turns = screen.getByLabelText('Turns per item');
+    expect(screen.queryByLabelText('Each day')).toBeNull();
+  });
+
+  it('writes turns per run to review.budget.max_turns_per_task', async () => {
+    await renderSettings();
+    const turns = screen.getByLabelText('Turns per run');
     fireEvent.change(turns, { target: { value: '40' } });
     fireEvent.blur(turns);
 

@@ -23,6 +23,8 @@ export interface RadioOption<T extends string> {
 interface RadioGroupProps<T extends string> {
   /** The group's name, said once ("How do you want to start?"); `legend` shows it. */
   legend: ReactNode;
+  /** The group's whole name, when the legend holds more than the name (a tip beside it). */
+  groupName?: string;
   /** Show the legend (else it is for screen readers only). */
   showLegend?: boolean;
   /** The radios' name attribute. */
@@ -45,6 +47,7 @@ const chosen = 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]';
 /** Cards side by side: icon, title, description, the radio top right. */
 export function RadioCards<T extends string>({
   legend,
+  groupName,
   showLegend = true,
   name,
   options,
@@ -54,7 +57,7 @@ export function RadioCards<T extends string>({
   gridClassName,
 }: RadioGroupProps<T>) {
   return (
-    <fieldset className={cn('m-0 min-w-0 border-0 p-0', className)}>
+    <fieldset aria-label={groupName} className={cn('m-0 min-w-0 border-0 p-0', className)}>
       <legend className={showLegend ? cn(sectionHeadingClass, 'mb-3 p-0') : 'sr-only'}>{legend}</legend>
       <div className={cn('grid gap-3', gridClassName ?? '@[560px]:grid-cols-2 @[1100px]:grid-cols-4')}>
         {options.map((o) => (

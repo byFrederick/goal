@@ -235,7 +235,6 @@ function Ready({
 
   const { line, review, basics } = modelOf(model);
   const budget = review.budget;
-  const day = budget?.daily_usd ?? budgetRanges.day.fallback;
   const week = budget?.weekly_usd ?? budgetRanges.week.fallback;
   const panelStations = (line.stations ?? []).map((s) => ({
     id: s.id,
@@ -270,7 +269,7 @@ function Ready({
         }),
         cards: (
           <>
-            <BudgetCard day={day} week={week} />
+            <BudgetCard week={week} />
             <IntakeCard names={switchedOn.map((t) => t.name)} />
             <PreviewPlaceholder className="min-h-37.5" />
           </>
