@@ -19,7 +19,7 @@ import { stationLabel } from '../factory-editor/line/labels';
 import { defaultEdits } from './budget-draft';
 import { BudgetFields, useBudgetValues } from './budget-fields';
 import { BudgetCard } from './budget-gauge';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 import { explainProblems, type PublishProblem, stepsToLink } from './publish-problems';
@@ -243,7 +243,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       preview={{
         ...previewSlots({
           organization: organizationCard(org, host),
-          code: codeCard(repoOf(search.url), search.secret),
+          code: codeCard({ url: search.url, secret: search.secret, done: true }),
           factory: (
             <FactoryCard
               name={factoryTitle({

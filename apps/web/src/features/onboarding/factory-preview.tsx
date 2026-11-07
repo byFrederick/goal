@@ -4,6 +4,7 @@
 // the draft (step 4) or the picked template (step 3, before the factory exists).
 
 import { useQuery } from '@tanstack/react-query';
+import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { draftModelQuery, factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
@@ -12,9 +13,11 @@ import { factoryTitle } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { GitHubMark } from '../../ui/github-mark';
+import { GitLabMark } from '../../ui/gitlab-mark';
 import { Skeleton } from '../../ui/skeleton';
 import { StationNode, type StationNodeTone } from '../../ui/station-node';
 import { stationLabel } from '../factory-editor/line/labels';
+import { repoOf } from './code-search';
 import { PreviewCard, type PreviewSlots } from './onboarding-layout';
 
 /** A station as the panel draws it: its name, its kind (Done shows a check) and its WIP limit. */
@@ -33,16 +36,52 @@ export function organizationCard(org: OrgSummary, host: string): ReactNode {
   return <PreviewCard label="Organization" value={org.name} detail={`${host}/o/${org.slug}`} />;
 }
 
-/** The code card: the repository entered in step 2 and the secret that holds its token. */
-export function codeCard(repo: string | undefined, secret?: string): ReactNode {
-  if (repo === undefined) return undefined;
+/** The mark of a repository's host: GitHub's, GitLab's, or a neutral branch icon for any other host. */
+function HostMark({ url }: { url: string | undefined }) {
+  let host = '';
+  try {
+    host = url ? new URL(url).hostname.toLowerCase() : '';
+  } catch {
+    host = '';
+  }
+  if (host === 'github.com') return <GitHubMark className="shrink-0" />;
+  if (host === 'gitlab.com' || host.startsWith('gitlab.')) return <GitLabMark className="shrink-0" />;
+  return <GitBranch aria-hidden="true" className="size-4 shrink-0" />;
+}
+
+/**
+ * The code card. With a repository it shows the repository and its host's mark. Without one, it shows "No code"
+ * once the Code step is done (`done`), and nothing before that: the slot stays dashed. The card fades in over
+ * the dashed slot (MOTION.md, Loading).
+ */
+export function codeCard({
+  url,
+  repo,
+  secret,
+  done = false,
+}: {
+  url?: string | undefined;
+  /** The label to show; defaults to the one read from `url`. */
+  repo?: string | undefined;
+  secret?: string | undefined;
+  done?: boolean;
+}): ReactNode {
+  const label = repo ?? repoOf(url);
+  const reveal = 'motion-safe:animate-slot-reveal';
+  if (label === undefined) {
+    if (!done) return undefined;
+    return (
+      <PreviewCard active label="Code" value="No code" detail="Items don't touch a repository" className={reveal} />
+    );
+  }
   return (
     <PreviewCard
       active
       label="Code"
-      value={repo}
-      icon={<GitHubMark className="shrink-0" />}
+      value={label}
+      icon={<HostMark url={url} />}
       detail={secret ? `Token ${secret}` : 'Public repository'}
+      className={reveal}
     />
   );
 }

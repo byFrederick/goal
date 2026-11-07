@@ -24,7 +24,7 @@ import { DraftSessionProvider, useDraft, useDraftSession } from '../factory-edit
 import { stationLabel } from '../factory-editor/line/labels';
 import { nameFromTitle, nameProblem, newFactoryRequest, suggestedTitle } from '../factory-editor/start/start-choice';
 import { useTemplates } from '../factory-editor/start/template-picker';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import {
   codeCard,
   FactoryCard,
@@ -69,7 +69,7 @@ export function FactoryStep({ org, search }: { org: OrgSummary; search: Onboardi
   const picked = choice ?? templates[0]?.name ?? blank;
   const pickedTitle = picked === blank ? 'Start empty' : (templates.find((t) => t.name === picked)?.title ?? picked);
   const organization = organizationCard(org, window.location.host);
-  const code = codeCard(repoOf(search.url), search.secret);
+  const code = codeCard({ url: search.url, secret: search.secret });
 
   if (search.factory) return <ContinueFactory org={org} search={search} />;
   if (created) {
@@ -138,7 +138,7 @@ function ContinueFactory({ org, search }: { org: OrgSummary; search: OnboardingS
       }
       preview={{
         organization: organizationCard(org, window.location.host),
-        second: codeCard(repoOf(search.url), search.secret),
+        second: codeCard({ url: search.url, secret: search.secret }),
       }}
     >
       <div className="flex flex-col gap-2">
