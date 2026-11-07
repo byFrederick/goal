@@ -283,6 +283,55 @@ func (q *Queries) OpenCIWaits(ctx context.Context, itemID uuid.UUID) ([]OpenCIWa
 	return items, nil
 }
 
+const openCIWaitsOnPoll = `-- name: OpenCIWaitsOnPoll :many
+SELECT id, org_id, item_id, station, visit, host, repo, sha, pr_url, phase, round, held, started_at, ended_at, outcome FROM ci_waits
+WHERE host = $1 AND repo = $2 AND sha = $3 AND ended_at IS NULL
+ORDER BY started_at, item_id, station, visit
+`
+
+type OpenCIWaitsOnPollParams struct {
+	Host string
+	Repo string
+	Sha  string
+}
+
+// The open waits on one commit's poll, by start: every wait one poll of the commit decides.
+func (q *Queries) OpenCIWaitsOnPoll(ctx context.Context, arg OpenCIWaitsOnPollParams) ([]CiWait, error) {
+	rows, err := q.db.Query(ctx, openCIWaitsOnPoll, arg.Host, arg.Repo, arg.Sha)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CiWait
+	for rows.Next() {
+		var i CiWait
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrgID,
+			&i.ItemID,
+			&i.Station,
+			&i.Visit,
+			&i.Host,
+			&i.Repo,
+			&i.Sha,
+			&i.PrUrl,
+			&i.Phase,
+			&i.Round,
+			&i.Held,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.Outcome,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recordCIPoll = `-- name: RecordCIPoll :execrows
 UPDATE ci_polls
 SET checks = coalesce($1, checks),

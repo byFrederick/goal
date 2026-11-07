@@ -490,6 +490,10 @@ type Store interface {
 	// An unknown item has none.
 	OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWaitRecord, error)
 
+	// OpenCIWaitsOnPoll returns the organization's open CI waits on key's host, repository and
+	// sha, by start: every wait one poll of that commit decides.
+	OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error)
+
 	// EndCIWaits ends the open waits among ids with outcome at `at` and returns how many it
 	// ended; waits already ended and unknown ids are left out.
 	EndCIWaits(ctx context.Context, ids []domain.CIWaitID, outcome domain.CIOutcome, at time.Time) (int, error)

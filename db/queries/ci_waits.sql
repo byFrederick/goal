@@ -68,6 +68,12 @@ JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo A
 WHERE w.item_id = sqlc.arg(item_id) AND w.ended_at IS NULL
 ORDER BY w.started_at, w.station, w.visit, w.repo;
 
+-- name: OpenCIWaitsOnPoll :many
+-- The open waits on one commit's poll, by start: every wait one poll of the commit decides.
+SELECT * FROM ci_waits
+WHERE host = sqlc.arg(host) AND repo = sqlc.arg(repo) AND sha = sqlc.arg(sha) AND ended_at IS NULL
+ORDER BY started_at, item_id, station, visit;
+
 -- name: CIRounds :one
 -- How many distinct CI rounds the item had in one visit to the station.
 SELECT count(DISTINCT round) FROM ci_waits

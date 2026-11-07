@@ -221,6 +221,33 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 	return out, nil
 }
 
+// OpenCIWaitsOnPoll implements ports.Store.
+func (s *Store) OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []domain.CIWaitRecord
+
+	for _, r := range s.ci.waits {
+		if r.org == org && r.wait.Open() && r.wait.PollKey() == key {
+			w := r.wait
+			w.Held = slices.Clone(w.Held)
+			out = append(out, w)
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b domain.CIWaitRecord) int {
+		return cmp.Or(a.StartedAt.Compare(b.StartedAt), cmp.Compare(a.Item, b.Item), cmp.Compare(a.Station, b.Station), cmp.Compare(a.Visit, b.Visit))
+	})
+
+	return out, nil
+}
+
 // EndCIWaits implements ports.Store.
 func (s *Store) EndCIWaits(ctx context.Context, ids []domain.CIWaitID, outcome domain.CIOutcome, at time.Time) (int, error) {
 	org, err := orgOf(ctx)

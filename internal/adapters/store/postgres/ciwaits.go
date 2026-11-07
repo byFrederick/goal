@@ -214,6 +214,23 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 	return out, nil
 }
 
+// OpenCIWaitsOnPoll implements ports.Store.
+func (s *Store) OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error) {
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.CiWait, error) {
+		return q.OpenCIWaitsOnPoll(ctx, db.OpenCIWaitsOnPollParams{Host: key.Host, Repo: key.Repo, Sha: key.SHA})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open ci waits on %s@%s: %w", key.Repo, key.SHA, err)
+	}
+
+	out := make([]domain.CIWaitRecord, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ciWaitFrom(r))
+	}
+
+	return out, nil
+}
+
 // EndCIWaits implements ports.Store.
 func (s *Store) EndCIWaits(ctx context.Context, ids []domain.CIWaitID, outcome domain.CIOutcome, at time.Time) (int, error) {
 	if !outcome.Valid() {
