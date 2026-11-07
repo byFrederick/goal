@@ -162,6 +162,9 @@ test('a published line without a model key: the Code card wraps at spaces and Ho
   const factory = factoryOf(page);
 
   await page.getByRole('radio', { name: /^No code/ }).check();
+  // The Code card appears in the preview once the step is done.
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).not.toHaveURL(/\/get-started\/code\?/);
   const detail = page.getByText(/Items don't touch a repository/);
   await expect(detail).toBeVisible();
   expect(await detail.evaluate((el) => getComputedStyle(el).wordBreak)).not.toBe('break-all');

@@ -51,9 +51,9 @@ func newPolicyGoald(t *testing.T) *policyGoald {
 			{Id: cliHaiku, Label: "Claude Haiku 5.5", UsedBy: []gen.ModelUse{}},
 		},
 		BoxSizes: []gen.PolicyBoxSize{
-			{Size: gen.Small, Vcpu: 1, MemoryBytes: 2 << 30, Factories: []gen.SizeUse{}},
-			{Size: gen.Medium, Vcpu: 2, MemoryBytes: 4 << 30, Factories: []gen.SizeUse{{FactoryId: "f1", Name: "support"}}},
-			{Size: gen.Large, Vcpu: 4, MemoryBytes: 8 << 30, Factories: []gen.SizeUse{{FactoryId: "f2", Name: "web"}}},
+			{Size: gen.PolicyBoxSizeSizeSmall, Vcpu: 1, MemoryBytes: 2 << 30, Factories: []gen.SizeUse{}},
+			{Size: gen.PolicyBoxSizeSizeMedium, Vcpu: 2, MemoryBytes: 4 << 30, Factories: []gen.SizeUse{{FactoryId: "f1", Name: "support"}}},
+			{Size: gen.PolicyBoxSizeSizeLarge, Vcpu: 4, MemoryBytes: 8 << 30, Factories: []gen.SizeUse{{FactoryId: "f2", Name: "web"}}},
 		},
 		EgressAddresses: []string{"203.0.113.0/24"},
 	}}

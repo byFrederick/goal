@@ -19,7 +19,7 @@ import type { RunsFilter } from '../../api/client';
 import * as client from '../../api/client';
 import * as download from '../../api/download';
 import { attentionQuery, factoriesQuery } from '../../api/queries';
-import type { OrgRunList, OrgSummary } from '../../api/types';
+import type { OrgRun, OrgRunList, OrgSummary } from '../../api/types';
 import { TopBarSetContext, type TopBarState } from '../../app/top-bar';
 import { TooltipProvider } from '../../ui/tooltip';
 import { touchLink } from '../../ui/touch-target';
@@ -210,6 +210,46 @@ describe('the Runs page states', () => {
     expect(screen.getByText('Each one starts over')).toBeTruthy();
     expect(screen.getByText(/\d+ running now/)).toBeTruthy();
     expect(screen.getByText(/^Showing \d+ of \d+ runs today\.$/)).toBeTruthy();
+  });
+
+  it('shows CPU, peak memory and box size, and — for a run the box could not measure', async () => {
+    const list = fromMock({});
+    const [measured, unmeasured] = list.runs as [OrgRun, OrgRun];
+    calls.answer = () => ({
+      ...list,
+      runs: [
+        {
+          ...measured,
+          status: 'succeeded',
+          cpu_seconds: 186,
+          peak_memory_bytes: Math.round(1.2 * 1024 ** 3),
+          box_size: 'medium',
+        },
+        { ...unmeasured, status: 'succeeded', error: null, cpu_seconds: null, peak_memory_bytes: null, box_size: null },
+      ],
+    });
+    renderRuns();
+    const table = await screen.findByRole('table');
+    for (const name of ['Peak memory', 'Box']) expect(within(table).getByRole('columnheader', { name })).toBeTruthy();
+    expect(within(table).getByRole('columnheader', { name: /^CPU/ })).toBeTruthy();
+
+    const rows = within(table).getAllByRole('row').slice(1);
+    const first = within(rows[0] as HTMLElement);
+    expect(first.getByText('3.1 min').className).toContain('tabular-nums');
+    expect(first.getByText('1.2 GB')).toBeTruthy();
+    expect(first.getByText('Medium')).toBeTruthy();
+    expect(within(rows[1] as HTMLElement).getAllByText('—')).toHaveLength(3);
+  });
+
+  it('explains the figures in a tip beside the CPU header', async () => {
+    renderRuns();
+    await screen.findByRole('table');
+
+    fireEvent.click(screen.getByRole('button', { name: 'About CPU' }));
+
+    expect((await screen.findAllByText(/CPU time from prepare to the run's end/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Peak memory is the most memory the box used at once/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/couldn't measure it/).length).toBeGreaterThan(0);
   });
 
   it('never shows an agent copy number', async () => {

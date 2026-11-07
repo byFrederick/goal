@@ -9,13 +9,16 @@ import (
 // Spend reads what the organization in ctx's agent runs cost (agent_runs.cost_usd), for the
 // spend screen. Budgets are not here: they stay in each factory's definition
 // (runtime.budget dailyUsd and weeklyUsd), and the API sets OrgSpend.Factories against them.
-// Box compute time is not recorded, so it is not counted.
+// What a box costs is not recorded, so it is not counted; its CPU time and peak memory are.
 type Spend interface {
 	// OrgSpend measures w (w.Check must pass; domain.ErrInvalid otherwise), laid out by
 	// domain.NewOrgSpend. A run counts on the UTC day it started, at or after a bound's start and
 	// before w.Now, with its cost so far; an item counts as merged on the UTC day of its done_at
 	// while it is in state done. A run counts as rework once its item entered a rework round of 1
-	// or more at or before the run started, which an item reopened after done keeps.
+	// or more at or before the run started, which an item reopened after done keeps. Its usage
+	// rows group the window's runs that reported a CPU time or a peak memory by factory, agent
+	// (or station) and box size, with percentile_cont's medians and 90th percentiles. It reads
+	// every factory of the organization; the caller hides those its user may not see.
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
 
 	// EachAgentModelSpend calls each with the cost of the runs of factories that started in w's

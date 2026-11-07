@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { fileURLToPath } from 'node:url';
+import { cpuStartFile, saveCpuStart } from './cgroup.js';
 import { gitWithRetry } from './retry.js';
 import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, paths } from './spec.js';
 
@@ -41,8 +42,13 @@ export interface PrepareDeps {
   credentialHelper?: { node: string; script: string };
   /** The wait between attempts of a network git step; setTimeout when absent. */
   sleep?: (ms: number) => Promise<void>;
-  /** Where a retry is logged; stderr when absent. */
+  /** Where a retry, or a cgroup counter that can't be read, is logged; stderr when absent. */
   log?: (line: string) => void;
+  /**
+   * The box's cgroup v2 root (src/cgroup.ts), whose cpu.stat usage_usec prepare saves to
+   * dirs.goal/cpu-start-usec as it starts, for the run's cpu_seconds. Absent, nothing is saved.
+   */
+  cgroup?: string;
 }
 
 /** Each network git attempt's default time limit, in seconds (GOAL_GIT_ATTEMPT_TIMEOUT). */
@@ -107,9 +113,12 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * per attempt (GOAL_GIT_ATTEMPT_TIMEOUT seconds, 300 by default); an attempt cut off at it or failed
  * on the transport (a dropped connection, a 5xx) is retried up to 3 attempts, the clone from an
  * empty workspace. Any other failure throws.
+ * With deps.cgroup, prepare first saves the box's CPU counter beside spec.json (saveCpuStart); a
+ * counter that can't be read saves nothing and never fails prepare.
  */
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   const started = deps.now();
+  if (deps.cgroup !== undefined) await saveCpuStart(deps.cgroup, join(deps.dirs.goal, cpuStartFile), deps.log);
   const gateway = required(deps.env, 'GOAL_GATEWAY_URL');
   const token = required(deps.env, 'GOAL_GATEWAY_TOKEN');
   const bundle = await fetchBundle(deps, new URL('/run', gateway), token);
