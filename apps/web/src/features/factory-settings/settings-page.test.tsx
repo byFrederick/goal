@@ -77,6 +77,7 @@ describe('Factory settings page', () => {
   it('shows the purpose and a read-only badge with the sidebar’s letter', async () => {
     await renderSettings();
 
+    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('SRE');
     expect((screen.getByLabelText('Purpose') as HTMLTextAreaElement).value).toBe(
       'Triage, investigate and document production issues.',
     );
@@ -125,7 +126,7 @@ describe('Factory settings page', () => {
     expect(screen.getByRole('heading', { name: 'General' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'People with access' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Danger zone' })).toBeTruthy();
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('sre');
+    expect((screen.getByLabelText('Name (in URLs and the CLI)') as HTMLInputElement).value).toBe('sre');
     expect((screen.getByLabelText('Purpose') as HTMLTextAreaElement).readOnly).toBe(true);
     expect(screen.getByText('Agents read this as their first line of context.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
@@ -175,7 +176,7 @@ describe('Factory settings page', () => {
 
     const people = await screen.findByRole('region', { name: 'People with access' });
     expect(await within(people).findByRole('alert')).toBeTruthy();
-    expect(screen.getByLabelText('Name')).toBeTruthy();
+    expect(screen.getByLabelText('Name (in URLs and the CLI)')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
   });
 

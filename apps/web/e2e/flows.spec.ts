@@ -166,7 +166,7 @@ test('the sidebar opens a factory and marks its pages', async ({ page }) => {
 
   const sidebar = orgNav(page);
   // The mark is Sr: software, which sorts before sre, also starts with S.
-  const sre = sidebar.getByRole('link', { name: 'Sr sre 3 waiting on you' });
+  const sre = sidebar.getByRole('link', { name: 'Sr SRE 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(sre).toHaveAttribute('aria-current', 'page');
@@ -198,7 +198,7 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the phone navigation');
   await page.goto('/o/acme');
   await openNavigation(page);
-  const sre = orgNav(page).getByRole('link', { name: 'Sr sre 3 waiting on you' });
+  const sre = orgNav(page).getByRole('link', { name: 'Sr SRE 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
@@ -211,14 +211,14 @@ test('a decision made elsewhere updates the badges without a reload', async ({ p
   await page.goto('/o/acme/f/goal/board');
   await boardIsLive(page);
   await openNavigation(page);
-  const goal = orgNav(page).getByRole('link', { name: /^G goal / });
-  await expect(goal).toHaveAccessibleName('G goal 3 waiting on you, 1 item blocked');
-  await expect(orgNav(page).getByRole('link', { name: /^\S+ sre .*blocked: andon pulled$/ })).toBeVisible();
+  const goal = orgNav(page).getByRole('link', { name: /^G Goal / });
+  await expect(goal).toHaveAccessibleName('G Goal 3 waiting on you, 1 item blocked');
+  await expect(orgNav(page).getByRole('link', { name: /^\S+ SRE .*blocked: andon pulled$/ })).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
 
-  await expect(goal).toHaveAccessibleName('G goal 2 waiting on you, 1 item blocked');
+  await expect(goal).toHaveAccessibleName('G Goal 2 waiting on you, 1 item blocked');
 });
 
 test('the sidebar marks Home on the organization pages', async ({ page }) => {
@@ -567,7 +567,7 @@ test('pull the andon cord, then clear it: the line stops and runs again', async 
     await openNavigation(page);
     const goal = orgNav(page)
       .filter({ visible: true })
-      .getByRole('link', { name: /^G goal/ });
+      .getByRole('link', { name: /^G Goal/ });
     if (pulled) await expect(goal).toHaveAccessibleName(name);
     else await expect(goal).not.toHaveAccessibleName(name);
     if (isPhone(page)) {

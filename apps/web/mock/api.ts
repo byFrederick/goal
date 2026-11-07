@@ -14,7 +14,7 @@
 // allows (Org.can); the people routes (members, invitations, factory roles, transfer) answer as
 // goald does, a fresh-only change asking for a recent sign-in (the factory routes do not filter by
 // factory role under sign-in).
-// The organizations' API keys are keys.ts's; their connections and connection kinds connections.ts's;
+// The organizations' API keys are keys.ts's;
 // their knowledge bases knowledge.ts's.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
@@ -63,7 +63,6 @@ import type { IntakeEvent, TriggerTry, TriggerTryStep } from '../src/api/types.t
 import { createAccess } from './access.ts';
 import { authSettings, createMockAuth } from './auth.ts';
 import { createCodeHosts } from './code-hosts.ts';
-import { createConnections } from './connections.ts';
 import { createDefinitions } from './definitions.ts';
 import { createEnvironments, serveCatalog } from './environments.ts';
 import { parseFault, sleep, takeFault } from './faults.ts';
@@ -282,8 +281,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   const subscribers = new Set<Subscriber>();
   const definitions = createDefinitions({
     state: () => state,
-    // Read at request time: the connections are made just below.
-    connections: (org) => connections.outlines(org),
     knowledgeSources: (org) => knowledge.names(org),
     knowledgeIndex: (org, name) => knowledge.indexOf(org, name),
     broadcast: (org, event, data) => {
@@ -299,22 +296,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     person: (req) => auth.who(req)?.person,
     member: (org, user) => state.people.members[org]?.some((m) => m.userId === user) ?? false,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
-    acme: acmeOrg,
-  });
-
-  const connections = createConnections({
-    clock,
-    actor: (req) => auth.actor(req),
-    stale: (req, res) => stale(req, res),
-    factories: (org) => state.factories.filter((f) => f.org_id === org),
-    names: (factory) => definitions.connectionNames(factory),
-    audit: (org, by, action, target, data, at) => auditAs(org, by, action, target, data, at),
-    broadcast: (org, event, data) => {
-      for (const sub of subscribers) {
-        if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      }
-    },
-    sources: (org, name) => knowledge.readers(org, name),
     acme: acmeOrg,
   });
 
@@ -352,7 +333,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     actor: (req) => auth.actor(req),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     listedBy: (factory) => definitions.knowledgeSourceNames(factory),
-    connectionSync: (org, name) => connections.syncOf(org, name),
+    // goald serves no organization connections (ADR 0037): no name resolves.
+    connectionSync: () => undefined,
     audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {
@@ -1428,10 +1410,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       stats: state.stationStats[f.name] ?? {},
       agents: Object.fromEntries(Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.agents])),
       slots: Object.fromEntries(
-        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [
-          id,
-          c.wip_limit ?? Math.max(c.agents.length, 1),
-        ]),
+        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.copies ?? Math.max(c.agents.length, 1)]),
       ),
       waiting: Object.fromEntries(
         f.stations.map((s) => [
@@ -1777,7 +1756,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
       apiKeys.reset(clock());
-      connections.reset(clock());
       secrets.reset(clock());
       orgNotifications.reset();
       codeHosts.reset();
@@ -1911,7 +1889,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await environments.handle(org, rest, method, res, () => readBody(req))) return;
     if (await definitions.handle(org, rest, method, url, req, res)) return;
     if (await apiKeys.handle(forCaller(req, org), rest, method, req, res, () => readBody(req))) return;
-    if (await connections.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (access.handle(org, rest, method, url, res)) return;
     if (await secrets.handle(org, rest, method, url, req, res, () => readBody(req))) return;
     if (await codeHosts.handle(org, rest, method, res, () => readBody(req))) return;
