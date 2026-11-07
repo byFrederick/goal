@@ -256,6 +256,10 @@ func ciLimits(c domain.CIWait) domain.CIWait {
 		c.Max = domain.DefaultCIMax
 	}
 
+	if c.Rounds <= 0 {
+		c.Rounds = domain.DefaultCIRounds
+	}
+
 	return c
 }
 
@@ -300,8 +304,10 @@ func (e *Engine) endCIWaits(ctx context.Context, waits []ciWaitOn, outcome domai
 }
 
 // ciWaitEnded is called once for each CI wait the poller ended, with its outcome and the checks
-// that decided it (none for CIUnreadable). It is where acting on the outcome goes: starting the
-// run a before-run wait gates, and applying or sending back what an after-run wait holds.
+// that decided it (none for CIUnreadable), and logs it. The poller holds no item lease, so it
+// acts on no outcome: the item's next claim does, under its lease (ciGate), starting the run a
+// before wait gated, or applying (applyHeld) or running the station again on what an after wait
+// held.
 func (e *Engine) ciWaitEnded(ctx context.Context, w domain.CIWaitRecord, outcome domain.CIOutcome, checks ports.CommitChecks) {
 	failed := make([]string, 0, len(checks.Failed()))
 	for _, c := range checks.Failed() {
