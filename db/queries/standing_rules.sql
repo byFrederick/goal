@@ -1,6 +1,6 @@
 -- Standing rules (00075, ADR 0031 decision 7), under row-level security. A rule is never deleted;
 -- revoking it sets revoked_at and revoked_by. A rule is keyed by its factory, environment and
--- server (00091; 00133 dropped the connection key).
+-- server (00091; 00135 dropped the connection key).
 
 -- name: StandingRules :many
 SELECT r.id, r.factory_id, r.environment, r.server, r.tool, r.agent, r.created_by, r.created_at, r.item_id, r.revoked_by,

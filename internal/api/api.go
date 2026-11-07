@@ -117,6 +117,8 @@ type Items interface {
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error)
+	BudgetExhaustedSince(ctx context.Context, factory domain.FactoryID) (time.Time, bool, error)
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
 	EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
 		each func(domain.AgentModelSpend) error) error

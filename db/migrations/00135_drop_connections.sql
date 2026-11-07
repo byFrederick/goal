@@ -25,13 +25,13 @@ BEGIN
                AND EXISTS (SELECT 1 FROM definition_versions v
                            WHERE v.org_id = f.org_id AND v.factory_id = f.id AND v.state <> 'draft')
                AND NOT EXISTS (SELECT 1 FROM factory_conversions fc WHERE fc.org_id = f.org_id AND fc.factory_id = f.id)) THEN
-    RAISE EXCEPTION 'migration 00133 drops connections, but a factory was never converted from them: %', remedy;
+    RAISE EXCEPTION 'migration 00135 drops connections, but a factory was never converted from them: %', remedy;
   END IF;
   IF EXISTS (SELECT 1 FROM standing_rules WHERE connection_id IS NOT NULL AND revoked_at IS NULL) THEN
-    RAISE EXCEPTION 'migration 00133 drops connections, but an active standing rule is still keyed by one: %', remedy;
+    RAISE EXCEPTION 'migration 00135 drops connections, but an active standing rule is still keyed by one: %', remedy;
   END IF;
   IF EXISTS (SELECT 1 FROM knowledge_sources WHERE connection_id IS NOT NULL AND secret_id IS NULL) THEN
-    RAISE EXCEPTION 'migration 00133 drops connections, but a knowledge source still reads one without a secret: %', remedy;
+    RAISE EXCEPTION 'migration 00135 drops connections, but a knowledge source still reads one without a secret: %', remedy;
   END IF;
 END
 $$;

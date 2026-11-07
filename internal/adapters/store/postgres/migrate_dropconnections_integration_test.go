@@ -15,13 +15,13 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// connectionsConverted is the release the refusal of 00133 names.
+// connectionsConverted is the release the refusal of 00135 names.
 const connectionsConverted = "run a release that converts connections (ADR 0037)"
 
 // acmeGit names the seeded server and secret.
 const acmeGit = "acme-git"
 
-// seedConnections is a database at 00132 with an organization that has a connection of a
+// seedConnections is a database at 00134 with an organization that has a connection of a
 // platform kind, sealed under key id old, and a factory with a published version.
 type seedConnections struct {
 	db         testDB
@@ -38,7 +38,7 @@ func newSeedConnections(t *testing.T) seedConnections {
 
 	db := newTestDB(t, OwnerRole)
 	owner := openPool(t, db.owner)
-	migrateTo(t, owner, 132)
+	migrateTo(t, owner, 134)
 
 	store := New(openPool(t, db.app))
 	s := seedConnections{
@@ -123,18 +123,18 @@ func (s seedConnections) assertConnectionsDropped(t *testing.T) {
 
 	for _, table := range []string{"connections", "connection_kinds"} {
 		if s.tableExists(t, table) {
-			t.Errorf("table %s after 00133; want it dropped", table)
+			t.Errorf("table %s after 00135; want it dropped", table)
 		}
 	}
 
 	var columns int
 	if err := s.owner.QueryRow(t.Context(), `SELECT count(*) FROM information_schema.columns
 		WHERE table_name IN ('standing_rules', 'knowledge_sources') AND column_name = 'connection_id'`).Scan(&columns); err != nil || columns != 0 {
-		t.Errorf("%d connection_id columns after 00133, %v; want none", columns, err)
+		t.Errorf("%d connection_id columns after 00135, %v; want none", columns, err)
 	}
 }
 
-// Migration 00133 drops connections on a converted database: the revoked rules keyed by a
+// Migration 00135 drops connections on a converted database: the revoked rules keyed by a
 // connection go, a rule keyed by a server and a synced source that reads with a secret stay, and
 // goal_connection_key_ids no longer reads the connection's key id.
 func TestMigrate_DropsConnections(t *testing.T) {
@@ -159,7 +159,7 @@ func TestMigrate_DropsConnections(t *testing.T) {
 		source, string(s.org), s.connection)
 
 	if ids, err := ConnectionKeyIDs(t.Context(), s.store); err != nil || !slices.Equal(ids, []string{"k1", "old"}) {
-		t.Fatalf("ConnectionKeyIDs at 00132 = %v, %v; want the secret's k1 and the connection's old", ids, err)
+		t.Fatalf("ConnectionKeyIDs at 00134 = %v, %v; want the secret's k1 and the connection's old", ids, err)
 	}
 
 	migrate(t, s.db.owner)
@@ -167,20 +167,20 @@ func TestMigrate_DropsConnections(t *testing.T) {
 	s.assertConnectionsDropped(t)
 
 	if rules := s.standingRuleIDs(t); !slices.Equal(rules, []string{server.String()}) || slices.Contains(rules, revoked.String()) {
-		t.Errorf("standing rules after 00133 = %v; want only the server rule %s", rules, server)
+		t.Errorf("standing rules after 00135 = %v; want only the server rule %s", rules, server)
 	}
 
 	got, err := NewKnowledge(s.store).Sources(ctx)
 	if err != nil || len(got) != 1 || string(got[0].ID) != source.String() || got[0].Secret != acmeGit || got[0].Connection != "" {
-		t.Errorf("knowledge sources after 00133 = %+v, %v; want handbook, reading with secret acme-git", got, err)
+		t.Errorf("knowledge sources after 00135 = %+v, %v; want handbook, reading with secret acme-git", got, err)
 	}
 
 	if ids, err := ConnectionKeyIDs(t.Context(), s.store); err != nil || !slices.Equal(ids, []string{"k1"}) {
-		t.Errorf("ConnectionKeyIDs after 00133 = %v, %v; want only the secret's k1", ids, err)
+		t.Errorf("ConnectionKeyIDs after 00135 = %v, %v; want only the secret's k1", ids, err)
 	}
 }
 
-// Migration 00133 refuses a database that was not converted, before it drops anything: it names
+// Migration 00135 refuses a database that was not converted, before it drops anything: it names
 // the release to run first, and the connections are still there.
 func TestMigrate_DropsConnectionsRefusesUnconverted(t *testing.T) {
 	t.Parallel()
@@ -211,7 +211,7 @@ func TestMigrate_DropsConnectionsRefusesUnconverted(t *testing.T) {
 			}
 
 			if !s.tableExists(t, "connections") || !s.tableExists(t, "connection_kinds") {
-				t.Error("a refused 00133 dropped the connection tables; want them kept")
+				t.Error("a refused 00135 dropped the connection tables; want them kept")
 			}
 		})
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 // ConnectionKeyIDs are the master key ids some secret (its value or its previous one) or webhook
-// endpoint of any organization is sealed under (goal_connection_key_ids, as 00133 replaced it):
+// endpoint of any organization is sealed under (goal_connection_key_ids, as 00135 replaced it):
 // goald refuses to start without each of them.
 func ConnectionKeyIDs(ctx context.Context, s *Store) ([]string, error) {
 	var ids []string

@@ -90,9 +90,32 @@ test('gives the purpose buttons and the Budget sliders a 44 px target at 390 px'
   await openCodeStep(page);
   const factory = new URL(page.url()).searchParams.get('factory');
   await page.goto(`/o/goal/get-started/budget?factory=${factory}`);
-  await expect(page.locator('#budget-day')).toBeVisible();
-  for (const id of ['budget-day', 'budget-week', 'budget-item']) {
+  await expect(page.locator('#budget-week')).toBeVisible();
+  for (const id of ['budget-week', 'budget-item']) {
     const box = await page.locator(`#${id}`).boundingBox();
     expect(box?.height ?? 0, id).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test('keeps the current step’s label inside the stepper at 390 px on every step', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openCodeStep(page);
+  const search = new URL(page.url()).search;
+  for (const step of ['code', 'line', 'budget', 'intake', 'people', 'first-item']) {
+    await page.goto(`/o/goal/get-started/${step}${search}`);
+    const item = page.locator('li[aria-current=step]');
+    await expect(item).toHaveCount(1);
+    await expect
+      .poll(
+        async () => {
+          const box = await item.boundingBox();
+          const view = await page.getByRole('region', { name: 'Setup steps' }).boundingBox();
+          if (!box || !view) return false;
+          return box.x >= view.x - 0.5 && box.x + box.width <= view.x + view.width + 0.5;
+        },
+        { message: `the label of ${step} is inside the stepper` },
+      )
+      .toBe(true);
   }
 });

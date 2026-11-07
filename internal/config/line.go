@@ -271,6 +271,7 @@ func station(st Station) domain.Station {
 	out := domain.Station{
 		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent,
 		Agents: st.Agents, WIP: st.WIP, Buffer: st.Buffer, Output: st.Output, Action: domain.StationAction(st.Action),
+		Merges: domain.MergesPolicy(st.Merges),
 	}
 
 	for lane, r := range st.Route {

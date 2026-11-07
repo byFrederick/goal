@@ -172,7 +172,7 @@ type StandingRulesRow struct {
 
 // Standing rules (00075, ADR 0031 decision 7), under row-level security. A rule is never deleted;
 // revoking it sets revoked_at and revoked_by. A rule is keyed by its factory, environment and
-// server (00091; 00133 dropped the connection key).
+// server (00091; 00135 dropped the connection key).
 func (q *Queries) StandingRules(ctx context.Context, includeRevoked bool) ([]StandingRulesRow, error) {
 	rows, err := q.db.Query(ctx, standingRules, includeRevoked)
 	if err != nil {

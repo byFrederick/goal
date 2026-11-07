@@ -100,7 +100,7 @@ func (c *Credentials) Delete(ctx context.Context, name string, by domain.Actor) 
 }
 
 // UsedBy implements ports.Credentials. Connections referred to credentials; with them gone
-// (00133) nothing does, and the deprecated answers keep their shape with no users.
+// (00135) nothing does, and the deprecated answers keep their shape with no users.
 func (c *Credentials) UsedBy(ctx context.Context, _ string) ([]string, error) {
 	if _, ok := domain.OrgFrom(ctx); !ok {
 		return nil, domain.ErrNoOrg
@@ -147,7 +147,7 @@ func (c *Credentials) ImportPreview(ctx context.Context, names []string) ([]doma
 		return nil, fmt.Errorf("import preview: %w", err)
 	}
 
-	// No connection refers to a name any more (00133), so every count is zero.
+	// No connection refers to a name any more (00135), so every count is zero.
 	out := make([]domain.CredentialImportPreview, 0, len(names))
 	for _, name := range names {
 		out = append(out, domain.CredentialImportPreview{Name: name, Exists: slices.Contains(existing, name)})

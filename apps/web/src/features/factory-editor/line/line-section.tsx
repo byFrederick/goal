@@ -83,11 +83,11 @@ function Stations({ selected }: { selected: string | undefined }) {
             No stations yet. Add a queue where work arrives, the stations that work on it, then Done.
           </p>
         ) : (
-          <div className="relative min-w-0 overflow-x-auto rounded-control border border-line">
+          <div className="@container relative min-w-0 overflow-x-auto rounded-control border border-line">
             <div className={lineTableWidth}>
               <div
                 aria-hidden="true"
-                className={`${lineColumns} items-center border-b border-line bg-panel px-3 py-2 text-xs font-medium text-muted`}
+                className={`${lineColumns} hidden items-center border-b border-line bg-panel px-3 py-2 text-xs font-medium text-muted @[940px]:grid`}
               >
                 <span />
                 <span>Station</span>

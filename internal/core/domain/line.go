@@ -183,6 +183,21 @@ func (l Line) Refusal() string {
 	}
 }
 
+// BlockModelKeyMissing is the code of a block whose line is on secrets and names no
+// runtime.modelKey (Line.RefusalCode): the blocked event's data.code, which callers branch on
+// instead of the reason's words.
+const BlockModelKeyMissing = "model_key_missing"
+
+// RefusalCode is the stable code of the line's Refusal, "" when the refusal has none or runs can
+// start: BlockModelKeyMissing for a line on secrets without runtime.modelKey.
+func (l Line) RefusalCode() string {
+	if len(l.Removed) == 0 && l.OnSecrets() && l.Runtime.ModelKey == "" {
+		return BlockModelKeyMissing
+	}
+
+	return ""
+}
+
 // Runtime is what every agent task of the factory shares.
 type Runtime struct {
 	Model string // default model; an agent's own Model wins
@@ -287,9 +302,30 @@ type Station struct {
 	// a gate where goald acts as the engine on the gate's approval (ActionMerge); empty means
 	// the approval only records the decision.
 	Action StationAction
+	// Merges says whether a station with ActionMerge integrates one item per merge target at a
+	// time (MergesSerialize, the default) or several at once (MergesAllow); see TakesTurns.
+	Merges MergesPolicy
 	// Context names what goald preloads into the feedback of every run at the station.
 	Context []StationContext
 }
+
+// MergesPolicy says whether a merge station integrates items into the same merge target one at
+// a time. A merge target is the branch an item's pull request merges into: the default branch for
+// a standalone item or an assembly's landing, and the assembly's integration branch for a part.
+type MergesPolicy string
+
+// Merges policies, as written in factory.yaml's board.stations[].merges.
+const (
+	// MergesSerialize is the default: one item per merge target at a time.
+	MergesSerialize MergesPolicy = "serialize"
+	// MergesAllow integrates several items into the same merge target at once.
+	MergesAllow MergesPolicy = "allow"
+)
+
+// TakesTurns reports whether items at the station take turns per merge target: true for a
+// station with ActionMerge whose Merges is anything but MergesAllow, the zero policy included,
+// and false for every other station.
+func (s Station) TakesTurns() bool { return s.Action == ActionMerge && s.Merges != MergesAllow }
 
 // StationContext is something goald preloads into a station's runs.
 type StationContext string

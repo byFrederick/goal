@@ -63,9 +63,9 @@ docker compose down
 
 ## Upgrade
 
-goald applies the database's new migrations when it starts. Before you upgrade past migration 00133, which drops connections, the database must have run a release that converts connections to secrets ([ADR 0037](https://github.com/byFrederick/goal/blob/main/docs/adr/0037-secrets-and-environment-files.md)), and goald must have started on it once. That release converts each factory, standing rule and synced knowledge source from connections to secrets.
+goald applies the database's new migrations when it starts. Before you upgrade past migration 00135, which drops connections, the database must have run a release that converts connections to secrets ([ADR 0037](https://github.com/byFrederick/goal/blob/main/docs/adr/0037-secrets-and-environment-files.md)), and goald must have started on it once. That release converts each factory, standing rule and synced knowledge source from connections to secrets.
 
-On a database that was not converted, migration 00133 refuses to run and changes nothing. goald does not start, and its error says `run a release that converts connections (ADR 0037) first`. Start that release once, then upgrade again.
+On a database that was not converted, migration 00135 refuses to run and changes nothing. goald does not start, and its error says `run a release that converts connections (ADR 0037) first`. Start that release once, then upgrade again.
 
 ## If it does not start
 

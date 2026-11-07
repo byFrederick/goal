@@ -56,10 +56,9 @@ A line at the top says "Box size, CLIs and what agents reach live in environment
 
 | Field | Sets | Notes |
 |---|---|---|
-| Each day | `runtime.budget.dailyUsd` | US dollars. The schema accepts it, but the engine does not enforce a daily cap yet. See [WIP and budget](/docs/concepts/wip-and-budget/). |
-| Each week | `runtime.budget.weeklyUsd` | US dollars. When the week's spend reaches it, agent work stops as set under "When a budget runs out". |
-| Each item | `runtime.budget.perItemUsd` | US dollars. The cap for one run. |
-| Turns per item | `runtime.budget.maxTurnsPerTask` | The most turns one task may take. |
+| Each week | `runtime.budget.weeklyUsd` | US dollars. The budget Goal enforces: when the last 7 days' spend reaches it, no new agent work starts, as set under "When a budget runs out". A day's share is about this figure ÷ 7. |
+| Each run | `runtime.budget.perItemUsd` | US dollars. The cap for one agent run, not for a whole item: an item that passes through several agent stations can spend it at each. |
+| Turns per run | `runtime.budget.maxTurnsPerTask` | The most turns one task may take. |
 | Items a day | `board.flow.targets.throughputPerDay` | A target. The Floor draws it on the throughput chart. |
 | Hours lead time | `board.flow.targets.leadTimeHours` | A target: hours from arriving to done. The Floor compares each week with it. |
 | Expedite lead time, minutes | `board.flow.targets.expediteLeadTimeMinutes` | A target for expedite items. The engine does not act on it. |
@@ -70,7 +69,7 @@ Leave a field empty to remove its value. A cap with no value is no cap.
 
 | Choice | Sets | Notes |
 |---|---|---|
-| When a budget runs out: Finish what started | `runtime.budget.onExhausted: drain` | The default. Runs in progress finish; nothing new starts. |
+| When a budget runs out: Finish what started | `runtime.budget.onExhausted: drain` | The default. Runs in progress finish; nothing new starts until the last 7 days' spend is under the budget. |
 | When a budget runs out: Stop at once | `runtime.budget.onExhausted: stop` | Every agent stops at once. |
 | New work enters: Pull when the constraint has room | `board.flow.release: drum-buffer-rope` | Saved now, not enforced yet: the engine releases work as it arrives. |
 | New work enters: As soon as it arrives | `board.flow.release: push` | The default. |

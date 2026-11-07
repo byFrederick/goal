@@ -1,11 +1,16 @@
+import { useParams } from '@tanstack/react-router';
 import { Fragment, type ReactNode, useId, useState } from 'react';
 import type { ItemState } from '../../api/types';
+import { BlockedSentence } from '../../shared/blocked-sentence';
+import { blockedWords } from '../../shared/blocked-words';
 import { formatClock, formatDuration, formatUsd, humanize } from '../../shared/format';
 import { useModelLabel } from '../../shared/models';
+import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip, type ChipTone } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { Disclosure } from '../../ui/disclosure';
+import { InfoTip } from '../../ui/info-tip';
 import { WorkingLine } from '../../ui/working-line';
 import { outputLead } from './outputs';
 import {
@@ -187,8 +192,16 @@ function checkRow(check: CheckEntry): Row {
   };
 }
 
+/** A block's plain sentence, its fix linked to the item's factory. */
+function BlockedLine({ words }: { words: NonNullable<ReturnType<typeof blockedWords>> }) {
+  const org = useOrg();
+  const { factory } = useParams({ strict: false });
+  return factory ? <BlockedSentence words={words} org={org.slug} factory={factory} /> : <>{words.sentence}</>;
+}
+
 /** A note, or an event that says what a person did (violet), a sent-back or passed gate, or the engine's own step. */
 function noteRow(note: NoteEntry): Row {
+  const words = blockedWords(note.blockedCode);
   const people = note.tone === 'you';
   const tone: TileTone = note.tone === 'ok' ? 'ok' : note.tone === 'rework' ? 'rework' : people ? 'you' : 'plain';
   return {
@@ -199,8 +212,20 @@ function noteRow(note: NoteEntry): Row {
     right: note.open ? <span className="text-you-ink">Now</span> : undefined,
     children: (
       <>
-        <span>{note.text}</span>
-        {note.detail ? <span className="block text-muted">“{note.detail}”</span> : null}
+        {words ? (
+          <span>
+            <BlockedLine words={words} />
+            {note.detail ? (
+              <>
+                {' '}
+                <InfoTip about="Why it is blocked">{note.detail}</InfoTip>
+              </>
+            ) : null}
+          </span>
+        ) : (
+          <span>{note.text}</span>
+        )}
+        {!words && note.detail ? <span className="block text-muted">“{note.detail}”</span> : null}
       </>
     ),
   };

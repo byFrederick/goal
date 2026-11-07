@@ -149,6 +149,33 @@ func (h *harness) wantPromptInDraft(t *testing.T, f domain.FactoryID, agent map[
 	}
 }
 
+// The skeleton's end station is titled Done, as every starter template's is, so the Line step
+// shows a name instead of an empty field.
+func TestCreateFactory_BlankSkeletonEndsAtDone(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	c, err := h.svc.CreateFactory(h.ctx, authoring.NewFactoryRequest{Name: blankName, Start: authoring.Start{Kind: authoring.StartBlank}})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	m, err := h.svc.DraftModel(h.ctx, c.Factory.ID)
+	if err != nil {
+		t.Fatalf("model: %v", err)
+	}
+
+	stations, _ := m.Model.Line["stations"].([]any)
+	if len(stations) == 0 {
+		t.Fatalf("blank line = %v, want stations", m.Model.Line)
+	}
+
+	if last, _ := stations[len(stations)-1].(map[string]any); last["kind"] != "done" || last["name"] != "Done" {
+		t.Errorf("blank line ends at %v, want a done station named Done", last)
+	}
+}
+
 // agentStations are the line model's stations of kind agent.
 func agentStations(line map[string]any) []map[string]any {
 	stations, _ := line["stations"].([]any)

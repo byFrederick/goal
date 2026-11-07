@@ -23,7 +23,7 @@ const (
 
 var _ ports.StandingRules = (*StandingRules)(nil)
 
-// StandingRules are the standing rules in 00075's standing_rules, keyed by server since 00133
+// StandingRules are the standing rules in 00075's standing_rules, keyed by server since 00135
 // (ports.StandingRules).
 type StandingRules struct {
 	s *Store

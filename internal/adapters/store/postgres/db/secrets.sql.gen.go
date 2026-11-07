@@ -27,7 +27,7 @@ const connectionKeyIDs = `-- name: ConnectionKeyIDs :one
 SELECT goal_connection_key_ids()::text[] AS key_ids
 `
 
-// The master key ids of every organization's sealed secrets and webhook endpoints (00133).
+// The master key ids of every organization's sealed secrets and webhook endpoints (00135).
 func (q *Queries) ConnectionKeyIDs(ctx context.Context) ([]string, error) {
 	row := q.db.QueryRow(ctx, connectionKeyIDs)
 	var key_ids []string

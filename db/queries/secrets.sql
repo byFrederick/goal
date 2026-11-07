@@ -143,5 +143,5 @@ UPDATE secrets SET previous_key_id = sqlc.arg(key_id), previous_nonce = sqlc.arg
 WHERE id = sqlc.arg(id);
 
 -- name: ConnectionKeyIDs :one
--- The master key ids of every organization's sealed secrets and webhook endpoints (00133).
+-- The master key ids of every organization's sealed secrets and webhook endpoints (00135).
 SELECT goal_connection_key_ids()::text[] AS key_ids;

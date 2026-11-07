@@ -1,7 +1,15 @@
 // What the board says about stations and cards, in words, from the board's statistics. Derived
 // only from station kinds and the API's numbers, never from station or factory names.
 import type { Board, BoardLine, BoardStation, ItemCard } from '../../api/types';
-import { formatDuration, formatPercent, formatUsd, formatUsdCompact, humanize, plural } from '../../shared/format';
+import {
+  formatDuration,
+  formatPercent,
+  formatUsd,
+  formatUsdCompact,
+  formatWeekdayTime,
+  humanize,
+  plural,
+} from '../../shared/format';
 import { describeState, type StateLabel, waitingOnYou } from '../../shared/item-state';
 import { waitingShort } from '../../shared/waiting';
 import type { HatchTone } from '../../ui/hatch';
@@ -141,7 +149,8 @@ export function expediteHeader(line: BoardLine, shown: number): string | null {
 export function budgetNote(line: BoardLine): string | null {
   const b = line.budget;
   if (!b?.exhausted) return null;
-  return `Weekly budget used up: ${formatUsd(b.spent_usd)} of ${formatUsdCompact(b.weekly_usd)}. No new agent work starts until the week’s spend falls below it.`;
+  const resumes = b.resumes_at ? ` Resumes about ${formatWeekdayTime(b.resumes_at)}.` : '';
+  return `Weekly budget used up: ${formatUsd(b.spent_usd)} of ${formatUsdCompact(b.weekly_usd)}. No new agent work starts until the week’s spend falls below it.${resumes}`;
 }
 
 /** A working item's doing line: "Working", with its turn once the agent has taken one. */

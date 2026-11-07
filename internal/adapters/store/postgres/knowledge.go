@@ -102,7 +102,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 	}
 
 	if n.Connection != "" {
-		// No connection is left to read (00133), so every name is unknown.
+		// No connection is left to read (00135), so every name is unknown.
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: connection %q: %w", n.Connection, ports.ErrNotFound)
 	}
 

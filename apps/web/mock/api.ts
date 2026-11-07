@@ -93,7 +93,7 @@ import { type SearchSource, search } from './search.ts';
 import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
 import { createStandingRules } from './standing-rules.ts';
-import { starterTitles } from './starter.ts';
+import { runStarterCourse, starterTitles } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
@@ -1126,7 +1126,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   const attentionOf = (f: Factory): FactoryAttention => ({
     factory_id: f.id,
-    waiting_on_you: decisionsOf(f).length,
+    // A used-up weekly budget is one entry of Needs you, so it counts as waiting on you.
+    waiting_on_you: decisionsOf(f).length + (budgetOf(f)?.exhausted ? 1 : 0),
     blocked_items: inState(f, 'blocked').length,
     andon: openAndon(f),
     connections_blocked: 0,
@@ -1223,11 +1224,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { summary: summary || null, facts, pull_request: it.pr_url, spend_usd: it.cost_usd };
   };
 
-  /** Why a blocked item is blocked: its latest blocked or paused event. */
+  /** Why a blocked item is blocked: its latest blocked or paused event's reason and code. */
   const blockerOf = (it: MockItem): InboxEntry['blocked'] => {
     const last = state.events.findLast((e) => e.item_id === it.id && (e.kind === 'blocked' || e.kind === 'paused'));
     const reason = typeof last?.data.reason === 'string' && last.data.reason ? last.data.reason : null;
-    return { reason, paused: last?.kind === 'paused' };
+    const code = typeof last?.data.code === 'string' && last.data.code ? last.data.code : null;
+    return { reason, code, paused: last?.kind === 'paused' };
   };
 
   /**
@@ -1312,12 +1314,28 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           },
         ]
       : [];
+    const used = budgetOf(f);
+    const budget: InboxEntry[] =
+      used?.exhausted && used.since && used.resumes_at
+        ? [
+            {
+              ...entry(f, 'budget', f.id, used.since),
+              budget: {
+                spent_usd: used.spent_usd,
+                weekly_usd: used.weekly_usd,
+                since: used.since,
+                resumes_at: used.resumes_at,
+              },
+            },
+          ]
+        : [];
     const pull = openAndon(f);
     if (pull) {
       return [
         ...items,
         ...syncs,
         ...conversions,
+        ...budget,
         { ...entry(f, 'andon', String(pull.id), pull.pulled_at), andon: pull },
       ];
     }
@@ -1349,7 +1367,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         watch: w.watch,
       }),
     );
-    return [...items, ...syncs, ...conversions, ...warnings, ...worse];
+    return [...items, ...syncs, ...conversions, ...budget, ...warnings, ...worse];
   };
 
   const kindOrder: InboxEntry['kind'][] = [
@@ -1357,6 +1375,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     'question',
     'tool_approval',
     'andon',
+    'budget',
     'rework_warning',
     'blocked',
     'expedite',
@@ -1543,9 +1562,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     const flow = state.flow[factory.name];
     const drum = state.constraint[factory.name] ?? null;
     const limited = stations.filter((s) => s.wip_limit !== null);
-    const weekly = state.weeklyBudget[factory.name] ?? null;
+    const budget = budgetOf(factory);
     const today = Date.parse(`${utcDay(0, clock())}T00:00:00Z`);
-    const spent = metricsOf(flowInput(factory), { from: today - 6 * dayMs, to: today }, false).spend_usd;
     const queues = new Set(stations.filter((s) => s.kind === 'queue').map((s) => s.id));
     const lane = flow?.expedite_wip !== undefined;
     const andon = openAndon(factory);
@@ -1576,7 +1594,35 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
             ).length,
           }
         : null,
-      budget: weekly === null ? null : { weekly_usd: weekly, spent_usd: spent, exhausted: spent >= weekly },
+      budget,
+    };
+  };
+
+  /**
+   * A factory's weekly budget as goald reports it: the spend of the runs in the rolling 7×24 h window, and, once
+   * the cap is reached, since when and when the oldest runs leave the window so the spend falls below it (each run
+   * leaves 7 days after it started; the mock counts by the day a run finished).
+   */
+  const budgetOf = (factory: Factory): NonNullable<Board['line']['budget']> | null => {
+    const weekly = state.weeklyBudget[factory.name] ?? null;
+    if (weekly === null) return null;
+    const now = clock();
+    const done = (state.history[factory.name] ?? []).filter((d) => d.done_at > now - 7 * dayMs && d.done_at <= now);
+    const spent = Math.round(done.reduce((n, d) => n + d.cost_usd, 0) * 100) / 100;
+    if (spent < weekly) return { weekly_usd: weekly, spent_usd: spent, exhausted: false };
+    let rest = spent;
+    let leaves = now;
+    for (const d of [...done].sort((a, b) => a.done_at - b.done_at)) {
+      leaves = d.done_at + 7 * dayMs;
+      rest -= d.cost_usd;
+      if (rest < weekly) break;
+    }
+    return {
+      weekly_usd: weekly,
+      spent_usd: spent,
+      exhausted: true,
+      since: new Date(now - 2 * 3_600_000).toISOString(),
+      resumes_at: new Date(leaves).toISOString(),
     };
   };
 
@@ -1723,6 +1769,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           });
         });
       }
+      // {usedUpBudget: "<factory>"}: that factory's weekly cap is a cent, so its week's spend has used it up.
+      if (typeof body.usedUpBudget === 'string') state.weeklyBudget[body.usedUpBudget] = 0.01;
       const role = roleSetting(body.role);
       grants = role ? grantsOf(sources.table, role) : undefined;
       if (grants) withRole(state, grants);
@@ -1736,6 +1784,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       jonah.reset();
       views.reset();
       webhooks.reset();
+      policy.reset();
+      // Spend is derived from the budgets and the clock: it keeps no state to reset.
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
@@ -2274,21 +2324,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         };
         state.items.push(it);
         if (starterTitles.includes(title)) {
-          // The mock runs no agent, so the starter item runs its whole course at once: created nine minutes ago,
-          // its spec accepted, moved to Build and merged at Done, with $0.84 spent. Seconds from its creation. The
-          // Floor then hides the new-factory checklist, as it does once an item has merged (frontend.md, "New factory row").
-          const at = (s: number) => new Date(clock() - (540 - s) * 1000).toISOString();
-          it.created_at = at(0);
-          emit(it, 'created', 'engine', {}, at(0));
-          it.station = 'spec';
-          emit(it, 'moved', 'engine', { from: 'inbox', to: 'spec' }, at(12));
-          emit(it, 'approved', 'user:local', {}, at(270));
-          it.station = 'build';
-          emit(it, 'moved', 'engine', { from: 'spec', to: 'build' }, at(302));
-          it.station = 'done';
-          emit(it, 'moved', 'engine', { from: 'build', to: 'done' }, at(540));
-          it.state = 'done';
-          it.cost_usd = 0.84;
+          const current = state.definitions[factory.id]?.versions.find(
+            (v) => v.id === state.definitions[factory.id]?.current,
+          );
+          runStarterCourse({
+            item: it,
+            runs: state.runs,
+            emit,
+            now: clock(),
+            keyed: definitions.modelKey(factory) !== undefined,
+            agent: definitions.agentNames(factory)[0] ?? 'agent',
+            version: current ? { id: current.id, number: current.number } : null,
+          });
         } else {
           emit(it, 'created', 'engine');
         }

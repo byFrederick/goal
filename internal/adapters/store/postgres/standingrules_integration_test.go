@@ -36,7 +36,7 @@ func TestMigrate_StandingRulesServerKey(t *testing.T) {
 
 	migrateTo(t, openPool(t, db.owner), 91)
 
-	// 00133 drops connection_id, so the row is read as 00091 left it.
+	// 00135 drops connection_id, so the row is read as 00091 left it.
 	var connID, factoryID, environment, server *string
 	if err := admin.QueryRow(t.Context(), `SELECT connection_id::text, factory_id::text, environment, server
 		FROM standing_rules WHERE id = $1 AND revoked_at IS NULL`, rule).Scan(&connID, &factoryID, &environment, &server); err != nil {

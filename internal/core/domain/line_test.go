@@ -44,6 +44,7 @@ func TestLine_Refusal(t *testing.T) {
 		name string
 		line Line
 		want []string // in the reason; none for a line that runs
+		code string   // RefusalCode
 	}{
 		{
 			name: "on connections", line: Line{Number: 5, Runtime: Runtime{ModelConnection: testModelConn}},
@@ -65,11 +66,15 @@ func TestLine_Refusal(t *testing.T) {
 			name: "environments without a model key", line: Line{
 				Number: 4, Runtime: Runtime{ModelConnection: testModelConn}, Environments: []Environment{{Name: DefaultEnvironment}},
 			},
-			want: []string{"version 4", "runtime.modelKey"},
+			want: []string{"version 4", "runtime.modelKey"}, code: BlockModelKeyMissing,
 		},
 	}
 
 	for _, tt := range tests {
+		if got := tt.line.RefusalCode(); got != tt.code {
+			t.Errorf("%s: refusal code %q; want %q", tt.name, got, tt.code)
+		}
+
 		got := tt.line.Refusal()
 		if (got == "") != (len(tt.want) == 0) {
 			t.Errorf("%s: refusal %q; want one: %v", tt.name, got, len(tt.want) > 0)
@@ -130,6 +135,29 @@ func TestStation_LaneAgents(t *testing.T) {
 	} {
 		if got := tt.st.LaneAgents(); !slices.Equal(got, tt.want) || got == nil {
 			t.Errorf("%s: lane agents = %#v, want %#v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// A merge station takes turns per merge target unless its merges is allow; a station that does
+// not merge never takes turns, whatever its merges says.
+func TestStation_TakesTurns(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		st   Station
+		want bool
+	}{
+		{"merge station by default", Station{Kind: KindAgent, Action: ActionMerge}, true},
+		{"merge station that serializes", Station{Kind: KindHuman, Action: ActionMerge, Merges: MergesSerialize}, true},
+		{"merge station that allows", Station{Kind: KindAgent, Action: ActionMerge, Merges: MergesAllow}, false},
+		{"agent station", Station{Kind: KindAgent}, false},
+		{"agent station with serialize", Station{Kind: KindAgent, Merges: MergesSerialize}, false},
+		{"human station", Station{Kind: KindHuman}, false},
+	} {
+		if got := tt.st.TakesTurns(); got != tt.want {
+			t.Errorf("%s: takes turns = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }
