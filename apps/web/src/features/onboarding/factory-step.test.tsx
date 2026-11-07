@@ -280,7 +280,14 @@ describe('step 2, pick a template', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Factory name' }), { target: { value: '— !' } });
     const use = screen.getByRole('button', { name: 'Use Incident response' }) as HTMLButtonElement;
     expect(use.disabled || use.getAttribute('aria-disabled') === 'true').toBe(true);
-    expect(screen.getByText(/Use 3 to 40 lowercase letters/)).toBeTruthy();
+    expect(screen.getByText('Use a title with at least 3 letters or digits.')).toBeTruthy();
+  });
+
+  it('asks for a longer title when it is only two characters', async () => {
+    renderStep();
+    await screen.findByRole('radio', { name: /Incident response/ });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Factory name' }), { target: { value: 'QA' } });
+    expect(screen.getByText('Use a title with at least 3 letters or digits.')).toBeTruthy();
   });
 
   it('saves the purpose into the new draft, writes no repository, and continues to the Code step', async () => {
