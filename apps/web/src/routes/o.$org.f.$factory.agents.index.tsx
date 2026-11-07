@@ -4,6 +4,7 @@ import { pageTitle } from '../app/route-focus';
 import { AgentsSkeleton } from '../app/route-skeletons';
 import { agentNamesOf } from '../features/agents/agents-line';
 import { AgentsPage } from '../features/agents/agents-page';
+import { factoryTitle } from '../shared/factory';
 
 // The Agents page: the running version's line, with each agent's statistics loaded beside it. Both are
 // awaited, so the page renders whole; a failure shows the route's error screen with its retry.
@@ -15,6 +16,6 @@ export const Route = createFileRoute('/o/$org/f/$factory/agents/')({
       agentNamesOf(version.model).map((agent) => ensureLoaded(queryClient, agentStatsQuery(org.id, factory.id, agent))),
     );
   },
-  head: ({ match: { context } }) => pageTitle('Agents', context.factory.name, context.org.name),
+  head: ({ match: { context } }) => pageTitle('Agents', factoryTitle(context.factory), context.org.name),
   component: AgentsPage,
 });
