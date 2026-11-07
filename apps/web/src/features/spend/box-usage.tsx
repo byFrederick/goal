@@ -12,7 +12,7 @@ type Grouping = 'agents' | 'stations';
 type UsageRow = AgentUsage | StationUsage;
 
 const tip =
-  'Median is the middle run; P90 is the run that 9 in 10 stay under. CPU runs from prepare to the run’s end. Runs the box couldn’t measure are left out.';
+  'Median is the middle run; P90 is the run that 9 in 10 stay under. CPU runs from prepare to the run’s end. Memory is the peak of the box’s own cgroup where it has one, otherwise the machine’s memory in use during the run, which also counts the box’s system processes and can read a little higher. Runs the box couldn’t measure are left out.';
 
 const sizeLabel = { small: 'Small', medium: 'Medium', large: 'Large' } as const;
 
