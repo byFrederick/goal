@@ -112,6 +112,46 @@ func (q *Queries) CountOrgRuns(ctx context.Context, arg CountOrgRunsParams) (int
 	return count, err
 }
 
+const factoryRunCostsSince = `-- name: FactoryRunCostsSince :many
+SELECT started_at, cost_usd
+FROM agent_runs
+WHERE factory_id = $1 AND started_at >= $2 AND kind NOT IN ('jonah', 'try')
+ORDER BY started_at, id
+`
+
+type FactoryRunCostsSinceParams struct {
+	FactoryID uuid.UUID
+	Since     time.Time
+}
+
+type FactoryRunCostsSinceRow struct {
+	StartedAt time.Time
+	CostUsd   float64
+}
+
+// The start and cost of each run FactorySpendSince sums, oldest first, for when a used-up weekly
+// budget resumes (domain.BudgetResumesAt). Row-level security scopes it to the organization;
+// agent_runs_factory_started_idx serves the range.
+func (q *Queries) FactoryRunCostsSince(ctx context.Context, arg FactoryRunCostsSinceParams) ([]FactoryRunCostsSinceRow, error) {
+	rows, err := q.db.Query(ctx, factoryRunCostsSince, arg.FactoryID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FactoryRunCostsSinceRow
+	for rows.Next() {
+		var i FactoryRunCostsSinceRow
+		if err := rows.Scan(&i.StartedAt, &i.CostUsd); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const factorySpendSince = `-- name: FactorySpendSince :one
 SELECT coalesce(sum(cost_usd), 0)::float8 AS spend_usd
 FROM agent_runs

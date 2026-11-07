@@ -36,7 +36,7 @@ import {
 } from './board-filters';
 import { BoardTopBarActions, SearchItems } from './board-header';
 import { useCardMoves } from './card-move';
-import { columnCount, expediteHeader, firstStation, isExpedite } from './stats';
+import { budgetNote, columnCount, expediteHeader, firstStation, isExpedite } from './stats';
 
 /** Opens the Move menu for a card, with the station a drop chose; undefined: the caller may not move work. */
 type OnMove = ((item: ItemCard, to?: string) => void) | undefined;
@@ -426,6 +426,7 @@ export function BoardPage() {
           <LineStatus andon={board.line.andon} />
         </div>
       ) : null}
+      {budgetNote(board.line) ? <p className="m-0 text-secondary text-muted">{budgetNote(board.line)}</p> : null}
       {phone && filtersOpen ? <div id={filtersId}>{filters}</div> : null}
       <Columns
         board={shown}
