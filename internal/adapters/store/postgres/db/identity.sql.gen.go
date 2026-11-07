@@ -45,6 +45,40 @@ func (q *Queries) Invitations(ctx context.Context) ([]byte, error) {
 	return invitations, err
 }
 
+const memberNames = `-- name: MemberNames :many
+SELECT m.user_id::text AS user_id, coalesce(m.name, '')::text AS name, coalesce(m.email, '')::text AS email
+FROM jsonb_to_recordset(goal_members()) AS m (user_id uuid, name text, email text)
+WHERE m.user_id = ANY ($1::uuid[])
+`
+
+type MemberNamesRow struct {
+	UserID string
+	Name   string
+	Email  string
+}
+
+// The members of the transaction's organization among users, with the name and email the members
+// list has (goal_members, 00045); a user who is not a member has no row.
+func (q *Queries) MemberNames(ctx context.Context, users []uuid.UUID) ([]MemberNamesRow, error) {
+	rows, err := q.db.Query(ctx, memberNames, users)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MemberNamesRow
+	for rows.Next() {
+		var i MemberNamesRow
+		if err := rows.Scan(&i.UserID, &i.Name, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const members = `-- name: Members :one
 SELECT goal_members()::jsonb AS members
 `

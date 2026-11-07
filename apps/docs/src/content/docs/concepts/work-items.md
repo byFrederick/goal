@@ -53,7 +53,7 @@ Work types decide the kind of item and its class. They do not change how an item
 
 Every item is checked the same way however it arrives: its title can't be empty, its type must be one of the declared work types, and its lane must be one that a station routes by, when any station routes by lane. A request that fails a check is refused with `400 Bad Request`, and a plan with such a part blocks the item that planned it.
 
-Each item records where it came from as its `origin`: `person`, `plan` for a part, `trigger`, or `follow-up`. It also records who filed it. For a person's item, it records whether it was filed on the web, from the CLI or with an API key. The API answers an item's `origin`. Items filed before origins were recorded got theirs from how they were submitted, and those with no record of it show `person`.
+Each item records where it came from as its `origin`: `person`, `plan` for a part, `trigger`, or `follow-up`. It also records who filed it, and the API answers it as `created_by`: a person is named as the sidebar names them, or "A former member" after they leave the organization. For a person's item, it records whether it was filed on the web, from the CLI or with an API key. The API answers an item's `origin`. Items filed before origins were recorded got theirs from how they were submitted, and those with no record of it show `person`.
 
 Reading one item (`GET /v1/orgs/{org}/items/{item}`) also answers `came_from` for an item with origin `follow-up` or `trigger`:
 

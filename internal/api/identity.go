@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -307,6 +308,62 @@ func (s *server) actorOut(a domain.Actor) gen.Actor {
 	}
 
 	return gen.Actor{Kind: gen.ActorKind(a.Kind), Id: a.ID, Name: a.Name}
+}
+
+// formerMember names a person a stored ref names who is no longer a member of the organization,
+// or whom goald could not look up: never their id.
+const formerMember = "A former member"
+
+// nameActors names the people among actors, every actor of one response, as the sidebar names
+// them, with one Access.MemberNames call for all of them; a person without a member name is
+// formerMember. The local user, service, agent and system actors keep their names, and so does
+// every actor under GOAL_AUTH=none. A failed lookup does not fail the read: it is logged and
+// every person is formerMember. Ids and kinds never change.
+func (s *server) nameActors(ctx context.Context, actors ...*gen.Actor) {
+	if s.auth.Mode != AuthSession {
+		return
+	}
+
+	var people []*gen.Actor
+
+	users := make([]domain.UserID, 0, len(actors))
+	seen := make(map[domain.UserID]bool, len(actors))
+
+	for _, a := range actors {
+		if a == nil || a.Kind != gen.ActorKindUser || a.Id == domain.LocalUser.ID {
+			continue
+		}
+
+		people = append(people, a)
+
+		if id := domain.UserID(a.Id); !seen[id] {
+			seen[id] = true
+			users = append(users, id)
+		}
+	}
+
+	if len(people) == 0 {
+		return
+	}
+
+	names, err := s.access.MemberNames(ctx, users)
+	if err != nil {
+		s.log.WarnContext(ctx, "member names not read", slog.Int("people", len(users)), slog.Any("error", err))
+	}
+
+	for _, a := range people {
+		a.Name = cmp.Or(names[domain.UserID(a.Id)], formerMember)
+	}
+}
+
+// filers are the created_by actors of rows, for nameActors.
+func filers[T any](rows []T, createdBy func(*T) *gen.Actor) []*gen.Actor {
+	out := make([]*gen.Actor, 0, len(rows))
+	for i := range rows {
+		out = append(out, createdBy(&rows[i]))
+	}
+
+	return out
 }
 
 // eventActor is an item event's actor name as the API shows it: the local user's, from before

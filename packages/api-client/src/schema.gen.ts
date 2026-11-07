@@ -4522,7 +4522,7 @@ export interface components {
             kind: string;
             id: string;
         };
-        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job */
+        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same */
         Actor: {
             /** @enum {string} */
             kind: "user" | "service" | "agent" | "system";

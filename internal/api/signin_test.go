@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -49,15 +50,16 @@ func newSignedIn(t *testing.T) signedIn {
 	return newSignedInWith(t, nil)
 }
 
-// newSignedInWith is newSignedIn with goald's log written to logs when it is set.
-func newSignedInWith(t *testing.T, logs io.Writer) signedIn {
+// newSignedInWith is newSignedIn with goald's log written to logs when it is set, and the API's
+// collaborators changed by each of opts.
+func newSignedInWith(t *testing.T, logs io.Writer, opts ...func(*harness, *api.Deps)) signedIn {
 	t.Helper()
 
 	var h *harness
 
 	id := porttest.NewIdentity(func() time.Time { return h.clock.Now() })
 	in := &signIn{identity: id, access: porttest.NewAccessNotices(), google: true}
-	h = newHarnessLogged(t, in, logs) // adds acme and example-labs, with acme's factories, to id
+	h = newHarnessLogged(t, in, logs, opts...) // adds acme and example-labs, with acme's factories, to id
 
 	people := []struct {
 		user          domain.UserID
