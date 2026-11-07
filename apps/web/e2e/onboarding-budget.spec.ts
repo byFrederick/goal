@@ -60,7 +60,16 @@ for (const width of widths) {
     await page.getByRole('button', { name: /^Use / }).click();
     await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
     const factory = new URL(page.url()).searchParams.get('factory');
-    await page.goto(`/o/goal/get-started/budget?factory=${factory}`);
+    // Line holds Continue until the factory has a model key, so save one first.
+    await page.goto(`/o/goal/get-started/line?factory=${factory}`);
+    await page
+      .locator('input')
+      .and(page.getByLabel('Model key', { exact: true }))
+      .fill('test-token');
+    await page.getByRole('button', { name: 'Save the key' }).click();
+    await expect(page.getByText('Saved as the secret model-key, open to this factory.')).toBeVisible();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/\/get-started\/budget/);
     await expect(page.getByRole('slider', { name: 'A week' })).toHaveValue('800');
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page).toHaveURL(/\/get-started\/intake/);

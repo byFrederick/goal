@@ -521,5 +521,7 @@ describe('step 4 on a published factory with no draft', () => {
       () => expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
       { timeout: 3000 },
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Step budget')).toBeTruthy();
   });
 });
