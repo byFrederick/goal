@@ -47,6 +47,34 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 	return domain.NewOrgSpend(w, f), nil
 }
 
+// SpendByFactory implements ports.Spend over the store's runs, as OrgSpendByDay sums them.
+func (s *Store) SpendByFactory(ctx context.Context, since, until time.Time) ([]domain.FactorySpend, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	spend := map[domain.FactoryID]float64{}
+
+	for _, r := range s.runs {
+		if s.runVisible(r, org) && inWindow(r.StartedAt, since, until) {
+			spend[r.FactoryID] += r.Result.CostUSD
+		}
+	}
+
+	out := make([]domain.FactorySpend, 0, len(spend))
+	for id, usd := range spend {
+		out = append(out, domain.FactorySpend{FactoryID: id, USD: usd})
+	}
+
+	slices.SortFunc(out, func(a, b domain.FactorySpend) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
+
+	return out, nil
+}
+
 // runSpend sums org's runs as the postgres spend queries do: by day and factory from `from`, by
 // agent, by model, on rework and their usage in [since, until). Callers hold s.mu.
 func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.SpendFacts {

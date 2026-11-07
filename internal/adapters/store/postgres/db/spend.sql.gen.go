@@ -422,3 +422,43 @@ func (q *Queries) OrgUsageByStation(ctx context.Context, arg OrgUsageByStationPa
 	}
 	return items, nil
 }
+
+const spendByFactory = `-- name: SpendByFactory :many
+SELECT factory_id, sum(cost_usd)::float8 AS spend_usd
+FROM agent_runs
+WHERE started_at >= $1::timestamptz AND started_at < $2::timestamptz
+GROUP BY factory_id
+ORDER BY factory_id
+`
+
+type SpendByFactoryParams struct {
+	Since time.Time
+	Until time.Time
+}
+
+type SpendByFactoryRow struct {
+	FactoryID uuid.UUID
+	SpendUsd  float64
+}
+
+// OrgSpendByDay's runs by factory alone (ports.Spend.SpendByFactory): every run started in
+// [since, until), with or without an item, a running one with its cost so far.
+func (q *Queries) SpendByFactory(ctx context.Context, arg SpendByFactoryParams) ([]SpendByFactoryRow, error) {
+	rows, err := q.db.Query(ctx, spendByFactory, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpendByFactoryRow
+	for rows.Next() {
+		var i SpendByFactoryRow
+		if err := rows.Scan(&i.FactoryID, &i.SpendUsd); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

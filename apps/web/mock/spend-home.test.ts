@@ -48,4 +48,14 @@ describe('spend budgets and Home', () => {
       expect(b.weekly_usd).toBe(w?.budget_usd ?? null);
     }
   });
+
+  it('count a run without an item in Software, which the items alone leave out', async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const [spend, metrics] = await Promise.all([
+      get<OrgSpend>('/spend?window=week'),
+      get<{ spend_usd: number }>(`/factories/software/metrics?from=${day}&to=${day}`),
+    ]);
+    const software = spend.budgets.find((b) => b.factory.name === 'software');
+    expect(software?.today_usd).toBeCloseTo(metrics.spend_usd + 4.25, 2);
+  });
 });

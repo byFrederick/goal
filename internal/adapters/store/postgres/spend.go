@@ -84,6 +84,29 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 	return domain.NewOrgSpend(w, f), nil
 }
 
+// SpendByFactory implements ports.Spend: the SpendByFactory query, by factory id.
+func (s *Store) SpendByFactory(ctx context.Context, since, until time.Time) ([]domain.FactorySpend, error) {
+	var out []domain.FactorySpend
+
+	err := s.orgTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(q *db.Queries) error {
+		rows, err := q.SpendByFactory(ctx, db.SpendByFactoryParams{Since: since, Until: until})
+		if err != nil {
+			return err
+		}
+
+		for _, r := range rows {
+			out = append(out, domain.FactorySpend{FactoryID: domain.FactoryID(r.FactoryID.String()), USD: r.SpendUsd})
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("spend by factory: %w", err)
+	}
+
+	return out, nil
+}
+
 // readUsage reads the usage of the runs started in [since, until) into f, by agent and by station.
 func readUsage(ctx context.Context, q *db.Queries, since, until time.Time, f *domain.SpendFacts) error {
 	byAgent, err := q.OrgUsageByAgent(ctx, db.OrgUsageByAgentParams{Since: since, Until: until})

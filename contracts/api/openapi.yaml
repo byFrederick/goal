@@ -8962,7 +8962,10 @@ components:
           allOf:
             - $ref: "#/components/schemas/ConstraintSummary"
         waiting: { $ref: "#/components/schemas/WaitingSummary" }
-        spend_usd: { type: number, format: double, description: Cost of the agent runs started in the window }
+        spend_usd:
+          type: number
+          format: double
+          description: The cost of every agent run of the factory started in the window, Jonah's and other runs without an item included, as Spend's budget rows count it; a running run counts with its cost so far
         budget_usd:
           type: number
           format: double
