@@ -176,8 +176,9 @@ func (rc *receiver) webhook(ctx context.Context, id domain.WebhookEndpointID) (d
 		return domain.WebhookEndpoint{}, ctx, errUnknownWebhook
 	case err != nil:
 		return domain.WebhookEndpoint{}, ctx, err
-	case !hook.OrgLevel() || !hook.Enabled:
-		// A factory's own endpoint is never received (ADR 0040 decision 24).
+	case hook.SecretID == "" || !hook.Enabled:
+		// A row without an organization secret, a factory endpoint the conversion never reached,
+		// is never received (ADR 0040 decision 24).
 		return domain.WebhookEndpoint{}, ctx, errUnknownWebhook
 	}
 

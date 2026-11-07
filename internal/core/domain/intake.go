@@ -12,87 +12,31 @@ import (
 // POST /hooks/{id} (ADR 0026 decision 3).
 type WebhookEndpointID string
 
-// WebhookKind is how an endpoint's requests are signed and name their event (ADR 0026 decision 3).
-type WebhookKind string
-
-const (
-	// WebhookGeneric takes X-Goal-Signature and an event name in the body's event field.
-	WebhookGeneric WebhookKind = "generic"
-	// WebhookGitHub takes GitHub's X-Hub-Signature-256 and X-GitHub-Event.
-	WebhookGitHub WebhookKind = "github"
-)
-
-// WebhookSecretSize is the length in bytes of a signing secret goald generates.
+// WebhookSecretSize is the length in bytes of a signing secret goald generates for a webhook.
 const WebhookSecretSize = 32
 
-// WebhookEndpoint is one webhook endpoint of a factory (ADR 0026 decision 2), whose signing
-// secret is sealed on its row and is never part of it, or one webhook of the organization (ADR
-// 0040 decision 12), signed by an organization secret and open to some factories.
+// WebhookEndpoint is one webhook of the organization (ADR 0040 decision 12), signed by an
+// organization secret and open to some factories.
 type WebhookEndpoint struct {
 	ID WebhookEndpointID
-	// FactoryID is the factory endpoint's factory; "" for the organization's webhook.
-	FactoryID FactoryID
-	// Name is a slug unique within the factory, the one a trigger's on: webhook.<name> names; an
-	// organization webhook's is unique in the organization and never a reserved one.
-	Name string
-	// Kind is a factory endpoint's; "" for the organization's webhook.
-	Kind WebhookKind
-	// Sender is the organization webhook's, and Kind.Sender() for a factory endpoint.
+	// Name is a slug unique in the organization, never a reserved one: the one a trigger's on
+	// names.
+	Name   string
 	Sender WebhookSender
-	// SecretID and Secret are the organization secret that signs the organization's webhook; ""
-	// for a factory endpoint.
+	// SecretID and Secret are the organization secret that signs the webhook.
 	SecretID SecretID
 	Secret   string
-	// Enabled is false for a webhook turned off; a factory endpoint is always on.
+	// Enabled is false for a webhook turned off.
 	Enabled bool
 	// Token is the token sender's settings; zero for another sender.
 	Token TokenSettings
-	// Openings are the factories the organization's webhook is open to, by factory id; none for a
-	// factory endpoint.
+	// Openings are the factories the webhook is open to, by factory id.
 	Openings  []WebhookOpening
 	CreatedAt time.Time
 	// RotatedAt is when its secret was last replaced; nil when it never was.
 	RotatedAt *time.Time
 	// PingedAt is when the receiver last accepted GitHub's ping to it; nil when it never did.
 	PingedAt *time.Time
-}
-
-// NewWebhookEndpoint is what creates an endpoint.
-type NewWebhookEndpoint struct {
-	FactoryID FactoryID
-	Name      string
-	Kind      WebhookKind
-}
-
-// Check refuses a name that is not a slug or an unknown kind; the error wraps ErrInvalid.
-func (n NewWebhookEndpoint) Check() error {
-	if n.FactoryID == "" {
-		return fmt.Errorf("an endpoint needs a factory: %w", ErrInvalid)
-	}
-
-	if err := CheckConnectionName(n.Name); err != nil {
-		return err
-	}
-
-	if n.Kind != WebhookGeneric && n.Kind != WebhookGitHub {
-		return fmt.Errorf("endpoint kind %q must be generic or github: %w", n.Kind, ErrInvalid)
-	}
-
-	return nil
-}
-
-// WebhookSecret is an endpoint with its signing secret in the clear: only the answers that create
-// an endpoint and rotate its secret hold one (ADR 0026 decision 2).
-type WebhookSecret struct {
-	Endpoint WebhookEndpoint
-	Secret   []byte
-}
-
-// WebhookSecretAAD is the associated data an endpoint's sealed secret is bound to: its
-// organization, its id and the key id, so a ciphertext copied to another row, organization or key
-// id does not open.
-func WebhookSecretAAD(org OrgID, id WebhookEndpointID, keyID string) []byte {
-	return []byte("goal/webhook-secret/v1|" + string(org) + "|" + string(id) + "|" + keyID)
 }
 
 // WebhookDeliveryID is a delivery's id (a UUID).

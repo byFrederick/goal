@@ -117,48 +117,6 @@ func (q *Queries) ComingUpItems(ctx context.Context, arg ComingUpItemsParams) ([
 	return items, nil
 }
 
-const convertWebhookEndpoint = `-- name: ConvertWebhookEndpoint :exec
-UPDATE webhook_endpoints SET factory_id = NULL, name = $1, sender = $2, secret_id = $3
-WHERE id = $4
-`
-
-type ConvertWebhookEndpointParams struct {
-	Name     string
-	Sender   *string
-	SecretID *uuid.UUID
-	ID       uuid.UUID
-}
-
-// The endpoint becomes the organization's webhook, signed by secret_id; its sealed columns stay.
-func (q *Queries) ConvertWebhookEndpoint(ctx context.Context, arg ConvertWebhookEndpointParams) error {
-	_, err := q.db.Exec(ctx, convertWebhookEndpoint,
-		arg.Name,
-		arg.Sender,
-		arg.SecretID,
-		arg.ID,
-	)
-	return err
-}
-
-const convertedNameTaken = `-- name: ConvertedNameTaken :one
-SELECT EXISTS (SELECT 1 FROM webhook_endpoints
-               WHERE name = $1 AND id <> $2 AND (factory_id IS NULL OR id < $2))::bool
-`
-
-type ConvertedNameTakenParams struct {
-	Name string
-	ID   uuid.UUID
-}
-
-// Whether the conversion of endpoint id must not take the name: the organization's webhook has
-// it, or an older factory endpoint does, which keeps it when its turn comes.
-func (q *Queries) ConvertedNameTaken(ctx context.Context, arg ConvertedNameTakenParams) (bool, error) {
-	row := q.db.QueryRow(ctx, convertedNameTaken, arg.Name, arg.ID)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countDuplicate = `-- name: CountDuplicate :one
 UPDATE webhook_deliveries SET duplicates = duplicates + 1
 WHERE endpoint_id = $1 AND delivery_id = $2::text
@@ -399,44 +357,8 @@ func (q *Queries) InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDe
 	return err
 }
 
-const insertWebhookEndpoint = `-- name: InsertWebhookEndpoint :one
-
-INSERT INTO webhook_endpoints (id, factory_id, name, kind, key_id, nonce, ciphertext)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING created_at
-`
-
-type InsertWebhookEndpointParams struct {
-	ID         uuid.UUID
-	FactoryID  *uuid.UUID
-	Name       string
-	Kind       *string
-	KeyID      *string
-	Nonce      []byte
-	Ciphertext []byte
-}
-
-// Intake triggers' state (ADR 0026, 00071): webhook endpoints, their deliveries and the trigger
-// firing log. Every query runs as goal_app under row-level security, except the two definers'
-// callers and goal db rekey's (as goal_owner).
-// org_id comes from its default, goal_org().
-func (q *Queries) InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEndpointParams) (time.Time, error) {
-	row := q.db.QueryRow(ctx, insertWebhookEndpoint,
-		arg.ID,
-		arg.FactoryID,
-		arg.Name,
-		arg.Kind,
-		arg.KeyID,
-		arg.Nonce,
-		arg.Ciphertext,
-	)
-	var created_at time.Time
-	err := row.Scan(&created_at)
-	return created_at, err
-}
-
 const lockOrgWebhook = `-- name: LockOrgWebhook :one
-SELECT id, name FROM webhook_endpoints WHERE id = $1 AND factory_id IS NULL FOR UPDATE
+SELECT id, name FROM webhook_endpoints WHERE id = $1 FOR UPDATE
 `
 
 type LockOrgWebhookRow struct {
@@ -484,43 +406,6 @@ func (q *Queries) NewestItems(ctx context.Context, arg NewestItemsParams) (Newes
 	return i, err
 }
 
-const nextFactoryEndpoint = `-- name: NextFactoryEndpoint :one
-SELECT id, factory_id::uuid AS factory_id, name, coalesce(kind, '')::text AS kind, key_id::text AS key_id,
-       nonce::bytea AS nonce, ciphertext::bytea AS ciphertext
-FROM webhook_endpoints
-WHERE factory_id IS NOT NULL
-ORDER BY id
-LIMIT 1
-FOR UPDATE SKIP LOCKED
-`
-
-type NextFactoryEndpointRow struct {
-	ID         uuid.UUID
-	FactoryID  uuid.UUID
-	Name       string
-	Kind       string
-	KeyID      string
-	Nonce      []byte
-	Ciphertext []byte
-}
-
-// The conversion (ADR 0040 decision 15): the oldest endpoint that still has a factory, locked,
-// with its sealed secret; none when every one is converted.
-func (q *Queries) NextFactoryEndpoint(ctx context.Context) (NextFactoryEndpointRow, error) {
-	row := q.db.QueryRow(ctx, nextFactoryEndpoint)
-	var i NextFactoryEndpointRow
-	err := row.Scan(
-		&i.ID,
-		&i.FactoryID,
-		&i.Name,
-		&i.Kind,
-		&i.KeyID,
-		&i.Nonce,
-		&i.Ciphertext,
-	)
-	return i, err
-}
-
 const openItemByDedupe = `-- name: OpenItemByDedupe :one
 SELECT f.item_id::uuid AS item_id FROM trigger_firings f
 JOIN work_items w ON w.id = f.item_id
@@ -544,17 +429,15 @@ func (q *Queries) OpenItemByDedupe(ctx context.Context, arg OpenItemByDedupePara
 }
 
 const orgWebhookByName = `-- name: OrgWebhookByName :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
-WHERE e.factory_id IS NULL AND e.name = $1
+WHERE e.name = $1
 `
 
 type OrgWebhookByNameRow struct {
 	ID             uuid.UUID
-	FactoryID      *uuid.UUID
 	Name           string
-	Kind           *string
 	Sender         *string
 	SecretID       *uuid.UUID
 	SecretName     string
@@ -572,9 +455,7 @@ func (q *Queries) OrgWebhookByName(ctx context.Context, name string) (OrgWebhook
 	var i OrgWebhookByNameRow
 	err := row.Scan(
 		&i.ID,
-		&i.FactoryID,
 		&i.Name,
-		&i.Kind,
 		&i.Sender,
 		&i.SecretID,
 		&i.SecretName,
@@ -590,18 +471,15 @@ func (q *Queries) OrgWebhookByName(ctx context.Context, name string) (OrgWebhook
 }
 
 const orgWebhooks = `-- name: OrgWebhooks :many
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
-WHERE e.factory_id IS NULL
 ORDER BY e.name
 `
 
 type OrgWebhooksRow struct {
 	ID             uuid.UUID
-	FactoryID      *uuid.UUID
 	Name           string
-	Kind           *string
 	Sender         *string
 	SecretID       *uuid.UUID
 	SecretName     string
@@ -614,7 +492,7 @@ type OrgWebhooksRow struct {
 	PingedAt       *time.Time
 }
 
-// The organization's webhooks (no factory), by name.
+// The organization's webhooks, by name.
 func (q *Queries) OrgWebhooks(ctx context.Context) ([]OrgWebhooksRow, error) {
 	rows, err := q.db.Query(ctx, orgWebhooks)
 	if err != nil {
@@ -626,9 +504,7 @@ func (q *Queries) OrgWebhooks(ctx context.Context) ([]OrgWebhooksRow, error) {
 		var i OrgWebhooksRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.FactoryID,
 			&i.Name,
-			&i.Kind,
 			&i.Sender,
 			&i.SecretID,
 			&i.SecretName,
@@ -749,124 +625,6 @@ func (q *Queries) PruneWebhookLedger(ctx context.Context, before time.Time) (int
 	var deleted int64
 	err := row.Scan(&deleted)
 	return deleted, err
-}
-
-const resealWebhookSecret = `-- name: ResealWebhookSecret :exec
-UPDATE webhook_endpoints SET key_id = $1, nonce = $2, ciphertext = $3
-WHERE id = $4
-`
-
-type ResealWebhookSecretParams struct {
-	KeyID      *string
-	Nonce      []byte
-	Ciphertext []byte
-	ID         uuid.UUID
-}
-
-// goal db rekey: the same secret under the active key; rotated_at stays, as the secret does.
-func (q *Queries) ResealWebhookSecret(ctx context.Context, arg ResealWebhookSecretParams) error {
-	_, err := q.db.Exec(ctx, resealWebhookSecret,
-		arg.KeyID,
-		arg.Nonce,
-		arg.Ciphertext,
-		arg.ID,
-	)
-	return err
-}
-
-const rotateWebhookSecret = `-- name: RotateWebhookSecret :one
-UPDATE webhook_endpoints SET key_id = $1, nonce = $2, ciphertext = $3, rotated_at = now()
-WHERE id = $4 AND factory_id IS NOT NULL
-RETURNING id
-`
-
-type RotateWebhookSecretParams struct {
-	KeyID      *string
-	Nonce      []byte
-	Ciphertext []byte
-	ID         uuid.UUID
-}
-
-func (q *Queries) RotateWebhookSecret(ctx context.Context, arg RotateWebhookSecretParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, rotateWebhookSecret,
-		arg.KeyID,
-		arg.Nonce,
-		arg.Ciphertext,
-		arg.ID,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const sealedWebhookSecret = `-- name: SealedWebhookSecret :one
-SELECT key_id::text AS key_id, nonce::bytea AS nonce, ciphertext::bytea AS ciphertext FROM webhook_endpoints
-WHERE id = $1 AND key_id IS NOT NULL
-`
-
-type SealedWebhookSecretRow struct {
-	KeyID      string
-	Nonce      []byte
-	Ciphertext []byte
-}
-
-// A factory endpoint's sealed secret; the organization's webhooks have none.
-func (q *Queries) SealedWebhookSecret(ctx context.Context, id uuid.UUID) (SealedWebhookSecretRow, error) {
-	row := q.db.QueryRow(ctx, sealedWebhookSecret, id)
-	var i SealedWebhookSecretRow
-	err := row.Scan(&i.KeyID, &i.Nonce, &i.Ciphertext)
-	return i, err
-}
-
-const staleSealedWebhookSecrets = `-- name: StaleSealedWebhookSecrets :many
-SELECT id, org_id, coalesce(key_id, '')::text AS key_id, coalesce(nonce, ''::bytea)::bytea AS nonce,
-       coalesce(ciphertext, ''::bytea)::bytea AS ciphertext
-FROM webhook_endpoints
-WHERE key_id <> $1::text
-ORDER BY id
-LIMIT $2
-FOR NO KEY UPDATE
-`
-
-type StaleSealedWebhookSecretsParams struct {
-	Active string
-	Batch  int32
-}
-
-type StaleSealedWebhookSecretsRow struct {
-	ID         uuid.UUID
-	OrgID      uuid.UUID
-	KeyID      string
-	Nonce      []byte
-	Ciphertext []byte
-}
-
-// goal db rekey, as goal_owner: a batch of endpoints sealed under another key than the active one,
-// in every organization, locked.
-func (q *Queries) StaleSealedWebhookSecrets(ctx context.Context, arg StaleSealedWebhookSecretsParams) ([]StaleSealedWebhookSecretsRow, error) {
-	rows, err := q.db.Query(ctx, staleSealedWebhookSecrets, arg.Active, arg.Batch)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []StaleSealedWebhookSecretsRow
-	for rows.Next() {
-		var i StaleSealedWebhookSecretsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrgID,
-			&i.KeyID,
-			&i.Nonce,
-			&i.Ciphertext,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const triggerCreatedSince = `-- name: TriggerCreatedSince :one
@@ -1378,10 +1136,8 @@ SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS da
        count(*) FILTER (WHERE d.outcome = 'refused') AS refused
 FROM webhook_endpoints e
 JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= $1
-WHERE CASE WHEN $2::uuid IS NULL THEN e.factory_id IS NULL
-           ELSE e.factory_id = $2::uuid
-                OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = $2::uuid)
-      END
+WHERE $2::uuid IS NULL
+   OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = $2::uuid)
 GROUP BY 1, 2
 ORDER BY 1, 2
 `
@@ -1398,8 +1154,9 @@ type WebhookDeliveryDaysRow struct {
 	Refused    int64
 }
 
-// The factory's endpoints' deliveries since the instant, per endpoint and UTC day; each endpoint's
-// rows come from webhook_deliveries_endpoint_idx (endpoint_id, received_at).
+// The deliveries since the instant of the organization's webhooks open to the factory, or of all
+// of them for no factory, per endpoint and UTC day; each endpoint's rows come from
+// webhook_deliveries_endpoint_idx (endpoint_id, received_at).
 func (q *Queries) WebhookDeliveryDays(ctx context.Context, arg WebhookDeliveryDaysParams) ([]WebhookDeliveryDaysRow, error) {
 	rows, err := q.db.Query(ctx, webhookDeliveryDays, arg.Since, arg.FactoryID)
 	if err != nil {
@@ -1426,7 +1183,7 @@ func (q *Queries) WebhookDeliveryDays(ctx context.Context, arg WebhookDeliveryDa
 }
 
 const webhookEndpoint = `-- name: WebhookEndpoint :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.id = $1
@@ -1434,9 +1191,7 @@ WHERE e.id = $1
 
 type WebhookEndpointRow struct {
 	ID             uuid.UUID
-	FactoryID      *uuid.UUID
 	Name           string
-	Kind           *string
 	Sender         *string
 	SecretID       *uuid.UUID
 	SecretName     string
@@ -1454,9 +1209,7 @@ func (q *Queries) WebhookEndpoint(ctx context.Context, id uuid.UUID) (WebhookEnd
 	var i WebhookEndpointRow
 	err := row.Scan(
 		&i.ID,
-		&i.FactoryID,
 		&i.Name,
-		&i.Kind,
 		&i.Sender,
 		&i.SecretID,
 		&i.SecretName,
@@ -1484,19 +1237,17 @@ func (q *Queries) WebhookEndpointOrg(ctx context.Context, id uuid.UUID) (uuid.UU
 }
 
 const webhookEndpoints = `-- name: WebhookEndpoints :many
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
-WHERE e.factory_id = $1
-   OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = $1)
+WHERE EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = $1)
 ORDER BY e.name, e.id
 `
 
 type WebhookEndpointsRow struct {
 	ID             uuid.UUID
-	FactoryID      *uuid.UUID
 	Name           string
-	Kind           *string
 	Sender         *string
 	SecretID       *uuid.UUID
 	SecretName     string
@@ -1509,8 +1260,11 @@ type WebhookEndpointsRow struct {
 	PingedAt       *time.Time
 }
 
-// The endpoints open to the factory: its own, and the organization's webhooks with an opening.
-func (q *Queries) WebhookEndpoints(ctx context.Context, factoryID *uuid.UUID) ([]WebhookEndpointsRow, error) {
+// Intake triggers' state (ADR 0026, 00071): webhook endpoints, their deliveries and the trigger
+// firing log. Every query runs as goal_app under row-level security, except the two definers'
+// callers.
+// The organization's webhooks open to the factory.
+func (q *Queries) WebhookEndpoints(ctx context.Context, factoryID uuid.UUID) ([]WebhookEndpointsRow, error) {
 	rows, err := q.db.Query(ctx, webhookEndpoints, factoryID)
 	if err != nil {
 		return nil, err
@@ -1521,9 +1275,7 @@ func (q *Queries) WebhookEndpoints(ctx context.Context, factoryID *uuid.UUID) ([
 		var i WebhookEndpointsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.FactoryID,
 			&i.Name,
-			&i.Kind,
 			&i.Sender,
 			&i.SecretID,
 			&i.SecretName,
@@ -1554,8 +1306,7 @@ type WebhookNameTakenParams struct {
 	ExceptID uuid.UUID
 }
 
-// Whether an endpoint of the organization other than the one given has the name: a factory's
-// endpoint keeps its name until the conversion, so the partial unique index does not see it.
+// Whether a webhook of the organization other than the one given has the name.
 func (q *Queries) WebhookNameTaken(ctx context.Context, arg WebhookNameTakenParams) (bool, error) {
 	row := q.db.QueryRow(ctx, webhookNameTaken, arg.Name, arg.ExceptID)
 	var column_1 bool

@@ -8,25 +8,17 @@ import (
 )
 
 // Intake is the state of intake triggers (ADR 0026 decision 2), for the organization in ctx unless
-// a method says otherwise: webhook endpoints with their signing secrets, the deliveries they
-// received, the log of trigger firings, and what Intake shows about where items came from. A
-// signing secret is generated here, sealed with MasterKey under domain.WebhookSecretAAD
-// (organization, endpoint id and key id), and returned in the clear only by CreateEndpoint,
-// RotateSecret and OpenSecret; no error holds it.
+// a method says otherwise: the organization's webhooks (ADR 0040 decision 12), each signed by an
+// organization secret (OrgSecrets) and open to some factories, the deliveries they received, the
+// log of trigger firings, and what Intake shows about where items came from.
 type Intake interface {
-	// CreateEndpoint creates an endpoint with a new 32-byte secret, returned once. n must pass
-	// Check (domain.ErrInvalid); ErrNameTaken for a name the factory already uses, ErrNotFound for
-	// a factory the organization does not have, ErrNoMasterKey without a master key.
-	CreateEndpoint(ctx context.Context, n domain.NewWebhookEndpoint) (domain.WebhookSecret, error)
-	// ListEndpoints are the endpoints open to the factory, by name: its own and the
-	// organization's webhooks open to it.
+	// ListEndpoints are the organization's webhooks open to the factory, by name.
 	ListEndpoints(ctx context.Context, factory domain.FactoryID) ([]domain.WebhookEndpoint, error)
-	// Endpoint is endpoint id, a factory's endpoint or the organization's webhook. ErrNotFound
-	// when there is none.
+	// Endpoint is the organization's webhook id. ErrNotFound when there is none.
 	Endpoint(ctx context.Context, id domain.WebhookEndpointID) (domain.WebhookEndpoint, error)
 	// CreateWebhook creates the organization's webhook n (ADR 0040 decision 12), enabled and open
 	// to no factory, signed by the existing secret n.Secret. n must pass Check
-	// (domain.ErrInvalid); ErrNameTaken for a name an endpoint of the organization has,
+	// (domain.ErrInvalid); ErrNameTaken for a name another webhook of the organization has,
 	// ErrNotFound for a secret the organization does not have.
 	CreateWebhook(ctx context.Context, n domain.NewWebhook) (domain.WebhookEndpoint, error)
 	// Webhooks are the organization's webhooks, by name, each with its openings.
@@ -34,34 +26,18 @@ type Intake interface {
 	// WebhookByName is the organization's webhook name. ErrNotFound when there is none.
 	WebhookByName(ctx context.Context, name string) (domain.WebhookEndpoint, error)
 	// PatchWebhook applies p to the organization's webhook id. p must pass Check
-	// (domain.ErrInvalid); ErrNotFound for no such webhook (a factory's endpoint included) or a
-	// factory the organization does not have, ErrNameTaken for a name another endpoint has.
+	// (domain.ErrInvalid); ErrNotFound for no such webhook or a factory the organization does not
+	// have, ErrNameTaken for a name another webhook has.
 	PatchWebhook(ctx context.Context, id domain.WebhookEndpointID, p domain.WebhookPatch) (domain.WebhookEndpoint, error)
 	// WebhookSecretUses are the secrets the organization's webhooks are signed by, by secret then
 	// webhook.
 	WebhookSecretUses(ctx context.Context) ([]domain.WebhookSecretUse, error)
-	// ConvertEndpoints moves each of the organization's factory endpoints to the organization
-	// (ADR 0040 decision 15), oldest first, one transaction each. Its sealed secret becomes a new
-	// secret open to no factory, audited as created by the actor given and named
-	// domain.ConvertedSecretName, whose value is the hex the endpoint showed when it was made. The endpoint takes
-	// domain.ConvertedWebhookName (a name is taken by the organization's webhooks and by older
-	// factory endpoints), its kind's sender and that secret, and opens to its factory with every
-	// repository. It returns what it converted, in that order; a second call finds nothing.
-	// ErrNoMasterKey without a master key when there is an endpoint to convert.
-	ConvertEndpoints(ctx context.Context, by domain.Actor) ([]domain.ConvertedEndpoint, error)
-	// RotateSecret replaces the factory endpoint's secret with a new one, returned once, and sets
-	// RotatedAt. ErrNotFound when there is none, ErrNoMasterKey without a master key; an
-	// organization webhook's secret is replaced through OrgSecrets (domain.ErrInvalid).
-	RotateSecret(ctx context.Context, id domain.WebhookEndpointID) (domain.WebhookSecret, error)
-	// DeleteEndpoint deletes the endpoint and its deliveries. ErrNotFound when there is none.
+	// DeleteEndpoint deletes the organization's webhook and its deliveries. ErrNotFound when there
+	// is none.
 	DeleteEndpoint(ctx context.Context, id domain.WebhookEndpointID) error
-	// EndpointOrg is the organization of endpoint id, whatever organization ctx holds or none:
+	// EndpointOrg is the organization of webhook id, whatever organization ctx holds or none:
 	// POST /hooks/{id} carries no session. ErrNotFound when there is none.
 	EndpointOrg(ctx context.Context, id domain.WebhookEndpointID) (domain.OrgID, error)
-	// OpenSecret is the factory endpoint's secret in the clear, for checking a signature.
-	// ErrNotFound when there is none (an organization webhook's opens with
-	// OrgSecrets.OpenSigning), ErrNoMasterKey without a master key.
-	OpenSecret(ctx context.Context, id domain.WebhookEndpointID) ([]byte, error)
 	// RecordDelivery records a delivery with domain.StoredHeaders of its headers. n must pass
 	// Check (domain.ErrInvalid); ErrNotFound for an unknown endpoint.
 	RecordDelivery(ctx context.Context, n domain.NewWebhookDelivery) (domain.WebhookDelivery, error)
@@ -75,9 +51,9 @@ type Intake interface {
 	// (domain.WebhookDelivery.DeliveryID), with its body, for trying a trigger on it. ErrNotFound
 	// when the webhook keeps none with that id: never received, refused, or pruned.
 	DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error)
-	// DeliveryDays counts the deliveries of the endpoints open to the factory (ListEndpoints), or
-	// of the organization's webhooks for factory "", received at or after since,
-	// per endpoint and UTC day, by endpoint then day; a day without deliveries has no entry.
+	// DeliveryDays counts the deliveries of the organization's webhooks open to the factory
+	// (ListEndpoints), or of all its webhooks for factory "", received at or after since, per
+	// webhook and UTC day, by webhook then day; a day without deliveries has no entry.
 	DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error)
 	// PruneDeliveries deletes, in every organization, the deliveries received more than
 	// domain.DeliveryRetention before now, and the ledger ids and daily counts more than

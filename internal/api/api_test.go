@@ -498,7 +498,7 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		h.publishImport(t, authors, files)
 	}
 
-	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), h.store)
+	h.intake = porttest.NewIntake(h.store)
 
 	h.drafts = porttest.NewDraftRequests(tenancy, h.clock.Now)
 	h.drafts.AddFactory(testOrg, acmeID)
