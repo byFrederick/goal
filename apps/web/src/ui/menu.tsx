@@ -1,6 +1,6 @@
 import { Check, ChevronRight } from 'lucide-react';
 import { DropdownMenu as M } from 'radix-ui';
-import { type ComponentProps, useRef } from 'react';
+import { type ComponentProps, type PointerEvent, useRef } from 'react';
 import { cn } from './cn';
 
 // A menu of actions or links on Radix DropdownMenu (C §10.11): role="menu", arrow keys and
@@ -19,6 +19,18 @@ export const MenuGroup = M.Group;
 export const MenuRadioGroup = M.RadioGroup;
 export const MenuSub = M.Sub;
 
+/**
+ * A panel that is closing still holds its items while it shrinks away. The item under the pointer then
+ * sees a pointerleave or pointermove, and Radix moves focus to the panel or the item: focus the caller
+ * just handed elsewhere (a new station's name) bounces back. Preventing default makes Radix skip it.
+ */
+function ignoreWhileClosing<E extends PointerEvent<HTMLElement>>(handler?: (event: E) => void) {
+  return (event: E) => {
+    handler?.(event);
+    if (event.currentTarget.closest('[role="menu"]')?.getAttribute('data-state') === 'closed') event.preventDefault();
+  };
+}
+
 /** The white panel beside its trigger: to the right of the sidebar, below a phone's top row. */
 export function MenuContent({
   className,
@@ -31,7 +43,7 @@ export function MenuContent({
 }: ComponentProps<typeof M.Content>) {
   const node = useRef<HTMLDivElement | null>(null);
   return (
-    <M.Portal>
+    <M.Portal forceMount={props.forceMount}>
       <M.Content
         ref={(el) => {
           node.current = el;
@@ -83,6 +95,8 @@ export function MenuItem({ className, ...props }: ComponentProps<typeof M.Item>)
         className,
       )}
       {...props}
+      onPointerMove={ignoreWhileClosing(props.onPointerMove)}
+      onPointerLeave={ignoreWhileClosing(props.onPointerLeave)}
     />
   );
 }
@@ -96,6 +110,8 @@ export function MenuRadioItem({ className, children, ...props }: ComponentProps<
         className,
       )}
       {...props}
+      onPointerMove={ignoreWhileClosing(props.onPointerMove)}
+      onPointerLeave={ignoreWhileClosing(props.onPointerLeave)}
     >
       {children}
       <M.ItemIndicator className="flex">
@@ -115,6 +131,8 @@ export function MenuChoice({ className, children, ...props }: ComponentProps<typ
         className,
       )}
       {...props}
+      onPointerMove={ignoreWhileClosing(props.onPointerMove)}
+      onPointerLeave={ignoreWhileClosing(props.onPointerLeave)}
     >
       {children}
       <M.ItemIndicator className="flex">
@@ -143,6 +161,8 @@ export function MenuSubTrigger({ className, children, ...props }: ComponentProps
         className,
       )}
       {...props}
+      onPointerMove={ignoreWhileClosing(props.onPointerMove)}
+      onPointerLeave={ignoreWhileClosing(props.onPointerLeave)}
     >
       {children}
       <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
