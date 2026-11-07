@@ -455,7 +455,7 @@ func openSealed(ctx context.Context, store *postgres.Store, getenv func(string) 
 		log.InfoContext(ctx, "master keys loaded", slog.String("active", keys.Active()), slog.Int("count", len(have)))
 	}
 
-	return postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store, keys), nil
+	return postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store), nil
 }
 
 // connectionTransport carries every request goald makes to an organization's upstreams (merges,

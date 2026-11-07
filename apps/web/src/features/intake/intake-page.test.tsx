@@ -39,7 +39,6 @@ const intake: Intake = {
   items: 48,
   from: '2026-10-20',
   to: '2026-10-26',
-  sources: { github: 22, people: 11, cli: 0, api: 0, schedule: 7, webhook: 2 },
   window: '30d',
   origins: { person: 160, plan: 377, trigger: 4, follow_up: 31 },
   coming_up: [

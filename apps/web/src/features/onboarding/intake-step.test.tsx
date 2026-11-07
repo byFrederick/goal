@@ -102,7 +102,6 @@ function intakeOf(triggers: IntakeTrigger[]): Intake {
     items: 0,
     from: null,
     to: null,
-    sources: { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 },
     triggers,
     // The API's suggestions are the definition's disabled triggers.
     suggestions: triggers

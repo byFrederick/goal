@@ -154,7 +154,7 @@ func newHarness(t *testing.T, line domain.Line, run porttest.AgentFunc) *harness
 	h.rules = porttest.NewStandingRules(h.tenancy)
 	h.orgSecrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), h.tenancy)
 	h.addModelKey(t, testOrg)
-	h.intake = porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store)
+	h.intake = porttest.NewIntake(store)
 	h.e = h.engine(t, h.store)
 
 	return h

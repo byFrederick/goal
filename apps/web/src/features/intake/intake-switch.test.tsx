@@ -61,7 +61,6 @@ const intake: Intake = {
   items: 3,
   from: '2026-10-20',
   to: '2026-10-22',
-  sources: { github: 3, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 },
   suggestions: [],
   triggers: [
     {

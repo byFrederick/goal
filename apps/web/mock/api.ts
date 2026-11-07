@@ -96,7 +96,6 @@ import { runStarterCourse, starterTitles } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
-import { createWebhooks } from './webhooks.ts';
 
 type Next = (err?: unknown) => void;
 
@@ -358,10 +357,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     clock,
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     acme: acmeOrg,
-  });
-  const webhooks = createWebhooks({
-    clock,
-    factories: (org) => state.factories.filter((f) => f.org_id === org),
   });
 
   const ref = (it: MockItem) => `${it.factory}#${it.number}`;
@@ -1763,7 +1758,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       knowledge.reset(clock());
       jonah.reset();
       views.reset();
-      webhooks.reset();
       policy.reset();
       // Spend is derived from the budgets and the clock: it keeps no state to reset.
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
@@ -1901,7 +1895,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     if (await spend.handle(org, rest, method, url, res)) return;
     if (await policy.handle(org, rest, method, req, res, () => readBody(req))) return;
     if (orgWebhooks.handle(org.id, rest, method, res)) return;
-    if (await webhooks.handle(org.id, rest, method, req, res, () => readBody(req))) return;
 
     if (rest === '' && method === 'GET') return json(res, 200, forCaller(req, withCount(org)));
     if (rest === '' && method === 'DELETE') {
