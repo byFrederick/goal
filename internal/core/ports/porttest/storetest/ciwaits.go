@@ -22,6 +22,8 @@ var ciWaitsTests = []struct {
 	{"CIWaits_OneOpenPerVisitAndRepository", testCIWaitsOneOpen},
 	{"CIWaits_EndedWaitsLeaveThePollUnleased", testCIWaitsEnded},
 	{"CIWaits_OpenOnPoll", testCIWaitsOpenOnPoll},
+	{"CIWaits_ClaimSkipsOpenWait", testCIWaitsClaimSkipsOpenWait},
+	{"CIWaits_AtStation", testCIWaitsAtStation},
 }
 
 // The repository, commits and stations the CI wait cases use.
@@ -351,6 +353,95 @@ func testCIWaitsOpenOnPoll(f *fixture) {
 
 	if ws, err := f.Store.OpenCIWaitsOnPoll(f.ctx(t), domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: "c0ffee99"}); err != nil || len(ws) != 0 {
 		t.Errorf("OpenCIWaitsOnPoll of a commit with no wait = %+v, %v; want none", ws, err)
+	}
+}
+
+// ClaimNext skips an item while it has an open CI wait at its station, of either phase, and
+// takes it once the wait ended; a wait at another station does not hold it.
+func testCIWaitsClaimSkipsOpenWait(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	held, elsewhere := f.create(t, domain.NewItem{Title: "held", Class: domain.ClassExpedite}), f.create(t, domain.NewItem{Title: "elsewhere"})
+
+	before := ciWait(held.ID, ciSHA)
+	before.Station = stWork
+	w := f.openCIWait(t, before)
+
+	after := ciWait(elsewhere.ID, ciSHA)
+	after.Phase, after.Held = domain.CIPhaseAfter, json.RawMessage(`{"to":"done"}`)
+	f.openCIWait(t, after) // at ciStation, not the item's
+
+	if got, _ := f.claim(t, work, 0, t1); got.ID != elsewhere.ID {
+		t.Fatalf("claimed %q; want %q, as %q waits for CI", got.Title, elsewhere.Title, held.Title)
+	}
+
+	if _, _, err := f.Store.ClaimNext(ctx, ports.Claim{FactoryID: f.factory, Station: work, Slot: 1, Now: t1, ExpiresAt: t1.Add(ttl)}); !errors.Is(err, ports.ErrNoWork) {
+		t.Fatalf("ClaimNext while the wait is open = %v; want ErrNoWork", err)
+	}
+
+	if n, err := f.Store.EndCIWaits(ctx, []domain.CIWaitID{w.ID}, domain.CIPassed, t1); err != nil || n != 1 {
+		t.Fatalf("EndCIWaits = %d, %v; want 1, nil", n, err)
+	}
+
+	if got, _ := f.claim(t, work, 1, t1); got.ID != held.ID {
+		t.Fatalf("claimed %q once the wait ended; want %q", got.Title, held.Title)
+	}
+}
+
+// CIWaits returns the item's waits at one station, open and ended, by start, each with its
+// poll's recorded checks; never another station's or another item's.
+func testCIWaitsAtStation(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	it, other := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+
+	first := f.openCIWait(t, ciWait(it.ID, ciSHA))
+
+	if n, err := f.Store.EndCIWaits(ctx, []domain.CIWaitID{first.ID}, domain.CIUnreadable, t1); err != nil || n != 1 {
+		t.Fatalf("EndCIWaits = %d, %v; want 1, nil", n, err)
+	}
+
+	next := ciWait(it.ID, ciNewSHA)
+	next.StartedAt = t1.Add(time.Minute)
+	second := f.openCIWait(t, next)
+
+	elsewhere := ciWait(it.ID, ciSHA)
+	elsewhere.Station = stWork
+	f.openCIWait(t, elsewhere)
+	f.openCIWait(t, ciWait(other.ID, ciSHA))
+
+	polls := f.leaseCIPolls(t, t1.Add(time.Minute), ciOwner)
+	for _, p := range polls {
+		if err := f.Store.RecordCIPoll(ctx, p.CIPollKey, ciOwner, domain.CIPollResult{
+			Checks: json.RawMessage(ciChecks), Error: "the token cannot read CI", NextPollAt: t1.Add(time.Hour), Interval: domain.CIPollMinInterval,
+		}); err != nil {
+			t.Fatalf("RecordCIPoll(%s) = %v", p.SHA, err)
+		}
+	}
+
+	ws, err := f.Store.CIWaits(ctx, it.ID, ciStation)
+	if err != nil {
+		t.Fatalf("CIWaits = %v", err)
+	}
+
+	if len(ws) != 2 || ws[0].ID != first.ID || ws[1].ID != second.ID {
+		t.Fatalf("CIWaits = %+v; want %s then %s", ws, first.ID, second.ID)
+	}
+
+	if ws[0].Open() || ws[0].Outcome != domain.CIUnreadable || !ws[0].EndedAt.Equal(t1) || !ws[1].Open() {
+		t.Errorf("CIWaits = %+v; want the first ended unreadable at t1 and the second open", ws)
+	}
+
+	for _, w := range ws {
+		if w.Poll.SHA != w.SHA || !jsonEqual(w.Poll.Checks, json.RawMessage(ciChecks)) || w.Poll.LastError != "the token cannot read CI" {
+			t.Errorf("poll of the wait on %s = %+v; want its recorded checks and error", w.SHA, w.Poll)
+		}
+	}
+
+	if ws, err := f.Store.CIWaits(ctx, it.ID, "nowhere"); err != nil || len(ws) != 0 {
+		t.Errorf("CIWaits at a station with none = %+v, %v; want none", ws, err)
 	}
 }
 

@@ -78,3 +78,12 @@ ORDER BY started_at, item_id, station, visit;
 -- How many distinct CI rounds the item had in one visit to the station.
 SELECT count(DISTINCT round) FROM ci_waits
 WHERE item_id = sqlc.arg(item_id) AND station = sqlc.arg(station) AND visit = sqlc.arg(visit);
+
+-- name: CIWaitsAt :many
+-- The item's waits at one station, open and ended, by start, each with its poll's latest state:
+-- what the gate before a run reads.
+SELECT sqlc.embed(w), sqlc.embed(p)
+FROM ci_waits w
+JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
+WHERE w.item_id = sqlc.arg(item_id) AND w.station = sqlc.arg(station)
+ORDER BY w.started_at, w.visit, w.repo, w.id;

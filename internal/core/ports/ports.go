@@ -191,7 +191,8 @@ type Store interface {
 	// (factory, station, slot) lease is what keeps WIP at or under capacity across instances.
 	//
 	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled, and
-	// while its StartAt is after c.Now. Waiting lists it all the same.
+	// while its StartAt is after c.Now, and while it has an open CI wait at its station, of
+	// either phase (OpenCIWait). Waiting lists it all the same.
 	ClaimNext(ctx context.Context, c Claim) (domain.Item, domain.Lease, error)
 
 	// AddEdge records that e.Item needs e.Needs and appends an edge_added event on e.Item. It
@@ -489,6 +490,10 @@ type Store interface {
 	// OpenCIWaits returns the item's open CI waits by start, each with its poll's latest state.
 	// An unknown item has none.
 	OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWaitRecord, error)
+
+	// CIWaits returns the item's CI waits at station, open and ended, by start, each with its
+	// poll's latest state. An unknown item has none.
+	CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error)
 
 	// OpenCIWaitsOnPoll returns the organization's open CI waits on key's host, repository and
 	// sha, by start: every wait one poll of that commit decides.
