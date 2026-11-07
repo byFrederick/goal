@@ -360,10 +360,12 @@ function TriggerRow({
     <div className="flex items-center gap-3 border-t border-line p-4">
       <SourceTile icon={Icon} fill={tile} size="md" />
       <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <span className="font-control text-body text-ink">{trigger.name}</span>
+        <span className="font-control text-body text-ink">{triggerLabel(trigger.name)}</span>
         <span className="flex items-center gap-1 text-secondary break-words text-ink-soft">
           {words}
-          {words !== trigger.when ? <InfoTip about={`${trigger.name} schedule`}>{trigger.when}</InfoTip> : null}
+          {words !== trigger.when ? (
+            <InfoTip about={`${triggerLabel(trigger.name)} schedule`}>{trigger.when}</InfoTip>
+          ) : null}
         </span>
         <span className="text-secondary break-words text-muted">{createsSentence(trigger, stations)}</span>
         {trigger.problem && !missing ? (
@@ -378,15 +380,20 @@ function TriggerRow({
             </Link>
           </Button>
         ) : null}
-        <Switch aria-label={trigger.name} checked={on} disabled={disabled} onCheckedChange={onChange} />
+        <Switch aria-label={triggerLabel(trigger.name)} checked={on} disabled={disabled} onCheckedChange={onChange} />
       </div>
     </div>
   );
 }
 
+/** A starter trigger has no title in the definition, only a name: show it in words. */
+function triggerLabel(name: string): string {
+  return humanize(name);
+}
+
 /** The triggers that are on, then the ways that are always there, as one sentence: "A, B, New item, CLI and API". */
 function intakeSentence(names: string[]): string {
-  return [...names, 'New item, CLI and API'].join(', ');
+  return [...names.map(triggerLabel), 'New item, CLI and API'].join(', ');
 }
 
 /** The panel's Intake card: the triggers switched on, then what is always on. Steps 6 to 8 draw it. */

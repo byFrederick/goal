@@ -49,7 +49,7 @@ func (s *server) GetItemTeardown(ctx context.Context, req gen.GetItemTeardownReq
 
 	td := domain.TeardownOf(spans, runs, events, touches, target, s.clock.Now().UTC())
 
-	return gen.GetItemTeardown200JSONResponse(s.teardownOf(td)), nil
+	return gen.GetItemTeardown200JSONResponse(s.teardownOf(ctx, td)), nil
 }
 
 // allItemEvents reads every event of an item, a page of the most the store answers at a time.
@@ -108,7 +108,8 @@ func (s *server) teardownTarget(ctx context.Context, it domain.Item, runs []doma
 	return domain.TeardownTarget{LeadTime: l.ItemTarget(it.Class), BudgetUSD: deref(budgetOf(l, agent).PerItemUsd), Stations: stations}, nil
 }
 
-func (s *server) teardownOf(td domain.Teardown) gen.Teardown {
+// teardownOf is td as the API answers it, every person among its touches named with one lookup.
+func (s *server) teardownOf(ctx context.Context, td domain.Teardown) gen.Teardown {
 	out := gen.Teardown{
 		Open: td.Open, LeadTimeSeconds: wholeSeconds(td.LeadTime), CostUsd: td.CostUSD,
 		Rework:     gen.TeardownRework{Loops: td.Rework.Loops, Seconds: wholeSeconds(td.Rework.Time), CostUsd: td.Rework.CostUSD},
@@ -156,6 +157,8 @@ func (s *server) teardownOf(td domain.Teardown) gen.Teardown {
 	for _, t := range td.Touches {
 		out.Touches = append(out.Touches, gen.TeardownTouch{Touch: s.touchOf(t.Touch), WaitSeconds: wholeSeconds(t.Wait)})
 	}
+
+	s.nameActors(ctx, filers(out.Touches, func(t *gen.TeardownTouch) *gen.Actor { return &t.Touch.Actor })...)
 
 	return out
 }

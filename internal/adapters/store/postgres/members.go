@@ -91,6 +91,43 @@ func (a *Access) Members(ctx context.Context) ([]domain.Member, error) {
 	return out, nil
 }
 
+// MemberNames implements ports.Access in one read of goal_members: an id that is not a UUID
+// cannot be a user's, so it is left out rather than failing the read.
+func (a *Access) MemberNames(ctx context.Context, users []domain.UserID) (map[domain.UserID]string, error) {
+	out := make(map[domain.UserID]string, len(users))
+
+	ids := make([]uuid.UUID, 0, len(users))
+	for _, u := range users {
+		if id, err := uuid.Parse(string(u)); err == nil {
+			ids = append(ids, id)
+		}
+	}
+
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	var rows []db.MemberNamesRow
+
+	err := a.s.read(ctx, func(q *db.Queries) error {
+		var err error
+
+		rows, err = q.MemberNames(ctx, ids)
+
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("member names: %w", err)
+	}
+
+	for _, r := range rows {
+		user := domain.UserID(r.UserID)
+		out[user] = domain.Principal{Kind: domain.PrincipalUser, User: user, Name: r.Name, Email: r.Email}.Actor().Name
+	}
+
+	return out, nil
+}
+
 func members(ctx context.Context, q *db.Queries) ([]memberRow, error) {
 	raw, err := q.Members(ctx)
 	if err != nil {
