@@ -14,7 +14,14 @@ import { FactoryBadge } from '../../app/factory-badge';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { factoryTitle, refParam } from '../../shared/factory';
-import { formatClock, formatDuration, formatUsdCompact, humanize } from '../../shared/format';
+import {
+  formatClock,
+  formatCpuSeconds,
+  formatDuration,
+  formatMemory,
+  formatUsdCompact,
+  humanize,
+} from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
@@ -23,6 +30,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/empty-state';
 import { Input } from '../../ui/field';
+import { InfoTip } from '../../ui/info-tip';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '../../ui/menu';
 import { NotAvailable } from '../../ui/not-available';
 import { Skeleton } from '../../ui/skeleton';
@@ -434,6 +442,21 @@ export function RunsPage() {
                     <th scope="col" className="px-3 py-2 text-right font-medium">
                       Cost
                     </th>
+                    <th scope="col" className="hidden px-3 py-2 text-right font-medium min-[1440px]:table-cell">
+                      <span className="inline-flex items-center gap-1">
+                        CPU
+                        <InfoTip about="CPU">
+                          CPU is the box's CPU time from prepare to the run's end. Peak memory is the most memory the
+                          box used at once. — means the box couldn't measure it.
+                        </InfoTip>
+                      </span>
+                    </th>
+                    <th scope="col" className="hidden px-3 py-2 text-right font-medium min-[1440px]:table-cell">
+                      Peak memory
+                    </th>
+                    <th scope="col" className="hidden px-3 py-2 font-medium min-[1440px]:table-cell">
+                      Box
+                    </th>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Outcome
                     </th>
@@ -482,6 +505,15 @@ export function RunsPage() {
                         <td className="px-3 py-2 text-right tabular-nums">{durationOf(run, now)}</td>
                         <td className="hidden px-3 py-2 text-right tabular-nums xl:table-cell">{run.turns}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatUsdCompact(run.cost_usd)}</td>
+                        <td className="hidden px-3 py-2 text-right tabular-nums min-[1440px]:table-cell">
+                          {formatCpuSeconds(run.cpu_seconds)}
+                        </td>
+                        <td className="hidden px-3 py-2 text-right tabular-nums min-[1440px]:table-cell">
+                          {formatMemory(run.peak_memory_bytes)}
+                        </td>
+                        <td className="hidden px-3 py-2 min-[1440px]:table-cell">
+                          {run.box_size ? humanize(run.box_size) : '—'}
+                        </td>
                         <td className="px-3 py-2">
                           <Outcome status={run.status} />
                         </td>
@@ -489,7 +521,7 @@ export function RunsPage() {
                       {run.status === 'failed' ? (
                         <tr className="bg-rework-tint/50">
                           <td />
-                          <td colSpan={9} className="whitespace-normal break-words px-3 pb-3 lg:max-w-0">
+                          <td colSpan={12} className="whitespace-normal break-words px-3 pb-3 lg:max-w-0">
                             <div className="flex flex-wrap items-center gap-3 text-secondary">
                               {run.error ? <span className="text-rework-ink">{run.error}</span> : null}
                               <span className="ml-auto flex gap-3">

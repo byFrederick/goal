@@ -67,3 +67,25 @@ for (const width of [375, 768, 1440]) {
     });
   });
 }
+
+// Box usage (the CPU and memory of the window's runs by agent or station), at a phone's 390 px and a desktop's 1440 px.
+for (const width of [390, 1440]) {
+  test.describe(`Box usage at ${width} px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    test('shows the section, switches agents and stations and does not scroll sideways', async ({ page }) => {
+      await page.goto('/o/acme/spend');
+      const box = page.getByRole('region', { name: 'Box usage' });
+      await expect(box).toBeVisible();
+      await expect(box.getByRole('radio', { name: 'Agents' })).toBeChecked();
+      await expect(box.getByText('backend-engineer')).toBeVisible();
+      await expectNoHorizontalScroll(page);
+
+      await box.getByRole('radio', { name: 'Stations' }).click();
+      await expect(box.getByRole('radio', { name: 'Stations' })).toBeChecked();
+      await expect(box.getByText('build').first()).toBeVisible();
+      await expect(box.getByText('backend-engineer')).toHaveCount(0);
+      await expectNoHorizontalScroll(page);
+    });
+  });
+}

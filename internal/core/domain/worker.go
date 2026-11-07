@@ -46,6 +46,10 @@ type WorkerFinished struct {
 	InputTokens  int64           `json:"input_tokens"`
 	OutputTokens int64           `json:"output_tokens"`
 	SessionID    string          `json:"session_id"`
+	// CPUSeconds and PeakMemoryBytes are the box's CPU time and peak memory as the worker read
+	// them; nil when the line has no such field (a worker that cannot read them).
+	CPUSeconds      *float64 `json:"cpu_seconds"`
+	PeakMemoryBytes *int64   `json:"peak_memory_bytes"`
 	// Repositories are the repositories the run fetched or pushed, each with its pushed head and
 	// whether it wrote (ADR 0041 decision 5).
 	Repositories []WorkerRepository `json:"repositories"`
@@ -159,7 +163,7 @@ func RunRepositories(reported []WorkerRepository) []RunRepository {
 func (f *WorkerFinished) Result() RunResult {
 	res := RunResult{
 		CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
-		Repositories: RunRepositories(f.Repositories),
+		Repositories: RunRepositories(f.Repositories), CPUSeconds: f.CPUSeconds, PeakMemoryBytes: f.PeakMemoryBytes,
 	}
 
 	switch {
