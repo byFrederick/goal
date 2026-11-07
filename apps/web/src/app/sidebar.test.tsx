@@ -607,7 +607,7 @@ describe('the collapsed rail', () => {
     expect(await screen.findByText('Access')).toBeTruthy();
   });
 
-  it('shows a factory square\'s title in its tooltip and keeps the link to its name', async () => {
+  it("shows a factory square's title in its tooltip and keeps the link to its name", async () => {
     renderSidebar({ list: [factory('research', { title: 'Deep dive' })] });
     await collapse();
     const square = within(await nav()).getByRole('link', { name: /Deep dive factory/ });
