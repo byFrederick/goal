@@ -115,6 +115,26 @@ test('the line and the flow figures show on the Floor', async ({ page }) => {
   await expectAccessible(page);
 });
 
+test('a factory with no finished item shows no red 0 under Throughput and keeps No target set', async ({ page }) => {
+  // Answer the metrics with no finished item in either range, whatever the mock's fixture holds.
+  await page.route(/\/metrics\?/, async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    if (!body || typeof body !== 'object' || !('items_done' in body)) return route.fulfill({ response: res, json: body });
+    const empty = { items_done: 0, throughput_per_day: 0, lead_time_hours: null, rework_rate: 0 };
+    const targets = { ...body.targets, throughput_per_day: null };
+    return route.fulfill({
+      response: res,
+      json: { ...body, ...empty, spend_usd: 0, targets, previous: body.previous ? { ...body.previous, ...empty } : body.previous },
+    });
+  });
+  await page.goto('/o/acme/f/software');
+  const flow = page.getByRole('region', { name: 'Flow against targets' });
+  const throughput = flow.getByText('Throughput', { exact: true }).locator('xpath=..');
+  await expect(throughput.getByText('No target set')).toBeVisible();
+  await expect(throughput.locator('.text-rework-ink')).toHaveCount(0);
+});
+
 test('Add a build agent raises the station by one in a draft and opens the Line editor', async ({ page }) => {
   // The phone's Floor shows the what-if the same way; this flow runs on the desktop card.
   test.skip(isPhone(page), 'the what-if is on the desktop card');
