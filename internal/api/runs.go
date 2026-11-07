@@ -109,6 +109,7 @@ func (s *server) ListRuns(ctx context.Context, req gen.ListRunsRequestObject) (g
 			Turns: run.Turns, InputTokens: run.InputTokens, OutputTokens: run.OutputTokens, CostUsd: run.CostUsd,
 			Error: run.Error, StartedAt: run.StartedAt, EndedAt: run.EndedAt,
 			DefinitionVersionId: run.DefinitionVersionId, DefinitionVersion: run.DefinitionVersion,
+			CpuSeconds: run.CpuSeconds, PeakMemoryBytes: run.PeakMemoryBytes, BoxSize: run.BoxSize,
 			Factory: factoryHit(f),
 			Item: gen.RunItem{
 				Id: string(r.ItemID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: r.ItemNumber}.String(), Title: r.ItemTitle,
@@ -329,6 +330,7 @@ func (v *versionNumbers) runOf(ctx context.Context, r domain.Run) (gen.Run, erro
 		Status: gen.RunStatus(r.Result.Status), Turns: r.Result.Turns, InputTokens: r.Result.InputTokens,
 		OutputTokens: r.Result.OutputTokens, CostUsd: r.Result.CostUSD, Error: optional(r.Result.Error), StartedAt: r.StartedAt,
 		DefinitionVersionId: optional(string(r.DefinitionVersionID)), DefinitionVersion: number,
+		CpuSeconds: r.Result.CPUSeconds, PeakMemoryBytes: r.Result.PeakMemoryBytes, BoxSize: boxSizeOf(r.BoxSize),
 	}
 
 	if !r.EndedAt.IsZero() {
@@ -336,6 +338,17 @@ func (v *versionNumbers) runOf(ctx context.Context, r domain.Run) (gen.Run, erro
 	}
 
 	return run, nil
+}
+
+// boxSizeOf is a run's box size, nil when it has none (a run from before box sizes).
+func boxSizeOf(size domain.SandboxSize) *gen.SandboxSize {
+	if size == "" {
+		return nil
+	}
+
+	out := gen.SandboxSize(size)
+
+	return &out
 }
 
 // number is the version's number, nil for a run without a version or one whose version is gone.

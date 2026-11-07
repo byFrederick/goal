@@ -80,7 +80,10 @@ type Run struct {
 	Result              RunResult
 	// Input is what the run was given, as RecordRunInput stored it; empty for runs from before
 	// run records (00085).
-	Input     RunInput
+	Input RunInput
+	// BoxSize is the sandbox size goald opened the run's box with; empty for runs from before
+	// 00136 and for callers that named none.
+	BoxSize   SandboxSize
 	StartedAt time.Time
 	EndedAt   time.Time
 }
@@ -157,6 +160,10 @@ type RunResult struct {
 	InputTokens  int64
 	OutputTokens int64
 	SessionID    string
+	// CPUSeconds and PeakMemoryBytes are the box's CPU time and peak memory as the worker
+	// reported them on its finished line; nil when it reported none.
+	CPUSeconds      *float64
+	PeakMemoryBytes *int64
 	// Error explains a failed or cancelled run.
 	Error string
 	// Repositories are the repositories the worker reported at the end, each with its PushedHead
