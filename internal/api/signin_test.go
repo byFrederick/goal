@@ -25,6 +25,7 @@ const (
 	viewerID   domain.UserID = "019a4000-0000-7000-8000-000000000002"
 	strangerID domain.UserID = "019a4000-0000-7000-8000-000000000003"
 	ownerName                = "F. Cruz"
+	viewerName               = "M. Okafor"
 
 	ownerToken    = "OwnerOwnerOwnerOwnerOwnerOwner01"
 	viewerToken   = "ViewerViewerViewerViewerViewer02"
@@ -69,7 +70,7 @@ func newSignedInWith(t *testing.T, logs io.Writer, opts ...func(*harness, *api.D
 		role          domain.OrgRole
 	}{
 		{ownerID, ownerName, ownerToken, true, testOrg, domain.OrgOwner},
-		{viewerID, "M. Okafor", viewerToken, false, testOrg, domain.OrgMember},
+		{viewerID, viewerName, viewerToken, false, testOrg, domain.OrgMember},
 		{strangerID, "J. Doe", strangerToken, false, otherOrg, domain.OrgOwner},
 	}
 
