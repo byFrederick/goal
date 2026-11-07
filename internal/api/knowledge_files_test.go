@@ -241,6 +241,8 @@ func TestKnowledge_Check(t *testing.T) {
 
 	refused(t, "settings a source may not have", h.request(t, http.MethodPost, knowledgePath+"/check", `{"name":"guides","kind":"upload","secret":"docs-token"}`, nil),
 		http.StatusBadRequest, "")
+	refused(t, "a live source", h.request(t, http.MethodPost, knowledgePath+"/check", `{"name":"chat","kind":"live"}`, nil),
+		http.StatusBadRequest, "")
 	refused(t, "an unknown factory", h.request(t, http.MethodPost, knowledgePath+"/check", `{"name":"guides","kind":"upload","factories":["nope"]}`, nil),
 		http.StatusNotFound, "factory-not-found")
 }

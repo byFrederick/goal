@@ -204,7 +204,9 @@ func TestNewKnowledgeSource_RepositoryAndConfluence(t *testing.T) {
 
 	for what, n := range map[string]NewKnowledgeSource{
 		"confluence without a secret":  {Name: "wiki", Title: "Wiki", Kind: SourceConfluence},
-		"a repository on a connection": {Name: docsName, Title: docsTitle, Kind: SourceRepository, Connection: docsName},
+		"live":                         {Name: docsName, Title: docsTitle, Kind: "live"},
+		"an unknown kind":              {Name: docsName, Title: docsTitle, Kind: "drive"},
+		"a synced source on no secret": {Name: docsName, Title: docsTitle, Kind: SourceSynced},
 		"a read-when too long":         {Name: docsName, Title: docsTitle, Kind: SourceUpload, ReadWhen: strings.Repeat("x", MaxReadWhen+1)},
 	} {
 		if err := n.Check(); !errors.Is(err, ErrInvalid) {
