@@ -180,6 +180,16 @@ test('a published line without a model key: the Code card wraps at spaces and Ho
   expect(split).toBe(1);
   await expectNoHorizontalScroll(page);
 
+  // The mock's template has no environment file; the catalog's does. Add one that names no secret, so the line
+  // is on secrets with no model key.
+  const env = await page.request.put(
+    `/v1/orgs/acme/factories/${factory}/draft/files/${encodeURIComponent('environments/default.yaml')}`,
+    {
+      data: 'apiVersion: goal/v1\nkind: Environment\nspec:\n  size: small\n',
+      headers: { 'If-None-Match': '*', 'Content-Type': 'application/octet-stream' },
+    },
+  );
+  expect(env.ok()).toBeTruthy();
   const draft = await page.request.get(`/v1/orgs/acme/factories/${factory}/draft`);
   const { revision } = (await draft.json()) as { revision: number };
   const published = await page.request.post(`/v1/orgs/acme/factories/${factory}/draft/publish`, {
