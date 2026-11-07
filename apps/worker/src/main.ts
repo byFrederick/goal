@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { cp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { cgroupRoot, cpuStartFile, meminfoFile, selfCgroupFile } from './cgroup.js';
 import { runCheck } from './check.js';
 import { runDefinition } from './definition.js';
 import type { Shell } from './environment.js';
@@ -156,6 +157,7 @@ async function runPrepare(): Promise<number> {
           home: paths.home,
           knowledge: paths.knowledge,
         },
+        cgroup: cgroupRoot,
       }),
     );
     return 0;
@@ -190,6 +192,12 @@ async function runAgent(): Promise<number> {
       abortController,
       fetch,
       remoteHead,
+      resources: {
+        root: cgroupRoot,
+        selfCgroup: selfCgroupFile,
+        meminfo: meminfoFile,
+        startFile: join(paths.goal, cpuStartFile),
+      },
       recorded: () =>
         readFile(paths.repositoryRecord, 'utf8').then(
           (s) => s.split('\n').filter((l) => l !== ''),

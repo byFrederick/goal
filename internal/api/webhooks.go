@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,17 +13,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/byFrederick/goal/internal/api/gen"
-	"github.com/byFrederick/goal/internal/config"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// A factory's webhook endpoints and their delivery log (ADR 0026 decisions 2 and 3): anyone who
-// sees the factory lists endpoints and reads deliveries (factory:read); its editors create,
-// rotate and delete endpoints (webhook:manage, a fresh sign-in, never a key or a personal token).
-// A signing secret is in the answers of create and rotate only, hex-encoded, and never in a log,
-// a problem or another answer. POST /hooks/{endpoint}, which receives deliveries, is not served
-// here.
+// What the organization's webhook routes (orgwebhooks.go) share: their problems and the delivery
+// log's pages, counts and requests. POST /hooks/{webhook}, which receives deliveries, is not
+// served here.
 
 // Errors of the webhook routes, answered with their codes by webhookProblem.
 var (
@@ -45,7 +40,7 @@ const (
 // deliveryDays is how many UTC days, today the last, an endpoint's counts cover.
 const deliveryDays = 7
 
-// codeWebhookNotFound answers an endpoint the factory does not have.
+// codeWebhookNotFound answers a webhook the organization does not have.
 const codeWebhookNotFound = "webhook-not-found"
 
 // webhookProblem answers the webhook rules with their codes. Without a master key the detail is
@@ -102,96 +97,6 @@ func webhookError(err error) error {
 	default:
 		return err
 	}
-}
-
-func (s *server) ListWebhookEndpoints(ctx context.Context, req gen.ListWebhookEndpointsRequestObject) (gen.ListWebhookEndpointsResponseObject, error) {
-	f, err := s.factory(ctx, req.Factory)
-	if err != nil {
-		return nil, err
-	}
-
-	fid := domain.FactoryID(f.Metadata.ID)
-
-	endpoints, err := s.intake.ListEndpoints(ctx, fid)
-	if err != nil {
-		return nil, err
-	}
-
-	days, err := s.webhookDays(ctx, fid)
-	if err != nil {
-		return nil, err
-	}
-
-	out := gen.ListWebhookEndpoints200JSONResponse{Endpoints: make([]gen.WebhookEndpoint, 0, len(endpoints))}
-
-	for _, e := range endpoints {
-		o := endpointOut(e, f)
-		o.Days = days.of(e.ID)
-		out.Endpoints = append(out.Endpoints, o)
-	}
-
-	return out, nil
-}
-
-func (s *server) CreateWebhookEndpoint(ctx context.Context, req gen.CreateWebhookEndpointRequestObject) (gen.CreateWebhookEndpointResponseObject, error) {
-	f, err := s.factory(ctx, req.Factory)
-	if err != nil {
-		return nil, err
-	}
-
-	n := domain.NewWebhookEndpoint{FactoryID: domain.FactoryID(f.Metadata.ID), Name: req.Body.Name, Kind: domain.WebhookKind(req.Body.Kind)}
-
-	secret, err := s.intake.CreateEndpoint(ctx, n)
-	if err != nil {
-		return nil, webhookError(err)
-	}
-
-	return gen.CreateWebhookEndpoint201JSONResponse(createdOut(secret, f)), nil
-}
-
-func (s *server) RotateWebhookSecret(ctx context.Context, req gen.RotateWebhookSecretRequestObject) (gen.RotateWebhookSecretResponseObject, error) {
-	f, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	secret, err := s.intake.RotateSecret(ctx, e.ID)
-	if err != nil {
-		return nil, webhookError(err)
-	}
-
-	return gen.RotateWebhookSecret200JSONResponse(createdOut(secret, f)), nil
-}
-
-func (s *server) DeleteWebhookEndpoint(ctx context.Context, req gen.DeleteWebhookEndpointRequestObject) (gen.DeleteWebhookEndpointResponseObject, error) {
-	_, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.deletable(ctx, e); err != nil {
-		return nil, err
-	}
-
-	if err := s.intake.DeleteEndpoint(ctx, e.ID); err != nil {
-		return nil, webhookError(err)
-	}
-
-	return gen.DeleteWebhookEndpoint204Response{}, nil
-}
-
-func (s *server) ListWebhookDeliveries(ctx context.Context, req gen.ListWebhookDeliveriesRequestObject) (gen.ListWebhookDeliveriesResponseObject, error) {
-	f, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	page, err := s.deliveryPage(ctx, e.ID, domain.FactoryID(f.Metadata.ID), req.Params.Limit, req.Params.After)
-	if err != nil {
-		return nil, err
-	}
-
-	return gen.ListWebhookDeliveries200JSONResponse(page), nil
 }
 
 // deliveryPage is one page of endpoint id's deliveries, newest first, after the cursor after, with
@@ -254,20 +159,6 @@ func (s *server) deliveryPage(ctx context.Context, id domain.WebhookEndpointID, 
 	return out, nil
 }
 
-func (s *server) GetWebhookDelivery(ctx context.Context, req gen.GetWebhookDeliveryRequestObject) (gen.GetWebhookDeliveryResponseObject, error) {
-	f, e, err := s.webhookEndpoint(ctx, req.Factory, req.Endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	out, err := s.deliveryRequest(ctx, e.ID, domain.FactoryID(f.Metadata.ID), req.Delivery)
-	if err != nil {
-		return nil, err
-	}
-
-	return gen.GetWebhookDelivery200JSONResponse(out), nil
-}
-
 // deliveryRequest is endpoint id's delivery with its headers and body.
 func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointID, factory domain.FactoryID, delivery string,
 ) (gen.WebhookDeliveryRequest, error) {
@@ -302,26 +193,6 @@ func (s *server) deliveryRequest(ctx context.Context, id domain.WebhookEndpointI
 	}
 
 	return out, nil
-}
-
-// webhookEndpoint resolves a path's factory and its endpoint; an endpoint of another factory or
-// organization answers as unknown.
-func (s *server) webhookEndpoint(ctx context.Context, factoryRef, id string) (*config.Factory, domain.WebhookEndpoint, error) {
-	f, err := s.factory(ctx, factoryRef)
-	if err != nil {
-		return nil, domain.WebhookEndpoint{}, err
-	}
-
-	e, err := s.intake.Endpoint(ctx, domain.WebhookEndpointID(id))
-	if err != nil {
-		return nil, domain.WebhookEndpoint{}, webhookError(err)
-	}
-
-	if !e.OpenTo(domain.FactoryID(f.Metadata.ID)) {
-		return nil, domain.WebhookEndpoint{}, fmt.Errorf("%w: endpoint %s is not open to factory %s", errWebhookNotFound, id, f.Metadata.ID)
-	}
-
-	return f, e, nil
 }
 
 // deliveryEvaluations are the evaluations of the delivery rows by factory, or by every factory
@@ -404,44 +275,6 @@ func (s *server) deliveryOut(ctx context.Context, d domain.WebhookDelivery, eval
 	out.Item = &gen.WebhookDeliveryItem{Id: string(it.ID), Number: it.Number}
 
 	return out, nil
-}
-
-// endpointOut is an endpoint open to f as the contract has it, without its days, never its
-// secret: what it feeds is the triggers of f's current definition whose on names it. An
-// organization webhook reads as kind github or generic, and names the secret that signs it.
-func endpointOut(e domain.WebhookEndpoint, f *config.Factory) gen.WebhookEndpoint {
-	kind, secret := e.Kind, e.Name+"-hook-secret"
-	if e.OrgLevel() {
-		kind, secret = domain.WebhookGeneric, e.Secret
-		if e.Sender == domain.SenderGitHub {
-			kind = domain.WebhookGitHub
-		}
-	}
-
-	out := gen.WebhookEndpoint{
-		Id: string(e.ID), Name: e.Name, Kind: gen.WebhookKind(kind), Sender: gen.WebhookSender(e.Sender), Address: "/hooks/" + string(e.ID),
-		SecretName: secret, CreatedAt: e.CreatedAt, RotatedAt: e.RotatedAt, Triggers: []string{}, Days: make([]gen.WebhookDeliveryDay, 0, deliveryDays),
-	}
-
-	on := "webhook." + e.Name
-	for _, t := range f.Spec.Board.Triggers {
-		if t.On == on || strings.HasPrefix(t.On, on+".") {
-			out.Triggers = append(out.Triggers, t.Name)
-		}
-	}
-
-	return out
-}
-
-// createdOut is the answer of create and rotate, the only ones holding the secret. A new or
-// rotated endpoint's days are not read: its counts start empty or carry on, and the list has them.
-func createdOut(s domain.WebhookSecret, f *config.Factory) gen.CreatedWebhookEndpoint {
-	e := endpointOut(s.Endpoint, f)
-
-	return gen.CreatedWebhookEndpoint{
-		Id: e.Id, Name: e.Name, Kind: e.Kind, Sender: e.Sender, Address: e.Address, SecretName: e.SecretName, CreatedAt: e.CreatedAt, RotatedAt: e.RotatedAt,
-		Triggers: e.Triggers, Days: e.Days, Secret: hex.EncodeToString(s.Secret),
-	}
 }
 
 // cursorOut is the next_after of a page ending at c: opaque to clients.

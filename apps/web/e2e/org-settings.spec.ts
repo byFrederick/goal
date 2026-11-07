@@ -164,7 +164,7 @@ test('leaving with unsaved changes asks first', async ({ page }) => {
   await page.goto('/o/acme/settings');
   await page.getByLabel('Name').fill('Acme Robotics');
   await openNavigation(page);
-  const goal = orgNav(page).getByRole('link', { name: /^G goal / });
+  const goal = orgNav(page).getByRole('link', { name: /^G Goal / });
 
   await goal.click();
   const prompt = page.getByRole('dialog', { name: 'Leave without saving?' });

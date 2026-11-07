@@ -116,6 +116,7 @@ func (s *server) settings(ctx context.Context, o domain.Org) (gen.OrgSettings, e
 
 	if set {
 		out.SignupDomain = new(s.signupDomainOut(signup))
+		s.nameActors(ctx, &out.SignupDomain.SetBy)
 	}
 
 	for _, f := range factories {
@@ -154,7 +155,10 @@ func (s *server) SetSignupDomain(ctx context.Context, req gen.SetSignupDomainReq
 		return nil, err
 	}
 
-	return gen.SetSignupDomain200JSONResponse(s.signupDomainOut(out)), nil
+	set := s.signupDomainOut(out)
+	s.nameActors(ctx, &set.SetBy)
+
+	return gen.SetSignupDomain200JSONResponse(set), nil
 }
 
 // ClearSignupDomain stops sign-up by domain; members who joined by it stay.
@@ -171,6 +175,7 @@ func (s *server) ClearSignupDomain(ctx context.Context, _ gen.ClearSignupDomainR
 	return gen.ClearSignupDomain204Response{}, nil
 }
 
+// signupDomainOut is d as the contract has it, who set it not yet named: the response names them.
 func (s *server) signupDomainOut(d domain.SignupDomain) gen.SignupDomain {
 	return gen.SignupDomain{Domain: d.Domain, JoinRole: gen.FactoryRole(d.JoinRole), SetBy: s.actorOut(d.SetBy), SetAt: d.SetAt}
 }

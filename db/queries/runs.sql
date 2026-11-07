@@ -1,21 +1,26 @@
 -- name: InsertRun :exec
 -- A run records the definition version it starts on; NULL only for runs from before versions.
 -- kind is station for a line's run, jonah for a review's and try for a try of a past item; only
--- the last two may have no item (00079, 00102).
-INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind)
+-- the last two may have no item (00079, 00102). box_size is the sandbox size the box opens with,
+-- NULL when the caller named none (00136).
+INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind,
+                        box_size)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.narg(definition_version_id), sqlc.narg(item_id), sqlc.arg(station),
-        sqlc.arg(agent), sqlc.arg(model), 'running', sqlc.arg(started_at), sqlc.arg(kind));
+        sqlc.arg(agent), sqlc.arg(model), 'running', sqlc.arg(started_at), sqlc.arg(kind), sqlc.narg(box_size));
 
 -- name: RunItem :one
 SELECT item_id FROM agent_runs WHERE id = $1;
 
 -- name: FinishRun :one
--- Only a running run finishes; finishing it again matches nothing.
+-- Only a running run finishes; finishing it again matches nothing. cpu_seconds and
+-- peak_memory_bytes are NULL when the worker reported none (00136), peak_memory_source when it
+-- reported no known source with its peak memory (00137).
 UPDATE agent_runs SET
   status = sqlc.arg(status), session_id = sqlc.narg(session_id), turns = sqlc.arg(turns)::bigint,
   input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),
   cost_usd = sqlc.arg(cost_usd), error = sqlc.narg(error), ended_at = sqlc.arg(ended_at),
-  output = sqlc.narg(output)
+  output = sqlc.narg(output), cpu_seconds = sqlc.narg(cpu_seconds)::float8,
+  peak_memory_bytes = sqlc.narg(peak_memory_bytes)::bigint, peak_memory_source = sqlc.narg(peak_memory_source)::text
 WHERE id = sqlc.arg(id) AND status = 'running'
 RETURNING factory_id, item_id, station, agent;
 

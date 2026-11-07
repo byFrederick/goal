@@ -72,7 +72,7 @@ func newHookRig(t *testing.T, sender domain.WebhookSender, token domain.TokenSet
 	store.AddFactory(testOrg, acmeID)
 
 	r := &hookRig{
-		intake: porttest.NewIntake(key, store), secrets: porttest.NewOrgSecrets(key, newTenancy(t)),
+		intake: porttest.NewIntake(store), secrets: porttest.NewOrgSecrets(key, newTenancy(t)),
 		clock: porttest.NewClock(time.Now()), names: &namesStub{named: true}, logs: &bytes.Buffer{},
 	}
 	r.intake.UseSecrets(r.secrets)
@@ -385,22 +385,17 @@ func TestHooks_PreviousSecretPasses(t *testing.T) {
 	}
 }
 
-// An unknown id, an id that is no UUID, a disabled webhook and a factory's endpoint are 404;
-// another method is 405.
+// An unknown id, an id that is no UUID and a disabled webhook are 404 no such webhook; another
+// method is 405.
 func TestHooks_UnknownDisabledAndOtherMethods(t *testing.T) {
 	t.Parallel()
 
 	r := newHookRig(t, domain.SenderGitHub, domain.TokenSettings{})
 	ctx := r.ctx(t)
 
-	endpoint, err := r.intake.CreateEndpoint(ctx, domain.NewWebhookEndpoint{FactoryID: acmeID, Name: "alerts", Kind: domain.WebhookGitHub})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, id := range []string{"019a0000-0000-7000-8000-000000000000", "not-a-uuid", string(endpoint.Endpoint.ID)} {
-		if rec := r.post(t, api.HooksPath+id, `{}`, nil, ""); rec.Code != http.StatusNotFound {
-			t.Errorf("POST /hooks/%s = %d; want 404", id, rec.Code)
+	for _, id := range []string{"019a0000-0000-7000-8000-000000000000", "not-a-uuid"} {
+		if rec := r.post(t, api.HooksPath+id, `{}`, nil, ""); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "no such webhook") {
+			t.Errorf("POST /hooks/%s = %d %s; want 404 no such webhook", id, rec.Code, rec.Body)
 		}
 	}
 

@@ -47,8 +47,36 @@ func (s *Store) OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgS
 	return domain.NewOrgSpend(w, f), nil
 }
 
+// SpendByFactory implements ports.Spend over the store's runs, as OrgSpendByDay sums them.
+func (s *Store) SpendByFactory(ctx context.Context, since, until time.Time) ([]domain.FactorySpend, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	spend := map[domain.FactoryID]float64{}
+
+	for _, r := range s.runs {
+		if s.runVisible(r, org) && inWindow(r.StartedAt, since, until) {
+			spend[r.FactoryID] += r.Result.CostUSD
+		}
+	}
+
+	out := make([]domain.FactorySpend, 0, len(spend))
+	for id, usd := range spend {
+		out = append(out, domain.FactorySpend{FactoryID: id, USD: usd})
+	}
+
+	slices.SortFunc(out, func(a, b domain.FactorySpend) int { return cmp.Compare(a.FactoryID, b.FactoryID) })
+
+	return out, nil
+}
+
 // runSpend sums org's runs as the postgres spend queries do: by day and factory from `from`, by
-// agent, by model and on rework in [since, until). Callers hold s.mu.
+// agent, by model, on rework and their usage in [since, until). Callers hold s.mu.
 func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.SpendFacts {
 	type factoryDay struct {
 		day     time.Time
@@ -59,7 +87,10 @@ func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.
 	agents := map[domain.AgentSpend]float64{}
 	models := map[string]float64{}
 
-	var f domain.SpendFacts
+	var (
+		f                  domain.SpendFacts
+		byAgent, byStation = usageGroups{}, usageGroups{}
+	)
 
 	for _, r := range s.runs {
 		if !s.runVisible(r, org) || !inWindow(r.StartedAt, from, until) {
@@ -74,6 +105,8 @@ func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.
 
 		agents[domain.AgentSpend{FactoryID: r.FactoryID, Agent: r.Agent}] += r.Result.CostUSD
 		models[r.Model] += r.Result.CostUSD
+		byAgent.add(r, r.Agent)
+		byStation.add(r, r.Station)
 
 		if s.reworkAt(r.ItemID, r.StartedAt) {
 			f.ReworkUSD += r.Result.CostUSD
@@ -93,7 +126,65 @@ func (s *Store) runSpend(org domain.OrgID, from, since, until time.Time) domain.
 		f.ByModel = append(f.ByModel, domain.ModelSpend{Model: m, USD: usd})
 	}
 
+	f.UsageByAgent, f.UsageByStation = byAgent.rows(), byStation.rows()
+
 	return f
+}
+
+// usageKey groups runs' usage: factory, agent or station name, and box size.
+type usageKey struct {
+	factory domain.FactoryID
+	name    string
+	size    domain.SandboxSize
+}
+
+// usageGroups are the CPU seconds and peak memories of the runs of each group, as reported.
+type usageGroups map[usageKey]*usageValues
+
+type usageValues struct {
+	runs      int
+	cpu, peak []float64
+}
+
+// add counts r in the group of name when it reported a value, as the postgres query's filter.
+func (g usageGroups) add(r *domain.Run, name string) {
+	cpu, peak := r.Result.CPUSeconds, r.Result.PeakMemoryBytes
+	if cpu == nil && peak == nil {
+		return
+	}
+
+	k := usageKey{r.FactoryID, name, r.BoxSize}
+	if g[k] == nil {
+		g[k] = &usageValues{}
+	}
+
+	u := g[k]
+	u.runs++
+
+	if cpu != nil {
+		u.cpu = append(u.cpu, *cpu)
+	}
+
+	if peak != nil {
+		u.peak = append(u.peak, float64(*peak))
+	}
+}
+
+// rows are the groups with percentile_cont's medians and 90th percentiles.
+func (g usageGroups) rows() []domain.RunUsage {
+	var out []domain.RunUsage
+
+	for k, u := range g {
+		slices.Sort(u.cpu)
+		slices.Sort(u.peak)
+		out = append(out, domain.RunUsage{
+			FactoryID: k.factory, Name: k.name, BoxSize: k.size, Runs: u.runs,
+			CPUSecondsP50: domain.FloatPercentile(u.cpu, 0.5), CPUSecondsP90: domain.FloatPercentile(u.cpu, 0.9),
+			PeakMemoryBytesP50: domain.FloatPercentile(u.peak, 0.5), PeakMemoryBytesP90: domain.FloatPercentile(u.peak, 0.9),
+		})
+	}
+
+	return out
 }
 
 // reworkAt reports whether the item had entered a rework round by at. Callers hold s.mu.

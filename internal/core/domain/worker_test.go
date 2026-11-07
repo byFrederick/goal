@@ -92,6 +92,62 @@ func TestDecodeWorkerLine_FinishedAndUnknownLines(t *testing.T) {
 	}
 }
 
+func TestDecodeWorkerLine_FinishedUsageOptional(t *testing.T) {
+	t.Parallel()
+
+	_, fin, err := DecodeWorkerLine([]byte(`{"type":"finished","at":"2026-11-06T10:00:00Z","status":"succeeded","output":{"a":1},"cpu_seconds":12.5,"peak_memory_bytes":536870912}`), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := fin.Result()
+	if res.CPUSeconds == nil || *res.CPUSeconds != 12.5 || res.PeakMemoryBytes == nil || *res.PeakMemoryBytes != 536870912 {
+		t.Errorf("Result's usage = %v, %v; want 12.5 and 536870912", res.CPUSeconds, res.PeakMemoryBytes)
+	}
+
+	// A worker that reports no counters: no value, not zero, and the run still succeeds.
+	_, fin, err = DecodeWorkerLine([]byte(`{"type":"finished","at":"2026-11-06T10:00:00Z","status":"succeeded","output":{"a":1}}`), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res = fin.Result()
+	if res.CPUSeconds != nil || res.PeakMemoryBytes != nil || res.Status != RunSucceeded {
+		t.Errorf("Result without usage = cpu %v, peak %v, %s; want neither, succeeded", res.CPUSeconds, res.PeakMemoryBytes, res.Status)
+	}
+}
+
+func TestWorkerFinished_ResultKeepsAKnownMemorySourceWithPeakMemory(t *testing.T) {
+	t.Parallel()
+
+	const peak = `"peak_memory_bytes":536870912,`
+
+	for _, tc := range []struct {
+		name, fields string
+		want         MemorySource
+	}{
+		{"cgroup", peak + `"memory_source":"cgroup"`, MemoryCgroup},
+		{"machine", peak + `"memory_source":"machine"`, MemoryMachine},
+		{"unknown value", peak + `"memory_source":"guess"`, ""},
+		{"peak memory alone", strings.TrimSuffix(peak, ","), ""},
+		{"source without peak memory", `"memory_source":"cgroup"`, ""},
+		{"source with null peak memory", `"peak_memory_bytes":null,"memory_source":"machine"`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, fin, err := DecodeWorkerLine([]byte(`{"type":"finished","at":"2026-11-06T10:00:00Z","status":"succeeded","output":{"a":1},`+tc.fields+`}`), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := fin.Result().PeakMemorySource; got != tc.want {
+				t.Errorf("Result's PeakMemorySource = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWorkerFinished_DenialsAtTheLinesTime(t *testing.T) {
 	t.Parallel()
 

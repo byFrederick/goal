@@ -46,7 +46,7 @@ describe('factorySummary', () => {
         { factory_id: 'f-sre', role: 'approver' },
       ],
     });
-    expect(factorySummary(m, factories)).toBe('sre approver, support viewer');
+    expect(factorySummary(m, factories)).toBe('Sre approver, Support viewer');
   });
 
   it('leaves out factories the caller does not see and says when nothing is left', () => {

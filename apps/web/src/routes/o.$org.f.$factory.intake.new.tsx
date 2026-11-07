@@ -3,12 +3,13 @@ import { pageTitle } from '../app/route-focus';
 import { PendingScreen } from '../app/states';
 import { IntakePage } from '../features/intake/intake-page';
 import { NewTriggerDialog } from '../features/intake/new-trigger-dialog';
+import { factoryTitle } from '../shared/factory';
 
 // New trigger, step 1 of 2: the Intake page with the source picker over it. Continue leaves for the trigger
 // page at …/intake/<free name>?on=<event key>; closing the picker returns to the Intake page.
 export const Route = createFileRoute('/o/$org/f/$factory/intake/new')({
   pendingComponent: PendingScreen,
-  head: ({ match: { context } }) => pageTitle('New trigger', context.factory.name, context.org.name),
+  head: ({ match: { context } }) => pageTitle('New trigger', factoryTitle(context.factory), context.org.name),
   component: NewTriggerRoute,
 });
 

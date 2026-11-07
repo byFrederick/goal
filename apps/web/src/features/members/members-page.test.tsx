@@ -273,7 +273,7 @@ describe('members and roles, ready', () => {
       expect(within(table).getByRole('columnheader', { name: column })).toBeTruthy();
     }
     expect(within(table).getByRole('row', { name: /Freddy Cruz/ }).textContent).toContain('Owner');
-    expect(within(table).getByRole('row', { name: /Jonas Okafor/ }).textContent).toContain('goal editor, sre editor');
+    expect(within(table).getByRole('row', { name: /Jonas Okafor/ }).textContent).toContain('Goal editor, Sre editor');
 
     const waiting = screen.getByRole('region', { name: /Waiting to join/ });
     expect(within(waiting).getAllByText('sam@example.com').length).toBeGreaterThan(0);

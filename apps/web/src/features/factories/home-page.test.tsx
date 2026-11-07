@@ -2,8 +2,10 @@
 
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { approveItem, decideToolApproval } from '../../api/client';
+import { approveItem, decideToolApproval, listFactories } from '../../api/client';
+import { getVersion } from '../../api/definitions';
 import {
+  archivedFactoriesQuery,
   attentionQuery,
   boardQuery,
   inboxQuery,
@@ -11,6 +13,8 @@ import {
   metricsQuery,
   orgQuery,
   overviewQuery,
+  versionFileQuery,
+  versionQuery,
 } from '../../api/queries';
 import type { Board, Factory, FactoryOverview, FactoryOverviewList, Inbox, Item, OrgSummary } from '../../api/types';
 import { renderOrgPage, type Seed } from '../../test/route';
@@ -27,10 +31,16 @@ vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
   getFactoryOverview: vi.fn(() => (fake.overview ? fake.overview() : Promise.reject(new Error('no overview')))),
   getBoard: vi.fn((org: string, factory: string) => (fake.board ? fake.board(org, factory) : Promise.reject())),
+  listFactories: vi.fn(() => new Promise<never>(() => {})),
   decideToolApproval: vi.fn(async () => ({ id: 'id-software#14', state: 'queued' }) as unknown as Item),
   approveItem: vi.fn(
     async (_org: string, item: string) => ({ ref: item, state: 'done', station: 'done' }) as unknown as Item,
   ),
+}));
+
+vi.mock(import('../../api/definitions'), async (original) => ({
+  ...(await original()),
+  getVersion: vi.fn((await original()).getVersion),
 }));
 
 afterEach(cleanup);
@@ -243,7 +253,9 @@ function renderHome({
   can = ['factory:create'],
   factories = overview.factories,
   seedOverview = true,
+  archivedList = [] as Factory[] | null,
   inboxList = inboxEntries([decision, alert]),
+  extraSeed = [] as Seed[],
   boards = {
     [software.id]: softwareBoard,
     [sre.id]: board([station('review', 'agent', 0, 0, { send_back_ratio: 0.4 })]),
@@ -253,7 +265,11 @@ function renderHome({
   can?: string[];
   factories?: FactoryOverviewList['factories'];
   seedOverview?: boolean;
+  /** The archived factories; null leaves the query unseeded, so it stays pending. */
+  archivedList?: Factory[] | null;
   inboxList?: Inbox;
+  /** More seeded queries, e.g. a published version. */
+  extraSeed?: Seed[];
   boards?: Record<string, Board>;
 } = {}) {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -270,7 +286,9 @@ function renderHome({
       },
     ],
     [attentionQuery(org.id).queryKey, attention],
+    ...extraSeed,
     [inboxQuery(org.id).queryKey, inboxList],
+    ...(archivedList ? [[archivedFactoriesQuery(org.id).queryKey, archivedList] as Seed] : []),
     ...(seedOverview
       ? [
           [overviewQuery(org.id).queryKey, { ...overview, factories }] as Seed,
@@ -350,7 +368,7 @@ describe('Home: the ready state', () => {
     await renderReady();
 
     const software = screen.getByRole('article', { name: 'software' });
-    expect(within(software).getByText('Running')).toBeTruthy();
+    expect(await within(software).findByText('Running')).toBeTruthy();
     expect(within(software).getByRole('region', { name: 'software line' })).toBeTruthy();
     expect(within(software).getByText('Needs you')).toBeTruthy();
     expect(within(software).getByText('Throughput')).toBeTruthy();
@@ -361,6 +379,58 @@ describe('Home: the ready state', () => {
     expect(within(sreRow).getByText('Andon pulled')).toBeTruthy();
     expect(within(sreRow).getByText('Sent back')).toBeTruthy();
     expect(within(sreRow).queryByText('Throughput')).toBeNull();
+  });
+
+  it('shows no Running chip and no ok tone while the version reads are pending', async () => {
+    const real = await vi.importActual<typeof import('../../api/definitions')>('../../api/definitions');
+    vi.mocked(getVersion).mockImplementation(() => new Promise(() => {}));
+    try {
+      await renderReady();
+      const row = screen.getByRole('article', { name: 'software' });
+      expect(within(row).queryByText('Running')).toBeNull();
+      expect(within(row).queryByText('Needs a model key')).toBeNull();
+    } finally {
+      vi.mocked(getVersion).mockImplementation(real.getVersion);
+    }
+  });
+
+  it('shows Running when a version read fails, and logs it once', async () => {
+    const real = await vi.importActual<typeof import('../../api/definitions')>('../../api/definitions');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(getVersion).mockRejectedValue(new Error('goald is down'));
+    try {
+      await renderReady();
+      const row = screen.getByRole('article', { name: 'software' });
+      expect(await within(row).findByText('Running')).toBeTruthy();
+      expect(log.mock.calls.some(([m]) => String(m).includes('model key'))).toBe(true);
+    } finally {
+      vi.mocked(getVersion).mockImplementation(real.getVersion);
+      log.mockRestore();
+    }
+  });
+
+  it('says Needs a model key, not Running, for a published line on secrets without a model key', async () => {
+    await renderReady({
+      extraSeed: [
+        [
+          versionQuery(org.id, software.id, 'current').queryKey,
+          {
+            files: [
+              { path: 'factory.yaml', sha256: 'sha-f' },
+              { path: 'environments/default.yaml', sha256: 'sha-d' },
+            ],
+          },
+        ],
+        [
+          versionFileQuery(org.id, software.id, 'current', 'factory.yaml', 'sha-f').queryKey,
+          { text: 'spec:\n  runtime: {}\n' },
+        ],
+      ] as unknown as Seed[],
+    });
+
+    const row = screen.getByRole('article', { name: 'software' });
+    expect(await within(row).findByText('Needs a model key')).toBeTruthy();
+    expect(within(row).queryByText('Running')).toBeNull();
   });
 
   it('shows each station of the line as count over name, with Done today', async () => {
@@ -475,6 +545,27 @@ describe('Home: the ready state', () => {
     expect(router.state.location.pathname).toContain('/items/');
   });
 
+  it('names a factory by its title on its row and in the spend list, and links by its name', async () => {
+    const titled = { ...factory('f-support-replies', 'support-replies'), title: 'Support replies' };
+    await renderReady({ factories: [week(titled)] });
+
+    const row = screen.getByRole('article', { name: 'Support replies' });
+    const link = within(row).getByRole('link', { name: 'Support replies' });
+    expect(link.getAttribute('href')).toContain('/f/support-replies');
+    const spend = screen.getByRole('region', { name: 'Spend this week' });
+    expect(within(spend).getByText('Support replies')).toBeTruthy();
+    expect(within(spend).getByRole('meter').getAttribute('aria-label')).toMatch(/^Support replies: \$/);
+  });
+
+  it('names a factory without a title by its humanized name', async () => {
+    const untitled = { ...factory('f-release-notes', 'release-notes'), title: '' };
+    await renderReady({ factories: [week(untitled)] });
+
+    expect(
+      within(screen.getByRole('article', { name: 'Release notes' })).getByRole('link', { name: 'Release notes' }),
+    ).toBeTruthy();
+  });
+
   it('shows the week against the summed budgets, a bar per factory and the footnote', async () => {
     await renderReady();
 
@@ -494,8 +585,34 @@ describe('Home: the ready state', () => {
     expect(within(spend).getByRole('link', { name: 'Spend and billing' }).getAttribute('href')).toBe('/o/acme/spend');
   });
 
+  it('draws the Needs you first count neutral at 0', async () => {
+    renderHome({ inboxList: inboxEntries([]) });
+
+    const needs = await screen.findByRole('region', { name: 'Needs you first' });
+    const pill = within(needs).getByText('waiting on you').parentElement as HTMLElement;
+    expect(pill.textContent).toContain('0');
+    expect(pill.className).not.toContain('bg-you');
+    expect(pill.className).not.toContain('text-white');
+    expect(pill.className).toContain('bg-hover');
+  });
+
+  it('hides the archived factories link when none is archived', async () => {
+    renderHome({ archivedList: [] });
+
+    await screen.findByRole('region', { name: 'Needs you first' });
+    expect(screen.queryByRole('link', { name: 'Archived factories' })).toBeNull();
+  });
+
+  it('hides the archived factories link while the list loads', async () => {
+    renderHome({ archivedList: null });
+
+    await screen.findByRole('region', { name: 'Needs you first' });
+    expect(listFactories).toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: 'Archived factories' })).toBeNull();
+  });
+
   it('keeps the archived factories one link away', async () => {
-    const { router } = await renderReady();
+    const { router } = renderHome({ archivedList: [{ ...sre, archived_at: '2026-10-25T00:00:00Z' } as Factory] });
 
     fireEvent.click(await screen.findByRole('link', { name: 'Archived factories' }));
 

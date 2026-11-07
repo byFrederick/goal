@@ -80,9 +80,9 @@ func TestGetOrgPolicy_UsageAndSizes(t *testing.T) {
 
 	both := []gen.SizeUse{{FactoryId: acmeID, Name: acmeSlug}, {FactoryId: lineID, Name: lineSlug}}
 	wantSizes := []gen.PolicyBoxSize{
-		{Size: gen.Small, Vcpu: 1, MemoryBytes: 2 << 30, Factories: []gen.SizeUse{}},
-		{Size: gen.Medium, Vcpu: 2, MemoryBytes: 4 << 30, Factories: both},
-		{Size: gen.Large, Vcpu: 4, MemoryBytes: 8 << 30, Factories: []gen.SizeUse{}},
+		{Size: gen.PolicyBoxSizeSizeSmall, Vcpu: 1, MemoryBytes: 2 << 30, Factories: []gen.SizeUse{}},
+		{Size: gen.PolicyBoxSizeSizeMedium, Vcpu: 2, MemoryBytes: 4 << 30, Factories: both},
+		{Size: gen.PolicyBoxSizeSizeLarge, Vcpu: 4, MemoryBytes: 8 << 30, Factories: []gen.SizeUse{}},
 	}
 
 	if !slices.EqualFunc(got.BoxSizes, wantSizes, func(a, b gen.PolicyBoxSize) bool {

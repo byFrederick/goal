@@ -78,6 +78,8 @@ sw.addEventListener('activate', (event) => {
 
 sw.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (event.data?.type === 'SKIP_WAITING') void sw.skipWaiting();
+  // The page compares this id with the one in its index.html (src/pwa/register.ts).
+  if (event.data?.type === 'GET_BUILD') event.ports[0]?.postMessage({ type: 'BUILD', build: __BUILD_ID__ });
 });
 
 sw.addEventListener('fetch', (event) => {

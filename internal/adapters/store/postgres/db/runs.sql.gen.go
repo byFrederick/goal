@@ -15,7 +15,7 @@ import (
 const cancelLostRuns = `-- name: CancelLostRuns :many
 UPDATE agent_runs SET status = 'cancelled', error = $1, ended_at = $2
 WHERE id = ANY ($3::uuid[]) AND status = 'running'
-RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output
+RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source
 `
 
 type CancelLostRunsParams struct {
@@ -54,6 +54,10 @@ func (q *Queries) CancelLostRuns(ctx context.Context, arg CancelLostRunsParams) 
 			&i.Kind,
 			&i.Brief,
 			&i.Output,
+			&i.CpuSeconds,
+			&i.PeakMemoryBytes,
+			&i.BoxSize,
+			&i.PeakMemorySource,
 		); err != nil {
 			return nil, err
 		}
@@ -194,22 +198,26 @@ UPDATE agent_runs SET
   status = $1, session_id = $2, turns = $3::bigint,
   input_tokens = $4, output_tokens = $5,
   cost_usd = $6, error = $7, ended_at = $8,
-  output = $9
-WHERE id = $10 AND status = 'running'
+  output = $9, cpu_seconds = $10::float8,
+  peak_memory_bytes = $11::bigint, peak_memory_source = $12::text
+WHERE id = $13 AND status = 'running'
 RETURNING factory_id, item_id, station, agent
 `
 
 type FinishRunParams struct {
-	Status       string
-	SessionID    *string
-	Turns        int64
-	InputTokens  int64
-	OutputTokens int64
-	CostUsd      float64
-	Error        *string
-	EndedAt      *time.Time
-	Output       []byte
-	ID           uuid.UUID
+	Status           string
+	SessionID        *string
+	Turns            int64
+	InputTokens      int64
+	OutputTokens     int64
+	CostUsd          float64
+	Error            *string
+	EndedAt          *time.Time
+	Output           []byte
+	CpuSeconds       *float64
+	PeakMemoryBytes  *int64
+	PeakMemorySource *string
+	ID               uuid.UUID
 }
 
 type FinishRunRow struct {
@@ -219,7 +227,9 @@ type FinishRunRow struct {
 	Agent     string
 }
 
-// Only a running run finishes; finishing it again matches nothing.
+// Only a running run finishes; finishing it again matches nothing. cpu_seconds and
+// peak_memory_bytes are NULL when the worker reported none (00136), peak_memory_source when it
+// reported no known source with its peak memory (00137).
 func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRunRow, error) {
 	row := q.db.QueryRow(ctx, finishRun,
 		arg.Status,
@@ -231,6 +241,9 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 		arg.Error,
 		arg.EndedAt,
 		arg.Output,
+		arg.CpuSeconds,
+		arg.PeakMemoryBytes,
+		arg.PeakMemorySource,
 		arg.ID,
 	)
 	var i FinishRunRow
@@ -244,7 +257,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs WHERE id = $1
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
@@ -271,14 +284,19 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 		&i.Kind,
 		&i.Brief,
 		&i.Output,
+		&i.CpuSeconds,
+		&i.PeakMemoryBytes,
+		&i.BoxSize,
+		&i.PeakMemorySource,
 	)
 	return i, err
 }
 
 const insertRun = `-- name: InsertRun :exec
-INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind)
+INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind,
+                        box_size)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, 'running', $8, $9)
+        $6, $7, 'running', $8, $9, $10)
 `
 
 type InsertRunParams struct {
@@ -291,11 +309,13 @@ type InsertRunParams struct {
 	Model               string
 	StartedAt           time.Time
 	Kind                string
+	BoxSize             *string
 }
 
 // A run records the definition version it starts on; NULL only for runs from before versions.
 // kind is station for a line's run, jonah for a review's and try for a try of a past item; only
-// the last two may have no item (00079, 00102).
+// the last two may have no item (00079, 00102). box_size is the sandbox size the box opens with,
+// NULL when the caller named none (00136).
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,
@@ -307,12 +327,13 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 		arg.Model,
 		arg.StartedAt,
 		arg.Kind,
+		arg.BoxSize,
 	)
 	return err
 }
 
 const itemRuns = `-- name: ItemRuns :many
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output FROM agent_runs
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs
 WHERE item_id = $1
 ORDER BY started_at, id
 LIMIT $2::bigint
@@ -355,6 +376,10 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 			&i.Kind,
 			&i.Brief,
 			&i.Output,
+			&i.CpuSeconds,
+			&i.PeakMemoryBytes,
+			&i.BoxSize,
+			&i.PeakMemorySource,
 		); err != nil {
 			return nil, err
 		}
@@ -367,7 +392,7 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 }
 
 const listOrgRuns = `-- name: ListOrgRuns :many
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, w.number AS item_number, w.title AS item_title
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, r.peak_memory_source, w.number AS item_number, w.title AS item_title
 FROM agent_runs r
 JOIN work_items w ON w.id = r.item_id
 WHERE r.factory_id = ANY ($1::uuid[])
@@ -453,6 +478,10 @@ func (q *Queries) ListOrgRuns(ctx context.Context, arg ListOrgRunsParams) ([]Lis
 			&i.AgentRun.Kind,
 			&i.AgentRun.Brief,
 			&i.AgentRun.Output,
+			&i.AgentRun.CpuSeconds,
+			&i.AgentRun.PeakMemoryBytes,
+			&i.AgentRun.BoxSize,
+			&i.AgentRun.PeakMemorySource,
 			&i.ItemNumber,
 			&i.ItemTitle,
 		); err != nil {

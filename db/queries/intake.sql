@@ -1,49 +1,40 @@
 -- Intake triggers' state (ADR 0026, 00071): webhook endpoints, their deliveries and the trigger
 -- firing log. Every query runs as goal_app under row-level security, except the two definers'
--- callers and goal db rekey's (as goal_owner).
-
--- name: InsertWebhookEndpoint :one
--- org_id comes from its default, goal_org().
-INSERT INTO webhook_endpoints (id, factory_id, name, kind, key_id, nonce, ciphertext)
-VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.arg(name), sqlc.arg(kind), sqlc.arg(key_id), sqlc.arg(nonce), sqlc.arg(ciphertext))
-RETURNING created_at;
+-- callers.
 
 -- name: WebhookEndpoints :many
--- The endpoints open to the factory: its own, and the organization's webhooks with an opening.
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+-- The organization's webhooks open to the factory.
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
-WHERE e.factory_id = sqlc.arg(factory_id)
-   OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.arg(factory_id))
+WHERE EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.arg(factory_id))
 ORDER BY e.name, e.id;
 
 -- name: WebhookEndpoint :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 WHERE e.id = sqlc.arg(id);
 
 -- name: OrgWebhooks :many
--- The organization's webhooks (no factory), by name.
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+-- The organization's webhooks, by name.
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
-WHERE e.factory_id IS NULL
 ORDER BY e.name;
 
 -- name: OrgWebhookByName :one
-SELECT e.id, e.factory_id, e.name, e.kind, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
+SELECT e.id, e.name, e.sender, e.secret_id, coalesce(s.name, '')::text AS secret_name, e.enabled, e.token_header, e.token_event_path, e.token_id_path, e.created_at, e.rotated_at, e.pinged_at
 FROM webhook_endpoints e
 LEFT JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
-WHERE e.factory_id IS NULL AND e.name = sqlc.arg(name);
+WHERE e.name = sqlc.arg(name);
 
 -- name: LockOrgWebhook :one
 -- The organization's webhook, locked for a patch.
-SELECT id, name FROM webhook_endpoints WHERE id = sqlc.arg(id) AND factory_id IS NULL FOR UPDATE;
+SELECT id, name FROM webhook_endpoints WHERE id = sqlc.arg(id) FOR UPDATE;
 
 -- name: WebhookNameTaken :one
--- Whether an endpoint of the organization other than the one given has the name: a factory's
--- endpoint keeps its name until the conversion, so the partial unique index does not see it.
+-- Whether a webhook of the organization other than the one given has the name.
 SELECT EXISTS (SELECT 1 FROM webhook_endpoints WHERE name = sqlc.arg(name) AND id <> sqlc.arg(except_id)::uuid)::bool;
 
 -- name: InsertOrgWebhook :one
@@ -77,60 +68,12 @@ FROM webhook_endpoints e
 JOIN secrets s ON s.org_id = e.org_id AND s.id = e.secret_id
 ORDER BY s.name, e.name;
 
--- name: SealedWebhookSecret :one
--- A factory endpoint's sealed secret; the organization's webhooks have none.
-SELECT key_id::text AS key_id, nonce::bytea AS nonce, ciphertext::bytea AS ciphertext FROM webhook_endpoints
-WHERE id = sqlc.arg(id) AND key_id IS NOT NULL;
-
--- name: NextFactoryEndpoint :one
--- The conversion (ADR 0040 decision 15): the oldest endpoint that still has a factory, locked,
--- with its sealed secret; none when every one is converted.
-SELECT id, factory_id::uuid AS factory_id, name, coalesce(kind, '')::text AS kind, key_id::text AS key_id,
-       nonce::bytea AS nonce, ciphertext::bytea AS ciphertext
-FROM webhook_endpoints
-WHERE factory_id IS NOT NULL
-ORDER BY id
-LIMIT 1
-FOR UPDATE SKIP LOCKED;
-
--- name: ConvertedNameTaken :one
--- Whether the conversion of endpoint id must not take the name: the organization's webhook has
--- it, or an older factory endpoint does, which keeps it when its turn comes.
-SELECT EXISTS (SELECT 1 FROM webhook_endpoints
-               WHERE name = sqlc.arg(name) AND id <> sqlc.arg(id) AND (factory_id IS NULL OR id < sqlc.arg(id)))::bool;
-
--- name: ConvertWebhookEndpoint :exec
--- The endpoint becomes the organization's webhook, signed by secret_id; its sealed columns stay.
-UPDATE webhook_endpoints SET factory_id = NULL, name = sqlc.arg(name), sender = sqlc.arg(sender), secret_id = sqlc.arg(secret_id)
-WHERE id = sqlc.arg(id);
-
--- name: RotateWebhookSecret :one
-UPDATE webhook_endpoints SET key_id = sqlc.arg(key_id), nonce = sqlc.arg(nonce), ciphertext = sqlc.arg(ciphertext), rotated_at = now()
-WHERE id = sqlc.arg(id) AND factory_id IS NOT NULL
-RETURNING id;
-
 -- name: DeleteWebhookEndpoint :execrows
 DELETE FROM webhook_endpoints WHERE id = sqlc.arg(id);
 
 -- name: WebhookEndpointOrg :one
 -- Any organization's endpoint, through the definer; no row for none.
 SELECT o.org::uuid AS org_id FROM goal_webhook_endpoint_org(sqlc.arg(id)::uuid) AS o (org) WHERE o.org IS NOT NULL;
-
--- name: StaleSealedWebhookSecrets :many
--- goal db rekey, as goal_owner: a batch of endpoints sealed under another key than the active one,
--- in every organization, locked.
-SELECT id, org_id, coalesce(key_id, '')::text AS key_id, coalesce(nonce, ''::bytea)::bytea AS nonce,
-       coalesce(ciphertext, ''::bytea)::bytea AS ciphertext
-FROM webhook_endpoints
-WHERE key_id <> sqlc.arg(active)::text
-ORDER BY id
-LIMIT sqlc.arg(batch)
-FOR NO KEY UPDATE;
-
--- name: ResealWebhookSecret :exec
--- goal db rekey: the same secret under the active key; rotated_at stays, as the secret does.
-UPDATE webhook_endpoints SET key_id = sqlc.arg(key_id), nonce = sqlc.arg(nonce), ciphertext = sqlc.arg(ciphertext)
-WHERE id = sqlc.arg(id);
 
 -- name: InsertWebhookDelivery :exec
 INSERT INTO webhook_deliveries (id, endpoint_id, received_at, headers, body, outcome, reason, item_id)
@@ -193,17 +136,16 @@ SELECT id, endpoint_id, received_at, headers, body, outcome, reason, item_id, de
 WHERE endpoint_id = sqlc.arg(endpoint_id) AND delivery_id = sqlc.arg(delivery_id)::text;
 
 -- name: WebhookDeliveryDays :many
--- The factory's endpoints' deliveries since the instant, per endpoint and UTC day; each endpoint's
--- rows come from webhook_deliveries_endpoint_idx (endpoint_id, received_at).
+-- The deliveries since the instant of the organization's webhooks open to the factory, or of all
+-- of them for no factory, per endpoint and UTC day; each endpoint's rows come from
+-- webhook_deliveries_endpoint_idx (endpoint_id, received_at).
 SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS day,
        count(*) FILTER (WHERE d.outcome <> 'refused') AS delivered,
        count(*) FILTER (WHERE d.outcome = 'refused') AS refused
 FROM webhook_endpoints e
 JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= sqlc.arg(since)
-WHERE CASE WHEN sqlc.narg(factory_id)::uuid IS NULL THEN e.factory_id IS NULL
-           ELSE e.factory_id = sqlc.narg(factory_id)::uuid
-                OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.narg(factory_id)::uuid)
-      END
+WHERE sqlc.narg(factory_id)::uuid IS NULL
+   OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.narg(factory_id)::uuid)
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
@@ -254,12 +196,6 @@ WHERE f.factory_id = sqlc.arg(factory_id) AND f.trigger = sqlc.arg(trigger) AND 
 ORDER BY f.at DESC, f.id DESC
 LIMIT 1;
 
--- name: ItemSourceTally :many
-SELECT coalesce(source, '')::text AS source, count(*) AS items FROM work_items
-WHERE factory_id = sqlc.arg(factory_id) AND created_at >= sqlc.arg(since)
-GROUP BY 1
-ORDER BY 1;
-
 -- name: OriginTally :many
 -- The factory's items created at or after the instant, by origin: Intake's day counts, which read
 -- no delivery.
@@ -306,20 +242,18 @@ WHERE w.factory_id = sqlc.arg(factory_id) AND w.trigger IS NOT NULL AND w.create
 GROUP BY w.trigger
 ORDER BY w.trigger;
 
--- name: LastItemSources :many
--- The factory's newest items (created_at, then id) by source, with each source's first and last
--- instants.
-WITH last AS (
-  SELECT source, created_at FROM work_items
+-- name: NewestItems :one
+-- How many of the factory's newest items (created_at, then id) there are, with the first and last
+-- instants they were created; no row without items.
+WITH newest AS (
+  SELECT created_at FROM work_items
   WHERE factory_id = sqlc.arg(factory_id)
   ORDER BY created_at DESC, id DESC
   LIMIT sqlc.arg(max_items)
 )
-SELECT coalesce(source, '')::text AS source, count(*) AS items, min(created_at)::timestamptz AS first_at,
-       max(created_at)::timestamptz AS last_at
-FROM last
-GROUP BY 1
-ORDER BY 1;
+SELECT count(*)::bigint AS items, min(created_at)::timestamptz AS first_at, max(created_at)::timestamptz AS last_at
+FROM newest
+HAVING count(*) > 0;
 
 -- name: TriggerDays :many
 -- The factory's firings that created an item, per trigger and UTC day.

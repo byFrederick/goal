@@ -20,6 +20,7 @@ import type { KnowledgeSource, KnowledgeSourceReader } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { namesText } from '../../shared/connections';
 import { useCreatedOnce } from '../../shared/created';
+import { factoryTitle } from '../../shared/factory';
 import { formatClock, plural } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { useEdits } from '../../shared/use-edits';
@@ -543,7 +544,7 @@ function DeleteCard({ source: s }: { source: KnowledgeSource }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const reasonId = useId();
-  const users = s.used_by.factories.map((f) => f.name);
+  const users = s.used_by.factories.map((f) => factoryTitle(f));
   const remove = useMutation({
     mutationFn: () => deleteKnowledgeSource(org.id, s.name),
     onSuccess: async () => {

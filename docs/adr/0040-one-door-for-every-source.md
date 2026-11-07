@@ -1,6 +1,6 @@
 # ADR 0040 — One door for every source: start times, follow-ups that say where they go, checks that ask an agent what to file, webhooks that work
 
-Status: accepted · 2026-11-04 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (a trigger can set the item's repositories; GitHub webhooks are connected once for the organization)
+Status: accepted · 2026-11-04 · Amended by [ADR 0041](0041-code-and-github-without-an-app.md) (a trigger can set the item's repositories; GitHub webhooks are connected once for the organization) · Amended 2026-11-07: [decision 24's contract step is done](#amendment--2026-11-07-the-contract-step-is-done) (migration 00138)
 
 - **Replaces:**
   - [ADR 0028](0028-trigger-try-and-model-check.md), decisions 3–7: the model check in Only if goes, and a check asks an agent instead (decisions 18 and 19). Decisions 1 and 2, one evaluation function and Try as a dry run, stay; Try now covers webhook deliveries too.
@@ -522,3 +522,7 @@ The owner chose option C of three on 2026-11-03: one door for every source, star
 - The cleanup of decision 24 is filed as its own item once the assembly is deployed.
 - The software factory's definition change of decision 23 is published by a person after the deploy.
 - ADR 0041's assembly follows this one.
+
+## Amendment — 2026-11-07: the contract step is done
+
+Decision 24's contract step is done. Goal no longer reads or writes `work_items.source`, the `generic` kind, the old `sources` answer or the factory webhook endpoints. Migration 00138 drops `work_items.source` and the endpoints' `key_id`, `nonce`, `ciphertext`, `kind` and `factory_id`, with the checks 00116 added for them. Every webhook now has a sender and a secret, and its name is unique in its organization. `goal_connection_key_ids()` reads only the secrets' key ids. The migration refuses a database that has not run this ADR's release, before it changes anything.

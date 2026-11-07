@@ -38,7 +38,6 @@ func TestFile_PersonEntersAtTheFirstStation(t *testing.T) {
 
 	n, err := File(fileLine(), FileRequest{
 		Origin: OriginPerson, Via: ViaCLI, By: ada, Title: "  Add a flag  ", Lane: fileLaneAPI, Priority: 2, At: fileAt,
-		Source: ItemFromCLI,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +45,7 @@ func TestFile_PersonEntersAtTheFirstStation(t *testing.T) {
 
 	want := NewItem{
 		FactoryID: "f", Type: fileStory, Lane: fileLaneAPI, Title: "Add a flag", Priority: 2, Station: fileIntake,
-		State: StateQueued, Class: ClassStandard, CreatedAt: fileAt, Source: ItemFromCLI,
+		State: StateQueued, Class: ClassStandard, CreatedAt: fileAt,
 		Origin: OriginPerson, Via: ViaCLI, CreatedBy: ada,
 	}
 	if !reflect.DeepEqual(n, want) {
@@ -81,7 +80,6 @@ func TestFile_TriggerPlacesItsItem(t *testing.T) {
 
 	n, err := File(fileLine(), FileRequest{
 		Origin: OriginTrigger, By: EngineActor, Title: "Nightly", Station: fileMake, State: StateReady, Trigger: "nightly",
-		Source: ItemFromSchedule,
 	})
 	if err != nil {
 		t.Fatal(err)
