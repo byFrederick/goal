@@ -43,6 +43,8 @@ for (const width of widths) {
     await tip.click();
     await expect(page.locator('[data-radix-popper-content-wrapper]')).toContainText('no reset at midnight');
 
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/\/get-started\/budget/);
     await expectNoHorizontalScroll(page);
   });
 }
@@ -85,6 +87,8 @@ for (const width of widths) {
     await expect(page).toHaveURL(/\/get-started\/line/);
     await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
     await expect(page.getByText(/Choose a template again|has no draft/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/\/get-started\/budget/);
     await expectNoHorizontalScroll(page);
   });
 }

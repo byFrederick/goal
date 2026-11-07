@@ -167,6 +167,7 @@ function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
   const session = useDraftSession();
   const navigate = useNavigate();
   const validation = useValidation();
+  const hasDraft = useDraft((s) => s.hasDraft);
   const [leaving, setLeaving] = useState(false);
   const sentenceId = useId();
   const noAgent = !editor.stations.some((s) => s.kind === 'agent');
@@ -179,7 +180,7 @@ function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
       : modelKey.ready && modelKey.secret === undefined
         ? 'Add the model key, then continue.'
         : undefined;
-  const held = sentence !== undefined || validation === undefined || !modelKey.ready || leaving;
+  const held = sentence !== undefined || (hasDraft && validation === undefined) || !modelKey.ready || leaving;
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {sentence ? (

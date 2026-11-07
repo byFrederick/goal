@@ -511,4 +511,11 @@ describe('step 4 on a published factory with no draft', () => {
       vi.mocked(saveDraftSection).mock.invocationCallOrder[0] ?? 0,
     );
   });
+
+  it('lets Continue go to Budget when nothing changed', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByRole('region', { name: 'Spec' });
+    const next = await screen.findByRole('button', { name: 'Continue' });
+    await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false));
+  });
 });
