@@ -137,7 +137,7 @@ describe('LineNow', () => {
   });
 
   it('numbers each station by the items waiting and in progress there', () => {
-    render(<LineNow board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow board={line} constraint="build" doneThisWeek={53} merges />);
 
     const build = screen.getByText('Build').closest('li') as HTMLElement;
     expect(within(build).getAllByText('8')[0]).toBeTruthy();
@@ -171,12 +171,18 @@ describe('LineNow', () => {
   });
 
   it('marks the constraint with a Constraint tag and gives Done its counts', () => {
-    render(<LineNow board={line} constraint="build" doneThisWeek={53} />);
+    render(<LineNow board={line} constraint="build" doneThisWeek={53} merges />);
 
     const build = screen.getByText('Build').closest('li') as HTMLElement;
     expect(within(build).getByText('Constraint')).toBeTruthy();
     expect(within(screen.getByText('Done').closest('li') as HTMLElement).getByText('7 merged today')).toBeTruthy();
     expect(screen.getByText('53 this week')).toBeTruthy();
+  });
+
+  it('says done today on a line without code', () => {
+    render(<LineNow board={line} constraint="build" doneThisWeek={53} />);
+
+    expect(screen.getByText('7 done today')).toBeTruthy();
   });
 
   it('footer: in progress, release to the drum, the expedite lane and the andon state', () => {

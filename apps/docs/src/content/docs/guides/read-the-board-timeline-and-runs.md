@@ -103,6 +103,10 @@ Runs no longer has a Send to Jonah button: Jonah reads the line's evidence on it
 
 `--status` takes `running`, `succeeded`, `failed` or `cancelled`. A long list prints a `--cursor` for the next page.
 
+## The Floor's Done station and weekly throughput
+
+On the Floor, the line's Done station shows today's and this week's finished items. It says "merged today" on a line with repositories and "done today" on one without. Throughput by week uses the same words ("Items merged a day" or "Items done a day"), and its first bar is the factory's first week: weeks that ended before the factory was made are left out.
+
 ## Line health
 
 ```sh

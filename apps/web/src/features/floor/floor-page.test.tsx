@@ -742,11 +742,37 @@ describe('the cards below the figures', () => {
     });
   });
 
+  it('Throughput by week starts at the factory first week', async () => {
+    renderFloor({
+      weeks: {
+        ...twoWeeks,
+        to: '2026-11-08',
+        weeks: [
+          { from: '2026-10-19', to: '2026-10-25', done: 0, per_day: 0 },
+          { from: '2026-10-26', to: '2026-11-01', done: 0, per_day: 0 },
+          { from: '2026-11-02', to: '2026-11-08', done: 4, per_day: 0.6 },
+        ],
+      },
+      subject: { ...factory, created_at: '2026-11-07T09:00:00Z' },
+    });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    expect(card.querySelectorAll('.bg-ink, .bg-rule')).toHaveLength(1);
+    expect(card.textContent).not.toMatch(/Oct/);
+  });
+
+  it('Throughput by week shows its empty state when every week ends before the factory', async () => {
+    renderFloor({ weeks: twoWeeks, subject: { ...factory, created_at: '2026-11-07T09:00:00Z' } });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    expect(within(card).getByText('No finished items in these weeks yet.')).toBeTruthy();
+  });
+
   it('Throughput by week draws each week with the target', async () => {
     renderFloor({ weeks: twoWeeks });
 
     const card = await screen.findByRole('region', { name: 'Throughput by week' });
-    expect(within(card).getByRole('img', { name: /Items merged a day by week/ })).toBeTruthy();
+    expect(within(card).getByRole('img', { name: /Items done a day by week/ })).toBeTruthy();
     expect(within(card).getByText('Target 10')).toBeTruthy();
     // Every week is a solid bar: the past one in the rule colour, this week in ink; no hatch, no run blue.
     expect(card.querySelectorAll('.bg-rule')).toHaveLength(1);
