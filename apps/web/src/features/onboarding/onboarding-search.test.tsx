@@ -60,7 +60,7 @@ let factoryReady = false;
 beforeEach(() => {
   factoryReady = false;
   vi.mocked(listTemplates).mockResolvedValue([
-    { name: 'software', title: 'Software', code: 'write' } as unknown as TemplateSummary,
+    { name: 'software', title: 'Software', code: 'none' } as unknown as TemplateSummary,
   ]);
   vi.mocked(openDraft).mockResolvedValue({} as never);
   vi.mocked(getDraftFile).mockResolvedValue({ text: 'apiVersion: goal/v1\nkind: Factory\nspec: {}\n', sha256: 'abc' });

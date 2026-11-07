@@ -153,6 +153,21 @@ function lastSaved<T>(section: Section): T {
 }
 
 describe('step 5, set budgets and targets', () => {
+  it('keeps the code choice and repository when Continue goes to the intake step', async () => {
+    const router = renderStep(
+      `/o/acme/get-started/budget?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/intake'));
+    expect(router.state.location.search).toMatchObject({
+      factory: factoryId,
+      access: 'write',
+      url: 'https://github.com/acme/app',
+      secret: 'github-token',
+      template: 'starter',
+    });
+  });
+
   it('keeps the code choice and repository on its Back link', async () => {
     renderStep(
       `/o/acme/get-started/budget?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,

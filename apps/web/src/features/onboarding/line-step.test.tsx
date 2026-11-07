@@ -226,6 +226,23 @@ function renderStep(url: string) {
 }
 
 describe('step 4, shape the line', () => {
+  it('keeps the code choice and repository when Continue goes to the budget step', async () => {
+    const router = renderStep(
+      `/o/acme/get-started/line?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const next = await screen.findByRole('button', { name: 'Continue' });
+    await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(next);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/budget'));
+    expect(router.state.location.search).toMatchObject({
+      factory: factoryId,
+      access: 'write',
+      url: 'https://github.com/acme/app',
+      secret: 'github-token',
+      template: 'starter',
+    });
+  });
+
   it('keeps the code choice and repository on its Back link', async () => {
     renderStep(
       `/o/acme/get-started/line?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
