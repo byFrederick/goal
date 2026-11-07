@@ -216,6 +216,7 @@ func (e BoardLineStatus) Valid() bool {
 // Defines values for BridgeStepComponent.
 const (
 	BridgeStepComponentBlocked      BridgeStepComponent = "blocked"
+	BridgeStepComponentCi           BridgeStepComponent = "ci"
 	BridgeStepComponentOther        BridgeStepComponent = "other"
 	BridgeStepComponentRework       BridgeStepComponent = "rework"
 	BridgeStepComponentWaiting      BridgeStepComponent = "waiting"
@@ -228,6 +229,8 @@ func (e BridgeStepComponent) Valid() bool {
 	switch e {
 	case BridgeStepComponentBlocked:
 		return true
+	case BridgeStepComponentCi:
+		return true
 	case BridgeStepComponentOther:
 		return true
 	case BridgeStepComponentRework:
@@ -237,6 +240,48 @@ func (e BridgeStepComponent) Valid() bool {
 	case BridgeStepComponentWaitingOnYou:
 		return true
 	case BridgeStepComponentWorking:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CICheckResult.
+const (
+	CICheckResultFailed  CICheckResult = "failed"
+	CICheckResultNeutral CICheckResult = "neutral"
+	CICheckResultPassed  CICheckResult = "passed"
+)
+
+// Valid indicates whether the value is a known member of the CICheckResult enum.
+func (e CICheckResult) Valid() bool {
+	switch e {
+	case CICheckResultFailed:
+		return true
+	case CICheckResultNeutral:
+		return true
+	case CICheckResultPassed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CICheckState.
+const (
+	CICheckStateFinished CICheckState = "finished"
+	CICheckStatePending  CICheckState = "pending"
+	CICheckStateRunning  CICheckState = "running"
+)
+
+// Valid indicates whether the value is a known member of the CICheckState enum.
+func (e CICheckState) Valid() bool {
+	switch e {
+	case CICheckStateFinished:
+		return true
+	case CICheckStatePending:
+		return true
+	case CICheckStateRunning:
 		return true
 	default:
 		return false
@@ -1191,6 +1236,7 @@ func (e ItemState) Valid() bool {
 // Defines values for ItemWaitingKind.
 const (
 	WaitingAfter ItemWaitingKind = "after"
+	WaitingCI    ItemWaitingKind = "ci"
 	WaitingFiles ItemWaitingKind = "files"
 	WaitingTurn  ItemWaitingKind = "turn"
 )
@@ -1199,6 +1245,8 @@ const (
 func (e ItemWaitingKind) Valid() bool {
 	switch e {
 	case WaitingAfter:
+		return true
+	case WaitingCI:
 		return true
 	case WaitingFiles:
 		return true
@@ -3000,6 +3048,9 @@ type AssemblyPart struct {
 	Station string    `json:"station"`
 	Title   string    `json:"title"`
 
+	// Waiting Why the part is not claimed yet, the same object getItem returns as Item.waiting; null when it isn't waiting
+	Waiting *ItemWaiting `json:"waiting"`
+
 	// WaitingOn Refs of the needs that are neither done nor cancelled
 	WaitingOn []string `json:"waiting_on"`
 
@@ -3221,6 +3272,7 @@ type BoardStation struct {
 
 // BridgeStep defines model for BridgeStep.
 type BridgeStep struct {
+	// Component The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
 	Component BridgeStepComponent `json:"component"`
 	Hours     float64             `json:"hours"`
 
@@ -3234,7 +3286,7 @@ type BridgeStep struct {
 	Station *string `json:"station"`
 }
 
-// BridgeStepComponent defines model for BridgeStep.Component.
+// BridgeStepComponent The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
 type BridgeStepComponent string
 
 // BuilderCapabilities What this install enforces; the editor shows the controls for what it does not read-only
@@ -3268,6 +3320,60 @@ type BuilderModel struct {
 	// Id The model id, as runtime.model and agents[].model take it
 	Id    string `json:"id"`
 	Label string `json:"label"`
+}
+
+// CICheck One check CI runs on a commit, as goald last read it from the code host
+type CICheck struct {
+	// FailedJobs At most 5 of the check's failed jobs, where the host names them
+	FailedJobs []string `json:"failed_jobs"`
+
+	// Name The check's name as the code host shows it
+	Name string `json:"name"`
+
+	// Repo The key of the repository whose commit the check runs on
+	Repo string `json:"repo"`
+
+	// Result What a finished check concluded; null or absent until it finishes
+	Result *CICheckResult `json:"result,omitempty"`
+
+	// State How far the check has got
+	State CICheckState `json:"state"`
+
+	// Url The check on the code host; null or absent when the host gives none
+	Url *string `json:"url,omitempty"`
+}
+
+// CICheckResult What a finished check concluded; null or absent until it finishes
+type CICheckResult string
+
+// CICheckState How far the check has got
+type CICheckState string
+
+// CICommit A commit CI runs on
+type CICommit struct {
+	// Repo The repository's key, as in github.com/acme/app
+	Repo string `json:"repo"`
+
+	// Sha The commit's sha
+	Sha string `json:"sha"`
+
+	// Url The pull request the commit is on; null or absent when the wait has none
+	Url *string `json:"url,omitempty"`
+}
+
+// CIFailure The CI wait whose failure sent an item back
+type CIFailure struct {
+	// Checks The checks that failed, as last read; empty when it timed out with none failed
+	Checks []CICheck `json:"checks"`
+
+	// Repo The repository's key, as in github.com/acme/app
+	Repo string `json:"repo"`
+
+	// Sha The commit whose CI failed
+	Sha string `json:"sha"`
+
+	// Url The pull request the commit is on; null or absent when the wait has none
+	Url *string `json:"url,omitempty"`
 }
 
 // CameFromFollowUp A follow-up an item was filed from, the item and run that wrote it and the landing that filed it
@@ -4193,6 +4299,9 @@ type FactoryRepositoryTest struct {
 
 	// At When it was tested
 	At time.Time `json:"at"`
+
+	// Ci Whether the token can read the commit checks (GitHub) or the pipelines (GitLab) that a station with waitFor: ci waits on, with the host's reason. Absent for a test kept before goald checked CI, until the repository is tested again, and for an owner pattern. It never changes ok: only a factory with a waitFor: ci station needs it.
+	Ci *RepositoryCheck `json:"ci,omitempty"`
 
 	// Note For a write entry: the host reports no pull-request permission, so Goal can't check it
 	Note *string `json:"note,omitempty"`
@@ -5176,26 +5285,45 @@ type ItemTouches struct {
 	Unplanned int `json:"unplanned"`
 }
 
-// ItemWaiting Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones
+// ItemWaiting Why a queued or ready item is not claimed yet, derived on every read and never stored from its open needs (those neither done nor cancelled) and its open CI waits at its station. Precedence: planned and linked needs (after) win, then overlap ones (files), then turn ones (turn), then an open CI wait (ci)
 type ItemWaiting struct {
+	// Ci For kind ci, the commits CI runs on and their checks as goald last read them; null or absent for the other kinds
+	Ci *ItemWaitingCI `json:"ci,omitempty"`
+
 	// Files For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after
 	Files []string `json:"files"`
 
 	// Items Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first
 	Items []string `json:"items"`
 
-	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
+	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn); ci: for CI on its commits to finish, at a station with waitFor: ci (items, files and needs are then empty)
 	Kind ItemWaitingKind `json:"kind"`
 
 	// Needs The open needs of that kind, oldest edge first, the same ones as items
 	Needs []ItemWaitingNeed `json:"needs"`
 
-	// Target For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files
+	// Target For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after, files and ci
 	Target *string `json:"target,omitempty"`
 }
 
-// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
+// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn); ci: for CI on its commits to finish, at a station with waitFor: ci (items, files and needs are then empty)
 type ItemWaitingKind string
+
+// ItemWaitingCI The CI an item waits for, one commit per open CI wait, by start
+type ItemWaitingCI struct {
+	// Checks Every commit's checks, by commit and then in the code host's order; empty until goald's first poll reads any
+	Checks  []CICheck  `json:"checks"`
+	Commits []CICommit `json:"commits"`
+
+	// Failure The latest CI wait of the same visit to the station that ended failed or timed_out, which sent the item back; null or absent when none did
+	Failure *CIFailure `json:"failure,omitempty"`
+
+	// Finished How many of the checks have finished
+	Finished int `json:"finished"`
+
+	// Total How many checks there are
+	Total int `json:"total"`
+}
 
 // ItemWaitingNeed One open need that holds a waiting item
 type ItemWaitingNeed struct {
@@ -10723,7 +10851,7 @@ type ClientInterface interface {
 
 	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
 	//
-	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
 	GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -13830,7 +13958,7 @@ func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef,
 
 // GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
 //
-// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
 func (c *Client) GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -27589,7 +27717,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetLeadTimeBridgeWithResponse Why the p85 lead time is over its target, over a range of UTC days
 	//
-	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -39742,7 +39870,7 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org Or
 
 // GetLeadTimeBridgeWithResponse Why the p85 lead time is over its target, over a range of UTC days
 //
-// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 //
 // Returns a wrapper object for the known response body format(s).
 //

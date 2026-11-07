@@ -1,0 +1,2 @@
+{"data":{"project":{"jobsEnabled":true,"mergeRequest":{"diffHeadSha":"4b825dc6","headPipeline":
+{"id":"gid://gitlab/Ci::Pipeline/600","name":null,"status":"SUCCESS","ref":"goal/3-add-x","source":"push","path":"/acme/platform/web/-/pipelines/600","failedJobs":{"nodes":[{"name":"lint:optional","allowFailure":true}]}}}}}}

@@ -97,6 +97,32 @@ test('gives the purpose buttons and the Budget sliders a 44 px target at 390 px'
   }
 });
 
+// The CI line under the result's summary (ADR 0044): the mock fails ci for a repository ending -noci.
+for (const size of sizes) {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`shows the CI line with its reason at ${size.width} px in ${scheme}`, async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+      await page.setViewportSize(size);
+      await page.emulateMedia({ colorScheme: scheme });
+      await openCodeStep(page);
+      await page.getByRole('textbox', { name: 'Repository' }).fill('https://github.com/acme/app-noci');
+      await page.getByLabel('Token').fill('test-token');
+      await page.getByRole('button', { name: 'Continue' }).click();
+      await expect(page.getByText(/Can’t read CI\. GitHub answered 403/)).toBeVisible();
+      const tip = page.getByRole('button', { name: 'About reading CI' });
+      await expect(tip).toBeVisible();
+      if (size.width === 390) {
+        const box = await tip.boundingBox();
+        expect(box?.width).toBeGreaterThanOrEqual(44);
+        expect(box?.height).toBeGreaterThanOrEqual(44);
+      }
+
+      await expectNoHorizontalScroll(page);
+      await expectNoClippedElements(page);
+    });
+  }
+}
+
 test('keeps the current step’s label inside the stepper at 390 px on every step', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
   await page.setViewportSize({ width: 390, height: 844 });

@@ -191,7 +191,8 @@ type Store interface {
 	// (factory, station, slot) lease is what keeps WIP at or under capacity across instances.
 	//
 	// An item is skipped while any item it needs (AddEdge) is neither done nor cancelled, and
-	// while its StartAt is after c.Now. Waiting lists it all the same.
+	// while its StartAt is after c.Now, and while it has an open CI wait at its station, of
+	// either phase (OpenCIWait). Waiting lists it all the same.
 	ClaimNext(ctx context.Context, c Claim) (domain.Item, domain.Lease, error)
 
 	// AddEdge records that e.Item needs e.Needs and appends an edge_added event on e.Item. It
@@ -480,6 +481,48 @@ type Store interface {
 	// DeleteSavedView deletes the factory's view id, or returns ErrNotFound. Deleting or purging
 	// the factory deletes its views.
 	DeleteSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID) error
+
+	// OpenCIWait opens a CI wait (ADR 0044 decision 9), checked by domain.NewCIWait.Check, and
+	// creates its commit's poll, due at n.StartedAt every domain.CIPollMinInterval, unless the
+	// organization already polls that host, repository and sha, in one transaction under the
+	// item's lock. It returns the wait with a new id. An unknown item is ErrNotFound, and an open
+	// wait of the same item, station, visit and repository is ErrConflict.
+	OpenCIWait(ctx context.Context, n domain.NewCIWait) (domain.CIWaitRecord, error)
+
+	// ReplaceCIWaitSHA follows a moved head: it ends the open wait id as domain.CISuperseded at
+	// `at` and opens one like it on sha (and prURL, when set) started at `at`, in the same visit
+	// and round, in one transaction. It returns the new wait; ErrNotFound when id is not open.
+	ReplaceCIWaitSHA(ctx context.Context, id domain.CIWaitID, sha, prURL string, at time.Time) (domain.CIWaitRecord, error)
+
+	// LeaseDueCIPolls leases to owner until now+lease up to limit of the organization's polls
+	// due by now (NextPollAt) that have an open wait and no live lease, earliest due first
+	// (FOR UPDATE SKIP LOCKED, so instances lease side by side). A poll whose lease ended is
+	// due again.
+	LeaseDueCIPolls(ctx context.Context, now time.Time, owner string, lease time.Duration, limit int) ([]domain.CIPoll, error)
+
+	// RecordCIPoll records what a poll read (domain.CIPollResult, checked) on the poll owner
+	// leased, and releases the lease. ErrLeaseLost when owner does not hold the poll.
+	RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner string, r domain.CIPollResult) error
+
+	// OpenCIWaits returns the item's open CI waits by start, each with its poll's latest state.
+	// An unknown item has none.
+	OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.CIWaitRecord, error)
+
+	// CIWaits returns the item's CI waits at station, open and ended, by start, each with its
+	// poll's latest state. An unknown item has none.
+	CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error)
+
+	// OpenCIWaitsOnPoll returns the organization's open CI waits on key's host, repository and
+	// sha, by start: every wait one poll of that commit decides.
+	OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error)
+
+	// EndCIWaits ends the open waits among ids with outcome at `at` and returns how many it
+	// ended; waits already ended and unknown ids are left out.
+	EndCIWaits(ctx context.Context, ids []domain.CIWaitID, outcome domain.CIOutcome, at time.Time) (int, error)
+
+	// CIRounds counts the distinct CI rounds of the item's waits, open or ended, in one visit to
+	// the station.
+	CIRounds(ctx context.Context, item domain.ItemID, station, visit string) (int, error)
 }
 
 // FlowStats is the read model of how work flows: spans of time items spend at stations and the
@@ -520,7 +563,10 @@ type FlowStats interface {
 
 	// ItemTimes returns the items of q.Type done in [q.Since, q.Until), by when they were done:
 	// each one's lead time and its time in each component of the lead-time bridge, from its
-	// spans since it started (domain.ComponentOf); lead time counts from Item.LeadFrom. It returns at most limit items, those done last, so the read
+	// spans since it started (domain.ComponentOf); lead time counts from Item.LeadFrom. A
+	// first-round queued or ready span's overlap with the union of the item's CI waits at its
+	// station (an open wait having no end) counts as domain.ComponentCI there, not as waiting
+	// (ADR 0044 decision 10). It returns at most limit items, those done last, so the read
 	// stays bounded however busy the window.
 	ItemTimes(ctx context.Context, q FlowQuery, limit int) ([]domain.ItemTime, error)
 
@@ -1038,10 +1084,13 @@ type CodeHost interface {
 	// errors.ErrUnsupported. It only reads.
 	Repositories(ctx context.Context, host domain.CodeHost, token, owner string) (RepositoryList, error)
 
-	// RepositoryAccess reports what token can do in repo: whether it can read the repository and
-	// whether it can push to it, each with a one-line reason from the host. A refusal the host
-	// answers (an unknown repository, a bad token, no push) is in the result; err is a host that
-	// gave no answer it could read. It only reads.
+	// RepositoryAccess reports what token can do in repo: whether it can read the repository,
+	// whether it can push to it and whether it can read the repository's CI (ADR 0044, decision
+	// 10), each with a one-line reason from the host. A refusal the host answers (an unknown
+	// repository, a bad token, no push, no CI read) is in the result; err is a host that gave no
+	// answer it could read. A failed CI check never changes Read or Push: only a factory that
+	// waits for CI needs it. When Read fails, Push and CI are not checked and fail too. It only
+	// reads.
 	RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (RepositoryAccess, error)
 
 	// OwnerAccess reports what token can do in the repositories of owner on host (one of the
@@ -1056,6 +1105,16 @@ type CodeHost interface {
 	// anything is sent. The token goes only to the host's domain.CodeHostAPIBase, redirects are
 	// not followed, and it only reads.
 	OwnerAccess(ctx context.Context, host domain.CodeHost, token, owner string) (OwnerAccess, error)
+
+	// Checks returns what CI says about commit sha in repo (ADR 0044, decision 6): each check with
+	// its state, its result once finished, a link and a few failed job names where the host gives
+	// them. When url, a pull request of repo, is set, it reads the pull request's current head and
+	// returns that head's checks with it in CommitChecks.Head; else Head is sha. No checks with a
+	// nil error means no CI is configured or none has registered yet. A token that cannot see CI
+	// is an error wrapping ErrCINotReadable (a *CINotReadableError naming the permission it
+	// needs), never no checks; a rate limit is a *RateLimitedError saying when to retry. It only
+	// reads.
+	Checks(ctx context.Context, repo domain.CodeRepository, token, sha, url string) (CommitChecks, error)
 }
 
 // OwnerAccess is what CodeHost.OwnerAccess found a token can do in an owner's repositories.
@@ -1074,6 +1133,10 @@ const MaxOwnerRepositories = 1000
 // RepositoryAccess is what CodeHost.RepositoryAccess found a token can do in a repository.
 type RepositoryAccess struct {
 	Read, Push AccessCheck
+	// CI is whether the token can read the CI of the repository's default branch head (check runs
+	// and commit statuses, or pipelines), as CodeHost.Checks needs. It is independent of Read
+	// and Push: a failed CI check leaves both as they are.
+	CI AccessCheck
 }
 
 // AccessCheck is one check of RepositoryAccess: whether it passed, and the host's one-line reason.

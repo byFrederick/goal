@@ -167,15 +167,16 @@ func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]
 	out := make([]domain.ItemTime, 0, len(done))
 
 	for _, it := range done {
-		times := map[domain.Component]time.Duration{}
+		times := domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.LeadFrom()), Times: map[domain.Component]time.Duration{}}
 
 		for _, sp := range s.spans[it.ID] {
 			if !sp.LeftAt.IsZero() && !sp.EnteredAt.Before(it.LeadFrom()) { // time before it started is not lead time
-				times[domain.ComponentOf(sp)] += sp.LeftAt.Sub(sp.EnteredAt)
+				times.AddTime(domain.ComponentOf(sp), sp.LeftAt.Sub(sp.EnteredAt), s.ci.overlap(org, it.ID, sp))
 			}
 		}
 
-		out = append(out, domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.LeadFrom()), Times: times})
+		times.TrimCIWaiting()
+		out = append(out, times)
 	}
 
 	return out, nil
@@ -183,3 +184,54 @@ func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]
 
 // ofType reports whether it is of work type typ; every item is when typ is "".
 func ofType(it *domain.Item, typ string) bool { return typ == "" || it.Type == typ }
+
+// overlap is how much of the closed span sp the item's CI waits at its station cover, counting
+// overlapping waits once and an open wait as never ending.
+func (c *ciRows) overlap(org domain.OrgID, item domain.ItemID, sp domain.Span) time.Duration {
+	type interval struct{ from, to time.Time }
+
+	var ivs []interval
+
+	for _, r := range c.waits {
+		if r.org != org || r.wait.Item != item || r.wait.Station != sp.Station {
+			continue
+		}
+
+		from, to := maxTime(r.wait.StartedAt, sp.EnteredAt), sp.LeftAt
+		if !r.wait.Open() && r.wait.EndedAt.Before(to) {
+			to = r.wait.EndedAt
+		}
+
+		if from.Before(to) {
+			ivs = append(ivs, interval{from, to})
+		}
+	}
+
+	slices.SortFunc(ivs, func(a, b interval) int { return a.from.Compare(b.from) })
+
+	var total time.Duration
+
+	var end time.Time
+
+	for _, iv := range ivs {
+		if iv.from.Before(end) {
+			iv.from = end
+		}
+
+		if iv.from.Before(iv.to) {
+			total += iv.to.Sub(iv.from)
+			end = iv.to
+		}
+	}
+
+	return total
+}
+
+// maxTime is the later of a and b.
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+
+	return b
+}

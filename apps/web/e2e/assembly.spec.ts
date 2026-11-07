@@ -158,3 +158,27 @@ for (const width of [1024, 1280, 1440]) {
     expect(scrolls).toBeLessThanOrEqual(0);
   });
 }
+
+// A part's wait shows in its Plan row as a Board card shows it: the mock's part 2 of #17 waits for CI
+// (9 of 14 checks finished) and part 3 for the merge turn part 2 holds. The row stays inside the Plan
+// card, with no horizontal scroll. Not run in the box (no browser).
+for (const size of [
+  { name: '375', width: 375, height: 812 },
+  { name: '1440', width: 1440, height: 900 },
+]) {
+  test(`plan rows show each part's wait at ${size.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto('/o/acme/f/goal/items/17');
+
+    const plan = page.getByRole('region', { name: 'Plan' });
+    const ci = plan.getByText('Waiting for CI · 9 of 14');
+    await expect(ci).toBeVisible();
+    await expect(plan.getByRole('button', { name: 'About CI' })).toBeVisible();
+    await expect(plan.getByText('Waits for goal#19 to land')).toBeVisible();
+
+    const card = await plan.boundingBox();
+    const row = await ci.boundingBox();
+    expect(card && row && row.x >= card.x && row.x + row.width <= card.x + card.width).toBe(true);
+    await expectNoHorizontalScroll(page);
+  });
+}

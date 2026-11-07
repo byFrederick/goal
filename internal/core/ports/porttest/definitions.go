@@ -1157,6 +1157,7 @@ func (s *Store) deleteFactory(id domain.FactoryID) {
 	})
 	s.andon = slices.DeleteFunc(s.andon, func(a andonRecord) bool { return a.pull.FactoryID == id })
 	s.edges = slices.DeleteFunc(s.edges, func(e domain.Edge) bool { return gone[e.Item] || gone[e.Needs] })
+	s.ci.purge("", gone)
 	maps.DeleteFunc(s.views, func(_ domain.SavedViewID, v savedViewRecord) bool { return v.view.Factory == id })
 
 	if org, ok := s.factories[id]; ok {

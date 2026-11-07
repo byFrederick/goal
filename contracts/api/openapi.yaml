@@ -2443,8 +2443,9 @@ paths:
       summary: Why the p85 lead time is over its target, over a range of UTC days
       description: >-
         The items done in the range (as for getMetrics) split into slow (over the definition's
-        lead-time target) and fast; each kind of time an item spends (waiting at a station, rework
-        sent back by a station, waiting on a person, blocked, working) gets the share of the gap
+        lead-time target) and fast; each kind of time an item spends (waiting at a station, ci:
+        held at a station waiting for CI on the item's commits, which waiting does not count,
+        rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap
         between the actual p85 and the target that its excess over the fast items explains. Steps
         under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range
         or a type the factory does not declare.
@@ -6274,16 +6275,17 @@ components:
     ItemWaiting:
       type: object
       description: >-
-        Why a queued or ready item is not claimed yet, derived from its open needs (those neither
-        done nor cancelled) on every read and never stored. Planned and linked needs win over
-        overlap ones, and overlap ones over turn ones
+        Why a queued or ready item is not claimed yet, derived on every read and never stored from
+        its open needs (those neither done nor cancelled) and its open CI waits at its station.
+        Precedence: planned and linked needs (after) win, then overlap ones (files), then turn
+        ones (turn), then an open CI wait (ci)
       required: [kind, items, files, needs]
       properties:
         kind:
           type: string
-          enum: [after, files, turn]
-          x-enum-varnames: [WaitingAfter, WaitingFiles, WaitingTurn]
-          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)"
+          enum: [after, files, turn, ci]
+          x-enum-varnames: [WaitingAfter, WaitingFiles, WaitingTurn, WaitingCI]
+          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn); ci: for CI on its commits to finish, at a station with waitFor: ci (items, files and needs are then empty)"
         items:
           type: array
           description: "Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first"
@@ -6299,7 +6301,63 @@ components:
         target:
           type: string
           nullable: true
-          description: "For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files"
+          description: "For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after, files and ci"
+        ci:
+          allOf: [{ $ref: "#/components/schemas/ItemWaitingCI" }]
+          nullable: true
+          description: For kind ci, the commits CI runs on and their checks as goald last read them; null or absent for the other kinds
+    ItemWaitingCI:
+      type: object
+      description: The CI an item waits for, one commit per open CI wait, by start
+      required: [commits, checks, finished, total]
+      properties:
+        commits:
+          type: array
+          items: { $ref: "#/components/schemas/CICommit" }
+        checks:
+          type: array
+          description: Every commit's checks, by commit and then in the code host's order; empty until goald's first poll reads any
+          items: { $ref: "#/components/schemas/CICheck" }
+        finished: { type: integer, description: How many of the checks have finished, as in 9 of 14 }
+        total: { type: integer, description: How many checks there are }
+        failure:
+          allOf: [{ $ref: "#/components/schemas/CIFailure" }]
+          nullable: true
+          description: The latest CI wait of the same visit to the station that ended failed or timed_out, which sent the item back; null or absent when none did
+    CICommit:
+      type: object
+      description: A commit CI runs on
+      required: [repo, sha]
+      properties:
+        repo: { type: string, description: "The repository's key, as in github.com/acme/app" }
+        sha: { type: string, description: The commit's sha }
+        url: { type: string, nullable: true, description: "The pull request the commit is on; null or absent when the wait has none" }
+    CICheck:
+      type: object
+      description: One check CI runs on a commit, as goald last read it from the code host
+      required: [repo, name, state, failed_jobs]
+      properties:
+        repo: { type: string, description: The key of the repository whose commit the check runs on }
+        name: { type: string, description: The check's name as the code host shows it }
+        state: { type: string, enum: [pending, running, finished], description: How far the check has got }
+        result: { type: string, enum: [passed, failed, neutral], nullable: true, description: What a finished check concluded; null or absent until it finishes }
+        url: { type: string, nullable: true, description: The check on the code host; null or absent when the host gives none }
+        failed_jobs:
+          type: array
+          description: At most 5 of the check's failed jobs, where the host names them
+          items: { type: string }
+    CIFailure:
+      type: object
+      description: The CI wait whose failure sent an item back
+      required: [repo, sha, checks]
+      properties:
+        repo: { type: string, description: "The repository's key, as in github.com/acme/app" }
+        sha: { type: string, description: The commit whose CI failed }
+        url: { type: string, nullable: true, description: "The pull request the commit is on; null or absent when the wait has none" }
+        checks:
+          type: array
+          description: The checks that failed, as last read; empty when it timed out with none failed
+          items: { $ref: "#/components/schemas/CICheck" }
     ItemWaitingNeed:
       type: object
       description: One open need that holds a waiting item
@@ -6357,7 +6415,7 @@ components:
           items: { type: string }
     AssemblyPart:
       type: object
-      required: [id, ref, number, index, key, title, paths, station, state, needs, waiting_on, wave, cost_usd, pr_url, agent, created_at, done_at]
+      required: [id, ref, number, index, key, title, paths, station, state, needs, waiting_on, waiting, wave, cost_usd, pr_url, agent, created_at, done_at]
       properties:
         id: { type: string }
         ref: { type: string, description: "<factory name>#<number>" }
@@ -6379,6 +6437,10 @@ components:
           type: array
           description: Refs of the needs that are neither done nor cancelled
           items: { type: string }
+        waiting:
+          allOf: [{ $ref: "#/components/schemas/ItemWaiting" }]
+          nullable: true
+          description: Why the part is not claimed yet, the same object getItem returns as Item.waiting; null when it isn't waiting
         wave: { type: integer, minimum: 0, description: "0 for no needs, otherwise 1 + the largest wave among its needs" }
         cost_usd: { type: number, format: double }
         pr_url: { type: string, nullable: true, description: The pull request its outputs name }
@@ -8237,7 +8299,12 @@ components:
       type: object
       required: [component, station, hours, share, items]
       properties:
-        component: { type: string, enum: [waiting, rework, waiting_on_you, blocked, working, other] }
+        component:
+          type: string
+          enum: [waiting, ci, rework, waiting_on_you, blocked, working, other]
+          description: >-
+            The kind of time. waiting is time queued or ready at the station; ci is time held at
+            the station waiting for CI on the item's commits, and is not counted in waiting.
         station:
           type: string
           nullable: true
@@ -10682,6 +10749,13 @@ components:
         note: { type: string, description: "For a write entry: the host reports no pull-request permission, so Goal can't check it" }
         read: { $ref: "#/components/schemas/RepositoryCheck" }
         push: { $ref: "#/components/schemas/RepositoryCheck" }
+        ci:
+          allOf: [{ $ref: "#/components/schemas/RepositoryCheck" }]
+          description: >-
+            Whether the token can read the commit checks (GitHub) or the pipelines (GitLab) that a
+            station with waitFor: ci waits on, with the host's reason. Absent for a test kept before
+            goald checked CI, until the repository is tested again, and for an owner pattern. It
+            never changes ok: only a factory with a waitFor: ci station needs it.
         readable: { type: integer, description: "For an owner pattern: how many of the owner's repositories the token can read" }
         pushable: { type: integer, description: "For an owner pattern: how many of them it can push to" }
         truncated: { type: boolean, description: "For an owner pattern: the count stopped at 1000, so there may be more" }

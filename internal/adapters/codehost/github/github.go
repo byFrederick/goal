@@ -82,12 +82,17 @@ const (
 	maxListBytes = 8 << 20
 )
 
-// Client calls GitHub's REST API. It is safe for concurrent use and keeps no state.
+// Client calls GitHub's REST API. It is safe for concurrent use. Its only state is the last ETag
+// and answer of each URL Checks reads, kept in memory for conditional requests and guarded by a
+// mutex; anything else it reads it reads again.
 type Client struct {
 	api     string
 	http    *http.Client
 	polls   []time.Duration
 	retries []time.Duration
+
+	etagsMu sync.Mutex
+	etags   map[string]etagged
 }
 
 // New returns a client. cfg.APIURL, when set, must be an http(s) URL; goald's settings check it.
@@ -108,6 +113,7 @@ func New(cfg Config) *Client {
 		api:     strings.TrimSuffix(cfg.APIURL, "/"),
 		polls:   slices.Clone(cfg.MergeabilityPolls),
 		retries: slices.Clone(cfg.MergeRetries),
+		etags:   map[string]etagged{},
 		http: &http.Client{
 			Timeout:   cfg.Timeout,
 			Transport: cfg.Transport,
@@ -809,15 +815,10 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 		reader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, p.api+path, reader)
+	req, err := newRequest(ctx, p, method, path, reader)
 	if err != nil {
 		return 0, "", nil, err
 	}
-
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+p.token)
-	req.Header.Set("X-GitHub-Api-Version", apiVersion)
-	req.Header.Set("User-Agent", "goald")
 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -852,6 +853,21 @@ func (cl *Client) send(ctx context.Context, p pull, method, path string, body, o
 	return res.StatusCode, msg, res.Header, nil
 }
 
+// newRequest is a request to GitHub's API at path, signed in with the pull's token.
+func newRequest(ctx context.Context, p pull, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, p.api+path, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("X-GitHub-Api-Version", apiVersion)
+	req.Header.Set("User-Agent", "goald")
+
+	return req, nil
+}
+
 // messageOf is the message of GitHub's JSON answer raw; a listing answers an array, which
 // carries none.
 func messageOf(raw []byte) (string, error) {
@@ -873,6 +889,7 @@ func messageOf(raw []byte) (string, error) {
 // true. For a fine-grained token that is the token's own grant; for a classic one it is the
 // account's role, which a token without the repo scope cannot use, so push ok can be optimistic.
 // A refusal (401, 403, 404) is a failed read with GitHub's message; a 5xx or no answer is an error.
+// CI is ciCheck on the answer's default_branch.
 func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeRepository, token string) (ports.RepositoryAccess, error) {
 	p, err := cl.check(repo, token)
 	if err != nil {
@@ -882,7 +899,8 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 	full := p.owner + "/" + p.repo
 
 	var answer struct {
-		Permissions struct {
+		DefaultBranch string `json:"default_branch"`
+		Permissions   struct {
 			Pull bool `json:"pull"`
 			Push bool `json:"push"`
 		} `json:"permissions"`
@@ -899,12 +917,14 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 		return ports.RepositoryAccess{
 			Read: ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitHub answered %d: %s", status, msg))},
 			Push: ports.AccessCheck{Reason: "not checked: the token cannot read " + full},
+			CI:   ports.AccessCheck{Reason: "not checked: the token cannot read " + full},
 		}, nil
 	}
 
 	out := ports.RepositoryAccess{
 		Read: ports.AccessCheck{OK: true, Reason: "GitHub shows " + full + " to the token"},
 		Push: ports.AccessCheck{OK: answer.Permissions.Push, Reason: "GitHub grants the token push to " + full},
+		CI:   cl.ciCheck(ctx, p, full, answer.DefaultBranch),
 	}
 
 	if !answer.Permissions.Push {
@@ -912,6 +932,33 @@ func (cl *Client) RepositoryAccess(ctx context.Context, repo domain.CodeReposito
 	}
 
 	return out, nil
+}
+
+// ciCheck is whether the token can read the CI of branch's head in the repository full: GET
+// .../commits/{branch}/check-runs?per_page=1 and GET .../commits/{branch}/status both answering
+// 200. A 403 from either is a fine-grained token without read access to Checks or Commit
+// statuses; any other answer, a 5xx, a redirect or none at all, fails the check with GitHub's
+// status and message. It never returns an error: CI is a check of its own, beside Read and Push.
+func (cl *Client) ciCheck(ctx context.Context, p pull, full, branch string) ports.AccessCheck {
+	if branch == "" || strings.Contains(branch, "..") {
+		return ports.AccessCheck{Reason: "GitHub named no default branch of " + full + ", so its CI could not be read"}
+	}
+
+	for _, probe := range []string{"/check-runs?per_page=1", "/status"} {
+		status, msg, _, err := cl.exchange(ctx, p, http.MethodGet, p.repoPath("/commits/"+refPath(branch)+probe), nil, nil, maxBodyBytes)
+
+		switch {
+		case err != nil:
+			return ports.AccessCheck{Reason: fmt.Sprintf("GitHub gave no answer to a read of the CI of %s: %v", full, err)}
+		case status == http.StatusForbidden:
+			return ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf(
+				"GitHub answered 403: %s. A fine-grained token needs read access to Checks and Commit statuses of %s", strings.TrimRight(msg, ". "), full))}
+		case status != http.StatusOK:
+			return ports.AccessCheck{Reason: strings.TrimSpace(fmt.Sprintf("GitHub answered %d: %s", status, msg))}
+		}
+	}
+
+	return ports.AccessCheck{OK: true, Reason: "GitHub shows the token the check runs and commit statuses of " + full}
 }
 
 // OwnerAccess implements ports.CodeHost with GET /user/repos for every affiliation (owner,

@@ -45,6 +45,7 @@ type Store struct {
 	repos  map[domain.ItemID][]domain.ItemRepository
 	joined []domain.FollowUpID // follow-ups in the order they joined a triage item
 	views  map[domain.SavedViewID]savedViewRecord
+	ci     ciRows
 	jonah  jonahRows
 	// exhausted holds since when each factory's weekly budget is used up (MarkBudgetExhausted).
 	exhausted map[domain.FactoryID]time.Time
@@ -74,6 +75,7 @@ func NewStore() *Store {
 		spans:     map[domain.ItemID][]domain.Span{},
 		leaseLog:  map[domain.ItemID][]domain.LeaseSpan{},
 		views:     map[domain.SavedViewID]savedViewRecord{},
+		ci:        ciRows{polls: map[ciPollID]*domain.CIPoll{}},
 		jonah:     jonahRows{runKinds: map[domain.RunID]domain.RunKind{}},
 		exhausted: map[domain.FactoryID]time.Time{},
 	}
@@ -143,6 +145,7 @@ func (s *Store) purge(org domain.OrgID) {
 
 	maps.DeleteFunc(s.runs, func(_ domain.RunID, r *domain.Run) bool { return gone[r.ItemID] })
 	s.edges = slices.DeleteFunc(s.edges, func(e domain.Edge) bool { return gone[e.Item] || gone[e.Needs] })
+	s.ci.purge(org, gone)
 	s.events = slices.DeleteFunc(s.events, func(e domain.Event) bool {
 		if gone[e.ItemID] {
 			delete(s.labels, e.ID)
@@ -496,7 +499,9 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 		}
 	}
 
-	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), func(it *domain.Item) bool { return s.held(it, c.Now) })
+	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), func(it *domain.Item) bool {
+		return s.held(it, c.Now) || s.ci.heldByCI(org, it)
+	})
 	if len(w) == 0 {
 		return domain.Item{}, domain.Lease{}, fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 	}

@@ -5,6 +5,7 @@ import type { ItemWaiting } from '../api/types';
 import { cn } from '../ui/cn';
 import { InfoTip } from '../ui/info-tip';
 import { StatusIcon, type StatusKind } from '../ui/status-icon';
+import { CIWait } from './ci-wait';
 import { refParam } from './factory';
 import { useOrg } from './org';
 import { turnTarget, waitingDetail, waitingShort } from './waiting';
@@ -19,6 +20,14 @@ export function WaitLine({
   status: StatusKind | null;
   className?: string;
 }) {
+  if (waiting.kind === 'ci') {
+    return (
+      <span className={cn('flex min-w-0 items-center gap-2 text-muted', className)}>
+        {status ? <StatusIcon status={status} className="text-muted" /> : null}
+        <CIWait waiting={waiting} />
+      </span>
+    );
+  }
   return (
     <span title={waitingDetail(waiting)} className={cn('flex min-w-0 items-center gap-1.5 text-muted', className)}>
       {status ? <StatusIcon status={status} className="text-muted" /> : null}

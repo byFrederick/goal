@@ -13,7 +13,7 @@ import (
 )
 
 const repositoryTests = `-- name: RepositoryTests :many
-SELECT org_id, factory_id, url, access, secret, at, tested, ok, summary, warning, read_ok, read_reason, push_ok, push_reason, readable, pushable, truncated FROM repository_tests WHERE factory_id = $1 ORDER BY url COLLATE "C"
+SELECT org_id, factory_id, url, access, secret, at, tested, ok, summary, warning, read_ok, read_reason, push_ok, push_reason, readable, pushable, truncated, ci_ok, ci_reason FROM repository_tests WHERE factory_id = $1 ORDER BY url COLLATE "C"
 `
 
 // One factory's latest tests, by url in byte order.
@@ -44,6 +44,8 @@ func (q *Queries) RepositoryTests(ctx context.Context, factoryID uuid.UUID) ([]R
 			&i.Readable,
 			&i.Pushable,
 			&i.Truncated,
+			&i.CiOk,
+			&i.CiReason,
 		); err != nil {
 			return nil, err
 		}
@@ -56,7 +58,7 @@ func (q *Queries) RepositoryTests(ctx context.Context, factoryID uuid.UUID) ([]R
 }
 
 const repositoryTestsBySecret = `-- name: RepositoryTestsBySecret :many
-SELECT org_id, factory_id, url, access, secret, at, tested, ok, summary, warning, read_ok, read_reason, push_ok, push_reason, readable, pushable, truncated FROM repository_tests WHERE secret = $1 ORDER BY factory_id, url COLLATE "C"
+SELECT org_id, factory_id, url, access, secret, at, tested, ok, summary, warning, read_ok, read_reason, push_ok, push_reason, readable, pushable, truncated, ci_ok, ci_reason FROM repository_tests WHERE secret = $1 ORDER BY factory_id, url COLLATE "C"
 `
 
 // The organization's latest tests whose token came from secret, by factory and url.
@@ -87,6 +89,8 @@ func (q *Queries) RepositoryTestsBySecret(ctx context.Context, secret string) ([
 			&i.Readable,
 			&i.Pushable,
 			&i.Truncated,
+			&i.CiOk,
+			&i.CiReason,
 		); err != nil {
 			return nil, err
 		}
@@ -101,15 +105,15 @@ func (q *Queries) RepositoryTestsBySecret(ctx context.Context, secret string) ([
 const upsertRepositoryTest = `-- name: UpsertRepositoryTest :execrows
 
 INSERT INTO repository_tests (factory_id, url, access, secret, at, tested, ok, summary, warning, read_ok, read_reason, push_ok, push_reason,
-  readable, pushable, truncated)
+  readable, pushable, truncated, ci_ok, ci_reason)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
   $9, $10, $11, $12, $13, $14, $15,
-  $16)
+  $16, $17, $18)
 ON CONFLICT (org_id, factory_id, url)
 DO UPDATE SET access = EXCLUDED.access, secret = EXCLUDED.secret, at = EXCLUDED.at, tested = EXCLUDED.tested, ok = EXCLUDED.ok,
   summary = EXCLUDED.summary, warning = EXCLUDED.warning, read_ok = EXCLUDED.read_ok, read_reason = EXCLUDED.read_reason,
   push_ok = EXCLUDED.push_ok, push_reason = EXCLUDED.push_reason, readable = EXCLUDED.readable, pushable = EXCLUDED.pushable,
-  truncated = EXCLUDED.truncated
+  truncated = EXCLUDED.truncated, ci_ok = EXCLUDED.ci_ok, ci_reason = EXCLUDED.ci_reason
 `
 
 type UpsertRepositoryTestParams struct {
@@ -129,12 +133,14 @@ type UpsertRepositoryTestParams struct {
 	Readable   int32
 	Pushable   int32
 	Truncated  bool
+	CiOk       *bool
+	CiReason   *string
 }
 
 // Repository tests (ports.RepositoryTests; migration 00131), under row-level security: every
 // statement sees the transaction's organization only.
 // org_id comes from its default, goal_org(); a factory the organization does not have violates
-// the foreign key.
+// the foreign key. ci_ok and ci_reason are NULL for a test without a CI check (migration 00140).
 func (q *Queries) UpsertRepositoryTest(ctx context.Context, arg UpsertRepositoryTestParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertRepositoryTest,
 		arg.FactoryID,
@@ -153,6 +159,8 @@ func (q *Queries) UpsertRepositoryTest(ctx context.Context, arg UpsertRepository
 		arg.Readable,
 		arg.Pushable,
 		arg.Truncated,
+		arg.CiOk,
+		arg.CiReason,
 	)
 	if err != nil {
 		return 0, err

@@ -439,6 +439,9 @@ WHERE w.factory_id = $1 AND w.station = $2 AND w.state IN ('queued', 'ready')
     SELECT 1 FROM item_edges e JOIN work_items n ON n.id = e.needs_id
     WHERE e.item_id = w.id AND n.state NOT IN ('done', 'cancelled')
   )
+  AND NOT EXISTS (
+    SELECT 1 FROM ci_waits c WHERE c.item_id = w.id AND c.station = w.station AND c.ended_at IS NULL
+  )
 ORDER BY (w.class_of_service = 'expedite') DESC, w.priority DESC, w.created_at, w.number
 LIMIT 1
 FOR NO KEY UPDATE OF w SKIP LOCKED
@@ -454,7 +457,9 @@ type LockNextWaitingItemParams struct {
 // slots claim concurrently without blocking each other or taking the same item. An item is
 // skipped while any item it needs is neither done nor cancelled (item_edges, by its primary key),
 // and while its start_at is after the claim's now (an item a trigger placed past the first
-// station). WaitingItems lists it all the same.
+// station), and while it has an open CI wait at the station, whatever its phase (ADR 0044
+// decisions 2 and 3; the partial index ci_waits_open_key serves it). WaitingItems lists it all
+// the same.
 func (q *Queries) LockNextWaitingItem(ctx context.Context, arg LockNextWaitingItemParams) (WorkItem, error) {
 	row := q.db.QueryRow(ctx, lockNextWaitingItem, arg.FactoryID, arg.Station, arg.Now)
 	var i WorkItem

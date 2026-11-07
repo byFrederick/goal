@@ -93,6 +93,8 @@ beforeEach(() => {
         ],
       },
     },
+    etags: { basics: 'b1', line: 'l1', agents: 'a1', connections: 'c1', review: 'r1' },
+    revision: 1,
   } as never);
 });
 
@@ -396,6 +398,24 @@ describe('Step 3, Connect your code: saving and testing', () => {
     expect(next().getAttribute('aria-disabled')).toBe('true');
     fireEvent.change(screen.getByLabelText('Token'), { target: { value: 'another-token' } });
     expect(next().getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('shows the CI line with the host’s reason when the token cannot read CI, and none when the answer has no ci', async () => {
+    vi.mocked(testFactoryRepository).mockImplementation(async (_o, _f, req) =>
+      answer(req.url, { ci: { ok: false, reason: 'GitHub answered 403: needs Checks and Commit statuses' } }),
+    );
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+    expect(await screen.findByText(/Can’t read CI\. GitHub answered 403/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About reading CI' })).toBeTruthy();
+    cleanup();
+    vi.mocked(testFactoryRepository).mockImplementation(async (_o, _f, req) => answer(req.url));
+    renderStep();
+    await fill('https://github.com/acme/app', 'test-token');
+    fireEvent.click(next());
+    await screen.findByText(/Can read and push/);
+    expect(screen.queryByText(/CI/)).toBeNull();
   });
 
   it('keeps focus on Continue when the test answers, and has the status region in the page before', async () => {

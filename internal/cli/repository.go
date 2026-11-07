@@ -64,7 +64,8 @@ func repositoryTest(ctx context.Context, out *printer, getenv func(string) strin
 const accessWrite = "write"
 
 // factoryRepositoryTest tests body on the factory's route and prints the result: the summary,
-// its warning or note, then both checks. It exits 1 when the token can't do what the access asks.
+// its warning or note, then read, push and, when the answer has one, the CI check. It exits 1 when
+// the token can't do what the access asks; a failed CI check alone never does.
 func factoryRepositoryTest(ctx context.Context, out *printer, c orgClient, ref string, body gen.FactoryRepositoryTestRequest) error {
 	res, err := c.TestFactoryRepositoryWithResponse(ctx, c.org, ref, body)
 	if err != nil {
@@ -82,6 +83,10 @@ func factoryRepositoryTest(ctx context.Context, out *printer, c orgClient, ref s
 	printTestNotes(out, "    ", r)
 	out.printf("  %s read: %s\n", mark(r.Read.Ok), r.Read.Reason)
 	out.printf("  %s push: %s\n", mark(r.Push.Ok), r.Push.Reason)
+
+	if r.Ci != nil {
+		out.printf("  %s ci: %s\n", mark(r.Ci.Ok), r.Ci.Reason)
+	}
 
 	if !r.Tested || !r.Ok {
 		return errRepositoryTestFailed

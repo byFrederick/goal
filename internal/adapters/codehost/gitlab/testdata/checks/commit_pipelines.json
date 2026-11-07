@@ -1,0 +1,2 @@
+{"data":{"project":{"jobsEnabled":true,"pipelines":{"nodes":[
+{"id":"gid://gitlab/Ci::Pipeline/400","name":null,"status":"WAITING_FOR_RESOURCE","ref":"main","source":"push","path":"/acme/platform/web/-/pipelines/400","failedJobs":{"nodes":[]}}]}}}}

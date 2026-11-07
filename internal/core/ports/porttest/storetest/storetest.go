@@ -150,6 +150,7 @@ func suiteCases() []suiteCase {
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
 		{"Transition_TakeLeaseRecordsTheAskedOutcomes", testTakeLeaseAsked},
 		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},
+		{"ItemTimes_CIWaitsAsTheirOwnComponent", testItemTimesCIWaits},
 		{"Andon_OneOpenPullPerFactoryClearedWithANote", testAndonPullAndClear},
 		{"Andon_PullsAreHistoryNewestFirst", testAndonHistory},
 		{"Andon_OnlyTheOrgs", testAndonOnlyTheOrgs},
@@ -170,7 +171,7 @@ func suiteCases() []suiteCase {
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
-	tests = append(tests, baseCommitTests...)
+	tests = append(append(tests, baseCommitTests...), ciWaitsTests...)
 
 	return tests
 }

@@ -1,0 +1,6 @@
+{"data":{"project":{"jobsEnabled":true,"pipelines":{"nodes":[
+{"id":"gid://gitlab/Ci::Pipeline/304","name":"acme-ci/build","status":"SUCCESS","ref":"goal/3-add-x","source":"external","path":"/acme/platform/web/-/pipelines/304","failedJobs":{"nodes":[]}},
+{"id":"gid://gitlab/Ci::Pipeline/303","name":"acme-ci/build","status":"FAILED","ref":"goal/3-add-x","source":"external","path":"/acme/platform/web/-/pipelines/303","failedJobs":{"nodes":[]}},
+{"id":"gid://gitlab/Ci::Pipeline/302","name":null,"status":"RUNNING","ref":"goal/3-add-x","source":"push","path":"/acme/platform/web/-/pipelines/302","failedJobs":{"nodes":[]}},
+{"id":"gid://gitlab/Ci::Pipeline/301","name":null,"status":"CANCELED","ref":"goal/3-add-x","source":"push","path":"/acme/platform/web/-/pipelines/301","failedJobs":{"nodes":[]}},
+{"id":"gid://gitlab/Ci::Pipeline/300","name":null,"status":"SUCCESS","ref":"main","source":"schedule","path":"/acme/platform/web/-/pipelines/300","failedJobs":{"nodes":[]}}]}}}}

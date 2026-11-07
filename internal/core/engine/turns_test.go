@@ -281,6 +281,57 @@ func TestEngine_TurnDeferredHolderKeepsItsTurn(t *testing.T) {
 	h.expectPosition(t, b.ID, isDone)
 }
 
+// A holder held for CI after its push (ADR 0044 decision 3) waits in the queue and keeps its
+// turn: an item that arrives after the hold and comes first in pull order is not claimed and
+// does not merge until the holder's held approval has merged.
+func TestEngine_TurnCIHeldHolderKeepsItsTurn(t *testing.T) {
+	t.Parallel()
+
+	h, p := holdHarness(t, holdLine(domain.ActionMerge, domain.DefaultCIRounds))
+
+	a := h.at(t, h.submit(t, domain.NewItem{Title: "a"}), stReview, domain.StateQueued)
+	h.codehost.Add(prFrom(prOf(a), a))
+	p.set(a.ID, stReview, pushedTo(`{"decision":"approve","pull_request":"`+prOf(a)+`"}`, pushSHA1))
+
+	h.step(t)
+	h.expectHeld(t, a.ID, pushSHA1, 1, 1)
+
+	b := h.at(t, h.submit(t, domain.NewItem{Title: "b", Priority: 5}), stReview, domain.StateQueued)
+	h.codehost.Add(prFrom(prOf(b), b))
+	p.set(b.ID, stReview, ok(`{"decision":"approve","pull_request":"`+prOf(b)+`"}`))
+
+	h.step(t)
+
+	if n := h.mergeRuns(b.ID); n != 0 {
+		t.Fatalf("b ran %d times at merge while a waited for CI, want 0", n)
+	}
+
+	h.expectPosition(t, b.ID, queuedAtMerge)
+	h.expectTurnOn(t, b.ID, a.ID)
+
+	if edges := h.edgesOf(t, a.ID, domain.EdgeTurn); len(edges) != 0 {
+		t.Errorf("a's turn edges = %+v, want none: a holds the turn", edges)
+	}
+
+	h.endCI(t, pushSHA1, checksOf(ports.CheckPassed, ports.CheckFinished))
+	h.step(t)
+
+	h.expectPosition(t, a.ID, isDone)
+	h.expectPosition(t, b.ID, queuedAtMerge)
+
+	if removed := h.eventsOf(b.ID, domain.EventEdgeRemoved); len(removed) != 0 && removed[0].Data["reason"] != "needed item left the station" {
+		t.Errorf("b's edge_removed events %+v, want only a leaving the station", removed)
+	}
+
+	h.step(t)
+
+	h.expectPosition(t, b.ID, isDone)
+
+	if m := h.codehost.Merges(); len(m) != 2 || m[0].URL != prOf(a) || m[1].URL != prOf(b) {
+		t.Errorf("merges = %+v; want a's, then b's", m)
+	}
+}
+
 // A holder waiting on a person at the merge station (a question or a tool approval) keeps its
 // turn: its pull request is still open, so the item waiting behind it is not claimed until the
 // holder is answered and done.

@@ -46,7 +46,8 @@ type turnGroup struct {
 
 // holdTurns makes a station that takes turns (domain.Station.TakesTurns) claim one item per merge
 // target at a time (ADR 0043). It groups the station's open items by turnTarget. The holder of
-// a group's turn is the item in progress or waiting on a person there, or else the waiting item the group's turn edges
+// a group's turn is the item in progress or waiting on a person there, or else a waiting item
+// held for CI after its push (an open after wait at the station, ADR 0044 decision 3), or else the waiting item the group's turn edges
 // already point to (so an item whose merge was deferred back to the queue keeps its turn), or
 // else the first waiting item in pull order with no open need but turn edges and no later start.
 // Every other waiting item of the group gets a turn edge on the holder, by the engine, so the
@@ -83,12 +84,38 @@ func (e *Engine) holdTurns(ctx context.Context, l domain.Line, st domain.Station
 		return fmt.Errorf("station %s: turn hold: read needs: %w", st.ID, err)
 	}
 
-	groups := turnGroups(l, waiting, open, needs, e.clock.Now())
+	ci, err := e.waitingForCI(ctx, st, waiting)
+	if err != nil {
+		return fmt.Errorf("station %s: turn hold: %w", st.ID, err)
+	}
+
+	groups := turnGroups(l, waiting, open, needs, ci, e.clock.Now())
 
 	// Stale edges go first, so a new edge on a holder never meets the holder's old edge as a cycle.
 	released := e.releaseTurns(ctx, l, waiting, open, needs, groups)
 
 	return errors.Join(released, e.takeTurns(ctx, groups, needs))
+}
+
+// waitingForCI are the waiting items held for CI after a push at st: an open after wait there. A
+// before wait holds no turn, since its item has nothing to merge yet.
+func (e *Engine) waitingForCI(ctx context.Context, st domain.Station, waiting []domain.Item) (map[domain.ItemID]bool, error) {
+	if !st.WaitsForCI() {
+		return nil, nil
+	}
+
+	ci := map[domain.ItemID]bool{}
+
+	for _, it := range waiting {
+		ws, err := e.store.OpenCIWaits(ctx, it.ID)
+		if err != nil {
+			return nil, fmt.Errorf("read the CI waits of %s: %w", it.ID, err)
+		}
+
+		ci[it.ID] = slices.ContainsFunc(ws, func(w domain.CIWaitRecord) bool { return w.Station == st.ID && w.Phase == domain.CIPhaseAfter })
+	}
+
+	return ci, nil
 }
 
 // releaseTurns removes the waiting items' turn edges whose needed item is not their group's
@@ -139,10 +166,13 @@ func (e *Engine) takeTurns(ctx context.Context, groups map[domain.ItemID]*turnGr
 }
 
 // turnGroups groups the station's waiting items by merge target and picks each group's holder:
-// the open item in progress or waiting on a person at the station with the lowest number, else the waiting item the
+// the open item in progress or waiting on a person at the station with the lowest number, else the
+// first waiting item in pull order held for CI after its push there (ci), else the waiting item the
 // group's turn edges point to first in pull order, else the first waiting item that may be
 // claimed but for its turn edges.
-func turnGroups(l domain.Line, waiting, open []domain.Item, needs map[domain.ItemID][]domain.OpenNeed, now time.Time) map[domain.ItemID]*turnGroup {
+func turnGroups(l domain.Line, waiting, open []domain.Item, needs map[domain.ItemID][]domain.OpenNeed, ci map[domain.ItemID]bool,
+	now time.Time,
+) map[domain.ItemID]*turnGroup {
 	groups := map[domain.ItemID]*turnGroup{}
 
 	group := func(it domain.Item) *turnGroup {
@@ -169,6 +199,10 @@ func turnGroups(l domain.Line, waiting, open []domain.Item, needs map[domain.Ite
 	}
 
 	for _, g := range groups {
+		if i := slices.IndexFunc(g.waiting, func(it domain.Item) bool { return ci[it.ID] }); g.holder == "" && i >= 0 {
+			g.holder = g.waiting[i].ID
+		}
+
 		if g.holder == "" {
 			g.holder = pointedTo(g.waiting, needs)
 		}

@@ -267,11 +267,26 @@ func integrationPolicy(in *Integration) domain.IntegrationPolicy {
 	return p
 }
 
+// ciWait maps a station's waitFor.ci, a field left out taking its default.
+func ciWait(c CIWait) domain.CIWait {
+	grace, _ := time.ParseDuration(c.Grace) // the schema refuses one that does not parse
+	limit, _ := time.ParseDuration(c.Max)
+
+	return domain.CIWait{
+		Grace: cmp.Or(grace, domain.DefaultCIGrace), Max: cmp.Or(limit, domain.DefaultCIMax),
+		Rounds: cmp.Or(c.Rounds, domain.DefaultCIRounds),
+	}
+}
+
 func station(st Station) domain.Station {
 	out := domain.Station{
 		ID: st.ID, Kind: domain.StationKind(st.Kind), Agent: st.Agent,
 		Agents: st.Agents, WIP: st.WIP, Buffer: st.Buffer, Output: st.Output, Action: domain.StationAction(st.Action),
 		Merges: domain.MergesPolicy(st.Merges),
+	}
+
+	if st.WaitFor != nil && st.WaitFor.CI != nil {
+		out.WaitFor = ciWait(*st.WaitFor.CI)
 	}
 
 	for lane, r := range st.Route {

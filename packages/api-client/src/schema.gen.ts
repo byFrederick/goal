@@ -1901,7 +1901,7 @@ export interface paths {
         };
         /**
          * Why the p85 lead time is over its target, over a range of UTC days
-         * @description The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+         * @description The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
          */
         get: operations["getLeadTimeBridge"];
         put?: never;
@@ -4776,21 +4776,76 @@ export interface components {
             /** @description The index of the picked choice in Item.question.choices */
             choice?: number;
         };
-        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones */
+        /** @description Why a queued or ready item is not claimed yet, derived on every read and never stored from its open needs (those neither done nor cancelled) and its open CI waits at its station. Precedence: planned and linked needs (after) win, then overlap ones (files), then turn ones (turn), then an open CI wait (ci) */
         ItemWaiting: {
             /**
-             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
+             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn); ci: for CI on its commits to finish, at a station with waitFor: ci (items, files and needs are then empty)
              * @enum {string}
              */
-            kind: "after" | "files" | "turn";
+            kind: "after" | "files" | "turn" | "ci";
             /** @description Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first */
             items: string[];
             /** @description For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after */
             files: string[];
             /** @description The open needs of that kind, oldest edge first, the same ones as items */
             needs: components["schemas"]["ItemWaitingNeed"][];
-            /** @description For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files */
+            /** @description For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after, files and ci */
             target?: string | null;
+            /** @description For kind ci, the commits CI runs on and their checks as goald last read them; null or absent for the other kinds */
+            ci?: components["schemas"]["ItemWaitingCI"] | null;
+        };
+        /** @description The CI an item waits for, one commit per open CI wait, by start */
+        ItemWaitingCI: {
+            commits: components["schemas"]["CICommit"][];
+            /** @description Every commit's checks, by commit and then in the code host's order; empty until goald's first poll reads any */
+            checks: components["schemas"]["CICheck"][];
+            /** @description How many of the checks have finished */
+            finished: number;
+            /** @description How many checks there are */
+            total: number;
+            /** @description The latest CI wait of the same visit to the station that ended failed or timed_out, which sent the item back; null or absent when none did */
+            failure?: components["schemas"]["CIFailure"] | null;
+        };
+        /** @description A commit CI runs on */
+        CICommit: {
+            /** @description The repository's key, as in github.com/acme/app */
+            repo: string;
+            /** @description The commit's sha */
+            sha: string;
+            /** @description The pull request the commit is on; null or absent when the wait has none */
+            url?: string | null;
+        };
+        /** @description One check CI runs on a commit, as goald last read it from the code host */
+        CICheck: {
+            /** @description The key of the repository whose commit the check runs on */
+            repo: string;
+            /** @description The check's name as the code host shows it */
+            name: string;
+            /**
+             * @description How far the check has got
+             * @enum {string}
+             */
+            state: "pending" | "running" | "finished";
+            /**
+             * @description What a finished check concluded; null or absent until it finishes
+             * @enum {string|null}
+             */
+            result?: "passed" | "failed" | "neutral" | null;
+            /** @description The check on the code host; null or absent when the host gives none */
+            url?: string | null;
+            /** @description At most 5 of the check's failed jobs, where the host names them */
+            failed_jobs: string[];
+        };
+        /** @description The CI wait whose failure sent an item back */
+        CIFailure: {
+            /** @description The repository's key, as in github.com/acme/app */
+            repo: string;
+            /** @description The commit whose CI failed */
+            sha: string;
+            /** @description The pull request the commit is on; null or absent when the wait has none */
+            url?: string | null;
+            /** @description The checks that failed, as last read; empty when it timed out with none failed */
+            checks: components["schemas"]["CICheck"][];
         };
         /** @description One open need that holds a waiting item */
         ItemWaitingNeed: {
@@ -4867,6 +4922,8 @@ export interface components {
             needs: string[];
             /** @description Refs of the needs that are neither done nor cancelled */
             waiting_on: string[];
+            /** @description Why the part is not claimed yet, the same object getItem returns as Item.waiting; null when it isn't waiting */
+            waiting: components["schemas"]["ItemWaiting"] | null;
             /** @description 0 for no needs, otherwise 1 + the largest wave among its needs */
             wave: number;
             /** Format: double */
@@ -6552,8 +6609,11 @@ export interface components {
             } | null;
         };
         BridgeStep: {
-            /** @enum {string} */
-            component: "waiting" | "rework" | "waiting_on_you" | "blocked" | "working" | "other";
+            /**
+             * @description The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
+             * @enum {string}
+             */
+            component: "waiting" | "ci" | "rework" | "waiting_on_you" | "blocked" | "working" | "other";
             /** @description Where the time went; for rework, the station that sent items back; null for waiting_on_you and other */
             station: string | null;
             /** Format: double */
@@ -8571,6 +8631,8 @@ export interface components {
             note?: string;
             read: components["schemas"]["RepositoryCheck"];
             push: components["schemas"]["RepositoryCheck"];
+            /** @description Whether the token can read the commit checks (GitHub) or the pipelines (GitLab) that a station with waitFor: ci waits on, with the host's reason. Absent for a test kept before goald checked CI, until the repository is tested again, and for an owner pattern. It never changes ok: only a factory with a waitFor: ci station needs it. */
+            ci?: components["schemas"]["RepositoryCheck"];
             /** @description For an owner pattern: how many of the owner's repositories the token can read */
             readable?: number;
             /** @description For an owner pattern: how many of them it can push to */

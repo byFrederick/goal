@@ -144,6 +144,7 @@ type Items interface {
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
+	CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error)
 	ListSavedViews(ctx context.Context, factory domain.FactoryID, viewer domain.UserID) ([]domain.SavedView, error)
 	CreateSavedView(ctx context.Context, v domain.SavedView) (domain.SavedView, error)
 	UpdateSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID, name string, filters map[string][]string, at time.Time) (domain.SavedView, error)
@@ -628,7 +629,12 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
-	waiting, err := s.waiting(ctx, it.FactoryID, []domain.Item{it}, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
+	l, err := s.lineOf(ctx, it.FactoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	waiting, err := s.waiting(ctx, it.FactoryID, l, []domain.Item{it}, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
 	if err != nil {
 		return nil, err
 	}
@@ -644,13 +650,6 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	if out.CameFrom, err = s.cameFrom(ctx, it); err != nil {
-		return nil, err
-	}
-
-	var l domain.Line
-	if f, err := s.factories.Lookup(ctx, string(it.FactoryID)); err == nil {
-		l = f.Line()
-	} else if !errors.Is(err, ports.ErrNotFound) {
 		return nil, err
 	}
 
