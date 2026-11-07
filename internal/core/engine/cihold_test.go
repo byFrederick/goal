@@ -20,6 +20,9 @@ var (
 	pushSHA3 = strings.Repeat("c3", 20)
 )
 
+// ghCIPermission is the permission a GitHub token lacks when it cannot read CI.
+const ghCIPermission = "read access to Checks and Commit statuses"
+
 // pusher plays, for an item at a station, the results set for it in order, the last one
 // repeating, and ok({}) for the rest.
 type pusher struct {
@@ -261,7 +264,7 @@ func TestCIHold_UnreadableBlocks(t *testing.T) {
 	h.step(t)
 	h.expectHeld(t, it.ID, pushSHA1, 1, 1)
 
-	h.endCI(t, pushSHA1, porttest.ChecksAnswer{Err: &ports.CINotReadableError{Permission: "read access to Checks and Commit statuses"}})
+	h.endCI(t, pushSHA1, porttest.ChecksAnswer{Err: &ports.CINotReadableError{Permission: ghCIPermission}})
 	h.step(t)
 
 	h.expectPosition(t, it.ID, domain.Position{Station: stReview, State: domain.StateBlocked})
@@ -272,7 +275,7 @@ func TestCIHold_UnreadableBlocks(t *testing.T) {
 	}
 
 	reason, _ := blocked[0].Data["reason"].(string)
-	for _, want := range []string{appKey, pushSHA1, "connection " + connGitHub, "read access to Checks and Commit statuses"} {
+	for _, want := range []string{appKey, pushSHA1, "connection " + connGitHub, ghCIPermission} {
 		if !strings.Contains(reason, want) {
 			t.Errorf("block reason %q lacks %q", reason, want)
 		}

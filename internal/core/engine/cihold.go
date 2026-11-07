@@ -184,8 +184,8 @@ func latestRound(waits []domain.CIWaitRecord, visit string) []domain.CIWaitRecor
 
 // applyHeld applies the output of run, held on the item's after waits whose CI passed: with the
 // claim's agent and the organization policy (which decides whether its merge is left to a
-// person), its output is checked against the current line again and finished without a new hold,
-// so the item moves on, and at an action: merge gate merges through mergeOnApproval.
+// person), its output is checked against the current line again and finished without a new hold
+// (finish), so the item moves on, and at an action: merge gate merges through mergeOnApproval.
 func (e *Engine) applyHeld(ctx context.Context, log *slog.Logger, c claimed, run domain.RunID) {
 	var err error
 	if c.agent, err = agentFor(c.line, c.station, c.item.Lane); err == nil {
@@ -211,7 +211,7 @@ func (e *Engine) applyHeld(ctx context.Context, log *slog.Logger, c claimed, run
 
 	log.InfoContext(ctx, "ci hold applied", slog.String("run", string(run)))
 
-	e.finish(ctx, log, c, run, r.Result.Output, chk, false)
+	e.finish(ctx, log, c, run, r.Result.Output, chk)
 }
 
 // ciRoundsReason is why an item blocks after limit CI rounds in visit: the checks that failed in
