@@ -4,6 +4,7 @@ import type { ItemState } from '../api/types';
 import { pageTitle } from '../app/route-focus';
 import { ItemsSkeleton } from '../app/route-skeletons';
 import { ItemsPage } from '../features/items/items-page';
+import { factoryTitle } from '../shared/factory';
 import { stateNames } from '../shared/item-state';
 
 interface ItemsSearch {
@@ -49,6 +50,6 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/')({
         : []),
     ]);
   },
-  head: ({ match: { context } }) => pageTitle('Items', context.factory.name, context.org.name),
+  head: ({ match: { context } }) => pageTitle('Items', factoryTitle(context.factory), context.org.name),
   component: ItemsPage,
 });
