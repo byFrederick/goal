@@ -546,7 +546,10 @@ type FlowStats interface {
 
 	// ItemTimes returns the items of q.Type done in [q.Since, q.Until), by when they were done:
 	// each one's lead time and its time in each component of the lead-time bridge, from its
-	// spans since it started (domain.ComponentOf); lead time counts from Item.LeadFrom. It returns at most limit items, those done last, so the read
+	// spans since it started (domain.ComponentOf); lead time counts from Item.LeadFrom. A
+	// first-round queued or ready span's overlap with the union of the item's CI waits at its
+	// station (an open wait having no end) counts as domain.ComponentCI there, not as waiting
+	// (ADR 0044 decision 10). It returns at most limit items, those done last, so the read
 	// stays bounded however busy the window.
 	ItemTimes(ctx context.Context, q FlowQuery, limit int) ([]domain.ItemTime, error)
 

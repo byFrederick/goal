@@ -15,6 +15,9 @@ type ComponentKind string
 const (
 	// ComponentWaiting is time queued or ready at a station, in the item's first round.
 	ComponentWaiting ComponentKind = "waiting"
+	// ComponentCI is time queued or ready at a station while it waits for CI on the item's
+	// commits, in the first round; it is not counted in waiting (ADR 0044 decision 10).
+	ComponentCI ComponentKind = "ci"
 	// ComponentRework is any time in a rework round, by the station that sent the item back.
 	ComponentRework ComponentKind = "rework"
 	// ComponentWaitingOnYou is time waiting for a person's decision, in the first round.
@@ -28,7 +31,7 @@ const (
 )
 
 var componentOrder = []ComponentKind{
-	ComponentWaiting, ComponentRework, ComponentWaitingOnYou, ComponentBlocked, ComponentWorking, ComponentOther,
+	ComponentWaiting, ComponentCI, ComponentRework, ComponentWaitingOnYou, ComponentBlocked, ComponentWorking, ComponentOther,
 }
 
 // Component is one kind of time at one station ("" for waiting on you and other).
