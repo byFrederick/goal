@@ -9,12 +9,16 @@ interface FieldControl {
   id: string;
   describedBy: string | undefined;
   invalid: boolean;
+  labelledBy: string | undefined;
 }
 
 const FieldContext = createContext<FieldControl | null>(null);
 
 interface FieldProps {
-  label: ReactNode;
+  /** The visible label. Leave it out when `labelledBy` names the control by text already on screen. */
+  label?: ReactNode;
+  /** The id of text on screen that names the control (a card's title), instead of a second visible label. */
+  labelledBy?: string;
   /** Beside the label, outside it: a mark or a small action ("Edited · Undo"). */
   aside?: ReactNode;
   /** Under the control, always shown. */
@@ -26,7 +30,7 @@ interface FieldProps {
   children: ReactNode;
 }
 
-export function Field({ label, aside, help, error, className, children }: FieldProps) {
+export function Field({ label, labelledBy, aside, help, error, className, children }: FieldProps) {
   const id = useId();
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;
@@ -34,7 +38,7 @@ export function Field({ label, aside, help, error, className, children }: FieldP
 
   return (
     <div className={cn('flex min-w-0 flex-col gap-1.5', className)}>
-      {aside ? (
+      {labelledBy ? null : aside ? (
         <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <label htmlFor={id} className="text-sm font-medium text-ink">
             {label}
@@ -48,7 +52,7 @@ export function Field({ label, aside, help, error, className, children }: FieldP
       )}
       {/* The control shakes each time the field turns invalid; the message fades in (MOTION.md, Invalid form field). */}
       <div className={cn('min-w-0', error && 'motion-safe:animate-error-shake')}>
-        <FieldContext value={{ id, describedBy, invalid: Boolean(error) }}>{children}</FieldContext>
+        <FieldContext value={{ id, describedBy, invalid: Boolean(error), labelledBy }}>{children}</FieldContext>
       </div>
       {error ? (
         <p id={errorId} className="col-span-full m-0 animate-fade-in text-[13px] leading-snug text-rework-ink">
@@ -80,6 +84,7 @@ export function Input({ className, readOnly, ...props }: ComponentProps<'input'>
     <input
       id={field?.id}
       aria-describedby={field?.describedBy}
+      aria-labelledby={field?.labelledBy}
       aria-invalid={field?.invalid || undefined}
       readOnly={readOnly || shown}
       className={cn(

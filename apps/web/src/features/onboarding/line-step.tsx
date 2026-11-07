@@ -23,7 +23,7 @@ import { LineEditorProvider, useLineEditor } from '../factory-editor/line/line-e
 import { ModelsBox } from '../factory-editor/line/models-box';
 import { type Direction, stepTarget } from '../factory-editor/line/reorder';
 import { WipStepper } from '../factory-editor/line/station-row';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, type PreviewStation, previewSlots } from './factory-preview';
 import { AddHere, CardControls, useCardFlip } from './line-step-controls';
 import { ModelKeyCard, useModelKeySecret } from './model-key-card';
@@ -139,7 +139,7 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
       action={<Continue org={org} factory={factory} />}
       preview={previewSlots({
         organization: organizationCard(org, host),
-        code: codeCard(repoOf(search.url), search.secret),
+        code: codeCard({ url: search.url, secret: search.secret, done: true }),
         factory: (
           <FactoryCard
             name={basics.name || factoryDetail?.name || ''}

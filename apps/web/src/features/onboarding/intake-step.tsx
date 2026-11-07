@@ -22,7 +22,7 @@ import { OpenDraftError, setTriggersEnabled } from '../intake/set-trigger-enable
 import { sourceIcon } from '../intake/triggers-table';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 
@@ -265,7 +265,7 @@ function Ready({
       preview={{
         ...previewSlots({
           organization: organizationCard(org, window.location.host),
-          code: codeCard(repoOf(search.url), search.secret),
+          code: codeCard({ url: search.url, secret: search.secret, done: true }),
           factory: <FactoryCard name={factory.name} purpose={basics.purpose ?? ''} stations={panelStations} />,
         }),
         cards: (
