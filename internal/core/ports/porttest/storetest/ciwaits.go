@@ -362,7 +362,8 @@ func testCIWaitsClaimSkipsOpenWait(f *fixture) {
 	t := f.t
 	ctx := f.ctx(t)
 
-	held, elsewhere := f.create(t, domain.NewItem{Title: "held", Class: domain.ClassExpedite}), f.create(t, domain.NewItem{Title: "elsewhere"})
+	held := f.create(t, domain.NewItem{Title: "waits for CI", Class: domain.ClassExpedite})
+	elsewhere := f.create(t, domain.NewItem{Title: "waits at another station"})
 
 	before := ciWait(held.ID, ciSHA)
 	before.Station = stWork
@@ -389,6 +390,32 @@ func testCIWaitsClaimSkipsOpenWait(f *fixture) {
 	}
 }
 
+// ciUnreadableError is the error testCIWaitsAtStation records on the polls.
+const ciUnreadableError = "the token cannot read CI"
+
+// recordedPolls fails unless each of ws carries its poll with the checks and error
+// recordEveryCIPoll recorded.
+func recordedPolls(t *testing.T, ws []domain.CIWaitRecord) {
+	t.Helper()
+
+	for _, w := range ws {
+		if w.Poll.SHA != w.SHA || !jsonEqual(w.Poll.Checks, json.RawMessage(ciChecks)) || w.Poll.LastError != ciUnreadableError {
+			t.Errorf("poll of the wait on %s = %+v; want its recorded checks and error", w.SHA, w.Poll)
+		}
+	}
+}
+
+// recordEveryCIPoll leases every poll due at now and records r on each, or fails the test.
+func (f *fixture) recordEveryCIPoll(t *testing.T, now time.Time, r domain.CIPollResult) {
+	t.Helper()
+
+	for _, p := range f.leaseCIPolls(t, now, ciOwner) {
+		if err := f.Store.RecordCIPoll(f.ctx(t), p.CIPollKey, ciOwner, r); err != nil {
+			t.Fatalf("RecordCIPoll(%s) = %v", p.SHA, err)
+		}
+	}
+}
+
 // CIWaits returns the item's waits at one station, open and ended, by start, each with its
 // poll's recorded checks; never another station's or another item's.
 func testCIWaitsAtStation(f *fixture) {
@@ -407,19 +434,13 @@ func testCIWaitsAtStation(f *fixture) {
 	next.StartedAt = t1.Add(time.Minute)
 	second := f.openCIWait(t, next)
 
-	elsewhere := ciWait(it.ID, ciSHA)
-	elsewhere.Station = stWork
-	f.openCIWait(t, elsewhere)
+	atWork := ciWait(it.ID, ciSHA)
+	atWork.Station = stWork
+	f.openCIWait(t, atWork)
 	f.openCIWait(t, ciWait(other.ID, ciSHA))
-
-	polls := f.leaseCIPolls(t, t1.Add(time.Minute), ciOwner)
-	for _, p := range polls {
-		if err := f.Store.RecordCIPoll(ctx, p.CIPollKey, ciOwner, domain.CIPollResult{
-			Checks: json.RawMessage(ciChecks), Error: "the token cannot read CI", NextPollAt: t1.Add(time.Hour), Interval: domain.CIPollMinInterval,
-		}); err != nil {
-			t.Fatalf("RecordCIPoll(%s) = %v", p.SHA, err)
-		}
-	}
+	f.recordEveryCIPoll(t, t1.Add(time.Minute), domain.CIPollResult{
+		Checks: json.RawMessage(ciChecks), Error: ciUnreadableError, NextPollAt: t1.Add(time.Hour), Interval: domain.CIPollMinInterval,
+	})
 
 	ws, err := f.Store.CIWaits(ctx, it.ID, ciStation)
 	if err != nil {
@@ -434,11 +455,7 @@ func testCIWaitsAtStation(f *fixture) {
 		t.Errorf("CIWaits = %+v; want the first ended unreadable at t1 and the second open", ws)
 	}
 
-	for _, w := range ws {
-		if w.Poll.SHA != w.SHA || !jsonEqual(w.Poll.Checks, json.RawMessage(ciChecks)) || w.Poll.LastError != "the token cannot read CI" {
-			t.Errorf("poll of the wait on %s = %+v; want its recorded checks and error", w.SHA, w.Poll)
-		}
-	}
+	recordedPolls(t, ws)
 
 	if ws, err := f.Store.CIWaits(ctx, it.ID, "nowhere"); err != nil || len(ws) != 0 {
 		t.Errorf("CIWaits at a station with none = %+v, %v; want none", ws, err)

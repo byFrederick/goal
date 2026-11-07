@@ -79,6 +79,9 @@ type claimed struct {
 	// hostKind is the kind of the code host of a landing root's first repository (firstHostKind),
 	// which picks the command its landing note opens a pull request with; "" for GitHub's.
 	hostKind domain.CodeHostKind
+	// ci is the `## CI` section the claim's briefs start with at a station that waits for CI
+	// (ciGate); "" elsewhere and for an item with no pushed commit.
+	ci string
 }
 
 // webTools are the Claude Code tools of the builtins.web group, which the organization policy's
@@ -93,7 +96,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
 
-	if !e.admitted(ctx, log, &c) {
+	if !e.ready(ctx, log, &c) {
 		return
 	}
 
@@ -106,12 +109,15 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		return
 	}
 
-	// What the claim's every attempt hears: its assembly, the factory's open work.
+	// What the claim's every attempt hears after the CI section: its assembly, the factory's
+	// open work.
 	preloaded, err := e.preloaded(ctx, l, st, it)
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
 		return
 	}
+
+	preloaded = joinParts(c.ci, preloaded)
 
 	var b box
 	defer e.deleteBox(ctx, log, &b)
@@ -234,6 +240,18 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 	}
 
 	return ctx.Err()
+}
+
+// ready reports whether the claim's run may start: at a station that waits for CI, only once
+// CI on the item's commits has finished, keeping what CI said for its brief (ciGate, ADR 0044
+// decision 2), and then only once it is admitted.
+func (e *Engine) ready(ctx context.Context, log *slog.Logger, c *claimed) bool {
+	var ok bool
+	if c.ci, ok = e.ciGate(ctx, log, *c); !ok {
+		return false
+	}
+
+	return e.admitted(ctx, log, c)
 }
 
 // admitted finds the claim's agent (agentFor), applies the organization policy to it
