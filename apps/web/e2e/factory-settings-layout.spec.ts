@@ -102,3 +102,31 @@ test('the environments Edit link is 44×44 and no Jonah ⓘ lies over the field 
     );
   }
 });
+
+// The CI line under each kept result (ADR 0044): the kept results are answered with a failing ci.
+for (const size of sizes) {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`shows the CI line with its reason at ${size.width} px in ${scheme}`, async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs the whole matrix');
+      await page.route('**/repositories/tests', async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        const reason =
+          'GitHub answered 403: Resource not accessible. A fine-grained token needs read access to Checks and Commit statuses of acme/app';
+        for (const t of body.tests) t.ci = { ok: false, reason };
+        await route.fulfill({ response, json: body });
+      });
+      await page.setViewportSize(size);
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(path);
+      const code = page.getByRole('region', { name: 'Code' });
+      await expect(code.getByText(/Can’t read CI\. GitHub answered 403/)).toBeVisible();
+      const tip = code.getByRole('button', { name: 'About reading CI' });
+      if (size.width === 390) await expectTarget44(tip, 'About reading CI');
+      else await expect(tip).toBeVisible();
+
+      await expectNoHorizontalScroll(page);
+      await expectNoClippedElements(page);
+    });
+  }
+}

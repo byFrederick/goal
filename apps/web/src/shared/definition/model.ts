@@ -91,6 +91,8 @@ export interface ModelStation {
   checks?: (string | StationCheck)[];
   gate?: Gate;
   action?: 'merge';
+  /** Wait for CI on the item's commits: "ci", or { ci: { grace, max, rounds } } (ADR 0044). */
+  waitFor?: 'ci' | { ci: { grace?: string; max?: string; rounds?: number } };
 }
 
 export interface Flow {

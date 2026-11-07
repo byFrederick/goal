@@ -15,6 +15,7 @@ import { defKeys, keys, templatesQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
 import { createSecret, getSecret, patchSecret } from '../../api/secrets';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
+import { CiAccessLine, waitsForCi } from '../../shared/ci-access-line';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Field, Input } from '../../ui/field';
@@ -23,6 +24,7 @@ import { RadioCards, type RadioOption } from '../../ui/radio-cards';
 import { SegmentedControl } from '../../ui/segmented-control';
 import { Skeleton } from '../../ui/skeleton';
 import { touchLink } from '../../ui/touch-target';
+import { DraftSessionProvider, useSection } from '../factory-editor/draft/use-draft';
 import { nameProblem } from '../secrets/words';
 import {
   type CodeAccess,
@@ -79,7 +81,9 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
     );
   }
   return search.factory ? (
-    <CodeForm key={code} org={org} search={search} factory={search.factory} code={code} />
+    <DraftSessionProvider org={org.id} factory={search.factory}>
+      <CodeForm key={code} org={org} search={search} factory={search.factory} code={code} />
+    </DraftSessionProvider>
   ) : (
     <NoFactory org={org} search={search} />
   );
@@ -161,6 +165,7 @@ function CodeForm({
   /** The secret and token the last save made, so a retest with the same token does not create it twice. */
   const [saved, setSaved] = useState<{ name: string; token: string }>();
   const [answer, setAnswer] = useState<Answer>();
+  const waitsCi = waitsForCi(useSection('line'));
   const host = window.location.host;
 
   const wantsCode = access !== 'none';
@@ -501,6 +506,7 @@ function CodeForm({
                     return (
                       <div key={r.url} className="flex animate-fade-in flex-col gap-1">
                         <Callout tone={r.ok ? 'ok' : 'rework'}>{resultText(label, r)}</Callout>
+                        <CiAccessLine ci={r.ci} waitsForCi={waitsCi} />
                         {r.warning ? <Callout tone="note">{r.warning}</Callout> : null}
                         {r.note ? <Callout tone="note">{r.note}</Callout> : null}
                       </div>
