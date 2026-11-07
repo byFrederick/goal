@@ -364,3 +364,74 @@ func TestAPI_AddItemPartNeedsItemCreate(t *testing.T) {
 		t.Errorf("the viewer adding a part = %d %s; want 403", res.status, res.body)
 	}
 }
+
+// TestAPI_ItemPartsWaiting: each part carries the same waiting getItem shows, its open needs read
+// once for all parts. A part at a waitFor: ci station with an open CI wait waits for kind ci with
+// its commit and counts, one held by a turn edge waits for its turn on the assembly's
+// integration branch, and one held by nothing has none.
+func TestAPI_ItemPartsWaiting(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	asm, parts := h.assembledOf(t,
+		domain.NewPart{Key: "server", Title: "the server", Paths: []string{"cmd/goald/main.go"}},
+		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{openAPIPath}},
+		domain.NewPart{Key: "client", Title: "the client", Paths: []string{"web/src/a.ts"}},
+	)
+
+	for i, p := range parts {
+		if p.Station != stBuild || p.State != domain.StateQueued {
+			parts[i] = h.move(t, p, domain.Position{Station: stBuild, State: domain.StateQueued}, nil)
+		}
+	}
+
+	server, contract, client := parts[0], parts[1], parts[2]
+
+	const branch = "goal/a1-the-assembly"
+
+	if _, err := h.store.SetIntegrationBranch(inOrg(t), asm.ID, branch, stBuild, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	h.edge(t, client, contract, domain.EdgeTurn)
+	h.openCIWait(t, server, ciSHA, 1)
+	h.recordChecks(t, ciSHA,
+		ports.Check{Name: ciLint, State: ports.CheckFinished, Result: ports.CheckPassed},
+		ports.Check{Name: ciTest, State: ports.CheckRunning},
+	)
+
+	var got gen.AssemblyParts
+
+	h.getReadingOnce(t, "OpenNeeds", "/v1/orgs/acme/items/"+string(asm.ID)+"/parts", &got)
+
+	if len(got.Parts) != 3 {
+		t.Fatalf("parts = %d; want 3", len(got.Parts))
+	}
+
+	passed, pr, target := gen.CICheckResultPassed, prURL, branch
+	contractRef := "line#" + strconv.FormatInt(contract.Number, 10)
+	want := map[string]*gen.ItemWaiting{
+		"server": {
+			Kind: gen.WaitingCI, Items: []string{}, Files: []string{}, Needs: []gen.ItemWaitingNeed{},
+			Ci: &gen.ItemWaitingCI{
+				Commits: []gen.CICommit{{Repo: ciRepo, Sha: ciSHA, Url: &pr}},
+				Checks: []gen.CICheck{
+					{Repo: ciRepo, Name: ciLint, State: gen.CICheckStateFinished, Result: &passed, FailedJobs: []string{}},
+					{Repo: ciRepo, Name: ciTest, State: gen.CICheckStateRunning, FailedJobs: []string{}},
+				},
+				Finished: 1, Total: 2,
+			},
+		},
+		"client": {
+			Kind: gen.WaitingTurn, Items: []string{contractRef}, Files: []string{}, Target: &target,
+			Needs: []gen.ItemWaitingNeed{{Ref: contractRef, Title: "the contract", Paths: []string{openAPIPath}}},
+		},
+		"contract": nil,
+	}
+
+	for _, p := range got.Parts {
+		if !reflect.DeepEqual(p.Waiting, want[p.Key]) {
+			t.Errorf("part %s waiting = %s; want %s", p.Key, jsonOf(t, p.Waiting), jsonOf(t, want[p.Key]))
+		}
+	}
+}

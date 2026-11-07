@@ -5224,6 +5224,8 @@ export interface components {
             needs: string[];
             /** @description Refs of the needs that are neither done nor cancelled */
             waiting_on: string[];
+            /** @description Why the part is not claimed yet, the same object getItem returns as Item.waiting; null when it isn't waiting */
+            waiting: components["schemas"]["ItemWaiting"] | null;
             /** @description 0 for no needs, otherwise 1 + the largest wave among its needs */
             wave: number;
             /** Format: double */
