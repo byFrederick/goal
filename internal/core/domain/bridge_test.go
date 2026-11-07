@@ -80,6 +80,30 @@ func TestBridgeLeadTime_StepsExplainTheGapByExcessOverFastItems(t *testing.T) {
 	}
 }
 
+func TestBridgeLeadTime_CIIsItsOwnStepNextToWaiting(t *testing.T) {
+	t.Parallel()
+
+	ciAtBuild := Component{Kind: ComponentCI, Station: stationBuild}
+	items := []ItemTime{
+		item(map[Component]time.Duration{atBuild: h, build: 2 * h}),
+		item(map[Component]time.Duration{atBuild: h, build: 2 * h}),
+		item(map[Component]time.Duration{atBuild: 3 * h, ciAtBuild: 2 * h, build: 2 * h}),
+		item(map[Component]time.Duration{atBuild: 3 * h, ciAtBuild: 2 * h, build: 2 * h}),
+		item(map[Component]time.Duration{atBuild: 3 * h, ciAtBuild: 2 * h, build: 2 * h}),
+	}
+
+	// Waiting's excess is 3 - 1 = 2 h and ci's 2 h: an even split, with ci right after waiting.
+	b := BridgeLeadTime(items, target, target+2*h)
+
+	want := []BridgeStep{
+		{Component: atBuild, Duration: h, Share: 0.5, Items: 3},
+		{Component: ciAtBuild, Duration: h, Share: 0.5, Items: 3},
+	}
+	if !sameSteps(b.Steps, want) {
+		t.Errorf("steps = %+v, want %+v", b.Steps, want)
+	}
+}
+
 func TestBridgeLeadTime_StepsSumExactlyToAnUnevenGap(t *testing.T) {
 	t.Parallel()
 

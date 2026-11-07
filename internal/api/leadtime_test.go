@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -49,6 +50,57 @@ func TestAPI_LeadTimeBridgeOverTarget(t *testing.T) {
 
 	if c := b.Constraint; c == nil || c.Station != stBuild || c.BusyRatio != nil {
 		t.Errorf("constraint = %+v, want build, busy unknown before any lease", c)
+	}
+}
+
+// Time an item waited at a station for CI on its commits is its own ci step, not waiting
+// (ADR 0044 decision 10).
+func TestAPI_LeadTimeBridgeCIWaits(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	// Every item waits at build: 2 h and 3 h (fast), 9, 10 and 11 h (slow); each slow one waits
+	// 4 h of it for CI.
+	for i, hours := range []int{2, 3, 9, 10, 11} {
+		created, done := oct(18+i, 0), oct(18+i, hours)
+		it := h.seed(t, stBuild, domain.StateQueued, created)
+
+		if hours > 6 {
+			w, err := h.store.OpenCIWait(inOrg(t), domain.NewCIWait{
+				Item: it.ID, Station: stBuild, Visit: "visit-1", Repo: ciRepo, SHA: "c0ffee", Phase: domain.CIPhaseBefore, Round: 1,
+				StartedAt: created.Add(time.Hour),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := h.store.EndCIWaits(inOrg(t), []domain.CIWaitID{w.ID}, domain.CIPassed, created.Add(5*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		h.move(t, it, domain.Position{Station: stDone, State: domain.StateDone}, func(tr *ports.Transition) { tr.At, tr.DoneAt = done, done })
+	}
+
+	var b gen.LeadTimeBridge
+	if code := h.call(t, http.MethodGet, leadTimePath, "", &b); code != http.StatusOK {
+		t.Fatalf("lead time = %d", code)
+	}
+
+	// The 4.4 h gap splits by excess: ci 4 h (none for fast items), waiting 6 h less 2.5 h.
+	steps := map[gen.BridgeStepComponent]gen.BridgeStep{}
+	for _, st := range b.Steps {
+		steps[st.Component] = st
+	}
+
+	ci, waiting := steps[gen.BridgeStepComponentCi], steps[gen.BridgeStepComponentWaiting]
+	if len(b.Steps) != 2 || deref(ci.Station) != stBuild || math.Abs(ci.Hours-4.4*4/7.5) > 1e-9 || ci.Items != 3 {
+		t.Errorf("steps = %+v, want ci at build of 4.4 h × 4/7.5 for 3 items", b.Steps)
+	}
+
+	if deref(waiting.Station) != stBuild || math.Abs(waiting.Hours-4.4*3.5/7.5) > 1e-9 {
+		t.Errorf("waiting step = %+v, want 4.4 h × 3.5/7.5 at build, without the CI hours", waiting)
 	}
 }
 
