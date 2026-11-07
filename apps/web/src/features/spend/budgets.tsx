@@ -1,11 +1,13 @@
-// Budgets per factory: its daily and weekly caps (set in the factory's definition, so shown here, not
-// edited), today's spend against the daily cap, and the state. A stopped factory has an open andon pull
+// Budgets per factory: its weekly budget (set in the factory's definition, so shown here, not edited),
+// today's spend against a day's share of it (weekly ÷ 7, the figure Home shows), the last 7 days against the
+// weekly budget, and the state. The definition's dailyUsd stops nothing, so it is shown nowhere. A stopped factory has an open andon pull
 // and its reason as the line under its bar. The three rules under the list are fixed copy: SpendBudget
 // carries no per-item cap, so Per item says what a run does at its own cap.
 
 import type { SpendBudget } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import { Chip, type ChipTone } from '../../ui/chip';
+import { dayShare, dayShareHint } from '../onboarding/budget-hints';
 import { meterOf } from './meter';
 import { money, percentOf } from './view';
 
@@ -29,7 +31,10 @@ export function Budgets({ budgets }: { budgets: readonly SpendBudget[] }) {
       )}
       <dl className="m-0 flex flex-col gap-2 border-t border-line pt-4 pb-3 text-secondary">
         <Rule term="At 80%" detail="Owners and admins get a Needs you alert" />
-        <Rule term="At 100%" detail="The factory drains: running items finish, nothing new starts until midnight UTC" />
+        <Rule
+          term="At 100%"
+          detail="The factory drains: running items finish; nothing new starts until the last 7 days' spend is under the budget"
+        />
         <Rule term="Per item" detail="A run stops at the item's cap and asks you" />
       </dl>
     </section>
@@ -46,7 +51,7 @@ function Rule({ term, detail }: { term: string; detail: string }) {
 }
 
 function BudgetRow({ budget: b }: { budget: SpendBudget }) {
-  const daily = b.daily_usd;
+  const daily = b.weekly_usd === null ? null : dayShare(b.weekly_usd);
   const pct = daily === null ? null : percentOf(b.today_usd, daily);
   const stopped = b.state === 'stopped';
   const over = b.state === 'over_budget';
@@ -61,7 +66,9 @@ function BudgetRow({ budget: b }: { budget: SpendBudget }) {
         <div className="flex min-w-0 flex-col leading-snug">
           <b className="font-semibold text-ink">{title}</b>
           <span className="text-meta text-muted">
-            {money(daily)} a day, {money(b.weekly_usd)} a week
+            {b.weekly_usd === null
+              ? 'No weekly budget'
+              : `${dayShareHint(b.weekly_usd)}, ${money(b.weekly_usd)} a week`}
           </span>
         </div>
       </div>
@@ -81,7 +88,7 @@ function BudgetRow({ budget: b }: { budget: SpendBudget }) {
         </span>
         {b.weekly_usd === null ? null : (
           <span className="min-w-0 break-words text-meta text-muted">
-            Week {money(b.week_usd)} of {money(b.weekly_usd)}
+            Last 7 days {money(b.week_usd)} of {money(b.weekly_usd)}
           </span>
         )}
       </div>

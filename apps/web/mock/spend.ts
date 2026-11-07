@@ -27,6 +27,8 @@ export interface SpendOptions {
   factoriesOf: (org: string) => SpendFactory[];
   /** The reason of a factory's open andon pull, or null while its line runs. */
   reasonOf: (org: string, factory: SpendFactory) => string | null;
+  /** The weekly budget a factory's definition sets, when the mock keeps one that Home also shows. */
+  weeklyOf?: (factory: SpendFactory) => number | null | undefined;
 }
 
 /** The budgets the acme fixtures set in each factory's definition, and the agents that spend. */
@@ -146,19 +148,19 @@ export function createSpend(options: SpendOptions) {
     const rework = cents(total * 0.12);
     const budgets: SpendBudget[] = factories.map((f) => {
       const cap = budgeted[f.name] ?? { daily: 0, weekly: 0, agents: [] };
-      const today_usd = sumOfDay(org, today);
-      const week_usd = sumOver(org, daysBetween(today - 6 * dayMs, now));
+      const weekly = options.weeklyOf?.(f) ?? cap.weekly;
+      const today_usd = factorySpend(f, today);
+      const week_usd = cents(daysBetween(today - 6 * dayMs, now).reduce((n, d) => n + factorySpend(f, d), 0));
       const reason = options.reasonOf(org, f);
-      const state = reason !== null ? 'stopped' : week_usd >= cap.weekly ? 'over_budget' : 'running';
+      const state = reason !== null ? 'stopped' : week_usd >= weekly ? 'over_budget' : 'running';
       return {
         factory: { id: f.id, name: f.name, title: f.title ?? f.name },
         daily_usd: cap.daily,
-        weekly_usd: cap.weekly,
+        weekly_usd: weekly,
         today_usd,
         week_usd,
         state,
-        reason:
-          state === 'stopped' ? reason : state === 'over_budget' ? `$${week_usd} of $${cap.weekly} this week` : null,
+        reason: state === 'stopped' ? reason : state === 'over_budget' ? `$${week_usd} of $${weekly} this week` : null,
         model_connections: [connection],
       };
     });

@@ -26,7 +26,8 @@ for (const width of [375, 768, 1440]) {
       // One budget row: Software, with its daily and weekly caps.
       const budgets = page.getByRole('heading', { level: 2, name: 'Budgets' }).locator('xpath=ancestor::section[1]');
       await expect(budgets.getByText('Software', { exact: true })).toBeVisible();
-      await expect(budgets.getByText('$150 a day, $800 a week')).toBeVisible();
+      await expect(budgets.getByText('about $114 a day, $800 a week')).toBeVisible();
+      await expect(budgets.getByText(/midnight/i)).toHaveCount(0);
 
       // Export CSV is built; the router's Set up is not built yet: disabled, never a live link or button.
       await expect(page.getByRole('button', { name: 'Export CSV' })).not.toHaveAttribute('aria-disabled', 'true');
@@ -34,6 +35,34 @@ for (const width of [375, 768, 1440]) {
 
       await expectAccessible(page);
       await expectNoHorizontalScroll(page);
+    });
+
+    test('a budget row agrees with Home and shows its own factory spend', async ({ page }) => {
+      // SRE's weekly budget is $400 on both screens, so a day is about $57 on both.
+      await page.goto('/o/acme');
+      const home = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'SRE' }) });
+      await expect(home.getByText('of $57.14')).toBeVisible();
+
+      await page.goto('/o/acme/spend');
+      const budgets = page.getByRole('heading', { level: 2, name: 'Budgets' }).locator('xpath=ancestor::section[1]');
+      const row = (name: string) => budgets.getByRole('listitem').filter({ hasText: name });
+      await expect(row('SRE').getByText('about $57 a day, $400 a week')).toBeVisible();
+      await expect(row('SRE').getByText(/Today .* of \$57\.14|Today .* of \$57/)).toBeVisible();
+
+      // Each row has its own 7-day figure, not the organization's total.
+      const week = async (name: string) =>
+        Number(
+          (
+            (await row(name)
+              .getByText(/Last 7 days/)
+              .textContent()) ?? ''
+          )
+            .match(/Last 7 days \$([\d,.]+)/)?.[1]
+            ?.replace(/,/g, ''),
+        );
+      const [software, sre] = [await week('Software'), await week('SRE')];
+      expect(sre).toBeGreaterThan(0);
+      expect(sre).toBeLessThan(software);
     });
 
     test('the Today label stays inside its box', async ({ page }) => {
