@@ -2772,7 +2772,7 @@ type ActivityEvent struct {
 	Title   string  `json:"title"`
 }
 
-// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 type Actor struct {
 	// Id "local" for the local user, an agent's name or a job's name
 	Id   string    `json:"id"`
@@ -2925,7 +2925,7 @@ type AndonState struct {
 type ApiKey struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor     `json:"created_by"`
 	ExpiresAt time.Time `json:"expires_at"`
 
@@ -3030,7 +3030,7 @@ type AuditEntry struct {
 	// Action <noun>.<past_verb>, as in org.updated
 	Action string `json:"action"`
 
-	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -3625,7 +3625,7 @@ type Credential struct {
 	Agents    CredentialAgents `json:"agents"`
 	CreatedAt time.Time        `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy   Actor  `json:"created_by"`
 	Description string `json:"description"`
 
@@ -3649,7 +3649,7 @@ type Credential struct {
 	Type      CredentialType `json:"type"`
 	UpdatedAt time.Time      `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 
 	// UsedBy What uses a credential
@@ -3910,7 +3910,7 @@ type Draft struct {
 	ChangeCount int       `json:"change_count"`
 	CreatedAt   time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
 	// Current The version that runs now, which differs from base after a restore; null before the first publish
@@ -3931,7 +3931,7 @@ type Draft struct {
 	// UpdatedAt The last save ("Autosaved 14:32")
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -3987,7 +3987,7 @@ type DraftRef struct {
 	Revision  int64     `json:"revision"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -4006,7 +4006,7 @@ type DraftRequest struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	Id         string     `json:"id"`
 
-	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Requester Actor              `json:"requester"`
 	StartedAt *time.Time         `json:"started_at,omitempty"`
 	Status    DraftRequestStatus `json:"status"`
@@ -5565,7 +5565,7 @@ type KnowledgeSource struct {
 	Connection *string   `json:"connection,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor  `json:"created_by"`
 	Id        string `json:"id"`
 
@@ -7167,7 +7167,7 @@ type SearchItem struct {
 type Secret struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy   Actor  `json:"created_by"`
 	Description string `json:"description"`
 
@@ -7191,7 +7191,7 @@ type Secret struct {
 	Source    SecretSource `json:"source"`
 	UpdatedAt time.Time    `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 
 	// Uses What uses it, by kind then name
@@ -7392,7 +7392,7 @@ type SignupDomain struct {
 	JoinRole FactoryRole `json:"join_role"`
 	SetAt    time.Time   `json:"set_at"`
 
-	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	SetBy Actor `json:"set_by"`
 }
 
@@ -7506,7 +7506,7 @@ type StandingRule struct {
 	ConnectionId *string   `json:"connection_id"`
 	CreatedAt    time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
 	// Environment The environment file's name of a rule keyed by server, as in default; null for a connection's rule
@@ -7972,7 +7972,7 @@ type ToolTemplateList struct {
 
 // Touch One action by a person on an item, named by its most specific event
 type Touch struct {
-	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -8546,7 +8546,7 @@ type VersionRef struct {
 	Number      int       `json:"number"`
 	PublishedAt time.Time `json:"published_at"`
 
-	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	PublishedBy Actor `json:"published_by"`
 }
 

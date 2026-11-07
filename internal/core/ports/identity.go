@@ -50,6 +50,11 @@ type Access interface {
 	// Members lists the organization's members by name, with their factory roles and last
 	// activity.
 	Members(ctx context.Context) ([]domain.Member, error)
+	// MemberNames names each of users who is a member of the organization, as the sidebar names
+	// them (domain.Principal.Actor: the trimmed name, else the email), in one read. A user who
+	// is not a member (removed, or never one) is absent from the map, as is an id that is not a
+	// user's; no users is an empty map.
+	MemberNames(ctx context.Context, users []domain.UserID) (map[domain.UserID]string, error)
 	// Invitations lists the organization's pending, unexpired invitations, oldest first.
 	Invitations(ctx context.Context) ([]domain.Invitation, error)
 	// SetFactoryRole gives member user role on factory f; "" removes it (nothing to remove is no
