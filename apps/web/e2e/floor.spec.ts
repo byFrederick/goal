@@ -126,7 +126,7 @@ test('Add a build agent raises the station by one in a draft and opens the Line 
   // The draft is not published: the person reviews and publishes it in the Line editor.
   await expect(page).toHaveURL(/\/o\/acme\/f\/software\/definition\/line$/);
   // The draft starts from the published definition, whose Build station is worked by one backend-engineer agent.
-  await expect(page.getByRole('combobox', { name: 'Who works at Build' })).toHaveText('backend-engineer × 2');
+  await expect(page.getByRole('combobox', { name: 'Who works here at Build' })).toHaveText('backend-engineer × 2');
 });
 
 test('a phone shows the range the URL names', async ({ page }) => {

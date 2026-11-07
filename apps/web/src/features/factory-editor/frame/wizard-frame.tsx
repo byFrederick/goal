@@ -47,7 +47,7 @@ export function WizardHeader({
 }
 
 const viewItem =
-  'inline-flex h-[38px] items-center gap-1.5 rounded-chip px-3 text-sm text-ink-soft transition-colors duration-(--duration-quick) md:h-[34px]';
+  'inline-flex h-[38px] items-center gap-1.5 rounded-chip px-3 text-sm text-ink-soft transition-colors duration-(--duration-quick) max-md:min-h-11 md:h-[34px]';
 
 /**
  * Visual | YAML in the wizard: a pressed-button group (the boards' toggle). YAML says why it is
