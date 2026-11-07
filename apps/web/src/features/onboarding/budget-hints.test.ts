@@ -1,32 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dayShare,
+  dayShareHint,
   estimateForTarget,
-  fullDaysHint,
-  fullDaysInWeek,
   gaugeFraction,
-  itemsForDay,
-  itemsHint,
   timesAverage,
   timesAverageHint,
 } from './budget-hints';
 
-// The picture's values: $150 a day, $800 a week, $12 per item and a target of 10 items a day.
+// The picture's values: $800 a week, $12 per run and a target of 10 items a day.
 describe('the hints under the budgets', () => {
-  it('says how many items a day fits at the average cost', () => {
-    expect(itemsForDay(150)).toBe(48);
-    expect(itemsHint(150)).toBe('fits about 48 items');
+  it('shows the week’s day share as week ÷ 7, the figure Home shows', () => {
+    expect(dayShare(800)).toBe(114);
+    expect(dayShareHint(800)).toBe('about $114 a day');
+    expect(dayShareHint(1400)).toBe('about $200 a day');
   });
 
-  it('says how many full days the week covers at the day’s budget', () => {
-    expect(fullDaysInWeek(150, 800)).toBe(5);
-    expect(fullDaysHint(150, 800)).toBe('covers 5 full days');
-    expect(fullDaysHint(500, 500)).toBe('covers 1 full day');
-  });
-
-  it('says how many times the average the most per item is', () => {
+  it('says how many times the average item the most per run is', () => {
     expect(timesAverage(12)).toBe(4);
-    expect(timesAverageHint(12)).toBe('4 times the average');
-    expect(timesAverageHint(3)).toBe('1 time the average');
+    expect(timesAverageHint(12)).toBe('one agent run, 4 times the average item');
+    expect(timesAverageHint(3)).toBe('one agent run, 1 time the average item');
   });
 });
 
@@ -35,9 +28,9 @@ describe('the estimate and the gauge', () => {
     expect(estimateForTarget(10)).toBe(31);
   });
 
-  it('fills the gauge by the day’s budget out of $500, and no further', () => {
-    expect(gaugeFraction(150)).toBeCloseTo(0.3);
-    expect(gaugeFraction(500)).toBe(1);
-    expect(gaugeFraction(900)).toBe(1);
+  it('fills the gauge by the week’s budget out of $2,000, and no further', () => {
+    expect(gaugeFraction(800)).toBeCloseTo(0.4);
+    expect(gaugeFraction(2000)).toBe(1);
+    expect(gaugeFraction(3000)).toBe(1);
   });
 });

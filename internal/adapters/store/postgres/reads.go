@@ -194,6 +194,28 @@ func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since 
 	return usd, nil
 }
 
+// RunCostsSince implements ports.Store.
+func (s *Store) RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.FactoryRunCostsSinceRow, error) {
+		return q.FactoryRunCostsSince(ctx, db.FactoryRunCostsSinceParams{FactoryID: fid, Since: since})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("run costs of factory %s since %s: %w", factory, since.Format(time.RFC3339), err)
+	}
+
+	out := make([]domain.RunCost, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.RunCost{StartedAt: r.StartedAt.UTC(), CostUSD: r.CostUsd})
+	}
+
+	return out, nil
+}
+
 // Attention implements ports.Store. Its reads share one snapshot.
 func (s *Store) Attention(ctx context.Context) ([]domain.Attention, error) {
 	var out []domain.Attention

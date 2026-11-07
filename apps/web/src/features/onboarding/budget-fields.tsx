@@ -5,15 +5,15 @@ import { useState } from 'react';
 import type { Budget } from '../../shared/definition/model';
 import { formatUsd, formatUsdCompact, plural } from '../../shared/format';
 import { Field, Input } from '../../ui/field';
+import { InfoTip } from '../../ui/info-tip';
 import { RadioCards } from '../../ui/radio-cards';
 import { useDraftSession, useSection } from '../factory-editor/draft/use-draft';
 import { setBudgetField, setTarget } from './budget-draft';
 import {
   averageItemUsd,
   budgetRanges,
+  dayShareHint,
   estimateForTarget,
-  fullDaysHint,
-  itemsHint,
   targetFallbacks,
   timesAverageHint,
 } from './budget-hints';
@@ -26,7 +26,6 @@ export function useBudgetValues() {
   return {
     review,
     line,
-    day: budget.daily_usd ?? budgetRanges.day.fallback,
     week: budget.weekly_usd ?? budgetRanges.week.fallback,
     perItem: budget.per_item_usd ?? budgetRanges.perItem.fallback,
     exhausted: budget.on_exhausted ?? 'drain',
@@ -38,7 +37,7 @@ export function useBudgetValues() {
 export function BudgetFields() {
   const session = useDraftSession();
   const values = useBudgetValues();
-  const { review, line, day, week, perItem, exhausted, itemsPerDay, leadHours } = values;
+  const { review, line, week, perItem, exhausted, itemsPerDay, leadHours } = values;
 
   // Each change is one edit, coalesced while the person drags or types; leaving the control saves it.
   const setBudgetAt = <K extends keyof Budget>(field: K, value: Budget[K]) =>
@@ -50,26 +49,17 @@ export function BudgetFields() {
   return (
     <>
       <BudgetSlider
-        id="budget-day"
-        label="A day"
-        range={budgetRanges.day}
-        value={day}
-        hint={itemsHint(day)}
-        onChange={(v) => setBudgetAt('daily_usd', v)}
-        onDone={flush}
-      />
-      <BudgetSlider
         id="budget-week"
         label="A week"
         range={budgetRanges.week}
         value={week}
-        hint={fullDaysHint(day, week)}
+        hint={dayShareHint(week)}
         onChange={(v) => setBudgetAt('weekly_usd', v)}
         onDone={flush}
       />
       <BudgetSlider
         id="budget-item"
-        label="Most per item"
+        label="Most per run"
         range={budgetRanges.perItem}
         value={perItem}
         hint={timesAverageHint(perItem)}
@@ -80,13 +70,23 @@ export function BudgetFields() {
       <Estimate itemsPerDay={itemsPerDay} />
 
       <RadioCards
-        legend="When a budget runs out"
+        groupName="When a budget runs out"
+        legend={
+          <span className="flex items-center gap-1">
+            When a budget runs out
+            <InfoTip about="when a budget runs out" className="max-md:size-11">
+              The budget is the last 7 days of spend, counted back from now: there is no reset at midnight. Spend that
+              is more than 7 days old stops counting, so new work starts again as soon as the total falls under the
+              budget.
+            </InfoTip>
+          </span>
+        }
         name="budget-exhausted"
         options={[
           {
             value: 'drain',
             label: "Finish what's started",
-            description: 'Running items finish; nothing new starts until tomorrow.',
+            description: 'Running items finish; nothing new starts until the last 7 days’ spend is under the budget.',
           },
           { value: 'stop', label: 'Stop everything', description: 'Running agents pause at their next turn.' },
         ]}

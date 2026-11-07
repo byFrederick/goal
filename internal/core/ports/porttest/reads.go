@@ -271,6 +271,29 @@ func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since 
 	return s.spend(org, factory, since, time.Time{}, "") - jonah, nil // Jonah's runs never trigger onExhausted
 }
 
+// RunCostsSince implements ports.Store.
+func (s *Store) RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.RunCost{}
+
+	for id, r := range s.runs {
+		if s.runVisible(r, org) && r.FactoryID == factory && !s.jonah.runKinds[id].Jonahs() && !r.StartedAt.Before(since) {
+			out = append(out, domain.RunCost{StartedAt: r.StartedAt, CostUSD: r.Result.CostUSD})
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b domain.RunCost) int { return a.StartedAt.Compare(b.StartedAt) })
+
+	return out, nil
+}
+
 // spend adds the cost of an organization's factory's runs started in [since, until), or at or
 // after since when until is zero, on items of typ ("" for every type). Callers hold s.mu.
 func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until time.Time, typ string) float64 {
