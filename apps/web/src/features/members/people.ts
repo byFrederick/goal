@@ -3,6 +3,7 @@
 // changed, the invite dialog's addresses. Pure: the page renders what these return.
 import type { InviteRequest, OrgRoleName } from '../../api/auth';
 import type { FactoryRole, Invitation, Member, OrgRole } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { formatDay } from '../../shared/format';
 import { displayName } from '../../shared/names';
 
@@ -37,9 +38,12 @@ export function seesFactory(m: Member, factory: string): boolean {
  * A member's factories in a line: "sre approver, support viewer" (by factory name, of the
  * factories the caller sees), "Editor in every factory" for owners and admins, "No factories".
  */
-export function factorySummary(m: Member, factories: readonly { id: string; name: string }[]): string {
+export function factorySummary(
+  m: Member,
+  factories: readonly { id: string; name: string; title?: string | undefined }[],
+): string {
   if (editorEverywhere(m.role)) return 'Editor in every factory';
-  const names = new Map(factories.map((f) => [f.id, f.name]));
+  const names = new Map(factories.map((f) => [f.id, factoryTitle(f)]));
   const held = m.factory_roles
     .flatMap((g) => {
       const name = names.get(g.factory_id);

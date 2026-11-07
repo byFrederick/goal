@@ -128,3 +128,21 @@ for (const width of [390, 1440]) {
     });
   });
 }
+
+for (const width of [375, 1440]) {
+  test.describe(`factory titles at ${width} px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    test('Spend names factories by title in the legend, table, By agent and Box usage', async ({ page }) => {
+      await page.goto('/o/acme/spend');
+      await expect(heading(page)).toBeVisible();
+      const section = (name: string) =>
+        page.getByRole('heading', { level: 2, name }).locator('xpath=ancestor::section[1]');
+      for (const name of ['Spend by day', 'By agent', 'Box usage']) {
+        const body = section(name);
+        await expect(body.getByText(/SRE/).first()).toBeAttached();
+        await expect(body.getByText(/(^|[^\w-])sre([^\w-]|$)/)).toHaveCount(0);
+      }
+    });
+  });
+}

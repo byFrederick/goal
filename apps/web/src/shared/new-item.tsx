@@ -11,7 +11,7 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/dialog'
 import { Select } from '../ui/select';
 import { Skeleton } from '../ui/skeleton';
 import { modelOf } from './definition/model';
-import { findFactory, refParam } from './factory';
+import { factoryTitle, findFactory, refParam } from './factory';
 import { formatDay, humanize } from './format';
 import { factoryWorkInvalidations } from './invalidation';
 import { useOrg } from './org';
@@ -477,7 +477,7 @@ function FactoryField({ id, picker, missing }: { id: string; picker: Picker; mis
             ? []
             : [
                 { value: '', label: 'Choose a factory' },
-                ...picker.factories.map((f) => ({ value: f.id, label: f.name })),
+                ...picker.factories.map((f) => ({ value: f.id, label: factoryTitle(f) })),
               ]
         }
       />

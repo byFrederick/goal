@@ -295,7 +295,7 @@ export function RunsPage() {
                 label: 'Spend today',
                 value: formatUsdCompact(summary?.spend_usd ?? 0),
                 note: (summary?.spend_by_factory ?? [])
-                  .map((f) => `${f.name} ${formatUsdCompact(f.spend_usd)}`)
+                  .map((f) => `${factoryTitle(f)} ${formatUsdCompact(f.spend_usd)}`)
                   .join(', '),
               },
             ]}

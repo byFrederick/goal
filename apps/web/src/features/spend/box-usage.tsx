@@ -21,7 +21,7 @@ export function BoxUsagePlaceholder() {
   return <div className="h-56 rounded-card bg-hover" />;
 }
 
-export function BoxUsage({ spend, factoryNames }: { spend: OrgSpend; factoryNames: ReadonlyMap<string, string> }) {
+export function BoxUsage({ spend, factoryTitles }: { spend: OrgSpend; factoryTitles: ReadonlyMap<string, string> }) {
   const [grouping, setGrouping] = useState<Grouping>('agents');
   const rows: UsageRow[] = grouping === 'agents' ? spend.usage.by_agent : spend.usage.by_station;
   const many = new Set([...spend.usage.by_agent, ...spend.usage.by_station].map((r) => r.factory_id)).size > 1;
@@ -84,7 +84,9 @@ export function BoxUsage({ spend, factoryNames }: { spend: OrgSpend; factoryName
                 <td className="min-w-0 py-3 pr-3 max-md:col-span-2 max-md:p-0">
                   <b className="font-semibold break-words text-ink">{nameOf(r)}</b>
                   {many ? (
-                    <span className="block text-meta text-muted">{factoryNames.get(r.factory_id) ?? r.factory_id}</span>
+                    <span className="block text-meta text-muted">
+                      {factoryTitles.get(r.factory_id) ?? r.factory_id}
+                    </span>
                   ) : null}
                 </td>
                 <Cell label="Box" left>
