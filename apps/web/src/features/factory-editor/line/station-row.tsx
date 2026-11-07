@@ -1,7 +1,6 @@
 // One station of the line (D §10.6, design v3): a row of the stations table with its number (the drag
 // handle), name and id, kind, WIP limit, who works there, ↑ ↓ and More, then its rules behind a
-// disclosure and B's problems with their fixes. The columns never stack: the table scrolls sideways in
-// its own box on a narrow screen. Alt+ArrowUp/Down anywhere in the row moves the station.
+// disclosure and B's problems with their fixes. Wide enough, the cells are one row; narrower, kind, WIP, who and order take a second line. Alt+ArrowUp/Down anywhere in the row moves the station.
 import { ArrowDown, ArrowUp, GripVertical, MoreHorizontal, TriangleAlert } from 'lucide-react';
 import { type KeyboardEvent, useId, useState } from 'react';
 import { toast } from 'sonner';
@@ -54,11 +53,25 @@ const fieldWords: Record<string, string> = {
 const and = (words: string[]) =>
   words.length < 2 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`;
 
-/** The table's columns, shared by its header and its rows: handle and number, station, kind, WIP, who, order. */
+/**
+ * The table's wide columns, shared by its header and its rows: handle and number, station, kind, WIP, who, order.
+ * They apply from `wideRow` of the table's own width (a container query on its box, not the viewport):
+ * 44 + 160 (name, fits "Integrate") + 220 + 120 + 200 + 112 = 856, five 12 px gaps = 60, padding 24 = 940.
+ * Narrower, each station takes two lines and the header row is hidden.
+ */
 export const lineColumns =
-  'grid grid-cols-[44px_minmax(170px,1.3fr)_268px_132px_minmax(150px,1fr)_140px] gap-x-3 md:grid-cols-[44px_minmax(170px,1.3fr)_268px_132px_minmax(150px,1fr)_112px] lg:grid-cols-[44px_minmax(0,1.3fr)_minmax(220px,268px)_minmax(120px,132px)_minmax(0,1fr)_112px]';
-/** The table's width below lg (the order column fits three 44 px buttons below md): its box scrolls sideways. From lg the tracks flex and the table fits its card. */
-export const lineTableWidth = 'min-w-[988px] md:min-w-[960px] lg:min-w-0';
+  '@[940px]:grid-cols-[44px_minmax(160px,1.3fr)_minmax(220px,268px)_minmax(120px,132px)_minmax(200px,1fr)_112px] gap-x-3';
+/** The table's width below `wideRow`: a phone's box scrolls sideways past this. */
+export const lineTableWidth = 'min-w-[560px]';
+
+/** The visible label over a field of the second line; the wide row has its header instead. */
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <span aria-hidden="true" className="text-xs font-medium text-muted @[940px]:hidden">
+      {children}
+    </span>
+  );
+}
 
 const iconButton =
   'inline-flex size-11 shrink-0 items-center justify-center rounded-control border border-line bg-card text-ink transition-colors duration-(--duration-quick) hover:bg-shell md:size-8 aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:bg-card';
@@ -181,7 +194,7 @@ export function StationRow({
         drag.dragging && 'opacity-50',
       )}
     >
-      <div className={cn(lineColumns, 'items-center px-3 py-2.5')}>
+      <div className={cn(lineColumns, 'grid grid-cols-[44px_minmax(0,1fr)] items-center gap-y-2 px-3 py-2.5')}>
         {drag.handle && !editor.viewOnly ? (
           <button
             type="button"
@@ -242,80 +255,91 @@ export function StationRow({
           </span>
         </div>
 
-        <div className="min-w-0">
-          <SegmentedControl
-            label={`Kind of ${label}`}
-            className="flex w-full [&>label]:min-w-0 [&>label]:flex-1 [&>label]:justify-center md:[&>label]:h-6 md:[&>label]:px-2 md:[&>label]:text-xs"
-            value={station.kind}
-            onChange={setKind}
-            readOnly={editor.viewOnly}
-            options={kinds.map((k) => ({
-              value: k,
-              label: kindLabel[k],
-              disabledReason:
-                k === 'done' && !last && station.kind !== 'done' ? 'Only the last station can be Done' : undefined,
-            }))}
-          />
-        </div>
-
-        <div className="min-w-0">
-          {station.kind === 'agent' || station.kind === 'human' ? (
-            <WipStepper
-              label={label}
-              wip={station.wip}
-              onChange={setWip}
-              onBlur={editor.flush}
-              invalid={invalid('wip')}
-              describedBy={describedBy('wip')}
+        {/* The second line below the wide breakpoint; the wide row lays its cells straight into the grid. */}
+        <div className="col-start-2 flex flex-wrap items-end gap-x-3 gap-y-2 @[940px]:contents">
+          <div className="flex w-[220px] min-w-0 flex-col gap-1 @[940px]:w-auto">
+            <FieldLabel>Kind</FieldLabel>
+            <SegmentedControl
+              label={`Kind of ${label}`}
+              className="flex w-full [&>label]:min-w-0 [&>label]:flex-1 [&>label]:justify-center md:[&>label]:h-6 md:[&>label]:px-2 md:[&>label]:text-xs"
+              value={station.kind}
+              onChange={setKind}
               readOnly={editor.viewOnly}
+              options={kinds.map((k) => ({
+                value: k,
+                label: kindLabel[k],
+                disabledReason:
+                  k === 'done' && !last && station.kind !== 'done' ? 'Only the last station can be Done' : undefined,
+              }))}
             />
-          ) : (
-            <span className="text-sm text-muted">Not limited</span>
+          </div>
+
+          <div className="flex w-[120px] min-w-0 flex-col gap-1 @[940px]:w-auto">
+            <FieldLabel>WIP limit</FieldLabel>
+            {station.kind === 'agent' || station.kind === 'human' ? (
+              <WipStepper
+                label={label}
+                wip={station.wip}
+                onChange={setWip}
+                onBlur={editor.flush}
+                invalid={invalid('wip')}
+                describedBy={describedBy('wip')}
+                readOnly={editor.viewOnly}
+              />
+            ) : (
+              <span className="text-sm text-muted">Not limited</span>
+            )}
+          </div>
+          <div className="flex min-w-[200px] flex-1 flex-col gap-1 text-sm @[940px]:min-w-0">
+            <FieldLabel>Who works here</FieldLabel>
+            <WhoWorks station={station} invalid={invalid('who')} describedBy={describedBy('who')} />
+          </div>
+          {/* Beside WIP and who works when the row has room, on a line of their own when not. */}
+          {editor.viewOnly ? null : (
+            <div className="ml-auto flex flex-col gap-1 @[940px]:ml-0">
+              <FieldLabel>Order</FieldLabel>
+              <div className="flex justify-end gap-1">
+                <OrderButton dir={-1} label={label} blocked={up} onStep={step} />
+                <OrderButton dir={1} label={label} blocked={down} onStep={step} />
+                <Menu>
+                  <MenuTrigger asChild>
+                    <button type="button" aria-label={`More for ${label}`} className={iconButton}>
+                      <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
+                    </button>
+                  </MenuTrigger>
+                  <MenuContent side="bottom" align="end" className="w-64">
+                    <MenuItem onSelect={() => insert('above')}>Insert above</MenuItem>
+                    {station.kind === 'done' ? null : (
+                      <MenuItem onSelect={() => insert('below')}>Insert below</MenuItem>
+                    )}
+                    {station.kind === 'done' ? null : (
+                      <MenuItem
+                        onSelect={() => {
+                          const copy = duplicateStation(line, station.id);
+                          if (copy) editor.insert(copy.edit, copy.station);
+                        }}
+                      >
+                        Duplicate
+                      </MenuItem>
+                    )}
+                    {station.kind === 'agent' ? (
+                      <>
+                        <MenuSeparator />
+                        <MenuItem onSelect={() => setDialog('agents')}>Parallel agents…</MenuItem>
+                        <MenuItem onSelect={() => setDialog('output')}>Output contract…</MenuItem>
+                        <MenuItem onSelect={() => setDialog('buffer')}>Buffer in front…</MenuItem>
+                      </>
+                    ) : null}
+                    <MenuSeparator />
+                    <MenuItem onSelect={() => setDialog('delete')} className="text-rework-ink">
+                      Delete…
+                    </MenuItem>
+                  </MenuContent>
+                </Menu>
+              </div>
+            </div>
           )}
         </div>
-        <div className="min-w-0 text-sm">
-          <WhoWorks station={station} invalid={invalid('who')} describedBy={describedBy('who')} />
-        </div>
-        {/* Beside WIP and who works when the row has room, on a line of their own when not. */}
-        {editor.viewOnly ? null : (
-          <div className="flex justify-end gap-1">
-            <OrderButton dir={-1} label={label} blocked={up} onStep={step} />
-            <OrderButton dir={1} label={label} blocked={down} onStep={step} />
-            <Menu>
-              <MenuTrigger asChild>
-                <button type="button" aria-label={`More for ${label}`} className={iconButton}>
-                  <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
-                </button>
-              </MenuTrigger>
-              <MenuContent side="bottom" align="end" className="w-64">
-                <MenuItem onSelect={() => insert('above')}>Insert above</MenuItem>
-                {station.kind === 'done' ? null : <MenuItem onSelect={() => insert('below')}>Insert below</MenuItem>}
-                {station.kind === 'done' ? null : (
-                  <MenuItem
-                    onSelect={() => {
-                      const copy = duplicateStation(line, station.id);
-                      if (copy) editor.insert(copy.edit, copy.station);
-                    }}
-                  >
-                    Duplicate
-                  </MenuItem>
-                )}
-                {station.kind === 'agent' ? (
-                  <>
-                    <MenuSeparator />
-                    <MenuItem onSelect={() => setDialog('agents')}>Parallel agents…</MenuItem>
-                    <MenuItem onSelect={() => setDialog('output')}>Output contract…</MenuItem>
-                    <MenuItem onSelect={() => setDialog('buffer')}>Buffer in front…</MenuItem>
-                  </>
-                ) : null}
-                <MenuSeparator />
-                <MenuItem onSelect={() => setDialog('delete')} className="text-rework-ink">
-                  Delete…
-                </MenuItem>
-              </MenuContent>
-            </Menu>
-          </div>
-        )}
       </div>
 
       <div className="pl-14 pr-3">

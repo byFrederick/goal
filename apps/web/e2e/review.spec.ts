@@ -80,7 +80,7 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
     .first()
     .click();
   await page.getByRole('button', { name: 'Set agent to spec-writer' }).first().click();
-  await expect(page.getByRole('combobox', { name: 'Who works at Spec' })).toHaveText(/spec-writer/);
+  await expect(page.getByRole('combobox', { name: 'Who works here at Spec' })).toHaveText(/spec-writer/);
 
   await reviewLink(page).click();
   await expect(alert).toHaveCount(0);
