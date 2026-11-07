@@ -50,6 +50,45 @@ describe('CIWait', () => {
     expect(within(group).getByText('Running')).toBeTruthy();
   });
 
+  it('lists the failure as its own group beside the checks of the open commit', async () => {
+    const base = waiting.ci as NonNullable<ItemWaiting['ci']>;
+    const both: ItemWaiting = {
+      ...waiting,
+      ci: {
+        ...base,
+        failure: {
+          repo,
+          sha: 'fedcba9876543210',
+          url: 'https://github.com/acme/app/pull/6',
+          checks: [
+            {
+              repo,
+              name: 'task web:e2e',
+              state: 'finished',
+              result: 'failed',
+              url: 'https://ci.example.com/e2e-failed',
+              failed_jobs: ['3/12'],
+            },
+          ],
+        },
+      },
+    };
+    render(<CIWait waiting={both} />);
+    expect(screen.getByText('CI failed: task web:e2e (3/12)')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'About CI' }));
+    const failed = await screen.findByRole('group', { name: `${repo}, failed` });
+    expect(within(failed).getByRole('link', { name: 'fedcba9' }).getAttribute('href')).toBe(
+      'https://github.com/acme/app/pull/6',
+    );
+    expect(within(failed).getByRole('link', { name: 'task web:e2e' }).getAttribute('href')).toBe(
+      'https://ci.example.com/e2e-failed',
+    );
+    expect(within(failed).getByText('Failed')).toBeTruthy();
+    expect(within(failed).getByText('(3/12)')).toBeTruthy();
+    const open = screen.getByRole('group', { name: repo });
+    expect(within(open).getByRole('link', { name: 'build' })).toBeTruthy();
+  });
+
   it('shows a commit without a url as plain text', async () => {
     const bare: ItemWaiting = {
       ...waiting,

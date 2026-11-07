@@ -26,13 +26,22 @@ const failed = {
     ...running.ci,
     failure: {
       repo,
-      sha: '0123456789abcdef',
-      checks: [check({ name: 'task web:e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12'] })],
+      sha: 'fedcba9876543210',
+      url: 'https://github.com/acme/app/pull/6',
+      checks: [
+        check({
+          name: 'task web:e2e',
+          state: 'finished',
+          result: 'failed',
+          failed_jobs: ['3/12'],
+          url: 'https://ci.example.com/e2e-failed',
+        }),
+      ],
     },
   },
 };
 
-async function patch(page: Page, waiting: unknown) {
+async function patchBoard(page: Page, waiting: unknown) {
   await page.route(/\/factories\/[^/]+\/board(\?|$)/, async (route) => {
     const response = await route.fetch();
     const board = await response.json();
@@ -42,22 +51,49 @@ async function patch(page: Page, waiting: unknown) {
   });
 }
 
+async function expectList(page: Page, label: string, failedWait: boolean) {
+  await expect(page.getByText(label).first()).toBeVisible();
+  await page.getByRole('button', { name: 'About CI' }).first().click();
+  if (failedWait) {
+    const failed = page.getByRole('group', { name: `${repo}, failed` });
+    await expect(failed.getByRole('link', { name: 'fedcba9' })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/app/pull/6',
+    );
+    await expect(failed.getByRole('link', { name: 'task web:e2e' })).toHaveAttribute(
+      'href',
+      'https://ci.example.com/e2e-failed',
+    );
+    await expect(failed.getByText('3/12')).toBeVisible();
+  }
+  const group = page.getByRole('group', { name: repo, exact: true });
+  await expect(group.getByRole('link', { name: '0123456' })).toHaveAttribute(
+    'href',
+    'https://github.com/acme/app/pull/7',
+  );
+  await expect(group.getByRole('link', { name: 'build' })).toHaveAttribute('href', 'https://ci.example.com/build');
+  await expectNoHorizontalScroll(page);
+  await expectAccessible(page);
+}
+
 for (const [name, waiting, label] of [
   ['running', running, 'Waiting for CI · 9 of 14'],
   ['failed', failed, 'CI failed: task web:e2e (3/12)'],
 ] as const) {
   test(`a ${name} CI wait reads ${label} on a Board card, with its ⓘ`, async ({ page }) => {
-    await patch(page, waiting);
+    await patchBoard(page, waiting);
     await page.goto('/o/acme/f/goal/board');
-    await expect(page.getByText(label).first()).toBeVisible();
-    await page.getByRole('button', { name: 'About CI' }).first().click();
-    const group = page.getByRole('group', { name: repo });
-    await expect(group.getByRole('link', { name: '0123456' })).toHaveAttribute(
-      'href',
-      'https://github.com/acme/app/pull/7',
-    );
-    await expect(group.getByRole('link', { name: 'task web:e2e' }).or(group.getByText('task web:e2e'))).toBeVisible();
-    await expectNoHorizontalScroll(page);
-    await expectAccessible(page);
+    await expectList(page, label, name === 'failed');
+  });
+
+  test(`a ${name} CI wait reads ${label} on the item page, with its ⓘ`, async ({ page }) => {
+    await page.route(/\/factories\/[^/]+\/items\/[^/?]+(\?|$)/, async (route) => {
+      const response = await route.fetch();
+      const item = await response.json();
+      Object.assign(item, { state: 'queued', waiting });
+      await route.fulfill({ response, json: item });
+    });
+    await page.goto('/o/acme/f/goal/items/12');
+    await expectList(page, label, name === 'failed');
   });
 }

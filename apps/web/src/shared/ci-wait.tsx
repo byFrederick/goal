@@ -42,48 +42,72 @@ function Check({ check }: { check: CICheck }) {
   );
 }
 
-/** The repositories a CI wait lists: the commits it runs on and the checks of each, with the failed ones. */
+function RepoGroup({
+  name,
+  repo,
+  sha,
+  url,
+  checks,
+  empty,
+}: {
+  name: string;
+  repo: string;
+  sha: string;
+  url?: string | null | undefined;
+  checks: CICheck[];
+  empty?: string;
+}) {
+  return (
+    <fieldset aria-label={name} className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
+      <div className="flex min-w-0 items-baseline justify-between gap-3">
+        <span className="min-w-0 break-all font-medium text-ink">{repo}</span>
+        {url ? (
+          <a href={url} target="_blank" rel="noreferrer" className={cn(link, 'flex-none font-mono text-xs text-muted')}>
+            {shortSha(sha)}
+          </a>
+        ) : (
+          <span className="flex-none font-mono text-xs text-muted">{shortSha(sha)}</span>
+        )}
+      </div>
+      {checks.length > 0 ? (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {checks.map((c) => (
+            <Check key={`${c.name}:${c.url ?? ''}`} check={c} />
+          ))}
+        </ul>
+      ) : empty ? (
+        <span className="text-muted">{empty}</span>
+      ) : null}
+    </fieldset>
+  );
+}
+
+/** The repositories a CI wait lists: the commits it runs on and their checks, and the failure that sent it back. */
 function CIList({ ci }: { ci: NonNullable<ItemWaiting['ci']> }) {
   const failed = ci.failure;
-  const commits = ci.commits.length > 0 || !failed ? ci.commits : [failed];
   return (
     <div className="flex flex-col gap-3 p-3 text-sm">
-      {commits.map((commit) => {
-        const checks = ci.checks.filter((c) => c.repo === commit.repo);
-        const shown = checks.length > 0 || !failed || failed.repo !== commit.repo ? checks : failed.checks;
-        return (
-          <fieldset
-            key={`${commit.repo}@${commit.sha}`}
-            aria-label={commit.repo}
-            className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0"
-          >
-            <div className="flex min-w-0 items-baseline justify-between gap-3">
-              <span className="min-w-0 break-all font-medium text-ink">{commit.repo}</span>
-              {commit.url ? (
-                <a
-                  href={commit.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(link, 'flex-none font-mono text-xs text-muted')}
-                >
-                  {shortSha(commit.sha)}
-                </a>
-              ) : (
-                <span className="flex-none font-mono text-xs text-muted">{shortSha(commit.sha)}</span>
-              )}
-            </div>
-            {shown.length > 0 ? (
-              <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                {shown.map((c) => (
-                  <Check key={`${c.name}:${c.url ?? ''}`} check={c} />
-                ))}
-              </ul>
-            ) : (
-              <span className="text-muted">No checks yet</span>
-            )}
-          </fieldset>
-        );
-      })}
+      {failed ? (
+        <RepoGroup
+          name={`${failed.repo}, failed`}
+          repo={failed.repo}
+          sha={failed.sha}
+          url={failed.url}
+          checks={failed.checks}
+          empty="Timed out"
+        />
+      ) : null}
+      {ci.commits.map((commit) => (
+        <RepoGroup
+          key={`${commit.repo}@${commit.sha}`}
+          name={commit.repo}
+          repo={commit.repo}
+          sha={commit.sha}
+          url={commit.url}
+          checks={ci.checks.filter((c) => c.repo === commit.repo)}
+          empty="No checks yet"
+        />
+      ))}
     </div>
   );
 }
