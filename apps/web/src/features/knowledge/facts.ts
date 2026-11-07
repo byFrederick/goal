@@ -22,7 +22,7 @@ export function fromDetail(s: KnowledgeSource): string {
     const space = `Space ${s.config.spaces ?? ''}`.trim();
     return s.config.root_page ? `${space}, page ${s.config.root_page}` : space;
   }
-  return s.connection ?? '';
+  return '';
 }
 
 /** The runs' reads and searches of each source, by name. */

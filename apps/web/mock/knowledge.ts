@@ -1,8 +1,8 @@
 // The organizations' knowledge as files for the mock API (ADR 0038): GET and POST
 // /v1/orgs/{org}/knowledge/sources, GET, PATCH and DELETE …/sources/{source}, POST …/{source}/sync,
 // POST (multipart files) and DELETE …/{source}/uploads, refusing as goald does
-// (knowledge-source-name-taken, connection-not-found, connection-cannot-sync,
-// knowledge-source-not-found, knowledge-source-in-use, knowledge-source-live,
+// (knowledge-source-name-taken,
+// knowledge-source-not-found, knowledge-source-in-use,
 // knowledge-file-not-found, not-an-upload-source, upload-too-large, unsupported-document-type).
 // The mock syncs at once: a sync, or an upload, makes the files of its source current,
 // broadcasting `event: knowledge` as syncing, then idle; its end moves updated_at, as goald's
@@ -16,7 +16,7 @@ import type { Actor, Factory, KnowledgeEvent, KnowledgeSource, KnowledgeSourceKi
 
 const dayMs = 86_400_000;
 const namePattern = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
-const kinds: readonly KnowledgeSourceKind[] = ['upload', 'repository', 'confluence', 'synced', 'live'];
+const kinds: readonly KnowledgeSourceKind[] = ['upload', 'repository', 'confluence', 'synced'];
 /** The file types an upload takes, by extension (internal/knowledge.TypeOf). */
 const types: Record<string, string> = {
   '.txt': 'text/plain',
@@ -71,8 +71,6 @@ export interface MockKnowledge {
   sources: (org: string) => KnowledgeSource[];
   /** A source's current snapshot as the preview line needs it: its file count and read_when; undefined when it has none. */
   indexOf: (org: string, name: string) => { files: number; read_when: string } | undefined;
-  /** The names of org's sources that read the connection named connection. */
-  readers: (org: string, connection: string) => string[];
   /** Serves the organization's knowledge routes; false for any other. */
   handle: (
     org: Org,
@@ -90,8 +88,6 @@ interface Deps {
   factories: (org: string) => Factory[];
   /** The knowledge sources the factory's current version may search. */
   listedBy: (factory: Factory) => string[];
-  /** The kind's sync hook of org's connection name: '' for a kind that cannot sync; undefined for no connection. */
-  connectionSync: (org: string, name: string) => string | undefined;
   audit: (
     org: string,
     by: Actor,
@@ -171,7 +167,6 @@ function seed(now: number, by: Actor): MockSource[] {
         name: 'dashboards',
         title: 'Dashboards',
         kind: 'synced',
-        connection: 'github',
         config: { repository: 'https://github.com/acme/dashboards', include: '**/*.md' },
         status: 'failed',
         last_error: 'the server refused the token',
@@ -193,7 +188,6 @@ function seed(now: number, by: Actor): MockSource[] {
         name: 'goal-docs',
         title: 'goal docs',
         kind: 'synced',
-        connection: 'github',
         config: { repository: 'https://github.com/acme/goal', branch: 'main', include: 'docs/**/*.md' },
         last_synced_at: at(-45 * 60_000),
         next_sync_at: at(15 * 60_000),
@@ -309,7 +303,6 @@ function seed(now: number, by: Actor): MockSource[] {
         name: 'support-macros',
         title: 'Support macros',
         kind: 'synced',
-        connection: 'github',
         config: { repository: 'https://github.com/acme/support-macros', include: '**/*.md' },
         // Only when someone presses Sync (ADR 0038 decision 1): no next sync.
         sync_every_seconds: 0,
@@ -328,16 +321,7 @@ function seed(now: number, by: Actor): MockSource[] {
   ];
 }
 
-export function createKnowledge({
-  clock,
-  actor,
-  factories,
-  listedBy,
-  connectionSync,
-  audit,
-  broadcast,
-  acme,
-}: Deps): MockKnowledge {
+export function createKnowledge({ clock, actor, factories, listedBy, audit, broadcast, acme }: Deps): MockKnowledge {
   let sources = new Map<string, MockSource[]>();
 
   const reset = (now: number) => {
@@ -426,53 +410,23 @@ export function createKnowledge({
     const name = typeof b.name === 'string' ? b.name : '';
     const title = typeof b.title === 'string' ? b.title.trim() : '';
     const kind = kinds.find((k) => k === b.kind);
-    const connection = typeof b.connection === 'string' ? b.connection : '';
-    // A synced source reads with a secret (ADR 0037), not a connection.
+    // A synced source reads with a secret (ADR 0037), or with nothing.
     const secret = typeof b.secret === 'string' ? b.secret : '';
     const every = typeof b.sync_every_seconds === 'number' ? b.sync_every_seconds : 3600;
     if (!namePattern.test(name))
       return refuse(res, 400, `name "${name}" must be 3 to 40 lowercase letters, digits or dashes`);
     if (title.length === 0 || title.length > 120) return refuse(res, 400, 'a source title has 1 to 120 characters');
     if (!kind)
-      return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, repository, confluence, synced or live`);
-    if ((kind === 'synced' || kind === 'repository' || kind === 'confluence') && connection === '') {
-      if (every !== 0 && every < 900)
-        return refuse(res, 400, 'a source syncs at most every 15 minutes, or only on demand (0)');
-      if (named(org.id, name))
-        return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
-      return createOn(org, req, res, {
-        name,
-        title,
-        kind,
-        connection: '',
-        secret,
-        every,
-        config: strings(b.config),
-        readWhen: typeof b.read_when === 'string' ? b.read_when : '',
-      });
-    }
-    if ((kind === 'upload') !== (connection === '')) {
-      return refuse(
-        res,
-        400,
-        kind === 'upload' ? 'an upload source reads no connection' : `a ${kind} source reads a connection`,
-      );
-    }
+      return refuse(res, 400, `source kind "${String(b.kind)}" is not upload, repository, confluence or synced`);
     if (every !== 0 && every < 900)
       return refuse(res, 400, 'a source syncs at most every 15 minutes, or only on demand (0)');
-    const hook = connection ? connectionSync(org.id, connection) : '';
-    if (hook === undefined) return refuse(res, 404, `connection "${connection}" not found`, 'connection-not-found');
-    if (kind === 'synced' && hook === '') {
-      return refuse(res, 400, `connection "${connection}"'s kind cannot sync`, 'connection-cannot-sync');
-    }
     if (named(org.id, name))
       return refuse(res, 409, `knowledge source "${name}" is taken`, 'knowledge-source-name-taken');
     return createOn(org, req, res, {
       name,
       title,
       kind,
-      connection,
-      secret: '',
+      secret,
       every,
       config: strings(b.config),
       readWhen: typeof b.read_when === 'string' ? b.read_when : '',
@@ -487,14 +441,13 @@ export function createKnowledge({
       name: string;
       title: string;
       kind: (typeof kinds)[number];
-      connection: string;
       secret: string;
       every: number;
       config: Record<string, string>;
       readWhen: string;
     },
   ) {
-    const { name, title, kind, connection, secret, every } = v;
+    const { name, title, kind, secret, every } = v;
     const by = actor(req);
     const now = new Date(clock()).toISOString();
     const s: MockSource = {
@@ -503,14 +456,13 @@ export function createKnowledge({
         name,
         title,
         kind,
-        ...(connection ? { connection } : {}),
         ...(secret ? { secret } : {}),
         config: v.config,
         read_when: v.readWhen,
         sync_every_seconds: every,
         status: 'idle',
         last_synced_at: null,
-        next_sync_at: kind === 'live' || every === 0 ? null : now,
+        next_sync_at: every === 0 ? null : now,
         latest_snapshot: null,
         sync_failures: 0,
         used_by: { factories: [], readers: [] },
@@ -521,13 +473,7 @@ export function createKnowledge({
       docs: [],
     };
     sources.set(org.id, [...list(org.id), s]);
-    audit(
-      org.id,
-      by,
-      'knowledge_source.created',
-      { kind: 'knowledge_source', id: s.source.id },
-      { name, kind, connection },
-    );
+    audit(org.id, by, 'knowledge_source.created', { kind: 'knowledge_source', id: s.source.id }, { name, kind });
     send(res, 201, out(org.id, s));
   }
 
@@ -671,10 +617,6 @@ export function createKnowledge({
       const s = named(org, name);
       return s && s.docs.length > 0 ? { files: s.docs.length, read_when: s.source.read_when } : undefined;
     },
-    readers: (org, connection) =>
-      list(org)
-        .filter((s) => s.source.connection === connection)
-        .map((s) => s.source.name),
     async handle(org, rest, method, req, res, body) {
       const url = new URL(req.url ?? '/', 'http://mock');
       if (rest === '/knowledge/sources' && method === 'GET') {
@@ -756,13 +698,9 @@ export function createKnowledge({
         return true;
       }
       if (src[2] === '/sync') {
-        if (s.source.kind === 'live')
-          refuse(res, 409, `knowledge source "${name}" is live and never syncs`, 'knowledge-source-live');
-        else {
-          res.statusCode = 202;
-          res.end();
-          sync(org.id, s);
-        }
+        res.statusCode = 202;
+        res.end();
+        sync(org.id, s);
       } else if (src[2] === '/uploads') {
         if (method === 'POST') {
           await upload(org, s, req, res);
