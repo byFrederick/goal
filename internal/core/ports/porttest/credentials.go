@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,13 +22,11 @@ var _ ports.Credentials = (*Credentials)(nil)
 // by Resolve, the factory scope enforced there, an audit entry through audit for every change and
 // use, and, as the secrets table they now live in, no type label or agent list
 // (domain.Credential.Stored). Views made with WithKey share the data, as goalds with different keys share one
-// database. The connections given to NewCredentials are the ones that refer to credentials as
-// {{name}}: UsedBy names them, and Delete refuses while one does.
+// database. No connection refers to a credential any more (ADR 0037), so UsedBy names none.
 type Credentials struct {
 	d     *credentialData
 	key   ports.MasterKey
 	audit ports.Audit
-	conns *Connections
 }
 
 type credentialData struct {
@@ -44,34 +41,23 @@ type credentialRow struct {
 }
 
 // NewCredentials returns credentials sealed with key and audited through audit (a Tenancy that
-// knows the organizations), referred to by conns' connections; nil conns has none.
-func NewCredentials(key ports.MasterKey, audit ports.Audit, conns *Connections) *Credentials {
-	return &Credentials{key: key, audit: audit, conns: conns, d: &credentialData{rows: map[domain.OrgID]map[string]*credentialRow{}}}
+// knows the organizations).
+func NewCredentials(key ports.MasterKey, audit ports.Audit) *Credentials {
+	return &Credentials{key: key, audit: audit, d: &credentialData{rows: map[domain.OrgID]map[string]*credentialRow{}}}
 }
 
 // WithKey returns a view of c's data sealed with key.
 func (c *Credentials) WithKey(key ports.MasterKey) *Credentials {
-	return &Credentials{d: c.d, key: key, audit: c.audit, conns: c.conns}
+	return &Credentials{d: c.d, key: key, audit: c.audit}
 }
 
 // UsedBy implements ports.Credentials.
-func (c *Credentials) UsedBy(ctx context.Context, name string) ([]string, error) {
-	org, ok := domain.OrgFrom(ctx)
-	if !ok {
+func (c *Credentials) UsedBy(ctx context.Context, _ string) ([]string, error) {
+	if _, ok := domain.OrgFrom(ctx); !ok {
 		return nil, domain.ErrNoOrg
 	}
 
-	return c.usedBy(org, name), nil
-}
-
-// usedBy are org's connections that refer to credential name. Its lock is the connections', taken
-// after c's when c's is held, never the other way round.
-func (c *Credentials) usedBy(org domain.OrgID, name string) []string {
-	if c.conns == nil {
-		return []string{}
-	}
-
-	return c.conns.referrers(org, name)
+	return []string{}, nil
 }
 
 // List implements ports.Credentials.
@@ -224,10 +210,6 @@ func (c *Credentials) Delete(ctx context.Context, name string, by domain.Actor) 
 		return err
 	}
 
-	if users := c.usedBy(org, name); len(users) > 0 {
-		return fmt.Errorf("credential %q is used by connections %s: %w", name, strings.Join(users, ", "), ports.ErrConflict)
-	}
-
 	if err := c.appendAudit(ctx, by, domain.AuditCredentialDeleted, r.cred, map[string]any{auditName: name}); err != nil {
 		return err
 	}
@@ -317,7 +299,7 @@ func (c *Credentials) ImportPreview(ctx context.Context, names []string) ([]doma
 	out := make([]domain.CredentialImportPreview, 0, len(names))
 	for _, name := range names {
 		_, exists := c.d.rows[org][name]
-		out = append(out, domain.CredentialImportPreview{Name: name, Exists: exists, Connections: len(c.usedBy(org, name))})
+		out = append(out, domain.CredentialImportPreview{Name: name, Exists: exists})
 	}
 
 	return out, nil

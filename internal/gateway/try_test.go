@@ -235,8 +235,8 @@ func expectTryBox(t *testing.T, b runBundle) {
 		t.Errorf("environment %+v; want its setup and env names, setup only, without files or MCP servers", e)
 	}
 
-	if len(b.Spec.Connections) != 0 || len(b.Spec.GrantedCalls) != 0 || b.Spec.Knowledge != nil {
-		t.Errorf("connections %+v, granted calls %+v, knowledge %+v; want none", b.Spec.Connections, b.Spec.GrantedCalls, b.Spec.Knowledge)
+	if len(b.Spec.GrantedCalls) != 0 || b.Spec.Knowledge != nil {
+		t.Errorf("granted calls %+v, knowledge %+v; want none", b.Spec.GrantedCalls, b.Spec.Knowledge)
 	}
 
 	expectTryRepository(t, b)

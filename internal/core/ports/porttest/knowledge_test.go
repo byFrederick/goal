@@ -18,15 +18,14 @@ func TestKnowledge_Conformance(t *testing.T) {
 
 	knowledgetest.Run(t, func(*testing.T) knowledgetest.Harness {
 		tn := porttest.NewTenancy(time.Now)
-		conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tn)
-		secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tn, conns)
-		kb := porttest.NewKnowledge(conns, tn)
+		secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tn)
+		kb := porttest.NewKnowledge(tn)
 		kb.ReadSecrets(secrets)
 
 		var orgs atomic.Int64
 
 		return knowledgetest.Harness{
-			Knowledge: kb, Connections: conns, Secrets: secrets, Audit: tn,
+			Knowledge: kb, Secrets: secrets, Audit: tn,
 			NewOrg: func(t *testing.T) domain.OrgID {
 				t.Helper()
 

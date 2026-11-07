@@ -7,27 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 )
-
-// Every platform kind that names a code host has its adapter in goald, so its connections merge.
-func TestCodeHosts_EveryPlatformCodeHostHasAnAdapter(t *testing.T) {
-	t.Parallel()
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hosts := codeHosts(false)
-
-	for _, k := range kinds {
-		if name := k.Spec.CodeHost; name != "" && hosts[name] == nil {
-			t.Errorf("kind %s names code host %q, which goald lacks", k.Name, name)
-		}
-	}
-}
 
 // A merge reaches the repository's host through the connection transport: public addresses
 // only (threat row 4), so a connection whose host is goald's own network gets no request.

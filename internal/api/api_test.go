@@ -23,7 +23,6 @@ import (
 	"github.com/byFrederick/goal/internal/builder"
 	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -91,7 +90,7 @@ spec:
   runtime:
     model: claude-fable-5-1
     modelConnection: claude
-    repository: { url: "https://github.com/acme/app.git", connection: repo }
+    repository: { url: "https://github.com/acme/app.git", connection: repo, token: "{{` + lineRepoSecret + `}}" }
     budget: { weeklyUsd: 70, perItemUsd: 4, maxTurnsPerTask: 80 }
   connections: [repo]
   contracts:
@@ -121,6 +120,12 @@ spec:
 
 const lineID = "0b6f1c9e-5d0a-4c39-9a51-6f1f3f0e2a10"
 
+// lineRepoSecret is the secret line's runtime.repository.token names, which its merges sign in
+// with (atMerge creates it): the harness makes the secrets before the engine, which opens it.
+//
+//nolint:gosec // a secret's name, not a value
+const lineRepoSecret = "line-repo-token"
+
 // defaultEnvFile and defaultEnv are acme's default environment (ADR 0037).
 const (
 	defaultEnvFile = "environments/default.yaml"
@@ -146,6 +151,9 @@ func inOrg(t *testing.T) context.Context {
 }
 
 var t0 = time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+
+// kindGitHub is the name of the github MCP server the environment tests list.
+const kindGitHub = "github"
 
 // testBoxSizes are the harness's sandbox sizes, as the docker backend's; testEgress its one egress
 // address (GOAL_EGRESS_ADDRESSES).
@@ -188,15 +196,15 @@ type harness struct {
 	platform *porttest.Platform
 	// notifications keeps each person's notification preferences.
 	notifications *porttest.NotificationPreferences
-	// conns keeps the organizations' connections, sealed under key k1, with goald's platform
-	// kinds. Connection tests dial through egress.PublicDialer, private addresses (the tests'
-	// servers) allowed unless publicOnly is set.
-	conns         *porttest.Connections
+	// standingRules keeps the organizations' standing rules. Environment tests dial through
+	// connTransport (egress.PublicDialer), private addresses (the tests' servers) allowed unless
+	// publicOnly is set.
+	standingRules *porttest.StandingRules
 	publicOnly    atomic.Bool
 	connTransport *http.Transport
-	// creds keeps the organizations' credentials, sealed under key k1, referred to by conns.
+	// creds keeps the organizations' credentials, sealed under key k1.
 	creds *porttest.Credentials
-	// secrets keeps the organizations' secrets, sealed under key k1, referred to by conns.
+	// secrets keeps the organizations' secrets, sealed under key k1.
 	secrets *porttest.OrgSecrets
 	// notifySettings keeps the organizations' notification settings, naming secrets' secrets;
 	// slack checks a Slack bot token.
@@ -505,14 +513,14 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 		t.Fatal(err)
 	}
 
-	h.catalog = templates
+	h.catalog, h.tenancy = templates, tenancy
+	connections := h.stores(t, tenancy)
 
 	e, err := engine.New(engine.Deps{
 		Store: h.store, Orgs: tenancy, Sandboxes: porttest.NewSandboxes(porttest.NewWorker(porttest.Succeed(`{}`)).Exec),
 		Contracts: porttest.NewContracts(), Secrets: porttest.Secrets{}, Clock: h.clock, Intake: h.intake, Audit: tenancy,
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost}, Hosts: tenancy,
-		Connections: sharedRules{Connections: engineConnections(t, newTenancy(t)), h: h},
-		Credentials: porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
+		StandingRules: h.standingRules, OrgSecrets: h.secrets,
 	}, engine.Config{Image: "ghcr.io/acme/goal-agent:1", GatewayURL: "http://gateway.example.com/mcp", GatewayKeyRef: "env:GOAL_GATEWAY_KEY"})
 	if err != nil {
 		t.Fatal(err)
@@ -554,13 +562,12 @@ func newHarnessLogged(t *testing.T, in *signIn, logs io.Writer, opts ...func(*ha
 	h.platform = porttest.NewPlatform(h.keys)
 	h.notifications = porttest.NewNotificationPreferences()
 
-	connections := h.connections(t, tenancy)
 	h.intake.UseSecrets(h.secrets)
 
 	deps := api.Deps{
 		Engine: e, Items: reads{Store: h.store, seam: h.seam}, Factories: defs, Definitions: authors, Versions: h.defs, Orgs: tenancy, Audit: tenancy,
 		Access: h.keys, OrgRetention: retention, Authorizer: h.seam, Auth: api.AuthConfig{Mode: api.AuthNone}, Platform: h.platform, Feed: feed,
-		Builder: h.builder, Connections: h.conns, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ParseKind: connkind.Parse, ConnectionTransport: connections, Logger: jsonLog(logs),
+		Builder: h.builder, StandingRules: h.standingRules, Credentials: h.creds, OrgSecrets: h.secrets, Intake: h.intake, ConnectionTransport: connections, Logger: jsonLog(logs),
 		// GitLab's code host lists no repositories, as the gitlab adapter.
 		CodeHosts: map[string]ports.CodeHost{"github": h.codehost, "gitlab": porttest.NewCodeHost()}, RepositoryTestTimeout: 50 * time.Millisecond,
 		Knowledge: h.kb, KnowledgeUploads: h.uploads, UploadMaxBytes: testUploadMax, Clock: h.clock, KnowledgeObjects: h.kbRanges, KnowledgeCheck: h.ingestor,
@@ -641,63 +648,17 @@ func (h *harness) with(d api.Deps, opts []func(*harness, *api.Deps)) api.Deps {
 	return d
 }
 
-// sharedRules are the engine's connections with the standing rules kept in the API's (h.conns),
-// as goald's one store keeps both: a rule Always allow creates is one the API lists and revokes.
-type sharedRules struct {
-	*porttest.Connections
-	h *harness
-}
-
-func (c sharedRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
-	return c.h.conns.StandingRules(ctx, includeRevoked)
-}
-
-func (c sharedRules) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
-	return c.h.conns.CreateStandingRule(ctx, n, by)
-}
-
-func (c sharedRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
-	return c.h.conns.RevokeStandingRule(ctx, id, by)
-}
-
-// engineConnections are the connections the engine's runs and merges get: acme's model connection
-// claude and its github connection repo, of goald's platform kinds.
-func engineConnections(t *testing.T, audit ports.Audit) *porttest.Connections {
+// stores makes h's standing rules, credentials, secrets, the notification settings naming them and
+// the knowledge base whose sources read them, and returns the transport environment tests dial
+// through.
+func (h *harness) stores(t *testing.T, audit ports.Audit) *http.Transport {
 	t.Helper()
 
-	c := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := c.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, n := range []domain.NewConnection{
-		{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-test"}},
-		{Name: "repo", Kind: "github", Secrets: map[string]string{"token": "ghp_test"}},
-	} {
-		if _, err := c.Create(inOrg(t), n, domain.LocalUser); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	return c
-}
-
-// connections makes h's connections, with goald's platform kinds, the secrets, the notification
-// settings naming them, and the knowledge base whose sources read them, and returns the transport their tests dial through.
-func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
-	t.Helper()
-
-	h.conns = porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), audit)
-	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
-	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit, h.conns)
+	h.standingRules = porttest.NewStandingRules(audit)
+	h.creds = porttest.NewCredentials(porttest.NewMasterKeys().Key("k1"), audit)
+	h.secrets = porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), audit)
 	h.notifySettings, h.slack = porttest.NewNotificationSettings(h.secrets, audit), porttest.NewDirectMessenger()
-	kb := porttest.NewKnowledge(h.conns, audit)
+	kb := porttest.NewKnowledge(audit)
 	kb.ReadSecrets(h.secrets)
 	h.kb, h.kbObjects = kb, porttest.NewObjectStore()
 	h.uploads = knowledge.NewUploads(h.kb, h.kbObjects, testUploadMax)
@@ -706,15 +667,6 @@ func (h *harness) connections(t *testing.T, audit ports.Audit) *http.Transport {
 		Knowledge: h.kb, Secrets: h.secrets, Hosts: h.tenancy, Uploads: h.uploads, Readers: map[string]ports.SourceReader{"gitdocs": h.kbDocs},
 		Objects: h.kbObjects, Clock: h.clock, TempDir: t.TempDir(),
 	})
-
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := h.conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
 
 	tr := &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return egress.PublicDialer{AllowPrivate: !h.publicOnly.Load()}.DialContext(ctx, network, addr)

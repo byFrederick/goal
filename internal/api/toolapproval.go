@@ -93,7 +93,7 @@ func toolApprovalOf(a domain.ToolApproval) *gen.ToolApproval {
 // ListStandingRules lists the organization's standing rules, oldest first: the active ones, and
 // the revoked ones too on request.
 func (s *server) ListStandingRules(ctx context.Context, req gen.ListStandingRulesRequestObject) (gen.ListStandingRulesResponseObject, error) {
-	rules, err := s.connections.StandingRules(ctx, deref(req.Params.Revoked))
+	rules, err := s.rules.StandingRules(ctx, deref(req.Params.Revoked))
 	if err != nil {
 		return nil, fmt.Errorf("list standing rules: %w", err)
 	}

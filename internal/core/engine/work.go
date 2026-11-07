@@ -556,9 +556,6 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 
 	res, err := e.runTask(ctx, runTask{
 		RunRequest: c.request(feedback), item: c.item, box: b, work: c.item.Work(),
-		// The agent's env gets the connections of its list the factory lists too, as the gateway
-		// serves them; its task token names its whole list.
-		own:       slices.DeleteFunc(slices.Clone(c.agent.Connections), func(n string) bool { return !slices.Contains(c.line.Connections, n) }),
 		workspace: func(b *box, env runEnv) string { return workspaceNote(c, b, env) },
 		then: func(ctx context.Context, runID domain.RunID, res domain.RunResult, scrub scrubber) error {
 			got, err := e.check(ctx, c, res.Output)
@@ -583,24 +580,21 @@ func (e *Engine) runOnce(ctx context.Context, c claimed, b *box, feedback string
 	return res, chk, err
 }
 
-// request is the claim's next run as a RunRequest, with brief added to its bundle's brief. A
-// version on secrets gives the run its model key and the agent's environment and no connection,
-// and its box the environment's size (medium when it names none) and image.
+// request is the claim's next run as a RunRequest, with brief added to its bundle's brief: the
+// run gets the version's model key and the agent's environment and no connection, and its box the
+// environment's size (medium when it names none) and image. A claim's line runs
+// (domain.Line.Refusal), so it is on secrets.
 func (c claimed) request(brief string) domain.RunRequest {
 	rt := c.line.Runtime
 
 	r := domain.RunRequest{
 		OrgID: c.line.OrgID, FactoryID: c.line.FactoryID, Version: c.line.VersionID, Kind: domain.RunKindStation,
 		Station: c.station.ID, Item: c.item.ID, Agent: c.agent.Name, Model: c.model, Brief: brief,
-		Repository: rt.Repository, Branch: c.branch, Base: c.base, Code: c.code, ModelConnection: rt.ModelConnection,
-		Connections: c.agent.Connections, DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Size: rt.Size, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
+		Repository: rt.Repository, Branch: c.branch, Base: c.base, Code: c.code, ModelKey: rt.ModelKey, Environment: c.env,
+		DeniedCommands: c.deny, Knowledge: c.knowledge, NoEnvironment: c.noEnv, Timeout: c.timeout, BoxLimit: c.boxLimit, Lease: &c.lease,
+		Size: cmp.Or(c.env.Size, domain.SandboxMedium), Image: c.env.Image,
 	}
-
-	if c.line.OnSecrets() {
-		r.ModelConnection, r.Connections, r.Repository.Connection = "", nil, ""
-		r.ModelKey, r.Environment = rt.ModelKey, c.env
-		r.Size, r.Image = cmp.Or(c.env.Size, domain.SandboxMedium), c.env.Image
-	}
+	r.Repository.Connection = ""
 
 	return r
 }
@@ -1169,11 +1163,11 @@ func (e *Engine) transition(ctx context.Context, log *slog.Logger, t ports.Trans
 	}
 }
 
-// agentEnvironment is the environment a's box gets on a version on secrets: its own, or the
-// default; zero on connections. It fails when the version has no file for it.
+// agentEnvironment is the environment a's box gets: its own, or the default. It fails with
+// domain.ErrNotOnSecrets for a version on connections, and when the version has no file for it.
 func agentEnvironment(l domain.Line, a domain.AgentSpec) (domain.Environment, error) {
 	if !l.OnSecrets() {
-		return domain.Environment{}, nil
+		return domain.Environment{}, fmt.Errorf("version %d: %w", l.Number, domain.ErrNotOnSecrets)
 	}
 
 	env, ok := l.Environment(a.Environment)

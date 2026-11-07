@@ -57,7 +57,7 @@ goal knowledge add runbooks --kind synced --secret docs-token \
   --config reader=gitdocs --config repository=https://github.com/acme/docs
 ```
 
-Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move keeps reading its connection, and goald logs why: for example, when that secret is open to some factories only, since goald moves a source only onto a secret open to every factory.
+Sources made before secrets read a connection. When goald moves an organization over to secrets, each such source gets the secret made from its connection's token, and the connection's other values go into its config. A source it can't move stays on its connection, and goald logs why: for example, when that secret is open to some factories only, since goald moves a source only onto a secret open to every factory. goald no longer reads connections, so a synced source still on one fails each sync with an error that names it, such as `source docs reads with connection acme-wiki, which goald no longer reads: give it a secret`, until you give it a secret.
 
 ## What runs get
 

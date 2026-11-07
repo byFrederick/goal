@@ -18,7 +18,7 @@ func TestNotificationSettings_Conformance(t *testing.T) {
 
 	notificationsettingtest.Run(t, func(*testing.T) notificationsettingtest.Harness {
 		tn := porttest.NewTenancy(time.Now)
-		secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tn, nil)
+		secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tn)
 
 		var orgs atomic.Int64
 

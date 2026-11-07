@@ -85,7 +85,7 @@ function main(argv: string[]): void {
   } catch {
     // No answer: git asks the next helper or fails without a prompt. A JSON error would quote the
     // file, which holds the tokens, so the message is fixed.
-    process.stderr.write('goal credential helper: cannot read the logins or write the record\n');
+    process.stderr.write('goal-agent credential helper: cannot read the logins or write the record\n');
   }
 }
 

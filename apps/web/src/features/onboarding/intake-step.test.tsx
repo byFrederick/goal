@@ -227,19 +227,48 @@ describe('step 6, choose where work comes from', () => {
     renderStep(url);
     expect(await screen.findByRole('heading', { name: 'Starter triggers' })).toBeTruthy();
 
-    expect(within(rowOf('Issues labeled factory')).getByText('Creates a feature at spec')).toBeTruthy();
+    expect(within(rowOf('Issues labeled factory')).getByText('Creates a feature at Spec')).toBeTruthy();
     expect(screen.getByRole('switch', { name: 'Issues labeled factory' }).getAttribute('aria-checked')).toBe('false');
     expect(screen.queryByRole('switch', { name: 'Weekly dependency audit' })).toBeNull();
     expect(screen.getByText('Always on:')).toBeTruthy();
     expect(screen.getByText('New item')).toBeTruthy();
-    expect(screen.getByText('goal run')).toBeTruthy();
+    expect(screen.getByText('CLI')).toBeTruthy();
+    expect(screen.queryByText('goal run')).toBeNull();
+    expect(screen.getByRole('button', { name: 'About CLI' })).toBeTruthy();
     expect(screen.queryByText('goal item create')).toBeNull();
     expect(screen.getByText('The API')).toBeTruthy();
   });
 
+  it('says a schedule in words with the cron behind an info tip, and names the station', async () => {
+    vi.mocked(getVersionModel).mockResolvedValue({
+      model: {
+        basics: { name: 'code-review', purpose: 'Reviews pull requests.' },
+        line: { stations: [{ id: 'inbox', name: 'Inbox', kind: 'queue' }] },
+        review: {},
+      },
+    } as never);
+    vi.mocked(getIntake).mockResolvedValue(
+      intakeOf([
+        trigger({
+          name: 'morning',
+          when: '0 7 * * 1-5, UTC',
+          create: { type: 'ticket', station: 'inbox', lane: null, expedite: false },
+        }),
+      ]),
+    );
+    renderStep(url);
+    expect(await screen.findByText('Weekdays at 07:00 UTC')).toBeTruthy();
+    expect(screen.getByText('Creates a ticket at Inbox')).toBeTruthy();
+    expect(screen.getByText('0 7 * * 1-5, UTC')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About Morning schedule' })).toBeTruthy();
+    // The same word as the Intake card's sentence.
+    expect(screen.getByText('CLI')).toBeTruthy();
+    expect(screen.getByText(/New item, CLI and API/)).toBeTruthy();
+  });
+
   it('says an expedited trigger creates its item in the expedite lane', async () => {
     renderStep(url);
-    expect(await screen.findByText('Creates a fix at build in the expedite lane')).toBeTruthy();
+    expect(await screen.findByText('Creates a fix at Build in the expedite lane')).toBeTruthy();
   });
 
   it('shows Connect for a trigger that needs an endpoint, with its switch off and disabled', async () => {

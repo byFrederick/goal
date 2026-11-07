@@ -56,7 +56,7 @@ Goald keeps a delivery's headers and body for 30 days when an enabled trigger na
 
 ## Webhooks made before organizations
 
-A factory's endpoint made before organization webhooks is converted once, when goald starts, to an organization webhook open to its factory for every repository. A renamed one is logged as `webhook renamed`, and a trigger that named the old name needs its `on` changed. [Webhook secrets](/docs/concepts/access-and-secrets/#webhook-secrets) has the rules.
+A factory's endpoint made before organization webhooks was converted once, by the one-time conversion from connections, to an organization webhook open to its factory for every repository; goald no longer converts endpoints. A renamed one was logged as `webhook renamed`, and a trigger that named the old name needs its `on` changed. [Webhook secrets](/docs/concepts/access-and-secrets/#webhook-secrets) has the rules.
 
 ## Next
 

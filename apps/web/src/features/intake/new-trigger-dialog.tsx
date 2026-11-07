@@ -6,17 +6,17 @@ import { useNavigate } from '@tanstack/react-router';
 import { Search } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import {
-  connectionsQuery,
   definitionTextQuery,
   defKeys,
   environmentTextQuery,
   intakeKeys,
   intakeQuery,
+  webhooksQuery,
 } from '../../api/queries';
 import type { TriggerSuggestion } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
 import { useFactory, useFactoryParams } from '../../shared/factory';
-import { useOrg } from '../../shared/org';
+import { useOrg, useOrgHolds } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -55,9 +55,11 @@ export function NewTriggerDialog() {
   const text = definition.data?.text ?? '';
   const board = readBoard(text);
   const servers = useCheckServers(text, board.agents);
-  // The organization's own connections decide the Connected and Not connected groups; until they load, none is.
-  const { data: connections } = useQuery(connectionsQuery(org.id));
-  const connectedKinds = new Set((connections ?? []).map((c) => c.kind));
+  // An enabled webhook of a sender decides that source is Connected (ADR 0040 decision 12); until the list
+  // loads, none is. Only owners and admins read webhooks, so anyone else sees the sources as Not connected.
+  const canReadWebhooks = useOrgHolds('webhook:read');
+  const { data: webhooks } = useQuery({ ...webhooksQuery(org.id), enabled: canReadWebhooks });
+  const connectedKinds = new Set((webhooks ?? []).filter((w) => w.enabled).map((w) => w.sender));
   const groups = pickerGroups(connectedKinds);
   const [source, setSource] = useState<SourceKey>('github');
   const [event, setEvent] = useState<string>(defaultEvent);

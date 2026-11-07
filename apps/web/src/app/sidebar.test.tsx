@@ -12,7 +12,6 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   attentionQuery,
-  connectionsQuery,
   factoriesQuery,
   jonahOverviewQuery,
   meQuery,
@@ -120,7 +119,6 @@ function renderSidebar({
   client.setQueryData(factoriesQuery(org.id).queryKey, list);
   client.setQueryData(meQuery.queryKey, me);
   client.setQueryData(orgsQuery.queryKey, [org]);
-  client.setQueryData(connectionsQuery(org.id).queryKey, []);
   if (att === 'pending') vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
   else if (att === 'error') vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
   else client.setQueryData(attentionQuery(org.id).queryKey, att);

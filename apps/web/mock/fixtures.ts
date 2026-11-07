@@ -433,7 +433,6 @@ export const orgCan = [
   'api_key:manage',
   'api_key:read',
   'audit:read',
-  'connection:browse',
   'connection:manage',
   'connection:read',
   'factory:archive',
@@ -478,7 +477,7 @@ const goalFactory: Factory = {
   org_id: acmeOrg,
   can: factoryCan,
   name: 'goal',
-  title: 'Software',
+  title: 'Goal',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
   work_types: ['feature', 'fix', 'refactor', 'infra', 'design'],
   stations: [

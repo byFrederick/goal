@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/adapters/sourcereader/gitdocs"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -99,7 +98,7 @@ func newCodeHost(t *testing.T, files map[string]string) *codeHost {
 	return h
 }
 
-// host is the stand-in's host, which the connections name.
+// host is the stand-in's host, which the sources' repositories are on.
 func (h *codeHost) host() string { return h.srv.Listener.Addr().String() }
 
 // repository is the repository's web URL.
@@ -327,26 +326,16 @@ func (h *codeHost) transport(allowPrivate bool) *http.Transport {
 	return &http.Transport{DialContext: egress.PublicDialer{AllowPrivate: allowPrivate}.DialContext, TLSClientConfig: base.TLSClientConfig.Clone()}
 }
 
-// spec is a source of config read with a connection on the stand-in of the platform kind named kind.
+// spec is a source of config read with a secret on the stand-in, whose code host is kind.
 func (h *codeHost) spec(t *testing.T, kind string, config map[string]string) domain.SyncSpec {
 	t.Helper()
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	i := slices.IndexFunc(kinds, func(k domain.ConnectionKind) bool { return k.Name == kind })
-	if i < 0 {
-		t.Fatalf("no platform kind %s", kind)
-	}
+	config = maps.Clone(config)
+	config[domain.SourceCodeHostKey] = kind
 
 	return domain.SyncSpec{
-		Source: domain.KnowledgeSource{Name: "docs", Kind: domain.SourceSynced, Connection: kind, Config: config},
-		Connection: &domain.ResolvedConnection{
-			Connection: domain.Connection{Name: kind, Kind: kind}, Kind: kinds[i],
-			Values: map[string]string{"token": token, "host": h.host()},
-		},
+		Source: domain.KnowledgeSource{Name: "docs", Kind: domain.SourceSynced, Secret: docsToken, Config: config},
+		Secret: &domain.ResolvedSecret{Secret: domain.Secret{Name: docsToken}, Value: token},
 	}
 }
 
@@ -576,11 +565,6 @@ func TestReader_Refusals(t *testing.T) {
 		want string
 	}{
 		{
-			name: "a repository on another host", kind: kindGitHub,
-			edit: func(s *domain.SyncSpec) { s.Source.Config[cfgRepository] = "https://git.example.com/" + project },
-			want: "not on",
-		},
-		{
 			name: "a repository URL that is not https", kind: kindGitLab,
 			edit: func(s *domain.SyncSpec) { s.Source.Config[cfgRepository] = "http://" + h.host() + "/" + project },
 			want: "https",
@@ -592,15 +576,15 @@ func TestReader_Refusals(t *testing.T) {
 		},
 		{name: "a malformed glob", kind: kindGitLab, edit: func(s *domain.SyncSpec) { s.Source.Config[cfgInclude] = "docs/[" }, want: "glob"},
 		{
-			name: "a kind without a code host", kind: kindGitHub,
-			edit: func(s *domain.SyncSpec) { s.Connection.Kind.Spec.CodeHost = "" }, want: "GitHub or GitLab",
+			name: "a host without a code host", kind: kindGitHub,
+			edit: func(s *domain.SyncSpec) { delete(s.Source.Config, domain.SourceCodeHostKey) }, want: "GitHub or GitLab",
 		},
-		{name: "no connection", kind: kindGitHub, edit: func(s *domain.SyncSpec) { s.Connection = nil }, want: "connection"},
+		{name: "no secret", kind: kindGitHub, edit: func(s *domain.SyncSpec) { s.Secret = nil }, want: "secret"},
 		{name: "an unknown branch", kind: kindGitHub, edit: func(s *domain.SyncSpec) { s.Source.Config[cfgBranch] = "nope" }, want: "404"},
 		{name: "an unknown GitLab branch", kind: kindGitLab, edit: func(s *domain.SyncSpec) { s.Source.Config[cfgBranch] = "nope" }, want: "404"},
 		{
 			name: "a token the host refuses", kind: kindGitLab,
-			edit: func(s *domain.SyncSpec) { s.Connection.Values["token"] = token + "-revoked" }, want: "401",
+			edit: func(s *domain.SyncSpec) { s.Secret.Value = token + "-revoked" }, want: "401",
 		},
 	}
 
@@ -656,8 +640,8 @@ func TestReader_DialsPublicAddressesOnly(t *testing.T) {
 	}
 }
 
-// world is one organization with a connection named after kind on the stand-in and a synced
-// source "docs" reading it with config, synced by the ingestion loop with the gitdocs reader.
+// world is one organization that lists the stand-in as a code host of kind, and a synced source "docs"
+// reading it with config and a secret, synced by the ingestion loop with the gitdocs reader.
 type world struct {
 	t     *testing.T
 	org   domain.OrgID
@@ -673,8 +657,7 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 
 	clock := porttest.NewClock(time.Now().UTC().Add(time.Second))
 	tenancy := porttest.NewTenancy(clock.Now)
-	conns := porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy)
-	kb := porttest.NewKnowledge(conns, tenancy)
+	kb := porttest.NewKnowledge(tenancy)
 
 	o, err := tenancy.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: "acme", Name: "Acme"})
 	if err != nil {
@@ -683,25 +666,7 @@ func newWorld(t *testing.T, h *codeHost, kind string, config map[string]string) 
 
 	ctx := domain.WithOrg(t.Context(), o.ID)
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := conns.SyncPlatformKinds(t.Context(), kinds); err != nil {
-		t.Fatal(err)
-	}
-
-	fields := map[string]string{"host": h.host()}
-	if kind == kindGitHub {
-		fields["api_url"] = "https://" + h.host() + "/api/v3" // a kind with a login is tested on its host
-	}
-
-	if _, err := conns.Create(ctx, domain.NewConnection{Name: kind, Kind: kind, Fields: fields, Secrets: map[string]string{"token": token}}, admin); err != nil {
-		t.Fatal(err)
-	}
-
-	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, conns)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 	kb.ReadSecrets(secrets)
 
 	if _, err := secrets.Create(ctx, domain.NewSecret{Name: docsToken, Value: token, Scope: domain.SecretScope{All: true}}, admin); err != nil {

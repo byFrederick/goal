@@ -45,7 +45,7 @@ func (e *Engine) integrate(ctx context.Context, log *slog.Logger, c *claimed) er
 
 	prBase := ""
 	if root.IntegrationBranch != "" && pr != "" {
-		if prBase, err = e.pullRequestBase(ctx, c.line, it, pr); err != nil {
+		if prBase, err = e.pullRequestBase(ctx, c.line, pr); err != nil {
 			return err
 		}
 	}
@@ -137,8 +137,8 @@ func (e *Engine) setIntegrationBranch(ctx context.Context, log *slog.Logger, l d
 
 // pullRequestBase reads the branch the pull request at url was opened against, signed in to its
 // repository as reads are (repositoryHost).
-func (e *Engine) pullRequestBase(ctx context.Context, l domain.Line, it domain.Item, url string) (string, error) {
-	t, err := e.repositoryHost(ctx, l, it, url)
+func (e *Engine) pullRequestBase(ctx context.Context, l domain.Line, url string) (string, error) {
+	t, err := e.repositoryHost(ctx, l, url)
 	if err != nil {
 		return "", fmt.Errorf("the base of pull request %s: %w", url, err)
 	}

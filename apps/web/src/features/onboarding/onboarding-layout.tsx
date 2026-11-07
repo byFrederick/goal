@@ -184,19 +184,23 @@ export function PreviewCard({
   detail,
   icon,
   active = false,
+  className,
 }: {
   label: string;
   value: string;
-  detail?: string;
+  /** Plain text may break anywhere; a node (an address with <wbr>) breaks only where it says. */
+  detail?: ReactNode;
   /** Drawn before the value, e.g. the GitHub mark on the Code card. */
   icon?: ReactNode;
   active?: boolean;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
         'flex min-w-0 flex-col gap-2 rounded-card border border-line bg-hover p-4',
         active && 'border-run ring-4 ring-run/25',
+        className,
       )}
     >
       <span className="text-meta text-ink-soft">{label}</span>
@@ -204,7 +208,11 @@ export function PreviewCard({
         {icon}
         {value}
       </span>
-      {detail ? <span className="text-secondary break-all text-ink-soft">{detail}</span> : null}
+      {detail ? (
+        <span className={cn('text-secondary text-ink-soft', typeof detail === 'string' ? 'break-all' : 'break-normal')}>
+          {detail}
+        </span>
+      ) : null}
     </div>
   );
 }

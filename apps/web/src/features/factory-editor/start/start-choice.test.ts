@@ -5,10 +5,12 @@ import {
   freeName,
   importVerdict,
   lineChips,
+  nameFromTitle,
   nameProblem,
   newFactoryRequest,
   sourceSentence,
   suggestedName,
+  suggestedTitle,
 } from './start-choice';
 import { filesFromUpload } from './upload';
 
@@ -46,6 +48,15 @@ describe('the Start step', () => {
     expect(suggestedName('clone', { clone: 'sre' }, [])).toBe('sre-copy');
     expect(suggestedName('template', {}, [])).toBe('');
     expect(suggestedName('yaml', {}, [])).toBe('');
+  });
+
+  it('offers a title and derives the name from it', () => {
+    expect(suggestedTitle('template', 'Support replies')).toBe('Support replies');
+    expect(suggestedTitle('blank', undefined)).toBe('New factory');
+    expect(nameFromTitle('Support replies', [])).toBe('support-replies');
+    expect(nameFromTitle('Support replies', ['support-replies'])).toBe('support-replies-2');
+    expect(nameFromTitle('42 Ops', [])).toBe('ops');
+    expect(nameFromTitle('— !', [])).toBe('');
   });
 
   it('checks a name against the schema’s slug', () => {

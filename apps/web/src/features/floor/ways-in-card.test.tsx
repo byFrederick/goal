@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { connectionsQuery, intakeQuery, versionModelQuery } from '../../api/queries';
-import type { Connection, Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
+import { intakeQuery, orgNotificationsQuery, versionModelQuery } from '../../api/queries';
+import type { Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { WaysInCard } from './ways-in-card';
 
@@ -52,11 +52,11 @@ const intakeWith = (triggers: IntakeTrigger[]) =>
 
 function renderWays({
   triggers = [labelTrigger],
-  connections = [] as Connection[],
+  slackSecret = null as string | null,
   model = published,
 }: {
   triggers?: IntakeTrigger[];
-  connections?: Connection[];
+  slackSecret?: string | null;
   model?: VersionModel;
 } = {}) {
   return renderFactoryPage({
@@ -67,7 +67,7 @@ function renderWays({
     seed: [
       [intakeQuery(org.id, factory.id).queryKey, intakeWith(triggers)],
       [versionModelQuery(org.id, factory.id, 'current').queryKey, model],
-      [connectionsQuery(org.id).queryKey, connections],
+      [orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret }],
     ],
   });
 }
@@ -91,15 +91,15 @@ describe('WaysInCard', () => {
     expect(screen.getByText('goal run')).toBeTruthy();
   });
 
-  it('offers Connect for Slack while the organization has no slack connection', async () => {
+  it('offers Connect for Slack while Slack notifications are not set', async () => {
     renderWays();
 
     expect(await screen.findByText('@software')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/secrets?new=true');
   });
 
-  it('offers no Connect once Slack is connected', async () => {
-    renderWays({ connections: [{ id: 'c-slack', name: 'slack', kind: 'slack' } as Connection] });
+  it('offers no Connect once Slack notifications are set', async () => {
+    renderWays({ slackSecret: 'slack-webhook' });
 
     await screen.findByText('@software');
     expect(screen.queryByRole('link', { name: 'Connect' })).toBeNull();

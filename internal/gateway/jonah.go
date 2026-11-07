@@ -122,7 +122,7 @@ func (g *Gateway) jonahBundle(ctx context.Context, c domain.TaskClaims) (runBund
 	return runBundle{
 		Spec: bundleSpec{
 			FactoryID: c.FactoryID, RunID: c.RunID, Agent: c.Agent, Model: cmp.Or(c.Model, line.Jonah.Model), Purpose: line.Purpose,
-			MaxUSD: left, Knowledge: k, Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: []string{}, Connections: []bundleConnection{},
+			MaxUSD: left, Knowledge: k, Skills: []string{}, ToolsAllow: []string{}, ToolsDeny: []string{},
 			Rules: []bundleRule{}, GrantedCalls: []grantedCall{}, Jonah: &bundleJonah{ProposeAfter: line.Jonah.ProposeAfter, Manual: c.Manual},
 		},
 		Files: files,

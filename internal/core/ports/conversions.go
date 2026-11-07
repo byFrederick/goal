@@ -34,8 +34,4 @@ type FactoryConversions interface {
 	Record(ctx context.Context, c FactoryConversion) (bool, error)
 	// List is the organization's conversions, by factory.
 	List(ctx context.Context) ([]FactoryConversion, error)
-	// WithLock runs fn while this instance holds the install's conversion lock, and reports
-	// whether it ran: false, without running fn, while another instance holds it. It needs no
-	// organization.
-	WithLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error)
 }

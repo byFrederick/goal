@@ -31,13 +31,11 @@ func digestRecipients(t *testing.T, dg *Digests, o outboxOrg) map[domain.UserID]
 }
 
 // The digest recipients are the members with the digest on, with their time zone (UTC without a
-// saved one), and Slack only while the organization's notification setting names a secret,
-// whatever connections exist.
+// saved one), and Slack only while the organization's notification setting names a secret.
 func TestDigests_Recipients(t *testing.T) {
 	t.Parallel()
 
 	o := newOutboxOrg(t)
-	o.slackConnection(t)
 	dg := NewDigests(o.d.s)
 
 	// The viewer turns the digest off; the approver lives in Berlin and wants it on Slack too.

@@ -133,7 +133,7 @@ func (g *Gateway) tryOf(ctx context.Context, c domain.TaskClaims, in domain.Past
 		return runBundle{}, fmt.Errorf("%w: version %s has no repository %s to try in", errForbidden, c.VersionID, row.Repo)
 	}
 
-	if err := g.addRepository(ctx, repo, it.Branch(), "", line.Flow.Assemblies.FreshBase, &b); err != nil {
+	if err := addRepository(repo, it.Branch(), "", line.Flow.Assemblies.FreshBase, &b); err != nil {
 		return runBundle{}, err
 	}
 

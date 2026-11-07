@@ -18,8 +18,6 @@ const (
 	approvalConnection = "repo"
 	approvalTool       = "create_comment"
 	approvalInput      = `{"body":"LGTM","issue":7}`
-	// githubTokenField is the github kind's secret field.
-	githubTokenField = "token"
 	// freshOwnerSession is the owner's session signed in just now.
 	freshOwnerSession = "fresh-owner-now"
 )
@@ -44,17 +42,6 @@ func (h *harness) toolAsked(t *testing.T, offered bool) domain.Item {
 	})
 }
 
-// withRepo adds the organization connection repo, whose tool the agent asked to call.
-func (h *harness) withRepo(t *testing.T) {
-	t.Helper()
-
-	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{
-		Name: approvalConnection, Kind: kindGitHub, Secrets: map[string]string{githubTokenField: "ghp_test"},
-	}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func toolApprovalPath(it domain.Item) string {
 	return "/v1/orgs/acme/items/" + url.PathEscape(string(it.ID)) + "/tool-approval"
 }
@@ -64,11 +51,13 @@ func (h signedIn) signInOwnerNow() {
 	h.identity.AddSession(freshOwnerToken, ownerID, domain.Session{ID: freshOwnerSession, CreatedAt: t0, ExpiresAt: t0.Add(time.Hour), Browser: true})
 }
 
-// checkRule checks r is backend's active rule on repo's create_comment, approved on it.
+// checkRule checks r is backend's active rule on create_comment of server repo in line's default
+// environment, approved on it.
 func checkRule(t *testing.T, rules []domain.StandingRule, it domain.Item) {
 	t.Helper()
 
-	if len(rules) != 1 || rules[0].Connection != approvalConnection || rules[0].Tool != approvalTool ||
+	if len(rules) != 1 || rules[0].ConnectionID != "" || rules[0].Factory != lineID || rules[0].Environment != domain.DefaultEnvironment ||
+		rules[0].Server != approvalConnection || rules[0].Tool != approvalTool ||
 		rules[0].Agent != agBackend || rules[0].ItemID != it.ID || !rules[0].Active() {
 		t.Errorf("rules %+v; want one active rule for backend on repo's create_comment", rules)
 	}
@@ -98,7 +87,7 @@ func decisionData(t *testing.T, e domain.Event) string {
 func (h *harness) rules(t *testing.T) []domain.StandingRule {
 	t.Helper()
 
-	rules, err := h.conns.StandingRules(inOrg(t), true)
+	rules, err := h.standingRules.StandingRules(inOrg(t), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +158,6 @@ func TestAPI_ToolApprovalDecides(t *testing.T) {
 			t.Parallel()
 
 			h := newHarness(t)
-			h.withRepo(t)
 			it := h.toolAsked(t, true)
 
 			got := decode[gen.Item](t, h.request(t, http.MethodPost, toolApprovalPath(it), tt.body, nil), http.StatusOK)
@@ -195,7 +183,6 @@ func TestAPI_ToolApprovalRefusals(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	h.withRepo(t)
 	open := h.toolAsked(t, true)
 	notOffered := h.toolAsked(t, false)
 	none := h.seed(t, stBuild, domain.StateWaitingHuman, t0)
@@ -255,7 +242,6 @@ func TestAPI_ToolApprovalAlwaysAllowNeedsConnectionManage(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.withRepo(t)
 	must(t, h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryViewer))
 
 	it := h.toolAsked(t, true)
@@ -327,13 +313,13 @@ func (h *harness) alwaysAllowed(t *testing.T, header http.Header) gen.StandingRu
 	return list.Rules[len(list.Rules)-1]
 }
 
-// checkListedRule checks rule is the local user's active rule for backend on repo's
-// create_comment.
+// checkListedRule checks rule is the local user's active rule for backend on create_comment of
+// server repo in line's default environment.
 func checkListedRule(t *testing.T, rule gen.StandingRule) {
 	t.Helper()
 
-	if rule.Id == "" || deref(rule.ConnectionId) == "" || rule.FactoryId != nil || rule.Environment != nil || rule.Server != nil ||
-		deref(rule.Connection) != approvalConnection || rule.Tool != approvalTool ||
+	if rule.Id == "" || rule.ConnectionId != nil || rule.Connection != nil || deref(rule.FactoryId) != lineID ||
+		deref(rule.Environment) != domain.DefaultEnvironment || deref(rule.Server) != approvalConnection || rule.Tool != approvalTool ||
 		rule.Agent != agBackend || rule.CreatedBy.Id != domain.LocalUser.ID || rule.ItemId == "" || rule.RevokedAt != nil || rule.RevokedBy != nil {
 		t.Errorf("rule %+v; want backend's active rule on repo's create_comment", rule)
 	}
@@ -349,7 +335,6 @@ func TestAPI_StandingRulesListAndRevoke(t *testing.T) {
 		t.Errorf("rules before any = %+v; want an empty list", list.Rules)
 	}
 
-	h.withRepo(t)
 	rule := h.alwaysAllowed(t, nil)
 
 	checkListedRule(t, rule)
@@ -380,7 +365,7 @@ func (h *harness) checkServerRule(t *testing.T) {
 		Factory: acmeID, Environment: domain.DefaultEnvironment, Server: approvalConnection, Tool: approvalTool, Agent: agBackend,
 		Item: "019a4000-0000-7000-8000-0000000000aa",
 	}
-	if _, err := h.conns.CreateServerStandingRule(inOrg(t), n, domain.LocalUser); err != nil {
+	if _, err := h.standingRules.CreateServerStandingRule(inOrg(t), n, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -405,7 +390,6 @@ func TestAPI_StandingRulesRefusals(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
-	h.withRepo(t)
 	h.signInOwnerNow()
 	rule := h.alwaysAllowed(t, cookie(freshOwnerToken))
 

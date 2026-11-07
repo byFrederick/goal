@@ -55,8 +55,8 @@ test.describe('the Secrets list', () => {
     await sheet.getByLabel('Value', { exact: true }).fill('test-token');
     // A new secret reaches every factory until that is switched off.
     await sheet.getByLabel('All factories, including new ones').uncheck();
-    // The mock titles two factories (goal and software) "Software"; the badge initials are hidden from the name.
-    await sheet.getByRole('button', { name: 'Software', exact: true }).last().click();
+    // Only the software factory is titled "Software"; the badge initials are hidden from the name.
+    await sheet.getByRole('button', { name: 'Software', exact: true }).click();
     await expectAccessible(page);
     await sheet.getByRole('button', { name: 'Add secret' }).click();
 

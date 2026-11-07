@@ -328,24 +328,6 @@ func (s *server) sourceUsers(ctx context.Context) (map[string][]factoryUse, erro
 	return users, nil
 }
 
-// connectionSources are the organization's sources by the connections they read.
-func (s *server) connectionSources(ctx context.Context) (map[string][]string, error) {
-	sources, err := s.knowledge.Sources(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	out := map[string][]string{}
-
-	for _, src := range sources {
-		if src.Connection != "" {
-			out[src.Connection] = append(out[src.Connection], src.Name)
-		}
-	}
-
-	return out, nil
-}
-
 // sourceSecret refuses a secret a source would read with that does not exist (404
 // secret-not-found), before the source is changed.
 func (s *server) sourceSecret(ctx context.Context, name *string) error {
