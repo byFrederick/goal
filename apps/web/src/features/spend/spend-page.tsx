@@ -155,7 +155,7 @@ function Ready({ spend, org }: { spend: OrgSpend; org: string }) {
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Budgets budgets={spend.budgets} />
-        <Payers budgets={spend.budgets} org={org} total={spend.budgets.length} />
+        <Payers budgets={spend.budgets} org={org} />
       </div>
       <BoxUsage spend={spend} factoryNames={nameOf} />
     </>
