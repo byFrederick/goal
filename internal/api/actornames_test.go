@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,8 +21,11 @@ import (
 // formerID was never a member of acme: it stands for someone who has left.
 const formerID domain.UserID = "019a4000-0000-7000-8000-000000000009"
 
-// formerMember is how the API names someone who is no longer a member.
-const formerMember = "A former member"
+// localUserName is how the API names the local user from before sign-in.
+const localUserName = "Local user (before sign-in)"
+
+// formerName is how the API names a person who is no longer a member.
+const formerName = "A former member"
 
 // countedAccess counts the API's MemberNames calls, and fails them with err when it is set.
 type countedAccess struct {
@@ -87,7 +91,7 @@ func TestItem_CreatedByNamesTheMember(t *testing.T) {
 	}
 }
 
-// Someone no longer in the organization, removed or never seen, is "A former member", never
+// Someone no longer in the organization, removed or never seen, is formerName, never
 // their id.
 func TestItem_CreatedByFormerMember(t *testing.T) {
 	t.Parallel()
@@ -101,13 +105,13 @@ func TestItem_CreatedByFormerMember(t *testing.T) {
 	}
 
 	for ref, id := range map[string]domain.UserID{"acme#1": viewerID, "acme#2": formerID} {
-		if got := h.item(t, ref).CreatedBy; got == nil || got.Id != string(id) || got.Name != "A former member" {
+		if got := h.item(t, ref).CreatedBy; got == nil || got.Id != string(id) || got.Name != formerName {
 			t.Errorf("%s created_by = %+v; want %s named A former member", ref, got, id)
 		}
 	}
 }
 
-// A failed lookup still answers the read: goald logs it and names the person "A former member".
+// A failed lookup still answers the read: goald logs it and names the person formerName.
 func TestItem_CreatedByLookupFailureFallsBack(t *testing.T) {
 	t.Parallel()
 
@@ -117,7 +121,7 @@ func TestItem_CreatedByLookupFailureFallsBack(t *testing.T) {
 	h := newSignedInWith(t, &logs, countingNames(counted))
 	h.filedBy(t, "by the owner", user(ownerID))
 
-	if got := h.item(t, "acme#1").CreatedBy; got == nil || got.Id != string(ownerID) || got.Name != "A former member" {
+	if got := h.item(t, "acme#1").CreatedBy; got == nil || got.Id != string(ownerID) || got.Name != formerName {
 		t.Errorf("created_by = %+v; want %s named A former member", got, ownerID)
 	}
 
@@ -156,7 +160,7 @@ func (h signedIn) filedByEveryone(t *testing.T, start time.Time) map[string]stri
 	h.filedStartingBy(t, "engine", domain.Actor{Kind: domain.ActorSystem, ID: "engine", Name: "engine"}, start)
 
 	return map[string]string{
-		"owner": ownerName, "viewer": "M. Okafor", "former": "A former member", "local user": "Local user (before sign-in)",
+		"owner": ownerName, "viewer": viewerName, "former": formerName, "local user": localUserName,
 		"key": "key-1", "agent": "investigator", "engine": "-",
 	}
 }
@@ -236,6 +240,247 @@ func TestItems_CreatedByNoLookupWithoutSignIn(t *testing.T) {
 	}
 }
 
+// asWith is as with header's fields too.
+func (h signedIn) asWith(t *testing.T, token, method, path, body string, header http.Header) response {
+	t.Helper()
+
+	all := cookie(token)
+	maps.Copy(all, header)
+
+	return h.request(t, method, path, body, all)
+}
+
+// publishedAs publishes acme, titled title, as token's person: it opens a draft, saves the
+// title and publishes it against the version running.
+func (h signedIn) publishedAs(t *testing.T, token, title string) gen.Version {
+	t.Helper()
+
+	f := decode[gen.Factory](t, h.as(t, token, http.MethodGet, acmeFactory, ""), http.StatusOK)
+	decode[gen.Draft](t, h.as(t, token, http.MethodPost, acmeDraft, `{}`), http.StatusCreated)
+
+	file := h.as(t, token, http.MethodGet, acmeDraft+"/files/factory.yaml", "")
+	if file.status != http.StatusOK {
+		t.Fatalf("read factory.yaml: %d %s", file.status, file.body)
+	}
+
+	doc := strings.Replace(acme, "title: Acme }", "title: "+title+" }", 1)
+	saved := decode[gen.SaveResult](t, h.asWith(t, token, http.MethodPut, acmeDraft+"/files/factory.yaml", doc,
+		http.Header{ifMatchHeader: {file.header.Get("ETag")}}), http.StatusOK)
+
+	return decode[gen.Version](t, h.as(t, token, http.MethodPost, acmeDraft+"/publish", body(t, map[string]any{
+		revisionKey: saved.Revision, expectedKey: f.Current.Id, "message": title,
+	})), http.StatusCreated)
+}
+
+// viewerEdits makes the viewer an admin of acme, who edits every factory.
+func (h signedIn) viewerEdits(t *testing.T) {
+	t.Helper()
+
+	if err := h.identity.SetOrgRole(testOrg, viewerID, domain.OrgAdmin); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func named(id domain.UserID, name string) gen.Actor {
+	return gen.Actor{Kind: gen.ActorKindUser, Id: string(id), Name: name}
+}
+
+// A version a member publishes in the web app names them, on the factory and on the version.
+func TestVersion_PublishedByNamesTheMember(t *testing.T) {
+	t.Parallel()
+
+	h := newSignedIn(t)
+	v := h.publishedAs(t, ownerToken, "Acme two")
+	want := named(ownerID, ownerName)
+
+	if v.PublishedBy == nil || *v.PublishedBy != want {
+		t.Errorf("publish published_by = %+v; want %+v", v.PublishedBy, want)
+	}
+
+	f := decode[gen.Factory](t, h.as(t, ownerToken, http.MethodGet, acmeFactory, ""), http.StatusOK)
+	if f.Current == nil || f.Current.PublishedBy != want {
+		t.Errorf("factory current = %+v; want published by %+v", f.Current, want)
+	}
+
+	got := decode[gen.VersionDetail](t, h.as(t, ownerToken, http.MethodGet, acmeFactory+"/versions/"+strconv.Itoa(*v.Number), ""), http.StatusOK)
+	if got.PublishedBy == nil || *got.PublishedBy != want {
+		t.Errorf("version published_by = %+v; want %+v", got.PublishedBy, want)
+	}
+}
+
+// The version history names every publisher with one MemberNames call.
+func TestVersions_PublishedByOneLookup(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	h.viewerEdits(t)
+	h.publishedAs(t, ownerToken, "Acme two")
+	h.publishedAs(t, viewerToken, "Acme three")
+	h.publishedAs(t, ownerToken, "Acme four")
+	counted.calls.Store(0)
+
+	page := decode[gen.VersionPage](t, h.as(t, ownerToken, http.MethodGet, acmeFactory+"/versions", ""), http.StatusOK)
+
+	got := map[int]string{}
+
+	for _, v := range page.Versions {
+		if v.Number != nil && v.PublishedBy != nil && *v.Number > 1 {
+			got[*v.Number] = v.PublishedBy.Name
+		}
+	}
+
+	if want := map[int]string{2: ownerName, 3: viewerName, 4: ownerName}; !maps.Equal(got, want) {
+		t.Errorf("history publishers = %v; want %v", got, want)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("history called MemberNames %d times; want 1", n)
+	}
+}
+
+// The factories list names the actors of every factory with one MemberNames call.
+func TestFactories_ActorsOneLookup(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	h.viewerEdits(t)
+	h.publishedAs(t, ownerToken, "Acme two")
+	decode[gen.Draft](t, h.as(t, viewerToken, http.MethodPost, factoriesPath+"/line/draft", `{}`), http.StatusCreated)
+	counted.calls.Store(0)
+
+	list := decode[gen.FactoryList](t, h.as(t, ownerToken, http.MethodGet, factoriesPath, ""), http.StatusOK)
+
+	got := map[string]string{}
+
+	for _, f := range list.Factories {
+		if f.Current != nil {
+			got[f.Name+" current"] = f.Current.PublishedBy.Name
+		}
+
+		if f.Draft != nil {
+			got[f.Name+" draft"] = f.Draft.UpdatedBy.Name
+		}
+	}
+
+	if got["acme current"] != ownerName || got["line draft"] != viewerName {
+		t.Errorf("factory actors = %v; want acme current by %s and line's draft by M. Okafor", got, ownerName)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("factories list called MemberNames %d times; want 1", n)
+	}
+}
+
+// A draft names who opened it and who last saved it, and so does its factory.
+func TestDraft_ActorsNameTheMember(t *testing.T) {
+	t.Parallel()
+
+	h := newSignedIn(t)
+	want := named(ownerID, ownerName)
+
+	d := decode[gen.Draft](t, h.as(t, ownerToken, http.MethodPost, acmeDraft, `{}`), http.StatusCreated)
+	if d.CreatedBy != want || d.UpdatedBy != want {
+		t.Errorf("opened draft by %+v, updated by %+v; want %+v", d.CreatedBy, d.UpdatedBy, want)
+	}
+
+	d = decode[gen.Draft](t, h.as(t, ownerToken, http.MethodGet, acmeDraft, ""), http.StatusOK)
+	if d.CreatedBy != want || d.UpdatedBy != want {
+		t.Errorf("draft by %+v, updated by %+v; want %+v", d.CreatedBy, d.UpdatedBy, want)
+	}
+
+	f := decode[gen.Factory](t, h.as(t, ownerToken, http.MethodGet, acmeFactory, ""), http.StatusOK)
+	if f.Draft == nil || f.Draft.UpdatedBy != want {
+		t.Errorf("factory draft = %+v; want updated by %+v", f.Draft, want)
+	}
+}
+
+// requested files a draft request on acme by a, as the API does, and ends it.
+func (h signedIn) requested(t *testing.T, a domain.Actor, text string) domain.DraftRequest {
+	t.Helper()
+
+	r, err := h.drafts.Create(domain.WithOrg(t.Context(), testOrg), domain.NewDraftRequest{Factory: acmeID, Requester: a, Text: text})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.finishDraftRequests(t, acmeID)
+
+	return r
+}
+
+// A draft request by someone who has left names them formerName.
+func TestDraftRequest_RequesterFormerMember(t *testing.T) {
+	t.Parallel()
+
+	h := newSignedIn(t)
+	r := h.requested(t, user(viewerID), "give review a 4th reviewer")
+
+	if err := h.identity.SetOrgRole(testOrg, viewerID, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	got := decode[gen.DraftRequest](t, h.as(t, ownerToken, http.MethodGet, acmeDraftRequests+"/"+string(r.ID), ""), http.StatusOK)
+	if want := named(viewerID, formerName); got.Requester != want {
+		t.Errorf("requester = %+v; want %+v", got.Requester, want)
+	}
+}
+
+// The draft requests list names every requester with one MemberNames call.
+func TestDraftRequests_RequesterOneLookup(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	h.requested(t, user(ownerID), "by the owner")
+	h.requested(t, user(viewerID), "by the viewer")
+	h.requested(t, user(formerID), "by someone who left")
+	h.requested(t, domain.LocalUser, "by the local user")
+
+	list := decode[gen.DraftRequestList](t, h.as(t, ownerToken, http.MethodGet, acmeDraftRequests, ""), http.StatusOK)
+
+	got := map[string]string{}
+	for _, r := range list.Requests {
+		got[r.Text] = r.Requester.Name
+	}
+
+	want := map[string]string{
+		"by the owner": ownerName, "by the viewer": viewerName, "by someone who left": formerName,
+		"by the local user": localUserName,
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("requesters = %v; want %v", got, want)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("draft requests list called MemberNames %d times; want 1", n)
+	}
+}
+
+// Under GOAL_AUTH=none the definitions routes look nobody up.
+func TestVersions_NoLookupWithoutSignIn(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newHarnessLogged(t, nil, nil, countingNames(counted))
+	v := h.renamed(t)
+
+	if v.PublishedBy == nil || *v.PublishedBy != (gen.Actor{Kind: gen.ActorKind(domain.LocalUser.Kind), Id: domain.LocalUser.ID, Name: domain.LocalUser.Name}) {
+		t.Errorf("published_by = %+v; want the local user", v.PublishedBy)
+	}
+
+	for _, path := range []string{factoriesPath, acmeFactory, acmeFactory + "/versions", acmeFactory + "/versions/" + strconv.Itoa(*v.Number), acmeDraftRequests} {
+		if res := h.request(t, http.MethodGet, path, "", nil); res.status != http.StatusOK {
+			t.Errorf("GET %s = %d %s", path, res.status, res.body)
+		}
+	}
+
+	if n := counted.calls.Load(); n != 0 {
+		t.Errorf("MemberNames called %d times under GOAL_AUTH=none; want 0", n)
+	}
+}
+
 // keyBy stores a key of acme made by a straight in the fake, as if through the API.
 func (h signedIn) keyBy(t *testing.T, name string, by domain.Actor) domain.APIKey {
 	t.Helper()
@@ -285,7 +530,7 @@ func TestAPIKeys_NamesPeopleInOneLookup(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"ci-deploy": ownerName, "by-former": formerMember, "revoked-by-viewer": ownerName, "revoked-by-viewer revoked": formerMember,
+		"ci-deploy": ownerName, "by-former": formerName, "revoked-by-viewer": ownerName, "revoked-by-viewer revoked": formerName,
 	}
 	if !maps.Equal(got, want) {
 		t.Errorf("key names = %v; want %v", got, want)
@@ -336,8 +581,8 @@ func TestSignupDomain_SetByFormerMember(t *testing.T) {
 	must(t, h.identity.SetOrgRole(testOrg, ownerID, ""))
 
 	s := decode[gen.OrgSettings](t, h.as(t, viewerToken, http.MethodGet, acmeSettings, ""), http.StatusOK)
-	if s.SignupDomain == nil || s.SignupDomain.SetBy.Id != string(ownerID) || s.SignupDomain.SetBy.Name != formerMember {
-		t.Errorf("signup_domain = %+v; want set by %s named %s", s.SignupDomain, ownerID, formerMember)
+	if s.SignupDomain == nil || s.SignupDomain.SetBy.Id != string(ownerID) || s.SignupDomain.SetBy.Name != formerName {
+		t.Errorf("signup_domain = %+v; want set by %s named %s", s.SignupDomain, ownerID, formerName)
 	}
 }
 
@@ -362,8 +607,8 @@ func (h signedIn) touchedByEveryone(t *testing.T) map[string]string {
 	must(t, h.identity.SetOrgRole(testOrg, viewerID, ""))
 
 	return map[string]string{
-		string(ownerID): ownerName, string(viewerID): formerMember, string(formerID): formerMember,
-		domain.LocalUser.ID: "Local user (before sign-in)",
+		string(ownerID): ownerName, string(viewerID): formerName, string(formerID): formerName,
+		domain.LocalUser.ID: localUserName,
 	}
 }
 

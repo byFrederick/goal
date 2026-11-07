@@ -356,7 +356,7 @@ func (s *server) nameActors(ctx context.Context, actors ...*gen.Actor) {
 	}
 }
 
-// filers are the created_by actors of rows, for nameActors.
+// filers are one actor of each of rows, their created_by for instance, for nameActors.
 func filers[T any](rows []T, createdBy func(*T) *gen.Actor) []*gen.Actor {
 	out := make([]*gen.Actor, 0, len(rows))
 	for i := range rows {
