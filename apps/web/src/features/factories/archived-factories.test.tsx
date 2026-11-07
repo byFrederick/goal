@@ -110,7 +110,7 @@ describe('the Archived filter on the Factories home', () => {
     fake.active = [];
     renderHome({ can: ['factory:archive'], archivedList: [archived], showArchived: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Restore sre' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore SRE' }));
 
     await waitFor(() => expect(restoreFactory).toHaveBeenCalledWith('org-1', 'factory-1'));
     await screen.findByText('No archived factories');
@@ -121,9 +121,9 @@ describe('the Archived filter on the Factories home', () => {
     vi.mocked(restoreFactory).mockReturnValueOnce(new Promise(() => {}));
     renderHome({ can: ['factory:archive'], archivedList: [archived], showArchived: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Restore sre' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore SRE' }));
 
-    const button = await screen.findByRole('button', { name: 'Restore sre' });
+    const button = await screen.findByRole('button', { name: 'Restore SRE' });
     await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
     expect(button.getAttribute('aria-busy')).toBe('true');
     expect(button.getAttribute('aria-disabled')).toBe('true');
