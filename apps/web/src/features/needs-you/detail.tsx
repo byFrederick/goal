@@ -12,7 +12,15 @@ import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
 import { BlockedSentence } from '../../shared/blocked-sentence';
 import { blockedWords } from '../../shared/blocked-words';
 import { refParam } from '../../shared/factory';
-import { formatAge, formatClock, formatPercent, formatUsd, formatWeekdayTime, humanize } from '../../shared/format';
+import {
+  formatAge,
+  formatClock,
+  formatClockOrWeekday,
+  formatPercent,
+  formatUsd,
+  formatWeekdayTime,
+  humanize,
+} from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
@@ -133,7 +141,11 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
   const factory = entry.factory.name;
   return (
     <nav aria-label="Where it waits" className="flex min-w-0 flex-wrap items-center gap-2 text-secondary text-ink-soft">
-      <Link to="/o/$org/f/$factory" params={{ org: org.slug, factory }} className="text-ink-soft hover:text-ink">
+      <Link
+        to="/o/$org/f/$factory"
+        params={{ org: org.slug, factory }}
+        className="inline-flex items-center justify-center text-ink-soft hover:text-ink max-md:min-h-11 max-md:min-w-11"
+      >
         {entry.factory.title ?? factory}
       </Link>
       {entry.item ? (
@@ -142,7 +154,7 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
           <Link
             to="/o/$org/f/$factory/items/$ref"
             params={{ org: org.slug, factory, ref: refParam(entry.item.ref) }}
-            className="text-ink-soft hover:text-ink"
+            className="inline-flex items-center justify-center text-ink-soft hover:text-ink max-md:min-h-11 max-md:min-w-11"
           >
             {entry.item.ref}
           </Link>
@@ -346,11 +358,11 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
       >
         <dl className="m-0 flex flex-col gap-2">
           <Fact label="Factory">{entry.factory.title ?? entry.factory.name}</Fact>
-          <Fact label="Used up since">{formatClock(b.since)}</Fact>
+          <Fact label="Used up since">{formatClockOrWeekday(b.since)}</Fact>
           <Fact label="Resumes">
             <span className="inline-flex items-center gap-1">
-              Resumes about {formatWeekdayTime(b.resumes_at)}
-              <InfoTip about="the weekly budget" side="bottom">
+              About {formatWeekdayTime(b.resumes_at)}
+              <InfoTip about="the weekly budget" side="bottom" className="max-md:size-11">
                 The budget covers a rolling 7×24 h window. Each run leaves it 7 days after it started. Under drain, the
                 runs in progress still finish.
               </InfoTip>
@@ -450,7 +462,11 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
             <span>
               <BlockedSentence words={words} org={org.slug} factory={entry.factory.name} />
             </span>
-            {entry.blocked?.reason ? <InfoTip about="Why it is blocked">{entry.blocked.reason}</InfoTip> : null}
+            {entry.blocked?.reason ? (
+              <InfoTip about="Why it is blocked" className="max-md:size-11">
+                {entry.blocked.reason}
+              </InfoTip>
+            ) : null}
           </p>
         ) : (
           <p className="m-0 text-secondary text-muted">{entry.blocked?.reason ?? 'No reason was recorded.'}</p>

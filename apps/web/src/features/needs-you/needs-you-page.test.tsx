@@ -1038,7 +1038,10 @@ describe('Needs you: a used-up weekly budget', () => {
     renderPage({ search: { entry: budget.id, type: 'alert' }, seed: seedWith([]) });
 
     expect((await screen.findAllByText('Weekly budget used up · $1,602.00 of $1,600')).length).toBeGreaterThan(0);
-    expect(screen.getByText(`Resumes about ${resumes}`)).toBeTruthy();
+    expect(screen.getByText(`About ${resumes}`)).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'The weekly budget' })).queryByText(/Resumes about/)).toBeNull();
+    // Used up on an earlier day: the weekday places it.
+    expect(screen.getByText(formatWeekdayTime('2026-10-27T08:00:00Z'))).toBeTruthy();
     expect(screen.getByRole('button', { name: 'About the weekly budget' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Weekly budget used up/ })).toBeTruthy();
   });
