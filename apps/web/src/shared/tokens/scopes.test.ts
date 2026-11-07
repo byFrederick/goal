@@ -82,3 +82,9 @@ describe('a row', () => {
     expect(lastUsedText('2026-10-24T08:59:30Z', now)).toBe('Just now');
   });
 });
+
+describe('connection:read label', () => {
+  it('is called See standing rules', () => {
+    expect(scope('connection:read').label).toBe('See standing rules');
+  });
+});
