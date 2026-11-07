@@ -363,7 +363,9 @@ function TriggerRow({
         <span className="font-control text-body text-ink">{triggerLabel(trigger.name)}</span>
         <span className="flex items-center gap-1 text-secondary break-words text-ink-soft">
           {words}
-          {words !== trigger.when ? <InfoTip about={`${triggerLabel(trigger.name)} schedule`}>{trigger.when}</InfoTip> : null}
+          {words !== trigger.when ? (
+            <InfoTip about={`${triggerLabel(trigger.name)} schedule`}>{trigger.when}</InfoTip>
+          ) : null}
         </span>
         <span className="text-secondary break-words text-muted">{createsSentence(trigger, stations)}</span>
         {trigger.problem && !missing ? (
