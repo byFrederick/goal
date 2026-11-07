@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ItemWaiting } from '../api/types';
+import type { CICheck, ItemWaiting } from '../api/types';
 import { waitingDetail, waitingShort } from './waiting';
 
 type ItemWaitingNeed = ItemWaiting['needs'][number];
@@ -71,5 +71,57 @@ describe('a turn wait', () => {
   it('names the default branch when the target is null or absent', () => {
     expect(waitingDetail(turn(null))).toBe('Waiting for software#763 to land on the default branch');
     expect(waitingDetail(turn())).toBe('Waiting for software#763 to land on the default branch');
+  });
+});
+
+describe('a CI wait', () => {
+  const check = (over: Partial<CICheck>): CICheck => ({
+    repo: 'github.com/acme/app',
+    name: 'build',
+    state: 'running',
+    failed_jobs: [],
+    ...over,
+  });
+  const base = (ci: Partial<NonNullable<ItemWaiting['ci']>>): ItemWaiting => ({
+    kind: 'ci',
+    items: [],
+    files: [],
+    needs: [],
+    ci: {
+      commits: [{ repo: 'github.com/acme/app', sha: '0123456789abcdef' }],
+      checks: [],
+      finished: 0,
+      total: 0,
+      ...ci,
+    },
+  });
+
+  it('counts finished checks while it runs, and says only Waiting for CI before the first poll', () => {
+    expect(waitingShort(base({ finished: 9, total: 14 }))).toBe('Waiting for CI · 9 of 14');
+    expect(waitingShort(base({}))).toBe('Waiting for CI');
+  });
+
+  it('names the first failed check and its first failed job after a failure', () => {
+    const failure = {
+      repo: 'github.com/acme/app',
+      sha: 'abc',
+      checks: [check({ name: 'task web:e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12', '4/12'] })],
+    };
+    expect(waitingShort(base({ finished: 3, total: 4, failure }))).toBe('CI failed: task web:e2e (3/12)');
+    failure.checks[0] = check({ name: 'lint', state: 'finished', result: 'failed' });
+    expect(waitingShort(base({ failure }))).toBe('CI failed: lint');
+    expect(waitingShort(base({ failure: { ...failure, checks: [] } }))).toBe('CI timed out');
+  });
+
+  it('lists one line per commit with its short sha and counts, then each failed check', () => {
+    const waiting = base({
+      checks: [check({ state: 'finished', result: 'passed' }), check({ name: 'test' })],
+      failure: {
+        repo: 'github.com/acme/app',
+        sha: 'abc',
+        checks: [check({ name: 'e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12'] })],
+      },
+    });
+    expect(waitingDetail(waiting)).toBe('github.com/acme/app 0123456 · 1 of 2\nFailed: e2e (3/12)');
   });
 });
