@@ -184,30 +184,6 @@ func TestCredentials_AMemberMayOnlyRead(t *testing.T) {
 	}
 }
 
-// A credential a connection refers to as {{name}} is not deleted, and the answer names the
-// connection (ADR 0017 decision 8).
-func TestCredentials_DeleteInUse(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t)
-	h.createToken(t)
-
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-		`{"name":"github","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
-
-	got := decode[gen.Credential](t, h.request(t, http.MethodGet, tokenPath, "", nil), http.StatusOK)
-	if !slices.Equal(got.UsedBy.Connections, []string{kindGitHub}) {
-		t.Errorf("used by = %v; want the github connection", got.UsedBy.Connections)
-	}
-
-	p := refused(t, "delete in use", h.request(t, http.MethodDelete, tokenPath, "", nil), http.StatusConflict, "credential-in-use")
-	if !strings.Contains(valueOf(p.Detail), kindGitHub) {
-		t.Errorf("problem = %q; want it to name the github connection", valueOf(p.Detail))
-	}
-
-	decode[gen.Credential](t, h.request(t, http.MethodGet, tokenPath, "", nil), http.StatusOK)
-}
-
 // An import's dry run answers each name as new or existing and stores nothing; a real run creates
 // the new names as api_keys with no factories, and skips or replaces the existing ones.
 func TestCredentials_Import(t *testing.T) {
@@ -215,9 +191,6 @@ func TestCredentials_Import(t *testing.T) {
 
 	h := newHarness(t)
 	h.createToken(t)
-
-	decode[gen.Connection](t, h.request(t, http.MethodPost, connectionsPath,
-		`{"name":"github","kind":"github","secrets":{"token":"{{acme-token}}"}}`, nil), http.StatusCreated)
 
 	text, err := json.Marshal("ACME_TOKEN=" + replacedValue + "\n# a comment\nSENTRY_TOKEN=\"" + importedValue + "\"\n")
 	if err != nil {
@@ -228,7 +201,7 @@ func TestCredentials_Import(t *testing.T) {
 
 	dry := decode[gen.CredentialImportResult](t, h.request(t, http.MethodPost, credImportPath, importBody(`,"dry_run":true`), nil), http.StatusOK)
 
-	want := []gen.CredentialImportOutcome{{Name: tokenName, Exists: true, Connections: 1}, {Name: "sentry-token", Exists: false, Connections: 0}}
+	want := []gen.CredentialImportOutcome{{Name: tokenName, Exists: true, Connections: 0}, {Name: "sentry-token", Exists: false, Connections: 0}}
 	if !dry.DryRun || !slices.Equal(dry.Credentials, want) {
 		t.Errorf("dry run = %+v; want %+v", dry, want)
 	}

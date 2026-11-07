@@ -16,7 +16,7 @@ import (
 )
 
 // The shell's search box (tag shell): one read over the organization's items, agents, factories
-// connections and secrets, each group best first and only what the caller sees.
+// and secrets, each group best first and only what the caller sees.
 
 // Limits of a search.
 const (
@@ -25,13 +25,9 @@ const (
 	maxSearchLimit     = 20
 )
 
-// The permissions a search's groups need; without one its group is empty.
-const (
-	// permConnectionRead reads the organization's connections' names and kinds.
-	permConnectionRead domain.Permission = "connection:read"
-	// permSecretRead reads the organization's secrets' metadata, never a value.
-	permSecretRead domain.Permission = "secret:read"
-)
+// permSecretRead is the permission the search's secrets group needs, reading the organization's
+// secrets' metadata and never a value; without it the group is empty.
+const permSecretRead domain.Permission = "secret:read"
 
 func (s *server) SearchOrg(ctx context.Context, req gen.SearchOrgRequestObject) (gen.SearchOrgResponseObject, error) {
 	q := strings.TrimSpace(req.Params.Q)
@@ -55,18 +51,13 @@ func (s *server) SearchOrg(ctx context.Context, req gen.SearchOrgRequestObject) 
 		return nil, err
 	}
 
-	conns, err := s.searchConnections(ctx, q, limit)
-	if err != nil {
-		return nil, err
-	}
-
 	secrets, err := s.searchSecrets(ctx, q, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	return gen.SearchOrg200JSONResponse{
-		Items: items, Agents: searchAgents(fs, q, limit), Factories: searchFactories(fs, q, limit), Connections: conns, Secrets: secrets,
+		Items: items, Agents: searchAgents(fs, q, limit), Factories: searchFactories(fs, q, limit), Secrets: secrets,
 	}, nil
 }
 
@@ -158,34 +149,6 @@ func searchFactories(fs []*config.Factory, q string, limit int) []gen.FactoryHit
 	})
 
 	return firstOf(out, limit)
-}
-
-// searchConnections finds the organization's connections whose name contains q, for a caller
-// who holds connection:read; anyone else finds none.
-func (s *server) searchConnections(ctx context.Context, q string, limit int) ([]gen.ConnectionHit, error) {
-	out := []gen.ConnectionHit{}
-
-	// Without connection:read the group is empty, not a refusal: the search still answers.
-	if err := s.ask(ctx, permConnectionRead, ""); err != nil {
-		return out, nil //nolint:nilerr // a denial empties the group
-	}
-
-	conns, err := s.connections.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, c := range conns {
-		if matchRank(c.Name, q) >= 0 {
-			out = append(out, gen.ConnectionHit{Name: c.Name, Kind: c.Kind})
-		}
-	}
-
-	slices.SortFunc(out, func(a, b gen.ConnectionHit) int {
-		return cmp.Or(cmp.Compare(matchRank(a.Name, q), matchRank(b.Name, q)), cmp.Compare(a.Name, b.Name))
-	})
-
-	return firstOf(out, limit), nil
 }
 
 // searchSecrets finds the organization's secrets whose name contains q, with their scope and

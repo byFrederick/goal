@@ -31,7 +31,7 @@ func TestKnowledge_DeleteRefusedWhileAPublishedVersionListsIt(t *testing.T) {
 	t.Parallel()
 
 	tenancy, ctx := builderOrg(t)
-	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
+	kb := porttest.NewKnowledge(tenancy)
 
 	f := &config.Factory{}
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
@@ -71,7 +71,7 @@ func TestKnowledge_AnArchivedFactoryUsesNoSource(t *testing.T) {
 	t.Parallel()
 
 	tenancy, ctx := builderOrg(t)
-	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
+	kb := porttest.NewKnowledge(tenancy)
 
 	f := &config.Factory{}
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder
@@ -128,7 +128,7 @@ func TestKnowledge_SourceReaders(t *testing.T) {
 	t.Parallel()
 
 	tenancy, ctx := builderOrg(t)
-	kb := porttest.NewKnowledge(porttest.NewConnections(porttest.NewMasterKeys().Key("k1"), tenancy), tenancy)
+	kb := porttest.NewKnowledge(tenancy)
 
 	f := &config.Factory{}
 	f.Metadata.ID, f.Metadata.Name = string(mxF), factoryBuilder

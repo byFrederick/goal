@@ -241,35 +241,9 @@ func (s *server) spendBudget(ctx context.Context, f *config.Factory, andon *doma
 }
 
 // modelConnections are, by factory goald runs that is not archived, what its current version
-// gets its model from: the organization's connections it names in runtime.modelConnection, with
-// their kinds, and on secrets the secret runtime.modelKey names, by name with kind secret and
-// never its value (ADR 0037 decision 7). A name the organization has no connection or secret
-// for is left out.
+// gets its model from: the secret runtime.modelKey names, by name with kind secret and never its
+// value (ADR 0037 decision 7). A name the organization has no secret for is left out.
 func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]gen.ConnectionHit, error) {
-	users, err := s.usersBy(ctx, func(f *config.Factory) []string {
-		if m := f.Spec.Runtime.ModelConnection; m != "" {
-			return []string{m}
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	conns, err := s.connections.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list the organization's connections: %w", err)
-	}
-
-	out := map[domain.FactoryID][]gen.ConnectionHit{}
-
-	for _, c := range conns {
-		for _, f := range users[c.Name] {
-			out[f.id] = append(out[f.id], gen.ConnectionHit{Name: c.Name, Kind: c.Kind})
-		}
-	}
-
 	keys, err := s.usersBy(ctx, func(f *config.Factory) []string { return config.SecretNames(f.Spec.Runtime.ModelKey) })
 	if err != nil {
 		return nil, err
@@ -279,6 +253,8 @@ func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]g
 	if err != nil {
 		return nil, fmt.Errorf("list the organization's secrets: %w", err)
 	}
+
+	out := map[domain.FactoryID][]gen.ConnectionHit{}
 
 	for _, sec := range secrets {
 		for _, f := range keys[sec.Name] {

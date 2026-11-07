@@ -8,12 +8,6 @@ import _ "embed"
 //go:embed factory.schema.json
 var Factory []byte
 
-// ConnectionKind is connection-kind.schema.json, the contract for every connection kind: the
-// platform's (internal/connkind/kinds) and the organizations' own.
-//
-//go:embed connection-kind.schema.json
-var ConnectionKind []byte
-
 // Environment is environment.schema.json, the contract for a definition's environment files
 // (environments/<name>.yaml, ADR 0037).
 //

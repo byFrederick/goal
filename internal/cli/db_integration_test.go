@@ -300,7 +300,7 @@ func TestDB_RecoverOwner(t *testing.T) {
 	}
 }
 
-// Spec 4 §5.2: goal db rekey reseals every organization's connections under the new key in
+// Spec 4 §5.2: goal db rekey reseals every organization's secrets under the new key in
 // front of GOAL_MASTER_KEYS, with nothing but the database, so the old key can then go; a second
 // run reseals nothing.
 func TestDB_Rekey(t *testing.T) {
@@ -317,20 +317,15 @@ func TestDB_Rekey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	conns := postgres.NewConnections(store, old)
-	if err := conns.SyncPlatformKinds(t.Context(), []domain.ConnectionKind{{Name: "acme-api", Title: "Acme API", Spec: domain.KindSpec{
-		Fields: []domain.KindField{{Name: "key", Title: "Key", Secret: true}}, Env: map[string]string{"ACME_KEY": "{{key}}"},
-	}}}); err != nil {
-		t.Fatal(err)
-	}
-
 	org, err := store.CreateOrg(t.Context(), domain.LocalUser, ports.NewOrg{Slug: orgAcme, Name: recoveredOrgName})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	ctx := domain.WithOrg(t.Context(), org.ID)
-	if _, err := conns.Create(ctx, domain.NewConnection{Name: orgAcme, Kind: "acme-api", Secrets: map[string]string{"key": "s3cret"}}, domain.LocalUser); err != nil {
+
+	secret := domain.NewSecret{Name: orgAcme, Value: "s3cret", Scope: domain.SecretScope{All: true}}
+	if _, err := postgres.NewSecrets(store, old).Create(ctx, secret, domain.LocalUser); err != nil {
 		t.Fatal(err)
 	}
 
@@ -350,8 +345,8 @@ func TestDB_Rekey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := postgres.NewConnections(store, onlyNew).Resolve(ctx, []string{orgAcme}, domain.ConnectionUse{Run: "run-1"})
-	if err != nil || got[0].Values["key"] != "s3cret" {
+	got, err := postgres.NewSecrets(store, onlyNew).Resolve(ctx, []string{orgAcme}, domain.SecretUse{Run: "run-1"})
+	if err != nil || len(got) != 1 || got[0].Value != "s3cret" {
 		t.Errorf("Resolve under the new key alone = %+v, %v", got, err)
 	}
 

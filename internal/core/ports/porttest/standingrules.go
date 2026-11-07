@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,42 +13,46 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// toolNames are a test's tool names sorted without repeats; nil for none, as the column holds
-// NULL.
-func toolNames(tools []string) []string {
-	if len(tools) == 0 {
-		return nil
-	}
+var _ ports.StandingRules = (*StandingRules)(nil)
 
-	out := slices.Clone(tools)
-	slices.Sort(out)
-
-	return slices.Compact(out)
+// StandingRules are standing rules kept in memory (ports.StandingRules), each change audited
+// through audit.
+type StandingRules struct {
+	mu    sync.Mutex
+	audit ports.Audit
+	// rules are each organization's standing rules, oldest first; none is ever removed.
+	rules map[domain.OrgID][]*domain.StandingRule
 }
 
-// StandingRules implements ports.Connections.
-func (c *Connections) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
+// NewStandingRules returns no standing rules, audited through audit (a Tenancy that knows the
+// organizations).
+func NewStandingRules(audit ports.Audit) *StandingRules {
+	return &StandingRules{audit: audit, rules: map[domain.OrgID][]*domain.StandingRule{}}
+}
+
+// StandingRules implements ports.StandingRules.
+func (s *StandingRules) StandingRules(ctx context.Context, includeRevoked bool) ([]domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return nil, domain.ErrNoOrg
 	}
 
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	out := []domain.StandingRule{}
 
-	for _, r := range c.d.rules[org] {
+	for _, r := range s.rules[org] {
 		if includeRevoked || r.Active() {
-			out = append(out, c.d.ruleLocked(org, r))
+			out = append(out, copyRule(r))
 		}
 	}
 
 	return out, nil
 }
 
-// CreateStandingRule implements ports.Connections.
-func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandingRule, by domain.Actor) (domain.StandingRule, error) {
+// CreateServerStandingRule implements ports.StandingRules.
+func (s *StandingRules) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg
@@ -57,17 +62,21 @@ func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandi
 		return domain.StandingRule{}, fmt.Errorf("create standing rule: %w", err)
 	}
 
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
+	return s.create(ctx, org, domain.StandingRule{
+		Factory: n.Factory, Environment: n.Environment, Server: n.Server, Tool: n.Tool, Agent: n.Agent, CreatedBy: by, ItemID: n.Item,
+	})
+}
 
-	conn, ok := c.d.conns[org][n.Connection]
-	if !ok {
-		return domain.StandingRule{}, fmt.Errorf("connection %q: %w", n.Connection, ports.ErrNotFound)
-	}
+// create adds rule n to org, or returns the active rule of its key (factory, environment and
+// server; tool; agent) and audits nothing.
+func (s *StandingRules) create(ctx context.Context, org domain.OrgID, n domain.StandingRule) (domain.StandingRule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	for _, r := range c.d.rules[org] {
-		if r.Active() && r.ConnectionID == conn.conn.ID && r.Tool == n.Tool && r.Agent == n.Agent {
-			return c.d.ruleLocked(org, r), nil
+	for _, r := range s.rules[org] {
+		if r.Active() && r.Factory == n.Factory && r.Environment == n.Environment &&
+			r.Server == n.Server && r.Tool == n.Tool && r.Agent == n.Agent {
+			return copyRule(r), nil
 		}
 	}
 
@@ -76,100 +85,51 @@ func (c *Connections) CreateStandingRule(ctx context.Context, n domain.NewStandi
 		return domain.StandingRule{}, err
 	}
 
-	r := &domain.StandingRule{
-		ID: domain.StandingRuleID(id.String()), ConnectionID: conn.conn.ID, Tool: n.Tool, Agent: n.Agent, CreatedBy: by,
-		CreatedAt: time.Now().UTC().Truncate(time.Microsecond), ItemID: n.Item,
-	}
+	r := n
+	r.ID, r.CreatedAt = domain.StandingRuleID(id.String()), time.Now().UTC().Truncate(time.Microsecond)
 
-	if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleCreated, *r, n.Connection); err != nil {
+	if err := s.ruleAudit(ctx, r.CreatedBy, domain.AuditStandingRuleCreated, r); err != nil {
 		return domain.StandingRule{}, err
 	}
 
-	c.d.rules[org] = append(c.d.rules[org], r)
+	s.rules[org] = append(s.rules[org], &r)
 
-	return c.d.ruleLocked(org, r), nil
+	return copyRule(&r), nil
 }
 
-// CreateServerStandingRule implements ports.Connections.
-func (c *Connections) CreateServerStandingRule(ctx context.Context, n domain.NewServerStandingRule, by domain.Actor) (domain.StandingRule, error) {
+// RevokeStandingRule implements ports.StandingRules.
+func (s *StandingRules) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
 	org, ok := domain.OrgFrom(ctx)
 	if !ok {
 		return domain.StandingRule{}, domain.ErrNoOrg
 	}
 
-	if err := n.Check(); err != nil {
-		return domain.StandingRule{}, fmt.Errorf("create standing rule: %w", err)
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
-
-	for _, r := range c.d.rules[org] {
-		if r.Active() && r.ConnectionID == "" && r.Factory == n.Factory && r.Environment == n.Environment && r.Server == n.Server &&
-			r.Tool == n.Tool && r.Agent == n.Agent {
-			return c.d.ruleLocked(org, r), nil
-		}
-	}
-
-	id, err := uuid.NewV7()
-	if err != nil {
-		return domain.StandingRule{}, err
-	}
-
-	r := &domain.StandingRule{
-		ID: domain.StandingRuleID(id.String()), Factory: n.Factory, Environment: n.Environment, Server: n.Server, Tool: n.Tool,
-		Agent: n.Agent, CreatedBy: by, CreatedAt: time.Now().UTC().Truncate(time.Microsecond), ItemID: n.Item,
-	}
-
-	if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleCreated, *r, ""); err != nil {
-		return domain.StandingRule{}, err
-	}
-
-	c.d.rules[org] = append(c.d.rules[org], r)
-
-	return c.d.ruleLocked(org, r), nil
-}
-
-// RevokeStandingRule implements ports.Connections.
-func (c *Connections) RevokeStandingRule(ctx context.Context, id domain.StandingRuleID, by domain.Actor) (domain.StandingRule, error) {
-	org, ok := domain.OrgFrom(ctx)
-	if !ok {
-		return domain.StandingRule{}, domain.ErrNoOrg
-	}
-
-	c.d.mu.Lock()
-	defer c.d.mu.Unlock()
-
-	i := slices.IndexFunc(c.d.rules[org], func(r *domain.StandingRule) bool { return r.ID == id })
+	i := slices.IndexFunc(s.rules[org], func(r *domain.StandingRule) bool { return r.ID == id })
 	if i < 0 {
 		return domain.StandingRule{}, fmt.Errorf("standing rule %s: %w", id, ports.ErrNotFound)
 	}
 
-	r := c.d.rules[org][i]
+	r := s.rules[org][i]
 	if !r.Active() {
 		return domain.StandingRule{}, fmt.Errorf("standing rule %s is revoked already: %w", id, ports.ErrConflict)
 	}
 
-	out := c.d.ruleLocked(org, r)
-	if err := c.ruleAudit(ctx, by, domain.AuditStandingRuleRevoked, out, out.Connection); err != nil {
+	if err := s.ruleAudit(ctx, by, domain.AuditStandingRuleRevoked, *r); err != nil {
 		return domain.StandingRule{}, err
 	}
 
 	now, revoker := time.Now().UTC().Truncate(time.Microsecond), by
 	r.RevokedBy, r.RevokedAt = &revoker, &now
 
-	return c.d.ruleLocked(org, r), nil
+	return copyRule(r), nil
 }
 
-// ruleLocked is a copy of r with its connection's name, "" once the connection is deleted.
-func (d *connectionData) ruleLocked(org domain.OrgID, r *domain.StandingRule) domain.StandingRule {
+// copyRule is a copy of r that shares nothing with it.
+func copyRule(r *domain.StandingRule) domain.StandingRule {
 	out := *r
-
-	for _, conn := range d.conns[org] {
-		if r.ConnectionID != "" && conn.conn.ID == r.ConnectionID {
-			out.Connection = conn.conn.Name
-		}
-	}
 
 	if r.RevokedBy != nil {
 		by, at := *r.RevokedBy, *r.RevokedAt
@@ -179,14 +139,12 @@ func (d *connectionData) ruleLocked(org domain.OrgID, r *domain.StandingRule) do
 	return out
 }
 
-// ruleAudit appends action on rule r, of the connection named name or of its server.
-func (c *Connections) ruleAudit(ctx context.Context, by domain.Actor, action string, r domain.StandingRule, name string) error {
-	data := map[string]any{"tool": r.Tool, "agent": r.Agent, "item_id": string(r.ItemID)}
-	if r.ConnectionID != "" {
-		data["connection"], data["connection_id"] = name, string(r.ConnectionID)
-	} else {
-		data["factory_id"], data["environment"], data["server"] = string(r.Factory), r.Environment, r.Server
+// ruleAudit appends action on rule r of its server.
+func (s *StandingRules) ruleAudit(ctx context.Context, by domain.Actor, action string, r domain.StandingRule) error {
+	data := map[string]any{
+		"tool": r.Tool, "agent": r.Agent, "item_id": string(r.ItemID),
+		"factory_id": string(r.Factory), "environment": r.Environment, "server": r.Server,
 	}
 
-	return c.appendAudit(ctx, by, action, domain.AuditTargetStandingRule, string(r.ID), data)
+	return s.audit.Append(ctx, domain.AuditEntry{Actor: by, Action: action, TargetKind: domain.AuditTargetStandingRule, TargetID: string(r.ID), Data: data})
 }

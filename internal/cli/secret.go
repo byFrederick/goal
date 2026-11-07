@@ -35,8 +35,10 @@ func secretCommand(ctx context.Context, out *printer, getenv func(string) string
 	return handler(ctx, out, getenv, args[1:])
 }
 
-// The verbs goal secret adds to connection's.
+// The verbs goal secret and other commands share.
 const (
+	verbCreate  = "create"
+	verbDelete  = "delete"
 	verbReplace = "replace"
 	verbImport  = "import"
 )
@@ -421,8 +423,8 @@ func deleted(status int, res *http.Response, p *gen.Problem) error {
 	return nil
 }
 
-// deleteNamed runs goal connection delete <name> or goal connection kind delete <name>: what is
-// the thing deleted, del deletes it.
+// deleteNamed runs a delete <name> command such as goal secret delete <name>: what is the thing
+// deleted, del deletes it.
 func deleteNamed(ctx context.Context, out *printer, getenv func(string) string, args []string, what string,
 	del func(c orgClient, name string) error,
 ) error {

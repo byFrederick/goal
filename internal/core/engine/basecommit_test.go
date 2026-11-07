@@ -29,15 +29,14 @@ const (
 
 // changedSinceLine is spec (preloading the open work, so it records base commits) then build,
 // with flow.assemblies.changedSince on, plans materialized, the touches field mapped to the
-// item's paths and the repository on the github connection.
+// item's paths and the repository read with the token {{github-entry}}.
 func changedSinceLine() domain.Line {
 	l := lineOf(agentStation(stSpec, agArchitect, 2, 2), agentStation(stBuild, agWorker, 2, 2))
 	l.Stations[1].Context = []domain.StationContext{domain.ContextInFlight}
 	l.Flow.Assemblies.Materialize = true
 	l.Flow.Assemblies.ChangedSince = true
 	l.Flow.Dependencies.Paths = fieldPaths
-	l.Runtime.Repository = domain.Repository{URL: appRepo, Connection: connGitHub}
-	l.Connections = []string{connGitHub}
+	l.Runtime.Repository = domain.Repository{URL: appRepo, Token: "{{" + secGitHubEntry + "}}"}
 
 	return l
 }
@@ -113,9 +112,7 @@ func TestEngine_FinishRecordsBaseCommit(t *testing.T) {
 		{name: "recorded", want: base},
 		{name: "setting off", line: func(l *domain.Line) { l.Flow.Assemblies.ChangedSince = false }},
 		{name: "no repository", line: func(l *domain.Line) { l.Runtime.Repository = domain.Repository{} }},
-		{name: "no code host connection", line: func(l *domain.Line) {
-			l.Connections, l.Runtime.Repository.Connection = nil, ""
-		}},
+		{name: "no repository token", line: func(l *domain.Line) { l.Runtime.Repository.Token = "" }},
 	}
 
 	for _, tt := range tests {
@@ -168,7 +165,7 @@ func TestEngine_BaseCommitCodeHostErrorStillFinishes(t *testing.T) {
 }
 
 // A repository on a host the organization doesn't list gets no base commit, and the code host no
-// call, though a connection of the factory signs git in to that host; listed, it gets one.
+// call, though the repository has a token; listed, it gets one.
 func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
 	t.Parallel()
 
@@ -176,10 +173,10 @@ func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
 
 	for _, listed := range []bool{false, true} {
 		line := changedSinceLine()
-		line.Runtime.Repository = domain.Repository{URL: gheRepo, Connection: connGHE}
-		line.Connections = []string{connGHE}
+		line.Runtime.Repository = domain.Repository{URL: gheRepo, Token: "{{" + secGHEEntry + "}}"}
 
 		h := newHarness(t, line, porttest.Succeed(touchesStore))
+		h.addSecret(t, secGHEEntry, gheTokenValue)
 		h.codehost.SetBranchHead(gheRepo, "", base)
 
 		if listed {
@@ -194,8 +191,8 @@ func TestEngine_BaseCommitRefusesAnUnlistedHost(t *testing.T) {
 		switch {
 		case !listed && (got != "" || len(calls) != 0 || !strings.Contains(h.logs.String(), "base commit not recorded")):
 			t.Errorf("unlisted: base commit %q after %d code host calls; want no base commit, no call and the log saying why", got, len(calls))
-		case listed && (got != base || !slices.Equal(calls, []string{"ghe-token"})):
-			t.Errorf("listed: base commit %q with tokens %d; want %s read once with the ghe connection's token", got, len(calls), base)
+		case listed && (got != base || !slices.Equal(calls, []string{gheTokenValue})):
+			t.Errorf("listed: base commit %q with tokens %d; want %s read once with the repository token", got, len(calls), base)
 		}
 	}
 }

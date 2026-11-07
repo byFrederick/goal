@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Hash, Plus, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { connectionsQuery, intakeQuery, versionModelQuery } from '../../api/queries';
+import { intakeQuery, orgNotificationsQuery, versionModelQuery } from '../../api/queries';
 import { modelOf } from '../../shared/definition/model';
 import { useFactory } from '../../shared/factory';
 import { NewItemButton } from '../../shared/new-item';
@@ -27,8 +27,8 @@ export function WaysInCard() {
   const factory = useFactory();
   const intake = useQuery(intakeQuery(org.id, factory.id));
   const model = useQuery({ ...versionModelQuery(org.id, factory.id, 'current'), select: (v) => modelOf(v.model) });
-  const connections = useQuery(connectionsQuery(org.id));
-  const queries = [intake, model, connections];
+  const notifications = useQuery(orgNotificationsQuery(org.id));
+  const queries = [intake, model, notifications];
 
   if (queries.some((query) => query.isError)) {
     const retry = () => {
@@ -54,7 +54,7 @@ export function WaysInCard() {
   }
 
   const triggers = intake.data.triggers;
-  const hasSlack = (connections.data ?? []).some((connection) => connection.kind === 'slack');
+  const hasSlack = Boolean(notifications.data?.slack_secret);
   const canCreate = holds(factory, 'item:create');
 
   return (

@@ -21,7 +21,6 @@ import (
 
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 	"github.com/byFrederick/goal/internal/core/ports/porttest"
@@ -323,7 +322,7 @@ func mxServer(t *testing.T, identity Identity) *httptest.Server {
 		Engine: struct{ Engine }{}, Items: mxItems{}, Factories: mxFactories{}, Definitions: mxDefinitions{}, Versions: struct{ Versions }{},
 		Orgs: mxOrgs{}, Audit: mxAudit{}, Access: struct{ Access }{}, OrgRetention: time.Hour, Authorizer: NewPermissions(clock),
 		Auth: AuthConfig{Mode: AuthSession}, Identity: identity, Platform: mxPlatform{}, Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
-		Builder: struct{ Builder }{}, Connections: struct{ ports.Connections }{}, Credentials: struct{ ports.Credentials }{}, OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: struct{ ports.EnvironmentTests }{}, ToolLister: struct{ ports.ToolLister }{}, RepositoryTests: struct{ ports.RepositoryTests }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{}, ParseKind: connkind.Parse,
+		Builder: struct{ Builder }{}, StandingRules: struct{ standingRules }{}, Credentials: struct{ ports.Credentials }{}, OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: struct{ ports.EnvironmentTests }{}, ToolLister: struct{ ports.ToolLister }{}, RepositoryTests: struct{ ports.RepositoryTests }{}, Intake: struct{ ports.Intake }{}, DraftRequests: struct{ ports.DraftRequests }{},
 		ConnectionTransport: http.DefaultTransport, Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{},
 		UploadMaxBytes: 1 << 20, Clock: clock,
 		KnowledgeObjects: struct{ KnowledgeObjects }{}, KnowledgeCheck: struct{ KnowledgeCheck }{},
@@ -463,3 +462,7 @@ func TestAPI_TwoOrgMatrixOverHTTP(t *testing.T) {
 	identity, principals := mxIdentity(t)
 	runHTTPMatrix(t, identity, principals)
 }
+
+// standingRules names ports.StandingRules so a struct can embed it: embedded as itself, its field
+// would hide its StandingRules method.
+type standingRules = ports.StandingRules

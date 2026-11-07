@@ -19,11 +19,6 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// Connections opens a synced source's connection; ports.Connections satisfies it.
-type Connections interface {
-	Resolve(ctx context.Context, names []string, use domain.ConnectionUse) ([]domain.ResolvedConnection, error)
-}
-
 // Secrets read and open the secrets synced sources read with: ports.OrgSecrets.
 type Secrets interface {
 	Get(ctx context.Context, name string) (domain.Secret, error)
@@ -53,8 +48,7 @@ const (
 )
 
 // IngestorConfig wires an Ingestor. Readers are the source
-// readers by name: a synced connection's kind's sync name (KindSpec.Sync), the reader a synced
-// source on a secret names, gitdocs for repository and confluence for Confluence sources; Uploads
+// readers by name: the reader a synced source on a secret names, gitdocs for repository and confluence for Confluence sources; Uploads
 // reads upload sources. Objects stores the snapshots upload, repository and Confluence sources
 // sync into, written first in TempDir ("" is the system's); nil writes none, and repository and
 // Confluence sources then fail. Converter turns what is neither text nor HTML into Markdown; nil
@@ -65,18 +59,17 @@ const (
 // opens only when each of them is in its scope (nil lists none, so only a secret open to all
 // opens).
 type IngestorConfig struct {
-	Knowledge   ports.Knowledge
-	Connections Connections
-	Secrets     Secrets
-	Hosts       Hosts
-	Listings    Listings
-	Uploads     ports.SourceReader
-	Readers     map[string]ports.SourceReader
-	Objects     ports.ObjectStore
-	Converter   ports.Converter
-	TempDir     string
-	Clock       ports.Clock
-	Log         *slog.Logger
+	Knowledge ports.Knowledge
+	Secrets   Secrets
+	Hosts     Hosts
+	Listings  Listings
+	Uploads   ports.SourceReader
+	Readers   map[string]ports.SourceReader
+	Objects   ports.ObjectStore
+	Converter ports.Converter
+	TempDir   string
+	Clock     ports.Clock
+	Log       *slog.Logger
 	// Workers, Lease and Tick default to DefaultWorkers, Lease and Tick.
 	Workers int
 	Lease   time.Duration
@@ -348,8 +341,8 @@ func (in *Ingestor) retain(ctx context.Context, c domain.SourceClaim) {
 }
 
 // reader is what reads src: the uploads; a repository's or Confluence source's kind's reader,
-// with its secret opened when it has one; a synced source's reader its config names, with its
-// secret opened; or its connection's kind's reader with the connection opened.
+// with its secret opened when it has one; or a synced source's reader its config names, with its
+// secret opened. A synced source without a secret, one still on a connection (ADR 0037), has none.
 func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (domain.SyncSpec, ports.SourceReader, error) {
 	spec := domain.SyncSpec{Source: src}
 
@@ -374,21 +367,11 @@ func (in *Ingestor) reader(ctx context.Context, src domain.KnowledgeSource) (dom
 		return in.secretReader(ctx, spec, src.Config[domain.SourceReaderKey])
 	}
 
-	conns, err := in.cfg.Connections.Resolve(ctx, []string{src.Connection}, domain.ConnectionUse{Source: src.Name})
-	if err != nil {
-		return spec, nil, fmt.Errorf("connection %s: %w", src.Connection, err)
+	if src.Connection != "" {
+		return spec, nil, fmt.Errorf("source %s reads with connection %s, which goald no longer reads: give it a secret", src.Name, src.Connection)
 	}
 
-	spec.Connection = &conns[0]
-
-	sync := conns[0].Kind.Spec.Sync
-
-	reader, ok := in.cfg.Readers[sync]
-	if !ok {
-		return spec, nil, fmt.Errorf("connection %s's kind syncs with %q, which this goald cannot read", src.Connection, sync)
-	}
-
-	return spec, reader, nil
+	return spec, nil, fmt.Errorf("source %s names no secret to read with: give it one", src.Name)
 }
 
 // secretReader opens the secret spec's source reads with, now (audited as secret.used, for the

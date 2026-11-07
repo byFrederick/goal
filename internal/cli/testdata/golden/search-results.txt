@@ -4,6 +4,3 @@ Items
 
 Agents
   login-coder  build,rework  web
-
-Connections
-  login-bot  github

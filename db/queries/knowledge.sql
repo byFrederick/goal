@@ -3,21 +3,14 @@
 
 -- name: KnowledgeSources :many
 -- The organization's sources, or the one named or with the given id.
-SELECT s.id, s.name, s.title, s.kind, c.name AS connection, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
+SELECT s.id, s.name, s.title, s.kind, sc.name AS secret, s.config, s.read_when, s.current_snapshot_id,
        coalesce(extract(epoch FROM s.sync_every), 0)::bigint AS sync_every_seconds, s.next_sync_at, s.lease_until, s.status,
        s.last_synced_at, s.last_error, s.sync_failures, s.created_by, s.created_at, s.updated_at
 FROM knowledge_sources s
-LEFT JOIN connections c ON c.org_id = s.org_id AND c.id = s.connection_id
 LEFT JOIN secrets sc ON sc.org_id = s.org_id AND sc.id = s.secret_id
 WHERE (sqlc.narg(name)::text IS NULL OR s.name = sqlc.narg(name)::text)
   AND (sqlc.narg(id)::uuid IS NULL OR s.id = sqlc.narg(id)::uuid)
 ORDER BY s.name;
-
--- name: KnowledgeConnection :one
--- A connection a source may read: its id and its kind's sync adapter ('' when it cannot sync).
-SELECT c.id, coalesce(k.spec->'spec'->>'sync', '')::text AS sync
-FROM connections c JOIN connection_kinds k ON k.id = c.kind_id
-WHERE c.name = sqlc.arg(name);
 
 -- name: KnowledgeSecret :one
 -- The id of a secret a source may read with.
@@ -32,8 +25,8 @@ ORDER BY s.name;
 -- name: InsertKnowledgeSource :exec
 -- org_id comes from its default, goal_org(). A live source never syncs; sync_every_seconds 0 is
 -- on demand (a NULL sync_every, 00100), due once now for its first snapshot.
-INSERT INTO knowledge_sources (id, name, title, kind, connection_id, secret_id, config, read_when, sync_every, next_sync_at, created_by)
-VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(connection_id), sqlc.narg(secret_id), sqlc.arg(config),
+INSERT INTO knowledge_sources (id, name, title, kind, secret_id, config, read_when, sync_every, next_sync_at, created_by)
+VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(secret_id), sqlc.arg(config),
         sqlc.arg(read_when),
         CASE WHEN sqlc.arg(sync_every_seconds)::bigint = 0 THEN NULL
              ELSE make_interval(secs => sqlc.arg(sync_every_seconds)::bigint) END,
@@ -60,10 +53,10 @@ WHERE name = sqlc.arg(name)
 RETURNING id;
 
 -- name: ConvertKnowledgeSource :exec
--- Moves a synced source over to its kind (ports.Knowledge.ConvertSource): off its connection,
--- with the config it keeps, due at once.
+-- Moves a synced source over to its kind (ports.Knowledge.ConvertSource), with the config it
+-- keeps, due at once.
 UPDATE knowledge_sources
-SET kind = sqlc.arg(kind), connection_id = NULL, config = sqlc.arg(config)::jsonb, next_sync_at = now(), updated_at = now()
+SET kind = sqlc.arg(kind), config = sqlc.arg(config)::jsonb, next_sync_at = now(), updated_at = now()
 WHERE id = sqlc.arg(id) AND kind = 'synced' AND secret_id IS NOT NULL;
 
 -- name: LockKnowledgeSource :one

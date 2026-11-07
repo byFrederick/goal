@@ -11,15 +11,7 @@ import {
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Dialog as D } from 'radix-ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  attentionQuery,
-  connectionsQuery,
-  factoriesQuery,
-  meQuery,
-  orgQuery,
-  orgsQuery,
-  overviewQuery,
-} from '../api/queries';
+import { attentionQuery, factoriesQuery, meQuery, orgQuery, orgsQuery, overviewQuery } from '../api/queries';
 import type { Factory, FactoryOverviewList, Me, Org, OrgAttention, OrgSummary } from '../api/types';
 import { TooltipProvider } from '../ui/tooltip';
 import { AccountProvider } from './account-menu';
@@ -82,7 +74,6 @@ function renderShell({ at, list = factories }: { at: string; list?: Factory[] })
   client.setQueryData(factoriesQuery(org.id).queryKey, list);
   client.setQueryData(meQuery.queryKey, me);
   client.setQueryData(orgsQuery.queryKey, [grants]);
-  client.setQueryData(connectionsQuery(org.id).queryKey, []);
   client.setQueryData(attentionQuery(org.id).queryKey, attention);
   client.setQueryData(overviewQuery(org.id).queryKey, overview);
 

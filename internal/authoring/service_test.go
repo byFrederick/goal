@@ -104,7 +104,7 @@ func newHarness(t *testing.T, opts ...option) *harness {
 		items:   porttest.NewStore(),
 		objects: porttest.NewObjectStore(),
 		clock:   porttest.NewClock(time.Date(2026, 10, 9, 14, 32, 0, 0, time.UTC)),
-		secrets: porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil),
+		secrets: porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy),
 		tenancy: tenancy,
 		ctx:     domain.WithActor(domain.WithOrg(t.Context(), o.ID), domain.LocalUser),
 	}

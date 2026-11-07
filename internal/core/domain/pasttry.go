@@ -358,17 +358,13 @@ type PastTryInput struct {
 }
 
 // TriableAgent reports whether agent a of l can be tried on a past item (ADR 0039 decision 9): its
-// agent needs no MCP server and no secret to do its work. On connections it names no connection
-// besides the model's; on secrets its environment has no MCP servers and no files. An environment's
-// env is allowed, for setup alone. False when l has no such agent or environment.
+// agent needs no MCP server and no secret to do its work: it names no connection, and its
+// environment has no MCP servers and no files. An environment's env is allowed, for setup alone.
+// False when l has no such agent or environment, as a version that is not on secrets has none.
 func (l Line) TriableAgent(name string) bool {
 	a, ok := l.Agent(name)
 	if !ok || len(a.Connections) > 0 {
 		return false
-	}
-
-	if !l.OnSecrets() {
-		return true
 	}
 
 	env, ok := l.Environment(a.Environment)

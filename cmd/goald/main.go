@@ -40,7 +40,6 @@ import (
 	"github.com/byFrederick/goal/internal/adapters/directmessage/slack"
 	"github.com/byFrederick/goal/internal/adapters/mailer/smtp"
 	"github.com/byFrederick/goal/internal/adapters/masterkey/masterkey"
-	"github.com/byFrederick/goal/internal/adapters/minter/awssts"
 	"github.com/byFrederick/goal/internal/adapters/objectstore/s3"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/cloudflare"
 	"github.com/byFrederick/goal/internal/adapters/sandboxes/docker"
@@ -55,7 +54,6 @@ import (
 	"github.com/byFrederick/goal/internal/catalog"
 	"github.com/byFrederick/goal/internal/catalog/senders"
 	"github.com/byFrederick/goal/internal/config"
-	"github.com/byFrederick/goal/internal/connkind"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/engine"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -64,7 +62,6 @@ import (
 	"github.com/byFrederick/goal/internal/gateway"
 	"github.com/byFrederick/goal/internal/jonah"
 	"github.com/byFrederick/goal/internal/knowledge"
-	"github.com/byFrederick/goal/internal/moveover"
 	"github.com/byFrederick/goal/internal/notify"
 	"github.com/byFrederick/goal/internal/retention"
 )
@@ -187,11 +184,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	// Connections and their kinds (spec 4): definitions are validated against them, the API serves
-	// them, runs get them and the gateway describes them in run bundles. Credentials (ADR 0017) and
-	// the organizations' secrets (ADR 0037, the same table) are sealed under the same master keys,
-	// and so are webhook endpoints' signing secrets (ADR 0026).
-	connections, credentials, orgSecrets, intake, err := openConnections(ctx, store, os.Getenv, log)
+	// Credentials (ADR 0017) and the organizations' secrets (ADR 0037, the same table) are sealed
+	// under the platform's master keys, and so are webhook endpoints' signing secrets (ADR 0026).
+	credentials, orgSecrets, intake, err := openSealed(ctx, store, os.Getenv, log)
 	if err != nil {
 		return err
 	}
@@ -215,7 +210,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return eng.SetLines(lines)
 	}, definitions.Config{CacheBytes: s.DefinitionCacheBytes}, log)
 
-	kb := openKnowledge(s, store, connections, orgSecrets, defs, objects, clock, engineConfig(s, "").LongestClaim(), log)
+	kb := openKnowledge(s, store, orgSecrets, defs, objects, clock, engineConfig(s, "").LongestClaim(), log)
 
 	// The organization policy (ADR 0024) is a ceiling over every definition: publishing checks a
 	// version's models against it, and the engine applies it at each run's start.
@@ -229,11 +224,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		Store: definitionStore, Loads: store, Templates: objects, Policies: policies, Webhooks: intake, Clock: clock,
 		Credentials: authoring.SecretsCheck{Secrets: orgSecrets, Knowledge: kb.kb, Webhooks: intake, Hosts: store, Tests: postgres.NewEnvironmentTests(store)}, Log: log,
 	})
-	// The code host adapters: moving over tests a converted version's repository token with them,
-	// the engine merges with them and the API lists what a connection reaches.
-	hosts := codeHosts(s.AllowPrivateUpstreams)
+	// The code host adapters: the engine merges with them and the API lists what a connection
+	// reaches. The standing rules (ADR 0031): the engine keeps and revokes them, and the gateway
+	// and the API read them.
+	hosts, rules := codeHosts(s.AllowPrivateUpstreams), postgres.NewStandingRules(store)
 	toolLister := toollister.New(connectionTransport(s.AllowPrivateUpstreams))
-	moveOver(ctx, store, connections, orgSecrets, intake, definitionStore, authors, hosts, toolLister, clock, log)
 
 	boxes, err := sandboxes(ctx, s, log)
 	if err != nil {
@@ -244,21 +239,21 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// A draft request's box (ADR 0021) gets its request and the factory's draft from the gateway's
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
-		Definitions: defs, Items: store, Connections: connections, Policies: policies, Events: store, Clock: clock, Logger: log,
+		Definitions: defs, Items: store, StandingRules: rules, Policies: policies, Events: store, Clock: clock, Logger: log,
 		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
 	}
 
-	// The engine runs each claim in a sandbox with the run's connections, merges with the
-	// factory's code host connections and, at its start and every ReapEvery, deletes the
+	// The engine runs each claim in a sandbox with its agent's environment and secrets, merges
+	// with the repository tokens on the organization's code hosts and, at its start and every ReapEvery, deletes the
 	// sandboxes of runs that are over, whichever goald on this Docker host or this Worker
 	// started them.
 	eng, err = engine.New(engine.Deps{
 		Store: store, Orgs: store, Sandboxes: boxes.sandboxes,
-		Contracts: defs, Secrets: secrets, Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
-		Minters: minters(s), Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
+		Contracts: defs, Secrets: secrets, StandingRules: rules, OrgSecrets: orgSecrets, CodeHosts: hosts, Hosts: store, Clock: clock,
+		Policies: policies, Knowledge: kb.kb, Intake: intake, Events: shippedEvents{}, Audit: store, NotificationOutbox: store, Logger: log,
 	}, engineConfig(s, boxes.gateway))
 	if err != nil {
 		return err
@@ -288,8 +283,8 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 			Mode: api.AuthMode(s.Auth), EmailCodes: s.EmailCodes, Google: s.Google, SecureCookies: s.strictTransport(),
 		},
 		Identity: identity, Access: postgres.NewAccess(store), Platform: platform, TrustedProxies: s.TrustedProxies, Feed: feed, Builder: editor,
-		Connections: connections, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
-		ParseKind: connkind.Parse, ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
+		StandingRules: rules, Credentials: credentials, OrgSecrets: orgSecrets, Intake: intake, DraftRequests: postgres.NewDraftRequests(store), Catalog: templates, EnvironmentTests: postgres.NewEnvironmentTests(store), RepositoryTests: postgres.NewRepositoryTests(store), Conversions: postgres.NewFactoryConversions(store), ToolLister: toolLister,
+		ConnectionTransport: connectionTransport(s.AllowPrivateUpstreams), CodeHosts: hosts,
 		Knowledge: kb.kb, KnowledgeUploads: kb.uploads, UploadMaxBytes: s.UploadMaxBytes, KnowledgeObjects: objects, KnowledgeCheck: kb.ingestor,
 		OrgPolicies: postgres.NewOrgPolicies(store, s.modelIDs()), BoxSizes: s.boxSizes(), EgressAddresses: s.EgressAddresses,
 		NotificationPreferences: postgres.NewNotificationPreferences(store), NotificationSettings: postgres.NewNotificationSettings(store), SlackMessenger: slack.New(slack.Config{Transport: connectionTransport(false)}),
@@ -310,26 +305,6 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 
 	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, j)
-}
-
-// moveOver moves every organization from connections and credentials to secrets and environment
-// files, once (ADR 0037 decision 19), points synced knowledge sources at their connections'
-// secrets and moves factory webhook endpoints to the organization (ADR 0040 decision 15): run
-// before the lines load, so they load the converted versions. A converted version is published
-// only after its repository token (on hosts) and remote MCP servers (through tools) pass their
-// test. A failure is logged and goald starts, an unconverted factory running on the
-// old path.
-func moveOver(ctx context.Context, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets, intake *postgres.Intake,
-	definitions ports.DefinitionStore, authors *authoring.Service, hosts map[string]ports.CodeHost, tools ports.ToolLister,
-	clock ports.Clock, log *slog.Logger,
-) {
-	err := moveover.New(moveover.Deps{
-		Orgs: store, Connections: connections, Secrets: secrets, Settings: postgres.NewNotificationSettings(store), Knowledge: postgres.NewKnowledge(store), Webhooks: intake, Definitions: definitions,
-		Publisher: authors, Conversions: postgres.NewFactoryConversions(store), CodeHosts: hosts, Hosts: store, Tools: tools, Clock: clock, Logger: log,
-	}).Run(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "move over failed", slog.Any("error", err))
-	}
 }
 
 // newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's
@@ -407,11 +382,10 @@ func engineConfig(s settings, gatewayURL string) engine.Config {
 // GOAL_KB_WORKERS workers syncing due sources. Upload, repository and Confluence sources sync
 // into zip snapshots in the bucket, written first in the system's temporary directory; with no
 // GOAL_WORKERS_AI_URL, what is neither text nor HTML is refused. A synced source is read with its secret by the
-// reader its config names, or by its connection kind's sync reader while it is still on a
-// connection, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
+// reader its config names, through the public-only transport: gitdocs (GitHub and GitLab repositories) or
 // confluence (the spaces of a Confluence Cloud site). A source's secret opens only when every
 // factory listings lists the source in is in its scope (ADR 0041 decision 16).
-func openKnowledge(s settings, store *postgres.Store, connections *postgres.Connections, secrets *postgres.Secrets,
+func openKnowledge(s settings, store *postgres.Store, secrets *postgres.Secrets,
 	listings knowledge.Listings, objects ports.ObjectStore,
 	clock ports.Clock, keep time.Duration, log *slog.Logger,
 ) knowledgeBase {
@@ -443,69 +417,49 @@ func openKnowledge(s settings, store *postgres.Store, connections *postgres.Conn
 	return knowledgeBase{
 		kb: kb, uploads: uploads,
 		ingestor: knowledge.NewIngestor(knowledge.IngestorConfig{
-			Knowledge: kb, Connections: connections, Secrets: secrets, Hosts: store, Listings: listings, Uploads: uploads,
+			Knowledge: kb, Secrets: secrets, Hosts: store, Listings: listings, Uploads: uploads,
 			Readers: readers, Objects: objects, Converter: converter, Clock: clock, Log: log, Workers: s.KBWorkers, Keep: keep,
 		}),
 	}
 }
 
-// openConnections loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
+// openSealed loads the platform's master keys (GOAL_MASTER_KEYS or GOAL_MASTER_KEY_FILE),
 // refuses to start while a secret, connection or webhook endpoint is sealed under a key id they
-// lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), makes the kinds goald ships the platform's, and returns the
-// connections, the credentials, the secrets and the intake state sealed with those keys. Without a master key goald serves
-// everything but connections with secrets and credentials' values, and says so.
-func openConnections(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
-) (*postgres.Connections, *postgres.Credentials, *postgres.Secrets, *postgres.Intake, error) {
+// lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), and returns the credentials,
+// the secrets and the intake state sealed with those keys. Without a master key goald serves
+// everything but secrets' and credentials' values, and says so.
+func openSealed(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
+) (*postgres.Credentials, *postgres.Secrets, *postgres.Intake, error) {
 	keys, err := masterkey.Load(getenv)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	sealed, err := postgres.ConnectionKeyIDs(ctx, store)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	have := keys.IDs()
 
 	if missing := slices.DeleteFunc(sealed, func(id string) bool { return slices.Contains(have, id) }); len(missing) > 0 {
-		return nil, nil, nil, nil, fmt.Errorf("secrets or connections are sealed under master key %s, which %s and %s do not hold: "+
+		return nil, nil, nil, fmt.Errorf("secrets or connections are sealed under master key %s, which %s and %s do not hold: "+
 			"give goald every key a secret or connection is sealed under (goal db rekey reseals them under the active one, "+
 			"after which an old key can go)", strings.Join(missing, ", "), masterkey.KeysEnv, masterkey.FileEnv)
 	}
 
 	if len(have) == 0 {
-		log.WarnContext(ctx, "no master key: connections with secrets and credentials are unavailable until one is set; add "+
+		log.WarnContext(ctx, "no master key: secrets and credentials are unavailable until one is set; add "+
 			masterkey.KeysEnv+"=k1:<the output of openssl rand -base64 32> to .env and keep a copy offline")
 	} else {
 		log.InfoContext(ctx, "master keys loaded", slog.String("active", keys.Active()), slog.Int("count", len(have)))
 	}
 
-	kinds, err := connkind.Platform()
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	connections := postgres.NewConnections(store, keys)
-	if err := connections.SyncPlatformKinds(ctx, kinds); err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	log.InfoContext(ctx, "connection kinds synced", slog.Int("platform", len(kinds)))
-
-	return connections, postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store, keys), nil
+	return postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store, keys), nil
 }
 
-// minters are the minters by the name connection kinds give them (mint): AWS STS for the aws and
-// bedrock kinds, over the connection transport.
-func minters(s settings) map[string]ports.Minter {
-	return map[string]ports.Minter{
-		"aws-sts": awssts.New(awssts.Config{HTTPClient: &http.Client{Transport: connectionTransport(s.AllowPrivateUpstreams)}}),
-	}
-}
-
-// connectionTransport carries every request goald makes for a connection (its test, STS, merges,
-// sync and conversions): to public addresses only (egress.PublicDialer, threat row 4), unless
+// connectionTransport carries every request goald makes to an organization's upstreams (merges,
+// sync, tool listing and conversions): to public addresses only (egress.PublicDialer, threat row 4), unless
 // GOAL_ALLOW_PRIVATE_UPSTREAMS lets a laptop reach its own test servers. It uses no proxy, so a
 // proxy variable cannot route around the address check.
 func connectionTransport(allowPrivate bool) *http.Transport {

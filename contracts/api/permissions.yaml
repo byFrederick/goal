@@ -42,8 +42,8 @@ permissions:
   # for a fresh sign-in), creating one (manage: a fresh sign-in, in the browser only).
   - {name: personal_token:read,   level: org, org_roles: [owner, admin, member]}
   - {name: personal_token:manage, level: org, org_roles: [owner, admin, member], fresh: true}
-  # The organization's connections (spec 4 §8.1): members read names, kinds and status, never a
-  # value; owners and admins change and test them after a recent sign-in, never with a key.
+  # The organization's standing rules (ADR 0031 decision 7), under the names the connections had:
+  # members list them; owners and admins revoke them after a recent sign-in, never with a key.
   - {name: connection:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   - {name: connection:manage,  level: org, org_roles: [owner, admin], fresh: true}
   # The organization's secrets (ADR 0037 decision 4, in place of ADR 0017's credential:*):
@@ -55,9 +55,6 @@ permissions:
   # What the organization's agents reach (ADR 0037 decision 16): members, keys and tokens read
   # the Access read model, which names secrets, never a value.
   - {name: access:read,        level: org, org_roles: [owner, admin, member], keys: true, pat: true}
-  # Browsing what a code host connection reaches (its owners and repositories) uses its
-  # credential from goald, which connection:read never does; members, keys and tokens may.
-  - {name: connection:browse,  level: org, org_roles: [owner, admin, member], keys: true, pat: true}
   # The organization's knowledge base (ADR 0038 decision 13): members, keys and tokens read its
   # sources, files and reads; owners, admins and keys add, check, sync and delete sources and uploads.
   - {name: knowledge:read,     level: org, org_roles: [owner, admin, member], keys: true, pat: true}

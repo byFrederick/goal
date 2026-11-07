@@ -144,7 +144,7 @@ func expectGradeBox(t *testing.T, b runBundle, c domain.TaskClaims) {
 func expectNothingToWorkWith(t *testing.T, s bundleSpec) {
 	t.Helper()
 
-	if len(s.Connections) != 0 || s.Knowledge != nil || len(s.Rules) != 0 || len(s.Skills) != 0 || len(s.ToolsAllow) != 0 ||
+	if s.Knowledge != nil || len(s.Rules) != 0 || len(s.Skills) != 0 || len(s.ToolsAllow) != 0 ||
 		len(s.GrantedCalls) != 0 || s.Environment != nil || s.Jonah != nil || s.DraftRequest != nil || s.Brief != "" {
 		t.Errorf("spec = %+v; want no connection, knowledge, rule, skill, tool, call, environment or other mode", s)
 	}

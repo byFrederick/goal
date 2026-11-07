@@ -231,41 +231,6 @@ func TestEngine_MergePolicyOffLeavesTheMergeToAPerson(t *testing.T) {
 	}
 }
 
-// Use credentials off signs no connections into the run's task token, though its agent lists
-// some; environment signs the agent's list.
-func TestEngine_UseCredentialsPolicyOffGrantsNoConnections(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		setting domain.ToolSetting
-		want    []string
-	}{
-		{domain.ToolOff, nil},
-		{domain.ToolEnvironment, []string{connGitHub}},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.setting), func(t *testing.T) {
-			t.Parallel()
-
-			line := repoLine()
-			line.Connections = []string{connGitHub}
-			i := slices.IndexFunc(line.Agents, func(a domain.AgentSpec) bool { return a.Name == agWorker })
-			line.Agents[i].Connections = []string{connGitHub}
-
-			h := newHarness(t, line, porttest.Succeed(`{}`))
-			h.withPolicy(t, policy(func(p *domain.OrgPolicy) { p.UseCredentials = tt.setting }))
-			h.submit(t, domain.NewItem{})
-
-			h.step(t)
-
-			if c := h.claims(t, h.agentRun(t).Env["GOAL_GATEWAY_TOKEN"]); !slices.Equal(c.Connections, tt.want) {
-				t.Errorf("task token connections %q, want %q", c.Connections, tt.want)
-			}
-		})
-	}
-}
-
 // Use secrets off signs NoEnvironment into the run's task token, so the gateway gives the box no
 // env, files or MCP servers (ADR 0037 decision 12); attached_only signs it unset.
 func TestEngine_UseSecretsOffSignsNoEnvironment(t *testing.T) {

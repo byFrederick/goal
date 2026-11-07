@@ -701,8 +701,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Find the organization's items, agents, factories and connections, for the shell's search box
-         * @description One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+         * Find the organization's items, agents, factories and secrets, for the shell's search box
+         * @description One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Secrets are searched only for a caller who holds secret:read; for anyone else the group is empty.
          */
         get: operations["searchOrg"];
         put?: never;
@@ -3440,140 +3440,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/orgs/{org}/connection-kinds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The connection kinds the organization can make connections of
-         * @description The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
-         */
-        get: operations["listConnectionKinds"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connection-kinds/{kind}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection kind's name */
-                kind: components["parameters"]["KindRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Create or replace one of the organization's connection kinds
-         * @description The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-         */
-        put: operations["putConnectionKind"];
-        post?: never;
-        /**
-         * Delete one of the organization's connection kinds
-         * @description 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-         */
-        delete: operations["deleteConnectionKind"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The organization's connections
-         * @description By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
-         */
-        get: operations["listConnections"];
-        put?: never;
-        /**
-         * Create a connection
-         * @description A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-         */
-        post: operations["createConnection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections/{connection}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        /** One connection, with the env names a run gets from it and its kind's docs */
-        get: operations["getConnection"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete a connection
-         * @description 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-         */
-        delete: operations["deleteConnection"];
-        options?: never;
-        head?: never;
-        /**
-         * Rename a connection, or change its description, fields, secrets or tool modes
-         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-         */
-        patch: operations["updateConnection"];
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections/{connection}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run the connection's test
-         * @description Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
-         */
-        post: operations["testConnection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orgs/{org}/standing-rules": {
         parameters: {
             query?: never;
@@ -3617,31 +3483,6 @@ export interface paths {
          * @description The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
          */
         delete: operations["revokeStandingRule"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections/{connection}/repositories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The owners and repositories a code host connection reaches
-         * @description Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
-         */
-        get: operations["listConnectionRepositories"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4113,7 +3954,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a knowledge source naming a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -7180,8 +7021,6 @@ export interface components {
             items: components["schemas"]["SearchItem"][];
             agents: components["schemas"]["AgentHit"][];
             factories: components["schemas"]["FactoryHit"][];
-            /** @description Empty unless the caller holds connection:read */
-            connections: components["schemas"]["ConnectionHit"][];
             /** @description Empty unless the caller holds secret:read */
             secrets: components["schemas"]["SecretHit"][];
         };
@@ -7354,7 +7193,7 @@ export interface components {
             state: components["schemas"]["SpendBudgetState"];
             /** @description The open andon pull's reason when stopped, the spend against the cap when over_budget, else null */
             reason: string | null;
-            /** @description What gives the factory's runs their model, for "Who pays for models": the organization's connection runtime.modelConnection names, with its kind, and on secrets the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names neither */
+            /** @description What gives the factory's runs their model, for "Who pays for models": the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names none the organization has */
             model_connections: components["schemas"]["ConnectionHit"][];
         };
         /**
@@ -8241,9 +8080,6 @@ export interface components {
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter */
         ConnectionName: string;
-        ConnectionKindList: {
-            kinds: components["schemas"]["ConnectionKind"][];
-        };
         /** @description A template for connections (spec 4 §4.2), the platform's or the organization's */
         ConnectionKind: {
             name: components["schemas"]["ConnectionName"];
@@ -8262,7 +8098,7 @@ export interface components {
             mint?: string;
             /** @description The knowledge source reader that syncs through it (gitdocs, confluence) */
             sync?: string;
-            /** @description It has a test (POST …/connections/{connection}/test) */
+            /** @description It has a test request */
             testable: boolean;
             /** @description The env names a run gets, as the kind writes them ({{field}} where a field names one) */
             env: string[];
@@ -8278,13 +8114,6 @@ export interface components {
             required: boolean;
             /** @description The value of a field left empty */
             default?: string;
-        };
-        /** @description A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON, checked against contracts/definitions/connection-kind.schema.json */
-        ConnectionKindFile: {
-            [key: string]: unknown;
-        };
-        ConnectionList: {
-            connections: components["schemas"]["Connection"][];
         };
         /** @description An organization's connection (spec 4 §4.3), never a secret value */
         Connection: {
@@ -8345,33 +8174,6 @@ export interface components {
         ConnectionFactory: {
             id: string;
             name: string;
-        };
-        NewConnection: {
-            name: components["schemas"]["ConnectionName"];
-            kind: string;
-            description?: string;
-            /** @description The kind's non-secret values */
-            fields?: {
-                [key: string]: string;
-            };
-            /** @description The kind's secret values; never answered */
-            secrets?: {
-                [key: string]: string;
-            };
-        };
-        ConnectionPatch: {
-            name?: components["schemas"]["ConnectionName"];
-            description?: string;
-            /** @description Every non-secret value (replaces them all) */
-            fields?: {
-                [key: string]: string;
-            };
-            /** @description The secret fields to replace, by name; an empty value clears an optional one */
-            secrets?: {
-                [key: string]: string;
-            };
-            /** @description Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused. */
-            tools?: components["schemas"]["ConnectionTool"][];
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
         CredentialName: string;
@@ -9094,34 +8896,6 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
-        /** @description What a code host connection reaches (GET …/connections/{connection}/repositories) */
-        RepositoryList: {
-            /** @description The account the connection's credential signs in as */
-            login: string;
-            /** @description The owner the repositories belong to */
-            owner: string;
-            /** @description The account first, then its organizations */
-            owners: components["schemas"]["RepositoryOwner"][];
-            /** @description The most recently updated first, at most 100 */
-            repositories: components["schemas"]["Repository"][];
-            /** @description The owner has more repositories than the 100 answered */
-            truncated: boolean;
-        };
-        RepositoryOwner: {
-            login: string;
-            /** @enum {string} */
-            kind: "user" | "organization";
-        };
-        Repository: {
-            /** @description <owner>/<name> */
-            full_name: string;
-            /** @description Its https clone URL */
-            clone_url: string;
-            /** @description The largest first, at most 3 */
-            languages: string[];
-            /** Format: date-time */
-            updated_at: string;
-        };
         /** @description The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value */
         ConnectionEvent: {
             connection_id: string;
@@ -9416,8 +9190,6 @@ export interface components {
         UserRef: string;
         /** @description The organization's slug or id */
         OrgRef: string;
-        /** @description The connection's name */
-        ConnectionRef: string;
         /** @description The credential's name */
         CredentialRef: string;
         /** @description The secret's name */
@@ -9428,8 +9200,6 @@ export interface components {
         KnowledgeFilePath: string;
         /** @description The knowledge document's id */
         DocumentRef: string;
-        /** @description The connection kind's name */
-        KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
         /** @description The draft request's id */
@@ -14232,247 +14002,6 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    listConnectionKinds: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The kinds */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionKindList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    putConnectionKind: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection kind's name */
-                kind: components["parameters"]["KindRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectionKindFile"];
-            };
-        };
-        responses: {
-            /** @description The kind as the organization now sees it */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionKind"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    deleteConnectionKind: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection kind's name */
-                kind: components["parameters"]["KindRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listConnections: {
-        parameters: {
-            query?: {
-                /** @description Only the connections this factory's current version names (its metadata.id or metadata.name) */
-                factory?: string;
-                /** @description Only connections of this kind */
-                kind?: string;
-            };
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The connections */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    createConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewConnection"];
-            };
-        };
-        responses: {
-            /** @description The connection */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Connection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The connection */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Connection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    deleteConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    updateConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectionPatch"];
-            };
-        };
-        responses: {
-            /** @description The connection */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Connection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    testConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The outcome */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionTestResult"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
     listStandingRules: {
         parameters: {
             query?: {
@@ -14524,35 +14053,6 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    listConnectionRepositories: {
-        parameters: {
-            query?: {
-                /** @description The account or organization whose repositories to list; absent, the connection's own account */
-                owner?: string;
-            };
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The owners and repositories */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RepositoryList"];
-                };
-            };
             default: components["responses"]["Problem"];
         };
     };
