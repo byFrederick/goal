@@ -111,7 +111,7 @@ function PartRow({ part, detail }: { part: AssemblyPart; detail: string }) {
         {part.title}
       </Link>
       {part.waiting ? (
-        <WaitLine waiting={part.waiting} status={null} className="max-w-[45%] shrink text-[13px]" />
+        <WaitLine waiting={part.waiting} status={null} className="max-w-[45%] shrink text-secondary" />
       ) : (
         <span className="max-w-[45%] shrink truncate text-[13px] text-muted" title={detail}>
           {detail}
