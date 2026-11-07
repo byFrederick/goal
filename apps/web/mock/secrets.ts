@@ -266,6 +266,7 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
           summary: 'Can read and push',
           read: { ok: true, reason: 'Cloned' },
           push: { ok: true, reason: 'Can push' },
+          ci: { ok: true, reason: 'GitHub shows the token the check runs and commit statuses of acme/app' },
         });
       }
       kept.set(factory.id, of);
@@ -383,6 +384,7 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
         }
         const noRead = /-missing(\.git)?$/.test(address);
         const noPush = access === 'write' && /-readonly(\.git)?$/.test(address);
+        const noCi = /-noci(\.git)?$/.test(address);
         const good = !noRead && !noPush;
         const result = {
           url: address.replace(/^https:\/\//, '').toLowerCase(),
@@ -404,6 +406,18 @@ export function createSecrets({ clock, actor, stale, factories, acme }: Deps): M
           push: good
             ? { ok: true, reason: 'Can push' }
             : { ok: false, reason: 'The token has no write access to this repository.' },
+          // A repository ending -noci is one whose token cannot read CI; an owner pattern has no ci line.
+          ...(address.endsWith('/*')
+            ? {}
+            : {
+                ci: noCi
+                  ? {
+                      ok: false,
+                      reason:
+                        'GitHub answered 403: Resource not accessible. A fine-grained token needs read access to Checks and Commit statuses of acme/app',
+                    }
+                  : { ok: true, reason: 'GitHub shows the token the check runs and commit statuses of acme/app' },
+              }),
         };
         // The latest result per url is what the factory's Code section lists.
         latest.set(result.url, result);

@@ -11,7 +11,7 @@ import {
 } from '../../api/queries';
 import { listFactoryRepositoryTests, testFactoryRepository } from '../../api/repositories';
 import type { Factory, FactoryRepositoryTest, OrgSummary } from '../../api/types';
-import { factoryModelOf, type Model } from '../../shared/definition/model';
+import { factoryModelOf, type Model, modelOf } from '../../shared/definition/model';
 import { renderFactoryPage } from '../../test/route';
 import { FactorySettingsPage } from './settings-page';
 
@@ -143,6 +143,24 @@ describe('Code section', () => {
     ]);
     expect(chip.closest('[class*="bg-rework-tint"]')).toBeTruthy();
     expect(within(region).queryByText('Can read and push')).toBeNull();
+  });
+
+  it('shows the CI line under the result, as a warning when a station waits for CI, and none without ci', async () => {
+    setDraft({ repositories: [entry] });
+    api.model = factoryModelOf({
+      ...modelOf(api.model as never),
+      line: { stations: [{ id: 'build', kind: 'agent', waitFor: 'ci' }] },
+    } as Model);
+    const failed = { ok: false, reason: 'GitHub answered 403: needs Checks and Commit statuses' };
+    const region = await renderCode({ results: [{ ...kept, ci: failed }] });
+    const line = await within(region).findByText(/Can’t read CI\. GitHub answered 403/);
+    expect(line.className).toContain('text-rework-ink');
+    expect(within(region).getByRole('button', { name: 'About reading CI' })).toBeTruthy();
+    cleanup();
+    setDraft({ repositories: [entry] });
+    const plain = await renderCode({ results: [kept] });
+    await within(plain).findByText('Can read and push');
+    expect(within(plain).queryByText(/CI/)).toBeNull();
   });
 
   it('hides Test and Add a repository without definition:edit', async () => {

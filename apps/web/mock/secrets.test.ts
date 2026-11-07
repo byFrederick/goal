@@ -62,6 +62,19 @@ describe('the mock repository test', () => {
   });
 });
 
+describe('the mock repository test ci line', () => {
+  const test = (url: string) =>
+    mock().call('/factories/f-sre/repositories/test', 'POST', { url, secret: 'github-token', access: 'read' });
+
+  it('answers ci ok, fails it for a -noci repository, and leaves it out for an owner pattern', async () => {
+    expect((await test('https://github.com/acme/app')).answer).toMatchObject({ ci: { ok: true } });
+    const failed = (await test('https://github.com/acme/app-noci')).answer;
+    expect(failed).toMatchObject({ ok: true, ci: { ok: false } });
+    expect(JSON.stringify(failed)).toContain('Commit statuses');
+    expect((await test('https://github.com/acme/*')).answer).not.toHaveProperty('ci');
+  });
+});
+
 describe('the mock repository tests list', () => {
   const list = (m: ReturnType<typeof mock>, factory = 'f-software') =>
     m.call(`/factories/${factory}/repositories/tests`, 'GET');
