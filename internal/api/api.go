@@ -603,7 +603,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
-	out := s.itemOf(ctx, it)
+	out := s.unnamedItemOf(ctx, it)
 	if out.Flow, err = s.itemFlow(ctx, it); err != nil {
 		return nil, err
 	}
@@ -614,6 +614,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	out.Touches = s.itemTouchesOf(touches)
+	s.nameActors(ctx, append(touchActors(out.Touches.List), out.CreatedBy)...)
 
 	needs, dependents, err := s.itemLinks(ctx, it.ID)
 	if err != nil {
@@ -917,7 +918,17 @@ func (s *server) ref(ctx context.Context, factory domain.FactoryID, number int64
 	return domain.ItemRef{Factory: name, Number: number}.String()
 }
 
+// itemOf is it as the API answers it, who filed it named.
 func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
+	out := s.unnamedItemOf(ctx, it)
+	s.nameActors(ctx, out.CreatedBy)
+
+	return out
+}
+
+// unnamedItemOf is itemOf with who filed it not yet named, for a response that names every
+// person in it with one nameActors call.
+func (s *server) unnamedItemOf(ctx context.Context, it domain.Item) gen.Item {
 	out := gen.Item{
 		Id: string(it.ID), Ref: s.ref(ctx, it.FactoryID, it.Number), FactoryId: string(it.FactoryID), Number: it.Number,
 		ParentId: optional(string(it.ParentID)), Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body,
@@ -953,7 +964,7 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 }
 
 // createdBy is who filed it as the API shows them; nil for items filed before ADR 0040 and for the
-// engine's filings.
+// engine's filings. A person is named by the response's nameActors, once for all its items.
 func (s *server) createdBy(it domain.Item) *gen.Actor {
 	a, err := domain.ActorFromRef(it.CreatedBy)
 	if err != nil || a.Kind == domain.ActorSystem {

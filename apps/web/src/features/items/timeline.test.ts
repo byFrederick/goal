@@ -201,6 +201,9 @@ describe('buildTrace', () => {
           ended_at: '2026-10-23T14:40:00Z',
           definition_version_id: 'v-9',
           definition_version: 9,
+          cpu_seconds: null,
+          peak_memory_bytes: null,
+          box_size: null,
         },
       ],
     );
@@ -239,6 +242,9 @@ describe('buildTrace', () => {
           ended_at: null,
           definition_version_id: null,
           definition_version: null,
+          cpu_seconds: null,
+          peak_memory_bytes: null,
+          box_size: null,
         },
       ],
     );

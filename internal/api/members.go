@@ -15,6 +15,7 @@ import (
 // (/api/auth/organization/*), so its owner rules apply to them.
 type People interface {
 	Members(ctx context.Context) ([]domain.Member, error)
+	MemberNames(ctx context.Context, users []domain.UserID) (map[domain.UserID]string, error)
 	Invitations(ctx context.Context) ([]domain.Invitation, error)
 	SetFactoryRole(ctx context.Context, by domain.Actor, user domain.UserID, f domain.FactoryID, role domain.FactoryRole) error
 	TransferOwnership(ctx context.Context, by domain.Actor, from, to domain.UserID) error

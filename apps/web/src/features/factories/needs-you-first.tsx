@@ -46,7 +46,12 @@ export function NeedsYouFirst({
         <h2 id="needs-you-first" className="m-0 text-heading">
           Needs you first
         </h2>
-        <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-you px-1 text-meta font-semibold tabular-nums text-white">
+        <span
+          className={cn(
+            'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-meta font-semibold tabular-nums',
+            inbox.entries.length === 0 ? 'border border-line bg-hover text-ink-soft' : 'bg-you text-white',
+          )}
+        >
           <NumberRoll value={inbox.entries.length} />
           <span className="sr-only"> waiting on you</span>
         </span>

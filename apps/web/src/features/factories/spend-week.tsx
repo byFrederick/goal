@@ -3,9 +3,11 @@
 // "Last 7 days" where the picture says "Resets Monday 00:00 UTC": that copy needs a calendar-week split
 // per factory, which the API does not give. The bars use the factory badge's colour until factory colours
 // ship. "Spend and billing" opens the organization's Spend page.
+
 import { Link } from '@tanstack/react-router';
 import type { FactoryOverviewList, OrgSummary } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
+import { factoryTitle } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { Meter } from '../../ui/meter';
@@ -48,7 +50,7 @@ export function SpendWeek({
           >
             <span className="flex min-w-0 flex-1 items-center gap-2 @[480px]:w-40 @[480px]:flex-none">
               <FactoryBadge mark={mark(o.factory)} />
-              <span className="truncate">{o.factory.name}</span>
+              <span className="truncate">{factoryTitle(o.factory)}</span>
             </span>
             <span className="order-2 shrink-0 tabular-nums @[480px]:order-3">
               {formatUsd(o.spend_usd)}
@@ -59,7 +61,7 @@ export function SpendWeek({
                 value={o.spend_usd}
                 max={o.budget_usd}
                 tone={o.spend_usd > o.budget_usd ? 'rework' : 'ink'}
-                label={`${o.factory.name}: ${formatUsd(o.spend_usd)} of ${formatUsd(o.budget_usd)}`}
+                label={`${factoryTitle(o.factory)}: ${formatUsd(o.spend_usd)} of ${formatUsd(o.budget_usd)}`}
                 className="order-3 h-1.5 w-full @[480px]:order-2 @[480px]:w-auto @[480px]:min-w-0 @[480px]:flex-1"
               />
             ) : null}

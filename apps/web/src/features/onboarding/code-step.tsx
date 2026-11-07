@@ -305,10 +305,11 @@ function CodeForm({
     };
   });
 
-  const preview = codeCard(
-    wantsCode && validUrls[0] ? repositoryLabel(validUrls[0]) : undefined,
-    passed ? answer?.secret : undefined,
-  );
+  const preview = codeCard({
+    url: wantsCode ? validUrls[0] : undefined,
+    repo: wantsCode && validUrls[0] ? repositoryLabel(validUrls[0]) : undefined,
+    secret: passed ? answer?.secret : undefined,
+  });
 
   return (
     <OnboardingLayout

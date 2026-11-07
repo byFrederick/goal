@@ -5,16 +5,21 @@
 // (setTriggersEnabled), then goes to step 7. A trigger whose source needs an endpoint the factory lacks
 // (problem.kind missing_connection) shows Connect and its switch stays off. Its four states: loading, error
 // (with Retry), empty (no starter triggers) and ready.
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { defKeys, factoryQuery, intakeKeys, intakeQuery, versionModelQuery } from '../../api/queries';
 import type { Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
-import { modelOf } from '../../shared/definition/model';
+import { describeWhen } from '../../shared/cron-words';
+import { type ModelStation, modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
+import { humanize } from '../../shared/format';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
+import { InfoTip } from '../../ui/info-tip';
 import { SourceTile } from '../../ui/source-tile';
 import { Switch } from '../../ui/switch';
 import { stationLabel } from '../factory-editor/line/labels';
@@ -22,7 +27,7 @@ import { OpenDraftError, setTriggersEnabled } from '../intake/set-trigger-enable
 import { sourceIcon } from '../intake/triggers-table';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 
@@ -138,8 +143,10 @@ function needsConnection(trigger: IntakeTrigger): boolean {
 }
 
 /** The sentence for what a trigger creates: "Creates a feature at Spec", "in the expedite lane" when it is expedited. */
-function createsSentence(trigger: IntakeTrigger): string {
-  const { type, station, expedite } = trigger.create;
+function createsSentence(trigger: IntakeTrigger, stations: ModelStation[]): string {
+  const { type, station: id, expedite } = trigger.create;
+  const known = stations.find((s) => s.id === id);
+  const station = known?.name ? stationLabel(known) : humanize(id);
   const article = /^[aeiou]/i.test(type) ? 'an' : 'a';
   return `Creates ${article} ${type} at ${station}${expedite ? ' in the expedite lane' : ''}`;
 }
@@ -264,8 +271,8 @@ function Ready({
       preview={{
         ...previewSlots({
           organization: organizationCard(org, window.location.host),
-          code: codeCard(repoOf(search.url), search.secret),
-          factory: <FactoryCard name={factory.name} purpose={basics.purpose ?? ''} stations={panelStations} />,
+          code: codeCard({ url: search.url, secret: search.secret, done: true }),
+          factory: <FactoryCard name={factoryTitle(factory)} purpose={basics.purpose ?? ''} stations={panelStations} />,
         }),
         cards: (
           <>
@@ -299,6 +306,7 @@ function Ready({
                 org={org}
                 factory={factory}
                 trigger={trigger}
+                stations={line.stations ?? []}
                 on={isOn(trigger)}
                 disabled={trigger.enabled || needsConnection(trigger) || pending}
                 onChange={(next) =>
@@ -315,7 +323,8 @@ function Ready({
           <p className="m-0 flex flex-wrap items-center gap-2 text-secondary">
             <span className="text-ink-soft">Always on:</span>
             <Chip>New item</Chip>
-            <Chip>goal run</Chip>
+            <Chip>CLI</Chip>
+            <InfoTip about="CLI">The goal run command.</InfoTip>
             <Chip>The API</Chip>
           </p>
         </>
@@ -331,6 +340,7 @@ function TriggerRow({
   org,
   factory,
   trigger,
+  stations,
   on,
   disabled,
   onChange,
@@ -338,19 +348,26 @@ function TriggerRow({
   org: OrgSummary;
   factory: Factory;
   trigger: IntakeTrigger;
+  stations: ModelStation[];
   on: boolean;
   disabled: boolean;
   onChange: (next: boolean) => void;
 }) {
   const { icon: Icon, tile, label } = sourceIcon[trigger.source];
   const missing = needsConnection(trigger);
+  const words = trigger.source === 'schedule' ? describeWhen(trigger.when) : trigger.when;
   return (
     <div className="flex items-center gap-3 border-t border-line p-4">
       <SourceTile icon={Icon} fill={tile} size="md" />
       <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <span className="font-control text-body text-ink">{trigger.name}</span>
-        <span className="text-secondary break-words text-ink-soft">{trigger.when}</span>
-        <span className="text-secondary break-words text-muted">{createsSentence(trigger)}</span>
+        <span className="font-control text-body text-ink">{triggerLabel(trigger.name)}</span>
+        <span className="flex items-center gap-1 text-secondary break-words text-ink-soft">
+          {words}
+          {words !== trigger.when ? (
+            <InfoTip about={`${triggerLabel(trigger.name)} schedule`}>{trigger.when}</InfoTip>
+          ) : null}
+        </span>
+        <span className="text-secondary break-words text-muted">{createsSentence(trigger, stations)}</span>
         {trigger.problem && !missing ? (
           <span className="text-meta font-semibold text-rework-ink">{trigger.problem.message}</span>
         ) : null}
@@ -363,15 +380,20 @@ function TriggerRow({
             </Link>
           </Button>
         ) : null}
-        <Switch aria-label={trigger.name} checked={on} disabled={disabled} onCheckedChange={onChange} />
+        <Switch aria-label={triggerLabel(trigger.name)} checked={on} disabled={disabled} onCheckedChange={onChange} />
       </div>
     </div>
   );
 }
 
+/** A starter trigger has no title in the definition, only a name: show it in words. */
+function triggerLabel(name: string): string {
+  return humanize(name);
+}
+
 /** The triggers that are on, then the ways that are always there, as one sentence: "A, B, New item, CLI and API". */
 function intakeSentence(names: string[]): string {
-  return [...names, 'New item, CLI and API'].join(', ');
+  return [...names.map(triggerLabel), 'New item, CLI and API'].join(', ');
 }
 
 /** The panel's Intake card: the triggers switched on, then what is always on. Steps 6 to 8 draw it. */

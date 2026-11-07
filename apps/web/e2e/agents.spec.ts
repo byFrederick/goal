@@ -34,7 +34,7 @@ async function openAgent(page: Page, agent: string) {
 
 test('the agents list says where each agent works and opens its detail', async ({ page }) => {
   await page.goto(agents);
-  await expect(page).toHaveTitle('Agents · Definition · goal · Acme · Goal');
+  await expect(page).toHaveTitle('Agents · Definition · Goal · Acme · Goal');
   const list = page.getByRole('navigation', { name: 'Agents' });
   await expect(list.getByRole('heading', { name: '5 agents' })).toBeVisible();
   await expect(list.getByRole('link', { name: /backend-engineer/ })).toContainText('Build, backend lane');

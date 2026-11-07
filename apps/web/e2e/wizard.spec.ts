@@ -282,13 +282,13 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
 
   await page.getByRole('button', { name: 'Save and exit' }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
-  const card = page.getByRole('article', { name: 'new-factory', exact: true });
+  const card = page.getByRole('article', { name: 'New factory', exact: true });
   await expect(card.getByText('Draft', { exact: true })).toBeVisible();
   await checkPage(page);
 
   // The draft's name resumes it and opens the first step not left with Continue: Line (the v3 design
   // system's Factories home has no separate Continue setup link; docs/design/MASTER.md).
-  await card.getByRole('link', { name: 'new-factory' }).click();
+  await card.getByRole('link', { name: 'New factory' }).click();
   await expect(page).toHaveURL(new RegExp(`/o/acme/new/line\\?factory=${id}$`));
 
   await page.getByRole('button', { name: 'Delete this draft factory…' }).click();
@@ -297,7 +297,7 @@ test('a blank factory: save and exit, resume from the Factories home, delete it'
   await checkPage(page);
   await dialog.getByRole('button', { name: 'Delete draft factory' }).click();
   await expect(page).toHaveURL(/\/o\/acme$/);
-  await expect(page.getByRole('article', { name: 'new-factory', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('article', { name: 'New factory', exact: true })).toHaveCount(0);
 });
 
 test('Cancel on Start creates nothing; a clone starts from the running version', async ({ page }) => {

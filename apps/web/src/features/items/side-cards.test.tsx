@@ -115,6 +115,9 @@ function runOf(station: string, agent: string, cost: number): Run {
     ended_at: '2026-10-25T07:40:00Z',
     definition_version_id: null,
     definition_version: null,
+    cpu_seconds: null,
+    peak_memory_bytes: null,
+    box_size: null,
   };
 }
 
