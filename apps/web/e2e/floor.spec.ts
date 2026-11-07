@@ -52,7 +52,7 @@ test('the floor shows the cards below the figures: Needs you, where work waits, 
   await expect(add).not.toHaveAttribute('aria-disabled', 'true');
 
   const weeks = page.getByRole('region', { name: 'Throughput by week' });
-  await expect(weeks.getByRole('img', { name: /^Items merged a day by week, from .+ Target 8\.$/ })).toBeVisible();
+  await expect(weeks.getByRole('img', { name: /^Items done a day by week, from .+ Target 8\.$/ })).toBeVisible();
   await expect(weeks.getByText('This week')).toBeVisible();
 
   const activity = page.getByRole('region', { name: 'Activity' });
