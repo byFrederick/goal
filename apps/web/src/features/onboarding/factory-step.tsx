@@ -22,7 +22,7 @@ import { RadioCards } from '../../ui/radio-cards';
 import { setBasics } from '../factory-editor/draft/ops';
 import { DraftSessionProvider, useDraft, useDraftSession } from '../factory-editor/draft/use-draft';
 import { stationLabel } from '../factory-editor/line/labels';
-import { nameProblem, newFactoryRequest, suggestedName } from '../factory-editor/start/start-choice';
+import { nameFromTitle, nameProblem, newFactoryRequest, suggestedTitle } from '../factory-editor/start/start-choice';
 import { useTemplates } from '../factory-editor/start/template-picker';
 import { type OnboardingSearch, repoOf } from './code-search';
 import {
@@ -187,23 +187,26 @@ function CreateFactory({
   const nameRef = useRef<HTMLInputElement>(null);
   const taken = (useQuery(factoriesQuery(org.id)).data ?? []).map((f) => f.name);
 
-  const [typedName, setTypedName] = useState<string>();
+  const [typedTitle, setTypedTitle] = useState<string>();
   const [purpose, setPurpose] = useState('');
   // The name goald refused as taken: the name field says so and takes focus.
   const [takenName, setTakenName] = useState<string | null>(null);
   const [error, setError] = useState<string>();
 
   const kind = picked === blank ? 'blank' : 'template';
-  const name = typedName ?? suggestedName(kind, { template: kind === 'template' ? picked : undefined }, taken);
-  const trimmed = name.trim();
+  const title = typedTitle ?? suggestedTitle(kind, pickedTitle);
+  const trimmed = title.trim();
+  const name = nameFromTitle(trimmed, taken);
   const nameError =
     takenName !== null && takenName === trimmed
       ? `${org.name} already has a factory named ${trimmed}. Choose another name.`
-      : trimmed !== '' && typedName !== undefined
-        ? (nameProblem(trimmed) ?? undefined)
+      : trimmed !== '' && typedTitle !== undefined
+        ? nameProblem(name)
+          ? 'Use a title with at least 3 letters or digits.'
+          : undefined
         : undefined;
 
-  const request = newFactoryRequest({ kind, name, template: kind === 'template' ? picked : undefined });
+  const request = newFactoryRequest({ kind, name, title: trimmed, template: kind === 'template' ? picked : undefined });
   const ready = request !== null && !nameError && !templatesLoading && !templatesError;
 
   const create = useMutation({
@@ -317,16 +320,13 @@ function CreateFactory({
           <div className="flex items-center gap-3">
             <Input
               ref={nameRef}
-              value={name}
+              value={title}
               onChange={(e) => {
                 setTakenName(null);
-                setTypedName(e.target.value);
+                setTypedTitle(e.target.value);
               }}
               autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              translate="no"
-              className="min-w-0 flex-1 font-mono md:text-sm"
+              className="min-w-0 flex-1"
             />
             <FactoryInitial name={trimmed} className="size-11 text-heading" />
           </div>
