@@ -41,19 +41,30 @@ const failed = {
   },
 };
 
-async function patchBoard(page: Page, waiting: unknown) {
+// Patches the first station that has items and returns a getter for its id: a phone shows one station per tab.
+async function patchBoard(page: Page, waiting: unknown): Promise<() => string | undefined> {
+  let patched: string | undefined;
   await page.route(/\/factories\/[^/]+\/board(\?|$)/, async (route) => {
     const response = await route.fetch();
     const board = await response.json();
     const station = board.stations.find((s: { items: unknown[] }) => s.items.length > 0);
     Object.assign(station.items[0], { state: 'queued', waiting });
+    patched = station.id;
     await route.fulfill({ response, json: board });
   });
+  return () => patched;
+}
+
+// On a phone, picks the patched station's tab so its column is the one shown.
+async function showStation(page: Page, station: () => string | undefined) {
+  await expect.poll(station).toBeDefined();
+  const tab = page.locator(`[role="tab"][data-station="${station()}"]`);
+  if (await tab.isVisible()) await tab.click();
 }
 
 async function expectList(page: Page, label: string, failedWait: boolean) {
-  await expect(page.getByText(label).first()).toBeVisible();
-  await page.getByRole('button', { name: 'About CI' }).first().click();
+  await expect(page.getByText(label).filter({ visible: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'About CI' }).filter({ visible: true }).first().click();
   if (failedWait) {
     const failed = page.getByRole('group', { name: `${repo}, failed` });
     await expect(failed.getByRole('link', { name: 'fedcba9' })).toHaveAttribute(
@@ -81,13 +92,15 @@ for (const [name, waiting, label] of [
   ['failed', failed, 'CI failed: task web:e2e (3/12)'],
 ] as const) {
   test(`a ${name} CI wait reads ${label} on a Board card, with its ⓘ`, async ({ page }) => {
-    await patchBoard(page, waiting);
+    const station = await patchBoard(page, waiting);
     await page.goto('/o/acme/f/goal/board');
+    await showStation(page, station);
     await expectList(page, label, name === 'failed');
   });
 
   test(`a ${name} CI wait reads ${label} on the item page, with its ⓘ`, async ({ page }) => {
-    await page.route(/\/factories\/[^/]+\/items\/[^/?]+(\?|$)/, async (route) => {
+    // The item page reads /v1/orgs/{org}/items/{ref}; the pattern leaves out /events, /runs and other subpaths.
+    await page.route(/\/v1\/orgs\/[^/]+\/(factories\/[^/]+\/)?items\/[^/?]+(\?|$)/, async (route) => {
       const response = await route.fetch();
       const item = await response.json();
       Object.assign(item, { state: 'queued', waiting });

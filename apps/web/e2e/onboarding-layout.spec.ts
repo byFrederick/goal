@@ -105,7 +105,7 @@ for (const size of sizes) {
       await page.setViewportSize(size);
       await page.emulateMedia({ colorScheme: scheme });
       await openCodeStep(page);
-      await page.getByLabel('Repository').fill('https://github.com/acme/app-noci');
+      await page.getByRole('textbox', { name: 'Repository' }).fill('https://github.com/acme/app-noci');
       await page.getByLabel('Token').fill('test-token');
       await page.getByRole('button', { name: 'Continue' }).click();
       await expect(page.getByText(/Can’t read CI\. GitHub answered 403/)).toBeVisible();
