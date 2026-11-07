@@ -187,16 +187,16 @@ func (q *Queries) GetItemByNumber(ctx context.Context, arg GetItemByNumberParams
 const insertItem = `-- name: InsertItem :one
 INSERT INTO work_items (
   id, factory_id, number, parent_id, part_key, part_paths, paths, type, lane, title, body, station,
-  state, class_of_service, priority, base_commit, created_at, updated_at, source, trigger, origin, via,
+  state, class_of_service, priority, base_commit, created_at, updated_at, trigger, origin, via,
   created_by, generation, untrusted, start_at, started_at, branch
 ) VALUES (
   $1, $2, $3, $4, $5,
   $6::text[], $6::text[], $7, $8,
   $9, $10, $11, $12, $13,
   $14::bigint, $15::text, $16, $16,
-  $17, $18, $19, $20, $21,
-  $22::int, $23::bool, $24::timestamptz,
-  $25::timestamptz, $26::text
+  $17, $18, $19, $20,
+  $21::int, $22::bool, $23::timestamptz,
+  $24::timestamptz, $25::text
 )
 RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
@@ -218,7 +218,6 @@ type InsertItemParams struct {
 	Priority       int64
 	BaseCommit     *string
 	CreatedAt      time.Time
-	Source         *string
 	Trigger        *string
 	Origin         string
 	Via            *string
@@ -231,7 +230,7 @@ type InsertItemParams struct {
 }
 
 // Every filed item (fileItem): a person's, a trigger's, a follow-up's and a plan's part, which
-// sets part_key and part_paths (its paths too). source is still written for old instances (00113).
+// sets part_key and part_paths (its paths too).
 // branch is domain.ItemBranch, set once here (00130).
 func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (WorkItem, error) {
 	row := q.db.QueryRow(ctx, insertItem,
@@ -251,7 +250,6 @@ func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (WorkIte
 		arg.Priority,
 		arg.BaseCommit,
 		arg.CreatedAt,
-		arg.Source,
 		arg.Trigger,
 		arg.Origin,
 		arg.Via,

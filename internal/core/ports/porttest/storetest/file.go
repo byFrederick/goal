@@ -23,7 +23,7 @@ func testCreateItemRecordsOrigin(f *fixture) {
 
 	ada := domain.Actor{Kind: domain.ActorUser, ID: "ada", Name: "Ada"}
 	it := f.create(t, domain.NewItem{
-		Title: "a", Origin: domain.OriginPerson, Via: domain.ViaCLI, CreatedBy: ada, Source: domain.ItemFromCLI,
+		Title: "a", Origin: domain.OriginPerson, Via: domain.ViaCLI, CreatedBy: ada,
 	})
 	later := f.create(t, domain.NewItem{Title: "b", Origin: domain.OriginFollowUp, Generation: 2, Untrusted: true})
 
@@ -31,11 +31,10 @@ func testCreateItemRecordsOrigin(f *fixture) {
 		Origin    domain.Origin
 		Via       domain.Via
 		CreatedBy string
-		Source    domain.ItemSource
 	}
 
 	got := f.item(t, it.ID)
-	if g, want := (filed{got.Origin, got.Via, got.CreatedBy, got.Source}), (filed{domain.OriginPerson, domain.ViaCLI, ada.Ref(), domain.ItemFromCLI}); g != want {
+	if g, want := (filed{got.Origin, got.Via, got.CreatedBy}), (filed{domain.OriginPerson, domain.ViaCLI, ada.Ref()}); g != want {
 		t.Errorf("item = %+v; want %+v", g, want)
 	}
 
