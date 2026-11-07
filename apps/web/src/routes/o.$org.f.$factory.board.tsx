@@ -4,6 +4,7 @@ import { pageTitle } from '../app/route-focus';
 import { BoardSkeleton } from '../app/route-skeletons';
 import { type BoardGroup, type BoardView, statusChoices } from '../features/board/board-filters';
 import { BoardPage } from '../features/board/board-page';
+import { factoryTitle } from '../shared/factory';
 import type { StatusKind } from '../ui/status-icon';
 
 interface BoardSearch extends BoardView {
@@ -53,6 +54,6 @@ export const Route = createFileRoute('/o/$org/f/$factory/board')({
     void queryClient.prefetchQuery(touchesQuery(org.id, factory.id));
     return ensureLoaded(queryClient, boardQuery(org.id, factory.id));
   },
-  head: ({ match: { context } }) => pageTitle('Board', context.factory.name, context.org.name),
+  head: ({ match: { context } }) => pageTitle('Board', factoryTitle(context.factory), context.org.name),
   component: BoardPage,
 });

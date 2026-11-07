@@ -7,7 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId } from 'react';
-import { attentionQuery, inboxQuery, overviewQuery } from '../../api/queries';
+import { archivedFactoriesQuery, attentionQuery, inboxQuery, overviewQuery } from '../../api/queries';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
 import { plural } from '../../shared/format';
@@ -132,7 +132,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
             {reasons.newFactory(org.name)}
           </EmptyState>
         )}
-        <ArchivedLink slug={org.slug} />
+        <ArchivedLink orgId={org.id} slug={org.slug} />
       </>
     );
   }
@@ -157,7 +157,7 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
             );
           })}
         </ul>
-        <ArchivedLink slug={org.slug} />
+        <ArchivedLink orgId={org.id} slug={org.slug} />
       </section>
 
       <div className="grid gap-4 @[960px]:grid-cols-2">
@@ -168,8 +168,11 @@ export function FactoriesPage({ archived = false }: { archived?: boolean }) {
   );
 }
 
-/** The quiet way to the archived factories. */
-function ArchivedLink({ slug }: { slug: string }) {
+/** The quiet way to the archived factories, shown only when there are some. */
+function ArchivedLink({ orgId, slug }: { orgId: string; slug: string }) {
+  const archived = useQuery(archivedFactoriesQuery(orgId));
+  // Nothing while it loads or fails, and nothing when no factory is archived: the link never flashes.
+  if (!archived.data || archived.data.length === 0) return null;
   return (
     <Link
       to="/o/$org"

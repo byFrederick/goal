@@ -1,12 +1,14 @@
 // The dark panel of steps 7 and 8 (docs/design/screens/get-started/invite.jpg and first-item.jpg): the
 // organization, code and factory cards as step 6 leaves them, then the budget, intake and people cards, and on
 // step 8 the running item under them. The factory's item badge marks the station the item is at.
+
 import type { Factory, FactoryModel, Intake, OrgSummary } from '../../api/types';
 import { modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { stationLabel } from '../factory-editor/line/labels';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots, RunningItemCard } from './factory-preview';
 import { IntakeCard } from './intake-step';
 import type { PreviewSlots } from './onboarding-layout';
@@ -48,10 +50,10 @@ export function stepPanel({
   return {
     ...previewSlots({
       organization: organizationCard(org, window.location.host),
-      code: codeCard(repoOf(search.url), search.secret),
+      code: codeCard({ url: search.url, secret: search.secret, done: true }),
       factory: (
         <FactoryCard
-          name={factory.name}
+          name={factoryTitle(factory)}
           purpose={basics.purpose ?? ''}
           stations={panelStations}
           item={item ? { station: item.station, number: item.number } : undefined}
