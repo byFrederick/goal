@@ -130,17 +130,15 @@ func (f *fixture) one(org domain.OrgID, action string) domain.AuditEntry {
 
 // ruleKey is what a standing rule is kept for: its key, tool, agent role and item.
 type ruleKey struct {
-	connection     domain.ConnectionID
-	connectionName string
-	factory        domain.FactoryID
-	environment    string
-	server, tool   string
-	agent          string
-	item           domain.ItemID
+	factory      domain.FactoryID
+	environment  string
+	server, tool string
+	agent        string
+	item         domain.ItemID
 }
 
 func keyOf(r domain.StandingRule) ruleKey {
-	return ruleKey{r.ConnectionID, r.Connection, r.Factory, r.Environment, r.Server, r.Tool, r.Agent, r.ItemID}
+	return ruleKey{r.Factory, r.Environment, r.Server, r.Tool, r.Agent, r.ItemID}
 }
 
 // wantRule is the rule key(DefaultEnvironment, server, tool, agent) makes, approved on approvedOn.

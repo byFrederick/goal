@@ -8,9 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-// ConnectionID is a connection's id (a UUID).
-type ConnectionID string
-
 // MaxConnectionDescription is the most characters a description has (00051's checks).
 const MaxConnectionDescription = 500
 
@@ -74,13 +71,6 @@ func checkEnvName(name string) error {
 
 // EngineActor is who acts for a run or a knowledge source's sync in the audit log.
 var EngineActor = Actor{Kind: ActorSystem, ID: "engine", Name: "engine"}
-
-// ConnectionAAD is the associated data a connection's sealed secrets are bound to (spec 4 §4.3):
-// its organization, its id and the key id, so a ciphertext copied to another row, organization or
-// key id does not open.
-func ConnectionAAD(org OrgID, id ConnectionID, keyID string) []byte {
-	return []byte("goal/connection/v1|" + string(org) + "|" + string(id) + "|" + keyID)
-}
 
 // AuditConnectionUsed is the audit action of a connection's use by a run (spec 4 §12), which the
 // audit log still holds and no run writes any more.

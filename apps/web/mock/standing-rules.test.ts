@@ -46,8 +46,8 @@ describe('the mock standing rules', () => {
       factory_id: 'f-goal',
       environment: 'default',
       server: 'linear',
-      connection_id: null,
     });
+    expect(active[0]).not.toHaveProperty('connection_id');
     expect((call('/standing-rules', 'GET', '?revoked=true').answer.rules as unknown[]).length).toBe(2);
   });
 

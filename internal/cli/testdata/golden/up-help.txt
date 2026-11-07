@@ -112,8 +112,8 @@ usage:
                                                   the rest as read; refused when the policy changed since
                                                   it was read (--deny-command replaces the list)
   goal standing-rules list [--revoked] [--json]   the organization's standing rules: which agent role may
-                                                  call which connection or MCP server tool without asking,
-                                                  who made it and when (--revoked: the revoked ones too)
+                                                  call which MCP server tool without asking, who made it
+                                                  and when (--revoked: the revoked ones too)
   goal standing-rules revoke <rule>               revoke one: the agent asks first again for that tool
   goal key list                                   the organization's API keys: hint, scopes, factories,
                                                   ceiling, expiry, last use

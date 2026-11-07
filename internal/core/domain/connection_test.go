@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"maps"
-	"testing"
-)
+import "testing"
 
 // Hosts the domain's tests repeat.
 const (
@@ -21,26 +18,6 @@ func TestReservedRunEnv(t *testing.T) {
 	} {
 		if got := ReservedRunEnv(name); got != want {
 			t.Errorf("ReservedRunEnv(%q) = %v; want %v", name, got, want)
-		}
-	}
-}
-
-// The associated data binds organization, connection and key id, each to its own position.
-func TestConnectionAAD(t *testing.T) {
-	t.Parallel()
-
-	base := ConnectionAAD("org-a", "conn-1", "k1")
-	if string(base) != "goal/connection/v1|org-a|conn-1|k1" {
-		t.Errorf("ConnectionAAD = %q", base)
-	}
-
-	others := map[string][]byte{
-		"org": ConnectionAAD("org-b", "conn-1", "k1"), "connection": ConnectionAAD("org-a", "conn-2", "k1"),
-		"key": ConnectionAAD("org-a", "conn-1", "k2"),
-	}
-	for what, aad := range maps.All(others) {
-		if string(aad) == string(base) {
-			t.Errorf("another %s gives the same associated data", what)
 		}
 	}
 }

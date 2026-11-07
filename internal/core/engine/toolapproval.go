@@ -274,8 +274,8 @@ func (e *Engine) RevokeStandingRule(ctx context.Context, id domain.StandingRuleI
 		return domain.StandingRule{}, fmt.Errorf("revoke standing rule %s: %w", id, err)
 	}
 
-	e.log.InfoContext(ctx, "standing rule revoked", slog.String("rule", string(id)), slog.String("connection", r.Connection),
-		slog.String("tool", r.Tool), slog.String("agent", r.Agent), slog.String("by", by.Ref()))
+	e.log.InfoContext(ctx, "standing rule revoked", slog.String("rule", string(id)), slog.String("environment", r.Environment),
+		slog.String("server", r.Server), slog.String("tool", r.Tool), slog.String("agent", r.Agent), slog.String("by", by.Ref()))
 
 	return r, nil
 }

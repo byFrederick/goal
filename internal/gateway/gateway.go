@@ -50,8 +50,8 @@
 //
 // # Ask-first tool calls
 //
-// The bundle gives each connection the tools that ask first or are off for the run's agent
-// (tool_modes, from domain.EffectiveToolModes with the organization's standing rules) and the
+// The bundle gives each MCP server the tools that ask first or are off for the run's agent
+// (tool_modes, from domain.ServerToolModes with the organization's standing rules) and the
 // asks that offer Always allow, and the spec the calls a person approved for the run
 // (granted_calls, domain.GrantedCalls). ServeToolApproval answers POST /run/tool-approval
 // (toolapproval.go, ADR 0031 decision 4): the run reports a call that asks first, and
