@@ -385,8 +385,8 @@ func TestHooks_PreviousSecretPasses(t *testing.T) {
 	}
 }
 
-// An unknown id, an id that is no UUID, a disabled webhook and a factory's endpoint are 404;
-// another method is 405.
+// An unknown id, an id that is no UUID, a disabled webhook and a factory's own endpoint, which
+// no route serves since ADR 0040 decision 24, are 404 no such webhook; another method is 405.
 func TestHooks_UnknownDisabledAndOtherMethods(t *testing.T) {
 	t.Parallel()
 
@@ -399,8 +399,8 @@ func TestHooks_UnknownDisabledAndOtherMethods(t *testing.T) {
 	}
 
 	for _, id := range []string{"019a0000-0000-7000-8000-000000000000", "not-a-uuid", string(endpoint.Endpoint.ID)} {
-		if rec := r.post(t, api.HooksPath+id, `{}`, nil, ""); rec.Code != http.StatusNotFound {
-			t.Errorf("POST /hooks/%s = %d; want 404", id, rec.Code)
+		if rec := r.post(t, api.HooksPath+id, `{}`, nil, ""); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "no such webhook") {
+			t.Errorf("POST /hooks/%s = %d %s; want 404 no such webhook", id, rec.Code, rec.Body)
 		}
 	}
 
