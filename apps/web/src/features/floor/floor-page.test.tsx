@@ -12,6 +12,7 @@ import {
   metricsQuery,
   overviewQuery,
   touchesQuery,
+  versionModelQuery,
   weeklyQuery,
 } from '../../api/queries';
 import type {
@@ -28,6 +29,7 @@ import type {
   MetricsSummary,
   OrgSummary,
   TouchMetrics,
+  VersionModel,
   WeeklyThroughput,
 } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
@@ -370,6 +372,7 @@ function renderFloor({
   touches = touchesNow,
   subject = factory,
   merged = true,
+  model = null,
 }: {
   entries?: InboxEntry[];
   line?: Board;
@@ -385,6 +388,8 @@ function renderFloor({
   subject?: Factory;
   /** An item has merged: a mature factory. False seeds a new one, which shows the setup checklist. */
   merged?: boolean;
+  /** The published model, seeded when the test needs the line's code. */
+  model?: VersionModel | null;
 } = {}) {
   const range = rangeOf({});
   return renderFactoryPage({
@@ -415,6 +420,7 @@ function renderFloor({
       [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
       [overviewQuery(org.id, '1d').queryKey, today],
       [overviewQuery(org.id, '7d').queryKey, week],
+      ...(model ? [[versionModelQuery(org.id, factory.id, 'current').queryKey, model] as const] : []),
       ...(activity ? [[activityQuery(org.id, factory.id).queryKey, activity] as const] : []),
     ],
   });
@@ -766,6 +772,35 @@ describe('the cards below the figures', () => {
 
     const card = await screen.findByRole('region', { name: 'Throughput by week' });
     expect(within(card).getByText('No finished items in these weeks yet.')).toBeTruthy();
+  });
+
+  it('says merged at the Done station and in Throughput by week on a line with code', async () => {
+    const withCode = {
+      model: { basics: { repositories: [{ url: 'https://github.com/acme/app', connection: 'github' }] } },
+      ranges: {},
+    } as unknown as VersionModel;
+    const doneStation = {
+      id: 'done',
+      kind: 'done',
+      title: 'Done',
+      agents: [],
+      wip_limit: null,
+      waiting: 0,
+      in_progress: 0,
+      items: [],
+      busy_ratio: null,
+      send_back_ratio: null,
+      queue_trend: null,
+      oldest_waiting_seconds: null,
+      done_today: 7,
+      lanes: [],
+    } as unknown as Board['stations'][number];
+    renderFloor({ model: withCode, weeks: twoWeeks, line: { ...board, stations: [doneStation] } });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    await waitFor(() => expect(within(card).getByText('Items merged a day')).toBeTruthy());
+    expect(await screen.findByText('7 merged today')).toBeTruthy();
+    expect(screen.queryByText('7 done today')).toBeNull();
   });
 
   it('Throughput by week draws each week with the target', async () => {
