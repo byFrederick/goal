@@ -235,7 +235,7 @@ func labsSeesNoIntake(t *testing.T, pool *pgxpool.Pool, org domain.OrgID) {
 }
 
 // seedWebhookValue is the value of the secret seedWebhook signs a webhook with.
-const seedWebhookValue = "whsec-integration" //nolint:gosec // a test value, not a secret
+const seedWebhookValue = "whsec-integration"
 
 // seedWebhook creates the organization webhook name of org, signed by a new secret, open to a
 // new factory, and returns it.
