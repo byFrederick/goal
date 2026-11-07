@@ -289,6 +289,20 @@ describe('the other states', () => {
   });
 });
 
+describe('Factory titles', () => {
+  it('names factories by their title in the by-day legend and table, and By agent', async () => {
+    renderSpend();
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    const days = (screen.getByRole('heading', { name: 'Spend by day' }).closest('section') as HTMLElement).textContent;
+    expect(days).toMatch(/SRE \$/);
+    expect(days).toMatch(/Software \$/);
+    expect(days).not.toMatch(/\b(sre|software) \$/);
+    const agents = (screen.getByRole('heading', { name: 'By agent' }).closest('section') as HTMLElement).textContent;
+    expect(agents).toMatch(/Software/);
+    expect(agents).not.toMatch(/\bsoftware\b/);
+  });
+});
+
 describe('Box usage', () => {
   const section = async () => within(await screen.findByRole('region', { name: 'Box usage' }));
 
@@ -296,7 +310,8 @@ describe('Box usage', () => {
     renderSpend();
     const box = await section();
     const row = box.getByText('backend-engineer').closest('tr') as HTMLElement;
-    expect(within(row).getByText('software')).toBeTruthy();
+    expect(within(row).getByText('Software')).toBeTruthy();
+    expect(within(row).queryByText('software')).toBeNull();
     for (const text of ['Large', '42', '3.1 min', '6.9 min', '1.2 GB', '2.4 GB']) {
       expect(within(row).getByText(text)).toBeTruthy();
     }

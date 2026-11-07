@@ -454,7 +454,7 @@ describe('the sidebar', () => {
       fireEvent.keyDown(document.body, { key: 'c' });
 
       const picker = await screen.findByRole('combobox', { name: 'Factory' });
-      expect(picker.textContent).toBe('goal');
+      expect(picker.textContent).toBe('Goal');
     });
 
     it('starts the picker empty when C is pressed elsewhere', async () => {

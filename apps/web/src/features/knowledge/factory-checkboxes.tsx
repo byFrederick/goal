@@ -3,6 +3,7 @@
 // each row says which. Rows keep a 44 px target on phones.
 import type { Factory } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
+import { factoryTitle } from '../../shared/factory';
 import { factoryMark } from '../../shared/marks';
 import { Checkbox } from '../../ui/checkbox';
 
@@ -38,7 +39,7 @@ export function FactoryCheckboxes({
                 label={
                   <span className="flex min-w-0 items-center gap-2">
                     <FactoryBadge mark={factoryMark(f, factories)} />
-                    <span className="break-words">{f.name}</span>
+                    <span className="break-words">{factoryTitle(f)}</span>
                   </span>
                 }
                 className="min-h-11 min-w-0"
