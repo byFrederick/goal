@@ -156,7 +156,7 @@ test('pages are titled most specific first', async ({ page }) => {
   await page.goto('/o/acme/f/sre/board');
   await expect(page).toHaveTitle('Board · SRE · Acme · Goal');
   await page.goto('/o/acme/f/goal/items/12');
-  await expect(page).toHaveTitle('goal#12 · goal · Acme · Goal');
+  await expect(page).toHaveTitle('goal#12 · Goal · Acme · Goal');
 });
 
 test('the sidebar opens a factory and marks its pages', async ({ page }) => {

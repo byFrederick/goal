@@ -53,7 +53,7 @@ test('the floor shows the cards below the figures: Needs you, where work waits, 
 
   const weeks = page.getByRole('region', { name: 'Throughput by week' });
   await expect(
-    weeks.getByRole('img', { name: /^Items (merged|done) a day by week, from .+ Target 8\.$/ }),
+    weeks.getByRole('img', { name: /^Items merged a day by week, from .+ Target 8\.$/ }),
   ).toBeVisible();
   await expect(weeks.getByText('This week')).toBeVisible();
 
