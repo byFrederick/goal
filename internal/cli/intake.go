@@ -797,17 +797,12 @@ func triggersOf(triggers []gen.WebhookTrigger) string {
 	return strings.Join(parts, ", ")
 }
 
-// senderOfKind maps the factory endpoints' --kind to its sender: generic is standard's alias for
-// one release (ADR 0040 decision 22).
-var senderOfKind = map[string]gen.WebhookSender{"generic": gen.WebhookSenderStandard, "github": gen.WebhookSenderGithub}
-
-// webhooksCreate is goal webhooks create <name> [--sender S | --kind generic|github]
+// webhooksCreate is goal webhooks create <name> [--sender S]
 // [--secret <name>] [--json]: an enabled webhook open to no factory, signed by the secret named or
 // by a new webhook-<name> whose generated value is printed once.
 func webhooksCreate(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
 	fs, orgFlag, asJSON := intakeFlags("webhooks create")
 	sender := fs.String("sender", "", "how deliveries are signed: github, gitlab, standard (the default), pagerduty, sentry or token")
-	kind := fs.String("kind", "", "generic or github: the old name of --sender, generic being standard")
 	secret := fs.String("secret", "", "the existing secret that signs deliveries; default a new webhook-<name> with a generated value")
 
 	pos, err := parseInterspersed(fs, args)
@@ -815,7 +810,7 @@ func webhooksCreate(ctx context.Context, out *printer, getenv func(string) strin
 		return errUsage
 	}
 
-	n, ok := newWebhook(pos[0], *sender, *kind, *secret)
+	n, ok := newWebhook(pos[0], *sender, *secret)
 	if !ok {
 		return errUsage
 	}
@@ -851,22 +846,12 @@ func webhooksCreate(ctx context.Context, out *printer, getenv func(string) strin
 	return nil
 }
 
-// newWebhook is create's body: the sender from --sender or its alias --kind (standard when neither
-// is given), false for both, an unknown one or a name the secret flag leaves empty.
-func newWebhook(name, sender, kind, secret string) (gen.NewWebhook, bool) {
+// newWebhook is create's body: the sender from --sender (standard when it is not given), false for
+// an unknown one or a name the secret flag leaves empty.
+func newWebhook(name, sender, secret string) (gen.NewWebhook, bool) {
 	n := gen.NewWebhook{Name: name, Sender: gen.WebhookSenderStandard}
 
-	switch {
-	case sender != "" && kind != "":
-		return n, false
-	case kind != "":
-		s, ok := senderOfKind[kind]
-		if !ok {
-			return n, false
-		}
-
-		n.Sender = s
-	case sender != "":
+	if sender != "" {
 		n.Sender = gen.WebhookSender(sender)
 		if !slices.Contains([]gen.WebhookSender{
 			gen.WebhookSenderGithub, gen.WebhookSenderGitlab, gen.WebhookSenderStandard, gen.WebhookSenderPagerduty, gen.WebhookSenderSentry, gen.WebhookSenderToken,

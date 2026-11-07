@@ -830,7 +830,7 @@ Flags: `--json`.
 goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
 ```
 
-add a webhook, open to no factory (default sender standard; --kind generic|github is the old name of --sender, generic being standard); without --secret it makes the secret webhook-&lt;name&gt; and prints its value once, alone on stdout: store it in the sender now
+add a webhook, open to no factory (default sender standard); without --secret it makes the secret webhook-&lt;name&gt; and prints its value once, alone on stdout: store it in the sender now
 
 Flags: `--sender github|gitlab|standard|pagerduty|sentry|token`, `--secret <name>`, `--json`.
 

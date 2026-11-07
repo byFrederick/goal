@@ -294,11 +294,9 @@ const usage = `usage:
                                                   days (never a secret's value)
   goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
                                                   add a webhook, open to no factory (default sender
-                                                  standard; --kind generic|github is the old name of
-                                                  --sender, generic being standard); without --secret
-                                                  it makes the secret webhook-<name> and prints its
-                                                  value once, alone on stdout: store it in the sender
-                                                  now
+                                                  standard); without --secret it makes the secret
+                                                  webhook-<name> and prints its value once, alone on
+                                                  stdout: store it in the sender now
   goal webhooks open <webhook> <factory> [--repos a,b] [--json]
                                                   the factory receives its deliveries, only those of
                                                   the repositories listed with --repos; again replaces
