@@ -233,8 +233,6 @@ type probe struct {
 const (
 	submitFix  = `{"title":"t","type":"fix"}`
 	noDocument = "00000000-0000-7000-8000-fffffffffffd"
-	// probeHooks are acme's webhook endpoints.
-	probeHooks = "/v1/orgs/acme/factories/acme/webhooks"
 	// probeViews are acme's saved views.
 	probeViews = "/v1/orgs/acme/factories/acme/views"
 )
@@ -388,16 +386,6 @@ var probes = map[string]probe{
 	"deleteSecret":  {method: http.MethodDelete, path: "/v1/orgs/acme/secrets/acme-token", org: testOrg},
 	"importSecrets": {method: http.MethodPost, path: "/v1/orgs/acme/secrets/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
-	"listWebhookEndpoints": {method: http.MethodGet, path: probeHooks, org: testOrg, factory: acmeID},
-	"createWebhookEndpoint": {
-		method: http.MethodPost, path: probeHooks, body: `{"name":"ci-hooks","kind":"generic"}`, org: testOrg, factory: acmeID,
-	},
-	"rotateWebhookSecret":   {method: http.MethodPost, path: probeHooks + "/" + noDocument + "/rotate", org: testOrg, factory: acmeID},
-	"deleteWebhookEndpoint": {method: http.MethodDelete, path: probeHooks + "/" + noDocument, org: testOrg, factory: acmeID},
-	"listWebhookDeliveries": {method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries", org: testOrg, factory: acmeID},
-	"getWebhookDelivery": {
-		method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries/" + noDocument, org: testOrg, factory: acmeID,
-	},
 	"listWebhooks":             {method: http.MethodGet, path: "/v1/orgs/acme/webhooks", org: testOrg},
 	"createWebhook":            {method: http.MethodPost, path: "/v1/orgs/acme/webhooks", body: `{"name":"ci-hooks","sender":"github"}`, org: testOrg},
 	"getWebhook":               {method: http.MethodGet, path: "/v1/orgs/acme/webhooks/ci-hooks", org: testOrg},

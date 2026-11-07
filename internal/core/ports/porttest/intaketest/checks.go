@@ -198,7 +198,7 @@ func testExpireChecks(f *fixture) {
 func testCheckInput(f *fixture) {
 	t := f.t
 
-	open := f.item(domain.ItemFromSchedule, nightly, t0)
+	open := f.item(nightly, t0)
 	f.fire(nightly, "k-open", "INC-1", open.ID, t0)
 
 	if err := f.Store.AppendEvents(f.ctx(), domain.Event{
@@ -207,11 +207,11 @@ func testCheckInput(f *fixture) {
 		t.Fatalf("AppendEvents: %v", err)
 	}
 
-	closed := f.item(domain.ItemFromSchedule, nightly, t0.Add(-time.Hour))
+	closed := f.item(nightly, t0.Add(-time.Hour))
 	f.fire(nightly, "k-closed", "INC-2", closed.ID, t0.Add(-time.Hour))
 	f.close(closed, domain.StateCancelled)
 
-	f.item(domain.ItemFromSchedule, flaky, t0) // another trigger's
+	f.item(flaky, t0) // another trigger's
 
 	in, err := f.in.CheckInput(f.ctx(), f.factory, nightly, t0.Add(time.Hour))
 	if err != nil {
@@ -291,7 +291,7 @@ func (f *fixture) runCheck(at time.Time, answer string, limits domain.CheckLimit
 	for _, file := range a.File {
 		items = append(items, domain.CheckItem{Key: file.Key, Item: domain.NewItem{
 			FactoryID: f.factory, Type: typeFix, Title: file.Title, Body: file.Brief, Station: station, State: domain.StateQueued,
-			Class: domain.ClassStandard, CreatedAt: at, Source: domain.ItemFromSchedule, Trigger: nightly, Origin: domain.OriginTrigger,
+			Class: domain.ClassStandard, CreatedAt: at, Trigger: nightly, Origin: domain.OriginTrigger,
 			CreatedBy: domain.Actor{Kind: domain.ActorAgent, ID: watcher, Name: watcher}, Untrusted: true,
 		}})
 	}
@@ -612,7 +612,7 @@ func testCheckMemory(f *fixture) {
 
 	var newest domain.Item
 	for i := range domain.MaxCheckMemoryItems {
-		newest = f.item(domain.ItemFromSchedule, nightly, t0.Add(time.Duration(i+1)*time.Second))
+		newest = f.item(nightly, t0.Add(time.Duration(i+1)*time.Second))
 	}
 
 	m, err := f.in.CheckMemory(f.ctx(), f.factory, nightly, t0.Add(time.Hour))
@@ -719,7 +719,7 @@ func testItemCheckKey(f *fixture) {
 		t.Fatalf("reopen applied %+v; want INC-2 filed again", again.Applied)
 	}
 
-	scheduled := f.item(domain.ItemFromSchedule, nightly, t0)
+	scheduled := f.item(nightly, t0)
 
 	for _, c := range []struct {
 		what string

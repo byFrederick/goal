@@ -1,9 +1,7 @@
 package postgres
 
 import (
-	"cmp"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"slices"
 
@@ -47,7 +45,7 @@ func (in *Intake) CreateWebhook(ctx context.Context, n domain.NewWebhook) (domai
 		}
 
 		_, err = q.InsertOrgWebhook(ctx, db.InsertOrgWebhookParams{
-			ID: id, Name: n.Name, Sender: new(string(n.Sender)), Secret: n.Secret,
+			ID: id, Name: n.Name, Sender: string(n.Sender), Secret: n.Secret,
 			TokenHeader: nonEmpty(n.Token.Header), TokenEventPath: nonEmpty(n.Token.EventPath), TokenIDPath: nonEmpty(n.Token.IDPath),
 		})
 
@@ -246,7 +244,7 @@ func endpointIn(ctx context.Context, q *db.Queries, id uuid.UUID) (domain.Webhoo
 	return out[0], nil
 }
 
-// withOpenings are rows as endpoints, each organization webhook with its openings, by factory id.
+// withOpenings are rows as endpoints, each with its openings, by factory id.
 func withOpenings(ctx context.Context, q *db.Queries, rows []db.WebhookEndpointRow) ([]domain.WebhookEndpoint, error) {
 	ids := make([]uuid.UUID, 0, len(rows))
 	for _, r := range rows {
@@ -262,9 +260,7 @@ func withOpenings(ctx context.Context, q *db.Queries, rows []db.WebhookEndpointR
 
 	for _, r := range rows {
 		e := endpointFrom(r)
-		if e.OrgLevel() {
-			e.Openings = []domain.WebhookOpening{}
-		}
+		e.Openings = []domain.WebhookOpening{}
 
 		for _, o := range opened {
 			if o.WebhookID == r.ID {
@@ -295,108 +291,4 @@ func nonEmpty(s string) *string {
 	}
 
 	return &s
-}
-
-// ConvertEndpoints implements ports.Intake: one transaction per endpoint, which takes the oldest
-// endpoint still on a factory FOR UPDATE SKIP LOCKED, so a crash leaves each endpoint whole, and
-// another goald converting at the same time takes the next one.
-func (in *Intake) ConvertEndpoints(ctx context.Context, by domain.Actor) ([]domain.ConvertedEndpoint, error) {
-	org, ok := domain.OrgFrom(ctx)
-	if !ok {
-		return nil, domain.ErrNoOrg
-	}
-
-	out := []domain.ConvertedEndpoint{}
-
-	for {
-		c, err := fetch(ctx, in.s.inTx, func(q *db.Queries) (*domain.ConvertedEndpoint, error) { return in.convertIn(ctx, q, org, by) })
-		if err != nil {
-			return out, fmt.Errorf("convert webhook endpoints: %w", ruleError(err, ""))
-		}
-
-		if c == nil {
-			return out, nil
-		}
-
-		out = append(out, *c)
-	}
-}
-
-// convertIn converts the oldest endpoint still on a factory in q's transaction: a new secret
-// holding its sealed value, as the hex CreateEndpoint showed, audited as created by by; its new
-// name, sender and secret; and its opening to the factory. nil when there is none left.
-func (in *Intake) convertIn(ctx context.Context, q *db.Queries, org domain.OrgID, by domain.Actor) (*domain.ConvertedEndpoint, error) {
-	r, err := q.NextFactoryEndpoint(ctx)
-	if notFound(err) {
-		return nil, nil //nolint:nilnil // none left is not an error
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	if in.key.Active() == "" {
-		return nil, ports.ErrNoMasterKey
-	}
-
-	value, err := in.key.Open(r.KeyID, r.Nonce, r.Ciphertext, webhookSecretAAD(org, r.ID, r.KeyID))
-	if err != nil {
-		return nil, fmt.Errorf("secret of endpoint %s: %w", r.ID, err)
-	}
-
-	var lookup error
-
-	name := domain.ConvertedWebhookName(r.Name, func(n string) bool {
-		taken, err := q.ConvertedNameTaken(ctx, db.ConvertedNameTakenParams{Name: n, ID: r.ID})
-		lookup = cmp.Or(lookup, err)
-
-		return taken || err != nil
-	})
-
-	secretName := domain.ConvertedSecretName(name, func(n string) bool {
-		_, err := q.Secret(ctx, n)
-		if notFound(err) {
-			return false
-		}
-
-		lookup = cmp.Or(lookup, err)
-
-		return true
-	})
-
-	if lookup != nil {
-		return nil, lookup
-	}
-
-	sid, err := newID()
-	if err != nil {
-		return nil, err
-	}
-
-	// Open to no factory: a run never opens a webhook's secret (ADR 0040 decision 15).
-	sec := domain.NewSecret{Name: secretName, Description: "Signs the webhook " + name}.Secret()
-	sec.ID, sec.CreatedBy, sec.UpdatedBy = domain.SecretID(sid.String()), by, by
-
-	cols, err := secretColumns(sec)
-	if err != nil {
-		return nil, err
-	}
-
-	t := secretTable{s: in.s, key: in.key, kind: secretKind}
-	if _, err := t.insertIn(ctx, q, org, sid, sec, cols, hex.EncodeToString(value), nil); err != nil {
-		return nil, err
-	}
-
-	sender := string(domain.WebhookKind(r.Kind).Sender())
-	if err := q.ConvertWebhookEndpoint(ctx, db.ConvertWebhookEndpointParams{Name: name, Sender: &sender, SecretID: &sid, ID: r.ID}); err != nil {
-		return nil, err
-	}
-
-	if err := q.UpsertWebhookOpening(ctx, db.UpsertWebhookOpeningParams{WebhookID: r.ID, FactoryID: r.FactoryID}); err != nil {
-		return nil, err
-	}
-
-	return &domain.ConvertedEndpoint{
-		ID: domain.WebhookEndpointID(r.ID.String()), FactoryID: domain.FactoryID(r.FactoryID.String()), From: r.Name, Name: name, Secret: secretName,
-	}, nil
 }

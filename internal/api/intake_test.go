@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,13 +27,13 @@ const (
 	typeFix     = "fix"
 )
 
-// intakeItem creates an item of acme from source (and trigger, when set) at the instant given.
-func (h *harness) intakeItem(t *testing.T, source domain.ItemSource, trigger string, at time.Time) domain.Item {
+// intakeItem creates an item of acme from trigger (none when "") at the instant given.
+func (h *harness) intakeItem(t *testing.T, trigger string, at time.Time) domain.Item {
 	t.Helper()
 
 	it, err := h.store.CreateItem(inOrg(t), domain.NewItem{
-		FactoryID: acmeID, Type: typeFix, Title: "from " + string(source), Station: stInbox, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
+		FactoryID: acmeID, Type: typeFix, Title: "from " + cmp.Or(trigger, "a person"), Station: stInbox, State: domain.StateQueued,
+		Class: domain.ClassStandard, CreatedAt: at, Trigger: trigger,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -60,30 +61,20 @@ func (h *harness) fire(t *testing.T, trigger, dedupe string, item domain.ItemID,
 	}
 }
 
-// The sources count acme's 48 newest items by default, every source answered, over the days the
-// oldest and newest of them were created; the triggers are the definition's, in its order.
-func TestIntake_SourceTally(t *testing.T) {
+// items, from and to count acme's 48 newest items by default, over the days the oldest and newest
+// of them were created; the triggers are the definition's, in its order.
+func TestIntake_NewestItems(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
 	for range 2 { // older than the newest 48
-		h.intakeItem(t, domain.ItemFromAPI, "", oct(10, 0))
+		h.intakeItem(t, "", oct(10, 0))
 	}
 
 	start := oct(20, 0)
-	sources := []struct {
-		src domain.ItemSource
-		n   int
-	}{{domain.ItemFromPeople, 20}, {domain.ItemFromCLI, 10}, {domain.ItemFromAPI, 5}, {domain.ItemFromSchedule, 6}, {domain.ItemFromWebhook, 3}, {domain.ItemFromGitHub, 4}}
-
-	i := 0
-
-	for _, s := range sources {
-		for range s.n {
-			h.intakeItem(t, s.src, "", start.Add(time.Duration(i)*time.Hour))
-			i++
-		}
+	for i := range 48 {
+		h.intakeItem(t, "", start.Add(time.Duration(i)*time.Hour))
 	}
 
 	var in gen.Intake
@@ -91,16 +82,15 @@ func TestIntake_SourceTally(t *testing.T) {
 		t.Fatalf("intake = %d", code)
 	}
 
-	got := fmt.Sprintf("%d items %s to %s: %+v", in.Items, in.From, in.To, in.Sources)
-	if want := "48 items 2026-10-20 to 2026-10-21: {Api:5 Cli:10 Github:4 People:20 Schedule:6 Webhook:3}"; got != want {
+	if got, want := fmt.Sprintf("%d items %s to %s", in.Items, in.From, in.To), "48 items 2026-10-20 to 2026-10-21"; got != want {
 		t.Errorf("intake = %s, want %s", got, want)
 	}
 
 	checkIntakeTriggers(t, in.Triggers)
 
 	var five gen.Intake
-	if h.call(t, http.MethodGet, intakePath+"?items=5", "", &five); five.Items != 5 || five.Sources.Github != 4 || five.Sources.Webhook != 1 {
-		t.Errorf("intake of 5 items = %+v, want the newest 5: 4 from GitHub, 1 from a webhook", five)
+	if h.call(t, http.MethodGet, intakePath+"?items=5", "", &five); five.Items != 5 || five.From == nil || five.From.String() != "2026-10-21" {
+		t.Errorf("intake of 5 items = %+v, want the newest 5, from 2026-10-21", five)
 	}
 
 	for _, q := range []string{"?items=0", "?items=501"} {
@@ -138,15 +128,15 @@ func checkIntakeTriggers(t *testing.T, triggers []gen.IntakeTrigger) {
 	}
 }
 
-// A factory without items has no window, and zero for every source.
-func TestIntake_SourceTallyEmpty(t *testing.T) {
+// A factory without items has no window and counts none.
+func TestIntake_NewestItemsEmpty(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Items != 0 || in.From != nil || in.To != nil ||
-		in.Sources.People != 0 || len(in.Triggers) != 4 {
+		len(in.Triggers) != 4 {
 		t.Errorf("intake = %d %+v, want no items, no window and the 4 triggers", code, in)
 	}
 
@@ -157,34 +147,25 @@ func TestIntake_SourceTallyEmpty(t *testing.T) {
 	}
 }
 
-// Items whose creator recorded no source are not counted: the window's items are always the sum
-// of its sources, and a window of such items alone has no days.
-func TestIntake_SourceTallySkipsUnknownSources(t *testing.T) {
+// Items whose creator recorded no source count too: items reads no source.
+func TestIntake_NewestItemsCountUnknownSources(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
 	for i := range 3 {
-		h.intakeItem(t, "", "", oct(20, i))
+		h.intakeItem(t, "", oct(20, i))
 	}
 
-	var none gen.Intake
-	if code := h.call(t, http.MethodGet, intakePath, "", &none); code != http.StatusOK || none.Items != 0 || none.From != nil || none.To != nil {
-		t.Errorf("intake of items with no source = %d %+v, want no items and no window", code, none)
-	}
-
-	h.intakeItem(t, domain.ItemFromPeople, "", oct(21, 0))
-	h.intakeItem(t, domain.ItemFromCLI, "", oct(21, 1))
-	h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(21, 2))
+	h.intakeItem(t, flakyName, oct(21, 2))
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK {
 		t.Fatalf("intake = %d", code)
 	}
 
-	s := in.Sources
-	if sum := s.People + s.Cli + s.Api + s.Schedule + s.Webhook + s.Github; in.Items != 3 || sum != in.Items || in.From == nil || in.To == nil {
-		t.Errorf("intake = %d items %+v from %v to %v, want 3, the sum of the sources, over a window", in.Items, s, in.From, in.To)
+	if got, want := fmt.Sprintf("%d items %s to %s", in.Items, in.From, in.To), "4 items 2026-10-20 to 2026-10-21"; got != want {
+		t.Errorf("intake = %s, want %s", got, want)
 	}
 }
 
@@ -195,20 +176,20 @@ func TestIntake_TriggerStats(t *testing.T) {
 
 	h := newHarness(t) // now is Oct 23, 09:00 UTC
 
-	old := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(16, 8)) // before the week and the 7 days
+	old := h.intakeItem(t, flakyName, oct(16, 8)) // before the week and the 7 days
 	h.fire(t, flakyName, "TestOld", old.ID, "", oct(16, 8))
 
-	c := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(21, 10))
+	c := h.intakeItem(t, flakyName, oct(21, 10))
 	h.fire(t, flakyName, "TestOrgRLS", c.ID, "", oct(21, 10))
 	h.fire(t, flakyName, "TestLeaseExpiry", "", "only.failuresInARow: failed once", oct(22, 12))
 
-	a := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(23, 1))
+	a := h.intakeItem(t, flakyName, oct(23, 1))
 	h.fire(t, flakyName, "TestBoardStream", a.ID, "", oct(23, 1))
 
-	b := h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(23, 8))
+	b := h.intakeItem(t, flakyName, oct(23, 8))
 	h.fire(t, flakyName, "TestLeaseExpiry", b.ID, "", oct(23, 8))
 
-	nightly := h.intakeItem(t, domain.ItemFromSchedule, nightlyName, oct(23, 4))
+	nightly := h.intakeItem(t, nightlyName, oct(23, 4))
 	h.fire(t, nightlyName, "", nightly.ID, "", oct(23, 4))
 
 	h.mergedAndSpent(t, a, b, 1.5)
@@ -289,19 +270,27 @@ func TestIntake_TriggerProblems(t *testing.T) {
 		t.Errorf("problems without endpoints = %v, want %v", got, want)
 	}
 
-	endpoint := func(name string, kind domain.WebhookKind) domain.WebhookEndpointID {
+	endpoint := func(name string, sender domain.WebhookSender) domain.WebhookEndpointID {
 		t.Helper()
 
-		s, err := h.intake.CreateEndpoint(inOrg(t), domain.NewWebhookEndpoint{FactoryID: acmeID, Name: name, Kind: kind})
+		if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: domain.WebhookSecretName(name), Value: "test-secret"}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+
+		w, err := h.intake.CreateWebhook(inOrg(t), domain.NewWebhook{Name: name, Sender: sender, Secret: domain.WebhookSecretName(name)})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		return s.Endpoint.ID
+		if _, err := h.intake.PatchWebhook(inOrg(t), w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: acmeID}}}); err != nil {
+			t.Fatal(err)
+		}
+
+		return w.ID
 	}
 
-	gh := endpoint("github-app", domain.WebhookGitHub)
-	endpoint("ci-hooks", domain.WebhookGeneric)
+	gh := endpoint("github-app", domain.SenderGitHub)
+	endpoint("ci-hooks", domain.SenderStandard)
 
 	for _, at := range []time.Time{oct(10, 0), oct(20, 0), oct(23, 8)} { // the first is older than 7 days
 		if _, err := h.intake.RecordDelivery(inOrg(t), domain.NewWebhookDelivery{
@@ -509,7 +498,7 @@ func TestTryTrigger_Skipped(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
-	today := h.intakeItem(t, domain.ItemFromSchedule, nightlyName, h.clock.Now().Add(-time.Hour))
+	today := h.intakeItem(t, nightlyName, h.clock.Now().Add(-time.Hour))
 	f := h.scheduled(t, today.ID, h.clock.Now().Add(-time.Hour))
 
 	var got gen.TriggerTry
@@ -793,7 +782,7 @@ func TestIntake_OriginsByWindow(t *testing.T) {
 		{domain.OriginFollowUp, 40 * 24 * time.Hour},
 		{domain.OriginPlan, 100 * 24 * time.Hour},
 	} {
-		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, Source: domain.ItemFromPeople, CreatedAt: t0.Add(-n.age)})
+		h.filedAt(t, domain.NewItem{Title: string(n.origin), Origin: n.origin, CreatedAt: t0.Add(-n.age)})
 	}
 
 	for _, c := range []struct{ query, want string }{
@@ -810,8 +799,8 @@ func TestIntake_OriginsByWindow(t *testing.T) {
 			t.Errorf("intake%s = %s; want %s", c.query, got, c.want)
 		}
 
-		if in.Items != 5 || in.Sources.People != 5 {
-			t.Errorf("intake%s sources = %d %+v; want the 5 items as before", c.query, in.Items, in.Sources)
+		if in.Items != 5 {
+			t.Errorf("intake%s items = %d; want the 5 items as before", c.query, in.Items)
 		}
 	}
 }
@@ -830,8 +819,8 @@ func TestIntake_WindowRefused(t *testing.T) {
 }
 
 // The webhooks are the organization's open to acme, by name: receiving when enabled and an
-// enabled trigger names it, no_trigger when none does, closed when turned off. A factory endpoint
-// and a webhook not open to acme are left out.
+// enabled trigger names it, no_trigger when none does, closed when turned off. A webhook not open
+// to acme is left out.
 func TestIntake_OpenWebhooks(t *testing.T) {
 	t.Parallel()
 
@@ -861,10 +850,6 @@ func TestIntake_OpenWebhooks(t *testing.T) {
 	hook("ci-hooks", domain.SenderStandard, domain.WebhookPatch{Open: open}) // only the disabled deploy-failed names it
 	hook("pager", domain.SenderPagerDuty, domain.WebhookPatch{Open: open, Enabled: &off})
 	hook("elsewhere", domain.SenderGitHub, domain.WebhookPatch{Name: new("elsewhere")})
-
-	if _, err := h.intake.CreateEndpoint(inOrg(t), domain.NewWebhookEndpoint{FactoryID: acmeID, Name: "own", Kind: domain.WebhookGeneric}); err != nil {
-		t.Fatal(err)
-	}
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Webhooks == nil {

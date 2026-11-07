@@ -21,7 +21,7 @@ func TestSecrets_Conformance(t *testing.T) {
 		keys := porttest.NewMasterKeys()
 		secrets := porttest.NewOrgSecrets(keys.Key(), tn)
 		store := porttest.NewStore()
-		intake := porttest.NewIntake(keys.Key(), store)
+		intake := porttest.NewIntake(store)
 		intake.UseSecrets(secrets)
 
 		var orgs atomic.Int64

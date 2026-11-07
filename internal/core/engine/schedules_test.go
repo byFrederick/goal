@@ -37,8 +37,8 @@ func TestSchedules_FireOncePerInstantAcrossInstances(t *testing.T) {
 		t.Fatalf("Firing of the 09:00 instant = %v, %v; want it recorded", ok, err)
 	}
 
-	if it := h.item(t, f.ItemID); it.Title != `Sweep for "2026-10-23T09:00:00Z"` || it.Source != domain.ItemFromSchedule || f.Source != domain.TriggerSchedule {
-		t.Errorf("item %q from %s, firing from %s; want the schedule's", it.Title, it.Source, f.Source)
+	if it := h.item(t, f.ItemID); it.Title != `Sweep for "2026-10-23T09:00:00Z"` || f.Source != domain.TriggerSchedule {
+		t.Errorf("item %q, firing from %s; want the schedule's", it.Title, f.Source)
 	}
 
 	// The next instant fires once more; a tick with no instant in its window fires nothing.
@@ -96,17 +96,12 @@ func TestSchedules_SkippedWhileAnotherHoldsTheLock(t *testing.T) {
 func TestSchedules_PruneOldDeliveries(t *testing.T) {
 	t.Parallel()
 
-	h := intakeHarness(t)
+	h, w := deliveryHarness(t)
 	ctx := inOrg(t)
-
-	s, err := h.intake.CreateEndpoint(ctx, domain.NewWebhookEndpoint{FactoryID: factoryID, Name: "alerts", Kind: domain.WebhookGeneric})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for _, at := range []time.Time{t0.Add(-31 * 24 * time.Hour), t0.Add(-29 * 24 * time.Hour)} {
 		if _, err := h.intake.RecordDelivery(ctx, domain.NewWebhookDelivery{
-			EndpointID: s.Endpoint.ID, ReceivedAt: at, Outcome: domain.DeliveryAccepted,
+			EndpointID: w.ID, ReceivedAt: at, Outcome: domain.DeliveryAccepted,
 		}); err != nil {
 			t.Fatal(err)
 		}

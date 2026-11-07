@@ -5,13 +5,10 @@
 import { parse } from 'yaml';
 import type { Intake, IntakeTrigger } from '../src/api/types.ts';
 
-const none = { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 };
-
 const software: Intake = {
   items: 48,
   from: '2026-10-20',
   to: '2026-10-26',
-  sources: { github: 22, people: 11, cli: 0, api: 0, schedule: 7, webhook: 2 },
   window: '30d',
   origins: { person: 160, plan: 377, trigger: 4, follow_up: 31 },
   coming_up: [
@@ -190,5 +187,5 @@ function suggestionsOf(yamlText: string, triggers: readonly IntakeTrigger[]): In
 export function intakeOf(factory: string, yamlText: string): Intake {
   if (factory === 'software') return software;
   const triggers = triggersOf(yamlText);
-  return { items: 0, from: null, to: null, sources: none, suggestions: suggestionsOf(yamlText, triggers), triggers };
+  return { items: 0, from: null, to: null, suggestions: suggestionsOf(yamlText, triggers), triggers };
 }

@@ -73,8 +73,8 @@ func testPruneFirings(f *fixture) {
 	cutoff := t0.Add(-domain.FiringRetention)
 	old := cutoff.Add(-time.Hour)
 
-	open := f.item(domain.ItemFromGitHub, flaky, old)
-	done := f.item(domain.ItemFromGitHub, flaky, old)
+	open := f.item(flaky, old)
+	done := f.item(flaky, old)
 	f.close(done, domain.StateDone)
 
 	keptOpen, _ := f.fire(flaky, "old-open", "unit", open.ID, old)

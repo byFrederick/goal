@@ -511,7 +511,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	source, via := submittedFrom(ctx)
+	via := submittedVia(ctx)
 	p, _ := domain.PrincipalFrom(ctx)
 
 	var start *domain.StartRequest
@@ -527,7 +527,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 
 	it, err := s.engine.Submit(ctx, domain.FileRequest{
 		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
-		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
+		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority),
 		Start: start, Repositories: deref(b.Repositories),
 	})
 	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
@@ -577,24 +577,24 @@ func repositoriesOf(rows []domain.ItemRepository, l domain.Line) []gen.ItemRepos
 	return out
 }
 
-// submittedFrom is where an item the request submits comes from, for Intake, and how its person
-// filed it: an API key is the API; a user acting through a personal token or a session that is
-// not a browser one (goal login's) is the CLI; a browser session, and GOAL_AUTH=none's one
-// person, who has neither, are people on the web. "" when the request carries no principal.
-func submittedFrom(ctx context.Context) (domain.ItemSource, domain.Via) {
+// submittedVia is how the person of the request filed the item it submits: an API key is the
+// API; a user acting through a personal token or a session that is not a browser one (goal
+// login's) is the CLI; a browser session, and GOAL_AUTH=none's one person, who has neither, are
+// the web. "" when the request carries no principal.
+func submittedVia(ctx context.Context) domain.Via {
 	p, ok := domain.PrincipalFrom(ctx)
 
 	switch {
 	case !ok:
-		return "", ""
+		return ""
 	case p.Kind == domain.PrincipalService:
-		return domain.ItemFromAPI, domain.ViaAPI
+		return domain.ViaAPI
 	case p.Kind != domain.PrincipalUser:
-		return "", ""
+		return ""
 	case p.Token != nil, p.Session != nil && !p.Session.Browser:
-		return domain.ItemFromCLI, domain.ViaCLI
+		return domain.ViaCLI
 	default:
-		return domain.ItemFromPeople, domain.ViaWeb
+		return domain.ViaWeb
 	}
 }
 
