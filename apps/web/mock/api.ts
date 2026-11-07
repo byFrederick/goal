@@ -314,7 +314,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         if (sub.org === org) sub.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       }
     },
-    sources: (org, name) => knowledge.readers(org, name),
+    // No knowledge source reads a connection (ADR 0037).
+    sources: () => [],
     acme: acmeOrg,
   });
 
@@ -352,7 +353,6 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     actor: (req) => auth.actor(req),
     factories: (org) => state.factories.filter((f) => f.org_id === org),
     listedBy: (factory) => definitions.knowledgeSourceNames(factory),
-    connectionSync: (org, name) => connections.syncOf(org, name),
     audit: (org, by, action, target, data) => auditAs(org, by, action, target, data),
     broadcast: (org, event, data) => {
       for (const sub of subscribers) {

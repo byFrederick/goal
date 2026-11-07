@@ -60,7 +60,7 @@ export async function deleteKnowledgeSource(org: string, source: string): Promis
   await unwrap(goal.DELETE(orgPath('/knowledge/sources/{source}'), { params: { path: { org, source } } }));
 }
 
-/** Makes it due now; 409 knowledge-source-live for a live source. */
+/** Makes it due now. */
 export async function syncKnowledgeSource(org: string, source: string): Promise<void> {
   await unwrap(goal.POST(orgPath('/knowledge/sources/{source}/sync'), { params: { path: { org, source } } }));
 }

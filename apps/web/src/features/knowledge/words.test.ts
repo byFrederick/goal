@@ -23,7 +23,6 @@ const source = (patch: Partial<KnowledgeSource>): KnowledgeSource => ({
   name: 'goal-docs',
   title: 'goal docs',
   kind: 'synced',
-  connection: 'github',
   config: { repository: 'https://github.com/acme/goal' },
   sync_every_seconds: 3600,
   status: 'idle',
@@ -42,10 +41,6 @@ describe('sourceStatus', () => {
     expect(sourceStatus(source({}))).toEqual({ tone: 'ok', text: 'Synced' });
     expect(sourceStatus(source({ kind: 'upload' }))).toEqual({ tone: 'ok', text: 'Synced' });
     expect(sourceStatus(source({ status: 'syncing' }))).toEqual({ tone: 'muted', text: 'Syncing' });
-    expect(sourceStatus(source({ kind: 'live', next_sync_at: null }))).toEqual({
-      tone: 'muted',
-      text: 'Live, not indexed',
-    });
     expect(sourceStatus(source({ last_synced_at: null })).text).toBe('Waiting for its first sync');
     expect(sourceStatus(source({ kind: 'upload', last_synced_at: null })).text).toBe('No files yet');
   });
@@ -72,9 +67,8 @@ describe('syncTimes', () => {
     expect(syncTimes(source({ last_synced_at: null }), now).last).toBe('Not yet');
   });
 
-  test('uploads sync when files are added; a live source is searched at question time', () => {
+  test('uploads sync when files are added', () => {
     expect(syncTimes(source({ kind: 'upload' }), now)).toEqual({ last: '1 h ago', next: 'When files are added' });
-    expect(syncTimes(source({ kind: 'live' }), now)).toEqual({ last: 'Searched at question time' });
     expect(syncTimes(source({ status: 'syncing' }), now)).toEqual({ last: 'Running' });
   });
 });

@@ -53,7 +53,7 @@ export function SourcePage() {
   const manage = useOrgHolds('knowledge:manage');
   const sync = useSyncSource(org.id);
   const status = sourceStatus(source);
-  const syncs = source.kind !== 'upload' && source.kind !== 'live';
+  const syncs = source.kind !== 'upload';
   const at = source.last_synced_at && source.status !== 'syncing' ? formatClock(source.last_synced_at) : undefined;
 
   return (
@@ -90,20 +90,8 @@ export function SourcePage() {
       <div className="grid items-start gap-4 @[960px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="flex min-w-0 flex-col gap-4">
           {source.kind === 'upload' && manage ? <UploadCard source={source} /> : null}
-          {source.kind === 'live' ? (
-            <section className={card}>
-              <h2 className="m-0 text-heading">Files</h2>
-              <p className="m-0 text-body leading-normal text-muted">
-                A live source stores no files. Factories that list it get the tools of{' '}
-                <span translate="no">{source.connection}</span>, which search at question time.
-              </p>
-            </section>
-          ) : (
-            <>
-              <FilesCard source={source} />
-              <LatestSyncCard source={source} />
-            </>
-          )}
+          <FilesCard source={source} />
+          <LatestSyncCard source={source} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           {/* Edits survive a sync's end and other changes; untouched fields follow the saved source. */}
@@ -121,8 +109,6 @@ function createdText(s: KnowledgeSource): string {
   switch (s.kind) {
     case 'upload':
       return `${s.title} is added. Upload files to give agents something to read.`;
-    case 'live':
-      return `${s.title} is added. Factories that list it get the tools of ${s.connection}.`;
     default:
       return `${s.title} is added. Its first sync starts now; this page updates when it ends.`;
   }
@@ -410,7 +396,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
   const client = useQueryClient();
   const id = useId();
   // The reader is the one the config names, else what its keys say.
-  const reads = s.kind !== 'upload' && s.kind !== 'live';
+  const reads = s.kind !== 'upload';
   const reader =
     s.kind === 'repository'
       ? 'gitdocs'
@@ -503,7 +489,7 @@ function SettingsCard({ source: s, manage }: { source: KnowledgeSource; manage: 
             help={
               s.secret
                 ? 'The next sync reads with the new secret. Open to all factories.'
-                : `Reads with ${s.connection ?? 'an earlier setup'} until you pick a secret. Open to all factories.`
+                : 'It has no secret yet and reads with nothing. Open to all factories.'
             }
           />
           <ConfigFields
