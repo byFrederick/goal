@@ -10,12 +10,15 @@ export function LineNow({
   board,
   constraint,
   doneThisWeek,
+  merges = false,
 }: {
   board: Board;
   /** The constraint to show: the constraint report's, else the board's. */
   constraint: string | null;
   /** The items finished this week, from the 7-day overview; null while it loads. */
   doneThisWeek: number | null;
+  /** Whether the line has code, so its finished items are merged; false says "done". */
+  merges?: boolean;
 }) {
   const { line } = board;
   // The drum is the station the buffer feeds; it only means something under drum-buffer-rope.
@@ -29,7 +32,7 @@ export function LineNow({
       title="The line, now"
       legend
       className="rounded-card border border-line bg-card p-4 md:px-5"
-      stations={lineStations(board, constraint, doneThisWeek)}
+      stations={lineStations(board, constraint, doneThisWeek, merges)}
       andon={andon}
       footer={
         <>
