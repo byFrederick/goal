@@ -26,10 +26,7 @@ type KeySeed interface {
 func RunAPIKeys(t *testing.T, setup func(t *testing.T) (ports.Identity, ports.Access, KeySeed)) {
 	t.Helper()
 
-	cases := []struct {
-		name string
-		run  func(t *testing.T, id ports.Identity, a ports.Access, s KeySeed)
-	}{
+	runAccessCases(t, setup, []accessCase[KeySeed]{
 		{"ACreatedKeyResolvesWithItsGrants", testKeyGrants},
 		{"KeysAreListedAsCreated", testKeyListed},
 		{"ARevokedKeyStopsOnTheNextLookup", testKeyRevoked},
@@ -38,16 +35,7 @@ func RunAPIKeys(t *testing.T, setup func(t *testing.T) (ports.Identity, ports.Ac
 		{"NamesAreUniqueAmongTheOrgsLiveKeys", testKeyNames},
 		{"KeysStayInTheirOrg", testKeyOrgs},
 		{"LastUseIsRecordedAtMostOnceAMinute", testKeyLastUsed},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-
-			id, a, s := setup(t)
-			c.run(t, id, a, s)
-		})
-	}
+	})
 }
 
 // creator is who creates and revokes the cases' keys.

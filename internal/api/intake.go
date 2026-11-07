@@ -192,6 +192,8 @@ func (s *server) comingUp(ctx context.Context, out *gen.GetIntake200JSONResponse
 		list = append(list, e)
 	}
 
+	s.nameActors(ctx, filers(list, func(c *gen.IntakeComingUp) *gen.Actor { return c.CreatedBy })...)
+
 	out.ComingUp, out.ComingUpTotal = &list, &total
 
 	return nil

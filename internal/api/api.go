@@ -947,13 +947,14 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 	}
 
 	out.Start, out.CreatedBy, out.Untrusted = itemStartOf(it), s.createdBy(it), new(it.Untrusted)
+	s.nameActors(ctx, out.CreatedBy)
 	out.Branch = optional(it.Branch())
 
 	return out
 }
 
 // createdBy is who filed it as the API shows them; nil for items filed before ADR 0040 and for the
-// engine's filings.
+// engine's filings. A person is named by the response's nameActors, once for all its items.
 func (s *server) createdBy(it domain.Item) *gen.Actor {
 	a, err := domain.ActorFromRef(it.CreatedBy)
 	if err != nil || a.Kind == domain.ActorSystem {
