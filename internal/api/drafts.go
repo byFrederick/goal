@@ -32,7 +32,7 @@ func (s *server) GetDraft(ctx context.Context, req gen.GetDraftRequestObject) (g
 	}
 
 	return gen.GetDraft200JSONResponse{
-		Body:    s.draftOut(v),
+		Body:    s.draftOut(ctx, v),
 		Headers: gen.GetDraft200ResponseHeaders{ETag: quote(strconv.FormatInt(v.Draft.Revision, 10))},
 	}, nil
 }
@@ -59,10 +59,10 @@ func (s *server) OpenDraft(ctx context.Context, req gen.OpenDraftRequestObject) 
 	}
 
 	if created {
-		return gen.OpenDraft201JSONResponse(s.draftOut(v)), nil
+		return gen.OpenDraft201JSONResponse(s.draftOut(ctx, v)), nil
 	}
 
-	return gen.OpenDraft200JSONResponse(s.draftOut(v)), nil
+	return gen.OpenDraft200JSONResponse(s.draftOut(ctx, v)), nil
 }
 
 func (s *server) DiscardDraft(ctx context.Context, req gen.DiscardDraftRequestObject) (gen.DiscardDraftResponseObject, error) {
@@ -317,7 +317,10 @@ func (s *server) PublishDraft(ctx context.Context, req gen.PublishDraftRequestOb
 		return nil, fmt.Errorf("read published version %d: %w", v.Number, err)
 	}
 
-	return gen.PublishDraft201JSONResponse(s.versionOut(published.VersionInfo)), nil
+	out := s.versionOut(published.VersionInfo)
+	s.nameActors(ctx, out.PublishedBy)
+
+	return gen.PublishDraft201JSONResponse(out), nil
 }
 
 // ifMatch reads a write's If-Match: one strong entity tag, quoted. Without one the write is

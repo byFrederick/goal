@@ -266,7 +266,8 @@ func touchHeadline(st domain.TouchStats) gen.TouchHeadline {
 	}
 }
 
-// itemTouchesOf is an item's touches as getItem shows them.
+// itemTouchesOf is an item's touches as getItem shows them, its people not yet named: getItem names
+// them with the item's created_by (touchActors).
 func (s *server) itemTouchesOf(touches []domain.Touch) *gen.ItemTouches {
 	out := &gen.ItemTouches{Count: len(touches), List: make([]gen.Touch, 0, len(touches))}
 
@@ -283,14 +284,20 @@ func (s *server) itemTouchesOf(touches []domain.Touch) *gen.ItemTouches {
 	return out
 }
 
-// touchOf is one touch as the API answers it.
+// touchActors are the actors of touches, for nameActors.
+func touchActors(touches []gen.Touch) []*gen.Actor {
+	return filers(touches, func(t *gen.Touch) *gen.Actor { return &t.Actor })
+}
+
+// touchOf is one touch as the API answers it. A person is named by the response's nameActors, once
+// for all its touches; an agent or the engine keeps the name its event gives.
 func (s *server) touchOf(t domain.Touch) gen.Touch {
 	a, err := domain.ActorFromRef(t.Actor)
 	if err != nil {
 		a = domain.Actor{Kind: domain.ActorUser, ID: t.Actor}
 	}
 
-	if a != domain.LocalUser {
+	if a.Kind != domain.ActorUser {
 		a.Name = t.ActorName
 	}
 

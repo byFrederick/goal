@@ -61,7 +61,10 @@ func (s *server) CreateDraftRequest(ctx context.Context, req gen.CreateDraftRequ
 		return nil, fmt.Errorf("create draft request on %s: %w", rec.ID, err)
 	}
 
-	return gen.CreateDraftRequest201JSONResponse(s.draftRequestOut(r)), nil
+	out := s.draftRequestOut(r)
+	s.nameActors(ctx, &out.Requester)
+
+	return gen.CreateDraftRequest201JSONResponse(out), nil
 }
 
 // draftAgent checks that agent is an agent of the factory's definition as a request starts from
@@ -122,6 +125,8 @@ func (s *server) ListDraftRequests(ctx context.Context, req gen.ListDraftRequest
 		out.Requests = append(out.Requests, s.draftRequestOut(r))
 	}
 
+	s.nameActors(ctx, filers(out.Requests, func(r *gen.DraftRequest) *gen.Actor { return &r.Requester })...)
+
 	return out, nil
 }
 
@@ -140,10 +145,14 @@ func (s *server) GetDraftRequest(ctx context.Context, req gen.GetDraftRequestReq
 		return nil, fmt.Errorf("get draft request %s: %w", req.DraftRequest, err)
 	}
 
-	return gen.GetDraftRequest200JSONResponse(s.draftRequestOut(r)), nil
+	out := s.draftRequestOut(r)
+	s.nameActors(ctx, &out.Requester)
+
+	return gen.GetDraftRequest200JSONResponse(out), nil
 }
 
-// draftRequestOut is r as the routes answer it.
+// draftRequestOut is r as the routes answer it; its requester is named by the response's
+// nameActors.
 func (s *server) draftRequestOut(r domain.DraftRequest) gen.DraftRequest {
 	return gen.DraftRequest{
 		Id: string(r.ID), Text: r.Text, Agent: r.Agent, Status: gen.DraftRequestStatus(r.Status), Summary: r.Summary,

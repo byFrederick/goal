@@ -221,6 +221,18 @@ function renderStep(queryClient = new QueryClient({ defaultOptions: { queries: {
 }
 
 describe('step 8, watch your first item', () => {
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      undefined,
+      '&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter',
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/people');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('submits the starter item once, then shows its card with the timeline and the cost', async () => {
     renderStep();
 

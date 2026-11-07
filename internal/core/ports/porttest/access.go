@@ -113,6 +113,30 @@ func (i *Identity) Members(ctx context.Context) ([]domain.Member, error) {
 	return out, nil
 }
 
+// MemberNames implements ports.Access.
+func (i *Identity) MemberNames(ctx context.Context, users []domain.UserID) (map[domain.UserID]string, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	o, err := i.org(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[domain.UserID]string, len(users))
+
+	for _, user := range users {
+		u := i.users[user]
+		if _, member := o.members[user]; !member || u == nil {
+			continue
+		}
+
+		out[user] = domain.Principal{Kind: domain.PrincipalUser, User: u.ID, Name: u.Name, Email: u.Email}.Actor().Name
+	}
+
+	return out, nil
+}
+
 // lastActive is when user's newest session began (Better Auth's updatedAt of a session the fake
 // never extends); zero without one.
 func (i *Identity) lastActive(user domain.UserID) time.Time {

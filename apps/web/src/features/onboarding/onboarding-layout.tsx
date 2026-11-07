@@ -2,7 +2,7 @@
 // Goal mark and "Save and finish later" on top, the eight steps as a stepper, the step's form on the
 // left with Back and the primary action at its bottom, and on the right the dark panel "Your factory,
 // as you build it". The panel's slots are filled by the steps; until then they show dashed placeholders.
-import { Link } from '@tanstack/react-router';
+import { Link, useSearch } from '@tanstack/react-router';
 import { type ReactNode, useEffect, useRef } from 'react';
 import type { OrgSummary } from '../../api/types';
 import { useSignOut } from '../../shared/account';
@@ -136,6 +136,8 @@ function Stepper({ step }: { step: OnboardingStepKey }) {
 }
 
 function Panel({ preview }: { preview: PreviewSlots | undefined }) {
+  // A factory in the URL is already chosen: while it loads, the line is a bare placeholder, not a prompt to choose.
+  const chosen = Boolean(useSearch({ strict: false }).factory);
   return (
     <aside
       aria-label="Preview of your factory"
@@ -156,7 +158,9 @@ function Panel({ preview }: { preview: PreviewSlots | undefined }) {
       </div>
       {preview?.line ?? (
         <PreviewPlaceholder className="min-h-42 items-center justify-center text-center">
-          <span className="text-secondary text-ink-soft">The line appears when you pick a template</span>
+          {chosen ? null : (
+            <span className="text-secondary text-ink-soft">The line appears when you pick a template</span>
+          )}
         </PreviewPlaceholder>
       )}
       <div className="grid grid-cols-3 gap-3">

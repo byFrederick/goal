@@ -69,3 +69,15 @@ export function onboardingSearch(search: Record<string, unknown>): OnboardingSea
     template: template && template.length <= maxTemplate ? template : undefined,
   };
 }
+
+/** The search every Back and Continue link from the Line step onward carries, so no choice is lost on the way. */
+export function carriedSearch(search: OnboardingSearch, overrides: Partial<OnboardingSearch> = {}): OnboardingSearch {
+  return {
+    url: search.url,
+    secret: search.secret,
+    template: search.template,
+    factory: search.factory,
+    access: search.access,
+    ...overrides,
+  };
+}

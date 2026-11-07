@@ -202,11 +202,11 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await expect(page.getByRole('heading', { name: 'Starter triggers' })).toBeVisible();
   // The template's GitHub triggers need an endpoint the new factory does not have: they show Connect, not a switch.
   await expect(page.getByRole('link', { name: 'Connect GitHub' }).first()).toBeVisible();
-  await expect(page.getByRole('switch', { name: 'issues-labeled-factory' })).toBeDisabled();
+  await expect(page.getByRole('switch', { name: 'Issues labeled factory' })).toBeDisabled();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await page.getByRole('switch', { name: 'weekly-dependency-audit' }).click();
+  await page.getByRole('switch', { name: 'Weekly dependency audit' }).click();
   await page.getByRole('button', { name: 'Turn on 1 trigger' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/people\?.*factory=/);
 

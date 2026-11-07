@@ -22,7 +22,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { stationLabel } from '../factory-editor/line/labels';
 import { touchSentence } from '../items/touch-words';
-import { type OnboardingSearch, repoOf } from './code-search';
+import { carriedSearch, type OnboardingSearch, repoOf } from './code-search';
 import { ModelKeyGate } from './model-key-gate';
 import { OnboardingLayout } from './onboarding-layout';
 import { stepPanel } from './step-panel';
@@ -64,15 +64,15 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
   return (
     <Button asChild size="lg" variant="secondary">
       {factory ? (
-        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'people' }} search={{ factory }}>
+        <Link
+          to="/o/$org/get-started/$step"
+          params={{ org: org.slug, step: 'people' }}
+          search={carriedSearch(search, { factory })}
+        >
           Back
         </Link>
       ) : (
-        <Link
-          to="/o/$org/get-started/$step"
-          params={{ org: org.slug, step: 'factory' }}
-          search={{ url: search.url, secret: search.secret }}
-        >
+        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'factory' }} search={carriedSearch(search)}>
           Back
         </Link>
       )}
