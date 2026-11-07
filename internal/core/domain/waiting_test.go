@@ -3,6 +3,7 @@ package domain
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 // The paths and the integration branch the cases of TestWaitingFor share.
@@ -28,14 +29,7 @@ func TestWaitingFor(t *testing.T) {
 		Paths: []string{"web/src/**", itemsQuery, "internal/api/**", queriesGlob},
 	}
 
-	tests := []struct {
-		name   string
-		item   Item
-		needs  []OpenNeed
-		target string
-		want   Waiting
-		ok     bool
-	}{
+	tests := append([]waitingCase{
 		{name: "not waiting", item: Item{State: StateInProgress}, needs: []OpenNeed{planned}},
 		{name: "no open needs", item: queued},
 		{
@@ -81,16 +75,96 @@ func TestWaitingFor(t *testing.T) {
 			},
 			ok: true,
 		},
-	}
+	}, ciWaitingCases(queued, planned, overSQL, turn)...)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := WaitingFor(tt.item, tt.needs, tt.target)
+			got, ok := WaitingFor(tt.item, tt.needs, tt.target, tt.ci)
 			if ok != tt.ok || !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("WaitingFor = %+v, %v; want %+v, %v", got, ok, tt.want, tt.ok)
 			}
 		})
 	}
+}
+
+// waitingCase is a case of TestWaitingFor.
+type waitingCase struct {
+	name   string
+	item   Item
+	needs  []OpenNeed
+	target string
+	ci     []CIWaitRecord
+	want   Waiting
+	ok     bool
+}
+
+// ciWaitingCases are the cases of TestWaitingFor with CI waits: kind ci, the needs that win over
+// it, and which ended wait is the failure.
+func ciWaitingCases(queued Item, planned, overSQL, turn OpenNeed) []waitingCase {
+	open := ciWait("w2", "v1", 2, "")
+	openOther := ciWait("w3", "v1", 2, "")
+	openOther.Repo = "gitlab.com/acme/lib"
+	failed := ciWait("w1", "v1", 1, CIFailed)
+	timedOut := ciWait("w1", "v1", 1, CITimedOut)
+	passed := ciWait("w1", "v1", 1, CIPassed)
+	otherVisit := ciWait("w0", "v0", 1, CIFailed)
+
+	return []waitingCase{
+		{
+			name: "ci only", item: queued, ci: []CIWaitRecord{open, openOther},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open, openOther}}, ok: true,
+		},
+		{
+			name: "ci when ready", item: Item{State: StateReady}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
+		},
+		{
+			name: "after wins over ci", item: queued, needs: []OpenNeed{planned}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingAfter, Items: []OpenNeed{planned}}, ok: true,
+		},
+		{
+			name: "files wins over ci", item: queued, needs: []OpenNeed{overSQL}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingFiles, Items: []OpenNeed{overSQL}, Files: []string{itemsQuery, queriesGlob}}, ok: true,
+		},
+		{
+			name: "turn wins over ci", item: queued, needs: []OpenNeed{turn}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingTurn, Items: []OpenNeed{turn}}, ok: true,
+		},
+		{name: "an ended wait alone", item: queued, ci: []CIWaitRecord{failed}},
+		{name: "ci while in progress", item: Item{State: StateInProgress}, ci: []CIWaitRecord{open}},
+		{
+			name: "a failed wait of the visit is the failure", item: queued, ci: []CIWaitRecord{failed, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}, CIFailure: &failed}, ok: true,
+		},
+		{
+			name: "a timed out wait of the visit is the failure", item: queued, ci: []CIWaitRecord{timedOut, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}, CIFailure: &timedOut}, ok: true,
+		},
+		{
+			name: "a passed wait is no failure", item: queued, ci: []CIWaitRecord{passed, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
+		},
+		{
+			name: "a failure of another visit is not reported", item: queued, ci: []CIWaitRecord{otherVisit, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
+		},
+	}
+}
+
+// ciWait is a before wait on appKey in round of visit, started round minutes after 09:00, open
+// when outcome is empty and otherwise ended with it.
+func ciWait(id CIWaitID, visit string, round int, outcome CIOutcome) CIWaitRecord {
+	at := time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
+	w := CIWaitRecord{ID: id, NewCIWait: NewCIWait{
+		Item: "i", Station: stationBuild, Visit: visit, Repo: appKey, SHA: "abc123",
+		Phase: CIPhaseBefore, Round: round, StartedAt: at.Add(time.Duration(round) * time.Minute),
+	}}
+
+	if outcome != "" {
+		w.EndedAt, w.Outcome = w.StartedAt.Add(30*time.Second), outcome
+	}
+
+	return w
 }

@@ -6677,16 +6677,17 @@ components:
     ItemWaiting:
       type: object
       description: >-
-        Why a queued or ready item is not claimed yet, derived from its open needs (those neither
-        done nor cancelled) on every read and never stored. Planned and linked needs win over
-        overlap ones, and overlap ones over turn ones
+        Why a queued or ready item is not claimed yet, derived on every read and never stored from
+        its open needs (those neither done nor cancelled) and its open CI waits at its station.
+        Precedence: planned and linked needs (after) win, then overlap ones (files), then turn
+        ones (turn), then an open CI wait (ci)
       required: [kind, items, files, needs]
       properties:
         kind:
           type: string
-          enum: [after, files, turn]
-          x-enum-varnames: [WaitingAfter, WaitingFiles, WaitingTurn]
-          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)"
+          enum: [after, files, turn, ci]
+          x-enum-varnames: [WaitingAfter, WaitingFiles, WaitingTurn, WaitingCI]
+          description: "after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn); ci: for CI on its commits to finish, at a station with waitFor: ci (items, files and needs are then empty)"
         items:
           type: array
           description: "Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first"
@@ -6702,7 +6703,63 @@ components:
         target:
           type: string
           nullable: true
-          description: "For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files"
+          description: "For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after, files and ci"
+        ci:
+          allOf: [{ $ref: "#/components/schemas/ItemWaitingCI" }]
+          nullable: true
+          description: For kind ci, the commits CI runs on and their checks as goald last read them; null or absent for the other kinds
+    ItemWaitingCI:
+      type: object
+      description: The CI an item waits for, one commit per open CI wait, by start
+      required: [commits, checks, finished, total]
+      properties:
+        commits:
+          type: array
+          items: { $ref: "#/components/schemas/CICommit" }
+        checks:
+          type: array
+          description: Every commit's checks, by commit and then in the code host's order; empty until goald's first poll reads any
+          items: { $ref: "#/components/schemas/CICheck" }
+        finished: { type: integer, description: How many of the checks have finished, as in 9 of 14 }
+        total: { type: integer, description: How many checks there are }
+        failure:
+          allOf: [{ $ref: "#/components/schemas/CIFailure" }]
+          nullable: true
+          description: The latest CI wait of the same visit to the station that ended failed or timed_out, which sent the item back; null or absent when none did
+    CICommit:
+      type: object
+      description: A commit CI runs on
+      required: [repo, sha]
+      properties:
+        repo: { type: string, description: "The repository's key, as in github.com/acme/app" }
+        sha: { type: string, description: The commit's sha }
+        url: { type: string, nullable: true, description: "The pull request the commit is on; null or absent when the wait has none" }
+    CICheck:
+      type: object
+      description: One check CI runs on a commit, as goald last read it from the code host
+      required: [repo, name, state, failed_jobs]
+      properties:
+        repo: { type: string, description: The key of the repository whose commit the check runs on }
+        name: { type: string, description: The check's name as the code host shows it }
+        state: { type: string, enum: [pending, running, finished], description: How far the check has got }
+        result: { type: string, enum: [passed, failed, neutral], nullable: true, description: What a finished check concluded; null or absent until it finishes }
+        url: { type: string, nullable: true, description: The check on the code host; null or absent when the host gives none }
+        failed_jobs:
+          type: array
+          description: At most 5 of the check's failed jobs, where the host names them
+          items: { type: string }
+    CIFailure:
+      type: object
+      description: The CI wait whose failure sent an item back
+      required: [repo, sha, checks]
+      properties:
+        repo: { type: string, description: "The repository's key, as in github.com/acme/app" }
+        sha: { type: string, description: The commit whose CI failed }
+        url: { type: string, nullable: true, description: "The pull request the commit is on; null or absent when the wait has none" }
+        checks:
+          type: array
+          description: The checks that failed, as last read; empty when it timed out with none failed
+          items: { $ref: "#/components/schemas/CICheck" }
     ItemWaitingNeed:
       type: object
       description: One open need that holds a waiting item
