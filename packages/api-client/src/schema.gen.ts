@@ -6894,9 +6894,16 @@ export interface components {
              * @description The most memory the run's box used at once; null when cpu_seconds would be
              */
             peak_memory_bytes: number | null;
+            /** @description How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded */
+            peak_memory_source?: components["schemas"]["MemorySource"] | null;
             /** @description The box size the run ran in; null for a run from before box sizes were recorded */
             box_size: components["schemas"]["SandboxSize"] | null;
         };
+        /**
+         * @description How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole machine's used memory, read when the box's cgroup has no memory figures
+         * @enum {string}
+         */
+        MemorySource: "cgroup" | "machine";
         /**
          * @description How much CPU and memory a run's box gets (a factory's runtime.size)
          * @enum {string}

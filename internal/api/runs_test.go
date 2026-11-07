@@ -113,8 +113,8 @@ func TestAPI_RunsOfAnItem(t *testing.T) {
 	}
 }
 
-// A run carries its box's CPU seconds, peak memory and box size on getRun, listItemRuns and
-// listRuns; a run without them, or from before box sizes, carries nulls.
+// A run carries its box's CPU seconds, peak memory, peak memory source and box size on getRun,
+// listItemRuns and listRuns; a run without them, or from before box sizes, carries nulls.
 func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 	t.Parallel()
 
@@ -131,7 +131,7 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak}
+	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak, PeakMemorySource: domain.MemoryCgroup}
 	if err := h.store.FinishRun(inOrg(t), counted, res, t0.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,10 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 	bare := h.orgRun(t, it, agBackend, t0.Add(3*time.Minute), domain.RunResult{Status: domain.RunFailed, Error: "no counters"})
 
 	large := gen.SandboxSize(domain.SandboxLarge)
-	wantCounted := map[string]any{"cpu_seconds": cpu, "peak_memory_bytes": float64(peak), "box_size": string(large)}
+	wantCounted := map[string]any{
+		"cpu_seconds": cpu, "peak_memory_bytes": float64(peak),
+		"peak_memory_source": "cgroup", "box_size": string(large),
+	}
 	wantBare := map[string]any{"cpu_seconds": nil, "peak_memory_bytes": nil, "box_size": nil}
 
 	usage := func(what string, raw json.RawMessage, want map[string]any) {
@@ -154,6 +157,11 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 			if v, ok := got[k]; !ok || v != w {
 				t.Errorf("%s: %s = %v (present %t); want %v", what, k, v, ok, w)
 			}
+		}
+
+		// The source is optional: a run without one leaves it out or null.
+		if _, named := want["peak_memory_source"]; !named && got["peak_memory_source"] != nil {
+			t.Errorf("%s: peak_memory_source = %v; want none", what, got["peak_memory_source"])
 		}
 	}
 
