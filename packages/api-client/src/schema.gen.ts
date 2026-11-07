@@ -5078,21 +5078,76 @@ export interface components {
             /** @description The index of the picked choice in Item.question.choices */
             choice?: number;
         };
-        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones */
+        /** @description Why a queued or ready item is not claimed yet, derived on every read and never stored from its open needs (those neither done nor cancelled) and its open CI waits at its station. Precedence: planned and linked needs (after) win, then overlap ones (files), then turn ones (turn), then an open CI wait (ci) */
         ItemWaiting: {
             /**
-             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
+             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn); ci: for CI on its commits to finish, at a station with waitFor: ci (items, files and needs are then empty)
              * @enum {string}
              */
-            kind: "after" | "files" | "turn";
+            kind: "after" | "files" | "turn" | "ci";
             /** @description Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first */
             items: string[];
             /** @description For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after */
             files: string[];
             /** @description The open needs of that kind, oldest edge first, the same ones as items */
             needs: components["schemas"]["ItemWaitingNeed"][];
-            /** @description For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files */
+            /** @description For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after, files and ci */
             target?: string | null;
+            /** @description For kind ci, the commits CI runs on and their checks as goald last read them; null or absent for the other kinds */
+            ci?: components["schemas"]["ItemWaitingCI"] | null;
+        };
+        /** @description The CI an item waits for, one commit per open CI wait, by start */
+        ItemWaitingCI: {
+            commits: components["schemas"]["CICommit"][];
+            /** @description Every commit's checks, by commit and then in the code host's order; empty until goald's first poll reads any */
+            checks: components["schemas"]["CICheck"][];
+            /** @description How many of the checks have finished */
+            finished: number;
+            /** @description How many checks there are */
+            total: number;
+            /** @description The latest CI wait of the same visit to the station that ended failed or timed_out, which sent the item back; null or absent when none did */
+            failure?: components["schemas"]["CIFailure"] | null;
+        };
+        /** @description A commit CI runs on */
+        CICommit: {
+            /** @description The repository's key, as in github.com/acme/app */
+            repo: string;
+            /** @description The commit's sha */
+            sha: string;
+            /** @description The pull request the commit is on; null or absent when the wait has none */
+            url?: string | null;
+        };
+        /** @description One check CI runs on a commit, as goald last read it from the code host */
+        CICheck: {
+            /** @description The key of the repository whose commit the check runs on */
+            repo: string;
+            /** @description The check's name as the code host shows it */
+            name: string;
+            /**
+             * @description How far the check has got
+             * @enum {string}
+             */
+            state: "pending" | "running" | "finished";
+            /**
+             * @description What a finished check concluded; null or absent until it finishes
+             * @enum {string|null}
+             */
+            result?: "passed" | "failed" | "neutral" | null;
+            /** @description The check on the code host; null or absent when the host gives none */
+            url?: string | null;
+            /** @description At most 5 of the check's failed jobs, where the host names them */
+            failed_jobs: string[];
+        };
+        /** @description The CI wait whose failure sent an item back */
+        CIFailure: {
+            /** @description The repository's key, as in github.com/acme/app */
+            repo: string;
+            /** @description The commit whose CI failed */
+            sha: string;
+            /** @description The pull request the commit is on; null or absent when the wait has none */
+            url?: string | null;
+            /** @description The checks that failed, as last read; empty when it timed out with none failed */
+            checks: components["schemas"]["CICheck"][];
         };
         /** @description One open need that holds a waiting item */
         ItemWaitingNeed: {

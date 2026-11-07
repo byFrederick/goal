@@ -3,6 +3,7 @@ package domain
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 // The paths and the integration branch the cases of TestWaitingFor share.
@@ -28,11 +29,32 @@ func TestWaitingFor(t *testing.T) {
 		Paths: []string{"web/src/**", itemsQuery, "internal/api/**", queriesGlob},
 	}
 
+	at := time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
+	wait := func(id CIWaitID, visit string, round int, outcome CIOutcome) CIWaitRecord {
+		w := CIWaitRecord{ID: id, NewCIWait: NewCIWait{
+			Item: "i", Station: "review", Visit: visit, Repo: "github.com/acme/app", SHA: "abc123",
+			Phase: CIPhaseBefore, Round: round, StartedAt: at.Add(time.Duration(round) * time.Minute),
+		}}
+		if outcome != "" {
+			w.EndedAt, w.Outcome = w.StartedAt.Add(30*time.Second), outcome
+		}
+
+		return w
+	}
+	open := wait("w2", "v1", 2, "")
+	openOther := wait("w3", "v1", 2, "")
+	openOther.Repo = "gitlab.com/acme/lib"
+	failed := wait("w1", "v1", 1, CIFailed)
+	timedOut := wait("w1", "v1", 1, CITimedOut)
+	passed := wait("w1", "v1", 1, CIPassed)
+	otherVisit := wait("w0", "v0", 1, CIFailed)
+
 	tests := []struct {
 		name   string
 		item   Item
 		needs  []OpenNeed
 		target string
+		ci     []CIWaitRecord
 		want   Waiting
 		ok     bool
 	}{
@@ -81,13 +103,51 @@ func TestWaitingFor(t *testing.T) {
 			},
 			ok: true,
 		},
+		{
+			name: "ci only", item: queued, ci: []CIWaitRecord{open, openOther},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open, openOther}}, ok: true,
+		},
+		{
+			name: "ci when ready", item: Item{State: StateReady}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
+		},
+		{
+			name: "after wins over ci", item: queued, needs: []OpenNeed{planned}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingAfter, Items: []OpenNeed{planned}}, ok: true,
+		},
+		{
+			name: "files wins over ci", item: queued, needs: []OpenNeed{overSQL}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingFiles, Items: []OpenNeed{overSQL}, Files: []string{itemsQuery, queriesGlob}}, ok: true,
+		},
+		{
+			name: "turn wins over ci", item: queued, needs: []OpenNeed{turn}, ci: []CIWaitRecord{open},
+			want: Waiting{Kind: WaitingTurn, Items: []OpenNeed{turn}}, ok: true,
+		},
+		{name: "an ended wait alone", item: queued, ci: []CIWaitRecord{failed}},
+		{name: "ci while in progress", item: Item{State: StateInProgress}, ci: []CIWaitRecord{open}},
+		{
+			name: "a failed wait of the visit is the failure", item: queued, ci: []CIWaitRecord{failed, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}, CIFailure: &failed}, ok: true,
+		},
+		{
+			name: "a timed out wait of the visit is the failure", item: queued, ci: []CIWaitRecord{timedOut, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}, CIFailure: &timedOut}, ok: true,
+		},
+		{
+			name: "a passed wait is no failure", item: queued, ci: []CIWaitRecord{passed, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
+		},
+		{
+			name: "a failure of another visit is not reported", item: queued, ci: []CIWaitRecord{otherVisit, open},
+			want: Waiting{Kind: WaitingCI, CI: []CIWaitRecord{open}}, ok: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := WaitingFor(tt.item, tt.needs, tt.target)
+			got, ok := WaitingFor(tt.item, tt.needs, tt.target, tt.ci)
 			if ok != tt.ok || !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("WaitingFor = %+v, %v; want %+v, %v", got, ok, tt.want, tt.ok)
 			}

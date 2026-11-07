@@ -110,6 +110,7 @@ spec:
         buffer: 2
         output: change
         checks: [schema, { kind: evidence-links, min: 2 }, task check]
+        waitFor: ci
       - { id: merge, kind: human, action: merge }
       - { id: done, kind: done }
     flow:
