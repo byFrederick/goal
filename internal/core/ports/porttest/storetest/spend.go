@@ -293,3 +293,69 @@ func showUsage(rows []domain.RunUsage) string {
 
 	return b.String()
 }
+
+// Each factory's spend in [since, until): every run started in it counts, a run without an item
+// (Jonah's) too, one started exactly at since counts, a running one counts with 0 so far, one a
+// second before since or at until does not, while FlowMetrics' spend leaves out the run without
+// an item. One row per factory, by factory id; another
+// organization's runs count for nothing, and an empty window finds nothing.
+func testSpendByFactory(f *fixture) {
+	t := f.t
+	at := func(h, mi int) time.Time { return time.Date(2026, 11, 7, h, mi, 0, 0, time.UTC) }
+	since, until := at(0, 0), at(12, 0)
+
+	f1, f2 := f.factory, f.newFactory(t)
+	a := f.create(t, domain.NewItem{CreatedAt: at(0, 0).Add(-time.Hour)})
+	b := f.create(t, domain.NewItem{FactoryID: f2, CreatedAt: at(0, 0).Add(-time.Hour)})
+
+	f.spendRun(t, a, agWorker, model, since.Add(-time.Second), 4) // before the window
+	f.spendRun(t, a, agWorker, model, since, 1.5)                 // at the window's start
+	f.spendRun(t, a, agReviewer, modelB, at(9, 0), 0.25)
+	f.spendRun(t, a, agWorker, model, until, 100) // at the window's end
+	f.spendRun(t, b, agWorker, model, at(10, 0), 2)
+	f.spendRun(t, b, agWorker, model, at(11, 0), -1) // still running
+
+	// A Jonah run of f1 without an item.
+	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{FactoryID: f1, Agent: agJonah, Model: model, StartedAt: at(8, 0), Kind: domain.RunKindJonah})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.Store.FinishRun(f.ctx(t), id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: 0.125}, at(8, 1)); err != nil {
+		t.Fatal(err)
+	}
+
+	other := &fixture{Harness: f.Harness, t: t, org: f.NewOrg(t)}
+	other.factory = other.NewFactory(t, other.org)
+	other.spendRun(t, other.create(t, domain.NewItem{CreatedAt: since}), agWorker, model, at(9, 0), 1000)
+
+	got, err := f.Spend.SpendByFactory(f.ctx(t), since, until)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := slices.SortedFunc(slices.Values([]domain.FactorySpend{{FactoryID: f1, USD: 1.875}, {FactoryID: f2, USD: 2}}),
+		func(x, y domain.FactorySpend) int { return cmp.Compare(x.FactoryID, y.FactoryID) })
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("SpendByFactory = %+v, want %+v", got, want)
+	}
+
+	// FlowMetrics' spend, per item, counts the item runs alone.
+	if m, err := f.Flow.FlowMetrics(f.ctx(t), ports.FlowQuery{FactoryID: f1, Since: since, Until: until}, ""); err != nil || m.SpendUSD != 1.75 {
+		t.Errorf("FlowMetrics of f1 spent %v, %v; want 1.75, without the Jonah run", m.SpendUSD, err)
+	}
+
+	if got, err := f.Spend.SpendByFactory(f.ctx(t), until.Add(time.Hour), until.Add(2*time.Hour)); err != nil || len(got) != 0 {
+		t.Errorf("SpendByFactory of an empty window = %+v, %v; want none", got, err)
+	}
+
+	if theirs, err := f.Spend.SpendByFactory(other.ctx(t), since, until); err != nil ||
+		!reflect.DeepEqual(theirs, []domain.FactorySpend{{FactoryID: other.factory, USD: 1000}}) {
+		t.Errorf("the other organization's SpendByFactory = %+v, %v; want only its own run", theirs, err)
+	}
+
+	if _, err := f.Spend.SpendByFactory(t.Context(), since, until); !errors.Is(err, domain.ErrNoOrg) {
+		t.Errorf("SpendByFactory without an organization = %v, want ErrNoOrg", err)
+	}
+}

@@ -130,6 +130,7 @@ func suiteCases() []suiteCase {
 		{"FinishLostRuns_OnlyTheCurrentOrg", testFinishLostRunsOneOrg},
 		{"SpendSince_OnlyTheCurrentOrg", testSpendSinceOneOrg},
 		{"OrgSpend", testOrgSpend},
+		{"SpendByFactory", testSpendByFactory},
 		{"OrgSpend_UsageByAgentAndStationAndBoxSize", testOrgSpendUsage},
 		{"EachAgentModelSpend_ByFactoryAgentAndModelUpToMax", testEachAgentModelSpend},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},

@@ -999,12 +999,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
   // The policy answers: the install's models and box sizes, the acme facts and the revision (policy.ts).
   const policy = createPolicy({ clock, factoriesOf: (org) => factoriesOf(org) });
 
+  /** What a factory's runs without an item cost on the UTC days from `from` to `to` (day starts, in ms). */
+  const looseSpend = (f: Factory, from: number, to: number): number =>
+    state.looseRuns
+      .filter((r) => r.factory === f.name && Date.parse(r.started_at) >= from && Date.parse(r.started_at) < to + dayMs)
+      .reduce((n, r) => n + r.cost_usd, 0);
+
   // The spend figures: the factories the organization has, with the andon pull that stops one (spend.ts).
   const spend = createSpend({
     clock,
     factoriesOf,
     weeklyOf: (f) => state.weeklyBudget[f.name],
-    spendOf: (f, from, to) => metricsOf(flowInput(f), { from, to }, false).spend_usd,
+    spendOf: (f, from, to) => cents(metricsOf(flowInput(f), { from, to }, false).spend_usd + looseSpend(f, from, to)),
     reasonOf: (_org, f) => {
       const last = state.andon[f.name]?.at(-1);
       return last && last.cleared_at === null ? last.reason : null;
@@ -1151,7 +1157,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         items_by_type: types.map((type) => ({ type, count: waiting.filter((it) => it.type === type).length })),
         tool_approvals: [],
       },
-      spend_usd: metrics.spend_usd,
+      spend_usd: cents(metrics.spend_usd + looseSpend(f, today - (days - 1) * dayMs, today)),
       budget_usd: weekly === null ? null : cents((weekly * days) / 7),
       touches: {
         current: touchHeadlineOf(finishedIn(finishedOf(f), today - (days - 1) * dayMs, clock())),
