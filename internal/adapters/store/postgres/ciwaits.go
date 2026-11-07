@@ -214,6 +214,30 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 	return out, nil
 }
 
+// CIWaits implements ports.Store.
+func (s *Store) CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error) {
+	if !isUUID(string(item)) {
+		return nil, nil // an id that is not a UUID names no item, which has none
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.CIWaitsAtRow, error) {
+		return q.CIWaitsAt(ctx, db.CIWaitsAtParams{ItemID: uuid.MustParse(string(item)), Station: station})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ci waits of %s at %s: %w", item, station, err)
+	}
+
+	out := make([]domain.CIWaitRecord, 0, len(rows))
+
+	for _, r := range rows {
+		w := ciWaitFrom(r.CiWait)
+		w.Poll = ciPollFrom(r.CiPoll)
+		out = append(out, w)
+	}
+
+	return out, nil
+}
+
 // OpenCIWaitsOnPoll implements ports.Store.
 func (s *Store) OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error) {
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.CiWait, error) {

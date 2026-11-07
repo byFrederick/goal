@@ -50,7 +50,13 @@ A station's `merges` field sets this:
 
 ## Wait for CI
 
-A station's `waitFor` makes goald wait for CI on the commits an item's runs pushed. A run at the station starts only once CI on the item's current commits has finished. After a run pushes, the item moves on only once CI on what it pushed has passed. A failure sends the item back to the same station. The setting names no host, CI system, workflow or check: goald reads every check the code host reports for the commit. This takes effect once the engine parts of the CI wait land; until then, the definition accepts the setting and nothing acts on it.
+A station's `waitFor` makes goald wait for CI on the commits an item's runs pushed: a run at the station starts only once CI on the item's current commits has finished. goald polls the code host itself, so the agent never polls for CI and no run box waits. The setting names no host, CI system, workflow or check: goald reads every check the code host reports for the commit. After a run pushes, the item moves on as it does at a station without the setting.
+
+The commits are the latest each repository was pushed to. For each repository the item's runs pushed a change to, goald takes the head of the latest push. When one of the item's pull requests is in that repository, it takes the pull request's current head instead, since someone else may have pushed to it. An item no run pushed to has nothing to wait for, so a new item starts its run at once.
+
+When the item comes up for a claim and CI has not finished on one of its commits, goald starts a wait on that commit and puts the item back in the station's queue without starting a run. The item is not claimed again until every wait has ended. A wait ends when every check finished, when no check appeared within `grace`, or when `max` passed. The run then starts, and its brief opens with a `## CI` section: for each repository, the commit, how CI ended, and each check's name and result with its link and failed jobs. A failed check does not stop the run; the agent reads it in that section.
+
+When the token cannot read the repository's CI, the item blocks for a person. The reason names the repository, the commit, where the token comes from (the `runtime.repositories` entry, the connection, or `runtime.repository.token`) and the permission it needs, such as read access to Checks and Commit statuses on GitHub or `read_api` on GitLab. Give the token that permission, then retry the item: goald waits for CI again. Hidden CI never counts as passed.
 
 The short form uses the defaults:
 
@@ -66,8 +72,8 @@ waitFor: { ci: { grace: 5m, max: 60m, rounds: 3 } }
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `grace` | `5m` | How long after the run ended a first check may take to appear. A commit with no check by then gets no CI. |
-| `max` | `60m` | The longest goald waits on one commit. CI not finished by then counts as failed. |
+| `grace` | `5m` | How long after a wait starts a first check may take to appear. A commit with no check by then has no CI, and the wait ends. |
+| `max` | `60m` | The longest goald waits on one commit. A wait before a run ends then, and the `## CI` section says CI timed out. |
 | `rounds` | `3` | How many CI rounds one visit to the station gets before the item blocks for a person. |
 
 The decision is ADR 0044 (`docs/adr/0044-goald-waits-for-ci.md` in the repository).

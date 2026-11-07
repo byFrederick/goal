@@ -43,6 +43,74 @@ func (q *Queries) CIWaitItem(ctx context.Context, id uuid.UUID) (uuid.UUID, erro
 	return item_id, err
 }
 
+const cIWaitsAt = `-- name: CIWaitsAt :many
+SELECT w.id, w.org_id, w.item_id, w.station, w.visit, w.host, w.repo, w.sha, w.pr_url, w.phase, w.round, w.held, w.started_at, w.ended_at, w.outcome, p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until
+FROM ci_waits w
+JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
+WHERE w.item_id = $1 AND w.station = $2
+ORDER BY w.started_at, w.visit, w.repo, w.id
+`
+
+type CIWaitsAtParams struct {
+	ItemID  uuid.UUID
+	Station string
+}
+
+type CIWaitsAtRow struct {
+	CiWait CiWait
+	CiPoll CiPoll
+}
+
+// The item's waits at one station, open and ended, by start, each with its poll's latest state:
+// what the gate before a run reads.
+func (q *Queries) CIWaitsAt(ctx context.Context, arg CIWaitsAtParams) ([]CIWaitsAtRow, error) {
+	rows, err := q.db.Query(ctx, cIWaitsAt, arg.ItemID, arg.Station)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CIWaitsAtRow
+	for rows.Next() {
+		var i CIWaitsAtRow
+		if err := rows.Scan(
+			&i.CiWait.ID,
+			&i.CiWait.OrgID,
+			&i.CiWait.ItemID,
+			&i.CiWait.Station,
+			&i.CiWait.Visit,
+			&i.CiWait.Host,
+			&i.CiWait.Repo,
+			&i.CiWait.Sha,
+			&i.CiWait.PrUrl,
+			&i.CiWait.Phase,
+			&i.CiWait.Round,
+			&i.CiWait.Held,
+			&i.CiWait.StartedAt,
+			&i.CiWait.EndedAt,
+			&i.CiWait.Outcome,
+			&i.CiPoll.OrgID,
+			&i.CiPoll.Host,
+			&i.CiPoll.Repo,
+			&i.CiPoll.Sha,
+			&i.CiPoll.NextPollAt,
+			&i.CiPoll.IntervalSeconds,
+			&i.CiPoll.Etag,
+			&i.CiPoll.Checks,
+			&i.CiPoll.FirstCheckSeenAt,
+			&i.CiPoll.LastError,
+			&i.CiPoll.LeaseOwner,
+			&i.CiPoll.LeaseUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const endCIWaits = `-- name: EndCIWaits :execrows
 UPDATE ci_waits SET ended_at = $1, outcome = $2
 WHERE id = ANY($3::uuid[]) AND ended_at IS NULL

@@ -495,7 +495,9 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 		}
 	}
 
-	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), func(it *domain.Item) bool { return s.held(it, c.Now) })
+	w := slices.DeleteFunc(s.waiting(org, c.FactoryID, c.Station.ID), func(it *domain.Item) bool {
+		return s.held(it, c.Now) || s.ci.heldByCI(org, it)
+	})
 	if len(w) == 0 {
 		return domain.Item{}, domain.Lease{}, fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 	}

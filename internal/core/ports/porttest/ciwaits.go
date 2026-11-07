@@ -221,6 +221,43 @@ func (s *Store) OpenCIWaits(ctx context.Context, item domain.ItemID) ([]domain.C
 	return out, nil
 }
 
+// CIWaits implements ports.Store.
+func (s *Store) CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []domain.CIWaitRecord
+
+	for _, r := range s.ci.waits {
+		if r.org == org && r.wait.Item == item && r.wait.Station == station {
+			w := r.wait
+			w.Held = slices.Clone(w.Held)
+			w.Poll = *s.ci.polls[ciPollID{org: org, key: w.PollKey()}]
+			w.Poll.Checks = slices.Clone(w.Poll.Checks)
+			out = append(out, w)
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b domain.CIWaitRecord) int {
+		return cmp.Or(a.StartedAt.Compare(b.StartedAt), cmp.Compare(a.Visit, b.Visit), cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.ID, b.ID))
+	})
+
+	return out, nil
+}
+
+// heldByCI reports whether it has an open CI wait at its station, whatever its phase, which the
+// claim skips (ADR 0044 decisions 2 and 3). Callers hold s.mu.
+func (c *ciRows) heldByCI(org domain.OrgID, it *domain.Item) bool {
+	return slices.ContainsFunc(c.waits, func(r ciWaitRecord) bool {
+		return r.org == org && r.wait.Open() && r.wait.Item == it.ID && r.wait.Station == it.Station
+	})
+}
+
 // OpenCIWaitsOnPoll implements ports.Store.
 func (s *Store) OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error) {
 	org, err := orgOf(ctx)
