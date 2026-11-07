@@ -26,7 +26,9 @@ for (const width of [375, 768, 1440]) {
       // One budget row: Software, which has no weekly budget on Home either.
       const budgets = page.getByRole('heading', { level: 2, name: 'Budgets' }).locator('xpath=ancestor::section[1]');
       await expect(budgets.getByText('Software', { exact: true })).toBeVisible();
-      await expect(budgets.getByText('No weekly budget')).toBeVisible();
+      await expect(
+        budgets.getByRole('listitem').filter({ hasText: 'Software' }).getByText('No weekly budget'),
+      ).toBeVisible();
       await expect(budgets.getByText(/midnight/i)).toHaveCount(0);
 
       // Export CSV is built; the router's Set up is not built yet: disabled, never a live link or button.
@@ -39,18 +41,20 @@ for (const width of [375, 768, 1440]) {
 
     test('a budget row agrees with Home and shows its own factory spend', async ({ page }) => {
       const num = (text: string | null, re: RegExp) => Number(text?.match(re)?.[1]?.replace(/,/g, ''));
-
-      // Home: SRE's spend today and over the last 7 days, and its day figure (weekly ÷ 7).
-      await page.goto('/o/acme');
-      const home = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'SRE' }) });
-      await expect(home.getByText('of $57.14')).toBeVisible();
-      const homeToday = num(
-        await home
+      const homeToday = async (name: string) => {
+        const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name }) });
+        const text = await card
           .getByText(/^\$[\d,.]+$/)
           .first()
-          .textContent(),
-        /\$([\d,.]+)/,
-      );
+          .textContent();
+        return num(text, /\$([\d,.]+)/);
+      };
+
+      // Home: Software's spend today, and SRE's spend over the last 7 days with its day figure (weekly ÷ 7).
+      await page.goto('/o/acme');
+      const sreCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'SRE' }) });
+      await expect(sreCard.getByText('of $57.14')).toBeVisible();
+      const softwareToday = await homeToday('Software');
       const weekRow = page
         .locator('#spend-week')
         .locator('xpath=ancestor::section[1]')
@@ -58,19 +62,17 @@ for (const width of [375, 768, 1440]) {
         .filter({ hasText: 'SRE' });
       await expect(weekRow.getByText(/of \$400/)).toBeVisible();
       const homeWeek = num(await weekRow.textContent(), /\$([\d,.]+) of/);
+      expect(homeWeek).toBeGreaterThan(0);
 
       await page.goto('/o/acme/spend');
       const budgets = page.getByRole('heading', { level: 2, name: 'Budgets' }).locator('xpath=ancestor::section[1]');
       const row = (name: string) => budgets.getByRole('listitem').filter({ hasText: name });
       await expect(row('SRE').getByText('about $57 a day, $400 a week')).toBeVisible();
-      const sre = await row('SRE').textContent();
-      expect(num(sre, /Today \$([\d,.]+)/)).toBe(homeToday);
-      expect(num(sre, /Last 7 days \$([\d,.]+)/)).toBe(homeWeek);
+      expect(num(await row('SRE').textContent(), /Last 7 days \$([\d,.]+)/)).toBe(homeWeek);
 
-      // Each row has its own 7-day figure, not the organization's total.
-      expect(homeWeek).toBeGreaterThan(0);
-      const software = await row('Software').textContent();
-      expect(num(software, /Last 7 days \$([\d,.]+)/) || 0).not.toBe(homeWeek);
+      // Software's row shows Software's own spend today, as Home does, not the organization's.
+      await expect(row('Software').getByText(/Today \$/)).toBeVisible();
+      expect(num(await row('Software').textContent(), /Today \$([\d,.]+)/)).toBe(softwareToday);
     });
 
     test('the Today label stays inside its box', async ({ page }) => {
