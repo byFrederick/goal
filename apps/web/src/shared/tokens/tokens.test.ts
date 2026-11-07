@@ -99,3 +99,9 @@ describe('the New token form', () => {
     expect(source).not.toMatch(/useSearch|useLocation|useParams|useRouterState|window\.location|URLSearchParams/);
   });
 });
+
+describe('connection:read label', () => {
+  it('is called See standing rules', () => {
+    expect(scope('connection:read').label).toBe('See standing rules');
+  });
+});
