@@ -11,6 +11,7 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
+import { openDraft, saveDraftSection } from '../../api/definitions';
 import { createSecret, getSecret, patchSecret, replaceSecretValue } from '../../api/secrets';
 import type { Factory, OrgSummary, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
@@ -37,6 +38,10 @@ const unkeyed = 'apiVersion: goal/v1\nspec:\n  runtime: {}\n';
 
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
+  getVersionModel: vi.fn(async () => ({ model: api.model, ranges: {} }) as never),
+  getVersion: vi.fn(async () => ({ files: [{ path: 'factory.yaml', sha256: 's1', size: 10 }] }) as never),
+  getVersionFile: vi.fn(async () => ({ text: api.yaml, sha256: 's1' }) as never),
+  openDraft: vi.fn(async () => ({ revision: 1 }) as never),
   getFactory: vi.fn(async () => api.factory as Factory),
   validateDraft: vi.fn(
     async () => ({ ok: true, revision: 1, counts: {}, checks: [], problems: api.problems }) as never,
@@ -177,6 +182,16 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+/** A published factory with no draft: version 7 runs. */
+function setPublished() {
+  api.factory = {
+    id: factoryId,
+    name: 'software',
+    draft: null,
+    current: { id: 'version-7', number: 7 },
+  } as unknown as Factory;
+}
 
 /** Step 4 at /o/acme/get-started/line with the URL's `search`; the other steps are stubs the links reach. */
 function renderStep(url: string) {
@@ -474,5 +489,39 @@ describe('step 3 hands the factory on', () => {
   it('is reached from step 4 when the factory exists, so Back keeps it', async () => {
     renderStep(`/o/acme/get-started/factory?factory=${factoryId}`);
     expect(await screen.findByRole('link', { name: 'Continue' })).toBeTruthy();
+  });
+});
+
+describe('step 4 on a published factory with no draft', () => {
+  beforeEach(() => setPublished());
+
+  it('shows the running version’s stations, with no message about choosing a template', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    expect(await screen.findByRole('region', { name: 'Spec' })).toBeTruthy();
+    expect(screen.queryByText(/Choose a template/)).toBeNull();
+    expect(screen.queryByText(/has no draft/)).toBeNull();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('opens a draft from the version on the first change, then saves it', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const spec = await screen.findByRole('region', { name: 'Spec' });
+    fireEvent.change(within(spec).getByRole('combobox', { name: 'Agent of Spec' }), { target: { value: 'reviewer' } });
+    await waitFor(() => expect(api.saves.at(-1)?.section).toBe('line'), { timeout: 3000 });
+    expect(openDraft).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(openDraft).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(saveDraftSection).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('lets Continue go to Budget when nothing changed', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByRole('region', { name: 'Spec' });
+    await waitFor(
+      () => expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+      { timeout: 3000 },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Step budget')).toBeTruthy();
   });
 });
