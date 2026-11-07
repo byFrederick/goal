@@ -82,7 +82,7 @@ type Run struct {
 	// run records (00085).
 	Input RunInput
 	// BoxSize is the sandbox size goald opened the run's box with; empty for runs from before
-	// 00133 and for callers that named none.
+	// 00136 and for callers that named none.
 	BoxSize   SandboxSize
 	StartedAt time.Time
 	EndedAt   time.Time

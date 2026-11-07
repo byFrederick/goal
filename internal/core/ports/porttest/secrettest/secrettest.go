@@ -2,8 +2,7 @@
 // in-memory fake in porttest runs it, and the PostgreSQL adapter joins it with the store part, so
 // tests on the fake hold for the database's rules: names unique per organization, write-only values
 // sealed under the master key and bound to their row, the factory scope enforced by Resolve, an
-// audit entry for every change and use, organizations kept apart, and no deletion of a secret that
-// a connection refers to as {{name}}.
+// audit entry for every change and use, and organizations kept apart.
 package secrettest
 
 import (
@@ -23,9 +22,6 @@ type Harness struct {
 	// Secrets returns the secrets under test, sealing with key; every call shares one store, as
 	// goalds with different keys share one database.
 	Secrets func(key ports.MasterKey) ports.OrgSecrets
-	// Connections returns connections sealing with key in the secrets' store, so a connection can
-	// refer to a secret.
-	Connections func(key ports.MasterKey) ports.Connections
 	// Key returns master keys with ids, the first active; the same id is the same key in every
 	// call. With no ids it has none (ports.ErrNoMasterKey).
 	Key func(ids ...string) ports.MasterKey
@@ -63,7 +59,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Resolve_AnotherKeyDoesNotOpen", testOtherKey},
 		{"Resolve_CopiedCiphertextDoesNotOpen", testCopied},
 		{"Delete_GoneAndAudited", testDelete},
-		{"Delete_ReferencedIsAConflict", testDeleteReferenced},
 		{"OtherOrg_SeesNothing", testIsolation},
 		{"NoMasterKey_ValuesUnavailable", testNoKey},
 		{"Methods_NoOrgIsAnError", testNoOrg},
@@ -489,44 +484,6 @@ func testDelete(f *fixture) {
 
 	f.create(acme, sentryIn(replaced))
 	f.expect(f.resolve(acme, inA, sentry)[0].Value == replaced, "a deleted name could not be created again")
-}
-
-// refKind is an organization's connection kind with a secret field that may refer to a secret.
-func refKind() domain.ConnectionKind {
-	return domain.ConnectionKind{Name: "acme-api", Title: "Acme API", Spec: domain.KindSpec{
-		Fields: []domain.KindField{{Name: "key", Title: "Key", Secret: true, Required: true}},
-		Env:    map[string]string{"ACME_KEY": "{{key}}"},
-	}}
-}
-
-func testDeleteReferenced(f *fixture) {
-	acme := f.NewOrg(f.t)
-	ctx := f.in(acme)
-	f.create(acme, sentryIn(marker))
-
-	conns := f.Connections(f.Key("k1"))
-	if err := conns.PutKind(ctx, refKind(), admin); err != nil {
-		f.t.Fatalf("PutKind: %v", err)
-	}
-
-	n := domain.NewConnection{Name: "a-conn", Kind: refKind().Name, Secrets: map[string]string{"key": "{{" + sentry + "}}"}}
-	if _, err := conns.Create(ctx, n, admin); err != nil {
-		f.t.Fatalf("Create connection: %v", err)
-	}
-
-	err := f.s.Delete(ctx, sentry, admin)
-	f.refused("Delete of a referenced secret", err, ports.ErrConflict)
-	f.expect(err != nil && strings.Contains(err.Error(), "a-conn"), "the conflict does not name the connection: %v", err)
-
-	_, err = f.s.Get(ctx, sentry)
-	f.expect(err == nil, "a refused Delete deleted the secret: %v", err)
-	f.expect(len(f.audit(acme, domain.AuditSecretDeleted)) == 0, "a refused Delete was audited")
-
-	if err := conns.Delete(ctx, "a-conn", admin); err != nil {
-		f.t.Fatalf("Delete a-conn: %v", err)
-	}
-
-	f.expect(f.s.Delete(ctx, sentry, admin) == nil, "Delete of a secret no connection refers to was refused")
 }
 
 func testIsolation(f *fixture) {

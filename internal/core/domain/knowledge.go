@@ -381,11 +381,10 @@ type KnowledgeUpload struct {
 func KnowledgeKey(org OrgID, h BlobHash) string { return OrgPrefix(org) + "knowledge/" + string(h) }
 
 // SyncSpec is what a source reader reads: the source and, for a synced source, its secret
-// opened with its value, or the connection it still reads opened with its values.
+// opened with its value.
 type SyncSpec struct {
-	Source     KnowledgeSource
-	Secret     *ResolvedSecret
-	Connection *ResolvedConnection
+	Source KnowledgeSource
+	Secret *ResolvedSecret
 }
 
 // SourceItem is a document as its source lists it. MIME is its type when the listing knows it

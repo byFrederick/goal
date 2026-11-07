@@ -101,6 +101,11 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
 
+	if n.Connection != "" {
+		// No connection is left to read (00135), so every name is unknown.
+		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: connection %q: %w", n.Connection, ports.ErrNotFound)
+	}
+
 	id, err := newID()
 	if err != nil {
 		return domain.KnowledgeSource{}, err
@@ -114,18 +119,13 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 	var out domain.KnowledgeSource
 
 	err = k.s.inTx(ctx, func(q *db.Queries) error {
-		conn, err := sourceConnection(ctx, q, n)
-		if err != nil {
-			return err
-		}
-
 		secret, err := sourceSecret(ctx, q, n.Secret)
 		if err != nil {
 			return err
 		}
 
 		err = q.InsertKnowledgeSource(ctx, db.InsertKnowledgeSourceParams{
-			ID: id, Name: n.Name, Title: n.Title, Kind: string(n.Kind), ConnectionID: conn, SecretID: secret, Config: config, ReadWhen: n.ReadWhen,
+			ID: id, Name: n.Name, Title: n.Title, Kind: string(n.Kind), SecretID: secret, Config: config, ReadWhen: n.ReadWhen,
 			SyncEverySeconds: wholeSeconds(n.Every()), CreatedBy: by.Ref(),
 		})
 		if violates(err, sourceNameKey) {
@@ -154,7 +154,7 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 // createdAudit is the data of a new source's created entry: its name, kind and what it reads.
 func createdAudit(n domain.NewKnowledgeSource) map[string]any {
-	out := map[string]any{auditName: n.Name, "kind": string(n.Kind), "connection": n.Connection}
+	out := map[string]any{auditName: n.Name, "kind": string(n.Kind)}
 	if n.Secret != "" {
 		out["secret"] = n.Secret
 	}
@@ -178,28 +178,6 @@ func sourceSecret(ctx context.Context, q *db.Queries, name string) (*uuid.UUID, 
 	}
 
 	return &id, nil
-}
-
-// sourceConnection is the id of the connection a new source reads, nil for one that reads none.
-func sourceConnection(ctx context.Context, q *db.Queries, n domain.NewKnowledgeSource) (*uuid.UUID, error) {
-	if n.Connection == "" {
-		return nil, nil //nolint:nilnil // an upload source, or a synced one on a secret, reads no connection
-	}
-
-	c, err := q.KnowledgeConnection(ctx, n.Connection)
-	if notFound(err) {
-		return nil, fmt.Errorf("connection %q: %w", n.Connection, ports.ErrNotFound)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("connection %q: %w", n.Connection, err)
-	}
-
-	if n.Kind == domain.SourceSynced && c.Sync == "" {
-		return nil, fmt.Errorf("connection %q: %w", n.Connection, domain.ErrConnectionCannotSync)
-	}
-
-	return &c.ID, nil
 }
 
 // UpdateSource implements ports.Knowledge.
@@ -519,7 +497,7 @@ func sourceFrom(r db.KnowledgeSourcesRow) (domain.KnowledgeSource, error) {
 
 	return domain.KnowledgeSource{
 		ID: domain.KnowledgeSourceID(r.ID.String()), Name: r.Name, Title: r.Title, Kind: domain.KnowledgeSourceKind(r.Kind),
-		Connection: deref(r.Connection), Secret: deref(r.Secret), Config: config, ReadWhen: r.ReadWhen,
+		Secret: deref(r.Secret), Config: config, ReadWhen: r.ReadWhen,
 		CurrentSnapshot: snapshotID(r.CurrentSnapshotID), SyncEvery: time.Duration(r.SyncEverySeconds) * time.Second,
 		NextSyncAt: utc(r.NextSyncAt), LeaseUntil: utc(r.LeaseUntil), Status: domain.SyncStatus(r.Status),
 		LastSyncedAt: utc(r.LastSyncedAt), LastError: deref(r.LastError), SyncFailures: int(r.SyncFailures),

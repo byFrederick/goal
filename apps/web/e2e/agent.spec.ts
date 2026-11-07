@@ -9,7 +9,7 @@ test.beforeEach(async ({ request }) => {
 test('the agent page shows the last 7 days, its station and why work was sent back', async ({ page }) => {
   await page.goto('/o/acme/f/sre/agents/investigator');
   await expect(page.getByRole('heading', { level: 1, name: 'investigator' })).toBeVisible();
-  await expect(page).toHaveTitle(/^investigator · sre · Acme · Goal$/);
+  await expect(page).toHaveTitle(/^investigator · SRE · Acme · Goal$/);
   await expect(page.getByText('Investigate station')).toBeVisible();
 
   const measures = page.getByRole('region', { name: 'Last 7 days' });

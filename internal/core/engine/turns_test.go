@@ -20,7 +20,7 @@ func turnLine(merges domain.MergesPolicy) domain.Line {
 	land.Merges = merges
 
 	l := lineOf(agentStation(stBuild, agWorker, 4, 4), land)
-	l.Connections = []string{connGitHub, connGitLab}
+	l.Runtime.Repositories = mergeEntries()
 
 	return l
 }

@@ -226,7 +226,7 @@ type FinishRunRow struct {
 }
 
 // Only a running run finishes; finishing it again matches nothing. cpu_seconds and
-// peak_memory_bytes are NULL when the worker reported none (00133).
+// peak_memory_bytes are NULL when the worker reported none (00136).
 func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRunRow, error) {
 	row := q.db.QueryRow(ctx, finishRun,
 		arg.Status,
@@ -310,7 +310,7 @@ type InsertRunParams struct {
 // A run records the definition version it starts on; NULL only for runs from before versions.
 // kind is station for a line's run, jonah for a review's and try for a try of a past item; only
 // the last two may have no item (00079, 00102). box_size is the sandbox size the box opens with,
-// NULL when the caller named none (00133).
+// NULL when the caller named none (00136).
 func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 	_, err := q.db.Exec(ctx, insertRun,
 		arg.ID,

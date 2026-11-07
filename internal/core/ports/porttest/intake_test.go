@@ -22,7 +22,7 @@ func TestIntake_Conformance(t *testing.T) {
 		tn := porttest.NewTenancy(time.Now).WithStore(s)
 		keys := porttest.NewMasterKeys()
 		in := porttest.NewIntake(keys.Key(), s)
-		secrets := porttest.NewOrgSecrets(keys.Key(), tn, nil)
+		secrets := porttest.NewOrgSecrets(keys.Key(), tn)
 		in.UseSecrets(secrets)
 
 		var orgs, factories atomic.Int64

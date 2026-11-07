@@ -1,7 +1,8 @@
-// "Finish setting up" on the Floor (ready.jpg, ADR 0032 decision 2): the nine rows of the end of onboarding,
-// each done or to do from the data the factory has (setup-progress.ts). A to-do row links to the page
+// "Finish setting up" on the Floor (ready.jpg, ADR 0032 decision 2): the rows of the end of onboarding
+// (a Model key row too when the line is on secrets), each done or to do from the data the factory has (setup-progress.ts). A to-do row links to the page
 // that does it. Closing the card is remembered per browser (localStorage), and the card is gone once all
-// nine rows are done. Its states: loading (sr-only, no shape), error (with Retry) and ready.
+// rows are done. Its states: loading (sr-only, no shape; it also waits on the published version and factory.yaml),
+// error (with Retry) and ready.
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Check, X } from 'lucide-react';
@@ -23,7 +24,8 @@ import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { cn } from '../../ui/cn';
 import { CardFailed, CardLoading } from './card-states';
-import { doneCount, type SetupRow, type SetupRowId, setupRows, setupTotal } from './setup-progress';
+import { usePublishedKeyInput } from './model-key-needed';
+import { doneCount, type SetupRow, type SetupRowId, setupRows } from './setup-progress';
 
 /** The key the checklist's closed state is stored under, per factory and per browser. */
 export const setupHiddenKey = (factoryId: string) => `goal.setup-hidden.${factoryId}`;
@@ -61,7 +63,8 @@ export function SetupCard() {
   const model = useQuery({ ...versionModelQuery(org.id, factory.id, 'current'), select: (v) => modelOf(v.model) });
   const intake = useQuery(intakeQuery(org.id, factory.id));
   const finished = useQuery(itemsQuery(org.id, factory.id, { state: 'done', limit: 1 }));
-  const queries = [members, invitations, notifications, knowledge, model, intake, finished];
+  const published = usePublishedKeyInput(org.id, factory.id);
+  const queries = [members, invitations, notifications, knowledge, model, intake, finished, ...published.queries];
 
   if (hidden) return null;
   if (queries.some((query) => query.isError)) {
@@ -79,7 +82,7 @@ export function SetupCard() {
       </section>
     );
   }
-  if (queries.some((query) => query.isPending) || !model.data || !intake.data) {
+  if (queries.some((query) => query.isPending) || !published.ready || !model.data || !intake.data) {
     return (
       <div aria-busy="true">
         <CardLoading />
@@ -95,22 +98,24 @@ export function SetupCard() {
     model: model.data,
     triggers: intake.data.triggers,
     finishedItems: finished.data?.items.length ?? 0,
+    paths: published.paths,
+    factoryYaml: published.factoryYaml,
     factoryName: factory.name,
   });
   const done = doneCount(rows);
   // The checklist is for a new factory: it is gone once an item has merged (the Floor's rule), and at nine of nine.
-  if (done === setupTotal || (finished.data?.items.length ?? 0) > 0) return null;
+  if (done === rows.length || (finished.data?.items.length ?? 0) > 0) return null;
 
   return (
     <section aria-labelledby="setup-h" className={card}>
       <div className="mb-2 flex items-center gap-3">
-        <Ring done={done} />
+        <Ring done={done} total={rows.length} />
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 id="setup-h" className={heading}>
             Finish setting up
           </h2>
           <p className="m-0 text-meta text-muted">
-            {done} of {setupTotal} done
+            {done} of {rows.length} done
           </p>
         </div>
         <Button
@@ -136,8 +141,8 @@ export function SetupCard() {
   );
 }
 
-/** The progress ring: a track and the done share of it, labelled "N of 9 done". */
-function Ring({ done }: { done: number }) {
+/** The progress ring: a track and the done share of it, labelled "N of M done". */
+function Ring({ done, total }: { done: number; total: number }) {
   const radius = 16;
   const length = 2 * Math.PI * radius;
   return (
@@ -146,7 +151,7 @@ function Ring({ done }: { done: number }) {
       height="40"
       viewBox="0 0 40 40"
       role="img"
-      aria-label={`${done} of ${setupTotal} done`}
+      aria-label={`${done} of ${total} done`}
       className="shrink-0"
     >
       <circle cx="20" cy="20" r={radius} fill="none" strokeWidth={5} className="stroke-hover" />
@@ -158,7 +163,7 @@ function Ring({ done }: { done: number }) {
         strokeWidth={5}
         strokeLinecap="round"
         className="stroke-run"
-        strokeDasharray={`${(length * done) / setupTotal} ${length}`}
+        strokeDasharray={`${(length * done) / total} ${length}`}
         transform="rotate(-90 20 20)"
       />
     </svg>
@@ -210,6 +215,10 @@ function SetupAction({ id, factory }: { id: SetupRowId; factory: Factory }) {
           params={{ org, factory: ref, section: 'line' }}
           label="Open"
         />
+      );
+    case 'model-key':
+      return (
+        <ActionLink to="/o/$org/f/$factory/settings" params={{ org, factory: ref }} hash="runtime" label="Set up" />
       );
     case 'budget':
       return (

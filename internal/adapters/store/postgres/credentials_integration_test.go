@@ -33,7 +33,6 @@ func TestCredentials_Conformance(t *testing.T) {
 
 		return credentialtest.Harness{
 			Credentials: func(key ports.MasterKey) ports.Credentials { return NewCredentials(d.store, key) },
-			Connections: func(key ports.MasterKey) ports.Connections { return NewConnections(d.store, key) },
 			Key:         func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
 			Audit:       d.store,
 			NewOrg:      func(t *testing.T) domain.OrgID { t.Helper(); return newOrgID(t, d.store) },
@@ -173,10 +172,13 @@ func TestConnectionKeyIDs_IncludesCredentials(t *testing.T) {
 
 	d := newConnectionsDB(t)
 	org := newOrgID(t, d.store)
-	seedConnections(t, NewConnections(d.store, testKey(t, "k1")), org, "s3cret")
+	ctx := domain.WithOrg(t.Context(), org)
 
-	_, err := NewSecrets(d.store, testKey(t, "k9")).Create(domain.WithOrg(t.Context(), org),
-		domain.NewSecret{Name: seededCredential, Value: "sk-only-k9"}, domain.LocalUser)
+	if _, err := NewSecrets(d.store, testKey(t, "k1")).Create(ctx, domain.NewSecret{Name: "older-token", Value: "s3cret"}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := NewSecrets(d.store, testKey(t, "k9")).Create(ctx, domain.NewSecret{Name: seededCredential, Value: "sk-only-k9"}, domain.LocalUser)
 	if err != nil {
 		t.Fatal(err)
 	}

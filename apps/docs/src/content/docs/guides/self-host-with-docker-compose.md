@@ -61,6 +61,12 @@ docker compose down
 
 `docker compose down` keeps the data in the Compose volumes; it does not delete the database or the bucket.
 
+## Upgrade
+
+goald applies the database's new migrations when it starts. Before you upgrade past migration 00135, which drops connections, the database must have run a release that converts connections to secrets ([ADR 0037](https://github.com/byFrederick/goal/blob/main/docs/adr/0037-secrets-and-environment-files.md)), and goald must have started on it once. That release converts each factory, standing rule and synced knowledge source from connections to secrets.
+
+On a database that was not converted, migration 00135 refuses to run and changes nothing. goald does not start, and its error says `run a release that converts connections (ADR 0037) first`. Start that release once, then upgrade again.
+
 ## If it does not start
 
 - A refusal that names `GOAL_AUTH=none` means the sign-in settings are missing. Set the variables in step 1, or use `GOAL_AUTH=none`.

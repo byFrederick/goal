@@ -2,7 +2,7 @@
 -- A run records the definition version it starts on; NULL only for runs from before versions.
 -- kind is station for a line's run, jonah for a review's and try for a try of a past item; only
 -- the last two may have no item (00079, 00102). box_size is the sandbox size the box opens with,
--- NULL when the caller named none (00133).
+-- NULL when the caller named none (00136).
 INSERT INTO agent_runs (id, factory_id, definition_version_id, item_id, station, agent, model, status, started_at, kind,
                         box_size)
 VALUES (sqlc.arg(id), sqlc.arg(factory_id), sqlc.narg(definition_version_id), sqlc.narg(item_id), sqlc.arg(station),
@@ -13,7 +13,7 @@ SELECT item_id FROM agent_runs WHERE id = $1;
 
 -- name: FinishRun :one
 -- Only a running run finishes; finishing it again matches nothing. cpu_seconds and
--- peak_memory_bytes are NULL when the worker reported none (00133).
+-- peak_memory_bytes are NULL when the worker reported none (00136).
 UPDATE agent_runs SET
   status = sqlc.arg(status), session_id = sqlc.narg(session_id), turns = sqlc.arg(turns)::bigint,
   input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),

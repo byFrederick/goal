@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,7 +22,7 @@ import (
 const (
 	approvedHeading = "## Approved tool calls"
 	deniedHeading   = "## Denied tool calls"
-	// askTool asks first on connTracker; offTool is off there.
+	// askTool asks first on MCP server connTracker; offTool is off there.
 	askTool = "create_comment"
 	offTool = "delete_issue"
 )
@@ -28,14 +30,27 @@ const (
 // callInput is the input of the tests' Ask-first call, as the agent wrote it.
 var callInput = json.RawMessage(`{ "issue": 7, "body": "LGTM" }`)
 
-// askFirst sets connTracker's tools: askTool asks first and offTool is off.
-func (h *harness) askFirst(t *testing.T) {
-	t.Helper()
+// askFirst gives every environment of l the MCP server connTracker, on which askTool asks first
+// and offTool is off.
+func askFirst(l domain.Line) domain.Line {
+	return withTracker(l, map[string]string{askTool: string(domain.ToolModeAsk), offTool: string(domain.ToolModeOff)})
+}
 
-	modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
-	if _, err := h.connections.Update(inOrg(t), connTracker, domain.ConnectionPatch{ToolModes: modes}, domain.LocalUser); err != nil {
-		t.Fatal(err)
+// withTracker gives every environment of l the MCP server connTracker with the tool modes tools.
+func withTracker(l domain.Line, tools map[string]string) domain.Line {
+	l.Environments = slices.Clone(l.Environments)
+
+	for i, env := range l.Environments {
+		mcp := maps.Clone(env.MCP)
+		if mcp == nil {
+			mcp = map[string]domain.MCPServer{}
+		}
+
+		mcp[connTracker] = domain.MCPServer{URL: "https://mcp.tracker.example.com/", Tools: tools}
+		l.Environments[i].MCP = mcp
 	}
+
+	return l
 }
 
 // requestApproval has the item's running agent call askTool, the way the gateway passes the
@@ -55,7 +70,6 @@ func (h *harness) requestApproval(t *testing.T, e *engine.Engine, it domain.Item
 func (h *harness) awaiting(t *testing.T) (domain.Item, domain.ToolApproval) {
 	t.Helper()
 
-	h.askFirst(t)
 	it, run := h.asking(t)
 	h.requestApproval(t, h.e, it, run)
 	h.wait(t, h.e)
@@ -82,8 +96,7 @@ func TestRequestToolApproval_EndsTheRunAndWaitsForAPerson(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
-			h.askFirst(t)
+			h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 			it, run := h.asking(t)
 
 			requester := h.e
@@ -166,8 +179,7 @@ func TestRequestToolApproval_Refusals(t *testing.T) {
 	t.Run("bad calls, a second request and an item not in progress", func(t *testing.T) {
 		t.Parallel()
 
-		h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
-		h.askFirst(t)
+		h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 		it, run := h.asking(t)
 
 		for _, tt := range []struct {
@@ -177,8 +189,8 @@ func TestRequestToolApproval_Refusals(t *testing.T) {
 		}{
 			{name: "input not JSON", connection: connTracker, tool: askTool, input: json.RawMessage(`{`), want: engine.ErrBadToolCall},
 			{name: "malformed tool", connection: connTracker, tool: "no spaces", input: callInput, want: engine.ErrBadToolCall},
-			{name: "malformed connection", connection: "No Such", tool: askTool, input: callInput, want: engine.ErrBadToolCall},
-			{name: "unknown connection", connection: "missing", tool: askTool, input: callInput, want: ports.ErrNotFound},
+			{name: "malformed server", connection: "No Such", tool: askTool, input: callInput, want: engine.ErrBadToolCall},
+			{name: "a server the environment lacks", connection: "missing", tool: askTool, input: callInput, want: engine.ErrBadToolCall},
 		} {
 			if _, err := h.e.RequestToolApproval(inOrg(t), it.ID, run, agWorker, tt.connection, tt.tool, tt.input); !errors.Is(err, tt.want) {
 				t.Errorf("%s: RequestToolApproval = %v; want %v", tt.name, err, tt.want)
@@ -211,11 +223,25 @@ func TestRequestToolApproval_Refusals(t *testing.T) {
 		}
 	})
 
+	t.Run("a version not on secrets", func(t *testing.T) {
+		t.Parallel()
+
+		h := newHarness(t, onConnections(controlLine()), porttest.Block(nil, `{}`))
+		it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateInProgress)
+
+		if _, err := h.e.RequestToolApproval(inOrg(t), it.ID, "run-1", agWorker, connTracker, askTool, callInput); !errors.Is(err, domain.ErrNotOnSecrets) {
+			t.Errorf("a request on a version not on secrets = %v; want ErrNotOnSecrets", err)
+		}
+
+		if n := len(h.eventsOf(it.ID, domain.EventToolApprovalRequested)); n != 0 {
+			t.Errorf("events %v; want no request recorded", h.kinds(it.ID))
+		}
+	})
+
 	t.Run("an open question", func(t *testing.T) {
 		t.Parallel()
 
-		h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
-		h.askFirst(t)
+		h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 		it, run := h.asking(t)
 		h.ask(t, h.e, it, run)
 		h.wait(t, h.e)
@@ -234,7 +260,7 @@ func TestRequestToolApproval_Refusals(t *testing.T) {
 func TestDecideToolApproval_ApproveResumesWithoutRework(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+	h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 	it, a := h.awaiting(t)
 
 	got, err := h.e.DecideToolApproval(inOrg(t), it.ID, human, true, false, "")
@@ -256,7 +282,7 @@ func TestDecideToolApproval_ApproveResumesWithoutRework(t *testing.T) {
 		t.Error("the approval is still open after its approval")
 	}
 
-	if rules, err := h.connections.StandingRules(inOrg(t), true); err != nil || len(rules) != 0 {
+	if rules, err := h.rules.StandingRules(inOrg(t), true); err != nil || len(rules) != 0 {
 		t.Errorf("standing rules %+v, %v; want none without Always allow", rules, err)
 	}
 
@@ -274,7 +300,7 @@ func askingFirstTwice(t *testing.T) *harness {
 
 	var h *harness
 
-	h = newHarness(t, controlLine(), func(ctx context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
+	h = newHarness(t, askFirst(controlLine()), func(ctx context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
 		ctx = domain.WithOrg(ctx, testOrg)
 
 		runs, err := h.store.Runs(ctx, run.Sandbox.ItemID, 10)
@@ -335,7 +361,6 @@ func TestDecideToolApproval_DenyPutsTheDenialInTheNextBrief(t *testing.T) {
 	t.Parallel()
 
 	h := askingFirstTwice(t)
-	h.askFirst(t)
 	it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
 
 	h.step(t) // the run that asks first
@@ -380,7 +405,7 @@ func TestDecideToolApproval_DenyPutsTheDenialInTheNextBrief(t *testing.T) {
 func TestDecideToolApproval_Refusals(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+	h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 	it, _ := h.awaiting(t)
 
 	if _, err := h.e.DecideToolApproval(inOrg(t), h.submit(t, domain.NewItem{}).ID, human, true, false, ""); !errors.Is(err, engine.ErrNoOpenToolApproval) {
@@ -430,7 +455,7 @@ func TestDecideToolApproval_Refusals(t *testing.T) {
 func TestDecideToolApproval_AlwaysAllowCreatesOneStandingRule(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+	h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 	it, _ := h.awaiting(t)
 
 	// A retry after a transition that failed: the item changed under the first attempt.
@@ -443,38 +468,12 @@ func TestDecideToolApproval_AlwaysAllowCreatesOneStandingRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rules, err := h.connections.StandingRules(inOrg(t), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(rules) != 1 || rules[0].Connection != connTracker || rules[0].Tool != askTool || rules[0].Agent != agWorker ||
-		rules[0].ItemID != it.ID || !rules[0].Active() || rules[0].CreatedBy.Ref() != human.Ref() {
-		t.Fatalf("standing rules %+v; want one active rule for the call's connection, tool and agent role", rules)
-	}
-
 	grants := h.eventsOf(it.ID, domain.EventToolApprovalGranted)
 	if len(grants) != 1 || grants[0].Data[domain.KeyAlwaysAllow] != true {
 		t.Errorf("grants %+v; want one with always_allow", grants)
 	}
 
-	h.expectRuleLiftsTheAsk(t, rules)
-}
-
-// expectRuleLiftsTheAsk checks that rules lift askTool's ask for the agent role and leave offTool
-// off.
-func (h *harness) expectRuleLiftsTheAsk(t *testing.T, rules []domain.StandingRule) {
-	t.Helper()
-
-	conn, err := h.connections.Get(inOrg(t), connTracker)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	modes := domain.EffectiveToolModes(conn.ToolModes, rules, conn.ID, agWorker)
-	if _, asks := modes.Modes[askTool]; asks || modes.Modes[offTool] != domain.ToolModeOff {
-		t.Errorf("effective modes %+v; want %s allowed and %s off", modes, askTool, offTool)
-	}
+	h.expectServerRule(t, it.ID, domain.DefaultEnvironment)
 }
 
 // On secrets, Always allow keys the rule by the item's factory, the agent's environment ("" is the
@@ -488,7 +487,7 @@ func TestDecideToolApproval_AlwaysAllowOnSecretsKeysByServer(t *testing.T) {
 		t.Run(want, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarness(t, withEnvironment(secretsLine(), agWorker, env), porttest.Block(nil, `{}`))
+			h := newHarness(t, askFirst(withEnvironment(secretsLine(), agWorker, env)), porttest.Block(nil, `{}`))
 			h.addSecrets(t)
 			h.addSecret(t, secTickets, ticketsKeyValue)
 			it, _ := h.awaiting(t)
@@ -508,7 +507,7 @@ func TestDecideToolApproval_AlwaysAllowOnSecretsKeysByServer(t *testing.T) {
 func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string) {
 	t.Helper()
 
-	rules, err := h.connections.StandingRules(inOrg(t), true)
+	rules, err := h.rules.StandingRules(inOrg(t), true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,12 +540,14 @@ func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string)
 	}
 }
 
-// A call whose ask does not come from the organization connection's mode offers no Always allow.
+// A call whose ask does not come from the environment file's mode of the tool offers no Always
+// allow.
 func TestDecideToolApproval_AlwaysAllowRefusedWhenNotOffered(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
-	it, run := h.asking(t) // connTracker's tools are all allowed: the call's ask is not the organization's
+	// Only offTool is off on connTracker: askTool is allowed, so the call's ask is not the file's.
+	h := newHarness(t, withTracker(controlLine(), map[string]string{offTool: string(domain.ToolModeOff)}), porttest.Block(nil, `{}`))
+	it, run := h.asking(t)
 
 	if _, err := h.e.RequestToolApproval(inOrg(t), it.ID, run, agWorker, connTracker, askTool, callInput); err != nil {
 		t.Fatal(err)
@@ -558,7 +559,7 @@ func TestDecideToolApproval_AlwaysAllowRefusedWhenNotOffered(t *testing.T) {
 		t.Errorf("Always allow = %v; want ErrAlwaysAllowNotOffered", err)
 	}
 
-	if rules, _ := h.connections.StandingRules(inOrg(t), true); len(rules) != 0 {
+	if rules, _ := h.rules.StandingRules(inOrg(t), true); len(rules) != 0 {
 		t.Errorf("standing rules %+v; want none", rules)
 	}
 }
@@ -566,14 +567,14 @@ func TestDecideToolApproval_AlwaysAllowRefusedWhenNotOffered(t *testing.T) {
 func TestRevokeStandingRule_EndsTheRule(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+	h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 	it, _ := h.awaiting(t)
 
 	if _, err := h.e.DecideToolApproval(inOrg(t), it.ID, human, true, true, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	rules, err := h.connections.StandingRules(inOrg(t), false)
+	rules, err := h.rules.StandingRules(inOrg(t), false)
 	if err != nil || len(rules) != 1 {
 		t.Fatalf("standing rules %+v, %v; want one", rules, err)
 	}
@@ -587,7 +588,7 @@ func TestRevokeStandingRule_EndsTheRule(t *testing.T) {
 		t.Errorf("revoked rule %+v; want it ended by the person", got)
 	}
 
-	if active, _ := h.connections.StandingRules(inOrg(t), false); len(active) != 0 {
+	if active, _ := h.rules.StandingRules(inOrg(t), false); len(active) != 0 {
 		t.Errorf("active rules %+v; want none", active)
 	}
 
@@ -613,7 +614,7 @@ func (conflicting) Transition(context.Context, ports.Transition) (domain.Item, e
 func TestApprove_RefusedWhileAToolApprovalIsOpen(t *testing.T) {
 	t.Parallel()
 
-	h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+	h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 	it, _ := h.awaiting(t)
 
 	if _, err := h.e.Approve(inOrg(t), it.ID, human); !errors.Is(err, engine.ErrToolApprovalOpen) {
@@ -633,7 +634,7 @@ func TestToolApproval_WithdrawnByAPersonsControl(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			h := newHarness(t, controlLine(), porttest.Block(nil, `{}`))
+			h := newHarness(t, askFirst(controlLine()), porttest.Block(nil, `{}`))
 			it, _ := h.awaiting(t)
 
 			if _, err := act(h.e, inOrg(t), it.ID); err != nil {

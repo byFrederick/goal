@@ -603,8 +603,20 @@ func TestJonah_Unavailable(t *testing.T) {
 // lineModels is the model-proposal route of line's agents.
 const lineModels = "/v1/orgs/acme/factories/line/agents/"
 
-// modelLines is jonah.ModelDefinitions over the definitions cache, with the harness's modelLine
-// change, when a test sets one, applied to each line it reads.
+// onSecrets is l, when it is on connections, moved onto secrets with the model key {{claude-key}}
+// and an empty default environment, as only a version on secrets runs (ADR 0037): line, the
+// fixture Jonah tries, names a model connection.
+func onSecrets(l domain.Line) domain.Line {
+	if !l.OnSecrets() {
+		l.Runtime.ModelConnection, l.Runtime.ModelKey = "", "{{claude-key}}"
+		l.Environments = []domain.Environment{{Name: domain.DefaultEnvironment}}
+	}
+
+	return l
+}
+
+// modelLines is jonah.ModelDefinitions over the definitions cache, each line it reads onSecrets,
+// with the harness's modelLine change, when a test sets one, applied.
 type modelLines struct {
 	*definitions.Cache
 	h *harness
@@ -612,6 +624,8 @@ type modelLines struct {
 
 func (m modelLines) Line(ctx context.Context, id domain.DefinitionVersionID) (domain.Line, error) {
 	l, err := m.Cache.Line(ctx, id)
+	l = onSecrets(l)
+
 	if err == nil && m.h.modelLine != nil {
 		l.Agents = slices.Clone(l.Agents)
 		m.h.modelLine(&l)

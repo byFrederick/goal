@@ -37,7 +37,7 @@ func (h *harness) seedTitled(t *testing.T, title string) domain.Item {
 
 // searchLine renders a search's results as one line: each group's hits, best first.
 func searchLine(s gen.OrgSearch) string {
-	var items, agents, factories, conns, secrets []string
+	var items, agents, factories, secrets []string
 
 	for _, it := range s.Items {
 		items = append(items, fmt.Sprintf("%s#%d %s", it.FactoryName, it.Number, it.Title))
@@ -51,16 +51,12 @@ func searchLine(s gen.OrgSearch) string {
 		factories = append(factories, f.Name)
 	}
 
-	for _, c := range s.Connections {
-		conns = append(conns, c.Name+" ("+c.Kind+")")
-	}
-
 	for _, sec := range s.Secrets {
 		secrets = append(secrets, sec.Name)
 	}
 
-	return fmt.Sprintf("items [%s] agents [%s] factories [%s] connections [%s] secrets [%s]",
-		strings.Join(items, "; "), strings.Join(agents, "; "), strings.Join(factories, "; "), strings.Join(conns, "; "), strings.Join(secrets, "; "))
+	return fmt.Sprintf("items [%s] agents [%s] factories [%s] secrets [%s]",
+		strings.Join(items, "; "), strings.Join(agents, "; "), strings.Join(factories, "; "), strings.Join(secrets, "; "))
 }
 
 // A viewer of acme alone finds nothing of line: no item, agent or factory; its owner finds both.
@@ -80,42 +76,19 @@ func TestSearchOrg_HidesFactoriesTheCallerCannotRead(t *testing.T) {
 	for _, c := range []struct{ name, token, q, want string }{
 		{
 			"the viewer", viewerToken, "e",
-			"items [acme#1 Write the user guide] agents [acme/writer at ] factories [acme] connections [] secrets []",
+			"items [acme#1 Write the user guide] agents [acme/writer at ] factories [acme] secrets []",
 		},
 		{
 			"the owner", ownerToken, "e",
 			"items [line#1 Fix the backend build; acme#1 Write the user guide] agents [acme/writer at ; line/backend at build; line/frontend at build] " +
-				"factories [acme; line] connections [] secrets []",
+				"factories [acme; line] secrets []",
 		},
-		{"the viewer, line's agent", viewerToken, "backend", "items [] agents [] factories [] connections [] secrets []"},
+		{"the viewer, line's agent", viewerToken, "backend", "items [] agents [] factories [] secrets []"},
 	} {
 		got := decode[gen.OrgSearch](t, h.as(t, c.token, http.MethodGet, searchFor(c.q), ""), http.StatusOK)
 		if line := searchLine(got); line != c.want {
 			t.Errorf("%s searching %q:\n  %s\nwant\n  %s", c.name, c.q, line, c.want)
 		}
-	}
-}
-
-// Connections are found only with connection:read: a session member's, not a token without it.
-func TestSearchOrg_ConnectionsNeedConnectionRead(t *testing.T) {
-	t.Parallel()
-
-	h := keyed(t)
-
-	if res := h.as(t, freshToken, http.MethodPost, connectionsPath, `{"name":"github","kind":"github","secrets":{"token":"t"}}`); res.status != http.StatusCreated {
-		t.Fatalf("create the connection = %d %s; want 201", res.status, res.body)
-	}
-
-	created, _ := h.createToken(t, freshToken, laptop) // org:read and factory:read, no connection:read
-
-	got := decode[gen.OrgSearch](t, h.request(t, http.MethodGet, searchFor("git"), "", bearer(created.Secret)), http.StatusOK)
-	if got.Connections == nil || len(got.Connections) != 0 {
-		t.Errorf("a token without connection:read finds connections %+v; want []", got.Connections)
-	}
-
-	got = decode[gen.OrgSearch](t, h.as(t, viewerToken, http.MethodGet, searchFor("git"), ""), http.StatusOK)
-	if !slices.Equal(got.Connections, []gen.ConnectionHit{{Name: kindGitHub, Kind: kindGitHub}}) {
-		t.Errorf("a member finds connections %+v; want github", got.Connections)
 	}
 }
 
@@ -267,7 +240,7 @@ func TestSearchOrg_LimitsEachGroup(t *testing.T) {
 		t.Fatalf("search = %d; want 200", code)
 	}
 
-	if len(got.Items) != 2 || got.Items[0].Number != 3 || got.Agents == nil || got.Factories == nil || got.Connections == nil {
+	if len(got.Items) != 2 || got.Items[0].Number != 3 || got.Agents == nil || got.Factories == nil || got.Secrets == nil {
 		t.Errorf("search = %+v; want #3 and #2 and empty groups", got)
 	}
 }

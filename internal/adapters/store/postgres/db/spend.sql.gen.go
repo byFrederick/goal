@@ -326,7 +326,7 @@ type OrgUsageByAgentRow struct {
 }
 
 // The CPU seconds and peak memory of the runs started in [since, until) that reported either, by
-// factory, agent and box size (null before 00133): percentile_cont's medians and 90th
+// factory, agent and box size (null before 00136): percentile_cont's medians and 90th
 // percentiles, each over the runs with that value (cpu_runs and memory_runs); 0 when none has it.
 // domain.NewOrgSpend puts the groups without a CPU time last.
 func (q *Queries) OrgUsageByAgent(ctx context.Context, arg OrgUsageByAgentParams) ([]OrgUsageByAgentRow, error) {

@@ -402,6 +402,8 @@ describe('prepare', () => {
 
     expect(JSON.parse(await readFile(join(dirs.goal, 'spec.json'), 'utf8'))).toEqual({
       ...served.spec,
+      // goald serves no connections (ADR 0037); the worker's schema defaults them to [].
+      connections: [],
       gateway_url: gateway,
       branch: 'goal/1-add-a-health-endpoint',
       repositories: served.repositories,
@@ -411,15 +413,14 @@ describe('prepare', () => {
     // The bundle's repositories: the first clones into /workspace with the repository's fresh_base.
     expect(calls.map((c) => `${c.command} ${c.args.join(' ')}`)).toEqual([
       'git config --global credential.useHttpPath true',
-      `git config --global --add credential.https://github.com.helper ${credentialHelper(served.git_credentials[0])}`,
       'git check-ref-format --branch goal/1-add-a-health-endpoint',
       `git clone --quiet --filter=blob:none -- https://github.com/acme/api ${dirs.workspace}`,
       'git rev-parse --verify --quiet refs/remotes/origin/goal/1-add-a-health-endpoint',
       'git checkout --quiet -b goal/1-add-a-health-endpoint',
       'mise install --yes',
-      'mise use --global --yes task@3.46.1 npm:@acme/issues-cli@2.0.0',
+      'mise use --global --yes task@3.46.1',
     ]);
-    expect(prepared).toMatchObject({ branch: 'goal/1-add-a-health-endpoint', branch_existed: false, tools: 2 });
+    expect(prepared).toMatchObject({ branch: 'goal/1-add-a-health-endpoint', branch_existed: false, tools: 1 });
   });
 
   it('signs git in to one host with whichever connection the exec has: each helper answers only for its own variable', async () => {

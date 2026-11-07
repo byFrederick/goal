@@ -157,24 +157,27 @@ func (b JonahBudget) ReviewCap() float64 {
 	return max(min(b.BudgetUSD-b.SpentUSD, b.PerReviewUSD), minJonahCap)
 }
 
-// Refusal is why no run of the line can start, "" when runs can: since the cutover to
-// connections (spec 4 §14, step 5) a version that still has a form connections replaced is
-// refused, and so is one that names nothing that gives every run its model: runtime.modelKey on
-// secrets (ADR 0037 decision 7), runtime.modelConnection on connections. The engine blocks its
-// items with this reason, whose fix names environment files and secrets.
-func (l Line) Refusal() string {
-	const fix = "publish a version on environment files and secrets (ADR 0037): runtime.modelKey names the {{secret}} " +
-		"that holds the model's key; goal factory validate and the builder show the fix of each problem"
+// secretsFix is how a person fixes a version whose runs cannot start.
+const secretsFix = "publish a version on environment files and secrets (ADR 0037): runtime.modelKey names the {{secret}} " +
+	"that holds the model's key; goal factory validate and the builder show the fix of each problem"
 
+// ErrNotOnSecrets is why no run of a version that is not on secrets starts: the engine runs only
+// versions on environment files and secrets (ADR 0037 decision 19).
+var ErrNotOnSecrets = errors.New("it is on connections, which no run reads any more: " + secretsFix)
+
+// Refusal is why no run of the line can start, "" when runs can: a version that still has a form
+// connections replaced is refused, so is one on connections (ErrNotOnSecrets), and so is one on
+// secrets that names no runtime.modelKey, which gives every run its model (ADR 0037 decision 7).
+// The engine blocks its items with this reason, whose fix names environment files and secrets.
+func (l Line) Refusal() string {
 	switch {
 	case len(l.Removed) > 0:
-		return fmt.Sprintf("version %d still has %s, which connections replaced: %s", l.Number, strings.Join(l.Removed, ", "), fix)
-	case l.OnSecrets() && l.Runtime.ModelKey == "":
+		return fmt.Sprintf("version %d still has %s, which connections replaced: %s", l.Number, strings.Join(l.Removed, ", "), secretsFix)
+	case !l.OnSecrets():
+		return fmt.Sprintf("version %d: %v", l.Number, ErrNotOnSecrets)
+	case l.Runtime.ModelKey == "":
 		return fmt.Sprintf("version %d has environment files but names no runtime.modelKey, which gives every run its model: "+
 			"set it to the {{secret}} that holds the model's key", l.Number)
-	case !l.OnSecrets() && l.Runtime.ModelConnection == "":
-		return fmt.Sprintf("version %d names neither runtime.modelKey nor runtime.modelConnection, one of which gives every run its model: %s",
-			l.Number, fix)
 	default:
 		return ""
 	}
@@ -193,18 +196,6 @@ func (l Line) RefusalCode() string {
 	}
 
 	return ""
-}
-
-// MergeConnections are the connections the line's merges may use (spec 4 §4.7): its
-// organization connections and its repository's, each once; those whose kind has a code host
-// serve the pull requests on the host of their git login.
-func (l Line) MergeConnections() []string {
-	names := slices.Clone(l.Connections)
-	if c := l.Runtime.Repository.Connection; c != "" && !slices.Contains(names, c) {
-		names = append(names, c)
-	}
-
-	return names
 }
 
 // Runtime is what every agent task of the factory shares.

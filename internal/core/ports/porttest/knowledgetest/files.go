@@ -425,7 +425,7 @@ func testFilesIsolation(f *fixture) {
 func testNewKinds(f *fixture) {
 	ctx := f.ctx()
 
-	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: "test-token", Scope: domain.SecretScope{All: true}}, admin); err != nil {
+	if _, err := f.Secrets.Create(ctx, domain.NewSecret{Name: docsSecret, Value: secretValue, Scope: domain.SecretScope{All: true}}, admin); err != nil {
 		f.t.Fatal(err)
 	}
 
