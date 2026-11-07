@@ -20,8 +20,7 @@ type Knowledge interface {
 	Source(ctx context.Context, name string) (domain.KnowledgeSource, error)
 	// CreateSource creates a source, due to sync at once (knowledge_source.created). Its rules
 	// are NewKnowledgeSource.Check's (domain.ErrInvalid); ErrNameTaken for a name in use,
-	// ErrNotFound for an unknown connection or secret, domain.ErrConnectionCannotSync for a synced
-	// source whose connection's kind cannot sync. A source refers to its secret by id: renaming
+	// ErrNotFound for an unknown secret. A source refers to its secret by id: renaming
 	// the secret keeps it, and the secret cannot be deleted while a source reads with it
 	// (OrgSecrets.Delete: ErrConflict naming the sources).
 	CreateSource(ctx context.Context, s domain.NewKnowledgeSource, by domain.Actor) (domain.KnowledgeSource, error)
@@ -36,18 +35,17 @@ type Knowledge interface {
 	// the organization holds any more (DropBlobs). ErrNotFound when there is none.
 	DeleteSource(ctx context.Context, name string, by domain.Actor, drop DropBlobs) error
 	// ConvertSource moves a synced source that reads with a secret over to kind, a repository or
-	// Confluence source (ADR 0038 decision 16; KnowledgeSource.CheckConvert): it clears its
-	// connection, drops its reader from its config and keeps the other keys and the secret, makes
+	// Confluence source (ADR 0038 decision 16; KnowledgeSource.CheckConvert): it drops its
+	// reader from its config and keeps the other keys and the secret, makes
 	// it due at once and audits knowledge_source.updated with the new kind. domain.ErrInvalid for
 	// any other source or kind, ErrNotFound when there is none.
 	ConvertSource(ctx context.Context, name string, kind domain.KnowledgeSourceKind, by domain.Actor) (domain.KnowledgeSource, error)
-	// SyncNow makes a source due at once. ErrNotFound when there is none; a live source never
-	// syncs (domain.ErrInvalid).
+	// SyncNow makes a source due at once. ErrNotFound when there is none.
 	SyncNow(ctx context.Context, name string) error
 
 	// ClaimSource leases from now to until, as syncing, the source due first in any live
 	// organization (ctx needs none), so every organization's sources take their turn in one
-	// order; nil when none is: a source not live whose next sync is due and whose lease ended. The
+	// order; nil when none is: a source whose next sync is due and whose lease ended. The
 	// other lease methods take the claim's lease, under its organization in ctx.
 	ClaimSource(ctx context.Context, now, until time.Time) (*domain.SourceClaim, error)
 	// RenewSource extends a lease held at now until until. ErrLeaseLost when it ended, another
@@ -117,7 +115,7 @@ type DropBlobs func(ctx context.Context, unheld []domain.BlobHash) error
 
 // SourceReader reads the items of a source, one reader per kind (ADR 0038 decision 2): an upload
 // source's from the bucket, a repository's from its code host, Confluence's pages, and until the
-// cut-over a synced source's from its connection.
+// cut-over a synced source's with its reader.
 type SourceReader interface {
 	// List yields every item of the source with its version, then stops; an error ends it.
 	List(ctx context.Context, s domain.SyncSpec) iter.Seq2[domain.SourceItem, error]
