@@ -10,6 +10,15 @@ FROM agent_runs
 WHERE started_at >= sqlc.arg(since)::timestamptz AND started_at < sqlc.arg(until)::timestamptz
 GROUP BY 1, 2;
 
+-- name: SpendByFactory :many
+-- OrgSpendByDay's runs by factory alone (ports.Spend.SpendByFactory): every run started in
+-- [since, until), with or without an item, a running one with its cost so far.
+SELECT factory_id, sum(cost_usd)::float8 AS spend_usd
+FROM agent_runs
+WHERE started_at >= sqlc.arg(since)::timestamptz AND started_at < sqlc.arg(until)::timestamptz
+GROUP BY factory_id
+ORDER BY factory_id;
+
 -- name: OrgSpendByAgent :many
 -- The cost of the runs started in [since, until), by factory and agent name.
 SELECT factory_id, agent, sum(cost_usd)::float8 AS spend_usd
