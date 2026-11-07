@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- The onboarding preview no longer asks you to pick a template while a factory you already chose loads, and the Intake step names starter triggers in words, such as Daily open tickets, instead of by id.
 - On the Floor, the New item row in How work gets in is at least 44 px tall on a phone, and the ", or press C" hint no longer shows on touch devices. The Finish setting up checklist now says "First item done" instead of "First item merged", since a line without code never merges anything.
 - A factory made with Start empty, when the catalog has no blank template, now names its end station Done, as the starter templates do. Before, the station had no name, so the Line step showed an empty Name field and the preview labeled it "done".
 - Onboarding on a phone keeps the current step's label in view in the step bar, so "First item" is no longer cut off. When saving the Code step's token needs a fresh sign-in and you cancel it, the step now says so in one sentence and offers Sign in again, which saves and tests the token after you sign in. A station with no WIP limit shows No limit in its WIP field, in onboarding's Line step and in the factory editor.
