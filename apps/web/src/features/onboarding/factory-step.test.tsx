@@ -28,7 +28,13 @@ const api = vi.hoisted(() => ({
   templatesFail: 0,
   createRefusal: null as unknown,
   created: [] as unknown[],
+  existing: [] as string[],
   saves: [] as { section: Section; value: unknown }[],
+}));
+
+vi.mock(import('../../api/client'), async (original) => ({
+  ...(await original()),
+  listFactories: vi.fn(async () => api.existing.map((name) => ({ name })) as unknown as Factory[]),
 }));
 
 vi.mock(import('../../api/definitions'), async (original) => ({
@@ -126,6 +132,7 @@ function lineOf(name: string, stations: { id: string; name: string; kind: string
 }
 
 beforeEach(() => {
+  api.existing = [];
   api.templates = [
     {
       ...software,
@@ -221,7 +228,7 @@ describe('step 2, pick a template', () => {
     renderStep();
     await screen.findByRole('radio', { name: /Incident response/ });
     const name = screen.getByRole('textbox', { name: 'Factory name' });
-    expect((name as HTMLInputElement).value).toBe('incident-response');
+    expect((name as HTMLInputElement).value).toBe('Incident response');
     expect(screen.getByRole('button', { name: 'Not available yet' }).getAttribute('aria-disabled')).toBe('true');
   });
 
@@ -248,10 +255,32 @@ describe('step 2, pick a template', () => {
     await waitFor(() => expect(api.created).toHaveLength(1));
     expect(api.created[0]).toEqual({
       name: 'incident-response',
+      title: 'Incident response',
       start: { kind: 'template', template: 'incident-response' },
     });
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/code'), { timeout: 4000 });
     expect(router.state.location.search).toMatchObject({ factory: factoryId, template: 'incident-response' });
+  });
+
+  it('derives a free name when the title’s name is taken', async () => {
+    api.existing = ['incident-response'];
+    renderStep();
+    await screen.findByRole('radio', { name: /Incident response/ });
+    const { listFactories } = await import('../../api/client');
+    await waitFor(() => expect(listFactories).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Incident response' }));
+    await waitFor(() => expect(api.created).toHaveLength(1));
+    expect(api.created[0]).toMatchObject({ title: 'Incident response', name: 'incident-response-2' });
+  });
+
+  it('keeps Use off for a title with no letters', async () => {
+    renderStep();
+    await screen.findByRole('radio', { name: /Incident response/ });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Factory name' }), { target: { value: '— !' } });
+    const use = screen.getByRole('button', { name: 'Use Incident response' }) as HTMLButtonElement;
+    expect(use.disabled || use.getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(screen.getByText(/Use 3 to 40 lowercase letters/)).toBeTruthy();
   });
 
   it('saves the purpose into the new draft, writes no repository, and continues to the Code step', async () => {
@@ -278,7 +307,7 @@ describe('step 2, pick a template', () => {
     const name = screen.getByRole('textbox', { name: 'Factory name' });
     fireEvent.click(screen.getByRole('button', { name: 'Use Incident response' }));
     expect(
-      await screen.findByText('Acme already has a factory named incident-response. Choose another name.'),
+      await screen.findByText('Acme already has a factory named Incident response. Choose another name.'),
     ).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(name));
   });
