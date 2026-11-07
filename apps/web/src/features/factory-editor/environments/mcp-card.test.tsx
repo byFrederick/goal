@@ -51,8 +51,6 @@ const linear: ServerTest = {
 function rule(over: Partial<StandingRule>): StandingRule {
   return {
     id: 'r1',
-    connection_id: null,
-    connection: null,
     factory_id: 'f1',
     environment: 'default',
     server: 'linear',
@@ -108,7 +106,6 @@ describe('the standing rules of an MCP server', () => {
       rule({ id: 'd', environment: 'deploy', tool: 'delete_issue' }),
       rule({ id: 'e', server: 'sentry', tool: 'delete_issue' }),
       rule({ id: 'f', tool: 'delete_issue', revoked_at: '2026-10-31T10:00:00Z' }),
-      rule({ id: 'g', connection_id: 'c1', factory_id: null, environment: null, server: null }),
     ]);
     await screen.findAllByRole('button', { name: /^Revoke/ });
     const groupOf = (tool: string) =>

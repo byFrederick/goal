@@ -7418,36 +7418,30 @@ type SpendDay struct {
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
 
-// StandingRule Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by an organization connection, for every factory of the organization (connection_id set), or, for a factory on secrets, by one MCP server of one environment of one factory (factory_id, environment and server set, connection_id null; ADR 0037 decision 8)
+// StandingRule Lets one agent role call one tool without asking (ADR 0031 decision 7). A rule is keyed by one MCP server of one environment of one factory (ADR 0037 decision 8)
 type StandingRule struct {
 	// Agent The agent's role, its name in the definition, as in architect
-	Agent string `json:"agent"`
-
-	// Connection The connection's name; null once the connection is deleted, and for a rule keyed by server
-	Connection *string `json:"connection"`
-
-	// ConnectionId The connection the rule is keyed by; null for a rule keyed by server
-	ConnectionId *string   `json:"connection_id"`
-	CreatedAt    time.Time `json:"created_at"`
+	Agent     string    `json:"agent"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
 	CreatedBy Actor `json:"created_by"`
 
-	// Environment The environment file's name of a rule keyed by server, as in default; null for a connection's rule
-	Environment *string `json:"environment"`
+	// Environment The environment file's name, as in default
+	Environment string `json:"environment"`
 
-	// FactoryId The factory of a rule keyed by server; null for a connection's rule
-	FactoryId *string `json:"factory_id"`
-	Id        string  `json:"id"`
+	// FactoryId The factory the rule is keyed by
+	FactoryId string `json:"factory_id"`
+	Id        string `json:"id"`
 
 	// ItemId The item it was approved on
 	ItemId    string     `json:"item_id"`
 	RevokedAt *time.Time `json:"revoked_at"`
 	RevokedBy *Actor     `json:"revoked_by"`
 
-	// Server The MCP server's name in the environment file (mcp.<server>) of a rule keyed by server; null for a connection's rule
-	Server *string `json:"server"`
-	Tool   string  `json:"tool"`
+	// Server The MCP server's name in the environment file (mcp.<server>)
+	Server string `json:"server"`
+	Tool   string `json:"tool"`
 }
 
 // StandingRuleList defines model for StandingRuleList.

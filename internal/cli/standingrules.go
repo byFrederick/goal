@@ -18,7 +18,7 @@ const (
 )
 
 // standingRulesCommand is goal standing-rules list|revoke: the organization's standing rules,
-// each letting one agent role call one connection or MCP server tool without asking (ADR 0031
+// each letting one agent role call one MCP server tool without asking (ADR 0031
 // decision 7, ADR 0037 decision 8).
 // They are made by Always allow on a tool call, never here.
 func standingRulesCommand(ctx context.Context, out *printer, getenv func(string) string, args []string) error {
@@ -99,18 +99,10 @@ func ruleText(r gen.StandingRule) string {
 	return fmt.Sprintf("%s may call %s %s", r.Agent, ruleSource(r), r.Tool)
 }
 
-// ruleSource names what a rule's tool belongs to: "<environment>/<server>" for a rule keyed by an
-// environment's MCP server (ADR 0037 decision 8), else the connection's name, with "(deleted)"
-// for a connection that no longer exists.
+// ruleSource names what a rule's tool belongs to: "<environment>/<server>", the environment's MCP
+// server the rule is keyed by (ADR 0037 decision 8).
 func ruleSource(r gen.StandingRule) string {
-	switch {
-	case r.Server != nil && r.Environment != nil:
-		return *r.Environment + "/" + *r.Server
-	case r.Connection != nil:
-		return *r.Connection
-	default:
-		return "(deleted)"
-	}
+	return r.Environment + "/" + r.Server
 }
 
 // standingRuleRevoke is goal standing-rules revoke <rule>: the agent asks first again for the

@@ -226,26 +226,6 @@ func CanonicalJSON(raw []byte) (json.RawMessage, error) {
 	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
 }
 
-// RunToolModes are the modes of one connection's tools for one agent role in a run (ADR
-// 0031 decision 3).
-type RunToolModes struct {
-	// Modes are the tools that ask first or are off; a tool not in it is ToolModeAllow.
-	Modes map[string]ConnectionToolMode
-	// AlwaysAllowOffered are the tools, sorted, whose ask a person may answer with Always allow.
-	AlwaysAllowOffered []string
-}
-
-// EffectiveToolModes combines the organization connection's modes with the organization's
-// standing rules for agent, the agent's role: an active rule for (connection, tool, agent) turns
-// an ask into allow, and nothing turns off into anything. Every ask that remains comes from the
-// organization's mode, so each offers Always allow. A rule keyed by server lifts nothing here. The
-// definition's per-tool rule has no input here: no definition can carry one today.
-func EffectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, connection ConnectionID, agent string) RunToolModes {
-	return effectiveToolModes(modes, rules, func(r StandingRule, tool string) bool {
-		return r.ConnectionID != "" && r.ConnectionID == connection && r.Tool == tool && r.Agent == agent
-	})
-}
-
 // ToolModeEntry is one entry of an MCP server's tool modes in a run: a tool name or a glob, as
 // path.Match reads it, and its mode.
 type ToolModeEntry struct {
@@ -273,7 +253,7 @@ func ServerToolModes(
 	lifted := map[string]bool{}
 
 	for _, r := range rules {
-		if r.Active() && r.ConnectionID == "" && r.Factory == factory && r.Environment == environment && r.Server == server &&
+		if r.Active() && r.Factory == factory && r.Environment == environment && r.Server == server &&
 			r.Agent == agent && ResolveToolMode(file, r.Tool) == ToolModeAsk {
 			lifted[r.Tool] = true
 		}
@@ -479,27 +459,4 @@ func globCharsOverlap(a, b string) bool {
 	default:
 		return true
 	}
-}
-
-// effectiveToolModes are modes with each ask that an active rule of rules matches (lifts) turned
-// into allow.
-func effectiveToolModes(modes map[string]ConnectionToolMode, rules []StandingRule, lifts func(r StandingRule, tool string) bool) RunToolModes {
-	out := RunToolModes{Modes: map[string]ConnectionToolMode{}, AlwaysAllowOffered: []string{}}
-
-	for _, tool := range slices.Sorted(maps.Keys(modes)) {
-		switch modes[tool] {
-		case ToolModeOff:
-			out.Modes[tool] = ToolModeOff
-		case ToolModeAsk:
-			if slices.ContainsFunc(rules, func(r StandingRule) bool { return r.Active() && lifts(r, tool) }) {
-				continue
-			}
-
-			out.Modes[tool] = ToolModeAsk
-			out.AlwaysAllowOffered = append(out.AlwaysAllowOffered, tool)
-		case ToolModeAllow:
-		}
-	}
-
-	return out
 }

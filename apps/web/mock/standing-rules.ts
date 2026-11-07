@@ -73,8 +73,6 @@ export function createStandingRules(deps: Deps): MockStandingRules {
     const goal = factories(acme).find((f) => f.name === 'goal');
     rules = seeds.map((s) => ({
       id: s.id,
-      connection_id: null,
-      connection: null,
       factory_id: goal?.id ?? s.factory,
       environment: s.environment,
       server: s.server,

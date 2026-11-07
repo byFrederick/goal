@@ -532,12 +532,6 @@ func (h *harness) expectServerRule(t *testing.T, item domain.ItemID, env string)
 	if got := domain.ServerToolModes(file, nil, rules, factoryID, env, connTracker, agWorker); !reflect.DeepEqual(got, wantModes) {
 		t.Errorf("server tool modes %+v; want %s allowed and %s off", got, askTool, offTool)
 	}
-
-	modes := map[string]domain.ConnectionToolMode{askTool: domain.ToolModeAsk, offTool: domain.ToolModeOff}
-
-	if got := domain.EffectiveToolModes(modes, rules, "", agWorker); got.Modes[askTool] != domain.ToolModeAsk {
-		t.Errorf("a server's rule lifted a connection's ask: %+v", got)
-	}
 }
 
 // A call whose ask does not come from the environment file's mode of the tool offers no Always
