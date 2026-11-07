@@ -9,12 +9,16 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
 // intakeReleased is the release the refusal of 00136 names.
 const intakeReleased = "run ADR 0040's release first, then this one"
+
+// endpointKeyID is the master key id the seeded endpoints' own sealed secrets are under.
+const endpointKeyID = "endpoint-k0"
 
 // seedIntake is a database at 00135 with an organization webhook signed by a secret sealed under
 // key id k1, open to a factory.
@@ -34,6 +38,7 @@ func newSeedIntake(t *testing.T) seedIntake {
 	store := New(openPool(t, db.app))
 	s := seedIntake{seedConnections: seedConnections{db: db, owner: owner, store: store, org: newOrgID(t, store)}}
 	s.webhook = seedWebhook(t, connectionsDB{db: db, store: store, owner: New(owner), admin: openPool(t, db.admin)}, s.org, "github-acme")
+
 	if err := owner.QueryRow(t.Context(), `SELECT factory_id FROM webhook_openings WHERE webhook_id = $1`, string(s.webhook.ID)).Scan(&s.factory); err != nil {
 		t.Fatal(err)
 	}
@@ -42,13 +47,13 @@ func newSeedIntake(t *testing.T) seedIntake {
 }
 
 // factoryEndpoint inserts a webhook endpoint of the factory, as 00071 made them, signed by its
-// own sealed secret under key id old.
+// own sealed secret under endpointKeyID.
 func (s seedIntake) factoryEndpoint(t *testing.T) uuid.UUID {
 	t.Helper()
 
 	id := uuid.Must(uuid.NewV7())
 	s.exec(t, `INSERT INTO webhook_endpoints (id, org_id, factory_id, name, kind, key_id, nonce, ciphertext)
-		VALUES ($1, $2, $3, 'github', 'github', 'old', $4, 'sealed')`, id, string(s.org), s.factory, bytes.Repeat([]byte{1}, 12))
+		VALUES ($1, $2, $3, 'github', 'github', $4, $5, 'sealed')`, id, string(s.org), s.factory, endpointKeyID, bytes.Repeat([]byte{1}, 12))
 
 	return id
 }
@@ -65,17 +70,9 @@ func (s seedIntake) droppedColumns(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
 
-	var columns []string
-	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
-			t.Fatal(err)
-		}
-		columns = append(columns, c)
-	}
-	if err := rows.Err(); err != nil {
+	columns, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,11 +88,11 @@ func TestMigrate_DropsOldIntakeColumns(t *testing.T) {
 
 	s := newSeedIntake(t)
 	// A webhook converted from a factory endpoint may still hold the sealed value it was made with.
-	s.exec(t, `UPDATE webhook_endpoints SET key_id = 'old', nonce = $2, ciphertext = 'sealed' WHERE id = $1`,
-		string(s.webhook.ID), bytes.Repeat([]byte{1}, 12))
+	s.exec(t, `UPDATE webhook_endpoints SET key_id = $2, nonce = $3, ciphertext = 'sealed' WHERE id = $1`,
+		string(s.webhook.ID), endpointKeyID, bytes.Repeat([]byte{1}, 12))
 
-	if ids, err := ConnectionKeyIDs(t.Context(), s.store); err != nil || !slices.Equal(ids, []string{"k1", "old"}) {
-		t.Fatalf("ConnectionKeyIDs at 00135 = %v, %v; want the secret's k1 and the webhook's old", ids, err)
+	if ids, err := ConnectionKeyIDs(t.Context(), s.store); err != nil || !slices.Equal(ids, []string{endpointKeyID, "k1"}) {
+		t.Fatalf("ConnectionKeyIDs at 00135 = %v, %v; want the webhook's %s and the secret's k1", ids, err, endpointKeyID)
 	}
 
 	migrate(t, s.db.owner)
