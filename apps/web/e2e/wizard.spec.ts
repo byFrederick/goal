@@ -308,7 +308,7 @@ test('Cancel on Start creates nothing; a clone starts from the running version',
 
   await page.goto('/o/acme/new/start?from=clone');
   await expect(continueTo(page, 'Basics')).toHaveAttribute('aria-disabled', 'true');
-  await page.getByRole('radio', { name: /^sre/ }).check();
+  await page.getByRole('radio', { name: /^SRE/ }).check();
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('sre-copy');
   await checkPage(page);
   await continueTo(page, 'Basics').click();
