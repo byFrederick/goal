@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, approveItem, getFactoryActivity, getInbox, rejectItem } from '../../api/client';
-import { getDraftModel, openDraft, saveDraftSection } from '../../api/definitions';
+import { getDraftModel, getVersion, openDraft, saveDraftSection } from '../../api/definitions';
 import {
   activityQuery,
   boardQuery,
@@ -54,6 +54,7 @@ vi.mock('../../api/definitions', async (importOriginal) => ({
   openDraft: vi.fn(),
   getDraftModel: vi.fn(),
   saveDraftSection: vi.fn(),
+  getVersion: vi.fn((await importOriginal<typeof import('../../api/definitions')>()).getVersion),
 }));
 
 afterEach(() => {
@@ -491,6 +492,33 @@ describe('FloorPage', () => {
 
     expect(await screen.findByText('Line running')).toBeTruthy();
     expect(screen.getByText('Oct 20 to 26, compared with the 7 days before')).toBeTruthy();
+  });
+
+  it('shows no Line running chip and no ok tone while the version reads are pending', async () => {
+    const real = await vi.importActual<typeof import('../../api/definitions')>('../../api/definitions');
+    vi.mocked(getVersion).mockImplementation(() => new Promise(() => {}));
+    try {
+      const { container } = renderFloor();
+      expect(await screen.findByRole('heading', { level: 1, name: 'Floor' })).toBeTruthy();
+      expect(screen.queryByText('Line running')).toBeNull();
+      expect(screen.queryByText('Needs a model key')).toBeNull();
+      expect(container.querySelector('header .bg-ok')).toBeNull();
+    } finally {
+      vi.mocked(getVersion).mockImplementation(real.getVersion);
+    }
+  });
+
+  it('shows Line running when a version read fails', async () => {
+    const real = await vi.importActual<typeof import('../../api/definitions')>('../../api/definitions');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(getVersion).mockRejectedValue(new Error('goald is down'));
+    try {
+      renderFloor();
+      expect(await screen.findByText('Line running')).toBeTruthy();
+    } finally {
+      vi.mocked(getVersion).mockImplementation(real.getVersion);
+      log.mockRestore();
+    }
   });
 
   it('says the line needs a model key, not that it is running, when environments exist and the key does not', async () => {

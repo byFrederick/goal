@@ -90,6 +90,8 @@ A line that has environment files needs `runtime.modelKey` in `factory.yaml`, or
 - Home's row for the factory says **Needs a model key** where it would say **Running**.
 - **Finish setting up** has a **Model key** row, not done until the key is set. **Set up** opens the factory's Settings at Runtime, where you choose the secret.
 
+Until Goal has read the published version, both places show a grey placeholder where the chip goes, never a green one. If that read fails, they show **Running**.
+
 Both go away once the key is published.
 
 ## 5. Send it back for rework

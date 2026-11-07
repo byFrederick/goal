@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Home's row and the Floor's header no longer flash a green **Running** for a line that needs a model key. They show a grey placeholder until Goal has read the published version, then **Running** or **Needs a model key**; if the read fails, they show **Running**.
 - The update toast no longer stays on screen with a Reload button that does nothing. It closes when a newer version replaces the one it offered, and Reload reloads the page when that happens.
 - Runs on Cloudflare now record peak memory. Before, it was always empty, because the box's root cgroup has no memory counters. The worker reads its own cgroup first, then the root cgroup, then the machine's memory in use from `/proc/meminfo`, and its finished line says which with `memory_source` (`cgroup` or `machine`).
 - The Floor's flow figures no longer show a red 0 under Throughput when no item finished in either range, and any change of 0 reads in grey instead of green or red. "No target set" stays next to a change.
