@@ -41,7 +41,7 @@ test('the item lists its touches, and a reason set on one stays', async ({ page 
 
   const card = page.getByRole('region', { name: 'Human touches' });
   await expect(card.getByText('1 so far')).toBeVisible();
-  await expect(card.getByText(/^sre averages \d+\.\d per item\. Set a reason/)).toBeVisible();
+  await expect(card.getByText(/^SRE averages \d+\.\d per item\. Set a reason/)).toBeVisible();
   await expect(card.getByText(/Local user left a note: “Also check the connection pool”\.$/)).toBeVisible();
   await expect(card.getByText(/^Investigate, (note, )?unplanned$/)).toBeVisible();
   // The item head no longer repeats the count ("1 human touch"); the card's "1 so far" above is where it is said.
