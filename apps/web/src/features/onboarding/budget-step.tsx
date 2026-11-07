@@ -18,7 +18,7 @@ import { stationLabel } from '../factory-editor/line/labels';
 import { defaultEdits } from './budget-draft';
 import { BudgetFields, useBudgetValues } from './budget-fields';
 import { BudgetCard } from './budget-gauge';
-import type { OnboardingSearch } from './code-search';
+import { carriedSearch, type OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 import { explainProblems, type PublishProblem, stepsToLink } from './publish-problems';
@@ -47,15 +47,15 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
   return (
     <Button asChild size="lg" variant="secondary">
       {factory ? (
-        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'line' }} search={{ factory }}>
+        <Link
+          to="/o/$org/get-started/$step"
+          params={{ org: org.slug, step: 'line' }}
+          search={carriedSearch(search, { factory })}
+        >
           Back
         </Link>
       ) : (
-        <Link
-          to="/o/$org/get-started/$step"
-          params={{ org: org.slug, step: 'factory' }}
-          search={{ url: search.url, secret: search.secret }}
-        >
+        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'factory' }} search={carriedSearch(search)}>
           Back
         </Link>
       )}
@@ -136,7 +136,7 @@ function FixLink({
     <Link
       to="/o/$org/get-started/$step"
       params={{ org: org.slug, step }}
-      search={{ factory, url: search.url, secret: search.secret }}
+      search={carriedSearch(search, { factory })}
       className="font-medium underline underline-offset-2"
     >
       {`Go to the ${stepLabel(step)} step`}
@@ -198,7 +198,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       void navigate({
         to: '/o/$org/get-started/$step',
         params: { org: org.slug, step: 'intake' },
-        search: { factory },
+        search: carriedSearch(search, { factory }),
       });
     } catch (err) {
       setRefusal(refusalOf(err));

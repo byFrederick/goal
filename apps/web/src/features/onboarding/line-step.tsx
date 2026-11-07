@@ -25,7 +25,7 @@ import { LineEditorProvider, useLineEditor } from '../factory-editor/line/line-e
 import { ModelsBox } from '../factory-editor/line/models-box';
 import { type Direction, stepTarget } from '../factory-editor/line/reorder';
 import { WipStepper } from '../factory-editor/line/station-row';
-import type { OnboardingSearch } from './code-search';
+import { carriedSearch, type OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, type PreviewStation, previewSlots } from './factory-preview';
 import { AddHere, CardControls, useCardFlip } from './line-step-controls';
 import { ModelKeyCard, useModelKeySecret } from './model-key-card';
@@ -120,19 +120,13 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
           <Link
             to="/o/$org/get-started/$step"
             params={{ org: org.slug, step: 'code' }}
-            search={{
-              url: search.url,
-              secret: search.secret,
-              template: search.template,
-              factory,
-              access: search.access,
-            }}
+            search={carriedSearch(search, { factory })}
           >
             Back
           </Link>
         </Button>
       }
-      action={<Continue org={org} factory={factory} />}
+      action={<Continue org={org} search={search} factory={factory} />}
       preview={previewSlots({
         organization: organizationCard(org, host),
         code: codeCard({ url: search.url, secret: search.secret, done: true }),
@@ -167,7 +161,7 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
  * Continue goes to Budget, which publishes. It is held while the line has no station that runs an agent and while
  * the draft's validation reports an error or has not answered yet, and while factory.yaml has no model key, with one sentence saying what is missing.
  */
-function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
+function Continue({ org, search, factory }: { org: OrgSummary; search: OnboardingSearch; factory: string }) {
   const editor = useLineEditor();
   const session = useDraftSession();
   const navigate = useNavigate();
@@ -208,7 +202,7 @@ function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
               void navigate({
                 to: '/o/$org/get-started/$step',
                 params: { org: org.slug, step: 'budget' },
-                search: { factory },
+                search: carriedSearch(search, { factory }),
               });
             },
             () => setLeaving(false),
