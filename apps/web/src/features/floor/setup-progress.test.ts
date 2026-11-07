@@ -31,6 +31,8 @@ const empty: SetupInput = {
   model: { basics: {}, line: { stations: [] }, review: {} } as unknown as Model,
   triggers: [],
   finishedItems: 0,
+  paths: ['factory.yaml'],
+  factoryYaml: undefined,
   factoryName: 'software',
 };
 
@@ -42,6 +44,8 @@ const withAll: SetupInput = {
   model,
   triggers: [trigger(true), trigger(true), trigger(true)],
   finishedItems: 1,
+  paths: ['factory.yaml'],
+  factoryYaml: undefined,
   factoryName: 'software',
 };
 
@@ -50,6 +54,25 @@ const row = (rows: SetupRow[], id: SetupRow['id']) => {
   if (!found) throw new Error(`no row ${id}`);
   return found;
 };
+
+describe('Model key row', () => {
+  const onEnv = { ...empty, paths: ['factory.yaml', 'environments/default.yaml'] };
+  const keyed = 'spec:\n  runtime:\n    modelKey: "{{secret.anthropic}}"\n';
+
+  it('is not done for a line with an environment file and no model key', () => {
+    const rows = setupRows({ ...onEnv, factoryYaml: 'spec: {}\n' });
+    expect(row(rows, 'model-key')).toMatchObject({ done: false, text: 'Model key', hint: 'Agents run on it' });
+    expect(rows).toHaveLength(10);
+  });
+
+  it('is done once modelKey is set', () => {
+    expect(row(setupRows({ ...onEnv, factoryYaml: keyed }), 'model-key').done).toBe(true);
+  });
+
+  it('is absent for a line that is not on secrets', () => {
+    expect(setupRows(empty).some((r) => r.id === 'model-key')).toBe(false);
+  });
+});
 
 describe('setupRows', () => {
   it('lists the nine rows in the picture order', () => {
@@ -140,7 +163,11 @@ describe('setupRows', () => {
     expect(row(setupRows(empty), 'triggers')).toMatchObject({ done: false, text: '0 triggers' });
   });
 
-  it('marks the first item merged once an item of the factory is done', () => {
+  it('words the first-item row so it fits a line without code', () => {
+    expect(row(setupRows(empty), 'first-item').text).toBe('First item done');
+  });
+
+  it('marks the first item done once an item of the factory is done', () => {
     expect(row(setupRows(empty), 'first-item').done).toBe(false);
     expect(row(setupRows({ ...empty, finishedItems: 1 }), 'first-item').done).toBe(true);
   });

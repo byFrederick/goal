@@ -420,14 +420,6 @@ goal key revoke <name|id>
 
 revoke a key: anything using it stops working at once
 
-## goal connection
-
-```text
-goal connection ...
-```
-
-moved to goal access, goal secret and environment files; prints where and exits 2
-
 ## goal secret list
 
 ```text
@@ -479,14 +471,6 @@ goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dr
 import a .env file or a YAML file's credentials: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
 
 Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
-
-## goal credential
-
-```text
-goal credential ...
-```
-
-moved to goal secret; prints where and exits 2
 
 ## goal env test
 
@@ -635,7 +619,7 @@ remove the n-th fact from the draft's memory.yaml
 goal search "<query>" [--limit N] [--json]
 ```
 
-search the organization's items, agents, factories and connections, by group, best first (--limit: per group, 1 to 20, default 5; --json: goald's answer as it came)
+search the organization's items, agents and factories, by group, best first (--limit: per group, 1 to 20, default 5; --json: goald's answer as it came)
 
 Flags: `--limit N`, `--json`.
 
@@ -846,7 +830,7 @@ Flags: `--json`.
 goal webhooks create <name> [--sender github|gitlab|standard|pagerduty|sentry|token] [--secret <name>] [--json]
 ```
 
-add a webhook, open to no factory (default sender standard; --kind generic|github is the old name of --sender, generic being standard); without --secret it makes the secret webhook-&lt;name&gt; and prints its value once, alone on stdout: store it in the sender now
+add a webhook, open to no factory (default sender standard); without --secret it makes the secret webhook-&lt;name&gt; and prints its value once, alone on stdout: store it in the sender now
 
 Flags: `--sender github|gitlab|standard|pagerduty|sentry|token`, `--secret <name>`, `--json`.
 

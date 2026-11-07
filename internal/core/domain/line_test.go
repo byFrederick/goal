@@ -44,8 +44,12 @@ func TestLine_Refusal(t *testing.T) {
 		name string
 		line Line
 		want []string // in the reason; none for a line that runs
+		code string   // RefusalCode
 	}{
-		{name: "on connections", line: Line{Runtime: Runtime{ModelConnection: testModelConn}}},
+		{
+			name: "on connections", line: Line{Number: 5, Runtime: Runtime{ModelConnection: testModelConn}},
+			want: []string{"version 5", "on connections", "publish a version on environment files and secrets (ADR 0037)"},
+		},
 		{
 			name: "a removed form", line: Line{
 				Number: 3, Runtime: Runtime{ModelConnection: testModelConn}, Removed: []string{"spec.runtime.repository.token (env-reference-removed)"},
@@ -53,8 +57,8 @@ func TestLine_Refusal(t *testing.T) {
 			want: []string{"version 3", "spec.runtime.repository.token (env-reference-removed)", "publish a version on environment files and secrets (ADR 0037)"},
 		},
 		{
-			name: "no model connection", line: Line{Number: 2},
-			want: []string{"version 2", "runtime.modelConnection", "runtime.modelKey"},
+			name: "neither a model key nor environments", line: Line{Number: 2},
+			want: []string{"version 2", "on connections", "runtime.modelKey"},
 		},
 		{name: "on secrets", line: Line{Runtime: Runtime{ModelKey: testModelKey}, Environments: []Environment{{Name: DefaultEnvironment}}}},
 		{name: "a model key without environments", line: Line{Runtime: Runtime{ModelKey: testModelKey}}},
@@ -62,11 +66,15 @@ func TestLine_Refusal(t *testing.T) {
 			name: "environments without a model key", line: Line{
 				Number: 4, Runtime: Runtime{ModelConnection: testModelConn}, Environments: []Environment{{Name: DefaultEnvironment}},
 			},
-			want: []string{"version 4", "runtime.modelKey"},
+			want: []string{"version 4", "runtime.modelKey"}, code: BlockModelKeyMissing,
 		},
 	}
 
 	for _, tt := range tests {
+		if got := tt.line.RefusalCode(); got != tt.code {
+			t.Errorf("%s: refusal code %q; want %q", tt.name, got, tt.code)
+		}
+
 		got := tt.line.Refusal()
 		if (got == "") != (len(tt.want) == 0) {
 			t.Errorf("%s: refusal %q; want one: %v", tt.name, got, len(tt.want) > 0)
@@ -77,23 +85,6 @@ func TestLine_Refusal(t *testing.T) {
 				t.Errorf("%s: refusal %q; want %q in it", tt.name, got, w)
 			}
 		}
-	}
-}
-
-// A merge may use the line's connections and its repository's, each once.
-func TestLine_MergeConnections(t *testing.T) {
-	t.Parallel()
-
-	const repos = "repos"
-
-	l := Line{Connections: []string{repos, "datadog"}, Runtime: Runtime{Repository: Repository{Connection: "gitlab"}}}
-	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog", "gitlab"}) {
-		t.Errorf("MergeConnections = %v", got)
-	}
-
-	l.Runtime.Repository.Connection = repos
-	if got := l.MergeConnections(); !slices.Equal(got, []string{repos, "datadog"}) {
-		t.Errorf("MergeConnections with the repository's listed = %v", got)
 	}
 }
 

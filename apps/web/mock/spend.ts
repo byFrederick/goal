@@ -21,12 +21,16 @@ export interface SpendFactory {
   title?: string | undefined;
 }
 
-export interface SpendOptions {
+export interface SpendOptions<F extends SpendFactory = SpendFactory> {
   clock: () => number;
   /** The factories the caller sees in an organization, as the mock keeps them. */
-  factoriesOf: (org: string) => SpendFactory[];
+  factoriesOf: (org: string) => F[];
   /** The reason of a factory's open andon pull, or null while its line runs. */
   reasonOf: (org: string, factory: SpendFactory) => string | null;
+  /** The weekly budget a factory's definition sets, when the mock keeps one that Home also shows. */
+  weeklyOf?: (factory: SpendFactory) => number | null | undefined;
+  /** A factory's spend over UTC days `from` through `to`, from the source Home reads. */
+  spendOf?: (factory: F, from: number, to: number) => number;
 }
 
 /** The budgets the acme fixtures set in each factory's definition, and the agents that spend. */
@@ -96,9 +100,10 @@ function windowStart(window: SpendWindow, now: number): number {
   return today - mondayOffset * dayMs;
 }
 
-export function createSpend(options: SpendOptions) {
+export function createSpend<F extends SpendFactory>(options: SpendOptions<F>) {
   /** The spend of one factory on one UTC day, from its budget. */
-  const factorySpend = (f: SpendFactory, ms: number): number => {
+  const factorySpend = (f: F, ms: number): number => {
+    if (options.spendOf) return options.spendOf(f, startOfDay(ms), startOfDay(ms));
     const budget = budgeted[f.name];
     return budget ? spendOn(ms, budget) : 0;
   };
@@ -146,19 +151,19 @@ export function createSpend(options: SpendOptions) {
     const rework = cents(total * 0.12);
     const budgets: SpendBudget[] = factories.map((f) => {
       const cap = budgeted[f.name] ?? { daily: 0, weekly: 0, agents: [] };
-      const today_usd = sumOfDay(org, today);
-      const week_usd = sumOver(org, daysBetween(today - 6 * dayMs, now));
+      const weekly = options.weeklyOf ? (options.weeklyOf(f) ?? null) : cap.weekly;
+      const today_usd = factorySpend(f, today);
+      const week_usd = cents(daysBetween(today - 6 * dayMs, now).reduce((n, d) => n + factorySpend(f, d), 0));
       const reason = options.reasonOf(org, f);
-      const state = reason !== null ? 'stopped' : week_usd >= cap.weekly ? 'over_budget' : 'running';
+      const state = reason !== null ? 'stopped' : weekly !== null && week_usd >= weekly ? 'over_budget' : 'running';
       return {
         factory: { id: f.id, name: f.name, title: f.title ?? f.name },
         daily_usd: cap.daily,
-        weekly_usd: cap.weekly,
+        weekly_usd: weekly,
         today_usd,
         week_usd,
         state,
-        reason:
-          state === 'stopped' ? reason : state === 'over_budget' ? `$${week_usd} of $${cap.weekly} this week` : null,
+        reason: state === 'stopped' ? reason : state === 'over_budget' ? `$${week_usd} of $${weekly} this week` : null,
         model_connections: [connection],
       };
     });
@@ -184,11 +189,35 @@ export function createSpend(options: SpendOptions) {
       rework_usd: rework,
       rework_share: total > 0 ? 0.12 : 0,
       budgets,
+      usage: usageOf(factories, window),
+    };
+  }
+
+  /** Sample box usage: the factory's agents and stations, one with no box size and one with a missing percentile. */
+  function usageOf(factories: F[], window: SpendWindow): OrgSpend['usage'] {
+    const scale = window === 'week' ? 1 : window === 'month' ? 4 : 12;
+    const GB = 1024 ** 3;
+    const row = (i: number) => ({
+      box_size: (i % 3 === 2 ? null : (['large', 'medium', 'small'] as const)[i % 3]) ?? null,
+      runs: (12 - i * 2) * scale,
+      cpu_seconds_p50: 200 / (i + 1),
+      cpu_seconds_p90: i === 3 ? null : 450 / (i + 1),
+      peak_memory_bytes_p50: (1.6 / (i + 1)) * GB,
+      peak_memory_bytes_p90: (2.6 / (i + 1)) * GB,
+    });
+    const agents = factories.flatMap((f) =>
+      (budgeted[f.name]?.agents ?? []).slice(0, 3).map(([agent]) => ({ f, agent })),
+    );
+    return {
+      by_agent: agents.map(({ f, agent }, i) => ({ factory_id: f.id, agent, ...row(i % 5) })),
+      by_station: factories.flatMap((f, fi) =>
+        ['triage', 'build'].map((station, i) => ({ factory_id: f.id, station, ...row(fi + i) })),
+      ),
     };
   }
 
   /** The spend of one factory over the days, the sum its agents split. */
-  function spendOverFactory(f: SpendFactory, days: number[]): number {
+  function spendOverFactory(f: F, days: number[]): number {
     return cents(days.reduce((n, d) => n + factorySpend(f, d), 0));
   }
 

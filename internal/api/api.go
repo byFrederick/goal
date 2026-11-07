@@ -4,7 +4,7 @@
 // (approve, reject, retry, merge) and controls (move, pause; control.go), factory definition authoring (definitions.go: drafts,
 // validation, publishing, versions, templates), a Server-Sent Events stream of the
 // organization's events, the factory editor's metadata and skills catalog (builder.go), and the
-// organization's connections (connections.go), credentials (credentials.go) and knowledge base
+// organization's standing rules (toolapproval.go), credentials (credentials.go) and knowledge base
 // (knowledge.go), and each factory's webhook endpoints and their delivery log (webhooks.go).
 //
 // The handlers implement the strict server interface generated into internal/api/gen
@@ -117,6 +117,8 @@ type Items interface {
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
+	RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error)
+	BudgetExhaustedSince(ctx context.Context, factory domain.FactoryID) (time.Time, bool, error)
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
 	EachAgentModelSpend(ctx context.Context, w domain.SpendWindow, factories []domain.FactoryID, maxRows int,
 		each func(domain.AgentModelSpend) error) error
@@ -191,24 +193,24 @@ type Deps struct {
 	InboxSources []InboxSource
 	// Builder serves the factory editor's metadata and the skills catalog.
 	Builder Builder
-	// Connections are the organization's connections and kinds (spec 4); ParseKind reads an
-	// organization's kind file as goald's own (connkind.Parse); ConnectionTransport sends
-	// connection tests: it must dial public addresses only (egress.PublicDialer).
-	Connections         ports.Connections
-	ParseKind           KindParser
+	// ConnectionTransport sends environment tests: it must dial public addresses only
+	// (egress.PublicDialer).
 	ConnectionTransport http.RoundTripper
-	// CodeHosts are the code host adapters by the name a connection kind gives (KindSpec.CodeHost),
-	// as the engine has them; they list what a connection reaches. Without one, no kind is a code
-	// host here.
+	// StandingRules are the organization's standing rules (ADR 0031 decision 7), which
+	// /standing-rules lists; the engine revokes them.
+	StandingRules ports.StandingRules
+	// CodeHosts are the code host adapters by the kind of code host they speak (domain.CodeHostKind),
+	// as the engine has them; a repository test reaches its repository's host through one. Without
+	// one, no repository on that kind of host can be tested.
 	CodeHosts map[string]ports.CodeHost
 	// RepositoryTestTimeout bounds a repository test's call to its code host; 0 is 10 seconds.
 	RepositoryTestTimeout time.Duration
-	// Credentials are the organization's credentials (ADR 0017), which connections refer to as
-	// {{name}}.
+	// Credentials are the organization's credentials (ADR 0017), stored as secrets since ADR 0037;
+	// the credentials API keeps its contract, and nothing uses one any more.
 	Credentials ports.Credentials
 	// OrgSecrets are the organization's secrets (ADR 0037), the only place a value lives. What uses
-	// one is read from the factories' current versions, the knowledge sources and, for connections,
-	// Credentials.UsedBy.
+	// one is read from the factories' current versions and the knowledge sources (Credentials.UsedBy,
+	// which named connections, now names none).
 	OrgSecrets ports.OrgSecrets
 	// Catalog are the tool templates goald ships (catalog.Templates), served on /v1/catalog;
 	// EnvironmentTests keep the latest test of each environment's MCP servers, which ToolLister
@@ -267,7 +269,7 @@ func (d Deps) complete() bool {
 	missing := []bool{
 		d.Engine == nil, d.Items == nil, d.Factories == nil, d.Definitions == nil, d.Versions == nil, d.Orgs == nil,
 		d.Audit == nil, d.Access == nil, d.Authorizer == nil, d.Platform == nil, d.Feed == nil, d.Builder == nil, d.Clock == nil,
-		d.Connections == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.RepositoryTests == nil, d.Intake == nil, d.DraftRequests == nil, d.ParseKind == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
+		d.StandingRules == nil, d.Credentials == nil, d.OrgSecrets == nil, d.EnvironmentTests == nil, d.ToolLister == nil, d.RepositoryTests == nil, d.Intake == nil, d.DraftRequests == nil, d.ConnectionTransport == nil, d.OrgRetention <= 0,
 		d.Knowledge == nil, d.KnowledgeUploads == nil, d.UploadMaxBytes <= 0, d.KnowledgeObjects == nil, d.KnowledgeCheck == nil,
 		d.OrgPolicies == nil, len(d.BoxSizes) == 0, d.NotificationPreferences == nil, d.NotificationSettings == nil, d.SlackMessenger == nil,
 		d.Jonah != nil && (d.Jonah.Store == nil || d.Jonah.Decisions == nil),
@@ -312,7 +314,7 @@ var errInvalid = errors.New("invalid request")
 func New(d Deps) (http.Handler, error) {
 	if !d.complete() {
 		return nil, errors.New("api: Engine, Items, Factories, Definitions, Versions, Orgs, Audit, Access, Authorizer, Platform, Feed, Builder, Clock, " +
-			"Connections, Credentials, OrgSecrets, EnvironmentTests, ToolLister, RepositoryTests, Intake, ParseKind, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
+			"StandingRules, Credentials, OrgSecrets, EnvironmentTests, ToolLister, RepositoryTests, Intake, ConnectionTransport, Knowledge, KnowledgeUploads, KnowledgeObjects, KnowledgeCheck, OrgPolicies, BoxSizes, NotificationPreferences, NotificationSettings, SlackMessenger, " +
 			"a positive UploadMaxBytes and a positive OrgRetention are required, and Jonah, when set, needs Store and Decisions")
 	}
 
@@ -328,7 +330,7 @@ func New(d Deps) (http.Handler, error) {
 	s := &server{
 		engine: d.Engine, items: d.Items, factories: d.Factories, defs: d.Definitions, versions: d.Versions, orgs: d.Orgs, audit: d.Audit,
 		retention: d.OrgRetention, authz: d.Authorizer, auth: d.Auth, identity: d.Identity, access: d.Access, platform: d.Platform, feed: d.Feed,
-		builder: d.Builder, connections: d.Connections, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, repoTests: d.RepositoryTests, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, parseKind: d.ParseKind, codehosts: d.CodeHosts,
+		builder: d.Builder, rules: d.StandingRules, credentials: d.Credentials, secrets: d.OrgSecrets, catalog: slices.Clone(d.Catalog), envTests: d.EnvironmentTests, tools: d.ToolLister, repoTests: d.RepositoryTests, conversions: d.Conversions, intake: d.Intake, draftRequests: d.DraftRequests, codehosts: d.CodeHosts,
 		repoTestTimeout:  cmp.Or(d.RepositoryTestTimeout, connectionTestTimeout),
 		connectionClient: &http.Client{Transport: d.ConnectionTransport, CheckRedirect: noRedirects, Timeout: connectionTestTimeout},
 		knowledge:        d.Knowledge, uploads: d.KnowledgeUploads, uploadMax: d.UploadMaxBytes, objects: d.KnowledgeObjects, check: d.KnowledgeCheck,
@@ -446,10 +448,10 @@ type server struct {
 	feed      *Feed
 	inbox     []InboxSource
 	builder   Builder
-	// connections and parseKind serve the connection routes; connectionClient sends their tests.
-	connections      ports.Connections
-	parseKind        KindParser
+	// connectionClient sends environment tests.
 	connectionClient *http.Client
+	// rules serve the standing-rules list.
+	rules ports.StandingRules
 	// codehosts list what code host connections reach.
 	codehosts map[string]ports.CodeHost
 	// repoTestTimeout bounds a repository test's call to its code host.
@@ -509,7 +511,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 		return nil, err
 	}
 
-	source, via := submittedFrom(ctx)
+	via := submittedVia(ctx)
 	p, _ := domain.PrincipalFrom(ctx)
 
 	var start *domain.StartRequest
@@ -525,7 +527,7 @@ func (s *server) SubmitItem(ctx context.Context, req gen.SubmitItemRequestObject
 
 	it, err := s.engine.Submit(ctx, domain.FileRequest{
 		FactoryID: domain.FactoryID(f.Metadata.ID), Origin: domain.OriginPerson, Via: via, By: p.Actor(),
-		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority), Source: source,
+		Type: deref(b.Type), Title: b.Title, Body: deref(b.Body), Lane: deref(b.Lane), Priority: deref(b.Priority),
 		Start: start, Repositories: deref(b.Repositories),
 	})
 	if errors.Is(err, domain.ErrInvalid) { // what the line does not take is a bad request here, not a conflict
@@ -575,24 +577,24 @@ func repositoriesOf(rows []domain.ItemRepository, l domain.Line) []gen.ItemRepos
 	return out
 }
 
-// submittedFrom is where an item the request submits comes from, for Intake, and how its person
-// filed it: an API key is the API; a user acting through a personal token or a session that is
-// not a browser one (goal login's) is the CLI; a browser session, and GOAL_AUTH=none's one
-// person, who has neither, are people on the web. "" when the request carries no principal.
-func submittedFrom(ctx context.Context) (domain.ItemSource, domain.Via) {
+// submittedVia is how the person of the request filed the item it submits: an API key is the
+// API; a user acting through a personal token or a session that is not a browser one (goal
+// login's) is the CLI; a browser session, and GOAL_AUTH=none's one person, who has neither, are
+// the web. "" when the request carries no principal.
+func submittedVia(ctx context.Context) domain.Via {
 	p, ok := domain.PrincipalFrom(ctx)
 
 	switch {
 	case !ok:
-		return "", ""
+		return ""
 	case p.Kind == domain.PrincipalService:
-		return domain.ItemFromAPI, domain.ViaAPI
+		return domain.ViaAPI
 	case p.Kind != domain.PrincipalUser:
-		return "", ""
+		return ""
 	case p.Token != nil, p.Session != nil && !p.Session.Browser:
-		return domain.ItemFromCLI, domain.ViaCLI
+		return domain.ViaCLI
 	default:
-		return domain.ItemFromPeople, domain.ViaWeb
+		return domain.ViaWeb
 	}
 }
 
@@ -602,7 +604,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
-	out := s.itemOf(ctx, it)
+	out := s.unnamedItemOf(ctx, it)
 	if out.Flow, err = s.itemFlow(ctx, it); err != nil {
 		return nil, err
 	}
@@ -613,6 +615,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 	}
 
 	out.Touches = s.itemTouchesOf(touches)
+	s.nameActors(ctx, append(touchActors(out.Touches.List), out.CreatedBy)...)
 
 	needs, dependents, err := s.itemLinks(ctx, it.ID)
 	if err != nil {
@@ -914,7 +917,17 @@ func (s *server) ref(ctx context.Context, factory domain.FactoryID, number int64
 	return domain.ItemRef{Factory: name, Number: number}.String()
 }
 
+// itemOf is it as the API answers it, who filed it named.
 func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
+	out := s.unnamedItemOf(ctx, it)
+	s.nameActors(ctx, out.CreatedBy)
+
+	return out
+}
+
+// unnamedItemOf is itemOf with who filed it not yet named, for a response that names every
+// person in it with one nameActors call.
+func (s *server) unnamedItemOf(ctx context.Context, it domain.Item) gen.Item {
 	out := gen.Item{
 		Id: string(it.ID), Ref: s.ref(ctx, it.FactoryID, it.Number), FactoryId: string(it.FactoryID), Number: it.Number,
 		ParentId: optional(string(it.ParentID)), Type: it.Type, Lane: optional(it.Lane), Title: it.Title, Body: it.Body,
@@ -950,7 +963,7 @@ func (s *server) itemOf(ctx context.Context, it domain.Item) gen.Item {
 }
 
 // createdBy is who filed it as the API shows them; nil for items filed before ADR 0040 and for the
-// engine's filings.
+// engine's filings. A person is named by the response's nameActors, once for all its items.
 func (s *server) createdBy(it domain.Item) *gen.Actor {
 	a, err := domain.ActorFromRef(it.CreatedBy)
 	if err != nil || a.Kind == domain.ActorSystem {

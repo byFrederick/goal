@@ -1,7 +1,7 @@
 // The Floor over a range (E4): throughput against the range before and the target, the last 12
 // weeks, the header's window control writing the URL, and the line and the flow tiles of the top.
 import { expect, test } from '@playwright/test';
-import { expectAccessible, expectNoHorizontalScroll, isPhone, noonUtc, pinClock } from './support';
+import { expectAccessible, expectNoHorizontalScroll, isPhone, noonUtc, pinClock, setConstraintSaving } from './support';
 
 // One instant for the test, the mock and the page: noon UTC of the day the file loads, so the days
 // this test expects are the days goald and the page count from, even when the run crosses UTC
@@ -46,13 +46,12 @@ test('the floor shows the cards below the figures: Needs you, where work waits, 
 
   const waits = page.getByRole('region', { name: 'Where work waits' });
   await expect(waits.getByText("Share of the week each station's agents were busy")).toBeVisible();
-  // The what-if is live since #218: the person may edit the definition, so the button is not disabled.
-  const add = waits.getByRole('button', { name: /^Add (a|an) .+ agent$/ });
-  await expect(add).toBeVisible();
-  await expect(add).not.toHaveAttribute('aria-disabled', 'true');
+  // Investigate already runs at its WIP limit of 3, so another agent adds no slot and the card suggests none.
+  await expect(waits.getByText('is the constraint')).toBeVisible();
+  await expect(waits.getByRole('button', { name: /^Add (a|an) .+ agent$/ })).toHaveCount(0);
 
   const weeks = page.getByRole('region', { name: 'Throughput by week' });
-  await expect(weeks.getByRole('img', { name: /^Items merged a day by week, from .+ Target 8\.$/ })).toBeVisible();
+  await expect(weeks.getByRole('img', { name: /^Items done a day by week, from .+ Target 8\.$/ })).toBeVisible();
   await expect(weeks.getByText('This week')).toBeVisible();
 
   const activity = page.getByRole('region', { name: 'Activity' });
@@ -115,18 +114,57 @@ test('the line and the flow figures show on the Floor', async ({ page }) => {
   await expectAccessible(page);
 });
 
+test('a factory with no finished item shows no red 0 under Throughput and keeps No target set', async ({ page }) => {
+  // Answer the metrics with no finished item in either range, whatever the mock's fixture holds.
+  await page.route(/\/metrics\?/, async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    if (!body || typeof body !== 'object' || !('items_done' in body))
+      return route.fulfill({ response: res, json: body });
+    const empty = { items_done: 0, throughput_per_day: 0, lead_time_hours: null, rework_rate: 0 };
+    const targets = { ...body.targets, throughput_per_day: null };
+    return route.fulfill({
+      response: res,
+      json: {
+        ...body,
+        ...empty,
+        spend_usd: 0,
+        targets,
+        previous: body.previous ? { ...body.previous, ...empty } : body.previous,
+      },
+    });
+  });
+  await page.goto('/o/acme/f/software');
+  const flow = page.getByRole('region', { name: 'Flow against targets' });
+  const throughput = flow.getByText('Throughput', { exact: true }).locator('xpath=..');
+  await expect(throughput.getByText('No target set')).toBeVisible();
+  await expect(throughput.locator('.text-rework-ink')).toHaveCount(0);
+});
+
 test('Add a build agent raises the station by one in a draft and opens the Line editor', async ({ page }) => {
   // The phone's Floor shows the what-if the same way; this flow runs on the desktop card.
   test.skip(isPhone(page), 'the what-if is on the desktop card');
+  await setConstraintSaving(page, 5);
   await page.goto('/o/acme/f/software');
   const card = page.getByRole('region', { name: 'Where work waits' });
   await expect(card.getByText('With a 7th build agent')).toBeVisible();
+  // The what-if is live since #218: the person may edit the definition, so the button is not disabled.
+  await expect(card.getByRole('button', { name: 'Add a build agent' })).not.toHaveAttribute('aria-disabled', 'true');
   await card.getByRole('button', { name: 'Add a build agent' }).click();
 
   // The draft is not published: the person reviews and publishes it in the Line editor.
   await expect(page).toHaveURL(/\/o\/acme\/f\/software\/definition\/line$/);
   // The draft starts from the published definition, whose Build station is worked by one backend-engineer agent.
-  await expect(page.getByRole('combobox', { name: 'Who works at Build' })).toHaveText('backend-engineer × 2');
+  await expect(page.getByRole('combobox', { name: 'Who works here at Build' })).toHaveText('backend-engineer × 2');
+});
+
+test('the Floor suggests no agent when the constraint saves under an hour', async ({ page }) => {
+  await setConstraintSaving(page, 0.3);
+  await page.goto('/o/acme/f/software');
+  const card = page.getByRole('region', { name: 'Where work waits' });
+  await expect(card.getByText('is the constraint')).toBeVisible();
+  await expect(card.getByRole('button', { name: /^Add an? .* agent$/ })).toHaveCount(0);
+  await expect(card.getByText(/^With an? /)).toHaveCount(0);
 });
 
 test('a phone shows the range the URL names', async ({ page }) => {
@@ -170,6 +208,20 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test.describe('the New item row at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('is a 44 px target', async ({ page }) => {
+    // Research has no item yet, so How work gets in shows, and its role may create items (support's may not).
+    await page.goto('/o/goal/f/research');
+    const ways = page.getByRole('region', { name: 'How work gets in' });
+    const button = ways.getByRole('button', { name: /New item/ });
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  });
+});
 
 test.describe('activity at 390 px', () => {
   test.use({ viewport: { width: 390, height: 844 } });

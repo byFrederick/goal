@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { connectionsQuery, intakeQuery, versionModelQuery } from '../../api/queries';
-import type { Connection, Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
+import { intakeQuery, orgNotificationsQuery, versionModelQuery } from '../../api/queries';
+import type { Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
 import { WaysInCard } from './ways-in-card';
 
@@ -46,17 +46,16 @@ const intakeWith = (triggers: IntakeTrigger[]) =>
     items: 0,
     from: null,
     to: null,
-    sources: { people: 0, cli: 0, api: 0, schedule: 0, webhook: 0, github: 0 },
     triggers,
   }) as Intake;
 
 function renderWays({
   triggers = [labelTrigger],
-  connections = [] as Connection[],
+  slackSecret = null as string | null,
   model = published,
 }: {
   triggers?: IntakeTrigger[];
-  connections?: Connection[];
+  slackSecret?: string | null;
   model?: VersionModel;
 } = {}) {
   return renderFactoryPage({
@@ -67,7 +66,7 @@ function renderWays({
     seed: [
       [intakeQuery(org.id, factory.id).queryKey, intakeWith(triggers)],
       [versionModelQuery(org.id, factory.id, 'current').queryKey, model],
-      [connectionsQuery(org.id).queryKey, connections],
+      [orgNotificationsQuery(org.id).queryKey, { slack_secret: slackSecret }],
     ],
   });
 }
@@ -91,15 +90,15 @@ describe('WaysInCard', () => {
     expect(screen.getByText('goal run')).toBeTruthy();
   });
 
-  it('offers Connect for Slack while the organization has no slack connection', async () => {
+  it('offers Connect for Slack while Slack notifications are not set', async () => {
     renderWays();
 
     expect(await screen.findByText('@software')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Connect' }).getAttribute('href')).toBe('/o/acme/secrets?new=true');
   });
 
-  it('offers no Connect once Slack is connected', async () => {
-    renderWays({ connections: [{ id: 'c-slack', name: 'slack', kind: 'slack' } as Connection] });
+  it('offers no Connect once Slack notifications are set', async () => {
+    renderWays({ slackSecret: 'slack-webhook' });
 
     await screen.findByText('@software');
     expect(screen.queryByRole('link', { name: 'Connect' })).toBeNull();
@@ -113,5 +112,15 @@ describe('WaysInCard', () => {
 
     expect(await screen.findByText(/This factory has no triggers yet/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /New item, or press/ })).toBeTruthy();
+  });
+
+  it('makes the New item row a phone target and hides the shortcut hint on touch', async () => {
+    renderWays({ triggers: [] });
+
+    const button = await screen.findByRole('button', { name: /New item/ });
+    expect(button.className).toContain('max-md:min-h-11');
+    expect(button.className).not.toContain('gap-x-2');
+    expect(button.hasAttribute('aria-label')).toBe(false);
+    expect(button.querySelector('span')?.className).toContain('pointer-coarse:hidden');
   });
 });

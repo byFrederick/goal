@@ -441,30 +441,6 @@ func (e CodeHostKind) Valid() bool {
 	}
 }
 
-// Defines values for ConnectionStatus.
-const (
-	ConnectionStatusFailing       ConnectionStatus = "failing"
-	ConnectionStatusMissingSecret ConnectionStatus = "missing-secret"
-	ConnectionStatusOk            ConnectionStatus = "ok"
-	ConnectionStatusUntested      ConnectionStatus = "untested"
-)
-
-// Valid indicates whether the value is a known member of the ConnectionStatus enum.
-func (e ConnectionStatus) Valid() bool {
-	switch e {
-	case ConnectionStatusFailing:
-		return true
-	case ConnectionStatusMissingSecret:
-		return true
-	case ConnectionStatusOk:
-		return true
-	case ConnectionStatusUntested:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ConnectionEventChange.
 const (
 	ConnectionEventChangeCreated ConnectionEventChange = "created"
@@ -483,30 +459,6 @@ func (e ConnectionEventChange) Valid() bool {
 	case ConnectionEventChangeTested:
 		return true
 	case ConnectionEventChangeUpdated:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ConnectionKindModes.
-const (
-	ConnectionKindModesCli ConnectionKindModes = "cli"
-	ConnectionKindModesEnv ConnectionKindModes = "env"
-	ConnectionKindModesGit ConnectionKindModes = "git"
-	ConnectionKindModesMcp ConnectionKindModes = "mcp"
-)
-
-// Valid indicates whether the value is a known member of the ConnectionKindModes enum.
-func (e ConnectionKindModes) Valid() bool {
-	switch e {
-	case ConnectionKindModesCli:
-		return true
-	case ConnectionKindModesEnv:
-		return true
-	case ConnectionKindModesGit:
-		return true
-	case ConnectionKindModesMcp:
 		return true
 	default:
 		return false
@@ -907,6 +859,7 @@ func (e ImportStartKind) Valid() bool {
 const (
 	InboxEntryKindAndon           InboxEntryKind = "andon"
 	InboxEntryKindBlocked         InboxEntryKind = "blocked"
+	InboxEntryKindBudget          InboxEntryKind = "budget"
 	InboxEntryKindCheckFailing    InboxEntryKind = "check_failing"
 	InboxEntryKindCheckLimit      InboxEntryKind = "check_limit"
 	InboxEntryKindConversion      InboxEntryKind = "conversion"
@@ -925,6 +878,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindAndon:
 		return true
 	case InboxEntryKindBlocked:
+		return true
+	case InboxEntryKindBudget:
 		return true
 	case InboxEntryKindCheckFailing:
 		return true
@@ -1557,6 +1512,24 @@ func (e MeKind) Valid() bool {
 	}
 }
 
+// Defines values for MemorySource.
+const (
+	Cgroup  MemorySource = "cgroup"
+	Machine MemorySource = "machine"
+)
+
+// Valid indicates whether the value is a known member of the MemorySource enum.
+func (e MemorySource) Valid() bool {
+	switch e {
+	case Cgroup:
+		return true
+	case Machine:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MergeRequestMethod.
 const (
 	Squash MergeRequestMethod = "squash"
@@ -1634,19 +1607,19 @@ func (e PatchOpOp) Valid() bool {
 
 // Defines values for PolicyBoxSizeSize.
 const (
-	Large  PolicyBoxSizeSize = "large"
-	Medium PolicyBoxSizeSize = "medium"
-	Small  PolicyBoxSizeSize = "small"
+	PolicyBoxSizeSizeLarge  PolicyBoxSizeSize = "large"
+	PolicyBoxSizeSizeMedium PolicyBoxSizeSize = "medium"
+	PolicyBoxSizeSizeSmall  PolicyBoxSizeSize = "small"
 )
 
 // Valid indicates whether the value is a known member of the PolicyBoxSizeSize enum.
 func (e PolicyBoxSizeSize) Valid() bool {
 	switch e {
-	case Large:
+	case PolicyBoxSizeSizeLarge:
 		return true
-	case Medium:
+	case PolicyBoxSizeSizeMedium:
 		return true
-	case Small:
+	case PolicyBoxSizeSizeSmall:
 		return true
 	default:
 		return false
@@ -1740,24 +1713,6 @@ func (e QueueTrend) Valid() bool {
 	}
 }
 
-// Defines values for RepositoryOwnerKind.
-const (
-	RepositoryOwnerKindOrganization RepositoryOwnerKind = "organization"
-	RepositoryOwnerKindUser         RepositoryOwnerKind = "user"
-)
-
-// Valid indicates whether the value is a known member of the RepositoryOwnerKind enum.
-func (e RepositoryOwnerKind) Valid() bool {
-	switch e {
-	case RepositoryOwnerKindOrganization:
-		return true
-	case RepositoryOwnerKindUser:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for ReworkLoopCause.
 const (
 	ReworkLoopCauseCheckFailed  ReworkLoopCause = "check_failed"
@@ -1803,6 +1758,27 @@ func (e RunStatus) Valid() bool {
 	case RunStatusRunning:
 		return true
 	case RunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SandboxSize.
+const (
+	SandboxSizeLarge  SandboxSize = "large"
+	SandboxSizeMedium SandboxSize = "medium"
+	SandboxSizeSmall  SandboxSize = "small"
+)
+
+// Valid indicates whether the value is a known member of the SandboxSize enum.
+func (e SandboxSize) Valid() bool {
+	switch e {
+	case SandboxSizeLarge:
+		return true
+	case SandboxSizeMedium:
+		return true
+	case SandboxSizeSmall:
 		return true
 	default:
 		return false
@@ -2652,24 +2628,6 @@ func (e WebhookDeliveryRequestReceipt) Valid() bool {
 	}
 }
 
-// Defines values for WebhookKind.
-const (
-	WebhookKindGeneric WebhookKind = "generic"
-	WebhookKindGithub  WebhookKind = "github"
-)
-
-// Valid indicates whether the value is a known member of the WebhookKind enum.
-func (e WebhookKind) Valid() bool {
-	switch e {
-	case WebhookKindGeneric:
-		return true
-	case WebhookKindGithub:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for WebhookSender.
 const (
 	WebhookSenderGithub    WebhookSender = "github"
@@ -2862,7 +2820,7 @@ type ActivityEvent struct {
 	Title   string  `json:"title"`
 }
 
-// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 type Actor struct {
 	// Id "local" for the local user, an agent's name or a job's name
 	Id   string    `json:"id"`
@@ -2929,6 +2887,31 @@ type AgentStats struct {
 	To                 openapi_types.Date `json:"to"`
 }
 
+// AgentUsage defines model for AgentUsage.
+type AgentUsage struct {
+	// Agent The agent's name in its factory
+	Agent string `json:"agent"`
+
+	// BoxSize The runs' box size; null for runs from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+
+	// CpuSecondsP50 The median CPU seconds of the runs that reported one, interpolated between the closest runs (percentile_cont); null when none did
+	CpuSecondsP50 *float64 `json:"cpu_seconds_p50"`
+
+	// CpuSecondsP90 The 90th percentile
+	CpuSecondsP90 *float64 `json:"cpu_seconds_p90"`
+	FactoryId     string   `json:"factory_id"`
+
+	// PeakMemoryBytesP50 The median peak memory of the runs that reported one, rounded to a byte; null when none did
+	PeakMemoryBytesP50 *int64 `json:"peak_memory_bytes_p50"`
+
+	// PeakMemoryBytesP90 The 90th percentile
+	PeakMemoryBytesP90 *int64 `json:"peak_memory_bytes_p90"`
+
+	// Runs The runs that reported a CPU time or a peak memory
+	Runs int `json:"runs"`
+}
+
 // AndonClear defines model for AndonClear.
 type AndonClear struct {
 	// Note What was done about it, at most 2000 characters
@@ -2990,7 +2973,7 @@ type AndonState struct {
 type ApiKey struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor     `json:"created_by"`
 	ExpiresAt time.Time `json:"expires_at"`
 
@@ -3098,7 +3081,7 @@ type AuditEntry struct {
 	// Action <noun>.<past_verb>, as in org.updated
 	Action string `json:"action"`
 
-	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -3569,55 +3552,6 @@ type Comparison struct {
 	To CompareSide `json:"to"`
 }
 
-// Connection An organization's connection (spec 4 §4.3), never a secret value
-type Connection struct {
-	CreatedAt time.Time `json:"created_at"`
-
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
-	CreatedBy   Actor  `json:"created_by"`
-	Description string `json:"description"`
-
-	// Docs getConnection only, its kind's docs for agents
-	Docs *string `json:"docs,omitempty"`
-
-	// Env getConnection only, the env names a run gets from it
-	Env *[]string `json:"env,omitempty"`
-
-	// Fields The non-secret values set (a kind's defaults are not copied in)
-	Fields   map[string]string     `json:"fields"`
-	Id       string                `json:"id"`
-	Kind     string                `json:"kind"`
-	LastTest *ConnectionTestResult `json:"last_test"`
-
-	// LastUsedAt When a run last got it
-	LastUsedAt *time.Time `json:"last_used_at"`
-
-	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
-	Name ConnectionName `json:"name"`
-
-	// SecretsSet The secret fields that are set, sorted; their values are never shown
-	SecretsSet []string `json:"secrets_set"`
-
-	// Status missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
-	Status ConnectionStatus `json:"status"`
-
-	// Tools Its tools and their modes (ADR 0031 decisions 1 and 2), sorted by name: one entry for each tool the last test listed and each tool with a mode set, a tool without a mode being allow; empty for a connection never tested and without modes
-	Tools     []ConnectionTool `json:"tools"`
-	UpdatedAt time.Time        `json:"updated_at"`
-
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
-	UpdatedBy Actor `json:"updated_by"`
-
-	// UsedBy What uses a connection, so it cannot be deleted or renamed meanwhile
-	UsedBy ConnectionUsers `json:"used_by"`
-
-	// WaitingApprovals The open tool approvals on this connection in the organization, by its current name; the connections list's "Writes waiting for your OK" is their sum
-	WaitingApprovals int `json:"waiting_approvals"`
-}
-
-// ConnectionStatus missing-secret: a required secret field is not set (its kind gained one); else the last test's outcome, untested before any
-type ConnectionStatus string
-
 // ConnectionEvent The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value
 type ConnectionEvent struct {
 	Change       ConnectionEventChange `json:"change"`
@@ -3642,123 +3576,8 @@ type ConnectionHit struct {
 	Name string `json:"name"`
 }
 
-// ConnectionKind A template for connections (spec 4 §4.2), the platform's or the organization's
-type ConnectionKind struct {
-	// CodeHost The code host adapter that reads and merges its pull requests (github, gitlab)
-	CodeHost    *string `json:"code_host,omitempty"`
-	Description *string `json:"description,omitempty"`
-
-	// Docs What agents are told about using it
-	Docs *string `json:"docs,omitempty"`
-
-	// Env The env names a run gets, as the kind writes them ({{field}} where a field names one)
-	Env    []string              `json:"env"`
-	Fields []ConnectionKindField `json:"fields"`
-
-	// Mint The adapter that mints per-run credentials from it (aws-sts)
-	Mint *string `json:"mint,omitempty"`
-
-	// Model It gives agents their model; only such a kind may be a factory's model connection
-	Model bool `json:"model"`
-
-	// Modes How runs use it: env (variables for API calls and CLIs), mcp (an MCP server, remote or stdio), cli (a tool installed in the box), git (git over https)
-	Modes []ConnectionKindModes `json:"modes"`
-
-	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
-	Name ConnectionName `json:"name"`
-
-	// Platform Shipped with goald; otherwise the organization's own
-	Platform bool `json:"platform"`
-
-	// Sync The knowledge source reader that syncs through it (gitdocs, confluence)
-	Sync *string `json:"sync,omitempty"`
-
-	// Testable It has a test (POST …/connections/{connection}/test)
-	Testable bool   `json:"testable"`
-	Title    string `json:"title"`
-}
-
-// ConnectionKindModes defines model for ConnectionKind.Modes.
-type ConnectionKindModes string
-
-// ConnectionKindField defines model for ConnectionKindField.
-type ConnectionKindField struct {
-	// Default The value of a field left empty
-	Default     *string `json:"default,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Name        string  `json:"name"`
-	Required    bool    `json:"required"`
-
-	// Secret Write-only, sealed; an input of type password
-	Secret bool   `json:"secret"`
-	Title  string `json:"title"`
-}
-
-// ConnectionKindFile A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON, checked against contracts/definitions/connection-kind.schema.json
-type ConnectionKindFile map[string]interface{}
-
-// ConnectionKindList defines model for ConnectionKindList.
-type ConnectionKindList struct {
-	Kinds []ConnectionKind `json:"kinds"`
-}
-
-// ConnectionList defines model for ConnectionList.
-type ConnectionList struct {
-	Connections []Connection `json:"connections"`
-}
-
-// ConnectionName 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
-type ConnectionName = string
-
-// ConnectionPatch defines model for ConnectionPatch.
-type ConnectionPatch struct {
-	Description *string `json:"description,omitempty"`
-
-	// Fields Every non-secret value (replaces them all)
-	Fields *map[string]string `json:"fields,omitempty"`
-
-	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
-	Name *ConnectionName `json:"name,omitempty"`
-
-	// Secrets The secret fields to replace, by name; an empty value clears an optional one
-	Secrets *map[string]string `json:"secrets,omitempty"`
-
-	// Tools Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused.
-	Tools *[]ConnectionTool `json:"tools,omitempty"`
-}
-
-// ConnectionTestResult defines model for ConnectionTestResult.
-type ConnectionTestResult struct {
-	At time.Time `json:"at"`
-
-	// Error Why it failed (never a secret value)
-	Error *string `json:"error,omitempty"`
-	Ok    bool    `json:"ok"`
-
-	// Status The test request's HTTP status, when it got one
-	Status *int `json:"status,omitempty"`
-}
-
-// ConnectionTool defines model for ConnectionTool.
-type ConnectionTool struct {
-	// Mode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
-	Mode ConnectionToolMode `json:"mode"`
-
-	// Name The tool's name as the MCP server lists it, without the connection prefix: 1 to 128 letters, digits, underscores, dots or dashes
-	Name string `json:"name"`
-}
-
 // ConnectionToolMode What a run may do with one tool of the connection (ADR 0031 decision 1): allow runs the call, ask pauses it for a person, off refuses it
 type ConnectionToolMode string
-
-// ConnectionUsers What uses a connection, so it cannot be deleted or renamed meanwhile
-type ConnectionUsers struct {
-	// Factories The factories whose current version names it (those the caller sees)
-	Factories []ConnectionFactory `json:"factories"`
-
-	// KnowledgeSources The knowledge sources that read it, by name
-	KnowledgeSources []string `json:"knowledge_sources"`
-}
 
 // ConstraintCandidate defines model for ConstraintCandidate.
 type ConstraintCandidate struct {
@@ -3876,43 +3695,13 @@ type CreatedWebhook struct {
 	Triggers []WebhookTrigger `json:"triggers"`
 }
 
-// CreatedWebhookEndpoint An endpoint with its signing secret, answered only by createWebhookEndpoint and rotateWebhookSecret and never readable again.
-type CreatedWebhookEndpoint struct {
-	// Address The path senders post to, /hooks/{id}, on goald's public origin
-	Address   string    `json:"address"`
-	CreatedAt time.Time `json:"created_at"`
-
-	// Days The last 7 UTC days, oldest first, today last, each zero-filled
-	Days []WebhookDeliveryDay `json:"days"`
-	Id   string               `json:"id"`
-
-	// Kind A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
-	Kind WebhookKind `json:"kind"`
-	Name string      `json:"name"`
-
-	// RotatedAt When its secret was last replaced; null when it never was
-	RotatedAt *time.Time `json:"rotated_at"`
-
-	// Secret The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret field takes it.
-	Secret string `json:"secret"`
-
-	// SecretName A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it.
-	SecretName string `json:"secret_name"`
-
-	// Sender Its sender; a factory endpoint of kind generic reads as standard
-	Sender WebhookSender `json:"sender"`
-
-	// Triggers The names of the current definition's triggers it feeds, in definition order
-	Triggers []string `json:"triggers"`
-}
-
 // Credential An organization's credential (ADR 0017), never its value
 type Credential struct {
 	// Agents Per factory id, the agents that get it in their run's box as env
 	Agents    CredentialAgents `json:"agents"`
 	CreatedAt time.Time        `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy   Actor  `json:"created_by"`
 	Description string `json:"description"`
 
@@ -3936,7 +3725,7 @@ type Credential struct {
 	Type      CredentialType `json:"type"`
 	UpdatedAt time.Time      `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 
 	// UsedBy What uses a credential
@@ -4197,7 +3986,7 @@ type Draft struct {
 	ChangeCount int       `json:"change_count"`
 	CreatedAt   time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
 	// Current The version that runs now, which differs from base after a restore; null before the first publish
@@ -4218,7 +4007,7 @@ type Draft struct {
 	// UpdatedAt The last save ("Autosaved 14:32")
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -4274,7 +4063,7 @@ type DraftRef struct {
 	Revision  int64     `json:"revision"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -4293,7 +4082,7 @@ type DraftRequest struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	Id         string     `json:"id"`
 
-	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Requester Actor              `json:"requester"`
 	StartedAt *time.Time         `json:"started_at,omitempty"`
 	Status    DraftRequestStatus `json:"status"`
@@ -4362,7 +4151,7 @@ type Event struct {
 	Id     int64                  `json:"id"`
 	ItemId string                 `json:"item_id"`
 
-	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief
+	// Kind What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped at its station until a person retries it (data reason, the technical detail as written then; code, a stable code to branch on, only when the block has one: model_key_missing when the line is on environment files and secrets but names no runtime.modelKey). question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief
 	Kind    string  `json:"kind"`
 	RunId   *string `json:"run_id,omitempty"`
 	Station *string `json:"station,omitempty"`
@@ -4424,7 +4213,7 @@ type FactoryAttention struct {
 	ConnectionsBlocked int    `json:"connections_blocked"`
 	FactoryId          string `json:"factory_id"`
 
-	// WaitingOnYou Items waiting for a human decision (every decision; phase 2.2 has no identity)
+	// WaitingOnYou The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up
 	WaitingOnYou int `json:"waiting_on_you"`
 }
 
@@ -4765,7 +4554,7 @@ type ImportStartKind string
 
 // Inbox defines model for Inbox.
 type Inbox struct {
-	// Entries Ordered by kind, then oldest first
+	// Entries Ordered by since, newest first, then by id
 	Entries []InboxEntry `json:"entries"`
 
 	// Truncated More entries exist than limit; the most recent were kept
@@ -4774,11 +4563,29 @@ type Inbox struct {
 
 // InboxBlocked defines model for InboxBlocked.
 type InboxBlocked struct {
+	// Code The code of the item's latest blocked event (model_key_missing: the line names no runtime.modelKey); null without one
+	Code *string `json:"code"`
+
 	// Paused A person paused it (goal retry resumes it)
 	Paused bool `json:"paused"`
 
 	// Reason The reason of the item's latest blocked or paused event, as written then; null without one
 	Reason *string `json:"reason"`
+}
+
+// InboxBudget A factory's used-up weekly budget, in the rolling 7×24-hour window that ends now.
+type InboxBudget struct {
+	// ResumesAt When the window's spend falls below the cap; the line resumes on the engine's first tick after it
+	ResumesAt time.Time `json:"resumes_at"`
+
+	// Since Since when the budget is used up, as the engine recorded it (now when it has not yet)
+	Since time.Time `json:"since"`
+
+	// SpentUsd The cost of the runs started in the window
+	SpentUsd float64 `json:"spent_usd"`
+
+	// WeeklyUsd The cap
+	WeeklyUsd float64 `json:"weekly_usd"`
 }
 
 // InboxConversion A factory Goal could not move from connections to secrets and environment files. It runs on its version, on connections, until a version on secrets is published.
@@ -4804,6 +4611,9 @@ type InboxEntry struct {
 	// Blocked Why a blocked item is blocked; null for other kinds
 	Blocked *InboxBlocked `json:"blocked"`
 
+	// Budget The used-up weekly budget of a budget entry; absent or null for other kinds
+	Budget *InboxBudget `json:"budget,omitempty"`
+
 	// Conversion Why Goal could not convert the factory; absent or null for other kinds
 	Conversion *InboxConversion `json:"conversion,omitempty"`
 	Factory    struct {
@@ -4812,13 +4622,13 @@ type InboxEntry struct {
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, budget:<factory id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day. budget: a factory whose weekly budget is used up, measured against its current version's cap, until the window's spend falls below the cap or the cap rises
 	Kind InboxEntryKind `json:"kind"`
 
 	// KnowledgeSource Why the knowledge source does not sync; absent or null for other kinds
@@ -4830,7 +4640,7 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), since when the budget is used up (budget), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -4846,7 +4656,7 @@ type InboxEntry struct {
 	Watch *Watch `json:"watch,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day. budget: a factory whose weekly budget is used up, measured against its current version's cap, until the window's spend falls below the cap or the cap rises
 type InboxEntryKind string
 
 // InboxKnowledgeSource A knowledge source whose last syncs failed, shown under each factory that lists it.
@@ -4881,21 +4691,11 @@ type Intake struct {
 	// From The UTC day the oldest of them was created; null without items
 	From *openapi_types.Date `json:"from"`
 
-	// Items How many items the sources count
+	// Items How many of the factory's newest items there are
 	Items int `json:"items"`
 
 	// Origins How many of the factory's items created in the window came from each origin (ADR 0040 decision 2), zero included; always answered. Items filed before origins were recorded count as person, the column's default
 	Origins *IntakeOrigins `json:"origins,omitempty"`
-
-	// Sources How many of the items came from each source, zero included. Items whose creator recorded no source count in items only.
-	Sources struct {
-		Api      int `json:"api"`
-		Cli      int `json:"cli"`
-		Github   int `json:"github"`
-		People   int `json:"people"`
-		Schedule int `json:"schedule"`
-		Webhook  int `json:"webhook"`
-	} `json:"sources"`
 
 	// Suggestions The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers.
 	Suggestions []TriggerSuggestion `json:"suggestions"`
@@ -5853,7 +5653,7 @@ type KnowledgeSource struct {
 	Connection *string   `json:"connection,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor  `json:"created_by"`
 	Id        string `json:"id"`
 
@@ -6008,6 +5808,12 @@ type LineBudget struct {
 	// Exhausted No new agent work starts until the window moves or the cap rises
 	Exhausted bool `json:"exhausted"`
 
+	// ResumesAt When the rolling window's spend falls below the cap, so the line starts new work on the engine's first tick after it; absent or null while the budget has room
+	ResumesAt *time.Time `json:"resumes_at,omitempty"`
+
+	// Since Since when the budget is used up, as the engine recorded it (now when it has not yet); absent or null while the budget has room
+	Since *time.Time `json:"since,omitempty"`
+
 	// SpentUsd The cost of the runs started in the window
 	SpentUsd  float64 `json:"spent_usd"`
 	WeeklyUsd float64 `json:"weekly_usd"`
@@ -6132,6 +5938,9 @@ type Member struct {
 type MemberList struct {
 	Members []Member `json:"members"`
 }
+
+// MemorySource How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole machine's used memory, read when the box's cgroup has no memory figures
+type MemorySource string
 
 // MergeRequest defines model for MergeRequest.
 type MergeRequest struct {
@@ -6333,21 +6142,6 @@ type NewApiKey struct {
 	Scopes []Permission `json:"scopes"`
 }
 
-// NewConnection defines model for NewConnection.
-type NewConnection struct {
-	Description *string `json:"description,omitempty"`
-
-	// Fields The kind's non-secret values
-	Fields *map[string]string `json:"fields,omitempty"`
-	Kind   string             `json:"kind"`
-
-	// Name 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
-	Name ConnectionName `json:"name"`
-
-	// Secrets The kind's secret values; never answered
-	Secrets *map[string]string `json:"secrets,omitempty"`
-}
-
 // NewCredential defines model for NewCredential.
 type NewCredential struct {
 	// Agents Per factory id, the agents that get it in their run's box as env
@@ -6522,15 +6316,6 @@ type NewWebhook struct {
 	Token *WebhookTokenSettings `json:"token,omitempty"`
 }
 
-// NewWebhookEndpoint defines model for NewWebhookEndpoint.
-type NewWebhookEndpoint struct {
-	// Kind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
-	Kind WebhookKind `json:"kind"`
-
-	// Name A slug unique within the factory, the one a trigger's on: webhook.<name> names
-	Name string `json:"name"`
-}
-
 // NoteReceipt defines model for NoteReceipt.
 type NoteReceipt struct {
 	// Delivery next_run, the next run's brief carries it (live, to a running agent, comes later)
@@ -6638,7 +6423,7 @@ type Org struct {
 type OrgAttention struct {
 	Factories []FactoryAttention `json:"factories"`
 
-	// WaitingOnYou Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you)
+	// WaitingOnYou What waits on the caller across the organization (the sum of factories[].waiting_on_you)
 	WaitingOnYou int `json:"waiting_on_you"`
 }
 
@@ -6706,8 +6491,14 @@ type OrgRole string
 
 // OrgRun A run with the factory and the item it worked
 type OrgRun struct {
-	Agent   string  `json:"agent"`
-	CostUsd float64 `json:"cost_usd"`
+	Agent string `json:"agent"`
+
+	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+	CostUsd float64      `json:"cost_usd"`
+
+	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+	CpuSeconds *float64 `json:"cpu_seconds"`
 
 	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
 	DefinitionVersion *int `json:"definition_version"`
@@ -6727,10 +6518,16 @@ type OrgRun struct {
 	ItemId       string     `json:"item_id"`
 	Model        string     `json:"model"`
 	OutputTokens int64      `json:"output_tokens"`
-	StartedAt    time.Time  `json:"started_at"`
-	Station      string     `json:"station"`
-	Status       RunStatus  `json:"status"`
-	Turns        int        `json:"turns"`
+
+	// PeakMemoryBytes The most memory the run's box used at once; null when cpu_seconds would be
+	PeakMemoryBytes *int64 `json:"peak_memory_bytes"`
+
+	// PeakMemorySource How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded
+	PeakMemorySource *MemorySource `json:"peak_memory_source,omitempty"`
+	StartedAt        time.Time     `json:"started_at"`
+	Station          string        `json:"station"`
+	Status           RunStatus     `json:"status"`
+	Turns            int           `json:"turns"`
 }
 
 // OrgRunList defines model for OrgRunList.
@@ -6745,12 +6542,9 @@ type OrgRunList struct {
 
 // OrgSearch What a search found in the organization, by group, each best first
 type OrgSearch struct {
-	Agents []AgentHit `json:"agents"`
-
-	// Connections Empty unless the caller holds connection:read
-	Connections []ConnectionHit `json:"connections"`
-	Factories   []FactoryHit    `json:"factories"`
-	Items       []SearchItem    `json:"items"`
+	Agents    []AgentHit   `json:"agents"`
+	Factories []FactoryHit `json:"factories"`
+	Items     []SearchItem `json:"items"`
 
 	// Secrets Empty unless the caller holds secret:read
 	Secrets []SecretHit `json:"secrets"`
@@ -6835,6 +6629,9 @@ type OrgSpend struct {
 
 	// Until The window's end, the time measured (now)
 	Until time.Time `json:"until"`
+
+	// Usage The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last.
+	Usage SpendUsage `json:"usage"`
 
 	// Weekly The cost per merged item of the last 8 UTC weeks (from Monday), this week last; empty when not complete
 	Weekly []WeekCost  `json:"weekly"`
@@ -7003,7 +6800,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a knowledge source naming a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -7249,19 +7046,6 @@ type Replacement struct {
 	Old string `json:"old"`
 }
 
-// Repository defines model for Repository.
-type Repository struct {
-	// CloneUrl Its https clone URL
-	CloneUrl string `json:"clone_url"`
-
-	// FullName <owner>/<name>
-	FullName string `json:"full_name"`
-
-	// Languages The largest first, at most 3
-	Languages []string  `json:"languages"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
 // RepositoryCheck defines model for RepositoryCheck.
 type RepositoryCheck struct {
 	Ok bool `json:"ok"`
@@ -7269,33 +7053,6 @@ type RepositoryCheck struct {
 	// Reason The host's one-line reason
 	Reason string `json:"reason"`
 }
-
-// RepositoryList What a code host connection reaches (GET …/connections/{connection}/repositories)
-type RepositoryList struct {
-	// Login The account the connection's credential signs in as
-	Login string `json:"login"`
-
-	// Owner The owner the repositories belong to
-	Owner string `json:"owner"`
-
-	// Owners The account first, then its organizations
-	Owners []RepositoryOwner `json:"owners"`
-
-	// Repositories The most recently updated first, at most 100
-	Repositories []Repository `json:"repositories"`
-
-	// Truncated The owner has more repositories than the 100 answered
-	Truncated bool `json:"truncated"`
-}
-
-// RepositoryOwner defines model for RepositoryOwner.
-type RepositoryOwner struct {
-	Kind  RepositoryOwnerKind `json:"kind"`
-	Login string              `json:"login"`
-}
-
-// RepositoryOwnerKind defines model for RepositoryOwner.Kind.
-type RepositoryOwnerKind string
 
 // RestoreRequest defines model for RestoreRequest.
 type RestoreRequest struct {
@@ -7357,8 +7114,14 @@ type ReworkWarning struct {
 
 // Run One agent run: one container working one item at one station. Its full transcript is not kept (phase 2.2); the item's events carry the trace.
 type Run struct {
-	Agent   string  `json:"agent"`
-	CostUsd float64 `json:"cost_usd"`
+	Agent string `json:"agent"`
+
+	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+	CostUsd float64      `json:"cost_usd"`
+
+	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+	CpuSeconds *float64 `json:"cpu_seconds"`
 
 	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
 	DefinitionVersion *int `json:"definition_version"`
@@ -7370,16 +7133,22 @@ type Run struct {
 	EndedAt *time.Time `json:"ended_at"`
 
 	// Error Why a failed or cancelled run ended, else null
-	Error        *string   `json:"error"`
-	Id           string    `json:"id"`
-	InputTokens  int64     `json:"input_tokens"`
-	ItemId       string    `json:"item_id"`
-	Model        string    `json:"model"`
-	OutputTokens int64     `json:"output_tokens"`
-	StartedAt    time.Time `json:"started_at"`
-	Station      string    `json:"station"`
-	Status       RunStatus `json:"status"`
-	Turns        int       `json:"turns"`
+	Error        *string `json:"error"`
+	Id           string  `json:"id"`
+	InputTokens  int64   `json:"input_tokens"`
+	ItemId       string  `json:"item_id"`
+	Model        string  `json:"model"`
+	OutputTokens int64   `json:"output_tokens"`
+
+	// PeakMemoryBytes The most memory the run's box used at once; null when cpu_seconds would be
+	PeakMemoryBytes *int64 `json:"peak_memory_bytes"`
+
+	// PeakMemorySource How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded
+	PeakMemorySource *MemorySource `json:"peak_memory_source,omitempty"`
+	StartedAt        time.Time     `json:"started_at"`
+	Station          string        `json:"station"`
+	Status           RunStatus     `json:"status"`
+	Turns            int           `json:"turns"`
 }
 
 // RunItem defines model for RunItem.
@@ -7415,6 +7184,9 @@ type RunSummary struct {
 	SpendUsd       float64        `json:"spend_usd"`
 	Total          int            `json:"total"`
 }
+
+// SandboxSize How much CPU and memory a run's box gets (a factory's runtime.size)
+type SandboxSize string
 
 // SaveResult The draft after a save
 type SaveResult struct {
@@ -7483,7 +7255,7 @@ type SearchItem struct {
 type Secret struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy   Actor  `json:"created_by"`
 	Description string `json:"description"`
 
@@ -7507,7 +7279,7 @@ type Secret struct {
 	Source    SecretSource `json:"source"`
 	UpdatedAt time.Time    `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 
 	// Uses What uses it, by kind then name
@@ -7708,7 +7480,7 @@ type SignupDomain struct {
 	JoinRole FactoryRole `json:"join_role"`
 	SetAt    time.Time   `json:"set_at"`
 
-	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	SetBy Actor `json:"set_by"`
 }
 
@@ -7771,7 +7543,7 @@ type SpendBudget struct {
 	DailyUsd *float64   `json:"daily_usd"`
 	Factory  FactoryHit `json:"factory"`
 
-	// ModelConnections What gives the factory's runs their model, for "Who pays for models": the organization's connection runtime.modelConnection names, with its kind, and on secrets the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names neither
+	// ModelConnections What gives the factory's runs their model, for "Who pays for models": the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names none the organization has
 	ModelConnections []ConnectionHit `json:"model_connections"`
 
 	// Reason The open andon pull's reason when stopped, the spend against the cap when over_budget, else null
@@ -7801,6 +7573,12 @@ type SpendDay struct {
 	Usd       float64            `json:"usd"`
 }
 
+// SpendUsage The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last.
+type SpendUsage struct {
+	ByAgent   []AgentUsage   `json:"by_agent"`
+	ByStation []StationUsage `json:"by_station"`
+}
+
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
 
@@ -7816,7 +7594,7 @@ type StandingRule struct {
 	ConnectionId *string   `json:"connection_id"`
 	CreatedAt    time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
 	// Environment The environment file's name of a rule keyed by server, as in default; null for a connection's rule
@@ -7872,6 +7650,31 @@ type StationKind string
 
 // StationMoves Where the open items of each station the new version removes go, by station id
 type StationMoves map[string]string
+
+// StationUsage AgentUsage by station
+type StationUsage struct {
+	// BoxSize The runs' box size; null for runs from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+
+	// CpuSecondsP50 As AgentUsage's
+	CpuSecondsP50 *float64 `json:"cpu_seconds_p50"`
+
+	// CpuSecondsP90 As AgentUsage's
+	CpuSecondsP90 *float64 `json:"cpu_seconds_p90"`
+	FactoryId     string   `json:"factory_id"`
+
+	// PeakMemoryBytesP50 As AgentUsage's
+	PeakMemoryBytesP50 *int64 `json:"peak_memory_bytes_p50"`
+
+	// PeakMemoryBytesP90 As AgentUsage's
+	PeakMemoryBytesP90 *int64 `json:"peak_memory_bytes_p90"`
+
+	// Runs The runs that reported a CPU time or a peak memory
+	Runs int `json:"runs"`
+
+	// Station The station's id in its factory
+	Station string `json:"station"`
+}
 
 // StreamEvent The data of one `event: item` on /v1/orgs/{org}/stream
 type StreamEvent struct {
@@ -8257,7 +8060,7 @@ type ToolTemplateList struct {
 
 // Touch One action by a person on an item, named by its most specific event
 type Touch struct {
-	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -8831,7 +8634,7 @@ type VersionRef struct {
 	Number      int       `json:"number"`
 	PublishedAt time.Time `json:"published_at"`
 
-	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	PublishedBy Actor `json:"published_by"`
 }
 
@@ -9093,38 +8896,6 @@ type WebhookDeliveryRequestBodyEncoding string
 // WebhookDeliveryRequestReceipt What the receiver made of it: accepted; duplicate, a delivery id it already had (the first row counts the later ones in duplicates); refused, with its reason. null for a delivery recorded before the receiver.
 type WebhookDeliveryRequestReceipt string
 
-// WebhookEndpoint A webhook endpoint open to the factory, never its signing secret
-type WebhookEndpoint struct {
-	// Address The path senders post to, /hooks/{id}, on goald's public origin
-	Address   string    `json:"address"`
-	CreatedAt time.Time `json:"created_at"`
-
-	// Days The last 7 UTC days, oldest first, today last, each zero-filled
-	Days []WebhookDeliveryDay `json:"days"`
-	Id   string               `json:"id"`
-
-	// Kind A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
-	Kind WebhookKind `json:"kind"`
-	Name string      `json:"name"`
-
-	// RotatedAt When its secret was last replaced; null when it never was
-	RotatedAt *time.Time `json:"rotated_at"`
-
-	// SecretName A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it.
-	SecretName string `json:"secret_name"`
-
-	// Sender Its sender; a factory endpoint of kind generic reads as standard
-	Sender WebhookSender `json:"sender"`
-
-	// Triggers The names of the current definition's triggers it feeds, in definition order
-	Triggers []string `json:"triggers"`
-}
-
-// WebhookEndpointList defines model for WebhookEndpointList.
-type WebhookEndpointList struct {
-	Endpoints []WebhookEndpoint `json:"endpoints"`
-}
-
 // WebhookEvaluationItem defines model for WebhookEvaluationItem.
 type WebhookEvaluationItem struct {
 	Id     string `json:"id"`
@@ -9133,9 +8904,6 @@ type WebhookEvaluationItem struct {
 	// Ref <factory name>#<number>, such as sre#88
 	Ref string `json:"ref"`
 }
-
-// WebhookKind How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
-type WebhookKind string
 
 // WebhookList defines model for WebhookList.
 type WebhookList struct {
@@ -9224,9 +8992,6 @@ type WeeklyThroughput struct {
 	} `json:"weeks"`
 }
 
-// ConnectionRef defines model for ConnectionRef.
-type ConnectionRef = string
-
 // CredentialRef defines model for CredentialRef.
 type CredentialRef = string
 
@@ -9253,9 +9018,6 @@ type ItemRef = string
 
 // KeptTestRef defines model for KeptTestRef.
 type KeptTestRef = string
-
-// KindRef defines model for KindRef.
-type KindRef = string
 
 // KnowledgeFilePath defines model for KnowledgeFilePath.
 type KnowledgeFilePath = string
@@ -9289,9 +9051,6 @@ type UserRef = string
 
 // VersionSelector defines model for VersionSelector.
 type VersionSelector = string
-
-// WebhookEndpointRef defines model for WebhookEndpointRef.
-type WebhookEndpointRef = string
 
 // WebhookRef defines model for WebhookRef.
 type WebhookRef = string
@@ -9335,21 +9094,6 @@ type SearchSkillsParams struct {
 
 	// After The next_after of the previous page
 	After *string `form:"after,omitempty" json:"after,omitempty"`
-}
-
-// ListConnectionsParams defines parameters for ListConnections.
-type ListConnectionsParams struct {
-	// Factory Only the connections this factory's current version names (its metadata.id or metadata.name)
-	Factory *string `form:"factory,omitempty" json:"factory,omitempty"`
-
-	// Kind Only connections of this kind
-	Kind *string `form:"kind,omitempty" json:"kind,omitempty"`
-}
-
-// ListConnectionRepositoriesParams defines parameters for ListConnectionRepositories.
-type ListConnectionRepositoriesParams struct {
-	// Owner The account or organization whose repositories to list; absent, the connection's own account
-	Owner *string `form:"owner,omitempty" json:"owner,omitempty"`
 }
 
 // ListFactoriesParams defines parameters for ListFactories.
@@ -9454,7 +9198,7 @@ type ListDraftRequestsParams struct {
 
 // GetIntakeParams defines parameters for GetIntake.
 type GetIntakeParams struct {
-	// Items How many of the newest items the sources count (default 48)
+	// Items How many of the newest items `items`, `from` and `to` count (default 48)
 	Items *int `form:"items,omitempty" json:"items,omitempty"`
 
 	// Window The days origins count over, ending now (default 30d)
@@ -9557,14 +9301,6 @@ type ListVersionsParams struct {
 	// Before The next_before of the previous page; versions numbered below it
 	Before *int `form:"before,omitempty" json:"before,omitempty"`
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
-// ListWebhookDeliveriesParams defines parameters for ListWebhookDeliveries.
-type ListWebhookDeliveriesParams struct {
-	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
-
-	// After The next_after of the previous page; deliveries received before it
-	After *string `form:"after,omitempty" json:"after,omitempty"`
 }
 
 // GetInboxParams defines parameters for GetInbox.
@@ -9754,15 +9490,6 @@ type CreateAPIKeyJSONRequestBody = NewApiKey
 // SetCodeHostsJSONRequestBody defines body for SetCodeHosts for application/json ContentType.
 type SetCodeHostsJSONRequestBody = CodeHostsInput
 
-// PutConnectionKindJSONRequestBody defines body for PutConnectionKind for application/json ContentType.
-type PutConnectionKindJSONRequestBody = ConnectionKindFile
-
-// CreateConnectionJSONRequestBody defines body for CreateConnection for application/json ContentType.
-type CreateConnectionJSONRequestBody = NewConnection
-
-// UpdateConnectionJSONRequestBody defines body for UpdateConnection for application/json ContentType.
-type UpdateConnectionJSONRequestBody = ConnectionPatch
-
 // CreateCredentialJSONRequestBody defines body for CreateCredential for application/json ContentType.
 //
 // Deprecated: this type has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -9843,9 +9570,6 @@ type CreateSavedViewJSONRequestBody = NewSavedView
 
 // UpdateSavedViewJSONRequestBody defines body for UpdateSavedView for application/json ContentType.
 type UpdateSavedViewJSONRequestBody = SavedViewChange
-
-// CreateWebhookEndpointJSONRequestBody defines body for CreateWebhookEndpoint for application/json ContentType.
-type CreateWebhookEndpointJSONRequestBody = NewWebhookEndpoint
 
 // AnswerItemJSONRequestBody defines body for AnswerItem for application/json ContentType.
 type AnswerItemJSONRequestBody = ItemAnswer
@@ -10458,107 +10182,6 @@ type ClientInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
 	SetCodeHosts(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListConnectionKinds The connection kinds the organization can make connections of
-	//
-	// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
-	//
-	// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
-	ListConnectionKinds(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteConnectionKind Delete one of the organization's connection kinds
-	//
-	// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
-	DeleteConnectionKind(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PutConnectionKindWithBody Create or replace one of the organization's connection kinds
-	//
-	// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-	PutConnectionKindWithBody(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PutConnectionKind Create or replace one of the organization's connection kinds
-	//
-	// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-	PutConnectionKind(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListConnections The organization's connections
-	//
-	// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
-	//
-	// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
-	ListConnections(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateConnectionWithBody Create a connection
-	//
-	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-	CreateConnectionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateConnection Create a connection
-	//
-	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-	CreateConnection(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteConnection Delete a connection
-	//
-	// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
-	DeleteConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetConnection One connection, with the env names a run gets from it and its kind's docs
-	//
-	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
-	GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
-	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-	UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
-	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-	UpdateConnection(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListConnectionRepositories The owners and repositories a code host connection reaches
-	//
-	// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
-	//
-	// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
-	ListConnectionRepositories(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TestConnection Run the connection's test
-	//
-	// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
-	//
-	// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
-	TestConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListCredentials The organization's credentials
 	//
 	// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
@@ -11043,9 +10666,9 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
 	TestEnvironment(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetIntake Where the factory's newest items came from, and its triggers
+	// GetIntake The factory's newest items, its origins and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+	// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 	GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -11405,62 +11028,9 @@ type ClientInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
 	UpdateSavedView(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListWebhookEndpoints The webhook endpoints open to the factory
-	//
-	// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
-	//
-	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks (the `ListWebhookEndpoints` operationId).
-	ListWebhookEndpoints(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateWebhookEndpointWithBody Create a webhook endpoint
-	//
-	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes any type of body and a specified content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-	CreateWebhookEndpointWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateWebhookEndpoint Create a webhook endpoint
-	//
-	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes a body of the `application/json` content type.
-	//
-	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-	CreateWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, body CreateWebhookEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
-	//
-	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
-	DeleteWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListWebhookDeliveries One page of an endpoint's deliveries, newest first
-	//
-	// What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
-	//
-	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries (the `ListWebhookDeliveries` operationId).
-	ListWebhookDeliveries(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params *ListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetWebhookDelivery One delivery with its request
-	//
-	// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-	//
-	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery} (the `GetWebhookDelivery` operationId).
-	GetWebhookDelivery(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// RotateWebhookSecret Replace an endpoint's signing secret
-	//
-	// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-	//
-	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate (the `RotateWebhookSecret` operationId).
-	RotateWebhookSecret(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetInbox What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -12048,9 +11618,9 @@ type ClientInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRun(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+	// SearchOrg Find the organization's items, agents, factories and secrets, for the shell's search box
 	//
-	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Secrets are searched only for a caller who holds secret:read; for anyone else the group is empty.
 	//
 	// Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 	SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -12878,237 +12448,6 @@ func (c *Client) SetCodeHostsWithBody(ctx context.Context, org OrgRef, contentTy
 // Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
 func (c *Client) SetCodeHosts(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSetCodeHostsRequest(c.Server, org, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// ListConnectionKinds The connection kinds the organization can make connections of
-//
-// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
-//
-// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
-func (c *Client) ListConnectionKinds(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListConnectionKindsRequest(c.Server, org)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// DeleteConnectionKind Delete one of the organization's connection kinds
-//
-// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-//
-// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
-func (c *Client) DeleteConnectionKind(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteConnectionKindRequest(c.Server, org, kind)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// PutConnectionKindWithBody Create or replace one of the organization's connection kinds
-//
-// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-func (c *Client) PutConnectionKindWithBody(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutConnectionKindRequestWithBody(c.Server, org, kind, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// PutConnectionKind Create or replace one of the organization's connection kinds
-//
-// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-func (c *Client) PutConnectionKind(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutConnectionKindRequest(c.Server, org, kind, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// ListConnections The organization's connections
-//
-// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
-//
-// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
-func (c *Client) ListConnections(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListConnectionsRequest(c.Server, org, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// CreateConnectionWithBody Create a connection
-//
-// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-func (c *Client) CreateConnectionWithBody(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateConnectionRequestWithBody(c.Server, org, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// CreateConnection Create a connection
-//
-// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-func (c *Client) CreateConnection(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateConnectionRequest(c.Server, org, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// DeleteConnection Delete a connection
-//
-// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-//
-// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
-func (c *Client) DeleteConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteConnectionRequest(c.Server, org, connection)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GetConnection One connection, with the env names a run gets from it and its kind's docs
-//
-// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
-func (c *Client) GetConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetConnectionRequest(c.Server, org, connection)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// UpdateConnectionWithBody Rename a connection, or change its description, fields, secrets or tool modes
-//
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-func (c *Client) UpdateConnectionWithBody(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateConnectionRequestWithBody(c.Server, org, connection, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
-//
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-func (c *Client) UpdateConnection(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateConnectionRequest(c.Server, org, connection, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// ListConnectionRepositories The owners and repositories a code host connection reaches
-//
-// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
-//
-// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
-func (c *Client) ListConnectionRepositories(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListConnectionRepositoriesRequest(c.Server, org, connection, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// TestConnection Run the connection's test
-//
-// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
-//
-// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
-func (c *Client) TestConnection(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTestConnectionRequest(c.Server, org, connection)
 	if err != nil {
 		return nil, err
 	}
@@ -14174,9 +13513,9 @@ func (c *Client) TestEnvironment(ctx context.Context, org OrgRef, factory Factor
 	return c.Client.Do(req)
 }
 
-// GetIntake Where the factory's newest items came from, and its triggers
+// GetIntake The factory's newest items, its origins and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -15016,132 +14355,9 @@ func (c *Client) UpdateSavedView(ctx context.Context, org OrgRef, factory Factor
 	return c.Client.Do(req)
 }
 
-// ListWebhookEndpoints The webhook endpoints open to the factory
-//
-// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
-//
-// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks (the `ListWebhookEndpoints` operationId).
-func (c *Client) ListWebhookEndpoints(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListWebhookEndpointsRequest(c.Server, org, factory)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// CreateWebhookEndpointWithBody Create a webhook endpoint
-//
-// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-//
-// Takes any type of body and a specified content type.
-//
-// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-func (c *Client) CreateWebhookEndpointWithBody(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateWebhookEndpointRequestWithBody(c.Server, org, factory, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// CreateWebhookEndpoint Create a webhook endpoint
-//
-// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-//
-// Takes a body of the `application/json` content type.
-//
-// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-func (c *Client) CreateWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, body CreateWebhookEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateWebhookEndpointRequest(c.Server, org, factory, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
-//
-// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
-//
-// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
-func (c *Client) DeleteWebhookEndpoint(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteWebhookEndpointRequest(c.Server, org, factory, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// ListWebhookDeliveries One page of an endpoint's deliveries, newest first
-//
-// What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
-//
-// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries (the `ListWebhookDeliveries` operationId).
-func (c *Client) ListWebhookDeliveries(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params *ListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListWebhookDeliveriesRequest(c.Server, org, factory, endpoint, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// GetWebhookDelivery One delivery with its request
-//
-// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-//
-// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery} (the `GetWebhookDelivery` operationId).
-func (c *Client) GetWebhookDelivery(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetWebhookDeliveryRequest(c.Server, org, factory, endpoint, delivery)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// RotateWebhookSecret Replace an endpoint's signing secret
-//
-// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-//
-// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate (the `RotateWebhookSecret` operationId).
-func (c *Client) RotateWebhookSecret(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRotateWebhookSecretRequest(c.Server, org, factory, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 // GetInbox What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -16469,9 +15685,9 @@ func (c *Client) GetRun(ctx context.Context, org OrgRef, run string, reqEditors 
 	return c.Client.Do(req)
 }
 
-// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+// SearchOrg Find the organization's items, agents, factories and secrets, for the shell's search box
 //
-// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Secrets are searched only for a caller who holds secret:read; for anyone else the group is empty.
 //
 // Corresponds with GET /v1/orgs/{org}/search (the `SearchOrg` operationId).
 func (c *Client) SearchOrg(ctx context.Context, org OrgRef, params *SearchOrgParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -18253,500 +17469,6 @@ func NewSetCodeHostsRequestWithBody(server string, org OrgRef, contentType strin
 	}
 
 	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListConnectionKindsRequest constructs an http.Request for the ListConnectionKinds method
-func NewListConnectionKindsRequest(server string, org OrgRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connection-kinds", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewDeleteConnectionKindRequest constructs an http.Request for the DeleteConnectionKind method
-func NewDeleteConnectionKindRequest(server string, org OrgRef, kind KindRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connection-kinds/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPutConnectionKindRequest calls the generic PutConnectionKind builder with application/json body
-func NewPutConnectionKindRequest(server string, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPutConnectionKindRequestWithBody(server, org, kind, "application/json", bodyReader)
-}
-
-// NewPutConnectionKindRequestWithBody constructs an http.Request for the PutConnectionKind method, with any body, and a specified content type
-func NewPutConnectionKindRequestWithBody(server string, org OrgRef, kind KindRef, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connection-kinds/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListConnectionsRequest constructs an http.Request for the ListConnections method
-func NewListConnectionsRequest(server string, org OrgRef, params *ListConnectionsParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Factory != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "factory", *params.Factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Kind != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "kind", *params.Kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewCreateConnectionRequest calls the generic CreateConnection builder with application/json body
-func NewCreateConnectionRequest(server string, org OrgRef, body CreateConnectionJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreateConnectionRequestWithBody(server, org, "application/json", bodyReader)
-}
-
-// NewCreateConnectionRequestWithBody constructs an http.Request for the CreateConnection method, with any body, and a specified content type
-func NewCreateConnectionRequestWithBody(server string, org OrgRef, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewDeleteConnectionRequest constructs an http.Request for the DeleteConnection method
-func NewDeleteConnectionRequest(server string, org OrgRef, connection ConnectionRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetConnectionRequest constructs an http.Request for the GetConnection method
-func NewGetConnectionRequest(server string, org OrgRef, connection ConnectionRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewUpdateConnectionRequest calls the generic UpdateConnection builder with application/json body
-func NewUpdateConnectionRequest(server string, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewUpdateConnectionRequestWithBody(server, org, connection, "application/json", bodyReader)
-}
-
-// NewUpdateConnectionRequestWithBody constructs an http.Request for the UpdateConnection method, with any body, and a specified content type
-func NewUpdateConnectionRequestWithBody(server string, org OrgRef, connection ConnectionRef, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListConnectionRepositoriesRequest constructs an http.Request for the ListConnectionRepositories method
-func NewListConnectionRepositoriesRequest(server string, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s/repositories", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Owner != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "owner", *params.Owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTestConnectionRequest constructs an http.Request for the TestConnection method
-func NewTestConnectionRequest(server string, org OrgRef, connection ConnectionRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "connection", connection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/connections/%s/test", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
 
 	return req, nil
 }
@@ -23412,339 +22134,6 @@ func NewUpdateSavedViewRequestWithBody(server string, org OrgRef, factory Factor
 	}
 
 	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListWebhookEndpointsRequest constructs an http.Request for the ListWebhookEndpoints method
-func NewListWebhookEndpointsRequest(server string, org OrgRef, factory FactoryRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/webhooks", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewCreateWebhookEndpointRequest calls the generic CreateWebhookEndpoint builder with application/json body
-func NewCreateWebhookEndpointRequest(server string, org OrgRef, factory FactoryRef, body CreateWebhookEndpointJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreateWebhookEndpointRequestWithBody(server, org, factory, "application/json", bodyReader)
-}
-
-// NewCreateWebhookEndpointRequestWithBody constructs an http.Request for the CreateWebhookEndpoint method, with any body, and a specified content type
-func NewCreateWebhookEndpointRequestWithBody(server string, org OrgRef, factory FactoryRef, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/webhooks", pathParam0, pathParam1)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewDeleteWebhookEndpointRequest constructs an http.Request for the DeleteWebhookEndpoint method
-func NewDeleteWebhookEndpointRequest(server string, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam2 string
-
-	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "endpoint", endpoint, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/webhooks/%s", pathParam0, pathParam1, pathParam2)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewListWebhookDeliveriesRequest constructs an http.Request for the ListWebhookDeliveries method
-func NewListWebhookDeliveriesRequest(server string, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params *ListWebhookDeliveriesParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam2 string
-
-	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "endpoint", endpoint, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/webhooks/%s/deliveries", pathParam0, pathParam1, pathParam2)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.After != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "after", *params.After, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetWebhookDeliveryRequest constructs an http.Request for the GetWebhookDelivery method
-func NewGetWebhookDeliveryRequest(server string, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam2 string
-
-	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "endpoint", endpoint, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam3 string
-
-	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "delivery", delivery, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/webhooks/%s/deliveries/%s", pathParam0, pathParam1, pathParam2, pathParam3)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewRotateWebhookSecretRequest constructs an http.Request for the RotateWebhookSecret method
-func NewRotateWebhookSecretRequest(server string, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "org", org, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam1 string
-
-	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "factory", factory, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	var pathParam2 string
-
-	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "endpoint", endpoint, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/v1/orgs/%s/factories/%s/webhooks/%s/rotate", pathParam0, pathParam1, pathParam2)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
 
 	return req, nil
 }
@@ -28579,121 +26968,6 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PUT /v1/orgs/{org}/code-hosts (the `SetCodeHosts` operationId).
 	SetCodeHostsWithResponse(ctx context.Context, org OrgRef, body SetCodeHostsJSONRequestBody, reqEditors ...RequestEditorFn) (*SetCodeHostsResponse, error)
 
-	// ListConnectionKindsWithResponse The connection kinds the organization can make connections of
-	//
-	// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
-	ListConnectionKindsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListConnectionKindsResponse, error)
-
-	// DeleteConnectionKindWithResponse Delete one of the organization's connection kinds
-	//
-	// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
-	DeleteConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*DeleteConnectionKindResponse, error)
-
-	// PutConnectionKindWithBodyWithResponse Create or replace one of the organization's connection kinds
-	//
-	// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-	PutConnectionKindWithBodyWithResponse(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error)
-
-	// PutConnectionKindWithResponse Create or replace one of the organization's connection kinds
-	//
-	// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-	PutConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error)
-
-	// ListConnectionsWithResponse The organization's connections
-	//
-	// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
-	ListConnectionsWithResponse(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error)
-
-	// CreateConnectionWithBodyWithResponse Create a connection
-	//
-	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-	CreateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error)
-
-	// CreateConnectionWithResponse Create a connection
-	//
-	// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-	CreateConnectionWithResponse(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error)
-
-	// DeleteConnectionWithResponse Delete a connection
-	//
-	// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
-	DeleteConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*DeleteConnectionResponse, error)
-
-	// GetConnectionWithResponse One connection, with the env names a run gets from it and its kind's docs
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
-	GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error)
-
-	// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
-	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-	UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
-
-	// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
-	//
-	// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-	UpdateConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error)
-
-	// ListConnectionRepositoriesWithResponse The owners and repositories a code host connection reaches
-	//
-	// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
-	ListConnectionRepositoriesWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*ListConnectionRepositoriesResponse, error)
-
-	// TestConnectionWithResponse Run the connection's test
-	//
-	// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
-	TestConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*TestConnectionResponse, error)
-
 	// ListCredentialsWithResponse The organization's credentials
 	//
 	// By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
@@ -29226,9 +27500,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
 	TestEnvironmentWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error)
 
-	// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
+	// GetIntakeWithResponse The factory's newest items, its origins and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+	// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -29648,72 +27922,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with PATCH /v1/orgs/{org}/factories/{factory}/views/{view} (the `UpdateSavedView` operationId).
 	UpdateSavedViewWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, view SavedViewRef, body UpdateSavedViewJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSavedViewResponse, error)
 
-	// ListWebhookEndpointsWithResponse The webhook endpoints open to the factory
-	//
-	// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks (the `ListWebhookEndpoints` operationId).
-	ListWebhookEndpointsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListWebhookEndpointsResponse, error)
-
-	// CreateWebhookEndpointWithBodyWithResponse Create a webhook endpoint
-	//
-	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-	CreateWebhookEndpointWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWebhookEndpointResponse, error)
-
-	// CreateWebhookEndpointWithResponse Create a webhook endpoint
-	//
-	// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-	//
-	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-	CreateWebhookEndpointWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateWebhookEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWebhookEndpointResponse, error)
-
-	// DeleteWebhookEndpointWithResponse Delete a webhook endpoint and its deliveries
-	//
-	// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
-	DeleteWebhookEndpointWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*DeleteWebhookEndpointResponse, error)
-
-	// ListWebhookDeliveriesWithResponse One page of an endpoint's deliveries, newest first
-	//
-	// What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries (the `ListWebhookDeliveries` operationId).
-	ListWebhookDeliveriesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params *ListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*ListWebhookDeliveriesResponse, error)
-
-	// GetWebhookDeliveryWithResponse One delivery with its request
-	//
-	// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery} (the `GetWebhookDelivery` operationId).
-	GetWebhookDeliveryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string, reqEditors ...RequestEditorFn) (*GetWebhookDeliveryResponse, error)
-
-	// RotateWebhookSecretWithResponse Replace an endpoint's signing secret
-	//
-	// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-	//
-	// Returns a wrapper object for the known response body format(s).
-	//
-	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate (the `RotateWebhookSecret` operationId).
-	RotateWebhookSecretWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*RotateWebhookSecretResponse, error)
-
 	// GetInboxWithResponse What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -30367,9 +28578,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/orgs/{org}/runs/{run} (the `GetRun` operationId).
 	GetRunWithResponse(ctx context.Context, org OrgRef, run string, reqEditors ...RequestEditorFn) (*GetRunResponse, error)
 
-	// SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
+	// SearchOrgWithResponse Find the organization's items, agents, factories and secrets, for the shell's search box
 	//
-	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+	// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Secrets are searched only for a caller who holds secret:read; for anyone else the group is empty.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -31814,472 +30025,6 @@ func (r SetCodeHostsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r SetCodeHostsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListConnectionKindsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ConnectionKindList
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListConnectionKindsResponse) GetJSON200() *ConnectionKindList {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListConnectionKindsResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r ListConnectionKindsResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r ListConnectionKindsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListConnectionKindsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListConnectionKindsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type DeleteConnectionKindResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r DeleteConnectionKindResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r DeleteConnectionKindResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteConnectionKindResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteConnectionKindResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeleteConnectionKindResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type PutConnectionKindResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ConnectionKind
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r PutConnectionKindResponse) GetJSON200() *ConnectionKind {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r PutConnectionKindResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r PutConnectionKindResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r PutConnectionKindResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PutConnectionKindResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r PutConnectionKindResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListConnectionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ConnectionList
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListConnectionsResponse) GetJSON200() *ConnectionList {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListConnectionsResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r ListConnectionsResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r ListConnectionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListConnectionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListConnectionsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type CreateConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *Connection
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateConnectionResponse) GetJSON201() *Connection {
-	return r.JSON201
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r CreateConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r CreateConnectionResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r CreateConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreateConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type DeleteConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r DeleteConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r DeleteConnectionResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeleteConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type GetConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Connection
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetConnectionResponse) GetJSON200() *Connection {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GetConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r GetConnectionResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r GetConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type UpdateConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *Connection
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r UpdateConnectionResponse) GetJSON200() *Connection {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r UpdateConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r UpdateConnectionResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r UpdateConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r UpdateConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r UpdateConnectionResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListConnectionRepositoriesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *RepositoryList
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListConnectionRepositoriesResponse) GetJSON200() *RepositoryList {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListConnectionRepositoriesResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r ListConnectionRepositoriesResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r ListConnectionRepositoriesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListConnectionRepositoriesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListConnectionRepositoriesResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type TestConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *ConnectionTestResult
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r TestConnectionResponse) GetJSON200() *ConnectionTestResult {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r TestConnectionResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r TestConnectionResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r TestConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TestConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r TestConnectionResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -36169,287 +33914,6 @@ func (r UpdateSavedViewResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateSavedViewResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListWebhookEndpointsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *WebhookEndpointList
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListWebhookEndpointsResponse) GetJSON200() *WebhookEndpointList {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListWebhookEndpointsResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r ListWebhookEndpointsResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r ListWebhookEndpointsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListWebhookEndpointsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListWebhookEndpointsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type CreateWebhookEndpointResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON201 the response for an HTTP 201 `application/json` response
-	JSON201 *CreatedWebhookEndpoint
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON201 returns the response for an HTTP 201 `application/json` response
-func (r CreateWebhookEndpointResponse) GetJSON201() *CreatedWebhookEndpoint {
-	return r.JSON201
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r CreateWebhookEndpointResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r CreateWebhookEndpointResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r CreateWebhookEndpointResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreateWebhookEndpointResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateWebhookEndpointResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type DeleteWebhookEndpointResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r DeleteWebhookEndpointResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r DeleteWebhookEndpointResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteWebhookEndpointResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteWebhookEndpointResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeleteWebhookEndpointResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListWebhookDeliveriesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *WebhookDeliveryPage
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r ListWebhookDeliveriesResponse) GetJSON200() *WebhookDeliveryPage {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r ListWebhookDeliveriesResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r ListWebhookDeliveriesResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r ListWebhookDeliveriesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListWebhookDeliveriesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListWebhookDeliveriesResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type GetWebhookDeliveryResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *WebhookDeliveryRequest
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r GetWebhookDeliveryResponse) GetJSON200() *WebhookDeliveryRequest {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r GetWebhookDeliveryResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r GetWebhookDeliveryResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r GetWebhookDeliveryResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetWebhookDeliveryResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r GetWebhookDeliveryResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type RotateWebhookSecretResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	// JSON200 the response for an HTTP 200 `application/json` response
-	JSON200 *CreatedWebhookEndpoint
-	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
-	ApplicationproblemJSONDefault *Problem
-}
-
-// GetJSON200 returns the response for an HTTP 200 `application/json` response
-func (r RotateWebhookSecretResponse) GetJSON200() *CreatedWebhookEndpoint {
-	return r.JSON200
-}
-
-// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
-func (r RotateWebhookSecretResponse) GetApplicationproblemJSONDefault() *Problem {
-	return r.ApplicationproblemJSONDefault
-}
-
-// GetBody returns the raw response body bytes
-func (r RotateWebhookSecretResponse) GetBody() []byte {
-	return r.Body
-}
-
-// Status returns HTTPResponse.Status
-func (r RotateWebhookSecretResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r RotateWebhookSecretResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r RotateWebhookSecretResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -41156,199 +38620,6 @@ func (c *ClientWithResponses) SetCodeHostsWithResponse(ctx context.Context, org 
 	return ParseSetCodeHostsResponse(rsp)
 }
 
-// ListConnectionKindsWithResponse The connection kinds the organization can make connections of
-//
-// The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/connection-kinds (the `ListConnectionKinds` operationId).
-func (c *ClientWithResponses) ListConnectionKindsWithResponse(ctx context.Context, org OrgRef, reqEditors ...RequestEditorFn) (*ListConnectionKindsResponse, error) {
-	rsp, err := c.ListConnectionKinds(ctx, org, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListConnectionKindsResponse(rsp)
-}
-
-// DeleteConnectionKindWithResponse Delete one of the organization's connection kinds
-//
-// 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with DELETE /v1/orgs/{org}/connection-kinds/{kind} (the `DeleteConnectionKind` operationId).
-func (c *ClientWithResponses) DeleteConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, reqEditors ...RequestEditorFn) (*DeleteConnectionKindResponse, error) {
-	rsp, err := c.DeleteConnectionKind(ctx, org, kind, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteConnectionKindResponse(rsp)
-}
-
-// PutConnectionKindWithBodyWithResponse Create or replace one of the organization's connection kinds
-//
-// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-func (c *ClientWithResponses) PutConnectionKindWithBodyWithResponse(ctx context.Context, org OrgRef, kind KindRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error) {
-	rsp, err := c.PutConnectionKindWithBody(ctx, org, kind, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutConnectionKindResponse(rsp)
-}
-
-// PutConnectionKindWithResponse Create or replace one of the organization's connection kinds
-//
-// The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with PUT /v1/orgs/{org}/connection-kinds/{kind} (the `PutConnectionKind` operationId).
-func (c *ClientWithResponses) PutConnectionKindWithResponse(ctx context.Context, org OrgRef, kind KindRef, body PutConnectionKindJSONRequestBody, reqEditors ...RequestEditorFn) (*PutConnectionKindResponse, error) {
-	rsp, err := c.PutConnectionKind(ctx, org, kind, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutConnectionKindResponse(rsp)
-}
-
-// ListConnectionsWithResponse The organization's connections
-//
-// By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/connections (the `ListConnections` operationId).
-func (c *ClientWithResponses) ListConnectionsWithResponse(ctx context.Context, org OrgRef, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error) {
-	rsp, err := c.ListConnections(ctx, org, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListConnectionsResponse(rsp)
-}
-
-// CreateConnectionWithBodyWithResponse Create a connection
-//
-// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-func (c *ClientWithResponses) CreateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error) {
-	rsp, err := c.CreateConnectionWithBody(ctx, org, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateConnectionResponse(rsp)
-}
-
-// CreateConnectionWithResponse Create a connection
-//
-// A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/connections (the `CreateConnection` operationId).
-func (c *ClientWithResponses) CreateConnectionWithResponse(ctx context.Context, org OrgRef, body CreateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateConnectionResponse, error) {
-	rsp, err := c.CreateConnection(ctx, org, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateConnectionResponse(rsp)
-}
-
-// DeleteConnectionWithResponse Delete a connection
-//
-// 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with DELETE /v1/orgs/{org}/connections/{connection} (the `DeleteConnection` operationId).
-func (c *ClientWithResponses) DeleteConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*DeleteConnectionResponse, error) {
-	rsp, err := c.DeleteConnection(ctx, org, connection, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteConnectionResponse(rsp)
-}
-
-// GetConnectionWithResponse One connection, with the env names a run gets from it and its kind's docs
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/connections/{connection} (the `GetConnection` operationId).
-func (c *ClientWithResponses) GetConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*GetConnectionResponse, error) {
-	rsp, err := c.GetConnection(ctx, org, connection, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetConnectionResponse(rsp)
-}
-
-// UpdateConnectionWithBodyWithResponse Rename a connection, or change its description, fields, secrets or tool modes
-//
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-func (c *ClientWithResponses) UpdateConnectionWithBodyWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error) {
-	rsp, err := c.UpdateConnectionWithBody(ctx, org, connection, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUpdateConnectionResponse(rsp)
-}
-
-// UpdateConnectionWithResponse Rename a connection, or change its description, fields, secrets or tool modes
-//
-// fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with PATCH /v1/orgs/{org}/connections/{connection} (the `UpdateConnection` operationId).
-func (c *ClientWithResponses) UpdateConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, body UpdateConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateConnectionResponse, error) {
-	rsp, err := c.UpdateConnection(ctx, org, connection, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUpdateConnectionResponse(rsp)
-}
-
-// ListConnectionRepositoriesWithResponse The owners and repositories a code host connection reaches
-//
-// Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/connections/{connection}/repositories (the `ListConnectionRepositories` operationId).
-func (c *ClientWithResponses) ListConnectionRepositoriesWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, params *ListConnectionRepositoriesParams, reqEditors ...RequestEditorFn) (*ListConnectionRepositoriesResponse, error) {
-	rsp, err := c.ListConnectionRepositories(ctx, org, connection, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListConnectionRepositoriesResponse(rsp)
-}
-
-// TestConnectionWithResponse Run the connection's test
-//
-// Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/connections/{connection}/test (the `TestConnection` operationId).
-func (c *ClientWithResponses) TestConnectionWithResponse(ctx context.Context, org OrgRef, connection ConnectionRef, reqEditors ...RequestEditorFn) (*TestConnectionResponse, error) {
-	rsp, err := c.TestConnection(ctx, org, connection, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTestConnectionResponse(rsp)
-}
-
 // ListCredentialsWithResponse The organization's credentials
 //
 // By name, each with its type, description, factory scope, agents per factory, expiry, rotation reminder, last use and what uses it (the connections that refer to it as {{name}} and the agents listed). Never a value.
@@ -42226,9 +39497,9 @@ func (c *ClientWithResponses) TestEnvironmentWithResponse(ctx context.Context, o
 	return ParseTestEnvironmentResponse(rsp)
 }
 
-// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
+// GetIntakeWithResponse The factory's newest items, its origins and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -42936,114 +40207,9 @@ func (c *ClientWithResponses) UpdateSavedViewWithResponse(ctx context.Context, o
 	return ParseUpdateSavedViewResponse(rsp)
 }
 
-// ListWebhookEndpointsWithResponse The webhook endpoints open to the factory
-//
-// By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks (the `ListWebhookEndpoints` operationId).
-func (c *ClientWithResponses) ListWebhookEndpointsWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, reqEditors ...RequestEditorFn) (*ListWebhookEndpointsResponse, error) {
-	rsp, err := c.ListWebhookEndpoints(ctx, org, factory, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListWebhookEndpointsResponse(rsp)
-}
-
-// CreateWebhookEndpointWithBodyWithResponse Create a webhook endpoint
-//
-// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-//
-// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-func (c *ClientWithResponses) CreateWebhookEndpointWithBodyWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWebhookEndpointResponse, error) {
-	rsp, err := c.CreateWebhookEndpointWithBody(ctx, org, factory, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateWebhookEndpointResponse(rsp)
-}
-
-// CreateWebhookEndpointWithResponse Create a webhook endpoint
-//
-// A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-//
-// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks (the `CreateWebhookEndpoint` operationId).
-func (c *ClientWithResponses) CreateWebhookEndpointWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, body CreateWebhookEndpointJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWebhookEndpointResponse, error) {
-	rsp, err := c.CreateWebhookEndpoint(ctx, org, factory, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateWebhookEndpointResponse(rsp)
-}
-
-// DeleteWebhookEndpointWithResponse Delete a webhook endpoint and its deliveries
-//
-// Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint} (the `DeleteWebhookEndpoint` operationId).
-func (c *ClientWithResponses) DeleteWebhookEndpointWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*DeleteWebhookEndpointResponse, error) {
-	rsp, err := c.DeleteWebhookEndpoint(ctx, org, factory, endpoint, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteWebhookEndpointResponse(rsp)
-}
-
-// ListWebhookDeliveriesWithResponse One page of an endpoint's deliveries, newest first
-//
-// What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries (the `ListWebhookDeliveries` operationId).
-func (c *ClientWithResponses) ListWebhookDeliveriesWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params *ListWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*ListWebhookDeliveriesResponse, error) {
-	rsp, err := c.ListWebhookDeliveries(ctx, org, factory, endpoint, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListWebhookDeliveriesResponse(rsp)
-}
-
-// GetWebhookDeliveryWithResponse One delivery with its request
-//
-// The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery} (the `GetWebhookDelivery` operationId).
-func (c *ClientWithResponses) GetWebhookDeliveryWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string, reqEditors ...RequestEditorFn) (*GetWebhookDeliveryResponse, error) {
-	rsp, err := c.GetWebhookDelivery(ctx, org, factory, endpoint, delivery, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetWebhookDeliveryResponse(rsp)
-}
-
-// RotateWebhookSecretWithResponse Replace an endpoint's signing secret
-//
-// A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-//
-// Returns a wrapper object for the known response body format(s).
-//
-// Corresponds with POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate (the `RotateWebhookSecret` operationId).
-func (c *ClientWithResponses) RotateWebhookSecretWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, reqEditors ...RequestEditorFn) (*RotateWebhookSecretResponse, error) {
-	rsp, err := c.RotateWebhookSecret(ctx, org, factory, endpoint, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseRotateWebhookSecretResponse(rsp)
-}
-
 // GetInboxWithResponse What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -44141,9 +41307,9 @@ func (c *ClientWithResponses) GetRunWithResponse(ctx context.Context, org OrgRef
 	return ParseGetRunResponse(rsp)
 }
 
-// SearchOrgWithResponse Find the organization's items, agents, factories and connections, for the shell's search box
+// SearchOrgWithResponse Find the organization's items, agents, factories and secrets, for the shell's search box
 //
-// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+// One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Secrets are searched only for a caller who holds secret:read; for anyone else the group is empty.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -45531,328 +42697,6 @@ func ParseSetCodeHostsResponse(rsp *http.Response) (*SetCodeHostsResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest CodeHosts
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListConnectionKindsResponse parses an HTTP response from a ListConnectionKindsWithResponse call
-func ParseListConnectionKindsResponse(rsp *http.Response) (*ListConnectionKindsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListConnectionKindsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConnectionKindList
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteConnectionKindResponse parses an HTTP response from a DeleteConnectionKindWithResponse call
-func ParseDeleteConnectionKindResponse(rsp *http.Response) (*DeleteConnectionKindResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteConnectionKindResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case rsp.StatusCode == 204:
-		break // No content-type
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePutConnectionKindResponse parses an HTTP response from a PutConnectionKindWithResponse call
-func ParsePutConnectionKindResponse(rsp *http.Response) (*PutConnectionKindResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PutConnectionKindResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConnectionKind
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListConnectionsResponse parses an HTTP response from a ListConnectionsWithResponse call
-func ParseListConnectionsResponse(rsp *http.Response) (*ListConnectionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListConnectionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConnectionList
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreateConnectionResponse parses an HTTP response from a CreateConnectionWithResponse call
-func ParseCreateConnectionResponse(rsp *http.Response) (*CreateConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreateConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Connection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteConnectionResponse parses an HTTP response from a DeleteConnectionWithResponse call
-func ParseDeleteConnectionResponse(rsp *http.Response) (*DeleteConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case rsp.StatusCode == 204:
-		break // No content-type
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetConnectionResponse parses an HTTP response from a GetConnectionWithResponse call
-func ParseGetConnectionResponse(rsp *http.Response) (*GetConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Connection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseUpdateConnectionResponse parses an HTTP response from a UpdateConnectionWithResponse call
-func ParseUpdateConnectionResponse(rsp *http.Response) (*UpdateConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &UpdateConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Connection
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListConnectionRepositoriesResponse parses an HTTP response from a ListConnectionRepositoriesWithResponse call
-func ParseListConnectionRepositoriesResponse(rsp *http.Response) (*ListConnectionRepositoriesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListConnectionRepositoriesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RepositoryList
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTestConnectionResponse parses an HTTP response from a TestConnectionWithResponse call
-func ParseTestConnectionResponse(rsp *http.Response) (*TestConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TestConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConnectionTestResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -48578,200 +45422,6 @@ func ParseUpdateSavedViewResponse(rsp *http.Response) (*UpdateSavedViewResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SavedView
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListWebhookEndpointsResponse parses an HTTP response from a ListWebhookEndpointsWithResponse call
-func ParseListWebhookEndpointsResponse(rsp *http.Response) (*ListWebhookEndpointsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListWebhookEndpointsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest WebhookEndpointList
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreateWebhookEndpointResponse parses an HTTP response from a CreateWebhookEndpointWithResponse call
-func ParseCreateWebhookEndpointResponse(rsp *http.Response) (*CreateWebhookEndpointResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreateWebhookEndpointResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest CreatedWebhookEndpoint
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteWebhookEndpointResponse parses an HTTP response from a DeleteWebhookEndpointWithResponse call
-func ParseDeleteWebhookEndpointResponse(rsp *http.Response) (*DeleteWebhookEndpointResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteWebhookEndpointResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case rsp.StatusCode == 204:
-		break // No content-type
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListWebhookDeliveriesResponse parses an HTTP response from a ListWebhookDeliveriesWithResponse call
-func ParseListWebhookDeliveriesResponse(rsp *http.Response) (*ListWebhookDeliveriesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListWebhookDeliveriesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest WebhookDeliveryPage
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetWebhookDeliveryResponse parses an HTTP response from a GetWebhookDeliveryWithResponse call
-func ParseGetWebhookDeliveryResponse(rsp *http.Response) (*GetWebhookDeliveryResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetWebhookDeliveryResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest WebhookDeliveryRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.ApplicationproblemJSONDefault = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseRotateWebhookSecretResponse parses an HTTP response from a RotateWebhookSecretWithResponse call
-func ParseRotateWebhookSecretResponse(rsp *http.Response) (*RotateWebhookSecretResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &RotateWebhookSecretResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CreatedWebhookEndpoint
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -51904,36 +48554,6 @@ type ServerInterface interface {
 	// SetCodeHosts Replace the organization's added code hosts
 	// (PUT /v1/orgs/{org}/code-hosts)
 	SetCodeHosts(w http.ResponseWriter, r *http.Request, org OrgRef)
-	// ListConnectionKinds The connection kinds the organization can make connections of
-	// (GET /v1/orgs/{org}/connection-kinds)
-	ListConnectionKinds(w http.ResponseWriter, r *http.Request, org OrgRef)
-	// DeleteConnectionKind Delete one of the organization's connection kinds
-	// (DELETE /v1/orgs/{org}/connection-kinds/{kind})
-	DeleteConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef)
-	// PutConnectionKind Create or replace one of the organization's connection kinds
-	// (PUT /v1/orgs/{org}/connection-kinds/{kind})
-	PutConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef)
-	// ListConnections The organization's connections
-	// (GET /v1/orgs/{org}/connections)
-	ListConnections(w http.ResponseWriter, r *http.Request, org OrgRef, params ListConnectionsParams)
-	// CreateConnection Create a connection
-	// (POST /v1/orgs/{org}/connections)
-	CreateConnection(w http.ResponseWriter, r *http.Request, org OrgRef)
-	// DeleteConnection Delete a connection
-	// (DELETE /v1/orgs/{org}/connections/{connection})
-	DeleteConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
-	// GetConnection One connection, with the env names a run gets from it and its kind's docs
-	// (GET /v1/orgs/{org}/connections/{connection})
-	GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
-	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
-	// (PATCH /v1/orgs/{org}/connections/{connection})
-	UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
-	// ListConnectionRepositories The owners and repositories a code host connection reaches
-	// (GET /v1/orgs/{org}/connections/{connection}/repositories)
-	ListConnectionRepositories(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef, params ListConnectionRepositoriesParams)
-	// TestConnection Run the connection's test
-	// (POST /v1/orgs/{org}/connections/{connection}/test)
-	TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef)
 	// ListCredentials The organization's credentials
 	// (GET /v1/orgs/{org}/credentials)
 	//
@@ -52072,7 +48692,7 @@ type ServerInterface interface {
 	// TestEnvironment Test an environment's MCP servers or a template
 	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
 	TestEnvironment(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, environment string)
-	// GetIntake Where the factory's newest items came from, and its triggers
+	// GetIntake The factory's newest items, its origins and its triggers
 	// (GET /v1/orgs/{org}/factories/{factory}/intake)
 	GetIntake(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetIntakeParams)
 	// GetIntakeTrigger One trigger with this week's results and its recent events
@@ -52189,24 +48809,6 @@ type ServerInterface interface {
 	// UpdateSavedView Rename a view and replace its filters
 	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
 	UpdateSavedView(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, view SavedViewRef)
-	// ListWebhookEndpoints The webhook endpoints open to the factory
-	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
-	ListWebhookEndpoints(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
-	// CreateWebhookEndpoint Create a webhook endpoint
-	// (POST /v1/orgs/{org}/factories/{factory}/webhooks)
-	CreateWebhookEndpoint(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef)
-	// DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
-	// (DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint})
-	DeleteWebhookEndpoint(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef)
-	// ListWebhookDeliveries One page of an endpoint's deliveries, newest first
-	// (GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries)
-	ListWebhookDeliveries(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params ListWebhookDeliveriesParams)
-	// GetWebhookDelivery One delivery with its request
-	// (GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery})
-	GetWebhookDelivery(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string)
-	// RotateWebhookSecret Replace an endpoint's signing secret
-	// (POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate)
-	RotateWebhookSecret(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef)
 	// GetInbox What waits for a person across the organization's factories
 	// (GET /v1/orgs/{org}/inbox)
 	GetInbox(w http.ResponseWriter, r *http.Request, org OrgRef, params GetInboxParams)
@@ -52369,7 +48971,7 @@ type ServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(w http.ResponseWriter, r *http.Request, org OrgRef, run string)
-	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+	// SearchOrg Find the organization's items, agents, factories and secrets, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(w http.ResponseWriter, r *http.Request, org OrgRef, params SearchOrgParams)
 	// ListSecrets The organization's secrets
@@ -53137,374 +49739,6 @@ func (siw *ServerInterfaceWrapper) SetCodeHosts(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SetCodeHosts(w, r, org)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListConnectionKinds operation middleware
-func (siw *ServerInterfaceWrapper) ListConnectionKinds(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListConnectionKinds(w, r, org)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteConnectionKind operation middleware
-func (siw *ServerInterfaceWrapper) DeleteConnectionKind(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "kind" -------------
-	var kind KindRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteConnectionKind(w, r, org, kind)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// PutConnectionKind operation middleware
-func (siw *ServerInterfaceWrapper) PutConnectionKind(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "kind" -------------
-	var kind KindRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.PutConnectionKind(w, r, org, kind)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListConnections operation middleware
-func (siw *ServerInterfaceWrapper) ListConnections(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListConnectionsParams
-
-	// ------------- Optional query parameter "factory" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "factory", r.URL.Query(), &params.Factory, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "factory"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "kind" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListConnections(w, r, org, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateConnection operation middleware
-func (siw *ServerInterfaceWrapper) CreateConnection(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateConnection(w, r, org)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteConnection operation middleware
-func (siw *ServerInterfaceWrapper) DeleteConnection(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "connection" -------------
-	var connection ConnectionRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteConnection(w, r, org, connection)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetConnection operation middleware
-func (siw *ServerInterfaceWrapper) GetConnection(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "connection" -------------
-	var connection ConnectionRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetConnection(w, r, org, connection)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpdateConnection operation middleware
-func (siw *ServerInterfaceWrapper) UpdateConnection(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "connection" -------------
-	var connection ConnectionRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateConnection(w, r, org, connection)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListConnectionRepositories operation middleware
-func (siw *ServerInterfaceWrapper) ListConnectionRepositories(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "connection" -------------
-	var connection ConnectionRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListConnectionRepositoriesParams
-
-	// ------------- Optional query parameter "owner" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "owner", r.URL.Query(), &params.Owner, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "owner"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "owner", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListConnectionRepositories(w, r, org, connection, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// TestConnection operation middleware
-func (siw *ServerInterfaceWrapper) TestConnection(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "connection" -------------
-	var connection ConnectionRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "connection", r.PathValue("connection"), &connection, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "connection", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.TestConnection(w, r, org, connection)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -57290,290 +53524,6 @@ func (siw *ServerInterfaceWrapper) UpdateSavedView(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// ListWebhookEndpoints operation middleware
-func (siw *ServerInterfaceWrapper) ListWebhookEndpoints(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "factory" -------------
-	var factory FactoryRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWebhookEndpoints(w, r, org, factory)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateWebhookEndpoint operation middleware
-func (siw *ServerInterfaceWrapper) CreateWebhookEndpoint(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "factory" -------------
-	var factory FactoryRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateWebhookEndpoint(w, r, org, factory)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteWebhookEndpoint operation middleware
-func (siw *ServerInterfaceWrapper) DeleteWebhookEndpoint(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "factory" -------------
-	var factory FactoryRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "endpoint" -------------
-	var endpoint WebhookEndpointRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "endpoint", r.PathValue("endpoint"), &endpoint, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "endpoint", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteWebhookEndpoint(w, r, org, factory, endpoint)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListWebhookDeliveries operation middleware
-func (siw *ServerInterfaceWrapper) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "factory" -------------
-	var factory FactoryRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "endpoint" -------------
-	var endpoint WebhookEndpointRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "endpoint", r.PathValue("endpoint"), &endpoint, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "endpoint", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListWebhookDeliveriesParams
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		}
-		return
-	}
-
-	// ------------- Optional query parameter "after" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		var requiredError *runtime.RequiredParameterError
-		if errors.As(err, &requiredError) {
-			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
-		} else {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
-		}
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWebhookDeliveries(w, r, org, factory, endpoint, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetWebhookDelivery operation middleware
-func (siw *ServerInterfaceWrapper) GetWebhookDelivery(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "factory" -------------
-	var factory FactoryRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "endpoint" -------------
-	var endpoint WebhookEndpointRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "endpoint", r.PathValue("endpoint"), &endpoint, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "endpoint", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "delivery" -------------
-	var delivery string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "delivery", r.PathValue("delivery"), &delivery, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "delivery", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetWebhookDelivery(w, r, org, factory, endpoint, delivery)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// RotateWebhookSecret operation middleware
-func (siw *ServerInterfaceWrapper) RotateWebhookSecret(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "org" -------------
-	var org OrgRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "org", r.PathValue("org"), &org, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "org", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "factory" -------------
-	var factory FactoryRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "factory", r.PathValue("factory"), &factory, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factory", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "endpoint" -------------
-	var endpoint WebhookEndpointRef
-
-	err = runtime.BindStyledParameterWithOptions("simple", "endpoint", r.PathValue("endpoint"), &endpoint, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "endpoint", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RotateWebhookSecret(w, r, org, factory, endpoint)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetInbox operation middleware
 func (siw *ServerInterfaceWrapper) GetInbox(w http.ResponseWriter, r *http.Request) {
 
@@ -61174,12 +57124,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/environments/{environment}/test", wrapper.TestEnvironment)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/repositories/test", wrapper.TestFactoryRepository)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/repositories/tests", wrapper.ListFactoryRepositoryTests)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.ListWebhookEndpoints)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks", wrapper.CreateWebhookEndpoint)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}", wrapper.DeleteWebhookEndpoint)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate", wrapper.RotateWebhookSecret)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries", wrapper.ListWebhookDeliveries)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}", wrapper.GetWebhookDelivery)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/webhooks", wrapper.ListWebhooks)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/webhooks", wrapper.CreateWebhook)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/webhooks/{webhook}", wrapper.DeleteWebhook)
@@ -61222,18 +57166,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/meta", wrapper.GetBuilderMeta)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/skills", wrapper.SearchSkills)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/builder/skills/{owner}/{repo}/{skill}/files", wrapper.GetSkillFiles)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connection-kinds", wrapper.ListConnectionKinds)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/connection-kinds/{kind}", wrapper.DeleteConnectionKind)
-	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/orgs/{org}/connection-kinds/{kind}", wrapper.PutConnectionKind)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections", wrapper.ListConnections)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections", wrapper.CreateConnection)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.DeleteConnection)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.GetConnection)
-	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}", wrapper.UpdateConnection)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/test", wrapper.TestConnection)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/standing-rules", wrapper.ListStandingRules)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/orgs/{org}/standing-rules/{rule}", wrapper.RevokeStandingRule)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/connections/{connection}/repositories", wrapper.ListConnectionRepositories)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.ListCredentials)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/credentials", wrapper.CreateCredential)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/orgs/{org}/credentials/import", wrapper.ImportCredentials)
@@ -62088,396 +58022,6 @@ type SetCodeHostsdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response SetCodeHostsdefaultApplicationProblemPlusJSONResponse) VisitSetCodeHostsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListConnectionKindsRequestObject struct {
-	Org OrgRef `json:"org"`
-}
-
-type ListConnectionKindsResponseObject interface {
-	VisitListConnectionKindsResponse(w http.ResponseWriter) error
-}
-
-type ListConnectionKinds200JSONResponse ConnectionKindList
-
-func (response ListConnectionKinds200JSONResponse) VisitListConnectionKindsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListConnectionKindsdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListConnectionKindsdefaultApplicationProblemPlusJSONResponse) VisitListConnectionKindsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteConnectionKindRequestObject struct {
-	Org  OrgRef  `json:"org"`
-	Kind KindRef `json:"kind"`
-}
-
-type DeleteConnectionKindResponseObject interface {
-	VisitDeleteConnectionKindResponse(w http.ResponseWriter) error
-}
-
-type DeleteConnectionKind204Response struct {
-}
-
-func (response DeleteConnectionKind204Response) VisitDeleteConnectionKindResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DeleteConnectionKinddefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response DeleteConnectionKinddefaultApplicationProblemPlusJSONResponse) VisitDeleteConnectionKindResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type PutConnectionKindRequestObject struct {
-	Org  OrgRef  `json:"org"`
-	Kind KindRef `json:"kind"`
-	Body *PutConnectionKindJSONRequestBody
-}
-
-type PutConnectionKindResponseObject interface {
-	VisitPutConnectionKindResponse(w http.ResponseWriter) error
-}
-
-type PutConnectionKind200JSONResponse ConnectionKind
-
-func (response PutConnectionKind200JSONResponse) VisitPutConnectionKindResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type PutConnectionKinddefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response PutConnectionKinddefaultApplicationProblemPlusJSONResponse) VisitPutConnectionKindResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListConnectionsRequestObject struct {
-	Org    OrgRef `json:"org"`
-	Params ListConnectionsParams
-}
-
-type ListConnectionsResponseObject interface {
-	VisitListConnectionsResponse(w http.ResponseWriter) error
-}
-
-type ListConnections200JSONResponse ConnectionList
-
-func (response ListConnections200JSONResponse) VisitListConnectionsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListConnectionsdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListConnectionsdefaultApplicationProblemPlusJSONResponse) VisitListConnectionsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateConnectionRequestObject struct {
-	Org  OrgRef `json:"org"`
-	Body *CreateConnectionJSONRequestBody
-}
-
-type CreateConnectionResponseObject interface {
-	VisitCreateConnectionResponse(w http.ResponseWriter) error
-}
-
-type CreateConnection201JSONResponse Connection
-
-func (response CreateConnection201JSONResponse) VisitCreateConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateConnectiondefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response CreateConnectiondefaultApplicationProblemPlusJSONResponse) VisitCreateConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteConnectionRequestObject struct {
-	Org        OrgRef        `json:"org"`
-	Connection ConnectionRef `json:"connection"`
-}
-
-type DeleteConnectionResponseObject interface {
-	VisitDeleteConnectionResponse(w http.ResponseWriter) error
-}
-
-type DeleteConnection204Response struct {
-}
-
-func (response DeleteConnection204Response) VisitDeleteConnectionResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DeleteConnectiondefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response DeleteConnectiondefaultApplicationProblemPlusJSONResponse) VisitDeleteConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetConnectionRequestObject struct {
-	Org        OrgRef        `json:"org"`
-	Connection ConnectionRef `json:"connection"`
-}
-
-type GetConnectionResponseObject interface {
-	VisitGetConnectionResponse(w http.ResponseWriter) error
-}
-
-type GetConnection200JSONResponse Connection
-
-func (response GetConnection200JSONResponse) VisitGetConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetConnectiondefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response GetConnectiondefaultApplicationProblemPlusJSONResponse) VisitGetConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateConnectionRequestObject struct {
-	Org        OrgRef        `json:"org"`
-	Connection ConnectionRef `json:"connection"`
-	Body       *UpdateConnectionJSONRequestBody
-}
-
-type UpdateConnectionResponseObject interface {
-	VisitUpdateConnectionResponse(w http.ResponseWriter) error
-}
-
-type UpdateConnection200JSONResponse Connection
-
-func (response UpdateConnection200JSONResponse) VisitUpdateConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type UpdateConnectiondefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response UpdateConnectiondefaultApplicationProblemPlusJSONResponse) VisitUpdateConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListConnectionRepositoriesRequestObject struct {
-	Org        OrgRef        `json:"org"`
-	Connection ConnectionRef `json:"connection"`
-	Params     ListConnectionRepositoriesParams
-}
-
-type ListConnectionRepositoriesResponseObject interface {
-	VisitListConnectionRepositoriesResponse(w http.ResponseWriter) error
-}
-
-type ListConnectionRepositories200JSONResponse RepositoryList
-
-func (response ListConnectionRepositories200JSONResponse) VisitListConnectionRepositoriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListConnectionRepositoriesdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListConnectionRepositoriesdefaultApplicationProblemPlusJSONResponse) VisitListConnectionRepositoriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type TestConnectionRequestObject struct {
-	Org        OrgRef        `json:"org"`
-	Connection ConnectionRef `json:"connection"`
-}
-
-type TestConnectionResponseObject interface {
-	VisitTestConnectionResponse(w http.ResponseWriter) error
-}
-
-type TestConnection200JSONResponse ConnectionTestResult
-
-func (response TestConnection200JSONResponse) VisitTestConnectionResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type TestConnectiondefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response TestConnectiondefaultApplicationProblemPlusJSONResponse) VisitTestConnectionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -65868,247 +61412,6 @@ type UpdateSavedViewdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response UpdateSavedViewdefaultApplicationProblemPlusJSONResponse) VisitUpdateSavedViewResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWebhookEndpointsRequestObject struct {
-	Org     OrgRef     `json:"org"`
-	Factory FactoryRef `json:"factory"`
-}
-
-type ListWebhookEndpointsResponseObject interface {
-	VisitListWebhookEndpointsResponse(w http.ResponseWriter) error
-}
-
-type ListWebhookEndpoints200JSONResponse WebhookEndpointList
-
-func (response ListWebhookEndpoints200JSONResponse) VisitListWebhookEndpointsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWebhookEndpointsdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListWebhookEndpointsdefaultApplicationProblemPlusJSONResponse) VisitListWebhookEndpointsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWebhookEndpointRequestObject struct {
-	Org     OrgRef     `json:"org"`
-	Factory FactoryRef `json:"factory"`
-	Body    *CreateWebhookEndpointJSONRequestBody
-}
-
-type CreateWebhookEndpointResponseObject interface {
-	VisitCreateWebhookEndpointResponse(w http.ResponseWriter) error
-}
-
-type CreateWebhookEndpoint201JSONResponse CreatedWebhookEndpoint
-
-func (response CreateWebhookEndpoint201JSONResponse) VisitCreateWebhookEndpointResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type CreateWebhookEndpointdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response CreateWebhookEndpointdefaultApplicationProblemPlusJSONResponse) VisitCreateWebhookEndpointResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type DeleteWebhookEndpointRequestObject struct {
-	Org      OrgRef             `json:"org"`
-	Factory  FactoryRef         `json:"factory"`
-	Endpoint WebhookEndpointRef `json:"endpoint"`
-}
-
-type DeleteWebhookEndpointResponseObject interface {
-	VisitDeleteWebhookEndpointResponse(w http.ResponseWriter) error
-}
-
-type DeleteWebhookEndpoint204Response struct {
-}
-
-func (response DeleteWebhookEndpoint204Response) VisitDeleteWebhookEndpointResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
-}
-
-type DeleteWebhookEndpointdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response DeleteWebhookEndpointdefaultApplicationProblemPlusJSONResponse) VisitDeleteWebhookEndpointResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWebhookDeliveriesRequestObject struct {
-	Org      OrgRef             `json:"org"`
-	Factory  FactoryRef         `json:"factory"`
-	Endpoint WebhookEndpointRef `json:"endpoint"`
-	Params   ListWebhookDeliveriesParams
-}
-
-type ListWebhookDeliveriesResponseObject interface {
-	VisitListWebhookDeliveriesResponse(w http.ResponseWriter) error
-}
-
-type ListWebhookDeliveries200JSONResponse WebhookDeliveryPage
-
-func (response ListWebhookDeliveries200JSONResponse) VisitListWebhookDeliveriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type ListWebhookDeliveriesdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response ListWebhookDeliveriesdefaultApplicationProblemPlusJSONResponse) VisitListWebhookDeliveriesResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetWebhookDeliveryRequestObject struct {
-	Org      OrgRef             `json:"org"`
-	Factory  FactoryRef         `json:"factory"`
-	Endpoint WebhookEndpointRef `json:"endpoint"`
-	Delivery string             `json:"delivery"`
-}
-
-type GetWebhookDeliveryResponseObject interface {
-	VisitGetWebhookDeliveryResponse(w http.ResponseWriter) error
-}
-
-type GetWebhookDelivery200JSONResponse WebhookDeliveryRequest
-
-func (response GetWebhookDelivery200JSONResponse) VisitGetWebhookDeliveryResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type GetWebhookDeliverydefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response GetWebhookDeliverydefaultApplicationProblemPlusJSONResponse) VisitGetWebhookDeliveryResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(response.StatusCode)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type RotateWebhookSecretRequestObject struct {
-	Org      OrgRef             `json:"org"`
-	Factory  FactoryRef         `json:"factory"`
-	Endpoint WebhookEndpointRef `json:"endpoint"`
-}
-
-type RotateWebhookSecretResponseObject interface {
-	VisitRotateWebhookSecretResponse(w http.ResponseWriter) error
-}
-
-type RotateWebhookSecret200JSONResponse CreatedWebhookEndpoint
-
-func (response RotateWebhookSecret200JSONResponse) VisitRotateWebhookSecretResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type RotateWebhookSecretdefaultApplicationProblemPlusJSONResponse struct {
-	Body       Problem
-	StatusCode int
-}
-
-func (response RotateWebhookSecretdefaultApplicationProblemPlusJSONResponse) VisitRotateWebhookSecretResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -70089,36 +65392,6 @@ type StrictServerInterface interface {
 	// SetCodeHosts Replace the organization's added code hosts
 	// (PUT /v1/orgs/{org}/code-hosts)
 	SetCodeHosts(ctx context.Context, request SetCodeHostsRequestObject) (SetCodeHostsResponseObject, error)
-	// ListConnectionKinds The connection kinds the organization can make connections of
-	// (GET /v1/orgs/{org}/connection-kinds)
-	ListConnectionKinds(ctx context.Context, request ListConnectionKindsRequestObject) (ListConnectionKindsResponseObject, error)
-	// DeleteConnectionKind Delete one of the organization's connection kinds
-	// (DELETE /v1/orgs/{org}/connection-kinds/{kind})
-	DeleteConnectionKind(ctx context.Context, request DeleteConnectionKindRequestObject) (DeleteConnectionKindResponseObject, error)
-	// PutConnectionKind Create or replace one of the organization's connection kinds
-	// (PUT /v1/orgs/{org}/connection-kinds/{kind})
-	PutConnectionKind(ctx context.Context, request PutConnectionKindRequestObject) (PutConnectionKindResponseObject, error)
-	// ListConnections The organization's connections
-	// (GET /v1/orgs/{org}/connections)
-	ListConnections(ctx context.Context, request ListConnectionsRequestObject) (ListConnectionsResponseObject, error)
-	// CreateConnection Create a connection
-	// (POST /v1/orgs/{org}/connections)
-	CreateConnection(ctx context.Context, request CreateConnectionRequestObject) (CreateConnectionResponseObject, error)
-	// DeleteConnection Delete a connection
-	// (DELETE /v1/orgs/{org}/connections/{connection})
-	DeleteConnection(ctx context.Context, request DeleteConnectionRequestObject) (DeleteConnectionResponseObject, error)
-	// GetConnection One connection, with the env names a run gets from it and its kind's docs
-	// (GET /v1/orgs/{org}/connections/{connection})
-	GetConnection(ctx context.Context, request GetConnectionRequestObject) (GetConnectionResponseObject, error)
-	// UpdateConnection Rename a connection, or change its description, fields, secrets or tool modes
-	// (PATCH /v1/orgs/{org}/connections/{connection})
-	UpdateConnection(ctx context.Context, request UpdateConnectionRequestObject) (UpdateConnectionResponseObject, error)
-	// ListConnectionRepositories The owners and repositories a code host connection reaches
-	// (GET /v1/orgs/{org}/connections/{connection}/repositories)
-	ListConnectionRepositories(ctx context.Context, request ListConnectionRepositoriesRequestObject) (ListConnectionRepositoriesResponseObject, error)
-	// TestConnection Run the connection's test
-	// (POST /v1/orgs/{org}/connections/{connection}/test)
-	TestConnection(ctx context.Context, request TestConnectionRequestObject) (TestConnectionResponseObject, error)
 	// ListCredentials The organization's credentials
 	// (GET /v1/orgs/{org}/credentials)
 	//
@@ -70257,7 +65530,7 @@ type StrictServerInterface interface {
 	// TestEnvironment Test an environment's MCP servers or a template
 	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
 	TestEnvironment(ctx context.Context, request TestEnvironmentRequestObject) (TestEnvironmentResponseObject, error)
-	// GetIntake Where the factory's newest items came from, and its triggers
+	// GetIntake The factory's newest items, its origins and its triggers
 	// (GET /v1/orgs/{org}/factories/{factory}/intake)
 	GetIntake(ctx context.Context, request GetIntakeRequestObject) (GetIntakeResponseObject, error)
 	// GetIntakeTrigger One trigger with this week's results and its recent events
@@ -70374,24 +65647,6 @@ type StrictServerInterface interface {
 	// UpdateSavedView Rename a view and replace its filters
 	// (PATCH /v1/orgs/{org}/factories/{factory}/views/{view})
 	UpdateSavedView(ctx context.Context, request UpdateSavedViewRequestObject) (UpdateSavedViewResponseObject, error)
-	// ListWebhookEndpoints The webhook endpoints open to the factory
-	// (GET /v1/orgs/{org}/factories/{factory}/webhooks)
-	ListWebhookEndpoints(ctx context.Context, request ListWebhookEndpointsRequestObject) (ListWebhookEndpointsResponseObject, error)
-	// CreateWebhookEndpoint Create a webhook endpoint
-	// (POST /v1/orgs/{org}/factories/{factory}/webhooks)
-	CreateWebhookEndpoint(ctx context.Context, request CreateWebhookEndpointRequestObject) (CreateWebhookEndpointResponseObject, error)
-	// DeleteWebhookEndpoint Delete a webhook endpoint and its deliveries
-	// (DELETE /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint})
-	DeleteWebhookEndpoint(ctx context.Context, request DeleteWebhookEndpointRequestObject) (DeleteWebhookEndpointResponseObject, error)
-	// ListWebhookDeliveries One page of an endpoint's deliveries, newest first
-	// (GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries)
-	ListWebhookDeliveries(ctx context.Context, request ListWebhookDeliveriesRequestObject) (ListWebhookDeliveriesResponseObject, error)
-	// GetWebhookDelivery One delivery with its request
-	// (GET /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery})
-	GetWebhookDelivery(ctx context.Context, request GetWebhookDeliveryRequestObject) (GetWebhookDeliveryResponseObject, error)
-	// RotateWebhookSecret Replace an endpoint's signing secret
-	// (POST /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate)
-	RotateWebhookSecret(ctx context.Context, request RotateWebhookSecretRequestObject) (RotateWebhookSecretResponseObject, error)
 	// GetInbox What waits for a person across the organization's factories
 	// (GET /v1/orgs/{org}/inbox)
 	GetInbox(ctx context.Context, request GetInboxRequestObject) (GetInboxResponseObject, error)
@@ -70554,7 +65809,7 @@ type StrictServerInterface interface {
 	// GetRun One agent run (404 for a run of another organization)
 	// (GET /v1/orgs/{org}/runs/{run})
 	GetRun(ctx context.Context, request GetRunRequestObject) (GetRunResponseObject, error)
-	// SearchOrg Find the organization's items, agents, factories and connections, for the shell's search box
+	// SearchOrg Find the organization's items, agents, factories and secrets, for the shell's search box
 	// (GET /v1/orgs/{org}/search)
 	SearchOrg(ctx context.Context, request SearchOrgRequestObject) (SearchOrgResponseObject, error)
 	// ListSecrets The organization's secrets
@@ -71288,296 +66543,6 @@ func (sh *strictHandler) SetCodeHosts(w http.ResponseWriter, r *http.Request, or
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetCodeHostsResponseObject); ok {
 		if err := validResponse.VisitSetCodeHostsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListConnectionKinds operation middleware
-func (sh *strictHandler) ListConnectionKinds(w http.ResponseWriter, r *http.Request, org OrgRef) {
-	var request ListConnectionKindsRequestObject
-
-	request.Org = org
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListConnectionKinds(ctx, request.(ListConnectionKindsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListConnectionKinds")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListConnectionKindsResponseObject); ok {
-		if err := validResponse.VisitListConnectionKindsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteConnectionKind operation middleware
-func (sh *strictHandler) DeleteConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef) {
-	var request DeleteConnectionKindRequestObject
-
-	request.Org = org
-	request.Kind = kind
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteConnectionKind(ctx, request.(DeleteConnectionKindRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteConnectionKind")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteConnectionKindResponseObject); ok {
-		if err := validResponse.VisitDeleteConnectionKindResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// PutConnectionKind operation middleware
-func (sh *strictHandler) PutConnectionKind(w http.ResponseWriter, r *http.Request, org OrgRef, kind KindRef) {
-	var request PutConnectionKindRequestObject
-
-	request.Org = org
-	request.Kind = kind
-
-	var body PutConnectionKindJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.PutConnectionKind(ctx, request.(PutConnectionKindRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "PutConnectionKind")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(PutConnectionKindResponseObject); ok {
-		if err := validResponse.VisitPutConnectionKindResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListConnections operation middleware
-func (sh *strictHandler) ListConnections(w http.ResponseWriter, r *http.Request, org OrgRef, params ListConnectionsParams) {
-	var request ListConnectionsRequestObject
-
-	request.Org = org
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListConnections(ctx, request.(ListConnectionsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListConnections")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListConnectionsResponseObject); ok {
-		if err := validResponse.VisitListConnectionsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateConnection operation middleware
-func (sh *strictHandler) CreateConnection(w http.ResponseWriter, r *http.Request, org OrgRef) {
-	var request CreateConnectionRequestObject
-
-	request.Org = org
-
-	var body CreateConnectionJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateConnection(ctx, request.(CreateConnectionRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateConnection")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateConnectionResponseObject); ok {
-		if err := validResponse.VisitCreateConnectionResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteConnection operation middleware
-func (sh *strictHandler) DeleteConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
-	var request DeleteConnectionRequestObject
-
-	request.Org = org
-	request.Connection = connection
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteConnection(ctx, request.(DeleteConnectionRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteConnection")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteConnectionResponseObject); ok {
-		if err := validResponse.VisitDeleteConnectionResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetConnection operation middleware
-func (sh *strictHandler) GetConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
-	var request GetConnectionRequestObject
-
-	request.Org = org
-	request.Connection = connection
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetConnection(ctx, request.(GetConnectionRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetConnection")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetConnectionResponseObject); ok {
-		if err := validResponse.VisitGetConnectionResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// UpdateConnection operation middleware
-func (sh *strictHandler) UpdateConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
-	var request UpdateConnectionRequestObject
-
-	request.Org = org
-	request.Connection = connection
-
-	var body UpdateConnectionJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateConnection(ctx, request.(UpdateConnectionRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateConnection")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateConnectionResponseObject); ok {
-		if err := validResponse.VisitUpdateConnectionResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListConnectionRepositories operation middleware
-func (sh *strictHandler) ListConnectionRepositories(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef, params ListConnectionRepositoriesParams) {
-	var request ListConnectionRepositoriesRequestObject
-
-	request.Org = org
-	request.Connection = connection
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListConnectionRepositories(ctx, request.(ListConnectionRepositoriesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListConnectionRepositories")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListConnectionRepositoriesResponseObject); ok {
-		if err := validResponse.VisitListConnectionRepositoriesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// TestConnection operation middleware
-func (sh *strictHandler) TestConnection(w http.ResponseWriter, r *http.Request, org OrgRef, connection ConnectionRef) {
-	var request TestConnectionRequestObject
-
-	request.Org = org
-	request.Connection = connection
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.TestConnection(ctx, request.(TestConnectionRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "TestConnection")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(TestConnectionResponseObject); ok {
-		if err := validResponse.VisitTestConnectionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -74003,181 +68968,6 @@ func (sh *strictHandler) UpdateSavedView(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateSavedViewResponseObject); ok {
 		if err := validResponse.VisitUpdateSavedViewResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListWebhookEndpoints operation middleware
-func (sh *strictHandler) ListWebhookEndpoints(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
-	var request ListWebhookEndpointsRequestObject
-
-	request.Org = org
-	request.Factory = factory
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListWebhookEndpoints(ctx, request.(ListWebhookEndpointsRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListWebhookEndpoints")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListWebhookEndpointsResponseObject); ok {
-		if err := validResponse.VisitListWebhookEndpointsResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// CreateWebhookEndpoint operation middleware
-func (sh *strictHandler) CreateWebhookEndpoint(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef) {
-	var request CreateWebhookEndpointRequestObject
-
-	request.Org = org
-	request.Factory = factory
-
-	var body CreateWebhookEndpointJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.CreateWebhookEndpoint(ctx, request.(CreateWebhookEndpointRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "CreateWebhookEndpoint")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(CreateWebhookEndpointResponseObject); ok {
-		if err := validResponse.VisitCreateWebhookEndpointResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// DeleteWebhookEndpoint operation middleware
-func (sh *strictHandler) DeleteWebhookEndpoint(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef) {
-	var request DeleteWebhookEndpointRequestObject
-
-	request.Org = org
-	request.Factory = factory
-	request.Endpoint = endpoint
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteWebhookEndpoint(ctx, request.(DeleteWebhookEndpointRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteWebhookEndpoint")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteWebhookEndpointResponseObject); ok {
-		if err := validResponse.VisitDeleteWebhookEndpointResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// ListWebhookDeliveries operation middleware
-func (sh *strictHandler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, params ListWebhookDeliveriesParams) {
-	var request ListWebhookDeliveriesRequestObject
-
-	request.Org = org
-	request.Factory = factory
-	request.Endpoint = endpoint
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListWebhookDeliveries(ctx, request.(ListWebhookDeliveriesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListWebhookDeliveries")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListWebhookDeliveriesResponseObject); ok {
-		if err := validResponse.VisitListWebhookDeliveriesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// GetWebhookDelivery operation middleware
-func (sh *strictHandler) GetWebhookDelivery(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef, delivery string) {
-	var request GetWebhookDeliveryRequestObject
-
-	request.Org = org
-	request.Factory = factory
-	request.Endpoint = endpoint
-	request.Delivery = delivery
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetWebhookDelivery(ctx, request.(GetWebhookDeliveryRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetWebhookDelivery")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetWebhookDeliveryResponseObject); ok {
-		if err := validResponse.VisitGetWebhookDeliveryResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// RotateWebhookSecret operation middleware
-func (sh *strictHandler) RotateWebhookSecret(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, endpoint WebhookEndpointRef) {
-	var request RotateWebhookSecretRequestObject
-
-	request.Org = org
-	request.Factory = factory
-	request.Endpoint = endpoint
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.RotateWebhookSecret(ctx, request.(RotateWebhookSecretRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "RotateWebhookSecret")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(RotateWebhookSecretResponseObject); ok {
-		if err := validResponse.VisitRotateWebhookSecretResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -51,10 +51,10 @@ tags:
       contract, ADR 0007); goald answers the rest.
   - name: connections
     description: >-
-      The organization's connections (spec 4): the accounts and API keys its factories' runs use,
-      each of a connection kind, with credentials sealed under the platform's master key and never
-      readable back. Members read names, kinds and status; owners and admins create, test, change
-      and delete them, after a recent sign-in.
+      The organization's standing rules (ADR 0031 decision 7): each lets one agent role call one
+      tool without asking. Members list them; owners and admins revoke them, after a recent
+      sign-in. The organization's connections and connection kinds are gone: what runs reach is
+      on /access, and their credentials are secrets (ADR 0037 decision 16).
   - name: credentials
     description: >-
       The organization's credentials (ADR 0017): named secrets sealed under the platform's master
@@ -100,10 +100,7 @@ tags:
       repositories. Owners and admins list and read webhooks (webhook:read) and create, change and
       delete them (webhook:manage, after a recent sign-in, never with a key or a personal token);
       only webhook:manage reads a delivery's headers and body, since an organization webhook
-      carries every repository's events. The factory routes list the endpoints open to the
-      factory and their deliveries to anyone who sees the factory; a factory endpoint's signing
-      secret is sealed under the platform's master key and shown only in the answers that create
-      it and rotate it. Deliveries are kept 30 days.
+      carries every repository's events. Deliveries are kept 30 days.
   - name: views
     description: >-
       A factory's saved views (ADR 0020 decisions 1 and 2): named sets of the Items page's URL
@@ -1027,13 +1024,13 @@ paths:
       operationId: searchOrg
       x-goal-scope: org:read
       tags: [shell]
-      summary: Find the organization's items, agents, factories and connections, for the shell's search box
+      summary: Find the organization's items, agents, factories and secrets, for the shell's search box
       description: >-
         One read per keystroke. Each group holds up to limit results, best first: an exact match,
         then a prefix, then the rest. Items match by title (a case-insensitive substring, taken
         literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which
-        ranks first. Only the factories the caller sees are searched. Connections are searched
-        only for a caller who holds connection:read; for anyone else the group is empty.
+        ranks first. Only the factories the caller sees are searched. Secrets are searched only
+        for a caller who holds secret:read; for anyone else the group is empty.
       parameters:
         - name: q
           in: query
@@ -1172,13 +1169,15 @@ paths:
         identity, so every entry is everyone's. decision: an item waiting for a person's decision,
         with its approval brief; question: an item whose agent asked a person a question (ADR
         0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped;
-        rework_warning: a gate one rejection away from its andon policy's rework rate (display
+        budget: a factory whose weekly budget is used up, its line starting no new agent work until
+        the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes
+        the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display
         only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that
         waits on nothing else. An item has at most one entry (question, then decision, then blocked,
         then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients
         that do not know them render as a generic row. When more entries exist than limit, the
-        most recent ones are kept and truncated is true. Entries are ordered by kind (decision and
-        question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
+        most recent ones are kept and truncated is true. Entries are ordered by since, newest first,
+        then by id, whatever their kind. The default limit, 200, is
         enough for every screen to count what it groups (the Floor's Needs you card, the phone's
         Items view).
       parameters:
@@ -2258,10 +2257,10 @@ paths:
       operationId: getIntake
       x-goal-scope: intake:read
       tags: [intake]
-      summary: Where the factory's newest items came from, and its triggers
+      summary: The factory's newest items, its origins and its triggers
       description: >-
-        The sources of the factory's newest `items` items (by creation) with the UTC days the
-        oldest and the newest of them were created, and every trigger of the current definition
+        How many of the factory's newest `items` items (by creation) there are, with the UTC days
+        the oldest and the newest of them were created, and every trigger of the current definition
         in definition order, each with the items it created on each of the last 7 UTC days and
         its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it
         on `item` and `definition` stream events.
@@ -2275,7 +2274,7 @@ paths:
         - name: items
           in: query
           required: false
-          description: How many of the newest items the sources count (default 48)
+          description: How many of the newest items `items`, `from` and `to` count (default 48)
           schema: { type: integer, minimum: 1, maximum: 500, default: 48 }
         - name: window
           in: query
@@ -3031,146 +3030,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/FactoryRepositoryTestList" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-    get:
-      operationId: listWebhookEndpoints
-      x-goal-scope: factory:read
-      tags: [webhooks]
-      summary: The webhook endpoints open to the factory
-      description: >-
-        By name, the factory's own endpoints and the organization's webhooks open to it, each with
-        its address, kind, sender, the name of its signing secret, the triggers of the factory's
-        current definition it feeds (those whose on is webhook.<name> or starts with
-        webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one
-        release beside listWebhooks.
-      responses:
-        "200":
-          description: The endpoints
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WebhookEndpointList" }
-        default: { $ref: "#/components/responses/Problem" }
-    post:
-      operationId: createWebhookEndpoint
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: Create a webhook endpoint
-      description: >-
-        A factory endpoint with a new signing secret, answered here once and never again: copy it
-        to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400
-        webhook-invalid for a name that is not a slug or an unknown kind; 409
-        webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while
-        goald has no master key. Needs a sign-in from the last 10 minutes.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/NewWebhookEndpoint" }
-      responses:
-        "201":
-          description: The endpoint with its signing secret
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CreatedWebhookEndpoint" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-    delete:
-      operationId: deleteWebhookEndpoint
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: Delete a webhook endpoint and its deliveries
-      description: >-
-        Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to
-        the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a
-        sign-in from the last 10 minutes.
-      responses:
-        "204": { description: Deleted }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-    post:
-      operationId: rotateWebhookSecret
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: Replace an endpoint's signing secret
-      description: >-
-        A new signing secret, answered here once and never again; the old one stops opening at
-        once, so the sender's requests are refused until it has the new one. 404
-        webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is
-        replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in
-        from the last 10 minutes.
-      responses:
-        "200":
-          description: The endpoint with its new signing secret
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/CreatedWebhookEndpoint" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-    get:
-      operationId: listWebhookDeliveries
-      x-goal-scope: factory:read
-      tags: [webhooks]
-      summary: One page of an endpoint's deliveries, newest first
-      description: >-
-        What the endpoint received in the last 30 days, each with its outcome, without its
-        headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did
-        not answer; 404 webhook-not-found.
-      parameters:
-        - name: limit
-          in: query
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
-        - name: after
-          in: query
-          description: The next_after of the previous page; deliveries received before it
-          schema: { type: string }
-      responses:
-        "200":
-          description: Deliveries, newest first
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WebhookDeliveryPage" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/FactoryRef"
-      - $ref: "#/components/parameters/WebhookEndpointRef"
-      - name: delivery
-        in: path
-        required: true
-        description: The delivery's id
-        schema: { type: string }
-    get:
-      operationId: getWebhookDelivery
-      x-goal-scope: webhook:manage
-      tags: [webhooks]
-      summary: One delivery with its request
-      description: >-
-        The request as received: its headers (names lower-cased, never a signature header) and its
-        body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found
-        for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-      responses:
-        "200":
-          description: The delivery
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/WebhookDeliveryRequest" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/webhooks:
     parameters:
@@ -4252,201 +4111,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SkillFiles" }
         default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/connection-kinds:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-    get:
-      operationId: listConnectionKinds
-      x-goal-scope: connection:read
-      tags: [connections]
-      summary: The connection kinds the organization can make connections of
-      description: >-
-        The platform's kinds, shipped with goald, and the organization's own, by name; an
-        organization's kind hides a platform kind of the same name. Each with the fields a
-        connection of it is made of (secret ones are write-only), its modes, whether it gives
-        agents their model, its adapter hooks and its docs.
-      responses:
-        "200":
-          description: The kinds
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ConnectionKindList" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/connection-kinds/{kind}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/KindRef"
-    put:
-      operationId: putConnectionKind
-      x-goal-scope: connection:manage
-      tags: [connections]
-      summary: Create or replace one of the organization's connection kinds
-      description: >-
-        The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name
-        is the path's kind. A kind has no versions: replacing it changes every connection of it
-        from the next run on. A kind that breaks the schema or the kind rules is 400
-        connection-kind-invalid, whose detail names every broken rule; a new kind with a platform
-        kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a
-        connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the
-        connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited
-        as connection_kind.created or connection_kind.updated.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ConnectionKindFile" }
-      responses:
-        "200":
-          description: The kind as the organization now sees it
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ConnectionKind" }
-        default: { $ref: "#/components/responses/Problem" }
-    delete:
-      operationId: deleteConnectionKind
-      x-goal-scope: connection:manage
-      tags: [connections]
-      summary: Delete one of the organization's connection kinds
-      description: >-
-        404 connection-kind-not-found when the organization has no kind of that name (a platform
-        kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a
-        sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-      responses:
-        "204":
-          description: Deleted
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/connections:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-    get:
-      operationId: listConnections
-      x-goal-scope: connection:read
-      tags: [connections]
-      summary: The organization's connections
-      description: >-
-        By name, each with its kind, description, non-secret fields, which secret fields are set
-        (never a value), status, what uses it, its last use and last test. Members see them to
-        pick them in the builder; only owners and admins change them.
-      parameters:
-        - name: factory
-          in: query
-          description: Only the connections this factory's current version names (its metadata.id or metadata.name)
-          schema: { type: string }
-        - name: kind
-          in: query
-          description: Only connections of this kind
-          schema: { type: string }
-      responses:
-        "200":
-          description: The connections
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ConnectionList" }
-        default: { $ref: "#/components/responses/Problem" }
-    post:
-      operationId: createConnection
-      x-goal-scope: connection:manage
-      tags: [connections]
-      summary: Create a connection
-      description: >-
-        A connection of a kind, with the kind's non-secret fields in fields and its secret ones in
-        secrets, sealed under the platform's master key and never returned, not even masked. 400
-        field-unknown for a value that is no field of the kind (or of the other sort), 400
-        field-required for a required field without a value, 404 connection-kind-not-found for an
-        unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while
-        goald has no master key. Needs a sign-in from the last 10 minutes. Audited as
-        connection.created (field names only).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/NewConnection" }
-      responses:
-        "201":
-          description: The connection
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Connection" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/connections/{connection}:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/ConnectionRef"
-    get:
-      operationId: getConnection
-      x-goal-scope: connection:read
-      tags: [connections]
-      summary: One connection, with the env names a run gets from it and its kind's docs
-      responses:
-        "200":
-          description: The connection
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Connection" }
-        default: { $ref: "#/components/responses/Problem" }
-    patch:
-      operationId: updateConnection
-      x-goal-scope: connection:manage
-      tags: [connections]
-      summary: Rename a connection, or change its description, fields, secrets or tool modes
-      description: >-
-        fields, when present, replaces every non-secret value; secrets replaces the named secret
-        fields only (an empty value clears an optional one), audited as
-        connection.secret_replaced; the rest as connection.updated. tools, when present, replaces
-        every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no
-        MCP server, an unknown mode or a malformed tool name. A rename is 409
-        connection-in-use while a factory's current version names the connection, 409
-        connection-name-taken when another has the name. The kind never changes. Needs a sign-in
-        from the last 10 minutes.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ConnectionPatch" }
-      responses:
-        "200":
-          description: The connection
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Connection" }
-        default: { $ref: "#/components/responses/Problem" }
-    delete:
-      operationId: deleteConnection
-      x-goal-scope: connection:manage
-      tags: [connections]
-      summary: Delete a connection
-      description: >-
-        409 connection-in-use, naming what, while a factory's current version or a knowledge
-        source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-      responses:
-        "204":
-          description: Deleted
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/connections/{connection}/test:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/ConnectionRef"
-    post:
-      operationId: testConnection
-      x-goal-scope: connection:manage
-      tags: [connections]
-      summary: Run the connection's test
-      description: >-
-        Sends the kind's test request from goald with the connection's values: to public
-        addresses only (a URL naming a private, loopback, link-local or metadata address fails
-        the test), within 10 seconds, following no redirect. ok when the status is the one the
-        kind expects. A test that fails is a 200 with ok false and why; the outcome is the
-        connection's last test. 409 connection-not-testable for a kind without a test, 503
-        connections-unavailable for a sealed connection
-        while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as
-        connection.tested.
-      responses:
-        "200":
-          description: The outcome
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ConnectionTestResult" }
-        default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/standing-rules:
     parameters:
       - $ref: "#/components/parameters/OrgRef"
@@ -4496,39 +4160,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/StandingRule" }
         "409": { $ref: "#/components/responses/Conflict" }
-        default: { $ref: "#/components/responses/Problem" }
-  /v1/orgs/{org}/connections/{connection}/repositories:
-    parameters:
-      - $ref: "#/components/parameters/OrgRef"
-      - $ref: "#/components/parameters/ConnectionRef"
-    get:
-      operationId: listConnectionRepositories
-      x-goal-scope: connection:browse
-      tags: [connections]
-      summary: The owners and repositories a code host connection reaches
-      description: >-
-        Signs in to the code host with the connection's credential, from goald, and answers the
-        account it signs in as, the owners it can list (the account, then its organizations) and
-        the repositories of owner (the account when owner is absent). At most 100 repositories,
-        the most recently updated first, with no paging: truncated is true when the owner has
-        more. Each has at most 3 languages, the largest first. Audited as connection.used; no
-        secret value is answered. 404 connection-not-found for an unknown connection, 404
-        owner-not-found for an owner the code host does not know, 422 connection-not-code-host
-        for a connection whose kind is not a code host goald reaches, 422
-        repositories-not-supported for a code host that cannot list them yet (GitLab), 502
-        code-host-error when the code host refuses or fails, and 503 connections-unavailable for
-        a sealed connection while goald has no master key.
-      parameters:
-        - name: owner
-          in: query
-          description: The account or organization whose repositories to list; absent, the connection's own account
-          schema: { type: string, minLength: 1, maxLength: 100 }
-      responses:
-        "200":
-          description: The owners and repositories
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RepositoryList" }
         default: { $ref: "#/components/responses/Problem" }
   /v1/orgs/{org}/credentials:
     parameters:
@@ -5173,12 +4804,6 @@ components:
       required: true
       description: The organization webhook's name or id
       schema: { type: string }
-    WebhookEndpointRef:
-      name: endpoint
-      in: path
-      required: true
-      description: The webhook endpoint's id, the one in its address /hooks/{id}
-      schema: { type: string }
     UserRef:
       name: user
       in: path
@@ -5190,12 +4815,6 @@ components:
       in: path
       required: true
       description: The organization's slug or id
-      schema: { type: string }
-    ConnectionRef:
-      name: connection
-      in: path
-      required: true
-      description: The connection's name
       schema: { type: string }
     CredentialRef:
       name: credential
@@ -5228,12 +4847,6 @@ components:
       in: path
       required: true
       description: The knowledge document's id
-      schema: { type: string }
-    KindRef:
-      name: kind
-      in: path
-      required: true
-      description: The connection kind's name
       schema: { type: string }
     FactoryRef:
       name: factory
@@ -5385,11 +4998,9 @@ components:
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
             run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of
             the item's touches.
-            Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404),
-            field-unknown, field-required and connection-kind-invalid (400),
-            connection-name-taken, connection-kind-name-taken, connection-in-use,
-            connection-kind-in-use and connection-not-testable (409), connections-unavailable
-            (503: goald has no master key, so no secret can be sealed or opened).
+            Connections: connection-not-found (404, a knowledge source naming a connection the
+            organization does not have), connections-unavailable (503: goald has no master key,
+            so no secret can be opened).
             Credentials (ADR 0017): credential-not-found (404), credential-invalid (400),
             credential-name-taken and credential-in-use (409, naming the connections),
             credentials-unavailable (503: goald has no master key).
@@ -6167,7 +5778,9 @@ components:
       description: >-
         Who did something: a person (kind user; id "local" is the local user, named "Local user
         (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an
-        agent or a job
+        agent or a job. Under sign-in a person is named as the sidebar names them (their name, or
+        their email while they have none), or "A former member" once they have left the
+        organization; their id stays the same
       required: [kind, id, name]
       properties:
         kind: { type: string, enum: [user, service, agent, system] }
@@ -7475,6 +7088,20 @@ components:
         weekly_usd: { type: number, format: double }
         spent_usd: { type: number, format: double, description: The cost of the runs started in the window }
         exhausted: { type: boolean, description: No new agent work starts until the window moves or the cap rises }
+        since:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Since when the budget is used up, as the engine recorded it (now when it has not yet); absent or
+            null while the budget has room
+        resumes_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            When the rolling window's spend falls below the cap, so the line starts new work on the engine's
+            first tick after it; absent or null while the budget has room
     QueueTrend:
       type: string
       description: How many items wait at a station now against 24 hours earlier
@@ -8247,24 +7874,11 @@ components:
               per_day: { type: number, format: double, description: done divided by 7 }
     Intake:
       type: object
-      required: [items, from, to, sources, triggers, suggestions]
+      required: [items, from, to, triggers, suggestions]
       properties:
-        items: { type: integer, description: How many items the sources count, at most the items asked for }
+        items: { type: integer, description: How many of the factory's newest items there are, at most the items asked for }
         from: { type: string, format: date, nullable: true, description: The UTC day the oldest of them was created; null without items }
         to: { type: string, format: date, nullable: true, description: The UTC day the newest of them was created; null without items }
-        sources:
-          type: object
-          description: >-
-            How many of the items came from each source, zero included. Items whose creator
-            recorded no source count in items only.
-          required: [people, cli, api, schedule, webhook, github]
-          properties:
-            people: { type: integer }
-            cli: { type: integer }
-            api: { type: integer }
-            schedule: { type: integer }
-            webhook: { type: integer }
-            github: { type: integer }
         triggers:
           type: array
           description: The current definition's board.triggers, in definition order
@@ -8825,7 +8439,11 @@ components:
         kind:
           type: string
           description: >-
-            What happened, as in submitted, moved, note or lease_taken. question_asked: the
+            What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped
+            at its station until a person retries it (data reason, the technical detail as
+            written then; code, a stable code to branch on, only when the block has one:
+            model_key_missing when the line is on environment files and secrets but names no
+            runtime.modelKey). question_asked: the
             item's agent asked a person (data question, choices, agent as the role name, run_id);
             the run ends and the item waits at its station. question_answered: a person answered
             (data answer, the picked choice's text or their words; choice_index only when a
@@ -8880,7 +8498,7 @@ components:
       description: >-
         One agent run: one container working one item at one station. Its full transcript is not
         kept (phase 2.2); the item's events carry the trace.
-      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version]
+      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version, cpu_seconds, peak_memory_bytes, box_size]
       properties:
         id: { type: string }
         item_id: { type: string }
@@ -8906,6 +8524,38 @@ components:
           type: integer
           nullable: true
           description: That version's number ("ran on v9"); null when the run has no version
+        cpu_seconds:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The CPU time the run's box used, in seconds; null while the run is running, when the
+            box could not read it or for a run from before it was recorded
+        peak_memory_bytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: The most memory the run's box used at once; null when cpu_seconds would be
+        peak_memory_source:
+          allOf: [{ $ref: "#/components/schemas/MemorySource" }]
+          nullable: true
+          description: >-
+            How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for
+            a run from before the source was recorded
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The box size the run ran in; null for a run from before box sizes were recorded
+    MemorySource:
+      type: string
+      description: >-
+        How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole
+        machine's used memory, read when the box's cgroup has no memory figures
+      enum: [cgroup, machine]
+    SandboxSize:
+      type: string
+      description: How much CPU and memory a run's box gets (a factory's runtime.size)
+      enum: [small, medium, large]
     OrgRunList:
       type: object
       required: [runs, next_cursor, summary]
@@ -9057,7 +8707,7 @@ components:
       properties:
         waiting_on_you:
           type: integer
-          description: Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you)
+          description: What waits on the caller across the organization (the sum of factories[].waiting_on_you)
         factories:
           type: array
           items: { $ref: "#/components/schemas/FactoryAttention" }
@@ -9066,7 +8716,7 @@ components:
       required: [factory_id, waiting_on_you, blocked_items, andon, connections_blocked]
       properties:
         factory_id: { type: string }
-        waiting_on_you: { type: integer, description: Items waiting for a human decision (every decision; phase 2.2 has no identity) }
+        waiting_on_you: { type: integer, description: "The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up" }
         blocked_items: { type: integer }
         andon:
           description: The open andon pull, or null while the line runs
@@ -9077,7 +8727,7 @@ components:
     OrgSearch:
       type: object
       description: What a search found in the organization, by group, each best first
-      required: [items, agents, factories, connections, secrets]
+      required: [items, agents, factories, secrets]
       properties:
         items:
           type: array
@@ -9088,10 +8738,6 @@ components:
         factories:
           type: array
           items: { $ref: "#/components/schemas/FactoryHit" }
-        connections:
-          type: array
-          description: Empty unless the caller holds connection:read
-          items: { $ref: "#/components/schemas/ConnectionHit" }
         secrets:
           type: array
           description: Empty unless the caller holds secret:read
@@ -9163,6 +8809,7 @@ components:
         - rework_usd
         - rework_share
         - budgets
+        - usage
       properties:
         window: { $ref: "#/components/schemas/SpendWindow" }
         since: { type: string, format: date-time, description: "The window's start, 00:00 UTC" }
@@ -9209,6 +8856,7 @@ components:
           type: array
           description: One per factory goald runs that the caller sees and that is not archived, by name
           items: { $ref: "#/components/schemas/SpendBudget" }
+        usage: { $ref: "#/components/schemas/SpendUsage" }
     SpendDay:
       type: object
       required: [day, usd, by_factory]
@@ -9232,6 +8880,63 @@ components:
         factory_id: { type: string }
         agent: { type: string, description: The agent's name in its factory }
         usd: { type: number, format: double }
+    SpendUsage:
+      type: object
+      description: >-
+        The CPU time and peak memory of the window's runs (a run counts by when it started), over
+        the runs that reported either, for the factories the caller sees. Each row groups the runs
+        of a factory's agent or station in boxes of one size; a group none of whose runs reported
+        a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one
+        last.
+      required: [by_agent, by_station]
+      properties:
+        by_agent:
+          type: array
+          items: { $ref: "#/components/schemas/AgentUsage" }
+        by_station:
+          type: array
+          items: { $ref: "#/components/schemas/StationUsage" }
+    AgentUsage:
+      type: object
+      required: [factory_id, agent, box_size, runs, cpu_seconds_p50, cpu_seconds_p90, peak_memory_bytes_p50, peak_memory_bytes_p90]
+      properties:
+        factory_id: { type: string }
+        agent: { type: string, description: The agent's name in its factory }
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The runs' box size; null for runs from before box sizes were recorded
+        runs: { type: integer, description: The runs that reported a CPU time or a peak memory }
+        cpu_seconds_p50:
+          type: number
+          format: double
+          nullable: true
+          description: >-
+            The median CPU seconds of the runs that reported one, interpolated between the closest
+            runs (percentile_cont); null when none did
+        cpu_seconds_p90: { type: number, format: double, nullable: true, description: The 90th percentile, as cpu_seconds_p50 }
+        peak_memory_bytes_p50:
+          type: integer
+          format: int64
+          nullable: true
+          description: The median peak memory of the runs that reported one, rounded to a byte; null when none did
+        peak_memory_bytes_p90: { type: integer, format: int64, nullable: true, description: The 90th percentile, as peak_memory_bytes_p50 }
+    StationUsage:
+      description: AgentUsage by station
+      type: object
+      required: [factory_id, station, box_size, runs, cpu_seconds_p50, cpu_seconds_p90, peak_memory_bytes_p50, peak_memory_bytes_p90]
+      properties:
+        factory_id: { type: string }
+        station: { type: string, description: The station's id in its factory }
+        box_size:
+          allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
+          nullable: true
+          description: The runs' box size; null for runs from before box sizes were recorded
+        runs: { type: integer, description: The runs that reported a CPU time or a peak memory }
+        cpu_seconds_p50: { type: number, format: double, nullable: true, description: As AgentUsage's }
+        cpu_seconds_p90: { type: number, format: double, nullable: true, description: As AgentUsage's }
+        peak_memory_bytes_p50: { type: integer, format: int64, nullable: true, description: As AgentUsage's }
+        peak_memory_bytes_p90: { type: integer, format: int64, nullable: true, description: As AgentUsage's }
     ModelSpend:
       type: object
       required: [model, usd]
@@ -9277,9 +8982,8 @@ components:
           type: array
           description: >-
             What gives the factory's runs their model, for "Who pays for models": the
-            organization's connection runtime.modelConnection names, with its kind, and on
-            secrets the organization's secret runtime.modelKey names, by name with kind
-            "secret" and never its value (ADR 0037 decision 7); empty when it names neither
+            organization's secret runtime.modelKey names, by name with kind "secret" and never
+            its value (ADR 0037 decision 7); empty when it names none the organization has
           items: { $ref: "#/components/schemas/ConnectionHit" }
     SpendBudgetState:
       type: string
@@ -9389,7 +9093,7 @@ components:
       properties:
         entries:
           type: array
-          description: Ordered by kind, then oldest first
+          description: Ordered by since, newest first, then by id
           items: { $ref: "#/components/schemas/InboxEntry" }
         truncated: { type: boolean, description: More entries exist than limit; the most recent were kept }
     InboxEntryKind:
@@ -9404,8 +9108,10 @@ components:
         worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo
         this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three
         checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger
-        whose check skipped something over its limit today (UTC), once a day
-      enum: [decision, question, tool_approval, andon, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse, check_failing, check_limit]
+        whose check skipped something over its limit today (UTC), once a day. budget: a factory whose
+        weekly budget is used up, measured against its current version's cap, until the window's spend
+        falls below the cap or the cap rises
+      enum: [decision, question, tool_approval, andon, budget, rework_warning, blocked, expedite, conversion, knowledge_source, watch_worse, check_failing, check_limit]
     InboxEntry:
       type: object
       required: [id, kind, factory, since, item, station, action, approval, blocked, andon, rework]
@@ -9414,7 +9120,7 @@ components:
           type: string
           description: >-
             "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>,
-            andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>,
+            andon:<pull id>, budget:<factory id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>,
             watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
         kind: { $ref: "#/components/schemas/InboxEntryKind" }
         factory:
@@ -9429,7 +9135,7 @@ components:
           format: date-time
           description: >-
             Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation
-            (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the
+            (expedite), the pull (andon), since when the budget is used up (budget), now (rework_warning), the conversion's attempt (conversion), the
             watch's last update (watch_worse)
         item:
           description: The item it is about, or null for an entry that is about no item
@@ -9492,6 +9198,26 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/InboxTriggerCheck"
+        budget:
+          description: The used-up weekly budget of a budget entry; absent or null for other kinds
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/InboxBudget"
+    InboxBudget:
+      type: object
+      description: A factory's used-up weekly budget, in the rolling 7×24-hour window that ends now.
+      required: [spent_usd, weekly_usd, since, resumes_at]
+      properties:
+        spent_usd: { type: number, format: double, description: The cost of the runs started in the window }
+        weekly_usd: { type: number, format: double, description: The cap, from the factory's current version }
+        since:
+          type: string
+          format: date-time
+          description: Since when the budget is used up, as the engine recorded it (now when it has not yet)
+        resumes_at:
+          type: string
+          format: date-time
+          description: When the window's spend falls below the cap; the line resumes on the engine's first tick after it
     InboxTriggerCheck:
       type: object
       description: A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page.
@@ -9548,12 +9274,18 @@ components:
         spend_usd: { type: number, format: double }
     InboxBlocked:
       type: object
-      required: [reason, paused]
+      required: [reason, code, paused]
       properties:
         reason:
           type: string
           nullable: true
           description: The reason of the item's latest blocked or paused event, as written then; null without one
+        code:
+          type: string
+          nullable: true
+          description: >-
+            The code of the item's latest blocked event (model_key_missing: the line names no
+            runtime.modelKey); null without one
         paused: { type: boolean, description: A person paused it (goal retry resumes it) }
     ReworkWarning:
       type: object
@@ -10355,13 +10087,6 @@ components:
       type: string
       description: 3 to 40 lowercase letters, digits and inner dashes, starting with a letter
       pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
-    ConnectionKindList:
-      type: object
-      required: [kinds]
-      properties:
-        kinds:
-          type: array
-          items: { $ref: "#/components/schemas/ConnectionKind" }
     ConnectionKind:
       type: object
       description: A template for connections (spec 4 §4.2), the platform's or the organization's
@@ -10382,7 +10107,7 @@ components:
         code_host: { type: string, description: "The code host adapter that reads and merges its pull requests (github, gitlab)" }
         mint: { type: string, description: "The adapter that mints per-run credentials from it (aws-sts)" }
         sync: { type: string, description: "The knowledge source reader that syncs through it (gitdocs, confluence)" }
-        testable: { type: boolean, description: "It has a test (POST …/connections/{connection}/test)" }
+        testable: { type: boolean, description: It has a test request }
         env:
           type: array
           description: The env names a run gets, as the kind writes them ({{field}} where a field names one)
@@ -10398,19 +10123,6 @@ components:
         secret: { type: boolean, description: "Write-only, sealed; an input of type password" }
         required: { type: boolean }
         default: { type: string, description: The value of a field left empty }
-    ConnectionKindFile:
-      type: object
-      description: >-
-        A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON,
-        checked against contracts/definitions/connection-kind.schema.json
-      additionalProperties: true
-    ConnectionList:
-      type: object
-      required: [connections]
-      properties:
-        connections:
-          type: array
-          items: { $ref: "#/components/schemas/Connection" }
     Connection:
       type: object
       description: An organization's connection (spec 4 §4.3), never a secret value
@@ -10496,43 +10208,6 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-    NewConnection:
-      type: object
-      required: [name, kind]
-      properties:
-        name: { $ref: "#/components/schemas/ConnectionName" }
-        kind: { type: string }
-        description: { type: string, maxLength: 500 }
-        fields:
-          type: object
-          description: The kind's non-secret values
-          additionalProperties: { type: string }
-        secrets:
-          type: object
-          writeOnly: true
-          description: The kind's secret values; never answered
-          additionalProperties: { type: string }
-    ConnectionPatch:
-      type: object
-      properties:
-        name: { $ref: "#/components/schemas/ConnectionName" }
-        description: { type: string, maxLength: 500 }
-        fields:
-          type: object
-          description: Every non-secret value (replaces them all)
-          additionalProperties: { type: string }
-        secrets:
-          type: object
-          writeOnly: true
-          description: The secret fields to replace, by name; an empty value clears an optional one
-          additionalProperties: { type: string }
-        tools:
-          type: array
-          description: >-
-            Every tool's mode: replaces them all, so send the full list (a tool left out goes back
-            to allow). Only for a connection whose kind has an MCP server; a tool named twice is
-            refused.
-          items: { $ref: "#/components/schemas/ConnectionTool" }
     CredentialName:
       type: string
       description: >-
@@ -10560,58 +10235,6 @@ components:
       additionalProperties:
         type: array
         items: { type: string }
-    WebhookKind:
-      type: string
-      enum: [generic, github]
-      description: >-
-        How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex
-        HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's
-        X-Hub-Signature-256 and X-GitHub-Event.
-    NewWebhookEndpoint:
-      type: object
-      required: [name, kind]
-      properties:
-        name: { type: string, description: "A slug unique within the factory, the one a trigger's on: webhook.<name> names" }
-        kind: { $ref: "#/components/schemas/WebhookKind" }
-    WebhookEndpointList:
-      type: object
-      required: [endpoints]
-      properties:
-        endpoints:
-          type: array
-          items: { $ref: "#/components/schemas/WebhookEndpoint" }
-    WebhookEndpoint:
-      type: object
-      description: A webhook endpoint open to the factory, never its signing secret
-      required: [id, name, kind, sender, address, secret_name, created_at, rotated_at, triggers, days]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        kind:
-          allOf: [{ $ref: "#/components/schemas/WebhookKind" }]
-          description: A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise
-        sender:
-          allOf: [{ $ref: "#/components/schemas/WebhookSender" }]
-          description: Its sender; a factory endpoint of kind generic reads as standard
-        address: { type: string, description: "The path senders post to, /hooks/{id}, on goald's public origin" }
-        secret_name:
-          type: string
-          description: >-
-            A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the
-            endpoint, so no secret has this name; an organization webhook's is the name of the
-            organization secret that signs it.
-        created_at: { type: string, format: date-time }
-        rotated_at: { type: string, format: date-time, nullable: true, description: When its secret was last replaced; null when it never was }
-        triggers:
-          type: array
-          description: The names of the current definition's triggers it feeds, in definition order
-          items: { type: string }
-        days:
-          type: array
-          description: The last 7 UTC days, oldest first, today last, each zero-filled
-          minItems: 7
-          maxItems: 7
-          items: { $ref: "#/components/schemas/WebhookDeliveryDay" }
     WebhookSender:
       type: string
       enum: [github, gitlab, standard, pagerduty, sentry, token]
@@ -10750,22 +10373,6 @@ components:
         day: { type: string, format: date, description: The UTC day }
         delivered: { type: integer, description: Deliveries accepted, with or without an item created }
         refused: { type: integer }
-    CreatedWebhookEndpoint:
-      description: >-
-        An endpoint with its signing secret, answered only by createWebhookEndpoint and
-        rotateWebhookSecret and never readable again.
-      allOf:
-        - $ref: "#/components/schemas/WebhookEndpoint"
-        - type: object
-          required: [secret]
-          properties:
-            secret:
-              type: string
-              pattern: "^[0-9a-f]{64}$"
-              description: >-
-                The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give
-                this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret
-                field takes it.
     WebhookDeliveryOutcome:
       type: string
       enum: [refused, accepted, created]
@@ -11403,41 +11010,6 @@ components:
         status: { type: integer, description: "The test request's HTTP status, when it got one" }
         error: { type: string, description: Why it failed (never a secret value) }
         at: { type: string, format: date-time }
-    RepositoryList:
-      type: object
-      description: What a code host connection reaches (GET …/connections/{connection}/repositories)
-      required: [login, owner, owners, repositories, truncated]
-      properties:
-        login: { type: string, description: The account the connection's credential signs in as }
-        owner: { type: string, description: The owner the repositories belong to }
-        owners:
-          type: array
-          description: The account first, then its organizations
-          items: { $ref: "#/components/schemas/RepositoryOwner" }
-        repositories:
-          type: array
-          description: The most recently updated first, at most 100
-          maxItems: 100
-          items: { $ref: "#/components/schemas/Repository" }
-        truncated: { type: boolean, description: The owner has more repositories than the 100 answered }
-    RepositoryOwner:
-      type: object
-      required: [login, kind]
-      properties:
-        login: { type: string }
-        kind: { type: string, enum: [user, organization] }
-    Repository:
-      type: object
-      required: [full_name, clone_url, languages, updated_at]
-      properties:
-        full_name: { type: string, description: "<owner>/<name>" }
-        clone_url: { type: string, description: Its https clone URL }
-        languages:
-          type: array
-          description: The largest first, at most 3
-          maxItems: 3
-          items: { type: string }
-        updated_at: { type: string, format: date-time }
     ConnectionEvent:
       type: object
       description: "The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value"

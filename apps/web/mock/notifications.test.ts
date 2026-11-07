@@ -1,13 +1,13 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Connection, Problem } from '@goal/api-client';
+import type { Problem } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { NotificationPreferences } from '../src/api/types.ts';
 import { createMockApi, type MockApi } from './api.ts';
 
 // The mock answers GET and PUT /v1/me/notifications the way goald does (ADR 0023, decision 1): a person's
 // own preferences, seeded with the picture's boxes; a refused email or time zone is 400; GOAL_AUTH=none's
-// local user is 403 person-required. The Slack connection the account page needs is seeded in acme.
+// local user is 403 person-required.
 
 let api: MockApi;
 let server: Server;
@@ -105,10 +105,5 @@ describe('GET and PUT /v1/me/notifications', () => {
     const res = await call<Problem>(prefsPath);
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ code: 'person-required' });
-  });
-
-  it('seeds a Slack connection in acme, and lists it by kind', async () => {
-    const slack = await call<{ connections: Connection[] }>('/v1/orgs/acme/connections?kind=slack');
-    expect(slack.body.connections.map((c) => c.kind)).toEqual(['slack']);
   });
 });

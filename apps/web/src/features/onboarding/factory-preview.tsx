@@ -2,13 +2,22 @@
 // organization and code cards from steps 1 and 2, then the factory card with its line. The line is the
 // andon station nodes joined by a rule, each with its WIP slots as small squares. The factory card reads
 // the draft (step 4) or the picked template (step 3, before the factory exists).
+
+import { useQuery } from '@tanstack/react-query';
+import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { draftModelQuery, factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
-import type { StationKind } from '../../shared/definition/model';
+import { modelOf, type StationKind } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { GitHubMark } from '../../ui/github-mark';
+import { GitLabMark } from '../../ui/gitlab-mark';
+import { Skeleton } from '../../ui/skeleton';
 import { StationNode, type StationNodeTone } from '../../ui/station-node';
+import { stationLabel } from '../factory-editor/line/labels';
+import { repoOf } from './code-search';
 import { PreviewCard, type PreviewSlots } from './onboarding-layout';
 
 /** A station as the panel draws it: its name, its kind (Done shows a check) and its WIP limit. */
@@ -24,19 +33,64 @@ const maxSlots = 12;
 
 /** The organization card, first in the grid. */
 export function organizationCard(org: OrgSummary, host: string): ReactNode {
-  return <PreviewCard label="Organization" value={org.name} detail={`${host}/o/${org.slug}`} />;
+  // The address breaks only after a slash, never inside a word.
+  const detail = (
+    <>
+      {host}/<wbr />
+      o/
+      <wbr />
+      {org.slug}
+    </>
+  );
+  return <PreviewCard label="Organization" value={org.name} detail={detail} />;
 }
 
-/** The code card: the repository entered in step 2 and the secret that holds its token. */
-export function codeCard(repo: string | undefined, secret?: string): ReactNode {
-  if (repo === undefined) return undefined;
+/** The mark of a repository's host: GitHub's, GitLab's, or a neutral branch icon for any other host. */
+function HostMark({ url }: { url: string | undefined }) {
+  let host = '';
+  try {
+    host = url ? new URL(url).hostname.toLowerCase() : '';
+  } catch {
+    host = '';
+  }
+  if (host === 'github.com') return <GitHubMark className="shrink-0" />;
+  if (host === 'gitlab.com' || host.startsWith('gitlab.')) return <GitLabMark className="shrink-0" />;
+  return <GitBranch aria-hidden="true" className="size-4 shrink-0" />;
+}
+
+/**
+ * The code card. With a repository it shows the repository and its host's mark. Without one, it shows "No code"
+ * once the Code step is done (`done`), and nothing before that: the slot stays dashed. The card fades in over
+ * the dashed slot (MOTION.md, Loading).
+ */
+export function codeCard({
+  url,
+  repo,
+  secret,
+  done = false,
+}: {
+  url?: string | undefined;
+  /** The label to show; defaults to the one read from `url`. */
+  repo?: string | undefined;
+  secret?: string | undefined;
+  done?: boolean;
+}): ReactNode {
+  const label = repo ?? repoOf(url);
+  const reveal = 'motion-safe:animate-slot-reveal';
+  if (label === undefined) {
+    if (!done) return undefined;
+    return (
+      <PreviewCard active label="Code" value="No code" detail="Items don't touch a repository" className={reveal} />
+    );
+  }
   return (
     <PreviewCard
       active
       label="Code"
-      value={repo}
-      icon={<GitHubMark className="shrink-0" />}
+      value={label}
+      icon={<HostMark url={url} />}
       detail={secret ? `Token ${secret}` : 'Public repository'}
+      className={reveal}
     />
   );
 }
@@ -188,5 +242,43 @@ export function RunningItemCard({
         </span>
       </div>
     </section>
+  );
+}
+
+/**
+ * The factory card of a step before the line is open for editing (the Code step): the factory's name and the
+ * stations of its draft. Until both load it shows the card as muted blocks; without a draft, the card has no stations.
+ */
+export function FactoryCardOf({ org, factory }: { org: string; factory: string }) {
+  const detail = useQuery(factoryQuery(org, factory));
+  const model = useQuery(draftModelQuery(org, factory));
+  const ready = !detail.isPending && !model.isPending;
+  const { line, basics } = model.data ? modelOf(model.data.model) : { line: undefined, basics: undefined };
+  const stations: PreviewStation[] = (line?.stations ?? []).map((s) => ({
+    id: s.id,
+    label: stationLabel(s),
+    kind: s.kind,
+    wip: s.wip,
+  }));
+  return (
+    <Skeleton ready={ready} placeholder={<FactoryCardPlaceholder />}>
+      <FactoryCard
+        name={detail.data ? factoryTitle(detail.data) : ''}
+        purpose={basics?.purpose ?? ''}
+        stations={stations}
+      />
+    </Skeleton>
+  );
+}
+
+function FactoryCardPlaceholder() {
+  return (
+    <div className="flex min-h-42 flex-col gap-5 rounded-card border border-line bg-hover p-4 md:p-5">
+      <div className="flex items-center gap-3">
+        <div className="size-9 rounded-control bg-line" />
+        <div className="h-4 w-2/5 rounded-control bg-line" />
+      </div>
+      <div className="h-8 rounded-control bg-line" />
+    </div>
   );
 }

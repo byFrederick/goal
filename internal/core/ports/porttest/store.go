@@ -42,13 +42,15 @@ type Store struct {
 	edges     []domain.Edge // item needs, in the order they were added
 	followUps []domain.FollowUp
 	// repos are each item's repositories, in the order they joined.
-	repos   map[domain.ItemID][]domain.ItemRepository
-	joined  []domain.FollowUpID // follow-ups in the order they joined a triage item
-	views   map[domain.SavedViewID]savedViewRecord
-	ci      ciRows
-	jonah   jonahRows
-	ids     int
-	changes changes
+	repos  map[domain.ItemID][]domain.ItemRepository
+	joined []domain.FollowUpID // follow-ups in the order they joined a triage item
+	views  map[domain.SavedViewID]savedViewRecord
+	ci     ciRows
+	jonah  jonahRows
+	// exhausted holds since when each factory's weekly budget is used up (MarkBudgetExhausted).
+	exhausted map[domain.FactoryID]time.Time
+	ids       int
+	changes   changes
 }
 
 // andonRecord is one andon pull of a factory of an organization.
@@ -75,6 +77,7 @@ func NewStore() *Store {
 		views:     map[domain.SavedViewID]savedViewRecord{},
 		ci:        ciRows{polls: map[ciPollID]*domain.CIPoll{}},
 		jonah:     jonahRows{runKinds: map[domain.RunID]domain.RunKind{}},
+		exhausted: map[domain.FactoryID]time.Time{},
 	}
 }
 
@@ -156,6 +159,7 @@ func (s *Store) purge(org domain.OrgID) {
 			delete(s.factories, id)
 			delete(s.numbers, id)
 			delete(s.factCaps, id)
+			delete(s.exhausted, id)
 		}
 	}
 
@@ -756,7 +760,7 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	run := &domain.Run{
 		ID: domain.RunID(s.newID()), FactoryID: r.FactoryID, DefinitionVersionID: r.DefinitionVersionID, ItemID: r.ItemID, Station: r.Station,
-		Agent: r.Agent, Model: r.Model, Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: r.StartedAt,
+		Agent: r.Agent, Model: r.Model, Result: domain.RunResult{Status: domain.RunRunning}, BoxSize: r.Size, StartedAt: r.StartedAt,
 	}
 	s.runs[run.ID] = run
 	s.jonah.runKinds[run.ID] = kind

@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
+	"github.com/byFrederick/goal/internal/authoring"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
 )
@@ -20,6 +23,13 @@ func (h *harness) blockedBy(t *testing.T, it domain.Item, kind domain.EventKind,
 	if reason != "" {
 		data["reason"] = reason
 	}
+
+	h.blockedWith(t, it, kind, data)
+}
+
+// blockedWith appends the event of kind that blocked an item, with data.
+func (h *harness) blockedWith(t *testing.T, it domain.Item, kind domain.EventKind, data map[string]any) {
+	t.Helper()
 
 	if err := h.store.AppendEvents(inOrg(t), domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: t0, Kind: kind, Station: it.Station, Actor: domain.ActorEngine, Data: data,
@@ -35,9 +45,9 @@ func (h *harness) inbox(t *testing.T, query string) gen.Inbox {
 }
 
 // inboxItems seeds one item of each kind of the line factory: a decision with a brief, a question,
-// a blocked item, a paused one and an expedite one.
+// a blocked item, one blocked with a code, a paused one and an expedite one.
 type inboxItems struct {
-	decision, question, toolApproval, blocked, paused, expedite domain.Item
+	decision, question, toolApproval, blocked, coded, paused, expedite domain.Item
 }
 
 func (h *harness) seedInboxItems(t *testing.T) inboxItems {
@@ -54,6 +64,10 @@ func (h *harness) seedInboxItems(t *testing.T) inboxItems {
 	s.toolApproval = h.toolAsked(t, true)
 	s.blocked = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-2*time.Hour))
 	h.blockedBy(t, s.blocked, domain.EventBlocked, "checks failed")
+	s.coded = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-90*time.Minute))
+	h.blockedWith(t, s.coded, domain.EventBlocked, map[string]any{
+		"reason": "version 1 names no runtime.modelKey", "code": domain.BlockModelKeyMissing,
+	})
 	s.paused = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-time.Hour))
 	h.blockedBy(t, s.paused, domain.EventBlocked, "checks failed")
 	h.blockedBy(t, s.paused, domain.EventPaused, "")
@@ -90,7 +104,7 @@ func TestAPI_InboxEntriesOfEveryKind(t *testing.T) {
 		kinds = append(kinds, string(e.Kind)+" "+e.Factory.Name)
 	}
 
-	want := []string{"decision line", "question line", "tool_approval line", "andon acme", "rework_warning review", "blocked line", "blocked line", "expedite line"}
+	want := []string{"decision line", "question line", "tool_approval line", "andon acme", "rework_warning review", "blocked line", "blocked line", "blocked line", "expedite line"}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("entries = %v; want %v", kinds, want)
 	}
@@ -132,16 +146,28 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 	checkQuestionEntry(t, entryOf(got, seeded.question.ID), seeded.question)
 	checkToolApprovalEntry(t, entryOf(got, seeded.toolApproval.ID), seeded.toolApproval)
 
-	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Paused {
-		t.Errorf("blocked entry = %+v; want its failure", b)
-	}
-
-	if b := entryOf(got, seeded.paused.ID).Blocked; b == nil || b.Reason != nil || !b.Paused {
-		t.Errorf("paused entry = %+v; want paused without a reason", b)
-	}
+	checkBlockedEntries(t, got, seeded)
 
 	if e := entryOf(got, seeded.expedite.ID); e.Kind != gen.InboxEntryKindExpedite || !e.Since.Equal(seeded.expedite.CreatedAt) {
 		t.Errorf("expedite entry = %+v; want the hotfix since it was created", e)
+	}
+}
+
+// checkBlockedEntries checks the blocked entries: a failure without a code, a refusal with its
+// code, and a pause with neither.
+func checkBlockedEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
+	t.Helper()
+
+	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Code != nil || b.Paused {
+		t.Errorf("blocked entry = %+v; want its failure without a code", b)
+	}
+
+	if b := entryOf(got, seeded.coded.ID).Blocked; b == nil || deref(b.Code) != domain.BlockModelKeyMissing || deref(b.Reason) == "" {
+		t.Errorf("coded blocked entry = %+v; want code %s with its reason", b, domain.BlockModelKeyMissing)
+	}
+
+	if b := entryOf(got, seeded.paused.ID).Blocked; b == nil || b.Reason != nil || b.Code != nil || !b.Paused {
+		t.Errorf("paused entry = %+v; want paused without a reason or code", b)
 	}
 }
 
@@ -185,7 +211,8 @@ func checkLineEntries(t *testing.T, got gen.Inbox) {
 			}
 		case gen.InboxEntryKindDecision, gen.InboxEntryKindQuestion, gen.InboxEntryKindToolApproval, gen.InboxEntryKindBlocked,
 			gen.InboxEntryKindExpedite, gen.InboxEntryKindConversion, gen.InboxEntryKindKnowledgeSource,
-			gen.InboxEntryKindCheckFailing, gen.InboxEntryKindCheckLimit: // TestInbox_CheckEntries checks these
+			gen.InboxEntryKindCheckFailing, gen.InboxEntryKindCheckLimit, // TestInbox_CheckEntries checks these
+			gen.InboxEntryKindBudget: // and TestInbox_Budget these
 		}
 	}
 }
@@ -288,5 +315,124 @@ func expectLimitEntry(t *testing.T, l []gen.InboxEntry, day time.Time) {
 	if len(l) != 1 || l[0].Id != "check_limit:"+acmeID+":"+incidentsName+":"+day.Format(time.DateOnly) ||
 		l[0].TriggerCheck == nil || l[0].TriggerCheck.Trigger != incidentsName || !l[0].Since.Equal(day.Add(time.Hour+time.Minute)) {
 		t.Errorf("limit entries = %+v; want one for today, since the first check over the limit", l)
+	}
+}
+
+// A factory whose weekly budget is used up is one budget entry, measured against its current
+// version's cap and since when the engine recorded it (now before it has); a factory with room or
+// without a budget has none, and only the people who see the factory get it.
+func TestInbox_Budget(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	it := h.seed(t, stInbox, domain.StateQueued, t0)
+	h.spend(t, it.ID, t0.Add(-2*24*time.Hour), 30)
+
+	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 { // line has room, acme has no budget
+		t.Fatalf("budget entries with room = %+v; want none", got)
+	}
+
+	h.spend(t, it.ID, t0.Add(-time.Hour), 40) // $70 of $70
+	now := h.clock.Now()
+
+	runs, err := h.store.RunCostsSince(inOrg(t), lineID, domain.BudgetSince(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resumes, ok := domain.BudgetResumesAt(runs, 70, now)
+	if !ok || !resumes.Equal(t0.Add(5*24*time.Hour)) {
+		t.Fatalf("resumes at %v %v; want when the $30 run leaves the window", resumes, ok)
+	}
+
+	want := gen.InboxBudget{SpentUsd: 70, WeeklyUsd: 70, Since: now, ResumesAt: resumes}
+	expectBudgetEntry(t, "before the engine records it", budgetEntries(h.inbox(t, "")), want)
+
+	since := t0.Add(-30 * time.Minute)
+	if err := h.store.MarkBudgetExhausted(inOrg(t), lineID, since); err != nil {
+		t.Fatal(err)
+	}
+
+	want.Since = since
+	expectBudgetEntry(t, "once recorded", budgetEntries(h.inbox(t, "")), want)
+
+	h.as(acmeMember(domain.FactoryEditor)) // sees acme only
+
+	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 {
+		t.Errorf("budget entries of a member who cannot see line = %+v; want none", got)
+	}
+
+	h.seam.deny(nil)
+	h.raiseLineCap(t, 100)
+
+	if got := budgetEntries(h.inbox(t, "")); len(got) != 0 {
+		t.Errorf("budget entries after the cap rose = %+v; want none", got)
+	}
+
+	if _, marked, err := h.store.BudgetExhaustedSince(inOrg(t), lineID); err != nil || !marked {
+		t.Fatalf("exhausted since marked %v (%v); want the row kept until the engine's tick", marked, err)
+	}
+}
+
+// budgetEntries are the inbox's budget entries.
+func budgetEntries(in gen.Inbox) []gen.InboxEntry {
+	var out []gen.InboxEntry
+
+	for _, e := range in.Entries {
+		if e.Kind == gen.InboxEntryKindBudget {
+			out = append(out, e)
+		}
+	}
+
+	return out
+}
+
+// expectBudgetEntry checks that got is line's one budget entry, about no item, with want.
+func expectBudgetEntry(t *testing.T, what string, got []gen.InboxEntry, want gen.InboxBudget) {
+	t.Helper()
+
+	if len(got) != 1 {
+		t.Fatalf("budget entries %s = %+v; want line's only", what, got)
+	}
+
+	e := got[0]
+	if e.Id != "budget:"+lineID || e.Factory.Id != lineID || e.Item != nil || e.Station != nil || !e.Since.Equal(want.Since) || e.Budget == nil {
+		t.Fatalf("budget entry %s = %+v; want budget:%s since %v, about no item or station", what, e, lineID, want.Since)
+	}
+
+	b := *e.Budget
+	if b.SpentUsd != want.SpentUsd || b.WeeklyUsd != want.WeeklyUsd || !b.Since.Equal(want.Since) || !b.ResumesAt.Equal(want.ResumesAt) {
+		t.Errorf("budget %s = %+v; want %+v", what, b, want)
+	}
+}
+
+// raiseLineCap publishes a version of line whose weekly budget is usd.
+func (h *harness) raiseLineCap(t *testing.T, usd int) {
+	t.Helper()
+
+	authors, ctx := h.authors(t)
+
+	view, _, err := authors.OpenDraft(ctx, lineID, authoring.OpenDraftRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc := strings.Replace(line, "weeklyUsd: 70", "weeklyUsd: "+strconv.Itoa(usd), 1)
+
+	saved, err := authors.PutFile(ctx, lineID, authoring.FileWrite{Path: yamlFile, Content: []byte(doc)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// In the store, as the fixtures are published: line runs on the path before ADR 0037.
+	if _, err := h.defs.Publish(ctx, ports.Publish{
+		Factory: lineID, DraftRevision: saved.Revision, ExpectedCurrent: view.Current.ID, Name: lineSlug,
+		Message: "Raise the cap", By: domain.LocalUser, At: h.clock.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.versions.Refresh(t.Context()); err != nil { // as the definitions cache does on a change
+		t.Fatal(err)
 	}
 }

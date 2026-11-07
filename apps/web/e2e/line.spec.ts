@@ -54,12 +54,12 @@ async function drag(page: Page, from: Locator, to: Locator) {
 
 test('the line is accessible and fits the screen', async ({ page }) => {
   await openLine(page);
-  await expect(page).toHaveTitle('Line · Definition · goal · Acme · Goal');
+  await expect(page).toHaveTitle('Line · Definition · Goal · Acme · Goal');
   expect(await order(page)).toEqual(['Inbox', 'Spec', 'Approve spec', 'Build', 'Review', 'Merge', 'Done']);
   await expect(row(page, 'Build')).toHaveAccessibleName('4. Build, agent station');
   await expect(row(page, 'Build').getByRole('radio', { name: 'Agent' })).toBeChecked();
   await expect(row(page, 'Build').getByText('Constraint', { exact: false })).toBeVisible();
-  await expect(row(page, 'Build').getByRole('combobox', { name: 'Who works at Build' })).toContainText(
+  await expect(row(page, 'Build').getByRole('combobox', { name: 'Who works here at Build' })).toContainText(
     'routed by lane',
   );
   await expect(row(page, 'Review').getByRole('combobox', { name: 'If rejected, send back to' })).toHaveText('Build');
@@ -228,17 +228,45 @@ for (const width of [1024, 1280, 1440]) {
     const box = stations(page).locator('xpath=ancestor::div[contains(@class,"overflow-x-auto")][1]');
     const fits = await box.evaluate((el) => el.scrollWidth <= el.clientWidth);
     expect(fits, 'the stations box does not scroll sideways').toBe(true);
-    const edges = await box.evaluate((el, selector) => {
-      const right = el.getBoundingClientRect().right;
-      const first = el.querySelector(selector)?.firstElementChild;
-      const cells = first ? Array.from(first.children) : [];
-      const boxes = cells.map((c) => c.getBoundingClientRect());
+    const first = rows(page).first();
+    await first.getByRole('textbox', { name: /^Name of station/ }).fill('Integrate');
+    const report = await box.evaluate((el) => {
+      const rect = (e: Element) => e.getBoundingClientRect();
+      const overlap = (a: DOMRect, b: DOMRect) =>
+        a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+      const visible = (e: Element) => rect(e).width > 0 && rect(e).height > 0;
+      const right = rect(el).right;
+      const rows = Array.from(el.querySelectorAll('ol > li'));
+      const names = rows.map((r) => r.querySelector<HTMLInputElement>('[data-station-name]')).filter((n) => n !== null);
+      const headers = Array.from(el.querySelectorAll('[aria-hidden="true"].bg-panel > span')).filter(visible);
+      const headerOverlap = headers.some((h, i) => headers.slice(i + 1).some((o) => overlap(rect(h), rect(o))));
+      // Cells of the first row that sit on the same line must not overlap.
+      const cells = Array.from(rows[0]?.querySelector('div')?.children ?? []).flatMap((c) =>
+        getComputedStyle(c).display === 'contents' ? Array.from(c.children) : [c],
+      );
+      const sameLineOverlap = cells.some((c, i) =>
+        cells.slice(i + 1).some((o) => Math.abs(rect(c).top - rect(o).top) < 8 && overlap(rect(c), rect(o))),
+      );
+      const width = (selector: string) =>
+        Math.min(...rows.flatMap((r) => Array.from(r.querySelectorAll(selector)).map((f) => rect(f).width)));
       return {
-        inside: boxes.every((b) => b.right <= right + 1),
-        apart: boxes.every((b, i) => i === 0 || (boxes[i - 1]?.right ?? 0) <= b.left + 1),
+        scrolls: el.scrollWidth > el.clientWidth,
+        clipped: names.filter((n) => n.scrollWidth > n.clientWidth).length,
+        nameWidth: width('[data-station-name]'),
+        kindWidth: width('fieldset[class*="w-full"]'),
+        whoWidth: width('[aria-label^="Who works here at"]'),
+        headerOverlap,
+        sameLineOverlap,
+        inside: cells.every((c) => rect(c).right <= right + 1),
       };
-    }, 'ol > li');
-    expect(edges.inside, 'every cell of the first row ends inside the card').toBe(true);
-    expect(edges.apart, 'adjacent cells of the first row do not overlap').toBe(true);
+    });
+    expect(report.scrolls, 'the stations box does not scroll sideways').toBe(false);
+    expect(report.clipped, 'no name input clips "Integrate"').toBe(0);
+    expect(report.headerOverlap, 'no two column headers overlap').toBe(false);
+    expect(report.sameLineOverlap, 'cells on one line do not overlap').toBe(false);
+    expect(report.inside, 'every cell of the first row ends inside the card').toBe(true);
+    expect(report.nameWidth, 'the name field keeps its minimum').toBeGreaterThanOrEqual(150);
+    expect(report.kindWidth, 'the kind field keeps its minimum').toBeGreaterThanOrEqual(220);
+    expect(report.whoWidth, 'the who-works field keeps its minimum').toBeGreaterThanOrEqual(200);
   });
 }

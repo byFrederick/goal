@@ -6,6 +6,7 @@ import { useId } from 'react';
 import { ApiError, setTouchReason } from '../../api/client';
 import { keys, touchesQuery } from '../../api/queries';
 import type { Factory, Item, ItemEvent, Touch, TouchReason } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { formatClock } from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
@@ -34,7 +35,9 @@ export function TouchesCard({ item, itemKey, factory, events, className }: Props
   const operates = holds(factory, 'item:operate');
   const dataOf = new Map(events.map((e) => [e.id, e.data]));
   const average =
-    line && line.stats.finished > 0 ? `${factory.name} averages ${perItem(line.stats.per_item_mean)} per item.` : '';
+    line && line.stats.finished > 0
+      ? `${factoryTitle(factory)} averages ${perItem(line.stats.per_item_mean)} per item.`
+      : '';
   const ask = operates && touches.count > 0 ? ' Set a reason so the metric says why people stepped in.' : '';
 
   return (

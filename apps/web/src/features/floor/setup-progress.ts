@@ -1,11 +1,10 @@
-// The nine rows of "Finish setting up" on the Floor (ADR 0032 decision 2). Each row is done when the
+// The rows of "Finish setting up" on the Floor (ADR 0032 decision 2): nine, and a Model key row for a line on secrets. Each row is done when the
 // data the factory already has says so: nothing is stored for it. This file is a pure function over
 // the answers the card's queries give, so the rules are tested without a request.
 import type { IntakeTrigger, Invitation, KnowledgeSource, Member } from '../../api/types';
 import type { Model } from '../../shared/definition/model';
-
-/** How many rows the checklist has; the ring and "N of 9 done" count against it. */
-export const setupTotal = 9;
+import { modelKeyOf } from '../factory-editor/basics/model-key';
+import { needsModelKey, onSecrets } from './model-key-needed';
 
 export type SetupRowId =
   | 'invite'
@@ -14,6 +13,7 @@ export type SetupRowId =
   | 'organization'
   | 'code'
   | 'line'
+  | 'model-key'
   | 'budget'
   | 'triggers'
   | 'first-item';
@@ -31,6 +31,10 @@ export interface SetupInput {
   triggers: IntakeTrigger[];
   /** How many of the factory's items are done (merged); the Floor asks for one, so 0 or 1 matter. */
   finishedItems: number;
+  /** The published version's file paths. */
+  paths: string[];
+  /** The published factory.yaml's text. */
+  factoryYaml: string | undefined;
   /** The factory's name, for the Slack row's hint. */
   factoryName: string;
 }
@@ -49,6 +53,11 @@ export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** Whether the published model names a repository (basics.repositories, or the legacy basics.repository). */
+export function hasCode(model: Model): boolean {
+  return (model.basics?.repositories ?? []).length > 0 || Boolean(model.basics?.repository);
+}
+
 /**
  * The factory's code choice from the published model (ADR 0041): "No code", or the count with the access
  * the entries give. Any write entry makes it read and write; the legacy `repository` counts as one with write.
@@ -57,7 +66,7 @@ export function codeChoice(model: Model): string {
   const entries = model.basics?.repositories ?? [];
   const legacy = entries.length === 0 && model.basics?.repository ? 1 : 0;
   const count = entries.length + legacy;
-  if (count === 0) return 'No code';
+  if (!hasCode(model)) return 'No code';
   const write = legacy === 1 || entries.some((entry) => entry.access === 'write');
   return `Code, ${write ? 'read and write' : 'read only'}, ${plural(count, 'repository', 'repositories')}`;
 }
@@ -107,6 +116,16 @@ export function setupRows(input: SetupInput): SetupRow[] {
       hint: 'Stations and the agents that work them',
       done: stations > 0,
     },
+    ...(onSecrets(input.paths, input.factoryYaml)
+      ? [
+          {
+            id: 'model-key' as const,
+            text: 'Model key',
+            hint: 'Agents run on it',
+            done: !needsModelKey(input.paths, input.factoryYaml) && modelKeyOf(input.factoryYaml) !== undefined,
+          },
+        ]
+      : []),
     {
       id: 'budget',
       text: 'Budgets and targets',
@@ -121,7 +140,7 @@ export function setupRows(input: SetupInput): SetupRow[] {
     },
     {
       id: 'first-item',
-      text: 'First item merged',
+      text: 'First item done',
       hint: 'Send one item through the line',
       done: input.finishedItems > 0,
     },

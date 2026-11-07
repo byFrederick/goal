@@ -12,6 +12,7 @@ import { ApiError } from '../../api/client';
 import { publishDraft } from '../../api/definitions';
 import { defKeys } from '../../api/queries';
 import type { Factory } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { useDraft, useDraftSession } from '../factory-editor/draft/use-draft';
 
@@ -51,7 +52,7 @@ export function useSaveChanges(org: string, factory: Factory): SaveChangesState 
         expected_current_version_id: factory.current?.id ?? null,
       });
       session.closeDraft();
-      toast(`${factory.name} v${version.number} published`);
+      toast(`${factoryTitle(factory)} v${version.number} published`);
       setDone(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setDone(false), 2000);

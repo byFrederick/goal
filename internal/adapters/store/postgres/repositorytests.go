@@ -11,7 +11,7 @@ import (
 
 var _ ports.RepositoryTests = (*RepositoryTests)(nil)
 
-// RepositoryTests implements ports.RepositoryTests over 00131's repository_tests (with 00135's CI check), as goal_app
+// RepositoryTests implements ports.RepositoryTests over 00131's repository_tests (with 00140's CI check), as goal_app
 // under row-level security: every statement sees the organization in ctx. A test upserts the one
 // row of its factory and url.
 type RepositoryTests struct {
@@ -36,7 +36,7 @@ func (r *RepositoryTests) Record(ctx context.Context, t domain.RepositoryTest) e
 		return err
 	}
 
-	// A test without a CI check keeps NULL, as the tests kept before migration 00135 have.
+	// A test without a CI check keeps NULL, as the tests kept before migration 00140 have.
 	var ciOK *bool
 
 	var ciReason *string

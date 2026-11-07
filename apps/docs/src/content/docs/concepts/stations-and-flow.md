@@ -70,7 +70,7 @@ Each push starts a new CI round. Once a visit to the station has had `rounds` ro
 
 A rejection goes back to the gate's `onReject` station at once, without waiting for CI. A run that pushed nothing moves the item on at once, as at a station without the setting.
 
-When the token cannot read the repository's CI, the item blocks for a person. The reason names the repository, the commit, where the token comes from (the `runtime.repositories` entry, the connection, or `runtime.repository.token`) and the permission it needs, such as read access to Checks and Commit statuses on GitHub or `read_api` on GitLab. Give the token that permission, then retry the item: goald waits for CI again. Hidden CI never counts as passed.
+When the token cannot read the repository's CI, the item blocks for a person. The reason names the repository, the commit, where the token comes from (the `runtime.repositories` entry or `runtime.repository.token`) and the permission it needs, such as read access to Checks and Commit statuses on GitHub or `read_api` on GitLab. Give the token that permission, then retry the item: goald waits for CI again. Hidden CI never counts as passed.
 
 The short form uses the defaults:
 

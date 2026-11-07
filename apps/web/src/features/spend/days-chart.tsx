@@ -2,13 +2,14 @@
 // did not split by factory is drawn as one neutral segment and the note says why. The bars are
 // decorative: a visually hidden table carries every value for screen readers.
 import type { OrgSpend } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { factoryLines, money, shortDay, weekdayOf, windowDays } from './view';
 
 export function SpendDays({ spend }: { spend: OrgSpend }) {
   const lines = factoryLines(spend);
   const top = Math.max(0, ...spend.days.map((d) => d.usd));
   const fillOf = new Map(lines.map((l) => [l.id, l.fill]));
-  const nameOf = new Map(lines.map((l) => [l.id, l.name]));
+  const titleOf = new Map(lines.map((l) => [l.id, factoryTitle(l)]));
   const byDay = new Map(spend.days.map((d) => [d.day, d]));
   const slots = windowDays(spend);
   const todayOf = spend.until.slice(0, 10);
@@ -23,7 +24,7 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
           {lines.map((l) => (
             <li key={l.id} className="flex items-center gap-2">
               <i aria-hidden="true" className={`block size-3 rounded-chip ${l.fill}`} />
-              {l.name} {money(l.usd)}
+              {factoryTitle(l)} {money(l.usd)}
             </li>
           ))}
         </ul>
@@ -107,7 +108,7 @@ export function SpendDays({ spend }: { spend: OrgSpend }) {
                 <td>{money(d.usd)}</td>
                 <td>
                   {spend.complete
-                    ? d.by_factory.map((f) => `${nameOf.get(f.factory_id) ?? 'Factory'} ${money(f.usd)}`).join(', ') ||
+                    ? d.by_factory.map((f) => `${titleOf.get(f.factory_id) ?? 'Factory'} ${money(f.usd)}`).join(', ') ||
                       '—'
                     : '—'}
                 </td>

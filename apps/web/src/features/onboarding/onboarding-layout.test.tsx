@@ -10,22 +10,22 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrgSummary } from '../../api/types';
-import { OnboardingLayout } from './onboarding-layout';
+import { OnboardingLayout, PreviewCard } from './onboarding-layout';
 import { isOrgOnboardingStep, previousStep } from './steps';
 
 const goal: OrgSummary = { id: 'org-goal', slug: 'goal', name: 'Goal', mark: 'Go', factory_count: 1, role: 'owner' };
 
 /** The layout inside a router: its links need one. */
-async function renderLayout(element: ReactNode) {
+async function renderLayout(element: ReactNode, url = '/') {
   const queryClient = new QueryClient();
   const root = createRootRoute({ component: Outlet });
   const page = createRoute({ getParentRoute: () => root, path: '/', component: () => element });
   const org = createRoute({ getParentRoute: () => root, path: '/o/$org', component: () => <p>Home</p> });
   const router = createRouter({
     routeTree: root.addChildren([page, org]),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
+    history: createMemoryHistory({ initialEntries: [url] }),
   });
   render(
     <QueryClientProvider client={queryClient}>
@@ -41,6 +41,18 @@ afterEach(() => {
 });
 
 describe('the onboarding layout', () => {
+  const pick = 'The line appears when you pick a template';
+
+  it('asks for a template while no factory is chosen', async () => {
+    await renderLayout(<OnboardingLayout step="factory" org={goal} />);
+    expect(screen.getByText(pick)).toBeTruthy();
+  });
+
+  it('does not ask for a template while the chosen factory loads', async () => {
+    await renderLayout(<OnboardingLayout step="line" org={goal} />, '/?factory=6f1f3b1e-6a43-4d52-9a39-2f1c3f7c9a10');
+    expect(screen.queryByText(pick)).toBeNull();
+  });
+
   it('shows the eight steps and marks the current one', async () => {
     await renderLayout(<OnboardingLayout step="factory" org={goal} />);
 
@@ -55,6 +67,20 @@ describe('the onboarding layout', () => {
       .getAllByRole('listitem')
       .filter((li) => li.getAttribute('aria-current') === 'step');
     expect(current.map((li) => li.textContent)).toEqual(['Factory']);
+  });
+
+  it('scrolls the current step into view, instantly and without moving the page, when the step changes', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    await renderLayout(<OnboardingLayout step="line" org={goal} />);
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    expect(scroll.mock.contexts.at(-1)).toBe(
+      screen.getAllByRole('listitem').find((li) => li.getAttribute('aria-current') === 'step'),
+    );
+    cleanup();
+    scroll.mockClear();
+    await renderLayout(<OnboardingLayout step="first-item" org={goal} />);
+    expect((scroll.mock.contexts.at(-1) as HTMLElement).textContent).toBe('First item');
   });
 
   it('shows the Goal mark and name at the top, and "Save and finish later" to the organization home', async () => {
@@ -117,5 +143,14 @@ describe('the onboarding steps', () => {
     expect(previousStep('factory')).toBe('organization');
     expect(previousStep('code')).toBe('factory');
     expect(previousStep('line')).toBe('code');
+  });
+});
+
+describe('PreviewCard', () => {
+  it('wraps a sentence detail at spaces, never in the middle of a word', () => {
+    render(<PreviewCard label="Code" value="No code" detail="Items don't touch a repository." />);
+    const detail = screen.getByText("Items don't touch a repository.");
+    expect(detail.className).toContain('break-words');
+    expect(detail.className).not.toContain('break-all');
   });
 });

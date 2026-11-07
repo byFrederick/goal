@@ -3,7 +3,6 @@ import { describe, expect, test, vi } from 'vitest';
 import { defKeys, keys } from '../api/queries';
 import type { DefinitionEvent, StreamEvent } from '../api/types';
 import {
-  connectionInvalidations,
   definitionInvalidations,
   factoryInvalidations,
   heldByMove,
@@ -295,35 +294,6 @@ describe('the intake', () => {
   });
 });
 
-describe('connectionInvalidations', () => {
-  test('re-reads the lists, the connection, its activity and the kinds, never a definition or the work', async () => {
-    const client = definitionCache();
-    client.setQueryData(keys.connectionList(acme, {}), []);
-    client.setQueryData(keys.connectionList(acme, { factory: goal }), []);
-    client.setQueryData(keys.connection(acme, 'github'), {});
-    client.setQueryData(keys.connectionActivity(acme), {});
-    client.setQueryData(keys.connectionKinds(acme), []);
-    client.setQueryData(keys.connectionList(labs, {}), []);
-
-    const stale = await staleAfter(client, connectionInvalidations(acme));
-
-    expect(stale).toEqual([
-      keys.connectionList(acme, {}),
-      keys.connectionList(acme, { factory: goal }),
-      keys.connection(acme, 'github'),
-      keys.connectionActivity(acme),
-      // A connection of a kind another admin just defined: the kinds are re-read too.
-      keys.connectionKinds(acme),
-    ]);
-  });
-
-  test('a publish re-reads what uses each connection', () => {
-    expect(definitionInvalidations(acme, definition({ kind: 'current', number: 9 }))).toContainEqual(
-      keys.connections(acme),
-    );
-  });
-});
-
 describe('Jonah reads', () => {
   test("a learning event re-reads the factory's Jonah overview and proposals, and nothing of another factory", async () => {
     const client = new QueryClient();
@@ -357,7 +327,6 @@ describe('knowledgeInvalidations', () => {
     client.setQueryData(keys.knowledgeFiles(acme, 'handbook', ''), {});
     client.setQueryData(keys.knowledgeFind(acme, 'deploy'), []);
     client.setQueryData(keys.knowledgeReads(acme, 'handbook', 7), []);
-    client.setQueryData(keys.connectionList(acme, {}), []);
     client.setQueryData(keys.knowledgeSources(labs, {}), []);
 
     const stale = await staleAfter(client, knowledgeInvalidations(acme));

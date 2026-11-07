@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { Connection, KnowledgeFilePage, KnowledgeSource, KnowledgeSourceList, Problem } from '@goal/api-client';
+import type { KnowledgeFilePage, KnowledgeSource, KnowledgeSourceList, Problem } from '@goal/api-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockApi, type MockApi } from './api.ts';
 
@@ -133,13 +133,6 @@ describe('the mock knowledge base', () => {
       [
         sources,
         'POST',
-        { name: 'models', title: 'Models', kind: 'synced', connection: 'claude' },
-        400,
-        'connection-cannot-sync',
-      ],
-      [
-        sources,
-        'POST',
         { name: 'wiki', title: 'Wiki', kind: 'synced', connection: 'wiki' },
         404,
         'connection-not-found',
@@ -156,17 +149,14 @@ describe('the mock knowledge base', () => {
     expect([deck.status, deck.body.code]).toEqual([415, 'unsupported-document-type']);
   });
 
-  it("lists a live source in its connection's used_by and keeps the connection while it reads it", async () => {
-    const live = await call<KnowledgeSource>(sources, 'POST', {
+  it('refuses a source that names a connection, as goald serves none', async () => {
+    const res = await call<Problem>(sources, 'POST', {
       name: 'repo-search',
       title: 'Repository search',
       kind: 'live',
       connection: 'github',
     });
-    expect(live.status).toBe(201);
-    expect((await call<Problem>(`${sources}/repo-search/sync`, 'POST')).body.code).toBe('knowledge-source-live');
-    const github = await call<Connection>('/v1/orgs/acme/connections/github');
-    expect(github.body.used_by.knowledge_sources).toEqual(['dashboards', 'goal-docs', 'support-macros', 'repo-search']);
+    expect([res.status, res.body.code]).toEqual([404, 'connection-not-found']);
   });
 
   it('answers a check with the first files, at most 8 and no more than the file count', async () => {

@@ -31,12 +31,7 @@ type knowledgeBase struct {
 func (h *harness) knowledgeBase(t *testing.T) *knowledgeBase {
 	t.Helper()
 
-	conns, ok := h.connections.(*porttest.Connections)
-	if !ok {
-		t.Fatalf("the harness's connections are a %T, not the fake", h.connections)
-	}
-
-	kb := &knowledgeBase{kb: porttest.NewKnowledge(conns, h.tenancy), at: time.Now().UTC().Add(time.Hour)}
+	kb := &knowledgeBase{kb: porttest.NewKnowledge(h.tenancy), at: time.Now().UTC().Add(time.Hour)}
 	h.knowledge = kb.kb
 
 	return kb

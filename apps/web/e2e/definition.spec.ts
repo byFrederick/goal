@@ -30,7 +30,7 @@ async function openBasics(page: Page) {
 
 test('the definition frame is accessible and fits the screen', async ({ page }) => {
   await openBasics(page);
-  await expect(page).toHaveTitle('Basics · Definition · goal · Acme · Goal');
+  await expect(page).toHaveTitle('Basics · Definition · Goal · Acme · Goal');
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9, 3 changes');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(page.getByRole('link', { name: '3 changes in 2 sections' })).toBeVisible();
@@ -350,7 +350,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
         const count = await rows.count();
         for (let i = 0; i < count; i++) {
           const row = rows.nth(i);
-          const whoLocator = row.getByRole('combobox', { name: /^Who works at / });
+          const whoLocator = row.getByRole('combobox', { name: /^Who works here at / });
           const upLocator = row.getByRole('button', { name: /^Move .* up$/ });
           const who = (await whoLocator.count()) > 0 ? await whoLocator.first().boundingBox() : null;
           const up = (await upLocator.count()) > 0 ? await upLocator.first().boundingBox() : null;
@@ -420,3 +420,16 @@ test('the change-count and problems links are 44×44 at 390 px', async ({ page }
     'the change count and the problems link',
   );
 });
+
+for (const width of [375, 1440]) {
+  test(`the version history names the publisher, never an id, at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    await page.goto('/o/acme/f/goal/definition/versions');
+    const v8 = page.getByRole('listitem').filter({ has: page.getByText('v8', { exact: true }) });
+    await expect(v8.getByText(/by Amara Okafor$/)).toBeVisible();
+    await expect(
+      page.getByRole('main').getByText(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i),
+    ).toHaveCount(0);
+    await expectNoHorizontalScroll(page);
+  });
+}

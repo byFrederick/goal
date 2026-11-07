@@ -12,14 +12,14 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// A repository test kept before migration 00135 has no CI answer: after the migration it reads
+// A repository test kept before migration 00140 has no CI answer: after the migration it reads
 // with no CI check, never a failed one, and the next test of the repository records one.
 func TestMigrate_RepositoryTestsCIAbsentBeforeMigration(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDB(t, OwnerRole)
 	owner := openPool(t, db.owner)
-	migrateTo(t, owner, 133)
+	migrateTo(t, owner, 139)
 
 	at := time.Date(2026, 11, 6, 9, 0, 0, 0, time.UTC)
 	factory := uuid.NewString()

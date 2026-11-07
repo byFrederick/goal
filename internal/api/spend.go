@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -132,6 +133,8 @@ func (s *server) spendOut(ctx context.Context, sp domain.OrgSpend) gen.OrgSpend 
 		}
 	}
 
+	out.Usage = usageOut(sp, sees)
+
 	if !complete {
 		return out
 	}
@@ -241,35 +244,9 @@ func (s *server) spendBudget(ctx context.Context, f *config.Factory, andon *doma
 }
 
 // modelConnections are, by factory goald runs that is not archived, what its current version
-// gets its model from: the organization's connections it names in runtime.modelConnection, with
-// their kinds, and on secrets the secret runtime.modelKey names, by name with kind secret and
-// never its value (ADR 0037 decision 7). A name the organization has no connection or secret
-// for is left out.
+// gets its model from: the secret runtime.modelKey names, by name with kind secret and never its
+// value (ADR 0037 decision 7). A name the organization has no secret for is left out.
 func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]gen.ConnectionHit, error) {
-	users, err := s.usersBy(ctx, func(f *config.Factory) []string {
-		if m := f.Spec.Runtime.ModelConnection; m != "" {
-			return []string{m}
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	conns, err := s.connections.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list the organization's connections: %w", err)
-	}
-
-	out := map[domain.FactoryID][]gen.ConnectionHit{}
-
-	for _, c := range conns {
-		for _, f := range users[c.Name] {
-			out[f.id] = append(out[f.id], gen.ConnectionHit{Name: c.Name, Kind: c.Kind})
-		}
-	}
-
 	keys, err := s.usersBy(ctx, func(f *config.Factory) []string { return config.SecretNames(f.Spec.Runtime.ModelKey) })
 	if err != nil {
 		return nil, err
@@ -279,6 +256,8 @@ func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]g
 	if err != nil {
 		return nil, fmt.Errorf("list the organization's secrets: %w", err)
 	}
+
+	out := map[domain.FactoryID][]gen.ConnectionHit{}
 
 	for _, sec := range secrets {
 		for _, f := range keys[sec.Name] {
@@ -294,3 +273,41 @@ func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]g
 
 // modelKeyKind is the kind of a model_connections entry that is the model key's secret.
 const modelKeyKind = "secret"
+
+// usageOut is sp's usage rows of the factories the caller sees, in their order.
+func usageOut(sp domain.OrgSpend, sees func(domain.FactoryID) bool) gen.SpendUsage {
+	out := gen.SpendUsage{ByAgent: []gen.AgentUsage{}, ByStation: []gen.StationUsage{}}
+
+	for _, u := range sp.UsageByAgent {
+		if sees(u.FactoryID) {
+			out.ByAgent = append(out.ByAgent, gen.AgentUsage{
+				FactoryId: string(u.FactoryID), Agent: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
+				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
+				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
+			})
+		}
+	}
+
+	for _, u := range sp.UsageByStation {
+		if sees(u.FactoryID) {
+			out.ByStation = append(out.ByStation, gen.StationUsage{
+				FactoryId: string(u.FactoryID), Station: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
+				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
+				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
+			})
+		}
+	}
+
+	return out
+}
+
+// bytesOf is an interpolated byte count rounded to a byte, nil for none.
+func bytesOf(v *float64) *int64 {
+	if v == nil {
+		return nil
+	}
+
+	n := int64(math.Round(*v))
+
+	return &n
+}

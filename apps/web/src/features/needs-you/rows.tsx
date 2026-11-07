@@ -5,7 +5,8 @@ import { Link } from '@tanstack/react-router';
 import { useRef } from 'react';
 import type { InboxEntry, Watch } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
-import { formatAge, humanize } from '../../shared/format';
+import { blockedWords } from '../../shared/blocked-words';
+import { formatAge, formatUsd, formatUsdCompact, formatWeekdayTime, humanize } from '../../shared/format';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
 import { cn } from '../../ui/cn';
@@ -27,10 +28,16 @@ export function titleOf(entry: InboxEntry): string {
   if (entry.kind === 'conversion') return conversionTitle(entry);
   if (entry.kind === 'watch_worse' && entry.watch) return watchWorseTitle(entry.watch);
   if (entry.kind === 'andon') return 'Line stopped';
+  if (entry.kind === 'budget' && entry.budget) return budgetTitle(entry.budget);
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
   }
   return humanize(entry.kind);
+}
+
+/** A used-up weekly budget's title: "Weekly budget used up · $1,602 of $1,600". */
+export function budgetTitle(b: { spent_usd: number; weekly_usd: number }): string {
+  return `Weekly budget used up · ${formatUsd(b.spent_usd)} of ${formatUsdCompact(b.weekly_usd)}`;
 }
 
 /** A failing source's title: the source, and the factory that reads it, "product-specs, which Software reads, does not sync". */
@@ -58,12 +65,19 @@ export function approvalTitle(approval: { agent: string; tool: string }): string
 
 /** The line under the title: the item and its station, or the factory when no item is involved. */
 function whereOf(entry: InboxEntry): string {
+  if (entry.kind === 'blocked') {
+    const words = blockedWords(entry.blocked?.code);
+    if (words) return words.sentence;
+  }
   const station = humanize(entry.station ?? entry.item?.station ?? '');
   if (entry.kind === 'knowledge_source' && entry.knowledge_source) {
     const k = entry.knowledge_source;
     return `${k.error || 'The sync failed'} ${k.failed_syncs} times`;
   }
   if (entry.kind === 'conversion' && entry.conversion) return entry.conversion.reason;
+  if (entry.kind === 'budget' && entry.budget) {
+    return `${entry.factory.title ?? entry.factory.name} · Resumes about ${formatWeekdayTime(entry.budget.resumes_at)}`;
+  }
   if ((entry.kind === 'question' || entry.kind === 'tool_approval') && entry.item) {
     return `#${entry.item.number} at ${station}, run paused`;
   }

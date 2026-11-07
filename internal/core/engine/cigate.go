@@ -180,7 +180,7 @@ func pushedHeads(runs []domain.Run) []ciCommit {
 // pullRequestHead is the current head of the pull request at url, which Checks returns with the
 // checks of sha, read with the host and token a merge uses (repositoryHost).
 func (e *Engine) pullRequestHead(ctx context.Context, l domain.Line, it domain.Item, url, sha string) (string, error) {
-	t, err := e.repositoryHost(ctx, l, it, url)
+	t, err := e.repositoryHost(ctx, l, url)
 	if err != nil {
 		return "", err
 	}
@@ -270,30 +270,18 @@ func (e *Engine) ciUnreadable(ctx context.Context, l domain.Line, w domain.CIWai
 	}
 
 	return fmt.Sprintf("CI on %s at %s cannot be read with %s: %s. Give the token that permission, then retry the item.",
-		w.Repo, w.SHA, e.ciTokenSource(ctx, l, w.Repo), why)
+		w.Repo, w.SHA, ciTokenSource(l, w.Repo), why)
 }
 
 // ciTokenSource names, without its value, the token goald reads CI of the repository key with,
-// as repositoryHost picks it: the runtime.repositories entry that covers it, else on a version on
-// secrets runtime.repository.token, else the factory's connection for its host.
-func (e *Engine) ciTokenSource(ctx context.Context, l domain.Line, key string) string {
+// as repositoryHost picks it: the runtime.repositories entry that covers it, else
+// runtime.repository.token.
+func ciTokenSource(l domain.Line, key string) string {
 	if entry, ok := domain.TokenEntry(l.Runtime.Repositories, key, true); ok && entry.Token != "" {
 		return "the token of the runtime.repositories entry " + entry.URL
 	}
 
-	if l.OnSecrets() {
-		return repositoryLogin
-	}
-
-	host, _, _ := strings.Cut(key, "/")
-
-	if conns, err := e.codeHostConnections(ctx, l); err == nil {
-		if i := slices.IndexFunc(conns, func(c codeHostConnection) bool { return c.host == host }); i >= 0 {
-			return "the token of the connection " + conns[i].name
-		}
-	}
-
-	return "the token of the factory's connection for " + host
+	return repositoryLogin
 }
 
 // ciSection is the `## CI` section a run's brief starts with (ADR 0044 decision 2), built like

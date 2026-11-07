@@ -23,6 +23,27 @@ const ev = (kind: string, data: Record<string, unknown> = {}, extra: Partial<Ite
   ...extra,
 });
 
+describe('buildTrace: a blocked event', () => {
+  const noteOf = (data: Record<string, unknown>) => {
+    const note = buildTrace([ev('blocked', data)]).entries[0];
+    return note?.kind === 'note' ? note : undefined;
+  };
+
+  it('says a known code in plain words and keeps the reason as the detail', () => {
+    expect(noteOf({ reason: 'names no runtime.modelKey', code: 'model_key_missing' })).toMatchObject({
+      text: 'Agents need a model key: add one in Settings',
+      detail: 'names no runtime.modelKey',
+      blockedCode: 'model_key_missing',
+    });
+  });
+
+  it('keeps Blocked and the reason without a code', () => {
+    const note = noteOf({ reason: 'tests fail' });
+    expect(note).toMatchObject({ text: 'Blocked', detail: 'tests fail' });
+    expect(note?.blockedCode).toBeUndefined();
+  });
+});
+
 describe('buildTrace', () => {
   it('groups a run with its tool calls paired to their results, and totals cost and turns', () => {
     const run = { run_id: 'r1', actor: 'builder-1' };
@@ -180,6 +201,9 @@ describe('buildTrace', () => {
           ended_at: '2026-10-23T14:40:00Z',
           definition_version_id: 'v-9',
           definition_version: 9,
+          cpu_seconds: null,
+          peak_memory_bytes: null,
+          box_size: null,
         },
       ],
     );
@@ -218,6 +242,9 @@ describe('buildTrace', () => {
           ended_at: null,
           definition_version_id: null,
           definition_version: null,
+          cpu_seconds: null,
+          peak_memory_bytes: null,
+          box_size: null,
         },
       ],
     );

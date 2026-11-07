@@ -194,7 +194,6 @@ func (e *Engine) ciTarget(ctx context.Context, p domain.CIPoll, ws []domain.CIWa
 
 	var (
 		line   domain.Line
-		item   domain.Item
 		loaded bool
 		url    string
 	)
@@ -223,7 +222,7 @@ func (e *Engine) ciTarget(ctx context.Context, p domain.CIPoll, ws []domain.CIWa
 			}
 
 			if !loaded {
-				line, item, loaded = l, it, true
+				line, loaded = l, true
 			}
 		}
 
@@ -234,7 +233,7 @@ func (e *Engine) ciTarget(ctx context.Context, p domain.CIPoll, ws []domain.CIWa
 		return waits, mergeTarget{}, "", fmt.Errorf("the waits' lines are not loaded: %w", errCIUnreachable)
 	}
 
-	target, err := e.repositoryHost(ctx, line, item, repositoryURL(p.Repo))
+	target, err := e.repositoryHost(ctx, line, repositoryURL(p.Repo))
 
 	switch {
 	case errors.Is(err, ErrNoCodeHost), errors.Is(err, ports.ErrNotMergeable):

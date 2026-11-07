@@ -5,13 +5,10 @@
 import { parse } from 'yaml';
 import type { Intake, IntakeTrigger } from '../src/api/types.ts';
 
-const none = { github: 0, people: 0, cli: 0, api: 0, schedule: 0, webhook: 0 };
-
 const software: Intake = {
   items: 48,
   from: '2026-10-20',
   to: '2026-10-26',
-  sources: { github: 22, people: 11, cli: 0, api: 0, schedule: 7, webhook: 2 },
   window: '30d',
   origins: { person: 160, plan: 377, trigger: 4, follow_up: 31 },
   coming_up: [
@@ -36,8 +33,29 @@ const software: Intake = {
       needs: [],
       created_at: '2026-11-02T09:00:00Z',
     },
+    {
+      id: 'item-563',
+      ref: 'software#563',
+      title: 'Archive the unused staging buckets',
+      origin: 'person',
+      via: 'cli',
+      created_by: { kind: 'user', id: '01a1735d-b999-7ec7-9486-19cd26370764', name: 'Freddy Cruz' },
+      start: { at: '2026-11-25T09:00:00Z' },
+      needs: [],
+      created_at: '2026-11-03T09:00:00Z',
+    },
+    {
+      id: 'item-564',
+      ref: 'software#564',
+      title: 'Rotate the staging webhook secret',
+      origin: 'person',
+      created_by: { kind: 'user', id: '01a1735d-c0de-7a11-8f2e-5b6d7c8e9f01', name: 'A former member' },
+      start: { at: '2026-11-26T09:00:00Z' },
+      needs: [],
+      created_at: '2026-11-04T09:00:00Z',
+    },
   ],
-  coming_up_total: 2,
+  coming_up_total: 4,
   triage: {
     item: {
       id: 'item-570',
@@ -169,5 +187,5 @@ function suggestionsOf(yamlText: string, triggers: readonly IntakeTrigger[]): In
 export function intakeOf(factory: string, yamlText: string): Intake {
   if (factory === 'software') return software;
   const triggers = triggersOf(yamlText);
-  return { items: 0, from: null, to: null, sources: none, suggestions: suggestionsOf(yamlText, triggers), triggers };
+  return { items: 0, from: null, to: null, suggestions: suggestionsOf(yamlText, triggers), triggers };
 }

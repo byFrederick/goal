@@ -1,8 +1,8 @@
 // Step 5, "Set budgets and targets" (docs/design/screens/get-started/budget.jpg, ADR 0032 decision 4). The
 // factory from step 3, its draft open: the budget fields and the flow targets (budget-fields.tsx) save to the
 // draft as they change. Continue writes the picture's defaults for any field still unset, flushes the draft,
-// publishes it as the factory's first version and starts the line, then goes to step 6. A publish that goald
-// refuses shows its reason on the step, and the step stays.
+// publishes it when a draft is open (the first version starts the line; a later one names the running version),
+// then goes to step 6. A publish that goald refuses shows its reason on the step, and the step stays.
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -10,6 +10,7 @@ import { ApiError } from '../../api/client';
 import { publishDraft } from '../../api/definitions';
 import { defKeys, factoryQuery, keys } from '../../api/queries';
 import type { DefinitionProblem, OrgSummary } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { DraftSessionProvider, useDraft, useDraftSession, useSection } from '../factory-editor/draft/use-draft';
@@ -17,7 +18,7 @@ import { stationLabel } from '../factory-editor/line/labels';
 import { defaultEdits } from './budget-draft';
 import { BudgetFields, useBudgetValues } from './budget-fields';
 import { BudgetCard } from './budget-gauge';
-import { type OnboardingSearch, repoOf } from './code-search';
+import { carriedSearch, type OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 import { explainProblems, type PublishProblem, stepsToLink } from './publish-problems';
@@ -46,15 +47,15 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
   return (
     <Button asChild size="lg" variant="secondary">
       {factory ? (
-        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'line' }} search={{ factory }}>
+        <Link
+          to="/o/$org/get-started/$step"
+          params={{ org: org.slug, step: 'line' }}
+          search={carriedSearch(search, { factory })}
+        >
           Back
         </Link>
       ) : (
-        <Link
-          to="/o/$org/get-started/$step"
-          params={{ org: org.slug, step: 'factory' }}
-          search={{ url: search.url, secret: search.secret }}
-        >
+        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'factory' }} search={carriedSearch(search)}>
           Back
         </Link>
       )}
@@ -86,20 +87,10 @@ function Loading({ org, search, factory }: { org: OrgSummary; search: Onboarding
   );
 }
 
-/** The draft is read once it is open: until then the step shows its loading state. */
+/** The session is read once it is up: until then the step shows its loading state. Without a draft it shows the running version. */
 function DraftBudget({ org, search, factory }: { org: OrgSummary; search: OnboardingSearch; factory: string }) {
   const ready = useDraft((s) => s.ready);
-  const hasDraft = useDraft((s) => s.hasDraft);
   if (!ready) return <Loading org={org} search={search} factory={factory} />;
-  if (!hasDraft) {
-    return (
-      <NoFactory
-        org={org}
-        search={search}
-        message="This factory has no draft to set budgets on. Choose a template again."
-      />
-    );
-  }
   return <Budget org={org} search={search} factory={factory} />;
 }
 
@@ -145,7 +136,7 @@ function FixLink({
     <Link
       to="/o/$org/get-started/$step"
       params={{ org: org.slug, step }}
-      search={{ factory, url: search.url, secret: search.secret }}
+      search={carriedSearch(search, { factory })}
       className="font-medium underline underline-offset-2"
     >
       {`Go to the ${stepLabel(step)} step`}
@@ -158,7 +149,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
   const client = useQueryClient();
   const navigate = useNavigate();
   const values = useBudgetValues();
-  const { review, line, day, week } = values;
+  const { review, line, week } = values;
   const [pending, setPending] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const factoryDetail = useQuery(factoryQuery(org.id, factory)).data;
@@ -182,12 +173,16 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
         });
         return;
       }
-      await publishDraft(session.org, factory, {
-        revision: session.getSnapshot().revision,
-        expected_current_version_id: null,
-        start: true,
-      });
-      session.closeDraft();
+      // Nothing changed on a published factory: no draft is open, so there is nothing to publish.
+      if (session.getSnapshot().hasDraft) {
+        const currentId = factoryDetail?.current?.id ?? null;
+        await publishDraft(session.org, factory, {
+          revision: session.getSnapshot().revision,
+          expected_current_version_id: currentId,
+          ...(currentId === null ? { start: true } : {}),
+        });
+        session.closeDraft();
+      }
       await Promise.all(
         [
           defKeys.draft(session.org, factory),
@@ -196,13 +191,14 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
           defKeys.factory(session.org, factory),
           defKeys.factories(session.org),
           defKeys.compares(session.org, factory),
+          defKeys.version(session.org, factory, 'current'),
           keys.board(session.org, factory),
         ].map((queryKey) => client.invalidateQueries({ queryKey })),
       );
       void navigate({
         to: '/o/$org/get-started/$step',
         params: { org: org.slug, step: 'intake' },
-        search: { factory },
+        search: carriedSearch(search, { factory }),
       });
     } catch (err) {
       setRefusal(refusalOf(err));
@@ -241,10 +237,13 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       preview={{
         ...previewSlots({
           organization: organizationCard(org, host),
-          code: codeCard(repoOf(search.url), search.secret),
+          code: codeCard({ url: search.url, secret: search.secret, done: true }),
           factory: (
             <FactoryCard
-              name={basics.name || factoryDetail?.name || ''}
+              name={factoryTitle({
+                name: basics.name || factoryDetail?.name || '',
+                title: basics.title || factoryDetail?.title,
+              })}
               purpose={basics.purpose ?? ''}
               stations={panelStations}
             />
@@ -252,7 +251,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
         }),
         cards: (
           <>
-            <BudgetCard day={day} week={week} />
+            <BudgetCard week={week} />
             <PreviewPlaceholder className="min-h-37.5" />
             <PreviewPlaceholder className="min-h-37.5" />
           </>
@@ -262,7 +261,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-kpi tracking-display">Set budgets and targets</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
-          Goal stops starting new work when a budget is spent, so a busy day never surprises you.
+          Goal stops starting new work when the last 7 days’ spend reaches the budget.
         </p>
       </div>
 

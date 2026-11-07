@@ -28,18 +28,27 @@ type AccessSeed interface {
 func RunAccess(t *testing.T, setup func(t *testing.T) (ports.Identity, ports.Access, AccessSeed)) {
 	t.Helper()
 
-	cases := []struct {
-		name string
-		run  func(t *testing.T, id ports.Identity, a ports.Access, s AccessSeed)
-	}{
+	runAccessCases(t, setup, []accessCase[AccessSeed]{
 		{"MembersAreTheOrgsPeopleByName", testMembers},
+		{"MemberNamesAreTheSidebarsNames", testMemberNames},
 		{"InvitationsArePendingAndUnexpired", testInvitations},
 		{"AcceptingAnInvitationAppliesItsFactoryRoles", testAccept},
 		{"FactoryRolesAreGrantedChangedAndRemoved", testSetFactoryRole},
 		{"FactoryRolesRefuseWhatTheyCannotGive", testSetFactoryRoleRefused},
 		{"OwnershipGoesToAnAdminAtOnce", testTransfer},
 		{"OwnershipStaysWhenTheTransferIsRefused", testTransferRefused},
-	}
+	})
+}
+
+// accessCase is one case of ports.Access, seeded by S.
+type accessCase[S any] struct {
+	name string
+	run  func(t *testing.T, id ports.Identity, a ports.Access, s S)
+}
+
+// runAccessCases runs each of cases in parallel against a fresh implementation from setup.
+func runAccessCases[S any](t *testing.T, setup func(t *testing.T) (ports.Identity, ports.Access, S), cases []accessCase[S]) {
+	t.Helper()
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -101,6 +110,38 @@ func testMembers(t *testing.T, _ ports.Identity, a ports.Access, s AccessSeed) {
 
 	if ms := members(t, a, other); len(ms) != 1 || ms[0].User.ID != cy {
 		t.Errorf("members of the other org = %+v; want Cy alone", ms)
+	}
+}
+
+// MemberNames names each member of the organization in ctx as the sidebar does (the trimmed
+// name, else the email); a removed user, another organization's member and an id that is not
+// a user are absent, and asking for nobody is no error.
+func testMemberNames(t *testing.T, _ ports.Identity, a ports.Access, s AccessSeed) {
+	t.Helper()
+
+	acme, other := s.Org(t, "Acme"), s.Org(t, "Other")
+	ada, bob := s.User(t, "  Ada Lovelace  ", adaEmail, false), s.User(t, "", "bob@example.com", false)
+	cy, dee := s.User(t, "Cy", "cy@example.com", false), s.User(t, "Dee", "dee@example.com", false)
+	s.SetRole(t, acme, ada, domain.OrgOwner)
+	s.SetRole(t, acme, bob, domain.OrgMember)
+	s.SetRole(t, acme, cy, domain.OrgMember)
+	s.SetRole(t, acme, cy, "")
+	s.SetRole(t, other, dee, domain.OrgOwner)
+
+	ctx := domain.WithOrg(t.Context(), acme)
+
+	got, err := a.MemberNames(ctx, []domain.UserID{ada, bob, cy, dee, ada, "not-a-user"})
+	if err != nil {
+		t.Fatalf("MemberNames = %v", err)
+	}
+
+	want := map[domain.UserID]string{ada: "Ada Lovelace", bob: "bob@example.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("MemberNames = %v; want %v (Cy removed, Dee another organization's)", got, want)
+	}
+
+	if got, err := a.MemberNames(ctx, nil); err != nil || len(got) != 0 {
+		t.Errorf("MemberNames(nobody) = %v, %v; want an empty map", got, err)
 	}
 }
 

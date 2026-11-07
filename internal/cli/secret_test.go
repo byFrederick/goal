@@ -13,12 +13,43 @@ import (
 )
 
 const (
-	cmdSecret     = "secret"
-	cmdCredential = "credential"
-	secretName    = "acme-token"
+	cmdSecret      = "secret"
+	importedGitHub = "github"
+	docsSourceName = "docs"
+	secretName     = "acme-token"
 	// secretValue is the value the secret tests store; no output may hold it.
 	secretValue = "sk-acme-secret-value-91c4" //nolint:gosec // a test value, not a secret
 )
+
+// goalIn runs one CLI command line against g with stdin and returns its output.
+func (g *defGoald) goalIn(t *testing.T, stdin string, args ...string) (string, error) {
+	t.Helper()
+
+	var buf bytes.Buffer
+
+	err := run(t.Context(), args, &printer{w: &buf, in: strings.NewReader(stdin)}, testEnv(t, g.srv.URL, map[string]string{envOrg: orgAcme}), nil)
+
+	return buf.String(), err
+}
+
+// docsSource creates the knowledge source docs, which reads with the secret acme-token.
+func (g *defGoald) docsSource(t *testing.T) {
+	t.Helper()
+
+	n := domain.NewKnowledgeSource{Name: docsSourceName, Title: "Docs", Kind: domain.SourceRepository, Secret: secretName}
+	if _, err := g.kb.CreateSource(domain.WithOrg(t.Context(), g.orgID), n, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// deleteDocsSource deletes the knowledge source docs.
+func (g *defGoald) deleteDocsSource(t *testing.T) {
+	t.Helper()
+
+	if err := g.kb.DeleteSource(domain.WithOrg(t.Context(), g.orgID), docsSourceName, domain.LocalUser, nil); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // goalRun runs one CLI command line against g through Run, with stdin, and returns stdout, stderr
 // and the exit code.
@@ -176,7 +207,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.githubConnection(t)
+	g.docsSource(t)
 
 	lines := strings.Split(strings.TrimSpace(g.mustGoal(t, cmdSecret, subList)), "\n")
 	if len(lines) != 2 {
@@ -184,7 +215,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 	}
 
 	for i, want := range [][]string{
-		{secretName, "factories all", "used by connection github", "last used never", "expires 2027-03-01"},
+		{secretName, "factories all", "used by knowledge_source docs", "last used never", "expires 2027-03-01"},
 		{"deploy-key", "factories f-1", "used by nothing", "last used never", "expires none"},
 	} {
 		for _, w := range want {
@@ -196,7 +227,7 @@ func TestSecretCommand_ListAndShow(t *testing.T) {
 
 	show := g.mustGoal(t, cmdSecret, subShow, secretName)
 	for _, w := range []string{
-		"acme-token", "source       value", "description  the acme API", "factories    all", "used by      connection github",
+		"acme-token", "source       value", "description  the acme API", "factories    all", "used by      knowledge_source docs",
 		"expires      2027-03-01, reminder 7 days before", "last used    never",
 	} {
 		if !strings.Contains(show, w) {
@@ -220,7 +251,7 @@ func TestSecretCommand_ImportDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.githubConnection(t)
+	g.docsSource(t)
 
 	file := filepath.Join(t.TempDir(), "secrets.env")
 	if err := os.WriteFile(file, []byte("ACME_TOKEN="+secretValue+"\nSENTRY_TOKEN="+secretValue+"-2\n"), 0o600); err != nil {
@@ -228,7 +259,7 @@ func TestSecretCommand_ImportDryRun(t *testing.T) {
 	}
 
 	out := g.mustGoal(t, cmdSecret, verbImport, file, "--dry-run")
-	for _, w := range []string{"exists acme-token (used by connection github)", "new    sentry-token", "dry run: nothing stored"} {
+	for _, w := range []string{"exists acme-token (used by knowledge_source docs)", "new    sentry-token", "dry run: nothing stored"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("dry run = %q; want %q in it", out, w)
 		}
@@ -281,8 +312,8 @@ func TestSecretCommand_ImportUsage(t *testing.T) {
 	}
 }
 
-// goal secret delete of a secret a connection refers to fails and names the connection; once it
-// is free, delete deletes it.
+// goal secret delete of a secret a knowledge source reads with fails and names the source; once
+// it is free, delete deletes it.
 func TestSecretCommand_DeleteInUse(t *testing.T) {
 	t.Parallel()
 
@@ -292,14 +323,14 @@ func TestSecretCommand_DeleteInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	g.githubConnection(t)
+	g.docsSource(t)
 
 	stdout, stderr, code := g.goalRun(t, "", cmdSecret, verbDelete, secretName)
-	if code != 1 || !strings.Contains(stderr, "secret acme-token is used by connection github") {
-		t.Errorf("delete in use = exit %d, stdout %q, stderr %q; want exit 1 naming connection github", code, stdout, stderr)
+	if code != 1 || !strings.Contains(stderr, "secret acme-token is used by knowledge_source docs") {
+		t.Errorf("delete in use = exit %d, stdout %q, stderr %q; want exit 1 naming knowledge source docs", code, stdout, stderr)
 	}
 
-	g.deleteGitHubConnection(t)
+	g.deleteDocsSource(t)
 
 	if out := g.mustGoal(t, cmdSecret, verbDelete, secretName); !strings.Contains(out, "deleted secret acme-token") {
 		t.Errorf("delete = %q", out)
@@ -335,7 +366,6 @@ func TestSecretCommand_NeverPrintsAValue(t *testing.T) {
 		{secretValue, []string{cmdSecret, verbCreate, "Bad_Name"}},
 		{secretValue, []string{cmdSecret, verbReplace, secretName}},
 		{secretValue, []string{cmdSecret, verbReplace, "missing"}},
-		{"{{acme-token}}", []string{cmdConnection, verbCreate, importedGitHub, "--kind", importedGitHub, "--secret", "token=-"}},
 		{"", []string{cmdSecret, subList}},
 		{"", []string{cmdSecret, subShow, secretName}},
 		{"", []string{cmdSecret, verbImport, file, "--dry-run"}},
@@ -348,30 +378,5 @@ func TestSecretCommand_NeverPrintsAValue(t *testing.T) {
 		if strings.Contains(stdout, secretValue) || strings.Contains(stderr, secretValue) {
 			t.Errorf("%q (exit %d) printed the value: stdout %q, stderr %q", step.args, code, stdout, stderr)
 		}
-	}
-}
-
-// goal credential, whatever follows it, prints that it moved to goal secret and exits 2, without
-// calling goald or printing the whole usage.
-func TestCredentialCommand_Moved(t *testing.T) {
-	t.Parallel()
-
-	g := newDefGoald(t)
-
-	for _, args := range [][]string{
-		{cmdCredential},
-		{cmdCredential, subList},
-		{cmdCredential, verbCreate, secretName, "--type", "api_key"},
-		{cmdCredential, "rm", secretName},
-	} {
-		stdout, stderr, code := g.goalRun(t, secretValue, args...)
-		if code != 2 || stdout != "" || !strings.Contains(stderr, "goal credential moved to goal secret") ||
-			strings.Contains(stderr, "usage:") || strings.Count(stderr, "\n") != 1 {
-			t.Errorf("%q = exit %d, stdout %q, stderr %q; want exit 2 and one line naming goal secret", args, code, stdout, stderr)
-		}
-	}
-
-	if out := g.mustGoal(t, cmdSecret, subList); !strings.Contains(out, "no secrets") {
-		t.Errorf("list after goal credential = %q; want nothing created", out)
 	}
 }

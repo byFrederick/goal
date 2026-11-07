@@ -701,8 +701,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Find the organization's items, agents, factories and connections, for the shell's search box
-         * @description One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Connections are searched only for a caller who holds connection:read; for anyone else the group is empty.
+         * Find the organization's items, agents, factories and secrets, for the shell's search box
+         * @description One read per keystroke. Each group holds up to limit results, best first: an exact match, then a prefix, then the rest. Items match by title (a case-insensitive substring, taken literally, so % and _ are not wildcards) or by their exact number ("147" or "#147"), which ranks first. Only the factories the caller sees are searched. Secrets are searched only for a caller who holds secret:read; for anyone else the group is empty.
          */
         get: operations["searchOrg"];
         put?: never;
@@ -814,7 +814,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -1763,8 +1763,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Where the factory's newest items came from, and its triggers
-         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+         * The factory's newest items, its origins and its triggers
+         * @description How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
          */
         get: operations["getIntake"];
         put?: never;
@@ -2401,145 +2401,6 @@ export interface paths {
          * @description The latest result of each url tested for the factory, sorted by url, as testFactoryRepository answered it. Reading them tests nothing. 404 factory-not-found.
          */
         get: operations["listFactoryRepositoryTests"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/webhooks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The webhook endpoints open to the factory
-         * @description By name, the factory's own endpoints and the organization's webhooks open to it, each with its address, kind, sender, the name of its signing secret, the triggers of the factory's current definition it feeds (those whose on is webhook.<name> or starts with webhook.<name>.) and its deliveries of the last 7 UTC days. Never a secret. Kept for one release beside listWebhooks.
-         */
-        get: operations["listWebhookEndpoints"];
-        put?: never;
-        /**
-         * Create a webhook endpoint
-         * @description A factory endpoint with a new signing secret, answered here once and never again: copy it to the sender. Kept for one release; createWebhook makes the organization's webhooks. 400 webhook-invalid for a name that is not a slug or an unknown kind; 409 webhook-name-taken for a name the factory already uses; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-         */
-        post: operations["createWebhookEndpoint"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete a webhook endpoint and its deliveries
-         * @description Its address stops accepting requests. 404 webhook-not-found for an endpoint not open to the factory; 409 webhook-in-use, with triggers, while published triggers name it. Needs a sign-in from the last 10 minutes.
-         */
-        delete: operations["deleteWebhookEndpoint"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/rotate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Replace an endpoint's signing secret
-         * @description A new signing secret, answered here once and never again; the old one stops opening at once, so the sender's requests are refused until it has the new one. 404 webhook-not-found; 400 webhook-invalid for an organization webhook, whose secret is replaced on the Secrets page; 503 webhooks-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
-         */
-        post: operations["rotateWebhookSecret"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * One page of an endpoint's deliveries, newest first
-         * @description What the endpoint received in the last 30 days, each with its outcome, without its headers and body (getWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
-         */
-        get: operations["listWebhookDeliveries"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/factories/{factory}/webhooks/{endpoint}/deliveries/{delivery}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-                /** @description The delivery's id */
-                delivery: string;
-            };
-            cookie?: never;
-        };
-        /**
-         * One delivery with its request
-         * @description The request as received: its headers (names lower-cased, never a signature header) and its body. Only webhook:manage reads it (ADR 0040 decision 12). 404 webhook-delivery-not-found for a delivery the endpoint does not have. Needs a sign-in from the last 10 minutes.
-         */
-        get: operations["getWebhookDelivery"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3440,140 +3301,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/orgs/{org}/connection-kinds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The connection kinds the organization can make connections of
-         * @description The platform's kinds, shipped with goald, and the organization's own, by name; an organization's kind hides a platform kind of the same name. Each with the fields a connection of it is made of (secret ones are write-only), its modes, whether it gives agents their model, its adapter hooks and its docs.
-         */
-        get: operations["listConnectionKinds"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connection-kinds/{kind}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection kind's name */
-                kind: components["parameters"]["KindRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Create or replace one of the organization's connection kinds
-         * @description The body is a kind file (contracts/definitions/connection-kind.schema.json) as JSON, whose metadata.name is the path's kind. A kind has no versions: replacing it changes every connection of it from the next run on. A kind that breaks the schema or the kind rules is 400 connection-kind-invalid, whose detail names every broken rule; a new kind with a platform kind's name is 409 connection-kind-name-taken; a change that makes a field secret while a connection holds it as a plain value is 409 connection-kind-in-use, naming the field and the connection (clear the field there first). Needs a sign-in from the last 10 minutes. Audited as connection_kind.created or connection_kind.updated.
-         */
-        put: operations["putConnectionKind"];
-        post?: never;
-        /**
-         * Delete one of the organization's connection kinds
-         * @description 404 connection-kind-not-found when the organization has no kind of that name (a platform kind cannot be deleted); 409 connection-kind-in-use while a connection is of it. Needs a sign-in from the last 10 minutes. Audited as connection_kind.deleted.
-         */
-        delete: operations["deleteConnectionKind"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The organization's connections
-         * @description By name, each with its kind, description, non-secret fields, which secret fields are set (never a value), status, what uses it, its last use and last test. Members see them to pick them in the builder; only owners and admins change them.
-         */
-        get: operations["listConnections"];
-        put?: never;
-        /**
-         * Create a connection
-         * @description A connection of a kind, with the kind's non-secret fields in fields and its secret ones in secrets, sealed under the platform's master key and never returned, not even masked. 400 field-unknown for a value that is no field of the kind (or of the other sort), 400 field-required for a required field without a value, 404 connection-kind-not-found for an unknown kind, 409 connection-name-taken, 503 connections-unavailable for secrets while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.created (field names only).
-         */
-        post: operations["createConnection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections/{connection}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        /** One connection, with the env names a run gets from it and its kind's docs */
-        get: operations["getConnection"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete a connection
-         * @description 409 connection-in-use, naming what, while a factory's current version or a knowledge source uses it. Needs a sign-in from the last 10 minutes. Audited as connection.deleted.
-         */
-        delete: operations["deleteConnection"];
-        options?: never;
-        head?: never;
-        /**
-         * Rename a connection, or change its description, fields, secrets or tool modes
-         * @description fields, when present, replaces every non-secret value; secrets replaces the named secret fields only (an empty value clears an optional one), audited as connection.secret_replaced; the rest as connection.updated. tools, when present, replaces every tool's mode (a tool left out is allow); it is 400 for a connection whose kind has no MCP server, an unknown mode or a malformed tool name. A rename is 409 connection-in-use while a factory's current version names the connection, 409 connection-name-taken when another has the name. The kind never changes. Needs a sign-in from the last 10 minutes.
-         */
-        patch: operations["updateConnection"];
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections/{connection}/test": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run the connection's test
-         * @description Sends the kind's test request from goald with the connection's values: to public addresses only (a URL naming a private, loopback, link-local or metadata address fails the test), within 10 seconds, following no redirect. ok when the status is the one the kind expects. A test that fails is a 200 with ok false and why; the outcome is the connection's last test. 409 connection-not-testable for a kind without a test, 503 connections-unavailable for a sealed connection while goald has no master key. Needs a sign-in from the last 10 minutes. Audited as connection.tested.
-         */
-        post: operations["testConnection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orgs/{org}/standing-rules": {
         parameters: {
             query?: never;
@@ -3617,31 +3344,6 @@ export interface paths {
          * @description The rule's agent role asks first again from its next run. A rule is never deleted: revoking sets revoked_at and revoked_by, audited as standing_rule.revoked. 404 for a rule that does not exist, 409 standing-rule-revoked for one revoked already. Needs a sign-in from the last 10 minutes.
          */
         delete: operations["revokeStandingRule"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/orgs/{org}/connections/{connection}/repositories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        /**
-         * The owners and repositories a code host connection reaches
-         * @description Signs in to the code host with the connection's credential, from goald, and answers the account it signs in as, the owners it can list (the account, then its organizations) and the repositories of owner (the account when owner is absent). At most 100 repositories, the most recently updated first, with no paging: truncated is true when the owner has more. Each has at most 3 languages, the largest first. Audited as connection.used; no secret value is answered. 404 connection-not-found for an unknown connection, 404 owner-not-found for an owner the code host does not know, 422 connection-not-code-host for a connection whose kind is not a code host goald reaches, 422 repositories-not-supported for a code host that cannot list them yet (GitLab), 502 code-host-error when the code host refuses or fails, and 503 connections-unavailable for a sealed connection while goald has no master key.
-         */
-        get: operations["listConnectionRepositories"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4113,7 +3815,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections (spec 4 §8.2): connection-not-found and connection-kind-not-found (404), field-unknown, field-required and connection-kind-invalid (400), connection-name-taken, connection-kind-name-taken, connection-in-use, connection-kind-in-use and connection-not-testable (409), connections-unavailable (503: goald has no master key, so no secret can be sealed or opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a knowledge source naming a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -4681,7 +4383,7 @@ export interface components {
             kind: string;
             id: string;
         };
-        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job */
+        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same */
         Actor: {
             /** @enum {string} */
             kind: "user" | "service" | "agent" | "system";
@@ -5775,6 +5477,16 @@ export interface components {
             spent_usd: number;
             /** @description No new agent work starts until the window moves or the cap rises */
             exhausted: boolean;
+            /**
+             * Format: date-time
+             * @description Since when the budget is used up, as the engine recorded it (now when it has not yet); absent or null while the budget has room
+             */
+            since?: string | null;
+            /**
+             * Format: date-time
+             * @description When the rolling window's spend falls below the cap, so the line starts new work on the engine's first tick after it; absent or null while the budget has room
+             */
+            resumes_at?: string | null;
         };
         /**
          * @description How many items wait at a station now against 24 hours earlier
@@ -6517,7 +6229,7 @@ export interface components {
             }[];
         };
         Intake: {
-            /** @description How many items the sources count */
+            /** @description How many of the factory's newest items there are */
             items: number;
             /**
              * Format: date
@@ -6529,15 +6241,6 @@ export interface components {
              * @description The UTC day the newest of them was created; null without items
              */
             to: string | null;
-            /** @description How many of the items came from each source, zero included. Items whose creator recorded no source count in items only. */
-            sources: {
-                people: number;
-                cli: number;
-                api: number;
-                schedule: number;
-                webhook: number;
-                github: number;
-            };
             /** @description The current definition's board.triggers, in definition order */
             triggers: components["schemas"]["IntakeTrigger"][];
             /** @description The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers. */
@@ -7034,7 +6737,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
-            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief */
+            /** @description What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped at its station until a person retries it (data reason, the technical detail as written then; code, a stable code to branch on, only when the block has one: model_key_missing when the line is on environment files and secrets but names no runtime.modelKey). question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief */
             kind: string;
             station?: string;
             actor: string;
@@ -7093,7 +6796,31 @@ export interface components {
             definition_version_id: string | null;
             /** @description That version's number ("ran on v9"); null when the run has no version */
             definition_version: number | null;
+            /**
+             * Format: double
+             * @description The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+             */
+            cpu_seconds: number | null;
+            /**
+             * Format: int64
+             * @description The most memory the run's box used at once; null when cpu_seconds would be
+             */
+            peak_memory_bytes: number | null;
+            /** @description How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded */
+            peak_memory_source?: components["schemas"]["MemorySource"] | null;
+            /** @description The box size the run ran in; null for a run from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
         };
+        /**
+         * @description How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole machine's used memory, read when the box's cgroup has no memory figures
+         * @enum {string}
+         */
+        MemorySource: "cgroup" | "machine";
+        /**
+         * @description How much CPU and memory a run's box gets (a factory's runtime.size)
+         * @enum {string}
+         */
+        SandboxSize: "small" | "medium" | "large";
         OrgRunList: {
             runs: components["schemas"]["OrgRun"][];
             /** @description Pass as cursor for the next page; null on the last page */
@@ -7211,13 +6938,13 @@ export interface components {
             at: string;
         };
         OrgAttention: {
-            /** @description Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you) */
+            /** @description What waits on the caller across the organization (the sum of factories[].waiting_on_you) */
             waiting_on_you: number;
             factories: components["schemas"]["FactoryAttention"][];
         };
         FactoryAttention: {
             factory_id: string;
-            /** @description Items waiting for a human decision (every decision; phase 2.2 has no identity) */
+            /** @description The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up */
             waiting_on_you: number;
             blocked_items: number;
             /** @description The open andon pull, or null while the line runs */
@@ -7230,8 +6957,6 @@ export interface components {
             items: components["schemas"]["SearchItem"][];
             agents: components["schemas"]["AgentHit"][];
             factories: components["schemas"]["FactoryHit"][];
-            /** @description Empty unless the caller holds connection:read */
-            connections: components["schemas"]["ConnectionHit"][];
             /** @description Empty unless the caller holds secret:read */
             secrets: components["schemas"]["SecretHit"][];
         };
@@ -7338,6 +7063,7 @@ export interface components {
             rework_share: number | null;
             /** @description One per factory goald runs that the caller sees and that is not archived, by name */
             budgets: components["schemas"]["SpendBudget"][];
+            usage: components["schemas"]["SpendUsage"];
         };
         SpendDay: {
             /** Format: date */
@@ -7358,6 +7084,70 @@ export interface components {
             agent: string;
             /** Format: double */
             usd: number;
+        };
+        /** @description The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last. */
+        SpendUsage: {
+            by_agent: components["schemas"]["AgentUsage"][];
+            by_station: components["schemas"]["StationUsage"][];
+        };
+        AgentUsage: {
+            factory_id: string;
+            /** @description The agent's name in its factory */
+            agent: string;
+            /** @description The runs' box size; null for runs from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description The runs that reported a CPU time or a peak memory */
+            runs: number;
+            /**
+             * Format: double
+             * @description The median CPU seconds of the runs that reported one, interpolated between the closest runs (percentile_cont); null when none did
+             */
+            cpu_seconds_p50: number | null;
+            /**
+             * Format: double
+             * @description The 90th percentile
+             */
+            cpu_seconds_p90: number | null;
+            /**
+             * Format: int64
+             * @description The median peak memory of the runs that reported one, rounded to a byte; null when none did
+             */
+            peak_memory_bytes_p50: number | null;
+            /**
+             * Format: int64
+             * @description The 90th percentile
+             */
+            peak_memory_bytes_p90: number | null;
+        };
+        /** @description AgentUsage by station */
+        StationUsage: {
+            factory_id: string;
+            /** @description The station's id in its factory */
+            station: string;
+            /** @description The runs' box size; null for runs from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description The runs that reported a CPU time or a peak memory */
+            runs: number;
+            /**
+             * Format: double
+             * @description As AgentUsage's
+             */
+            cpu_seconds_p50: number | null;
+            /**
+             * Format: double
+             * @description As AgentUsage's
+             */
+            cpu_seconds_p90: number | null;
+            /**
+             * Format: int64
+             * @description As AgentUsage's
+             */
+            peak_memory_bytes_p50: number | null;
+            /**
+             * Format: int64
+             * @description As AgentUsage's
+             */
+            peak_memory_bytes_p90: number | null;
         };
         ModelSpend: {
             model: string;
@@ -7404,7 +7194,7 @@ export interface components {
             state: components["schemas"]["SpendBudgetState"];
             /** @description The open andon pull's reason when stopped, the spend against the cap when over_budget, else null */
             reason: string | null;
-            /** @description What gives the factory's runs their model, for "Who pays for models": the organization's connection runtime.modelConnection names, with its kind, and on secrets the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names neither */
+            /** @description What gives the factory's runs their model, for "Who pays for models": the organization's secret runtime.modelKey names, by name with kind "secret" and never its value (ADR 0037 decision 7); empty when it names none the organization has */
             model_connections: components["schemas"]["ConnectionHit"][];
         };
         /**
@@ -7507,18 +7297,18 @@ export interface components {
             }[];
         };
         Inbox: {
-            /** @description Ordered by kind, then oldest first */
+            /** @description Ordered by since, newest first, then by id */
             entries: components["schemas"]["InboxEntry"][];
             /** @description More entries exist than limit; the most recent were kept */
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day. budget: a factory whose weekly budget is used up, measured against its current version's cap, until the window's spend falls below the cap or the cap rises
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse" | "check_failing" | "check_limit";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "budget" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse" | "check_failing" | "check_limit";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, budget:<factory id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -7528,7 +7318,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), since when the budget is used up (budget), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -7557,6 +7347,31 @@ export interface components {
             watch?: components["schemas"]["Watch"] | null;
             /** @description The trigger of a check_failing or check_limit entry; absent or null for other kinds */
             trigger_check?: components["schemas"]["InboxTriggerCheck"] | null;
+            /** @description The used-up weekly budget of a budget entry; absent or null for other kinds */
+            budget?: components["schemas"]["InboxBudget"] | null;
+        };
+        /** @description A factory's used-up weekly budget, in the rolling 7×24-hour window that ends now. */
+        InboxBudget: {
+            /**
+             * Format: double
+             * @description The cost of the runs started in the window
+             */
+            spent_usd: number;
+            /**
+             * Format: double
+             * @description The cap
+             */
+            weekly_usd: number;
+            /**
+             * Format: date-time
+             * @description Since when the budget is used up, as the engine recorded it (now when it has not yet)
+             */
+            since: string;
+            /**
+             * Format: date-time
+             * @description When the window's spend falls below the cap; the line resumes on the engine's first tick after it
+             */
+            resumes_at: string;
         };
         /** @description A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page. */
         InboxTriggerCheck: {
@@ -7597,6 +7412,8 @@ export interface components {
         InboxBlocked: {
             /** @description The reason of the item's latest blocked or paused event, as written then; null without one */
             reason: string | null;
+            /** @description The code of the item's latest blocked event (model_key_missing: the line names no runtime.modelKey); null without one */
+            code: string | null;
             /** @description A person paused it (goal retry resumes it) */
             paused: boolean;
         };
@@ -8264,9 +8081,6 @@ export interface components {
         };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter */
         ConnectionName: string;
-        ConnectionKindList: {
-            kinds: components["schemas"]["ConnectionKind"][];
-        };
         /** @description A template for connections (spec 4 §4.2), the platform's or the organization's */
         ConnectionKind: {
             name: components["schemas"]["ConnectionName"];
@@ -8285,7 +8099,7 @@ export interface components {
             mint?: string;
             /** @description The knowledge source reader that syncs through it (gitdocs, confluence) */
             sync?: string;
-            /** @description It has a test (POST …/connections/{connection}/test) */
+            /** @description It has a test request */
             testable: boolean;
             /** @description The env names a run gets, as the kind writes them ({{field}} where a field names one) */
             env: string[];
@@ -8301,13 +8115,6 @@ export interface components {
             required: boolean;
             /** @description The value of a field left empty */
             default?: string;
-        };
-        /** @description A connection kind file (apiVersion goal/v1, kind ConnectionKind, metadata, spec) as JSON, checked against contracts/definitions/connection-kind.schema.json */
-        ConnectionKindFile: {
-            [key: string]: unknown;
-        };
-        ConnectionList: {
-            connections: components["schemas"]["Connection"][];
         };
         /** @description An organization's connection (spec 4 §4.3), never a secret value */
         Connection: {
@@ -8369,33 +8176,6 @@ export interface components {
             id: string;
             name: string;
         };
-        NewConnection: {
-            name: components["schemas"]["ConnectionName"];
-            kind: string;
-            description?: string;
-            /** @description The kind's non-secret values */
-            fields?: {
-                [key: string]: string;
-            };
-            /** @description The kind's secret values; never answered */
-            secrets?: {
-                [key: string]: string;
-            };
-        };
-        ConnectionPatch: {
-            name?: components["schemas"]["ConnectionName"];
-            description?: string;
-            /** @description Every non-secret value (replaces them all) */
-            fields?: {
-                [key: string]: string;
-            };
-            /** @description The secret fields to replace, by name; an empty value clears an optional one */
-            secrets?: {
-                [key: string]: string;
-            };
-            /** @description Every tool's mode: replaces them all, so send the full list (a tool left out goes back to allow). Only for a connection whose kind has an MCP server; a tool named twice is refused. */
-            tools?: components["schemas"]["ConnectionTool"][];
-        };
         /** @description 3 to 40 lowercase letters, digits and inner dashes, starting with a letter; an agent gets it as the env variable of the name upper-cased with each - turned into _, which must not be one reserved for the platform */
         CredentialName: string;
         /**
@@ -8413,43 +8193,6 @@ export interface components {
         /** @description Per factory id, the agents that get it in their run's box as env */
         CredentialAgents: {
             [key: string]: string[];
-        };
-        /**
-         * @description How requests are signed and name their event. generic: X-Goal-Signature: sha256=<hex HMAC-SHA256 of the body> and the event in the body's event field; github: GitHub's X-Hub-Signature-256 and X-GitHub-Event.
-         * @enum {string}
-         */
-        WebhookKind: "generic" | "github";
-        NewWebhookEndpoint: {
-            /** @description A slug unique within the factory, the one a trigger's on: webhook.<name> names */
-            name: string;
-            kind: components["schemas"]["WebhookKind"];
-        };
-        WebhookEndpointList: {
-            endpoints: components["schemas"]["WebhookEndpoint"][];
-        };
-        /** @description A webhook endpoint open to the factory, never its signing secret */
-        WebhookEndpoint: {
-            id: string;
-            name: string;
-            /** @description A factory endpoint's kind; an organization webhook reads as github for sender github, generic otherwise */
-            kind: components["schemas"]["WebhookKind"];
-            /** @description Its sender; a factory endpoint of kind generic reads as standard */
-            sender: components["schemas"]["WebhookSender"];
-            /** @description The path senders post to, /hooks/{id}, on goald's public origin */
-            address: string;
-            /** @description A factory endpoint's label for its signing secret, <name>-hook-secret, sealed on the endpoint, so no secret has this name; an organization webhook's is the name of the organization secret that signs it. */
-            secret_name: string;
-            /** Format: date-time */
-            created_at: string;
-            /**
-             * Format: date-time
-             * @description When its secret was last replaced; null when it never was
-             */
-            rotated_at: string | null;
-            /** @description The names of the current definition's triggers it feeds, in definition order */
-            triggers: string[];
-            /** @description The last 7 UTC days, oldest first, today last, each zero-filled */
-            days: components["schemas"]["WebhookDeliveryDay"][];
         };
         /**
          * @description How a webhook is signed and names its events (ADR 0040 decision 12). github: X-Hub-Signature-256; gitlab: X-Gitlab-Token; standard: Standard Webhooks' webhook-signature; pagerduty: X-PagerDuty-Signature; sentry: Sentry-Hook-Signature; token: a shared value in one header, for a sender that can do nothing else.
@@ -8544,11 +8287,6 @@ export interface components {
             /** @description Deliveries accepted */
             delivered: number;
             refused: number;
-        };
-        /** @description An endpoint with its signing secret, answered only by createWebhookEndpoint and rotateWebhookSecret and never readable again. */
-        CreatedWebhookEndpoint: components["schemas"]["WebhookEndpoint"] & {
-            /** @description The signing secret: 32 random bytes as 64 lower-case hex characters. Senders give this string as the HMAC-SHA256 key (its ASCII bytes), as GitHub's webhook secret field takes it. */
-            secret: string;
         };
         /**
          * @description refused, with its reason; accepted, with no trigger matched; created, an item
@@ -9119,34 +8857,6 @@ export interface components {
             /** Format: date-time */
             at: string;
         };
-        /** @description What a code host connection reaches (GET …/connections/{connection}/repositories) */
-        RepositoryList: {
-            /** @description The account the connection's credential signs in as */
-            login: string;
-            /** @description The owner the repositories belong to */
-            owner: string;
-            /** @description The account first, then its organizations */
-            owners: components["schemas"]["RepositoryOwner"][];
-            /** @description The most recently updated first, at most 100 */
-            repositories: components["schemas"]["Repository"][];
-            /** @description The owner has more repositories than the 100 answered */
-            truncated: boolean;
-        };
-        RepositoryOwner: {
-            login: string;
-            /** @enum {string} */
-            kind: "user" | "organization";
-        };
-        Repository: {
-            /** @description <owner>/<name> */
-            full_name: string;
-            /** @description Its https clone URL */
-            clone_url: string;
-            /** @description The largest first, at most 3 */
-            languages: string[];
-            /** Format: date-time */
-            updated_at: string;
-        };
         /** @description The data of one `event: connection` on /v1/orgs/{org}/stream; it carries no value */
         ConnectionEvent: {
             connection_id: string;
@@ -9435,14 +9145,10 @@ export interface components {
         SavedViewRef: string;
         /** @description The organization webhook's name or id */
         WebhookRef: string;
-        /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-        WebhookEndpointRef: string;
         /** @description A person's user id */
         UserRef: string;
         /** @description The organization's slug or id */
         OrgRef: string;
-        /** @description The connection's name */
-        ConnectionRef: string;
         /** @description The credential's name */
         CredentialRef: string;
         /** @description The secret's name */
@@ -9453,8 +9159,6 @@ export interface components {
         KnowledgeFilePath: string;
         /** @description The knowledge document's id */
         DocumentRef: string;
-        /** @description The connection kind's name */
-        KindRef: string;
         /** @description The factory's metadata.id or metadata.name */
         FactoryRef: string;
         /** @description The draft request's id */
@@ -12020,7 +11724,7 @@ export interface operations {
     getIntake: {
         parameters: {
             query?: {
-                /** @description How many of the newest items the sources count (default 48) */
+                /** @description How many of the newest items `items`, `from` and `to` count (default 48) */
                 items?: number;
                 /** @description The days origins count over, ending now (default 30d) */
                 window?: "7d" | "30d" | "90d";
@@ -12860,178 +12564,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FactoryRepositoryTestList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listWebhookEndpoints: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The endpoints */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookEndpointList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    createWebhookEndpoint: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewWebhookEndpoint"];
-            };
-        };
-        responses: {
-            /** @description The endpoint with its signing secret */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreatedWebhookEndpoint"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    deleteWebhookEndpoint: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    rotateWebhookSecret: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The endpoint with its new signing secret */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreatedWebhookEndpoint"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listWebhookDeliveries: {
-        parameters: {
-            query?: {
-                limit?: number;
-                /** @description The next_after of the previous page; deliveries received before it */
-                after?: string;
-            };
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deliveries, newest first */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookDeliveryPage"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getWebhookDelivery: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The factory's metadata.id or metadata.name */
-                factory: components["parameters"]["FactoryRef"];
-                /** @description The webhook endpoint's id, the one in its address /hooks/{id} */
-                endpoint: components["parameters"]["WebhookEndpointRef"];
-                /** @description The delivery's id */
-                delivery: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The delivery */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookDeliveryRequest"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -14257,247 +13789,6 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    listConnectionKinds: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The kinds */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionKindList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    putConnectionKind: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection kind's name */
-                kind: components["parameters"]["KindRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectionKindFile"];
-            };
-        };
-        responses: {
-            /** @description The kind as the organization now sees it */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionKind"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    deleteConnectionKind: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection kind's name */
-                kind: components["parameters"]["KindRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listConnections: {
-        parameters: {
-            query?: {
-                /** @description Only the connections this factory's current version names (its metadata.id or metadata.name) */
-                factory?: string;
-                /** @description Only connections of this kind */
-                kind?: string;
-            };
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The connections */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    createConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewConnection"];
-            };
-        };
-        responses: {
-            /** @description The connection */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Connection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The connection */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Connection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    deleteConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    updateConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectionPatch"];
-            };
-        };
-        responses: {
-            /** @description The connection */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Connection"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    testConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The outcome */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConnectionTestResult"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
     listStandingRules: {
         parameters: {
             query?: {
@@ -14549,35 +13840,6 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    listConnectionRepositories: {
-        parameters: {
-            query?: {
-                /** @description The account or organization whose repositories to list; absent, the connection's own account */
-                owner?: string;
-            };
-            header?: never;
-            path: {
-                /** @description The organization's slug or id */
-                org: components["parameters"]["OrgRef"];
-                /** @description The connection's name */
-                connection: components["parameters"]["ConnectionRef"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The owners and repositories */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RepositoryList"];
-                };
-            };
             default: components["responses"]["Problem"];
         };
     };

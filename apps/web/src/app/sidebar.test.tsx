@@ -12,7 +12,6 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   attentionQuery,
-  connectionsQuery,
   factoriesQuery,
   jonahOverviewQuery,
   meQuery,
@@ -120,7 +119,6 @@ function renderSidebar({
   client.setQueryData(factoriesQuery(org.id).queryKey, list);
   client.setQueryData(meQuery.queryKey, me);
   client.setQueryData(orgsQuery.queryKey, [org]);
-  client.setQueryData(connectionsQuery(org.id).queryKey, []);
   if (att === 'pending') vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
   else if (att === 'error') vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
   else client.setQueryData(attentionQuery(org.id).queryKey, att);
@@ -226,6 +224,19 @@ describe('the sidebar', () => {
     expect(screen.queryByText('Not available yet')).toBeNull();
   });
 
+  it('names a factory by its title, not its slug, in the row and its Expand button', async () => {
+    renderSidebar({ list: [factory('research', { title: 'Deep dive' }), factory('sre')] });
+    const sidebar = await nav();
+
+    const row = within(sidebar).getByRole('link', { name: /Deep dive/ });
+    expect(row.textContent).toContain('Deep dive');
+    expect(row.textContent).not.toContain('research');
+    expect(row.getAttribute('aria-label')).toMatch(/^R Deep dive/);
+    expect(row.getAttribute('href')).toBe('/o/acme/f/research');
+    expect(within(sidebar).getByRole('button', { name: 'Expand Deep dive' })).toBeTruthy();
+    expect(within(sidebar).getByRole('button', { name: 'Expand Sre' })).toBeTruthy();
+  });
+
   it('lists Intake as a link and Jonah as a link in the open factory', async () => {
     renderSidebar({ at: '/o/acme/f/goal' });
     const sidebar = await nav();
@@ -322,15 +333,15 @@ describe('the sidebar', () => {
     const sidebar = await nav();
 
     expect(within(sidebar).getByRole('link', { name: /Needs you/ }).textContent).toContain('waiting on you');
-    expect(within(sidebar).getByRole('link', { name: /^S sre 3 waiting on you/ })).toBeTruthy();
-    expect(within(sidebar).getByRole('link', { name: /^Su support.*andon pulled/ })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: /^S Sre 3 waiting on you/ })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: /^Su Support.*andon pulled/ })).toBeTruthy();
   });
 
   it('starts a factory link’s accessible name with its visible name', async () => {
     renderSidebar();
     const sidebar = await nav();
-    const link = within(sidebar).getByRole('link', { name: /^S sre/ });
-    expect(link.getAttribute('aria-label')).toBe('S sre 3 waiting on you');
+    const link = within(sidebar).getByRole('link', { name: /^S Sre/ });
+    expect(link.getAttribute('aria-label')).toBe('S Sre 3 waiting on you');
     expect(link.textContent?.startsWith('S')).toBe(true);
   });
 
@@ -406,7 +417,7 @@ describe('the sidebar', () => {
     expect(within(sidebar).queryByText('Spend this week')).toBeNull();
     expect(within(sidebar).queryByText(/waiting on you/)).toBeNull();
     expect(within(sidebar).getByRole('link', { name: 'Needs you' })).toBeTruthy();
-    expect(within(sidebar).getByRole('link', { name: /^S sre/ })).toBeTruthy();
+    expect(within(sidebar).getByRole('link', { name: /^S Sre/ })).toBeTruthy();
   });
 
   it('shows only the Factories label and its + with no factories', async () => {
@@ -443,7 +454,7 @@ describe('the sidebar', () => {
       fireEvent.keyDown(document.body, { key: 'c' });
 
       const picker = await screen.findByRole('combobox', { name: 'Factory' });
-      expect(picker.textContent).toBe('goal');
+      expect(picker.textContent).toBe('Goal');
     });
 
     it('starts the picker empty when C is pressed elsewhere', async () => {
@@ -528,7 +539,7 @@ describe('the collapsed rail', () => {
       'Secrets',
       'Knowledge',
     ]);
-    expect(names.slice(8, 11).map((name) => name?.match(/, (\w+) factory/)?.[1])).toEqual(['goal', 'sre', 'support']);
+    expect(names.slice(8, 11).map((name) => name?.match(/, (\w+) factory/)?.[1])).toEqual(['Goal', 'Sre', 'Support']);
     expect(names.slice(11)).toEqual([
       'New factory',
       'Docs',
@@ -594,6 +605,16 @@ describe('the collapsed rail', () => {
     fireEvent.focus(within(await nav()).getByRole('link', { name: 'Access' }));
 
     expect(await screen.findByText('Access')).toBeTruthy();
+  });
+
+  it("shows a factory square's title in its tooltip and keeps the link to its name", async () => {
+    renderSidebar({ list: [factory('research', { title: 'Deep dive' })] });
+    await collapse();
+    const square = within(await nav()).getByRole('link', { name: /Deep dive factory/ });
+    fireEvent.focus(square);
+
+    expect(await screen.findByText('Deep dive')).toBeTruthy();
+    expect(square.getAttribute('href')).toBe('/o/acme/f/research');
   });
 
   it('the collapsed choice survives a remount', async () => {
@@ -673,7 +694,7 @@ describe('the collapsed rail', () => {
     await waitFor(() => expect(rail.getAttribute('aria-busy')).toBe('false'));
     expect(within(rail).getByRole('link', { name: 'Needs you' })).toBeTruthy();
     expect(within(rail).queryByRole('img', { name: /Spend/ })).toBeNull();
-    expect(within(rail).getByRole('link', { name: /sre factory/ })).toBeTruthy();
+    expect(within(rail).getByRole('link', { name: /Sre factory/ })).toBeTruthy();
   });
 
   it('shows only New factory with no factories', async () => {

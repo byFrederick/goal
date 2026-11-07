@@ -88,13 +88,13 @@ func (s *server) GetIntake(ctx context.Context, req gen.GetIntakeRequestObject) 
 
 	l := f.Line()
 
-	w, err := s.intake.ItemSources(ctx, l.FactoryID, last)
+	w, err := s.intake.NewestItems(ctx, l.FactoryID, last)
 	if err != nil {
 		return nil, err
 	}
 
 	out := gen.GetIntake200JSONResponse{Triggers: []gen.IntakeTrigger{}, Suggestions: []gen.TriggerSuggestion{}, Window: &window}
-	tallySources(&out, w)
+	newestItems(&out, w)
 
 	origins, err := s.intake.OriginTally(ctx, l.FactoryID, s.clock.Now().AddDate(0, 0, -days))
 	if err != nil {
@@ -192,6 +192,8 @@ func (s *server) comingUp(ctx context.Context, out *gen.GetIntake200JSONResponse
 		list = append(list, e)
 	}
 
+	s.nameActors(ctx, filers(list, func(c *gen.IntakeComingUp) *gen.Actor { return c.CreatedBy })...)
+
 	out.ComingUp, out.ComingUpTotal = &list, &total
 
 	return nil
@@ -223,17 +225,12 @@ func (s *server) triage(ctx context.Context, name string, factory domain.Factory
 	return out, nil
 }
 
-// openWebhooks are the organization's webhooks among endpoints, the ones open to the factory, by
-// name, each with its state as the factory's triggers make it: receiving when it is enabled and
+// openWebhooks are endpoints, the organization's webhooks open to the factory, by name, each with its state as the factory's triggers make it: receiving when it is enabled and
 // an enabled trigger names it, no_trigger when none does, closed when it is turned off.
 func openWebhooks(endpoints []domain.WebhookEndpoint, triggers []domain.Trigger) *[]gen.IntakeWebhook {
 	out := []gen.IntakeWebhook{}
 
 	for _, e := range endpoints {
-		if e.FactoryID != "" {
-			continue
-		}
-
 		state := gen.Closed
 		if e.Enabled {
 			state = gen.NoTrigger
@@ -505,22 +502,10 @@ func triggerTry(t domain.TriggerTry) gen.TriggerTry {
 	return out
 }
 
-// tallySources fills out's window and source counts from w. Items of no known source (created
-// before their creator recorded one) are left out, so out.Items is always the sum of the sources.
-func tallySources(out *gen.GetIntake200JSONResponse, w domain.SourceWindow) {
-	counts := map[domain.ItemSource]*int{
-		domain.ItemFromPeople: &out.Sources.People, domain.ItemFromCLI: &out.Sources.Cli, domain.ItemFromAPI: &out.Sources.Api,
-		domain.ItemFromSchedule: &out.Sources.Schedule, domain.ItemFromWebhook: &out.Sources.Webhook, domain.ItemFromGitHub: &out.Sources.Github,
-	}
-
-	for _, c := range w.Counts {
-		if n, ok := counts[c.Source]; ok {
-			*n += c.Items
-			out.Items += c.Items
-		}
-	}
-
-	if out.Items > 0 {
+// newestItems fills out's count and days of the factory's newest items from w.
+func newestItems(out *gen.GetIntake200JSONResponse, w domain.ItemWindow) {
+	out.Items = w.Items
+	if w.Items > 0 {
 		out.From, out.To = &openapi_types.Date{Time: dayOf(w.From)}, &openapi_types.Date{Time: dayOf(w.To)}
 	}
 }
@@ -636,7 +621,7 @@ func (r triggerReads) problem(t domain.Trigger) *struct {
 		return nil
 	case domain.TriggerGitHub:
 		for _, e := range r.endpoints {
-			if e.Kind == domain.WebhookGitHub {
+			if e.Sender == domain.SenderGitHub {
 				mine = append(mine, e)
 			}
 		}

@@ -233,8 +233,6 @@ type probe struct {
 const (
 	submitFix  = `{"title":"t","type":"fix"}`
 	noDocument = "00000000-0000-7000-8000-fffffffffffd"
-	// probeHooks are acme's webhook endpoints.
-	probeHooks = "/v1/orgs/acme/factories/acme/webhooks"
 	// probeViews are acme's saved views.
 	probeViews = "/v1/orgs/acme/factories/acme/views"
 )
@@ -367,21 +365,9 @@ var probes = map[string]probe{
 	"getSkillFiles":    {method: http.MethodGet, path: "/v1/orgs/acme/builder/skills/acme/skills/lint/files", org: testOrg},
 	"listAPIKeys":      {method: http.MethodGet, path: "/v1/orgs/acme/api-keys", org: testOrg},
 
-	"listConnectionKinds":  {method: http.MethodGet, path: "/v1/orgs/acme/connection-kinds", org: testOrg},
-	"putConnectionKind":    {method: http.MethodPut, path: "/v1/orgs/acme/connection-kinds/acme-api", body: `{}`, org: testOrg},
-	"deleteConnectionKind": {method: http.MethodDelete, path: "/v1/orgs/acme/connection-kinds/acme-api", org: testOrg},
-	"listConnections":      {method: http.MethodGet, path: "/v1/orgs/acme/connections?factory=acme", org: testOrg, factory: acmeID},
-	"createConnection": {
-		method: http.MethodPost, path: "/v1/orgs/acme/connections", org: testOrg, body: `{"name":"docs","kind":"mcp-server"}`,
-	},
-	"getConnection":              {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs", org: testOrg},
-	"updateConnection":           {method: http.MethodPatch, path: "/v1/orgs/acme/connections/docs", body: `{"description":"d"}`, org: testOrg},
-	"testConnection":             {method: http.MethodPost, path: "/v1/orgs/acme/connections/docs/test", org: testOrg},
-	"listConnectionRepositories": {method: http.MethodGet, path: "/v1/orgs/acme/connections/docs/repositories", org: testOrg},
-	"deleteConnection":           {method: http.MethodDelete, path: "/v1/orgs/acme/connections/docs", org: testOrg},
-	"listStandingRules":          {method: http.MethodGet, path: "/v1/orgs/acme/standing-rules", org: testOrg},
-	"revokeStandingRule":         {method: http.MethodDelete, path: "/v1/orgs/acme/standing-rules/019a4000-0000-7000-8000-0000000000ff", org: testOrg},
-	"listCredentials":            {method: http.MethodGet, path: "/v1/orgs/acme/credentials", org: testOrg},
+	"listStandingRules":  {method: http.MethodGet, path: "/v1/orgs/acme/standing-rules", org: testOrg},
+	"revokeStandingRule": {method: http.MethodDelete, path: "/v1/orgs/acme/standing-rules/019a4000-0000-7000-8000-0000000000ff", org: testOrg},
+	"listCredentials":    {method: http.MethodGet, path: "/v1/orgs/acme/credentials", org: testOrg},
 	"createCredential": {
 		method: http.MethodPost, path: "/v1/orgs/acme/credentials", org: testOrg, body: `{"name":"acme-token","type":"api_key","value":"v"}`,
 	},
@@ -400,16 +386,6 @@ var probes = map[string]probe{
 	"deleteSecret":  {method: http.MethodDelete, path: "/v1/orgs/acme/secrets/acme-token", org: testOrg},
 	"importSecrets": {method: http.MethodPost, path: "/v1/orgs/acme/secrets/import", body: `{"format":"env","text":"A_B=c","dry_run":true}`, org: testOrg},
 
-	"listWebhookEndpoints": {method: http.MethodGet, path: probeHooks, org: testOrg, factory: acmeID},
-	"createWebhookEndpoint": {
-		method: http.MethodPost, path: probeHooks, body: `{"name":"ci-hooks","kind":"generic"}`, org: testOrg, factory: acmeID,
-	},
-	"rotateWebhookSecret":   {method: http.MethodPost, path: probeHooks + "/" + noDocument + "/rotate", org: testOrg, factory: acmeID},
-	"deleteWebhookEndpoint": {method: http.MethodDelete, path: probeHooks + "/" + noDocument, org: testOrg, factory: acmeID},
-	"listWebhookDeliveries": {method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries", org: testOrg, factory: acmeID},
-	"getWebhookDelivery": {
-		method: http.MethodGet, path: probeHooks + "/" + noDocument + "/deliveries/" + noDocument, org: testOrg, factory: acmeID,
-	},
 	"listWebhooks":             {method: http.MethodGet, path: "/v1/orgs/acme/webhooks", org: testOrg},
 	"createWebhook":            {method: http.MethodPost, path: "/v1/orgs/acme/webhooks", body: `{"name":"ci-hooks","sender":"github"}`, org: testOrg},
 	"getWebhook":               {method: http.MethodGet, path: "/v1/orgs/acme/webhooks/ci-hooks", org: testOrg},

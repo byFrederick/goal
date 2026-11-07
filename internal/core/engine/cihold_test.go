@@ -275,7 +275,7 @@ func TestCIHold_UnreadableBlocks(t *testing.T) {
 	}
 
 	reason, _ := blocked[0].Data["reason"].(string)
-	for _, want := range []string{appKey, pushSHA1, "connection " + connGitHub, ghCIPermission} {
+	for _, want := range []string{appKey, pushSHA1, "runtime.repositories entry https://github.com/acme/*", ghCIPermission} {
 		if !strings.Contains(reason, want) {
 			t.Errorf("block reason %q lacks %q", reason, want)
 		}

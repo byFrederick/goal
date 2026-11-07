@@ -18,7 +18,6 @@ export const tokenScopeGroups: readonly { id: TokenGroupId; label: string; scope
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
       { id: 'intake:read', label: 'See intake triggers', needs: 'viewer' },
       { id: 'connection:read', label: 'See connections', needs: null },
-      { id: 'connection:browse', label: 'List the repositories a connection reaches', needs: null },
       { id: 'secret:read', label: 'See secrets', needs: null },
       { id: 'access:read', label: 'See what agents can reach', needs: null },
       { id: 'knowledge:read', label: 'Search the knowledge base', needs: null },

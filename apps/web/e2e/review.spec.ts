@@ -80,7 +80,7 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
     .first()
     .click();
   await page.getByRole('button', { name: 'Set agent to spec-writer' }).first().click();
-  await expect(page.getByRole('combobox', { name: 'Who works at Spec' })).toHaveText(/spec-writer/);
+  await expect(page.getByRole('combobox', { name: 'Who works here at Spec' })).toHaveText(/spec-writer/);
 
   await reviewLink(page).click();
   await expect(alert).toHaveCount(0);
@@ -88,7 +88,7 @@ test('a problem blocks Publish until it is fixed; then v9 runs (flow 3)', async 
   await page.getByRole('textbox', { name: 'What changed, in one line' }).fill('Build also runs pnpm test');
   await publishButton(page).click();
 
-  await expectToast(page, 'goal v9 published');
+  await expectToast(page, 'Goal v9 published');
   // The card keeps the publish's check until the page is left: "v9 is published and running" (MOTION.md, publish succeeds).
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText('v9 is published and running.');
   await expect(versionRow(page, 9)).toContainText('Build also runs pnpm test');
@@ -129,7 +129,7 @@ test('after a publish the editor reads no draft that is gone', async ({ page }) 
   });
 
   await publishButton(page).click();
-  await expectToast(page, 'goal v9 published');
+  await expectToast(page, 'Goal v9 published');
   await expect(page.getByRole('region', { name: 'Publish' })).toContainText('v9 is published and running.');
   await page
     .getByRole('link', { name: /^Line, / })
@@ -195,7 +195,7 @@ test('items waiting at a station the draft removes ask where they go', async ({ 
     'No open items wait at a station it removes',
   );
   await publishButton(page).click();
-  await expectToast(page, 'goal v9 published');
+  await expectToast(page, 'Goal v9 published');
 });
 
 test('Review lists the draft’s kept tests with their results, and Versions shows the watch chips', async ({ page }) => {

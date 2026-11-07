@@ -1,6 +1,6 @@
 ## When you change
 
-CI waits and their polls: `db/migrations/00134_ci_waits.sql` (or a later migration of `ci_waits` or `ci_polls`), `db/queries/ci_waits.sql`, the CI wait methods of `ports.Store` in `internal/core/ports/ports.go` (`OpenCIWait`, `ReplaceCIWaitSHA`, `LeaseDueCIPolls`, `RecordCIPoll`, `OpenCIWaits`, `EndCIWaits`, `CIRounds`), the domain types in `internal/core/domain/ciwait.go`, `internal/adapters/store/postgres/ciwaits.go` or the fake in `internal/core/ports/porttest/ciwaits.go`
+CI waits and their polls: `db/migrations/00139_ci_waits.sql` (or a later migration of `ci_waits` or `ci_polls`), `db/queries/ci_waits.sql`, the CI wait methods of `ports.Store` in `internal/core/ports/ports.go` (`OpenCIWait`, `ReplaceCIWaitSHA`, `LeaseDueCIPolls`, `RecordCIPoll`, `OpenCIWaits`, `EndCIWaits`, `CIRounds`), the domain types in `internal/core/domain/ciwait.go`, `internal/adapters/store/postgres/ciwaits.go` or the fake in `internal/core/ports/porttest/ciwaits.go`
 
 ## Also change
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,16 +30,6 @@ var WebhookSenders = []WebhookSender{SenderGitHub, SenderGitLab, SenderStandard,
 
 // Valid reports whether s is one of WebhookSenders.
 func (s WebhookSender) Valid() bool { return slices.Contains(WebhookSenders, s) }
-
-// Sender is the sender a factory endpoint of kind k reads as: generic is standard's alias for one
-// release (ADR 0040 decision 22).
-func (k WebhookKind) Sender() WebhookSender {
-	if k == WebhookGitHub {
-		return SenderGitHub
-	}
-
-	return SenderStandard
-}
 
 // reservedWebhookNames are the names no organization webhook takes: a trigger's on names a sender
 // or a webhook by the same word (ADR 0040 decision 14).
@@ -68,48 +57,6 @@ func WebhookSecretName(name string) string {
 
 // maxWebhookName is the longest name a webhook or a secret takes.
 const maxWebhookName = 40
-
-// ConvertedWebhookName is the name a factory endpoint called name takes when the conversion moves
-// it to the organization (ADR 0040 decision 15): its own, or, when name is reserved or taken
-// reports it taken, the first free of name-2, name-3…, cut as freeName does.
-func ConvertedWebhookName(name string, taken func(string) bool) string {
-	return freeName(name, func(n string) bool { return slices.Contains(reservedWebhookNames, n) || taken(n) })
-}
-
-// ConvertedSecretName is the secret the conversion makes for the webhook called webhook:
-// WebhookSecretName, or, when taken reports it taken, the first free of its -2, -3… suffixes.
-func ConvertedSecretName(webhook string, taken func(string) bool) string {
-	return freeName(WebhookSecretName(webhook), taken)
-}
-
-// freeName is base, or base with the first suffix -2, -3… that taken does not report, base cut so
-// the result has at most 40 characters and no hyphen before the suffix.
-func freeName(base string, taken func(string) bool) string {
-	if !taken(base) {
-		return base
-	}
-
-	for i := 2; ; i++ {
-		suffix := "-" + strconv.Itoa(i)
-
-		if name := strings.TrimRight(truncate(base, maxWebhookName-len(suffix)), "-") + suffix; !taken(name) {
-			return name
-		}
-	}
-}
-
-// ConvertedEndpoint is a factory endpoint the conversion moved to the organization: its id, the
-// factory it now opens to, its name before and after, and the secret made from its sealed value.
-type ConvertedEndpoint struct {
-	ID        WebhookEndpointID
-	FactoryID FactoryID
-	From      string
-	Name      string
-	Secret    string
-}
-
-// Renamed reports whether the conversion gave c another name.
-func (c ConvertedEndpoint) Renamed() bool { return c.From != c.Name }
 
 // DefaultTokenHeader is the header a token sender's value comes in when its settings name none,
 // as "Authorization: Bearer <value>".
@@ -298,9 +245,6 @@ func (p WebhookPatch) Apply(e WebhookEndpoint) WebhookEndpoint {
 	return e
 }
 
-// OrgLevel reports whether e is the organization's webhook rather than a factory's endpoint.
-func (e WebhookEndpoint) OrgLevel() bool { return e.FactoryID == "" }
-
 // Opening is e's opening to factory f; false when it has none.
 func (e WebhookEndpoint) Opening(f FactoryID) (WebhookOpening, bool) {
 	i := slices.IndexFunc(e.Openings, func(o WebhookOpening) bool { return o.FactoryID == f })
@@ -311,19 +255,15 @@ func (e WebhookEndpoint) Opening(f FactoryID) (WebhookOpening, bool) {
 	return e.Openings[i], true
 }
 
-// OpenTo reports whether factory f receives e's deliveries: e is f's endpoint, or open to f.
+// OpenTo reports whether factory f receives e's deliveries: e is open to f.
 func (e WebhookEndpoint) OpenTo(f FactoryID) bool {
 	_, ok := e.Opening(f)
 
-	return e.FactoryID == f || ok
+	return ok
 }
 
-// Factories are the factories e reaches: its own, or those it is open to, by id.
+// Factories are the factories e is open to, by id.
 func (e WebhookEndpoint) Factories() []FactoryID {
-	if !e.OrgLevel() {
-		return []FactoryID{e.FactoryID}
-	}
-
 	out := make([]FactoryID, 0, len(e.Openings))
 	for _, o := range e.Openings {
 		out = append(out, o.FactoryID)

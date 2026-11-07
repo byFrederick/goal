@@ -32,13 +32,7 @@ export type {
   CompareSide,
   Comparison,
   Connection,
-  ConnectionEvent,
-  ConnectionHit,
   ConnectionKind,
-  ConnectionKindField,
-  ConnectionKindFile,
-  ConnectionPatch,
-  ConnectionTestResult,
   ConstraintCandidate,
   ConstraintReport,
   ConstraintSource,
@@ -122,7 +116,6 @@ export type {
   Metrics,
   MetricsSummary,
   NewApiKey,
-  NewConnection,
   NewDraftRequest,
   NewFactoryRequest,
   NewItem,
@@ -262,10 +255,6 @@ export type CodeHostKind = Schemas['CodeHostKind'];
 export type NotificationTestResult = Schemas['NotificationTestResult'];
 export type NotificationEvents = Schemas['NotificationEvents'];
 export type NotificationChannels = Schemas['NotificationChannels'];
-// What a code host connection reaches (GET …/connections/{connection}/repositories), for the Code step.
-export type RepositoryList = Schemas['RepositoryList'];
-export type RepositoryOwner = Schemas['RepositoryOwner'];
-export type Repository = Schemas['Repository'];
 export type AgentSpend = Schemas['AgentSpend'];
 export type ModelSpend = Schemas['ModelSpend'];
 export type OrgSpend = Schemas['OrgSpend'];
@@ -281,6 +270,8 @@ export type OrgPolicyView = Schemas['OrgPolicyView'];
 export type ToolPolicy = Schemas['ToolPolicy'];
 export type PolicyModel = Schemas['PolicyModel'];
 export type PolicyBoxSize = Schemas['PolicyBoxSize'];
+export type AgentUsage = Schemas['AgentUsage'];
+export type StationUsage = Schemas['StationUsage'];
 export type SpendBudget = Schemas['SpendBudget'];
 export type SpendBudgetState = Schemas['SpendBudgetState'];
 export type SpendDay = Schemas['SpendDay'];

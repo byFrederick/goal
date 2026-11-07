@@ -18,6 +18,13 @@ export const spendLabel: Record<SpendWindow, string> = {
   '90d': 'Spend, last 90 days',
 };
 
+/** The first KPI tile's label: the window's spend, named by its calendar window, not as a budget figure. */
+export const spendTileLabel: Record<SpendWindow, string> = {
+  week: 'Since Monday',
+  month: 'Spend this month',
+  '90d': 'Spend, last 90 days',
+};
+
 const dash = '—';
 
 /** Whole dollars, as budgets are set; "—" for a figure goald did not give. */

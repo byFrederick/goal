@@ -16,6 +16,7 @@ import { authConfigQuery, keys, settingsQuery } from '../../api/queries';
 import type { OrgSettings, OrgSettingsPatch, OrgSummary } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import { TopBarSlot } from '../../app/top-bar';
+import { factoryTitle } from '../../shared/factory';
 import { factoryMark } from '../../shared/marks';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
@@ -239,7 +240,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                     {factories.map((f) => (
                       <Chip key={f.factory_id} tone="plain">
                         <FactoryBadge mark={factoryMark(f, factories)} />
-                        {f.name}
+                        {factoryTitle(f)}
                       </Chip>
                     ))}
                   </div>
@@ -275,7 +276,7 @@ function SettingsScreen({ org, settings }: { org: OrgSummary; settings: OrgSetti
                       const key = `factory:${f.factory_id}` as const;
                       const id = `slots-${f.factory_id}`;
                       return (
-                        <SettingsRow key={f.factory_id} id={id} label={f.name} error={shown(key)}>
+                        <SettingsRow key={f.factory_id} id={id} label={factoryTitle(f)} error={shown(key)}>
                           <Input
                             id={id}
                             value={form.factories[f.factory_id] ?? ''}

@@ -1127,6 +1127,7 @@ func (s *Store) forgetFactory(id domain.FactoryID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	delete(s.exhausted, id)
 	delete(s.factories, id)
 }
 
@@ -1163,6 +1164,7 @@ func (s *Store) deleteFactory(id domain.FactoryID) {
 		s.purgeJonah(org, id)
 	}
 
+	delete(s.exhausted, id)
 	delete(s.factories, id)
 	delete(s.numbers, id)
 	delete(s.factCaps, id)

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -18,6 +19,9 @@ import (
 )
 
 const week = 7 * 24 * time.Hour
+
+// logExhausted is budgetLogs' line for a budget_exhausted log.
+const logExhausted = "budget_exhausted 1"
 
 // logBuffer collects JSON log lines from goroutines.
 type logBuffer struct {
@@ -170,7 +174,7 @@ func TestWeeklyBudget_DrainSkipsAgentClaimsOnly(t *testing.T) {
 		t.Errorf("%d runs started; want only the one claimed under budget", n)
 	}
 
-	if got, want := h.logs.budgetLogs(t), []string{"budget_exhausted 1"}; !slices.Equal(got, want) {
+	if got, want := h.logs.budgetLogs(t), []string{logExhausted}; !slices.Equal(got, want) {
 		t.Errorf("budget logs = %v; want %v", got, want)
 	}
 }
@@ -202,7 +206,7 @@ func TestWeeklyBudget_IgnoresJonahRuns(t *testing.T) {
 
 	h.wait(t, h.e)
 
-	if got := h.logs.budgetLogs(t); slices.Contains(got, "budget_exhausted 1") {
+	if got := h.logs.budgetLogs(t); slices.Contains(got, logExhausted) {
 		t.Errorf("budget logs = %v; want no budget_exhausted", got)
 	}
 
@@ -286,7 +290,7 @@ func TestWeeklyBudget_ResumesWhenWindowMoves(t *testing.T) {
 		t.Errorf("item = %s/%s; want claimed and done once the spend left the window", got.Station, got.State)
 	}
 
-	if got, want := h.logs.budgetLogs(t), []string{"budget_exhausted 1", "budget_resumed 0"}; !slices.Equal(got, want) {
+	if got, want := h.logs.budgetLogs(t), []string{logExhausted, "budget_resumed 0"}; !slices.Equal(got, want) {
 		t.Errorf("budget logs = %v; want %v", got, want)
 	}
 }
@@ -313,7 +317,7 @@ func TestWeeklyBudget_ResumesWhenTheCapRises(t *testing.T) {
 		t.Errorf("item = %s/%s; want claimed and done under the raised cap", got.Station, got.State)
 	}
 
-	if got, want := h.logs.budgetLogs(t), []string{"budget_exhausted 1", "budget_resumed 0"}; !slices.Equal(got, want) {
+	if got, want := h.logs.budgetLogs(t), []string{logExhausted, "budget_resumed 0"}; !slices.Equal(got, want) {
 		t.Errorf("budget logs = %v; want %v", got, want)
 	}
 }
@@ -430,5 +434,157 @@ func TestWeeklyBudget_StopStillCancelsTheRunsOfAPausedLine(t *testing.T) {
 
 	if n := len(h.worker.Runs()); n != 1 {
 		t.Errorf("%d runs started; want nothing claimed while paused", n)
+	}
+}
+
+// since returns since when the store has the factory's weekly budget used up, zero when not.
+func (h *harness) since(t *testing.T) time.Time {
+	t.Helper()
+
+	since, ok, err := h.store.BudgetExhaustedSince(inOrg(t), factoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !ok {
+		return time.Time{}
+	}
+
+	return since
+}
+
+// The first tick that finds the budget used up records its time; later ticks, and another
+// instance on the same store, keep it.
+func TestWeeklyBudget_RecordsSinceOnce(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, budgeted(10, domain.BudgetDrain, 1), porttest.Succeed(`{}`))
+	h.spent(t, t0, 10)
+	h.clock.Advance(time.Hour)
+	first := h.clock.Now()
+
+	h.step(t)
+
+	if got := h.since(t); !got.Equal(first) {
+		t.Fatalf("since = %v; want the first tick's %v", got, first)
+	}
+
+	h.clock.Advance(time.Minute)
+	h.step(t)
+
+	h.e = h.engine(t, h.store) // another instance, which has not seen the line yet
+	h.clock.Advance(time.Minute)
+	h.step(t)
+
+	if got := h.since(t); !got.Equal(first) {
+		t.Errorf("since = %v; want the first tick's %v kept", got, first)
+	}
+
+	if got, want := h.logs.budgetLogs(t), []string{logExhausted, logExhausted}; !slices.Equal(got, want) {
+		t.Errorf("budget logs = %v; want %v, one per instance", got, want)
+	}
+}
+
+// Once the budget has room again, whether the window moved, the cap rose or the budget was
+// removed, the since is cleared; an instance that starts clears one another left behind.
+func TestWeeklyBudget_ClearsSinceWhenTheBudgetHasRoom(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		room func(t *testing.T, h *harness)
+	}{
+		{"the window moves", func(_ *testing.T, h *harness) { h.clock.Advance(week + time.Second) }},
+		{"the cap rises", func(t *testing.T, h *harness) {
+			t.Helper()
+			h.setWeekly(t, 20)
+		}},
+		{"the budget is removed", func(t *testing.T, h *harness) {
+			t.Helper()
+			h.setWeekly(t, 0)
+		}},
+		{"a restart finds room", func(t *testing.T, h *harness) {
+			t.Helper()
+			h.clock.Advance(week + time.Second)
+			h.e = h.engine(t, h.store)
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, budgeted(10, domain.BudgetDrain, 1), porttest.Succeed(`{}`))
+			h.spent(t, t0, 10)
+			h.step(t)
+
+			if h.since(t).IsZero() {
+				t.Fatal("since not recorded while the budget is used up")
+			}
+
+			tc.room(t, h)
+			h.step(t)
+
+			if got := h.since(t); !got.IsZero() {
+				t.Errorf("since = %v; want it cleared once the budget has room", got)
+			}
+		})
+	}
+}
+
+// setWeekly publishes the line again with a weekly budget of usd (0: none).
+func (h *harness) setWeekly(t *testing.T, usd float64) {
+	t.Helper()
+
+	l := h.line
+	l.Runtime.WeeklyUSD = usd
+
+	if err := h.e.SetLines([]domain.Line{l}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// failingMarks fails the first MarkBudgetExhausted made through a store.
+type failingMarks struct {
+	ports.Store
+
+	failed atomic.Bool
+}
+
+func (s *failingMarks) MarkBudgetExhausted(ctx context.Context, f domain.FactoryID, since time.Time) error {
+	if s.failed.CompareAndSwap(false, true) {
+		return errors.New("the database is away")
+	}
+
+	return s.Store.MarkBudgetExhausted(ctx, f, since)
+}
+
+// A mark that fails is logged and tried again on the next tick, which logs no second transition.
+func TestWeeklyBudget_RetriesAFailedMark(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, budgeted(10, domain.BudgetDrain, 1), porttest.Succeed(`{}`))
+	h.spent(t, t0, 10)
+	h.e = h.engine(t, &failingMarks{Store: h.store})
+
+	h.step(t)
+
+	if got := h.since(t); !got.IsZero() {
+		t.Fatalf("since = %v; want none after the failed mark", got)
+	}
+
+	if !strings.Contains(h.logs.String(), `"msg":"budget_record_failed"`) {
+		t.Errorf("logs lack budget_record_failed:\n%s", h.logs.String())
+	}
+
+	h.clock.Advance(time.Minute)
+	h.step(t)
+
+	if got, want := h.since(t), h.clock.Now(); !got.Equal(want) {
+		t.Errorf("since = %v; want the retrying tick's %v", got, want)
+	}
+
+	if got, want := h.logs.budgetLogs(t), []string{logExhausted, "budget_record_failed 0"}; !slices.Equal(got, want) {
+		t.Errorf("budget logs = %v; want %v", got, want)
 	}
 }

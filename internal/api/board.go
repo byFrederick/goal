@@ -469,6 +469,8 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 		out = append(out, c)
 	}
 
+	s.nameActors(ctx, filers(out, func(c *gen.ItemCard) *gen.Actor { return c.CreatedBy })...)
+
 	return out, nil
 }
 

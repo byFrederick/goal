@@ -33,14 +33,14 @@ Because spend is checked once per tick and nothing is reserved when work is clai
 
 Two limits apply to each run rather than to the factory:
 
-- `runtime.budget.perItemUsd` caps what one task may cost. An agent can set its own cap.
+- `runtime.budget.perItemUsd` caps what one agent run may cost (the web UI calls it "Most per run"). An item that passes through several agent stations can spend it at each. An agent can set its own cap.
 - `runtime.budget.maxTurnsPerTask` caps the turns of one task.
 
 The engine passes these to each run as limits. It does not add them up against the weekly budget.
 
 ## Settings that are not enforced
 
-- `runtime.budget.dailyUsd` is accepted by the schema. The engine does not enforce a daily cap. Only the weekly budget stops work.
+- `runtime.budget.dailyUsd` is accepted by the schema, but nothing enforces it and the web UI no longer sets it. Only the weekly budget stops work. The day figure Home shows as Spend today is the weekly budget ÷ 7.
 
 ## Trigger limits
 

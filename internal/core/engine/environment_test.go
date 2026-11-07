@@ -16,10 +16,17 @@ import (
 
 // The test organization's secrets (ADR 0037) and their values.
 const (
-	secClaude  = "claude-key"
-	secGitHub  = "github-token"
-	secDB      = "db-pass"
-	secTickets = "tickets-key"
+	secClaude = "claude-key"
+	secModel  = "model-key"
+	secRepo   = "repo-token"
+
+	secGitHubEntry = "github-entry"
+	secGitLabEntry = "gitlab-entry"
+	secGHEEntry    = "ghe-entry"
+	gheTokenValue  = "ghe-token-for-tests-3435" //nolint:gosec // a test value
+	secGitHub      = "github-token"
+	secDB          = "db-pass"
+	secTickets     = "tickets-key"
 
 	apiKeyValue      = "sk-ant-api03-key-for-tests-2223"   //nolint:gosec // a test value
 	oauthTokenValue  = "sk-ant-oat01-token-for-tests-2425" //nolint:gosec // a test value
@@ -42,7 +49,7 @@ const envGatewayURL = "GOAL_GATEWAY_URL"
 // run on secrets never opens.
 func secretsLine() domain.Line {
 	line := lineOf(agentStation(stWork, agWorker, 1, 1))
-	line.Runtime.ModelConnection, line.Runtime.ModelKey = "", "{{"+secClaude+"}}"
+	line.Runtime.ModelKey = "{{" + secClaude + "}}"
 	line.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit, Token: "{{" + secGitHub + "}}"}
 	line.Connections = []string{connTracker}
 	line.Agents = agentConnections(line.Agents, agWorker, connTracker)
@@ -430,7 +437,7 @@ func TestRunTask_JonahOnSecrets(t *testing.T) {
 	h.addSecrets(t)
 
 	req := jonahRequest()
-	req.ModelConnection, req.ModelKey = "", "{{"+secClaude+"}}"
+	req.ModelKey = "{{" + secClaude + "}}"
 
 	if _, err := h.e.RunTask(t.Context(), req); err != nil {
 		t.Fatalf("RunTask: %v", err)
@@ -559,6 +566,10 @@ func TestRunTask_EnvironmentSizeAndImage(t *testing.T) {
 
 			if e := h.eventsOf(it.ID, domain.EventSandboxStarted); len(e) != 1 || e[0].Data["size"] != string(tt.wantSize) {
 				t.Errorf("sandbox_started %v; want one of size %s", e, tt.wantSize)
+			}
+
+			if runs := h.runs(t, testOrg, it.ID); len(runs) != 1 || runs[0].BoxSize != tt.wantSize {
+				t.Errorf("%d runs, the first of box size %q; want one of %s", len(runs), runs[0].BoxSize, tt.wantSize)
 			}
 		})
 	}
@@ -845,5 +856,59 @@ func (h *harness) notReported(t *testing.T, it domain.Item, value string) {
 		if strings.Contains(r, value) {
 			t.Errorf("a secret's value reached what the run reports:\n%s", r)
 		}
+	}
+}
+
+// A line on secrets that names no runtime.modelKey blocks its item before any run, with the
+// refusal as the reason and the code model_key_missing; a refusal without a code, a form
+// connections replaced, blocks with the reason alone.
+func TestAdmit_LineOnSecretsWithoutModelKeyBlocksWithCode(t *testing.T) {
+	t.Parallel()
+
+	noKey := secretsLine()
+	noKey.Runtime.ModelKey = ""
+
+	removed := lineOf(agentStation(stWork, agWorker, 1, 1))
+	removed.Removed = []string{"spec.agents[0].env (env-reference-removed)"}
+
+	tests := map[string]struct {
+		line domain.Line
+		code any // data.code; nil for no key
+	}{
+		"on secrets without a model key": {noKey, domain.BlockModelKeyMissing},
+		"a removed form":                 {removed, nil},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, tt.line, porttest.Succeed(`{}`))
+			it := h.submit(t, domain.NewItem{})
+
+			h.step(t)
+
+			if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+				t.Fatalf("item %s, want blocked", got.State)
+			}
+
+			blocked := h.eventsOf(it.ID, domain.EventBlocked)
+			if len(blocked) != 1 {
+				t.Fatalf("%d blocked events, want 1", len(blocked))
+			}
+
+			if reason := blocked[0].Data["reason"]; reason != tt.line.Refusal() {
+				t.Errorf("reason %q, want the refusal %q", reason, tt.line.Refusal())
+			}
+
+			code, ok := blocked[0].Data["code"]
+			if code != tt.code || ok != (tt.code != nil) {
+				t.Errorf("data.code %v (present %v), want %v", code, ok, tt.code)
+			}
+
+			if runs := h.worker.Runs(); len(runs) != 0 {
+				t.Errorf("%d runs started, want none", len(runs))
+			}
+		})
 	}
 }

@@ -56,12 +56,12 @@ func (e *Engine) itemCodeRepositories(ctx context.Context, l domain.Line, item d
 func repositoryURL(key string) string { return "https://" + key }
 
 // repositoryHost is the repository at url (a repository's, or a pull request's) on one of the
-// organization's code hosts, opened for the engine's use on the item to read, with the code host
+// organization's code hosts, opened for the engine to read, with the code host
 // that serves it and its token: the token of the entry of runtime.repositories that covers it, a
 // read entry's first (domain.TokenEntry), opened through OrgSecrets for the line's factory
-// (entryToken); for a repository no entry with a token covers, the line's code host connection or
-// runtime.repository.token (loginTargets). Merges pick their tokens with mergeTargets instead.
-func (e *Engine) repositoryHost(ctx context.Context, l domain.Line, it domain.Item, url string) (mergeTarget, error) {
+// (entryToken); for a repository no entry with a token covers, runtime.repository.token
+// (repositoryTargets). Merges pick their tokens with mergeTargets instead.
+func (e *Engine) repositoryHost(ctx context.Context, l domain.Line, url string) (mergeTarget, error) {
 	targets, err := e.codeRepositories(ctx, l, []string{url})
 	if err != nil {
 		return mergeTarget{}, err
@@ -69,7 +69,7 @@ func (e *Engine) repositoryHost(ctx context.Context, l domain.Line, it domain.It
 
 	entry, ok := domain.TokenEntry(l.Runtime.Repositories, targets[0].repo.Key(), true)
 	if !ok || entry.Token == "" {
-		if targets, err = e.loginTargets(ctx, l, []string{url}, domain.ConnectionUse{By: domain.EngineActor, Item: it.ID}); err != nil {
+		if targets, err = e.repositoryTargets(ctx, l, []string{url}); err != nil {
 			return mergeTarget{}, err
 		}
 
@@ -113,7 +113,7 @@ func (e *Engine) baseCommits(ctx context.Context, log *slog.Logger, c claimed) (
 	shas := make(map[string]string, len(repos))
 
 	for _, r := range repos {
-		sha, err := e.branchHead(ctx, l, c.item, r.url)
+		sha, err := e.branchHead(ctx, l, r.url)
 		if err != nil {
 			log.WarnContext(ctx, "base commit not recorded", slog.String("repository", r.url), slog.Any("error", err))
 
@@ -127,8 +127,8 @@ func (e *Engine) baseCommits(ctx context.Context, log *slog.Logger, c claimed) (
 }
 
 // branchHead reads the head of the default branch of the repository at url.
-func (e *Engine) branchHead(ctx context.Context, l domain.Line, it domain.Item, url string) (string, error) {
-	t, err := e.repositoryHost(ctx, l, it, url)
+func (e *Engine) branchHead(ctx context.Context, l domain.Line, url string) (string, error) {
+	t, err := e.repositoryHost(ctx, l, url)
 	if err != nil {
 		return "", err
 	}
@@ -199,7 +199,7 @@ func (e *Engine) changedSince(ctx context.Context, l domain.Line, it domain.Item
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gateMergeTimeout)
 	defer cancel()
 
-	t, err := e.repositoryHost(ctx, l, it, r.url)
+	t, err := e.repositoryHost(ctx, l, r.url)
 	if err != nil {
 		return "", err
 	}

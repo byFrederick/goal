@@ -39,7 +39,6 @@ const intake: Intake = {
   items: 48,
   from: '2026-10-20',
   to: '2026-10-26',
-  sources: { github: 22, people: 11, cli: 0, api: 0, schedule: 7, webhook: 2 },
   window: '30d',
   origins: { person: 160, plan: 377, trigger: 4, follow_up: 31 },
   coming_up: [
@@ -188,6 +187,17 @@ describe('IntakePage', () => {
     expect(within(triage).getByText('61')).toBeTruthy();
     expect(within(triage).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe('/o/acme/f/widgets/items/570');
     expect(within(triage).getByText('Join it when widgets#525 lands')).toBeTruthy();
+
+    // Each row opens its item from one stretched ref link; Open is the only other link, and none is nested.
+    const [first, waiting] = within(triage).getAllByRole('listitem') as [HTMLElement, HTMLElement];
+    const links = (row: HTMLElement) => within(row).getAllByRole('link');
+    expect(links(first).map((l) => l.getAttribute('href'))).toEqual([
+      '/o/acme/f/widgets/items/570',
+      '/o/acme/f/widgets/items/570',
+    ]);
+    expect(links(waiting)).toHaveLength(1);
+    expect(links(waiting)[0]?.getAttribute('href')).toBe('/o/acme/f/widgets/items/525');
+    for (const link of within(triage).getAllByRole('link')) expect(link.querySelector('a')).toBeNull();
     cleanup();
 
     vi.mocked(getIntake).mockResolvedValue({ ...intake, triage: null });

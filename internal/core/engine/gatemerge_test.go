@@ -21,14 +21,14 @@ const (
 )
 
 // gateMergeLine is build (an agent that reports pull requests) → review (a gate whose approval
-// merges) → done, with the organization's github and gitlab connections.
+// merges) → done, with mergeEntries.
 func gateMergeLine() domain.Line {
 	review := agentStation(stReview, agReviewer, 1, 1)
 	review.Gate = &domain.Gate{OnReject: stBuild, MaxRework: 2}
 	review.Action = domain.ActionMerge
 
 	l := lineOf(agentStation(stBuild, agWorker, 1, 1), review)
-	l.Connections = []string{connGitHub, connGitLab}
+	l.Runtime.Repositories = mergeEntries()
 
 	return l
 }
@@ -74,15 +74,15 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name   string
-		output string   // the build's output; empty: names app#7
-		conns  []string // nil: github and gitlab
-		pr     func(*ports.PullRequest)
-		reason string
+		name    string
+		output  string                   // the build's output; empty: names app#7
+		entries []domain.RepositoryEntry // nil: mergeEntries
+		pr      func(*ports.PullRequest)
+		reason  string
 	}{
 		{name: "closed", pr: func(pr *ports.PullRequest) { pr.Open = false }, reason: "is closed"},
 		{name: "no pull request in the outputs", output: `{"summary":"done"}`, reason: "no output names a pull_request"},
-		{name: "no connection serves the host", conns: []string{}, reason: "no connection of the factory"},
+		{name: "no entry covers the repository", entries: mergeEntries()[1:], reason: "no entry of runtime.repositories covers"},
 	}
 
 	for _, tt := range tests {
@@ -95,8 +95,8 @@ func TestGateMerge_RefusedBlocksAndRetrySkipsMerged(t *testing.T) {
 			}
 
 			line := gateMergeLine()
-			if tt.conns != nil {
-				line.Connections = tt.conns
+			if tt.entries != nil {
+				line.Runtime.Repositories = tt.entries
 			}
 
 			h := newHarness(t, line, byAgent(map[string]string{agWorker: output, agReviewer: approve}))
@@ -207,10 +207,7 @@ func (h *harness) expectEngineMerged(t *testing.T, item domain.ItemID, n int) {
 		t.Errorf("touches %+v, want none: the engine merged", touches)
 	}
 
-	if used := h.mergesUsed(t, item); len(used) != 1 || used[0].Data["name"] != connGitHub ||
-		used[0].Actor != domain.EngineActor || used[0].Data["run_id"] != nil {
-		t.Errorf("connection.used of the merge %+v; want github only, by the engine, naming no run", used)
-	}
+	h.expectMergeUsed(t, item, secGitHubEntry)
 }
 
 // expectBlockedAtGate fails unless item is blocked at the review gate, with a blocked event whose
@@ -368,7 +365,7 @@ const (
 // landing station.
 func landingLine() domain.Line {
 	l := gateMergeLine()
-	l.Runtime.Repository = domain.Repository{URL: repoURL, Connection: connGit}
+	l.Runtime.Repository = domain.Repository{URL: repoURL, Token: "{{" + secRepo + "}}"}
 	l.Flow.Assemblies.Integration = domain.IntegrationPolicy{Mode: domain.IntegrationModeBranch, MinParts: 1}
 
 	return l

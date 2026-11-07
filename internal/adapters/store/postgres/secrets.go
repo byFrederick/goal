@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -354,15 +355,6 @@ func (t secretTable) delete(ctx context.Context, name string, by domain.Actor) e
 			return err
 		}
 
-		users, err := q.CredentialUsers(ctx, name)
-		if err != nil {
-			return err
-		}
-
-		if len(users) > 0 {
-			return fmt.Errorf("%s %q is used by connections %s: %w", t.kind.noun, name, strings.Join(users, ", "), ports.ErrConflict)
-		}
-
 		sources, err := q.SecretKnowledgeSources(ctx, name)
 		if err != nil {
 			return err
@@ -641,4 +633,17 @@ func resealRows(key ports.MasterKey, kind string, rows []db.StaleSealedSecretsRo
 	}
 
 	return len(rows), nil
+}
+
+// uniqueNames are names without repeats, in their first order.
+func uniqueNames(names []string) []string {
+	out := make([]string, 0, len(names))
+
+	for _, n := range names {
+		if !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+
+	return out
 }

@@ -11,7 +11,7 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import { publishDraft } from '../../api/definitions';
+import { openDraft, publishDraft, saveDraftSection } from '../../api/definitions';
 import type { Factory, OrgSummary, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
 import { OrgContext } from '../../shared/org';
@@ -31,6 +31,8 @@ const api = vi.hoisted(() => ({
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
   getFactory: vi.fn(async () => api.factory as Factory),
+  getVersionModel: vi.fn(async () => ({ model: api.model, ranges: {} }) as never),
+  openDraft: vi.fn(async () => ({ revision: 1 }) as never),
   getDraft: vi.fn(async () => ({ base: null, revision: 1 }) as never),
   getDraftModel: vi.fn(
     async () =>
@@ -70,6 +72,16 @@ const factoryId = '6f1d2c3a-4b5e-4f70-8a9b-0c1d2e3f4a5b';
 
 function setFactory() {
   api.factory = { id: factoryId, name: 'software', draft: { revision: 1 }, current: null } as unknown as Factory;
+}
+
+/** A published factory with no draft: version 7 runs. */
+function setPublished() {
+  api.factory = {
+    id: factoryId,
+    name: 'software',
+    draft: null,
+    current: { id: 'version-7', number: 7 },
+  } as unknown as Factory;
 }
 
 /** A draft with two stations and no budget or targets: the picture's defaults show until they are set. */
@@ -141,6 +153,32 @@ function lastSaved<T>(section: Section): T {
 }
 
 describe('step 5, set budgets and targets', () => {
+  it('keeps the code choice and repository when Continue goes to the intake step', async () => {
+    const router = renderStep(
+      `/o/acme/get-started/budget?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/intake'));
+    expect(router.state.location.search).toMatchObject({
+      factory: factoryId,
+      access: 'write',
+      url: 'https://github.com/acme/app',
+      secret: 'github-token',
+      template: 'starter',
+    });
+  });
+
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      `/o/acme/get-started/budget?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/line');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('sends the person back to step 3 when the URL has no factory', async () => {
     renderStep('/o/acme/get-started/budget');
     expect(await screen.findByText('Choose a template first, then set its budgets.')).toBeTruthy();
@@ -158,24 +196,35 @@ describe('step 5, set budgets and targets', () => {
     renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
     expect(await screen.findByRole('heading', { level: 1, name: 'Set budgets and targets' })).toBeTruthy();
     expect(
-      screen.getByText('Goal stops starting new work when a budget is spent, so a busy day never surprises you.'),
+      screen.getByText('Goal stops starting new work when the last 7 days’ spend reaches the budget.'),
     ).toBeTruthy();
+    expect(screen.queryByText(/busy day/)).toBeNull();
+    expect(screen.queryByRole('slider', { name: 'A day' })).toBeNull();
 
-    const day = screen.getByRole('slider', { name: 'A day' }) as HTMLInputElement;
-    expect(day.min).toBe('10');
-    expect(day.max).toBe('500');
-    expect(day.value).toBe('150');
-    expect(screen.getByText('fits about 48 items')).toBeTruthy();
+    const week = screen.getByRole('slider', { name: 'A week' }) as HTMLInputElement;
+    expect(week.min).toBe('50');
+    expect(week.max).toBe('2000');
+    expect(week.step).toBe('50');
+    expect(week.value).toBe('800');
+    expect(screen.getByText('about $114 a day')).toBeTruthy();
 
-    expect(screen.getByText('covers 5 full days')).toBeTruthy();
-    expect(screen.getByText('4 times the average')).toBeTruthy();
-    expect((screen.getByRole('slider', { name: 'Most per item' }) as HTMLInputElement).value).toBe('12');
+    expect(screen.getByText('one agent run, 4 times the average item')).toBeTruthy();
+    expect((screen.getByRole('slider', { name: 'Most per run' }) as HTMLInputElement).value).toBe('12');
+    expect(screen.queryByRole('slider', { name: 'Most per item' })).toBeNull();
 
     expect(screen.getByText('~$31')).toBeTruthy();
     expect(screen.getByText(/at about \$3\.10 each for a typical item/)).toBeTruthy();
 
     const exhausted = screen.getByRole('group', { name: 'When a budget runs out' });
     expect(within(exhausted).getByRole('radio', { name: /Finish what's started/ })).toBeTruthy();
+    expect(
+      screen.getByText('Running items finish; nothing new starts until the last 7 days’ spend is under the budget.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/until tomorrow/)).toBeNull();
+    const tip = within(exhausted).getByRole('button', { name: 'About when a budget runs out' });
+    const described = tip.getAttribute('aria-describedby');
+    expect(described).toBeTruthy();
+    expect(document.getElementById(described ?? '')?.textContent).toContain('no reset at midnight');
     expect(within(exhausted).getByRole('radio', { name: /Stop everything/ })).toBeTruthy();
 
     expect(screen.getByRole('textbox', { name: 'Target, items a day' })).toBeTruthy();
@@ -183,14 +232,18 @@ describe('step 5, set budgets and targets', () => {
     expect(screen.getByText('hours')).toBeTruthy();
   });
 
-  it('writes a slider’s value to the draft and shows it on the Budget card', async () => {
+  it('shows the week’s day share and the Budget card as the week changes, and writes no daily budget', async () => {
     renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
-    const day = (await screen.findByRole('slider', { name: 'A day' })) as HTMLInputElement;
-    fireEvent.change(day, { target: { value: '200' } });
-    fireEvent.blur(day);
-    await waitFor(() => expect(lastSaved<{ budget?: { daily_usd?: number } }>('review').budget?.daily_usd).toBe(200));
-    expect(screen.getByText('$200 a day, $800 a week')).toBeTruthy();
-    expect(screen.getByText('fits about 65 items')).toBeTruthy();
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    expect(screen.getByText('$800 a week, about $114 a day')).toBeTruthy();
+    fireEvent.change(week, { target: { value: '1400' } });
+    fireEvent.blur(week);
+    await waitFor(() =>
+      expect(lastSaved<{ budget?: { weekly_usd?: number } }>('review').budget?.weekly_usd).toBe(1400),
+    );
+    expect(screen.getByText('about $200 a day')).toBeTruthy();
+    expect(screen.getByText('$1,400 a week, about $200 a day')).toBeTruthy();
+    expect(lastSaved<{ budget?: Record<string, unknown> }>('review').budget).not.toHaveProperty('daily_usd');
   });
 
   it('writes the exhaustion choice, the weekly and per-item budgets and both targets to the draft', async () => {
@@ -202,7 +255,7 @@ describe('step 5, set budgets and targets', () => {
       expect(lastSaved<{ budget?: { weekly_usd?: number } }>('review').budget?.weekly_usd).toBe(1000),
     );
 
-    const perItem = screen.getByRole('slider', { name: 'Most per item' });
+    const perItem = screen.getByRole('slider', { name: 'Most per run' });
     fireEvent.change(perItem, { target: { value: '20' } });
     fireEvent.blur(perItem);
     await waitFor(() =>
@@ -245,7 +298,8 @@ describe('step 5, set budgets and targets', () => {
     });
     // The defaults the draft left unset are saved before it is published.
     const review = lastSaved<{ budget?: Record<string, unknown> }>('review');
-    expect(review.budget).toMatchObject({ daily_usd: 150, weekly_usd: 800, per_item_usd: 12, on_exhausted: 'drain' });
+    expect(review.budget).toMatchObject({ weekly_usd: 800, per_item_usd: 12, on_exhausted: 'drain' });
+    expect(review.budget).not.toHaveProperty('daily_usd');
     expect(lastSaved<{ flow?: { targets?: Record<string, number> } }>('line').flow?.targets).toMatchObject({
       throughput_per_day: 10,
       lead_time_hours: 48,
@@ -332,5 +386,64 @@ describe('step 5, set budgets and targets', () => {
     expect(href).toContain('/o/acme/get-started/line');
     expect(href).toContain(`factory=${factoryId}`);
     expect(screen.queryByText(/spec|\/line\//)).toBeNull();
+  });
+});
+
+describe('step 5 on a published factory with no draft', () => {
+  beforeEach(() => {
+    setPublished();
+    setDraft({
+      review: { budget: { weekly_usd: 600, per_item_usd: 9, on_exhausted: 'stop' } },
+      line: {
+        stations: [
+          { id: 'build', name: 'Build', kind: 'agent', agent: 'backend-engineer', wip: 6 },
+          { id: 'done', name: 'Done', kind: 'done' },
+        ],
+        flow: { targets: { throughput_per_day: 10, lead_time_hours: 48 } },
+      },
+    });
+  });
+
+  it('shows the running version’s budget, and no message about choosing a template', async () => {
+    renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    expect(week.value).toBe('600');
+    expect((screen.getByRole('slider', { name: 'Most per run' }) as HTMLInputElement).value).toBe('9');
+    expect(screen.queryByText(/Choose a template/)).toBeNull();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('opens a draft from the version on the first change, then saves it', async () => {
+    renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    fireEvent.change(week, { target: { value: '700' } });
+    await waitFor(() =>
+      expect(lastSaved<{ budget?: { weekly_usd?: number } }>('review')?.budget?.weekly_usd).toBe(700),
+    );
+    expect(openDraft).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(openDraft).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(saveDraftSection).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('continues to intake without publishing when nothing changed', async () => {
+    const router = renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/intake'));
+    expect(publishDraft).not.toHaveBeenCalled();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('publishes the changed draft against the running version, then goes to intake', async () => {
+    const router = renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    fireEvent.change(week, { target: { value: '700' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(publishDraft).toHaveBeenCalledTimes(1));
+    expect(publishDraft).toHaveBeenCalledWith('org-1', factoryId, {
+      revision: expect.any(Number),
+      expected_current_version_id: 'version-7',
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/intake'));
   });
 });

@@ -167,6 +167,8 @@
   --animate-item-in: item-in var(--duration-fast) var(--ease-out) both;
   /* A skeleton pulses once while it waits (MOTION.md, Loading). */
   --animate-skeleton-pulse: skeleton-pulse var(--duration-pulse) linear;
+  /* A card replaces its dashed slot: it fades in through a small blur (MOTION.md, Loading, skeleton-reveal). */
+  --animate-slot-reveal: slot-reveal var(--duration-slow) ease-in-out both;
   /* A count badge appears: it slides up and pops in (MOTION.md, The needs-you count badge appears in the sidebar). */
   --animate-notification-badge: notification-badge var(--duration-emphasis) var(--ease-bounce) both;
   /* An invalid field shakes once, side to side, in five micro segments (MOTION.md, Invalid form field). */
@@ -199,6 +201,13 @@
     from {
       opacity: 0;
       transform: scale(var(--scale-tooltip));
+    }
+  }
+
+  @keyframes slot-reveal {
+    from {
+      opacity: 0;
+      filter: blur(var(--blur-small));
     }
   }
 

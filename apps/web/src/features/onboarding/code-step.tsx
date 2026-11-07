@@ -13,7 +13,8 @@ import { ApiError } from '../../api/client';
 import { getDraftFile, openDraft, putDraftFile } from '../../api/definitions';
 import { defKeys, keys, templatesQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
-import { createSecret, getSecret, patchSecret } from '../../api/secrets';
+import { createSecret } from '../../api/secrets';
+import { sessionHandlers } from '../../api/session';
 import type { FactoryRepositoryTest, OrgSummary, TemplateCode } from '../../api/types';
 import { CiAccessLine, waitsForCi } from '../../shared/ci-access-line';
 import { Button } from '../../ui/button';
@@ -35,8 +36,9 @@ import {
   withRepositories,
 } from './code-repositories';
 import { type OnboardingSearch, repositoryUrl } from './code-search';
-import { codeCard, organizationCard } from './factory-preview';
+import { codeCard, FactoryCardOf, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout } from './onboarding-layout';
+import { openSecretTo } from './open-secret';
 
 type Scope = 'organization' | 'some';
 
@@ -57,13 +59,6 @@ export function resultText(label: string, r: FactoryRepositoryTest): string {
   return `${label}: ${r.summary}${reason && !r.summary.includes(reason) ? ` ${reason}` : ''}`.trim();
 }
 
-/** Makes the secret open to the factory, keeping its value and every other factory it was open to. */
-async function openSecretTo(org: string, name: string, factory: string): Promise<void> {
-  const secret = await getSecret(org, name);
-  if (secret.scope.all_factories || secret.scope.factories.includes(factory)) return;
-  await patchSecret(org, name, { scope: { all_factories: false, factories: [...secret.scope.factories, factory] } });
-}
-
 /** `search` is the URL's choice (code-search.ts): the route passes it, so the step reads it the same way in a test. */
 export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
   const templates = useQuery(templatesQuery(org.id));
@@ -73,7 +68,19 @@ export function CodeStep({ org, search }: { org: OrgSummary; search: OnboardingS
   // nothing focusable sits inside the hidden layer.
   if (templates.isPending) {
     return (
-      <OnboardingLayout step="code" org={org} preview={{ organization: organizationCard(org, window.location.host) }}>
+      <OnboardingLayout
+        step="code"
+        org={org}
+        preview={
+          search.factory
+            ? previewSlots({
+                organization: organizationCard(org, window.location.host),
+                code: undefined,
+                factory: <FactoryCardOf org={org.id} factory={search.factory} />,
+              })
+            : { organization: organizationCard(org, window.location.host) }
+        }
+      >
         <Skeleton ready={false} placeholder={<CodePlaceholder />}>
           {null}
         </Skeleton>
@@ -166,6 +173,7 @@ function CodeForm({
   const [saved, setSaved] = useState<{ name: string; token: string }>();
   const [answer, setAnswer] = useState<Answer>();
   const waitsCi = waitsForCi(useSection('line'));
+  const [signingIn, setSigningIn] = useState(false);
   const host = window.location.host;
 
   const wantsCode = access !== 'none';
@@ -254,6 +262,17 @@ function CodeForm({
     run.mutate('create');
   };
 
+  /** The save was refused for a fresh sign-in and the dialog was cancelled: sign in from here, then save again. */
+  const signInAgain = async () => {
+    if (signingIn) return;
+    setSigningIn(true);
+    try {
+      if (await sessionHandlers.reauth()) run.mutate(run.variables ?? 'create');
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
   const chooseExisting = () => run.mutate('existing');
   const chooseNewName = () => {
     const problem = nameProblem(newName);
@@ -291,10 +310,11 @@ function CodeForm({
     };
   });
 
-  const preview = codeCard(
-    wantsCode && validUrls[0] ? repositoryLabel(validUrls[0]) : undefined,
-    passed ? answer?.secret : undefined,
-  );
+  const preview = codeCard({
+    url: wantsCode ? validUrls[0] : undefined,
+    repo: wantsCode && validUrls[0] ? repositoryLabel(validUrls[0]) : undefined,
+    secret: passed ? answer?.secret : undefined,
+  });
 
   return (
     <OnboardingLayout
@@ -327,7 +347,11 @@ function CodeForm({
           Continue
         </Button>
       }
-      preview={{ organization: organizationCard(org, host), second: preview }}
+      preview={previewSlots({
+        organization: organizationCard(org, host),
+        code: preview,
+        factory: <FactoryCardOf org={org.id} factory={factory} />,
+      })}
     >
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-kpi tracking-display">Connect your code</h1>
@@ -519,8 +543,25 @@ function CodeForm({
                 </p>
               ) : null}
               {run.isError && !clash ? (
-                <div className="animate-fade-in">
-                  <Callout tone="rework">{`Couldn’t save and test the token. ${run.error.message}`.trim()}</Callout>
+                <div className="flex animate-fade-in flex-col items-start gap-2">
+                  {run.error instanceof ApiError && run.error.code === 'reauth-required' ? (
+                    <>
+                      <Callout tone="rework">
+                        Couldn’t save and test the token because Goal needs you to sign in again.
+                      </Callout>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        busy={signingIn || run.isPending}
+                        busyLabel="Signing in…"
+                        onClick={() => void signInAgain()}
+                      >
+                        Sign in again
+                      </Button>
+                    </>
+                  ) : (
+                    <Callout tone="rework">{`Couldn’t save and test the token. ${run.error.message}`.trim()}</Callout>
+                  )}
                 </div>
               ) : null}
               {write.isError ? (

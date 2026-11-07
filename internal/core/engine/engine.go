@@ -15,9 +15,9 @@
 // check runs in the same sandbox, and the station's checks are commands in it whose exit codes
 // come from the runtime. The sandbox is deleted when the claim ends, however it ends. Nothing
 // runs while nothing is claimable: a station's slots are its sandboxes, from zero to its agent
-// count (capped by WIP). Each run gets its organization's connections (connections.go), each
-// command only its part: prepare the repository's git login, the agent the model's access and its
-// own connections' env, a check nothing; their secret values are scrubbed from what runs report.
+// count (capped by WIP). Each run gets what its version's secrets give it (environment.go),
+// each command only its part: prepare the repository tokens, the agent the model key and its
+// environment, a check nothing; the secret values are scrubbed from what runs report.
 //
 // Organizations. Every line belongs to one organization, and every store call the engine makes
 // for a line is bound to it (domain.WithOrg), so row-level security keeps each organization's
@@ -100,25 +100,17 @@ type Deps struct {
 	Contracts ports.Contracts
 	// Secrets resolves the gateway key (Config.GatewayKeyRef).
 	Secrets ports.Secrets
-	// Connections give each run its organization's connections (spec 4 §4.5), and merges the
-	// line's connections whose kind has a code host (§4.7).
-	Connections ports.Connections
-	// Credentials fill the connections' secret fields that refer to one and give each agent the
-	// ones listed for it (ADR 0017 decisions 5 and 6).
-	Credentials ports.Credentials
+	// StandingRules keep a person's always-allow of a tool (ADR 0031 decision 7) and revoke one.
+	StandingRules ports.StandingRules
 	// OrgSecrets give a run of a version on secrets the values its model key and its agent's
 	// environment refer to (ADR 0037 decision 10); nil fails every such run.
 	OrgSecrets ports.OrgSecrets
-	// CodeHosts are the code host adapters by kind (domain.CodeHostKind: github, gitlab), the
-	// names connection kinds give too (KindSpec.CodeHost).
+	// CodeHosts are the code host adapters by kind (domain.CodeHostKind: github, gitlab).
 	CodeHosts map[string]ports.CodeHost
 	// Hosts are the organization's added code hosts, read on every merge and base-commit read:
 	// a repository on a host the organization doesn't list gets no token (ADR 0041 decision 1).
 	// Nil lists only the built-in ones.
 	Hosts ports.CodeHosts
-	// Minters are the minters by the name a connection kind gives (KindSpec.Mint): a run of a
-	// connection whose kind names one gets credentials minted for it; without one it cannot run.
-	Minters map[string]ports.Minter
 	// Policies is the organization policy, read at each claim's run start as a ceiling over the
 	// version (ADR 0024): the default and allowed models, the denied commands and the box time
 	// limit. Nil applies no policy.
@@ -144,7 +136,7 @@ type Deps struct {
 
 func (d Deps) complete() bool {
 	return d.Store != nil && d.Orgs != nil && d.Sandboxes != nil && d.Contracts != nil && d.Secrets != nil &&
-		d.Connections != nil && d.Credentials != nil && d.CodeHosts != nil && d.Clock != nil
+		d.StandingRules != nil && d.CodeHosts != nil && d.Clock != nil
 }
 
 // Config is the engine's behaviour; zero durations take the defaults below.
@@ -202,6 +194,10 @@ func (c Config) LongestClaim() time.Duration {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyCode is the event data key of a block's stable code (domain.BlockModelKeyMissing), next to
+// its reason; only blocks that have one carry it.
+const keyCode = "code"
+
 // keyStation is the event and audit data key naming the station an item was at.
 const keyStation = "station"
 
@@ -234,21 +230,19 @@ const (
 
 // Engine runs factory lines. It is safe for concurrent use.
 type Engine struct {
-	store       ports.Store
-	orgs        Orgs
-	sandboxes   ports.Sandboxes
-	contracts   ports.Contracts
-	secrets     ports.Secrets
-	connections ports.Connections
-	credentials ports.Credentials
-	orgSecrets  ports.OrgSecrets
-	codehosts   map[string]ports.CodeHost
-	hosts       ports.CodeHosts
-	minters     map[string]ports.Minter
-	policies    ports.OrgPolicies
-	knowledge   KnowledgeSnapshots // nil without Deps.Knowledge
-	intake      ports.Intake
-	events      ports.SenderEvents
+	store      ports.Store
+	orgs       Orgs
+	sandboxes  ports.Sandboxes
+	contracts  ports.Contracts
+	secrets    ports.Secrets
+	rules      ports.StandingRules
+	orgSecrets ports.OrgSecrets
+	codehosts  map[string]ports.CodeHost
+	hosts      ports.CodeHosts
+	policies   ports.OrgPolicies
+	knowledge  KnowledgeSnapshots // nil without Deps.Knowledge
+	intake     ports.Intake
+	events     ports.SenderEvents
 	// holder names this instance's claims of delivery evaluations (deliveries.go).
 	holder string
 	audit  ports.Audit
@@ -278,6 +272,10 @@ type Engine struct {
 	// the spend afresh and logs what it finds.
 	budgetMu  sync.Mutex
 	exhausted map[domain.FactoryID]bool
+	// recorded holds, for each factory, whether its weekly budget was used up when this instance
+	// last wrote that to the store (recordBudget), so it writes only on a change. A factory not
+	// in it is written on its next tick. The store's record is the state the screens read.
+	recorded map[domain.FactoryID]bool
 	// warned holds the factories whose budget event this instance queued and whose spend is still
 	// at or over 80%, so the outbox is not asked again each tick. Also only a hint: the outbox
 	// itself queues once per factory per budget window, whichever instance asks.
@@ -324,9 +322,9 @@ func New(d Deps, cfg Config) (*Engine, error) {
 
 	return &Engine{
 		events: d.Events, holder: holder,
-		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, connections: d.Connections,
-		credentials: d.Credentials, orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, minters: d.Minters, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
-		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
+		store: d.Store, orgs: d.Orgs, sandboxes: d.Sandboxes, contracts: d.Contracts, secrets: d.Secrets, rules: d.StandingRules,
+		orgSecrets: d.OrgSecrets, codehosts: d.CodeHosts, hosts: d.Hosts, policies: d.Policies, knowledge: d.Knowledge, intake: d.Intake, audit: d.Audit, outbox: d.NotificationOutbox, clock: d.Clock, log: log, cfg: cfg, lines: lines,
+		active: map[domain.ItemID]*activeRun{}, checks: map[string]*activeRun{}, exhausted: map[domain.FactoryID]bool{}, recorded: map[domain.FactoryID]bool{}, warned: map[domain.FactoryID]bool{},
 	}, nil
 }
 

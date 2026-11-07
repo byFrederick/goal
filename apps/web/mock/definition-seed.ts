@@ -64,6 +64,9 @@ export interface MockSkill {
 
 export const localUser: Actor = { kind: 'user', id: 'local', name: 'Local user' };
 
+/** A named publisher, as the API now answers (its id is a UUID, its name is shown). */
+const amara: Actor = { kind: 'user', id: '01a1735d-a0a0-7b2c-9d3e-4f5a6b7c8d90', name: 'Amara Okafor' };
+
 const encoder = new TextEncoder();
 
 export function tree(files: Record<string, string>): Tree {
@@ -119,6 +122,7 @@ spec:
   runtime:
     model: claude-opus-5-5
     modelConnection: claude
+    modelKey: "{{secret.anthropic}}"
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
     repositories:
@@ -367,10 +371,11 @@ const researchFiles = () =>
 
 interface History {
   /** The version ids (from VersionRef) and when they were published, oldest first. */
-  versions: { id: string; message: string; at: string; files: Tree }[];
+  versions: { id: string; message: string; at: string; files: Tree; by?: Actor | undefined }[];
 }
 
 function published(v: History['versions'][number], number: number): MockVersion {
+  const by = v.by ?? localUser;
   return {
     id: v.id,
     number,
@@ -386,7 +391,7 @@ function published(v: History['versions'][number], number: number): MockVersion 
     updated_at: v.at,
     updated_by: localUser,
     published_at: v.at,
-    published_by: localUser,
+    published_by: by,
   };
 }
 
@@ -417,6 +422,7 @@ export function seedDefinitions(): Record<string, MockDefinition> {
       message,
       at: day(13 + i, '14:32'),
       files: goalFiles({ merge: i === 7, draft: false }),
+      by: i === 7 ? amara : undefined,
     })),
   });
   const base = goal.versions.at(-1) as MockVersion;
@@ -484,7 +490,7 @@ kind: Factory
 metadata:
   id: 0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88
   name: software
-  title: Software
+  title: Goal
 spec:
   runtime: { modelConnection: claude }
   agents:

@@ -47,7 +47,7 @@ func newDigestJob(t *testing.T, now time.Time) digestHarness {
 
 	clock := porttest.NewClock(now)
 	tenancy := porttest.NewTenancy(clock.Now)
-	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy, nil)
+	secrets := porttest.NewOrgSecrets(porttest.NewMasterKeys().Key("k1"), tenancy)
 
 	var orgs orgList
 

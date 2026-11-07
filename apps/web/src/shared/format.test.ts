@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatDurationCompact, formatHours, formatUsdCost, ordinal } from './format';
+import {
+  formatClockOrWeekday,
+  formatCpuSeconds,
+  formatDuration,
+  formatDurationCompact,
+  formatHours,
+  formatMemory,
+  formatUsdCost,
+  ordinal,
+} from './format';
 
 describe('formatHours', () => {
   it('says a duration in hours adaptively, as the Item page does', () => {
@@ -49,5 +58,33 @@ describe('formatUsdCost', () => {
     expect(formatUsdCost(0.0001)).toBe('<$0.01');
     expect(formatUsdCost(0.01)).toBe('$0.01');
     expect(formatUsdCost(2.4)).toBe('$2.40');
+  });
+});
+
+describe('formatCpuSeconds', () => {
+  it('says CPU seconds as seconds, minutes or hours, and a dash for none', () => {
+    expect(formatCpuSeconds(42)).toBe('42 s');
+    expect(formatCpuSeconds(186)).toBe('3.1 min');
+    expect(formatCpuSeconds(7200)).toBe('2.0 h');
+    expect(formatCpuSeconds(null)).toBe('—');
+  });
+});
+
+describe('formatMemory', () => {
+  it('says peak memory in KB, MB or GB, and a dash for none', () => {
+    expect(formatMemory(512 * 1024)).toBe('512 KB');
+    expect(formatMemory(300 * 1024 ** 2)).toBe('300 MB');
+    expect(formatMemory(1.2 * 1024 ** 3)).toBe('1.2 GB');
+    expect(formatMemory(null)).toBe('—');
+  });
+});
+
+describe('formatClockOrWeekday', () => {
+  const now = new Date(2026, 10, 7, 21, 0);
+  it('says only the time on the same day', () => {
+    expect(formatClockOrWeekday(new Date(2026, 10, 7, 19, 15).toISOString(), now)).toBe('19:15');
+  });
+  it('adds the weekday on an earlier day', () => {
+    expect(formatClockOrWeekday(new Date(2026, 10, 5, 19, 15).toISOString(), now)).toBe('Thu 19:15');
   });
 });

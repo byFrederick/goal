@@ -22,9 +22,8 @@ func TestSecrets_Conformance(t *testing.T) {
 		d := newConnectionsDB(t)
 
 		return secrettest.Harness{
-			Secrets:     func(key ports.MasterKey) ports.OrgSecrets { return NewSecrets(d.store, key) },
-			Connections: func(key ports.MasterKey) ports.Connections { return NewConnections(d.store, key) },
-			Key:         func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
+			Secrets: func(key ports.MasterKey) ports.OrgSecrets { return NewSecrets(d.store, key) },
+			Key:     func(ids ...string) ports.MasterKey { return testKey(t, ids...) },
 			CopySealed: func(t *testing.T, fromOrg domain.OrgID, from string, toOrg domain.OrgID, to string) {
 				t.Helper()
 
@@ -40,7 +39,7 @@ func TestSecrets_Conformance(t *testing.T) {
 				t.Helper()
 
 				n := domain.NewWebhook{Name: "github-acme", Sender: domain.SenderGitHub, Secret: name}
-				if _, err := NewIntake(d.store, testKey(t, "k1")).CreateWebhook(domain.WithOrg(t.Context(), org), n); err != nil {
+				if _, err := NewIntake(d.store).CreateWebhook(domain.WithOrg(t.Context(), org), n); err != nil {
 					t.Fatal(err)
 				}
 			},

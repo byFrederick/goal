@@ -46,7 +46,7 @@ function ArchivedRow({ org, factory, mayRestore }: { org: OrgSummary; factory: F
             busyLabel="Restoring…"
             onClick={() => restore.mutate()}
           >
-            Restore {factory.name}
+            Restore {factoryTitle(factory)}
           </Button>
         ) : null}
       </div>

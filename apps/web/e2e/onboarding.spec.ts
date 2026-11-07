@@ -80,6 +80,19 @@ async function makeFactory(page: Page) {
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
 }
 
+/** Step 4: Continue is held until the model key is set; the Models card saves it. */
+async function setModelKey(page: Page) {
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  await expect(page.getByText('Add the model key, then continue.')).toBeVisible();
+  await page
+    .locator('input')
+    .and(page.getByLabel('Model key', { exact: true }))
+    .fill('test-token');
+  await page.getByRole('button', { name: 'Save the key' }).click();
+  await expect(page.getByText('Saved as the secret model-key, open to this factory.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
+}
+
 /** Step 3: Read and write on one repository, the token tested by the mock, then Continue. */
 async function connectCode(page: Page, url = 'https://github.com/acme/goal') {
   await page.getByRole('radio', { name: /^Read and write/ }).check();
@@ -150,7 +163,7 @@ test('step 4 shapes the line of the factory made in step 2', async ({ page }) =>
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Not available yet' })).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await setModelKey(page);
   await expect(page.getByRole('button', { name: 'Add a station here' }).first()).toBeVisible();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -173,11 +186,12 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await connectCode(page);
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/line\?.*factory=/);
 
+  await setModelKey(page);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/budget\?.*factory=/);
   await expect(page.getByRole('heading', { level: 1, name: 'Set budgets and targets' })).toBeVisible();
-  await expect(page.getByRole('slider', { name: 'A day' })).toHaveValue('150');
-  await expect(page.getByText('fits about 48 items')).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'A week' })).toHaveValue('800');
+  await expect(page.getByText('about $114 a day', { exact: true })).toBeVisible();
   await expect(page.getByRole('radio', { name: /Finish what's started/ })).toBeChecked();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
@@ -188,11 +202,11 @@ test('step 4 continues to step 5, which publishes the factory, step 6 turns on a
   await expect(page.getByRole('heading', { name: 'Starter triggers' })).toBeVisible();
   // The template's GitHub triggers need an endpoint the new factory does not have: they show Connect, not a switch.
   await expect(page.getByRole('link', { name: 'Connect GitHub' }).first()).toBeVisible();
-  await expect(page.getByRole('switch', { name: 'issues-labeled-factory' })).toBeDisabled();
+  await expect(page.getByRole('switch', { name: 'Issues labeled factory' })).toBeDisabled();
   await expectAccessible(page);
   await expectNoHorizontalScroll(page);
 
-  await page.getByRole('switch', { name: 'weekly-dependency-audit' }).click();
+  await page.getByRole('switch', { name: 'Weekly dependency audit' }).click();
   await page.getByRole('button', { name: 'Turn on 1 trigger' }).click();
   await expect(page).toHaveURL(/\/o\/goal\/get-started\/people\?.*factory=/);
 
@@ -239,6 +253,19 @@ for (const size of [
 
     await expect(page.getByRole('status')).toContainText(/Can read but not push/);
     await expect(next).toBeFocused();
+  });
+}
+
+for (const width of [375, 768, 1440]) {
+  test(`step 3's preview keeps the picked template's line at ${width} px`, async ({ page }) => {
+    await signIn(page.request);
+    await page.setViewportSize({ width, height: 900 });
+    await makeFactory(page);
+
+    const preview = page.getByRole('complementary', { name: 'Preview of your factory' });
+    await expect(preview.getByRole('region', { name: 'Your factory' })).toBeVisible();
+    await expect(preview.getByRole('list', { name: 'The line' }).getByRole('listitem').first()).toBeVisible();
+    await expect(preview.getByText('The line appears when you pick a template')).toHaveCount(0);
   });
 }
 

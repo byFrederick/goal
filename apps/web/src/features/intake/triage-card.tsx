@@ -8,10 +8,14 @@ import { refParam, useFactoryParams } from '../../shared/factory';
 import { humanize } from '../../shared/format';
 import { RefLink } from '../../shared/ref-link';
 import { Button } from '../../ui/button';
+import { cn } from '../../ui/cn';
 import { Panel, rowClass } from './panel';
 
 const info =
   'Follow-ups that name no item and no time. When an item lands they join the open triage item, which the architect turns into work or closes.';
+
+// The ref link stretches over its row, so the whole row opens the item; the Open button sits above it.
+const stretched = "font-medium text-link underline after:absolute after:inset-0 after:content-[''] hover:no-underline";
 
 export function TriageCard({ triage }: { triage: IntakeTriage | null | undefined }) {
   const params = useFactoryParams();
@@ -23,15 +27,15 @@ export function TriageCard({ triage }: { triage: IntakeTriage | null | undefined
       ) : (
         <ul className="m-0 flex list-none flex-col p-0">
           {triage.item ? (
-            <li className={rowClass}>
+            <li className={cn(rowClass, 'relative')}>
               <Count n={triage.item.follow_ups} word="follow-ups" />
               <span className="flex min-w-0 flex-col">
                 <span className="truncate font-medium" title={triage.item.title}>
-                  <RefLink item={triage.item.ref} /> {triage.item.title}
+                  <RefLink item={triage.item.ref} className={stretched} /> {triage.item.title}
                 </span>
                 <Sub>In {humanize(triage.item.station)}, for the architect</Sub>
               </span>
-              <Button asChild variant="secondary" size="sm">
+              <Button asChild variant="secondary" size="sm" className="relative z-10">
                 <Link to="/o/$org/f/$factory/items/$ref" params={{ ...params, ref: refParam(triage.item.ref) }}>
                   Open
                 </Link>
@@ -39,11 +43,11 @@ export function TriageCard({ triage }: { triage: IntakeTriage | null | undefined
             </li>
           ) : null}
           {triage.waiting.map((source) => (
-            <li key={source.id} className={rowClass}>
+            <li key={source.id} className={cn(rowClass, 'relative')}>
               <Count n={source.follow_ups} word="waiting" />
               <span className="flex min-w-0 flex-col">
                 <span className="truncate font-medium" title={source.title}>
-                  <RefLink item={source.ref} /> {source.title}
+                  <RefLink item={source.ref} className={stretched} /> {source.title}
                 </span>
                 <Sub>Join it when {source.ref} lands</Sub>
               </span>

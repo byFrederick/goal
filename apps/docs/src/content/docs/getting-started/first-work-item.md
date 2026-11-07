@@ -26,6 +26,8 @@ goal run <factory> "Add a health check endpoint" --body "Return 200 from /health
 
 The web app can submit an item too. Setup submits the template's starter item at its last step, the First item step. The step names the repository only when you connected code in the Code step; a factory set up with No code shows the item without repository wording.
 
+Agents cannot run without a model key. If the factory has none when the First item step opens, for example because you skipped it in the Line step, the step submits nothing. It says that agents need a model key and shows the same key form as the Line step. **Publish and start** saves the key, publishes it as a new version and then submits the starter item.
+
 ## 2. Watch it move
 
 The item moves through the factory's line: its stations, the agents at each one, and the order they run in all come from the factory's definition. The screens show an example line of Intake, Spec, Build, Review, Done. A factory's own stations may have other names. [Concepts](/docs/concepts/) explains the flow.
@@ -79,6 +81,18 @@ When the question offers choices, give the number of the choice instead. Numbers
 ```sh
 goal answer <item> --choice 2
 ```
+
+## A line without a model key
+
+A line that has environment files needs `runtime.modelKey` in `factory.yaml`, or the engine blocks every item with `model_key_missing`. The Floor shows this before you send an item:
+
+- The header says **Needs a model key** where it would say **Line running**.
+- Home's row for the factory says **Needs a model key** where it would say **Running**.
+- **Finish setting up** has a **Model key** row, not done until the key is set. **Set up** opens the factory's Settings at Runtime, where you choose the secret.
+
+Until Goal has read the published version, both places show a grey placeholder where the chip goes, never a green one. If that read fails, they show **Running**.
+
+Both go away once the key is published.
 
 ## 5. Send it back for rework
 

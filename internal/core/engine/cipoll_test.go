@@ -22,13 +22,13 @@ const (
 	ciGrace, ciMax  = 5 * time.Minute, 60 * time.Minute
 )
 
-// ciLine is review (an agent station with waitFor: ci) on the organization's github and gitlab
-// connections, which sign the poller in to each host.
+// ciLine is review (an agent station with waitFor: ci) whose runtime.repositories entries (mergeEntries)
+// sign the poller in to github.com/acme and gitlab.com/acme.
 func ciLine() domain.Line {
 	review := agentStation(stReview, agReviewer, 1, 1)
 	review.WaitFor = domain.CIWait{Grace: ciGrace, Max: ciMax, Rounds: domain.DefaultCIRounds}
 	l := lineOf(review)
-	l.Connections = []string{connGitHub, connGitLab}
+	l.Runtime.Repositories = mergeEntries()
 
 	return l
 }
@@ -317,8 +317,8 @@ func TestCIPoller_TwoItemsShareOneCommitPoll(t *testing.T) {
 	h.expectEnded(t, b, domain.CIPassed)
 }
 
-// Each repository is polled with the adapter of its host's kind and the token of the factory's
-// connection for that host.
+// Each repository is polled with the adapter of its host's kind and the token of the
+// runtime.repositories entry that covers it.
 func TestCIPoller_TwoRepositories(t *testing.T) {
 	t.Parallel()
 
@@ -332,11 +332,11 @@ func TestCIPoller_TwoRepositories(t *testing.T) {
 
 	gh, gl := h.codehost.ChecksCalls(), h.gitlab.ChecksCalls()
 	if len(gh) != 1 || gh[0].Repo.Key() != app.Repo || gh[0].Token != "github-token" || gh[0].SHA != ciSHA {
-		t.Errorf("github Checks calls = %+v; want one on %s with the github connection's token", gh, app.Repo)
+		t.Errorf("github Checks calls = %+v; want one on %s with the github entry's token", gh, app.Repo)
 	}
 
 	if len(gl) != 1 || gl[0].Repo.Key() != web.Repo || gl[0].Token != "gitlab-token" || gl[0].SHA != ciNewSHA {
-		t.Errorf("gitlab Checks calls = %+v; want one on %s with the gitlab connection's token", gl, web.Repo)
+		t.Errorf("gitlab Checks calls = %+v; want one on %s with the gitlab entry's token", gl, web.Repo)
 	}
 
 	h.expectEnded(t, app, domain.CIPassed)

@@ -78,6 +78,20 @@ export function formatStart(iso: string): { day: string; time: string } {
   return { day: weekdayDay.format(d), time: clock.format(d) };
 }
 
+const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short' });
+
+/** "Mon 02:00" for when something resumes: the short weekday and the 24 h time, in the reader's time zone. */
+export function formatWeekdayTime(iso: string): string {
+  const d = new Date(iso);
+  return `${weekday.format(d)} ${clock.format(d)}`;
+}
+
+/** "19:15" today, "Thu 19:15" on another day: a moment that is recent enough for its weekday to place it. */
+export function formatClockOrWeekday(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  return d.toDateString() === now.toDateString() ? clock.format(d) : formatWeekdayTime(iso);
+}
+
 /** "Oct 17" from an ISO date or day ("2026-10-17"). */
 export function formatDay(day: string): string {
   return dayMonth.format(new Date(day.length === 10 ? `${day}T12:00:00Z` : day));
@@ -100,4 +114,22 @@ export function ordinal(n: number): string {
   if (tens >= 11 && tens <= 13) return `${n}th`;
   const suffix = { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th';
   return `${n}${suffix}`;
+}
+
+/** CPU seconds as the Runs page says them: "42 s", "3.1 min", "1.2 h"; "—" for none. */
+export function formatCpuSeconds(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return '—';
+  if (seconds < 59.5) return `${Math.max(0, Math.round(seconds))} s`;
+  const min = seconds / 60;
+  if (min < 59.95) return `${min.toFixed(1)} min`;
+  return `${(min / 60).toFixed(1)} h`;
+}
+
+/** A peak memory in bytes as "512 MB", "1.2 GB" (1 GB is 1024 MB, as a box's limit is); "—" for none. */
+export function formatMemory(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return '—';
+  const mb = bytes / 1024 ** 2;
+  if (mb < 1) return `${Math.round(bytes / 1024)} KB`;
+  if (mb < 1000) return `${Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
 }

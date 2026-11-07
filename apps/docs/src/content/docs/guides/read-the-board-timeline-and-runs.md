@@ -30,7 +30,7 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 ## Needs you
 
-`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. [Act on an item](../act-on-an-item/) covers the actions.
+`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. A factory whose weekly budget is used up appears here too, with no item, until its line has room again: it shows what the last 7 days of runs cost against the cap, since when the budget is used up, and when the line resumes on its own, once the oldest runs leave the 7-day window. The Board's line says the same: "Resumes about Mon 02:00" ends its weekly budget message. Raising the cap in a new version clears it at once. [Act on an item](../act-on-an-item/) covers the actions.
 
 ## The item page and its Timeline
 
@@ -90,7 +90,13 @@ An item that does not exist, or that you cannot see, exits with an error and pri
 
 ## Runs
 
-`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost and its status.
+`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost, its CPU, its peak memory, the size of its box and its status.
+
+- **CPU** is the box's CPU time from prepare to the end of the run, shown as seconds (`42 s`) or minutes (`3.1 min`).
+- **Peak memory** is the most memory the box used at once, for example `1.2 GB`. It is read from the box's cgroup where it has one, and otherwise from the machine's memory in use, which includes the box's own system processes.
+- **Box** is the box's size: Small, Medium or Large.
+
+A column shows — when the run is still going, or when the box couldn't measure the value. CPU, Peak memory and Box show from 1440 px wide; the ⓘ beside CPU repeats these meanings.
 
 Narrow the list with the search box and the filters. The CLI does the same:
 
@@ -102,6 +108,10 @@ goal runs --since 2026-10-26T00:00:00Z --limit 20
 Runs no longer has a Send to Jonah button: Jonah reads the line's evidence on its own. To keep an item as a test, use the Teardown tab of the item ([Act on an item](../act-on-an-item/#keep-an-item-as-a-test)).
 
 `--status` takes `running`, `succeeded`, `failed` or `cancelled`. A long list prints a `--cursor` for the next page.
+
+## The Floor's Done station and weekly throughput
+
+On the Floor, the line's Done station shows today's and this week's finished items. It says "merged today" on a line with repositories and "done today" on one without. Throughput by week uses the same words ("Items merged a day" or "Items done a day"), and its first bar is the factory's first week: weeks that ended before the factory was made are left out.
 
 ## Line health
 

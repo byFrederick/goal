@@ -46,7 +46,7 @@ goal webhooks deliveries github-acme --limit 20
 `list` shows each webhook's sender, address, signing secret's name, open factories, the triggers that use it and its deliveries in 7 days; never a secret's value. The triggers are those of its open factories that name the webhook, enabled or not, and the enabled ones that name its sender with an event, by factory name, then trigger. `deliveries` lists what it received, newest first, in the columns RECEIVED, OUTCOME, RECEIPT, REASON, ITEM and EVALUATIONS. EVALUATIONS is `<factory>: <outcome>` for each factory, by factory name, or the evaluation's state (`pending`) while it has no outcome; a column with nothing to show prints `-`. With `--json` it prints the API's answer, where each delivery has its `event` and these fields:
 
 - **`receipt`:** `accepted`, `duplicate` or `refused`, with the `reason` when refused. A duplicate keeps no row of its own: the webhook already took this delivery id, nothing is created, and the first delivery's `duplicates` counts it.
-- **`evaluations`, per factory, by factory name:** `created` with the item and its ref (`acme#88`), `skipped` with the reason, or `failed` with the error. A factory's own delivery list shows only that factory's evaluation.
+- **`evaluations`, per factory, by factory name:** `created` with the item and its ref (`acme#88`), `skipped` with the reason, or `failed` with the error.
 
 `goal webhooks list --json` also gives each webhook's `pinged_at`, when goald last accepted GitHub's ping, and its `setup_events`: the events its enabled triggers use, the ones to choose in GitHub. `setup_all_events` is true when a trigger names the webhook with no event.
 
@@ -56,7 +56,7 @@ Goald keeps a delivery's headers and body for 30 days when an enabled trigger na
 
 ## Webhooks made before organizations
 
-A factory's endpoint made before organization webhooks is converted once, when goald starts, to an organization webhook open to its factory for every repository. A renamed one is logged as `webhook renamed`, and a trigger that named the old name needs its `on` changed. [Webhook secrets](/docs/concepts/access-and-secrets/#webhook-secrets) has the rules.
+Before organization webhooks, a factory had its own webhook endpoints. The one-time conversion from connections made each one an organization webhook open to its factory for every repository; a renamed one was logged as `webhook renamed`, and a trigger that named the old name needs its `on` changed. The factory webhook routes, `/v1/orgs/{org}/factories/{factory}/webhooks` and the routes under it, are gone and answer 404. [Webhook secrets](/docs/concepts/access-and-secrets/#webhook-secrets) has the rules.
 
 ## Next
 

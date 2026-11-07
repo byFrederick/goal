@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { attentionQuery } from '../api/queries';
 import type { OrgAttention } from '../api/types';
+import { factoryTitle } from '../shared/factory';
 
 export interface Attention {
   /** Items waiting for a person's decision. */
@@ -38,24 +39,25 @@ export function useAttention(org: string): ReadonlyMap<string, Attention> {
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * A factory's square: its accessible name ("S, sre factory, 3 waiting on you") and the tooltip's
- * second line, which says the same status, or the factory's title when there is none.
+ * A factory's square: its accessible name ("S, Sre factory, 3 waiting on you") and the tooltip's
+ * second line, which says the same status, or nothing when the factory is quiet (the tooltip's first line is the title).
  */
 export function factorySignal(
   factory: { name: string; title?: string | undefined },
   mark: string,
   attention: Attention,
 ): { label: string; nameLabel: string; detail: string } {
+  const title = factoryTitle(factory);
   const status = [
     attention.waiting > 0 ? `${attention.waiting} waiting on you` : '',
     attention.andon !== null ? 'blocked: andon pulled' : '',
     attention.andon === null && attention.blocked > 0 ? plural(attention.blocked, 'item blocked', 'items blocked') : '',
   ].filter(Boolean);
-  const label = [`${mark}, ${factory.name} factory`, ...status].join(', ');
+  const label = [`${mark}, ${title} factory`, ...status].join(', ');
   // The link shows the mark, the name and the count in that order, and axe counts the aria-hidden mark too,
   // so its accessible name starts with those pieces unbroken (WCAG 2.5.3, label in name).
   const [waitingText, ...otherStatus] = attention.waiting > 0 ? status : ['', ...status];
-  const nameLabel = [[`${mark} ${factory.name}`, waitingText].filter(Boolean).join(' '), ...otherStatus].join(', ');
+  const nameLabel = [[`${mark} ${title}`, waitingText].filter(Boolean).join(' '), ...otherStatus].join(', ');
   const detail = status.length > 0 ? status.join(', ').replace('blocked: andon pulled', 'Andon pulled') : '';
-  return { label, nameLabel, detail: detail || factory.title || '' };
+  return { label, nameLabel, detail };
 }

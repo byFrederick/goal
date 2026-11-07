@@ -57,9 +57,8 @@ type FileRequest struct {
 	Station string
 	State   ItemState
 	Class   ClassOfService
-	// Trigger names the trigger that files it and Source where the item came from, for Intake.
+	// Trigger names the trigger that files it, for Intake.
 	Trigger string
-	Source  ItemSource
 	// Generation is 0 for people's and triggers' items and the assembly's for a part.
 	Generation int
 	// Untrusted marks work made from a webhook delivery; a part has its assembly's.
@@ -98,7 +97,7 @@ type FileRequest struct {
 func File(l Line, r FileRequest) (NewItem, error) {
 	n := NewItem{
 		FactoryID: l.FactoryID, Lane: strings.TrimSpace(r.Lane), Title: strings.TrimSpace(r.Title), Body: r.Body,
-		Priority: r.Priority, CreatedAt: r.At, Source: r.Source, Trigger: r.Trigger,
+		Priority: r.Priority, CreatedAt: r.At, Trigger: r.Trigger,
 		Origin: r.Origin, Via: r.Via, CreatedBy: r.By, Generation: r.Generation, Untrusted: r.Untrusted,
 		FactoryName: l.Name,
 	}

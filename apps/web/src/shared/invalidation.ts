@@ -128,8 +128,7 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
         keys.overviews(org),
         // The triggers of the running definition (what the intake shows).
         keys.intake(org, f),
-        // What uses a connection or a knowledge source is read from the current versions.
-        keys.connections(org),
+        // What uses a knowledge source is read from the current versions.
         keys.knowledge(org),
         // A trigger's rules and its results read from the current definition.
         intakeKeys.triggers(org, f),
@@ -139,17 +138,6 @@ export function definitionInvalidations(org: string, data: unknown): QueryKey[] 
     default:
       return [];
   }
-}
-
-/**
- * The queries one `connection` event touches (spec 4 §8.3): a connection created, changed, tested
- * or deleted changes the lists, that connection and the audit entries about connections, all
- * under one prefix; it carries no value. The kinds too: a connection of a kind another admin just
- * defined (kinds have no event of their own). A secret's uses name the connections
- * that refer to it, so the secrets list moves with them.
- */
-export function connectionInvalidations(org: string): QueryKey[] {
-  return [keys.connections(org), keys.connectionKinds(org), keys.secrets(org)];
 }
 
 /**

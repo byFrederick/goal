@@ -65,6 +65,19 @@ export interface Finished {
   repositories?: FinishedRepository[];
   /** The tool calls the agent's policy refused, by tool and call id (never their input); absent when none. */
   permission_denials?: { tool: string; id: string }[];
+  /**
+   * The box's CPU time since prepare started, in seconds: cgroup v2 cpu.stat's usage_usec at the
+   * end less prepare's reading. Absent when either reading is missing (src/cgroup.ts).
+   */
+  cpu_seconds?: number;
+  /**
+   * The box's peak memory in bytes, an integer, from the first source that reads: the worker's own
+   * cgroup v2 memory.peak or largest memory.current, the same at the cgroup root, or the largest
+   * MemTotal less MemAvailable in /proc/meminfo. Absent when none reads (src/cgroup.ts).
+   */
+  peak_memory_bytes?: number;
+  /** Where peak_memory_bytes came from: 'cgroup' or 'machine' (/proc/meminfo); absent with it. */
+  memory_source?: 'cgroup' | 'machine';
 }
 
 /** Progress text is cut to these lengths; events are for watching, not for replaying. */

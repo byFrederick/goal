@@ -10,6 +10,9 @@ import {
 } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../api/client';
+import { openDraft, saveDraftSection } from '../../api/definitions';
+import { createSecret, getSecret, patchSecret, replaceSecretValue } from '../../api/secrets';
 import type { Factory, OrgSummary, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
 import { OrgContext } from '../../shared/org';
@@ -25,15 +28,38 @@ const api = vi.hoisted(() => ({
   factory: null as unknown,
   saves: [] as { section: string; value: unknown }[],
   problems: [] as { severity: string; pointer?: string; message: string }[],
+  yaml: '',
+  puts: [] as string[],
+  secrets: { create: undefined as unknown, existing: { scope: { all_factories: false, factories: [] as string[] } } },
 }));
+
+const keyed = "apiVersion: goal/v1\nspec:\n  runtime:\n    modelKey: '{{model-key}}'\n";
+const unkeyed = 'apiVersion: goal/v1\nspec:\n  runtime: {}\n';
 
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
+  getVersionModel: vi.fn(async () => ({ model: api.model, ranges: {} }) as never),
+  getVersion: vi.fn(async () => ({ files: [{ path: 'factory.yaml', sha256: 's1', size: 10 }] }) as never),
+  getVersionFile: vi.fn(async () => ({ text: api.yaml, sha256: 's1' }) as never),
+  openDraft: vi.fn(async () => ({ revision: 1 }) as never),
   getFactory: vi.fn(async () => api.factory as Factory),
   validateDraft: vi.fn(
     async () => ({ ok: true, revision: 1, counts: {}, checks: [], problems: api.problems }) as never,
   ),
   getDraft: vi.fn(async () => ({ base: null, revision: 1 }) as never),
+  listDraftFiles: vi.fn(async () => [{ path: 'factory.yaml', sha256: 's1', size: 10 }] as never),
+  getDraftFile: vi.fn(async () => ({ text: api.yaml, sha256: 's1' })),
+  putDraftFile: vi.fn(async (_o: string, _f: string, _p: string, text: string) => {
+    api.puts.push(text);
+    return {
+      etag: 'n',
+      revision: 3,
+      updated_at: '2026-10-28T10:00:00Z',
+      sections: [],
+      change_count: 1,
+      problem_count: 0,
+    };
+  }),
   getDraftModel: vi.fn(
     async () =>
       ({
@@ -55,6 +81,17 @@ vi.mock(import('../../api/definitions'), async (original) => ({
       };
     },
   ),
+}));
+
+vi.mock(import('../../api/secrets'), async (original) => ({
+  ...(await original()),
+  createSecret: vi.fn(async () => {
+    if (api.secrets.create) throw api.secrets.create;
+    return {} as never;
+  }),
+  getSecret: vi.fn(async () => api.secrets.existing as never),
+  patchSecret: vi.fn(async () => ({}) as never),
+  replaceSecretValue: vi.fn(async () => ({}) as never),
 }));
 
 vi.mock(import('../../api/builder'), async (original) => ({
@@ -132,6 +169,10 @@ beforeEach(() => {
   // jsdom has no scrollIntoView; the line editor scrolls a focused control into view.
   Element.prototype.scrollIntoView = vi.fn();
   api.saves = [];
+  api.puts = [];
+  api.yaml = keyed;
+  api.secrets.create = undefined;
+  api.secrets.existing = { scope: { all_factories: false, factories: [] } };
   api.problems = [];
   setFactory();
   setDraft();
@@ -141,6 +182,16 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+/** A published factory with no draft: version 7 runs. */
+function setPublished() {
+  api.factory = {
+    id: factoryId,
+    name: 'software',
+    draft: null,
+    current: { id: 'version-7', number: 7 },
+  } as unknown as Factory;
+}
 
 /** Step 4 at /o/acme/get-started/line with the URL's `search`; the other steps are stubs the links reach. */
 function renderStep(url: string) {
@@ -175,6 +226,34 @@ function renderStep(url: string) {
 }
 
 describe('step 4, shape the line', () => {
+  it('keeps the code choice and repository when Continue goes to the budget step', async () => {
+    const router = renderStep(
+      `/o/acme/get-started/line?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const next = await screen.findByRole('button', { name: 'Continue' });
+    await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(next);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/budget'));
+    expect(router.state.location.search).toMatchObject({
+      factory: factoryId,
+      access: 'write',
+      url: 'https://github.com/acme/app',
+      secret: 'github-token',
+      template: 'starter',
+    });
+  });
+
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      `/o/acme/get-started/line?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/code');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('sends the person back to step 3 when the URL has no factory', async () => {
     renderStep('/o/acme/get-started/line');
     expect(await screen.findByText('Choose a template first, then shape its line.')).toBeTruthy();
@@ -202,6 +281,24 @@ describe('step 4, shape the line', () => {
     expect(within(build).getByText('frontend-engineer')).toBeTruthy();
     const review = screen.getByRole('region', { name: 'Review' });
     expect(within(review).getByText('Approval merges; rejects go back to Build, at most 2 times.')).toBeTruthy();
+  });
+
+  it('says "No limit" in the WIP field of a station with no wip, and + sets it to 1', async () => {
+    setDraft({
+      line: {
+        stations: [
+          { id: 'work', name: 'Work', kind: 'agent', agent: 'worker' },
+          { id: 'done', name: 'Done', kind: 'done' },
+        ],
+      },
+    });
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const work = await screen.findByRole('region', { name: 'Work' });
+    const field = within(work).getByRole('textbox', { name: 'WIP limit of Work' }) as HTMLInputElement;
+    expect(field.placeholder).toBe('No limit');
+    expect(field.value).toBe('');
+    fireEvent.click(within(work).getByRole('button', { name: 'Raise the WIP limit of Work' }));
+    await waitFor(() => expect(field.value).toBe('1'));
   });
 
   it('saves a station’s agent through the draft', async () => {
@@ -336,6 +433,76 @@ describe('shaping the line', () => {
   });
 });
 
+describe('the model key', () => {
+  const missing = 'Add the model key, then continue.';
+  const typeKey = (value: string) =>
+    fireEvent.change(screen.getByLabelText('Model key', { selector: 'input' }), { target: { value } });
+
+  it('holds Continue without a key, saves one open to this factory and writes the reference', async () => {
+    api.yaml = unkeyed;
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    expect(await screen.findByText(missing)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true);
+
+    typeKey('sk-ant-oat-test');
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    await waitFor(() => expect(screen.queryByText(missing)).toBeNull());
+    expect(createSecret).toHaveBeenCalledWith(
+      'org-1',
+      expect.objectContaining({
+        name: 'model-key',
+        value: 'sk-ant-oat-test',
+        scope: { all_factories: false, factories: [factoryId] },
+      }),
+    );
+    expect(await screen.findByText('Saved as the secret model-key, open to this factory.')).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+    );
+    await waitFor(() => expect(api.puts.at(-1)).toContain('{{model-key}}'), { timeout: 4000 });
+    expect(screen.queryByText(/\{\{/)).toBeNull();
+  });
+
+  it('saves the model key before Continue leaves the step', async () => {
+    api.yaml = unkeyed;
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByText(missing);
+    typeKey('sk-ant-oat-test');
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    await screen.findByText('Saved as the secret model-key, open to this factory.');
+    const next = (await screen.findByRole('button', { name: 'Continue' })) as HTMLButtonElement;
+    await waitFor(() => expect(next.disabled).toBe(false));
+    fireEvent.click(next);
+    await waitFor(() => expect(api.puts.at(-1)).toContain('{{model-key}}'), { timeout: 1500 });
+  });
+
+  it('asks for a key before saving', async () => {
+    api.yaml = unkeyed;
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByText(missing);
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    expect(await screen.findByText('Paste the model key.')).toBeTruthy();
+    expect(createSecret).not.toHaveBeenCalled();
+  });
+
+  it('offers the existing secret when the name is taken, and never writes its value', async () => {
+    api.yaml = unkeyed;
+    api.secrets.create = new ApiError({ title: 'Conflict', status: 409, code: 'secret-name-taken', detail: 'taken' });
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByText(missing);
+    typeKey('sk-ant-api-test');
+    fireEvent.click(screen.getByRole('button', { name: 'Save the key' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Use the existing secret' }));
+    await waitFor(() => expect(screen.queryByText(missing)).toBeNull());
+    expect(patchSecret).toHaveBeenCalledWith('org-1', 'model-key', {
+      scope: { all_factories: false, factories: [factoryId] },
+    });
+    expect(getSecret).toHaveBeenCalled();
+    expect(replaceSecretValue).not.toHaveBeenCalled();
+    expect(createSecret).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the factory card on step 4', () => {
   it('shows the factory with its station circles and WIP slots', async () => {
     renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
@@ -350,5 +517,39 @@ describe('step 3 hands the factory on', () => {
   it('is reached from step 4 when the factory exists, so Back keeps it', async () => {
     renderStep(`/o/acme/get-started/factory?factory=${factoryId}`);
     expect(await screen.findByRole('link', { name: 'Continue' })).toBeTruthy();
+  });
+});
+
+describe('step 4 on a published factory with no draft', () => {
+  beforeEach(() => setPublished());
+
+  it('shows the running version’s stations, with no message about choosing a template', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    expect(await screen.findByRole('region', { name: 'Spec' })).toBeTruthy();
+    expect(screen.queryByText(/Choose a template/)).toBeNull();
+    expect(screen.queryByText(/has no draft/)).toBeNull();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('opens a draft from the version on the first change, then saves it', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    const spec = await screen.findByRole('region', { name: 'Spec' });
+    fireEvent.change(within(spec).getByRole('combobox', { name: 'Agent of Spec' }), { target: { value: 'reviewer' } });
+    await waitFor(() => expect(api.saves.at(-1)?.section).toBe('line'), { timeout: 3000 });
+    expect(openDraft).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(openDraft).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(saveDraftSection).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('lets Continue go to Budget when nothing changed', async () => {
+    renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
+    await screen.findByRole('region', { name: 'Spec' });
+    await waitFor(
+      () => expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+      { timeout: 3000 },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Step budget')).toBeTruthy();
   });
 });

@@ -40,7 +40,7 @@ func itemFrom(w db.WorkItem) (domain.Item, error) {
 		Type: w.Type, Lane: deref(w.Lane), Title: w.Title, Body: w.Body, Station: w.Station,
 		State: domain.ItemState(w.State), Class: domain.ClassOfService(w.ClassOfService), Priority: int(w.Priority),
 		ReworkCount: int(w.ReworkCount), CostUSD: w.CostUsd, Outputs: outputs,
-		CreatedAt: w.CreatedAt.UTC(), UpdatedAt: w.UpdatedAt.UTC(), Source: domain.ItemSource(deref(w.Source)), Trigger: deref(w.Trigger),
+		CreatedAt: w.CreatedAt.UTC(), UpdatedAt: w.UpdatedAt.UTC(), Trigger: deref(w.Trigger),
 		Origin: domain.Origin(w.Origin), Via: domain.Via(deref(w.Via)), CreatedBy: deref(w.CreatedBy),
 		Generation: int(w.Generation), Untrusted: w.Untrusted, Triage: w.Triage,
 	}
@@ -92,9 +92,11 @@ func runFrom(r db.AgentRun) domain.Run {
 		Result: domain.RunResult{
 			Status: domain.RunStatus(r.Status), CostUSD: r.CostUsd, Turns: int(r.Turns), InputTokens: r.InputTokens,
 			OutputTokens: r.OutputTokens, SessionID: deref(r.SessionID), Error: deref(r.Error),
-			Output: rawJSON(r.Output),
+			Output: rawJSON(r.Output), CPUSeconds: r.CpuSeconds, PeakMemoryBytes: r.PeakMemoryBytes,
+			PeakMemorySource: domain.MemorySource(deref(r.PeakMemorySource)),
 		},
-		Input: domain.RunInput{Brief: deref(r.Brief)},
+		Input:   domain.RunInput{Brief: deref(r.Brief)},
+		BoxSize: domain.SandboxSize(deref(r.BoxSize)),
 	}
 
 	if r.DefinitionVersionID != nil {

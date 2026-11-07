@@ -20,6 +20,22 @@ const orgSpendPath = "/v1/orgs/acme/spend"
 func (h *harness) spendRun(t *testing.T, factory domain.FactoryID, agent, model string, at time.Time, usd float64) {
 	t.Helper()
 
+	h.boxRun(t, factory, agent, model, at, "", domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd})
+}
+
+// usageRun records a finished run of agent on factory in a box of size, started at, with the
+// CPU seconds and peak memory given.
+func (h *harness) usageRun(t *testing.T, factory domain.FactoryID, agent string, at time.Time, size domain.SandboxSize, cpu float64, peak int64) {
+	t.Helper()
+
+	h.boxRun(t, factory, agent, runModel, at, size, domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak})
+}
+
+// boxRun records a run of agent on a new item of factory in a box of size, started and ended at
+// with res.
+func (h *harness) boxRun(t *testing.T, factory domain.FactoryID, agent, model string, at time.Time, size domain.SandboxSize, res domain.RunResult) {
+	t.Helper()
+
 	station := stBuild
 	if factory == acmeID {
 		station = stInbox
@@ -33,12 +49,14 @@ func (h *harness) spendRun(t *testing.T, factory domain.FactoryID, agent, model 
 		t.Fatal(err)
 	}
 
-	run, err := h.store.StartRun(inOrg(t), ports.NewRun{FactoryID: factory, ItemID: it.ID, Station: station, Agent: agent, Model: model, StartedAt: at})
+	run, err := h.store.StartRun(inOrg(t), ports.NewRun{
+		FactoryID: factory, ItemID: it.ID, Station: station, Agent: agent, Model: model, StartedAt: at, Size: size,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := h.store.FinishRun(inOrg(t), run, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at); err != nil {
+	if err := h.store.FinishRun(inOrg(t), run, res, at); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -121,18 +139,15 @@ func budgetLines(s gen.OrgSpend) []string {
 }
 
 // Each window has its bounds, days and totals; budgets are each factory's, acme stopped by its
-// andon, line paid for by claude. acme names a model key, a secret, rather than a model
-// connection (ADR 0037), and the organization has no secret by that name, so it lists none.
+// andon. Neither lists a model: acme names a model key the organization has no secret for, and
+// line's runtime.modelConnection names a connection, which spend no longer reads (ADR 0037
+// decision 16).
 func TestGetOrgSpend_Windows(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 	h.seedSpend(t)
 	h.pullAndon(t)
-
-	if _, err := h.conns.Create(inOrg(t), domain.NewConnection{Name: "claude", Kind: "anthropic", Secrets: map[string]string{"key": "sk-ant-test"}}, domain.LocalUser); err != nil {
-		t.Fatal(err)
-	}
 
 	for _, c := range []struct{ query, want string }{
 		{"", "week 2026-10-19T00:00:00Z..2026-10-23T09:00:00Z complete=true days=5 total=3.00 month=6.00 last=4.00 merged=1 per=3.00 rework=0.00/0.00 weeks=8"},
@@ -154,7 +169,7 @@ func TestGetOrgSpend_Windows(t *testing.T) {
 
 			want := []string{
 				"acme daily=null weekly=null today=1.00 week=1.00 stopped (" + andonReason + ") models []",
-				"line daily=null weekly=70.00 today=0.00 week=2.00 running () models [claude (anthropic)]",
+				"line daily=null weekly=70.00 today=0.00 week=2.00 running () models []",
 			}
 			if lines := budgetLines(got); strings.Join(lines, "\n") != strings.Join(want, "\n") {
 				t.Errorf("budgets\n  %s\nwant\n  %s", strings.Join(lines, "\n  "), strings.Join(want, "\n  "))
@@ -258,6 +273,12 @@ func TestGetOrgSpend_HidesInvisibleFactories(t *testing.T) {
 	h := newSignedIn(t)
 	h.seedSpend(t)
 
+	// Usage on both factories; the line's peak memories have a median between two bytes.
+	today := time.Date(2026, time.October, 23, 7, 0, 0, 0, time.UTC)
+	h.usageRun(t, lineID, agBackend, today, domain.SandboxLarge, 300, 100)
+	h.usageRun(t, lineID, agBackend, today, domain.SandboxLarge, 100, 101)
+	h.usageRun(t, acmeID, writerAgent, today, domain.SandboxSmall, 20, 64)
+
 	viewer := decode[gen.OrgSpend](t, h.as(t, viewerToken, http.MethodGet, orgSpendPath+"?window=90d", ""), http.StatusOK)
 
 	if line, want := spendLine(viewer),
@@ -282,8 +303,57 @@ func TestGetOrgSpend_HidesInvisibleFactories(t *testing.T) {
 		t.Errorf("the viewer's budgets = %q; want acme's alone", lines)
 	}
 
+	if got, want := usageLines(viewer), "agents [8d4f/writer small 1 20/20 64/64] stations [8d4f/inbox small 1 20/20 64/64]"; got != want {
+		t.Errorf("the viewer's usage\n  %s\nwant\n  %s", got, want)
+	}
+
 	owner := decode[gen.OrgSpend](t, h.as(t, ownerToken, http.MethodGet, orgSpendPath+"?window=90d", ""), http.StatusOK)
 	if !owner.Complete || owner.TotalUsd != 10 || len(owner.Budgets) != 2 {
 		t.Errorf("the owner's spend = %s, %d budgets; want complete, 10.00 and both", spendLine(owner), len(owner.Budgets))
 	}
+
+	if got, want := usageLines(owner),
+		"agents [0b6f/"+agBackend+" large 2 200/280 101/101 8d4f/writer small 1 20/20 64/64] "+
+			"stations [0b6f/"+stBuild+" large 2 200/280 101/101 8d4f/inbox small 1 20/20 64/64]"; got != want {
+		t.Errorf("the owner's usage\n  %s\nwant\n  %s", got, want)
+	}
+}
+
+// usageLines shows the usage rows of sp in order: factory id prefix/name, box size, runs, CPU
+// P50/P90 and peak memory P50/P90.
+func usageLines(sp gen.OrgSpend) string {
+	show := func(f, name string, size *gen.SandboxSize, runs int, c50, c90 *float64, m50, m90 *int64) string {
+		v := func(p any) string {
+			switch p := p.(type) {
+			case *float64:
+				if p != nil {
+					return strconv.FormatFloat(*p, 'f', -1, 64)
+				}
+			case *int64:
+				if p != nil {
+					return strconv.FormatInt(*p, 10)
+				}
+			}
+
+			return unsetUSD
+		}
+
+		box := unsetUSD
+		if size != nil {
+			box = string(*size)
+		}
+
+		return fmt.Sprintf("%s/%s %s %d %s/%s %s/%s", f[:4], name, box, runs, v(c50), v(c90), v(m50), v(m90))
+	}
+
+	var agents, stations []string
+	for _, u := range sp.Usage.ByAgent {
+		agents = append(agents, show(u.FactoryId, u.Agent, u.BoxSize, u.Runs, u.CpuSecondsP50, u.CpuSecondsP90, u.PeakMemoryBytesP50, u.PeakMemoryBytesP90))
+	}
+
+	for _, u := range sp.Usage.ByStation {
+		stations = append(stations, show(u.FactoryId, u.Station, u.BoxSize, u.Runs, u.CpuSecondsP50, u.CpuSecondsP90, u.PeakMemoryBytesP50, u.PeakMemoryBytesP90))
+	}
+
+	return fmt.Sprintf("agents [%s] stations [%s]", strings.Join(agents, " "), strings.Join(stations, " "))
 }

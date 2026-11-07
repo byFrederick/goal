@@ -182,6 +182,26 @@ describe('Danger zone of a factory', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme'));
   });
 
+  it('names the factory by its title in the dialogs and toasts, and asks for the name to delete', async () => {
+    await renderSettings(archived, archiver);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete SRE?' });
+    expect(within(dialog).getByText('sre')).toBeTruthy();
+    const confirm = within(dialog).getByRole('button', { name: 'Delete factory' }) as HTMLButtonElement;
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'SRE' } });
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'sre' } });
+    expect(confirm.disabled).toBe(false);
+  });
+
+  it('titles the Archive dialog with the factory title', async () => {
+    await renderSettings(paused, archiver);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect(await screen.findByRole('dialog', { name: 'Archive SRE?' })).toBeTruthy();
+  });
+
   it('shows only Pause without factory:archive or factory:delete', async () => {
     await renderSettings(factory, []);
 

@@ -194,6 +194,25 @@ describe('budgetNote', () => {
     expect(budgetNote(line({ budget: { weekly_usd: 60, spent_usd: 12, exhausted: false } }))).toBeNull();
     expect(budgetNote(line())).toBeNull();
   });
+
+  it('adds when the line resumes, in the reader’s time zone', () => {
+    const resumes_at = '2026-11-02T01:00:00Z';
+    const d = new Date(resumes_at);
+    const day = new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(d);
+    const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(d);
+    expect(
+      budgetNote(
+        line({
+          budget: { weekly_usd: 60, spent_usd: 61.2, exhausted: true, since: '2026-10-30T09:00:00Z', resumes_at },
+        }),
+      ),
+    ).toBe(
+      `Weekly budget used up: $61.20 of $60. No new agent work starts until the week’s spend falls below it. Resumes about ${day} ${time}.`,
+    );
+    expect(budgetNote(line({ budget: { weekly_usd: 60, spent_usd: 61.2, exhausted: true, resumes_at: null } }))).toBe(
+      'Weekly budget used up: $61.20 of $60. No new agent work starts until the week’s spend falls below it.',
+    );
+  });
 });
 
 describe('constraintSentence', () => {

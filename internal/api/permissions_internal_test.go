@@ -191,7 +191,7 @@ func TestPermissions_PersonalTokensCarryExactlyThese(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
-		"access:read", "andon:manage", "authenticated", "connection:browse", "connection:read", "definition:edit", "definition:publish",
+		"access:read", "andon:manage", "authenticated", "connection:read", "definition:edit", "definition:publish",
 		"factory:archive", "factory:create", "factory:delete", string(permFactoryRead), "intake:read", "item:create", "item:decide", "item:operate", "knowledge:read", "org:read",
 		"secret:read", "trigger:try",
 	}
@@ -598,7 +598,7 @@ func TestServer_VisibleAndCan(t *testing.T) {
 	}{
 		{name: "viewer on their factory", p: viewer, f: mxF, visible: true, can: []domain.Permission{"factory:read", "intake:read"}},
 		{name: "viewer on another", p: viewer, f: mxG, visible: false, can: []domain.Permission{}},
-		{name: "member's org permissions", p: viewer, can: []domain.Permission{"access:read", "connection:browse", "connection:read", "knowledge:read", "member:read", "org:read", "personal_token:read", "secret:read"}},
+		{name: "member's org permissions", p: viewer, can: []domain.Permission{"access:read", "connection:read", "knowledge:read", "member:read", "org:read", "personal_token:read", "secret:read"}},
 		{name: "a stale owner may still be offered deleting", p: stale, canHolds: "org:delete"},
 		{name: "local user under none", authz: AllowAll{}, p: domain.LocalPrincipal, f: mxG, visible: true, canHolds: "definition:publish"},
 	}

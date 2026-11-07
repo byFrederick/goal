@@ -16,6 +16,7 @@ import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { StatStrip } from '../../ui/stat-strip';
 import { StatusIcon } from '../../ui/status-icon';
+import { touchLink } from '../../ui/touch-target';
 import { AssemblyActions } from './assembly-actions';
 import {
   agentRole,
@@ -164,6 +165,13 @@ function PlanCard({
   );
 }
 
+/**
+ * Ref, Station and Cost are columns only while the table's box is 896 px (4xl) wide; below that they sit on a
+ * second line under the title, so the title keeps the leftover width. Both classes name the same width.
+ */
+const partsColumn = 'hidden @4xl:table-cell';
+const partsLine = '@4xl:hidden';
+
 /** Every part in plan order, with its state, cost and pull request. */
 function PartsTable({
   parts,
@@ -179,7 +187,7 @@ function PartsTable({
   const link = usePartLink();
   return (
     <SectionCard title="Parts" className={className}>
-      <div className="-mx-4 overflow-x-auto px-4 md:-mx-5 md:px-5">
+      <div className="@container relative -mx-4 overflow-x-auto px-4 md:-mx-5 md:px-5">
         <table className="w-full min-w-[320px] border-collapse text-[15px]">
           <caption className="sr-only">Parts of {item}, in plan order</caption>
           <thead>
@@ -187,19 +195,22 @@ function PartsTable({
               <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
                 Part
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal max-lg:hidden">
+              <th scope="col" className={cn('py-2 pr-3 font-normal', partsColumn)}>
                 Ref
               </th>
               <th scope="col" className="py-2 pr-3 font-normal">
                 Title
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap max-lg:hidden">
+              <th scope="col" className={cn('min-w-20 py-2 pr-3 font-normal whitespace-nowrap', partsColumn)}>
                 Station
               </th>
-              <th scope="col" className="py-2 pr-3 font-normal whitespace-nowrap">
+              <th scope="col" className="min-w-[4.5rem] py-2 pr-3 font-normal whitespace-nowrap">
                 State
               </th>
-              <th scope="col" className="py-2 pr-3 text-right font-normal whitespace-nowrap max-lg:hidden">
+              <th
+                scope="col"
+                className={cn('min-w-[3.75rem] py-2 pr-3 text-right font-normal whitespace-nowrap', partsColumn)}
+              >
                 Cost
               </th>
               <th scope="col" className="py-2 font-normal whitespace-nowrap max-md:hidden">
@@ -213,20 +224,34 @@ function PartsTable({
                 <td className="py-2.5 pr-3 whitespace-nowrap text-muted tabular-nums">
                   {part.index} of {total}
                 </td>
-                <td className="py-2.5 pr-3 whitespace-nowrap text-muted max-lg:hidden">{part.ref}</td>
-                <td className="w-full max-w-0 min-w-24 py-2.5 pr-3">
+                <td className={cn('py-2.5 pr-3 whitespace-nowrap text-muted', partsColumn)}>{part.ref}</td>
+                <td className="w-full max-w-0 min-w-24 py-2.5 pr-3 @2xl:min-w-72">
                   <Link
                     to="/o/$org/f/$factory/items/$ref"
                     params={link(part)}
                     title={part.title}
-                    className="block truncate font-medium no-underline hover:underline"
+                    className={cn('block truncate font-medium no-underline hover:underline', touchLink)}
                   >
                     {part.title}
                   </Link>
+                  <div className={cn('mt-1 flex flex-wrap gap-x-3 text-secondary text-muted', partsLine)}>
+                    <span>
+                      <span className="sr-only">Ref: </span>
+                      {part.ref}
+                    </span>
+                    <span>
+                      <span className="sr-only">Station: </span>
+                      {humanize(part.station)}
+                    </span>
+                    <span className="tabular-nums">
+                      <span className="sr-only">Cost: </span>
+                      {formatUsd(part.cost_usd)}
+                    </span>
+                  </div>
                 </td>
-                <td className="py-2.5 pr-3 whitespace-nowrap max-lg:hidden">{humanize(part.station)}</td>
+                <td className={cn('py-2.5 pr-3 whitespace-nowrap', partsColumn)}>{humanize(part.station)}</td>
                 <td className="py-2.5 pr-3 whitespace-nowrap">{stateNames[part.state]}</td>
-                <td className="py-2.5 pr-3 text-right whitespace-nowrap tabular-nums max-lg:hidden">
+                <td className={cn('py-2.5 pr-3 text-right whitespace-nowrap tabular-nums', partsColumn)}>
                   {formatUsd(part.cost_usd)}
                 </td>
                 <td className="py-2.5 whitespace-nowrap max-md:hidden">

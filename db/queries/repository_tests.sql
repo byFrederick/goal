@@ -3,7 +3,7 @@
 
 -- name: UpsertRepositoryTest :execrows
 -- org_id comes from its default, goal_org(); a factory the organization does not have violates
--- the foreign key. ci_ok and ci_reason are NULL for a test without a CI check (migration 00135).
+-- the foreign key. ci_ok and ci_reason are NULL for a test without a CI check (migration 00140).
 INSERT INTO repository_tests (factory_id, url, access, secret, at, tested, ok, summary, warning, read_ok, read_reason, push_ok, push_reason,
   readable, pushable, truncated, ci_ok, ci_reason)
 VALUES (sqlc.arg(factory_id), sqlc.arg(url), sqlc.arg(access), sqlc.arg(secret), sqlc.arg(at), sqlc.arg(tested), sqlc.arg(ok), sqlc.arg(summary),

@@ -3,12 +3,14 @@
 // lanes and its gate; the models of the agents; and the factory card on the panel. Every value is read from and
 // saved through the line editor and the draft (LineEditorProvider, the draft ops), as the wizard's Line step
 // does. Nothing is published here: step 5 publishes (ADR 0032 decision 4).
+
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { type ReactNode, useId, useRef } from 'react';
+import { type ReactNode, useId, useRef, useState } from 'react';
 import { factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
 import type { ModelStation } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
@@ -16,16 +18,17 @@ import { Field, Input, NativeSelect } from '../../ui/field';
 import { Leaving, useLeaving } from '../../ui/leaving';
 import { NotAvailable } from '../../ui/not-available';
 import { addStation, moveStation, removeStation, setStationField, setStationName } from '../factory-editor/draft/ops';
-import { DraftSessionProvider, useDraft, useSection } from '../factory-editor/draft/use-draft';
+import { DraftSessionProvider, useDraft, useDraftSession, useSection } from '../factory-editor/draft/use-draft';
 import { useValidation } from '../factory-editor/frame/use-editor';
 import { stationLabel } from '../factory-editor/line/labels';
 import { LineEditorProvider, useLineEditor } from '../factory-editor/line/line-editor';
 import { ModelsBox } from '../factory-editor/line/models-box';
 import { type Direction, stepTarget } from '../factory-editor/line/reorder';
 import { WipStepper } from '../factory-editor/line/station-row';
-import { type OnboardingSearch, repoOf } from './code-search';
+import { carriedSearch, type OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, type PreviewStation, previewSlots } from './factory-preview';
 import { AddHere, CardControls, useCardFlip } from './line-step-controls';
+import { ModelKeyCard, useModelKeySecret } from './model-key-card';
 import { OnboardingLayout } from './onboarding-layout';
 
 export function LineStep({ org, search }: { org: OrgSummary; search: OnboardingSearch }) {
@@ -84,16 +87,10 @@ function Loading({ org }: { org: OrgSummary }) {
   );
 }
 
-/** The draft is read once it is open: until then the step shows its loading state. */
+/** The session is read once it is up: until then the step shows its loading state. Without a draft it shows the running version. */
 function Line({ org, search, factory }: { org: OrgSummary; search: OnboardingSearch; factory: string }) {
   const ready = useDraft((s) => s.ready);
-  const hasDraft = useDraft((s) => s.hasDraft);
   if (!ready) return <Loading org={org} />;
-  if (!hasDraft) {
-    return (
-      <NoFactory org={org} search={search} message="This factory has no draft to shape. Choose a template again." />
-    );
-  }
   return (
     <LineEditorProvider place="wizard">
       <LineBody org={org} search={search} factory={factory} />
@@ -123,25 +120,22 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
           <Link
             to="/o/$org/get-started/$step"
             params={{ org: org.slug, step: 'code' }}
-            search={{
-              url: search.url,
-              secret: search.secret,
-              template: search.template,
-              factory,
-              access: search.access,
-            }}
+            search={carriedSearch(search, { factory })}
           >
             Back
           </Link>
         </Button>
       }
-      action={<Continue org={org} factory={factory} />}
+      action={<Continue org={org} search={search} factory={factory} />}
       preview={previewSlots({
         organization: organizationCard(org, host),
-        code: codeCard(repoOf(search.url), search.secret),
+        code: codeCard({ url: search.url, secret: search.secret, done: true }),
         factory: (
           <FactoryCard
-            name={basics.name || factoryDetail?.name || ''}
+            name={factoryTitle({
+              name: basics.name || factoryDetail?.name || '',
+              title: basics.title || factoryDetail?.title,
+            })}
             purpose={basics.purpose ?? ''}
             stations={panelStations}
           />
@@ -158,27 +152,34 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
 
       <StationCards />
       <Models />
+      <ModelKeyCard org={org.id} factory={factory} />
     </OnboardingLayout>
   );
 }
 
 /**
  * Continue goes to Budget, which publishes. It is held while the line has no station that runs an agent and while
- * the draft's validation reports an error or has not answered yet, with one sentence saying what is missing.
+ * the draft's validation reports an error or has not answered yet, and while factory.yaml has no model key, with one sentence saying what is missing.
  */
-function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
+function Continue({ org, search, factory }: { org: OrgSummary; search: OnboardingSearch; factory: string }) {
   const editor = useLineEditor();
+  const session = useDraftSession();
   const navigate = useNavigate();
   const validation = useValidation();
+  const hasDraft = useDraft((s) => s.hasDraft);
+  const [leaving, setLeaving] = useState(false);
   const sentenceId = useId();
   const noAgent = !editor.stations.some((s) => s.kind === 'agent');
   const invalid = validation?.problems.some((p) => p.severity === 'error') ?? false;
+  const modelKey = useModelKeySecret();
   const sentence = noAgent
     ? 'Add a station that runs an agent, then continue.'
     : invalid
       ? 'Fix the problems in this line, then continue.'
-      : undefined;
-  const held = sentence !== undefined || validation === undefined;
+      : modelKey.ready && modelKey.secret === undefined
+        ? 'Add the model key, then continue.'
+        : undefined;
+  const held = sentence !== undefined || (hasDraft && validation === undefined) || !modelKey.ready || leaving;
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {sentence ? (
@@ -193,13 +194,20 @@ function Continue({ org, factory }: { org: OrgSummary; factory: string }) {
         disabled={held}
         aria-describedby={sentence ? sentenceId : undefined}
         className="[transition-duration:var(--duration-quick),var(--duration-quick),var(--duration-quick),var(--duration-quick),var(--duration-micro)] [transition-property:color,background-color,border-color,opacity,transform]"
-        onClick={() =>
-          void navigate({
-            to: '/o/$org/get-started/$step',
-            params: { org: org.slug, step: 'budget' },
-            search: { factory },
-          })
-        }
+        onClick={() => {
+          // Leaving unmounts the draft session and drops its pending autosave, so save first (the model key).
+          setLeaving(true);
+          void session.flush().then(
+            () => {
+              void navigate({
+                to: '/o/$org/get-started/$step',
+                params: { org: org.slug, step: 'budget' },
+                search: carriedSearch(search, { factory }),
+              });
+            },
+            () => setLeaving(false),
+          );
+        }}
       >
         Continue
       </Button>
