@@ -39,6 +39,8 @@ func (s *server) ListVersions(ctx context.Context, req gen.ListVersionsRequestOb
 		out.Versions = append(out.Versions, s.versionOut(v))
 	}
 
+	s.nameActors(ctx, filers(out.Versions, func(v *gen.Version) *gen.Actor { return v.PublishedBy })...)
+
 	if err := s.withWatches(ctx, rec.ID, out.Versions); err != nil {
 		return nil, err
 	}
@@ -62,6 +64,7 @@ func (s *server) GetVersion(ctx context.Context, req gen.GetVersionRequestObject
 	}
 
 	out := s.versionDetailOut(v)
+	s.nameActors(ctx, out.PublishedBy)
 
 	if v.State == domain.VersionPublished {
 		by, err := s.versionWatches(ctx, rec, []domain.DefinitionVersionID{v.ID})

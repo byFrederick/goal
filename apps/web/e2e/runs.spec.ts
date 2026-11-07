@@ -85,6 +85,30 @@ for (const width of [1280, 1440]) {
   });
 }
 
+test('shows CPU, Peak memory and Box with values and — at 1440 px', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openRuns(page);
+
+  await expect(page.getByRole('columnheader', { name: /^CPU/ })).toBeVisible();
+  for (const name of ['Peak memory', 'Box']) {
+    await expect(page.getByRole('columnheader', { name, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole('cell', { name: /^\d+(\.\d)? (s|min)$/ }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: /^\d+(\.\d)? (MB|GB)$/ }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: '—' }).first()).toBeVisible();
+});
+
+test('hides CPU, Peak memory and Box at 390 px without sideways scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openRuns(page);
+
+  await expect(page.getByRole('columnheader', { name: /^CPU/ })).toBeHidden();
+  for (const name of ['Peak memory', 'Box']) {
+    await expect(page.getByRole('columnheader', { name, exact: true })).toBeHidden();
+  }
+  await expectNoHorizontalScroll(page);
+});
+
 for (const width of [375, 390]) {
   test(`has the Runs title, an Export CSV icon and no sideways scroll at ${width} px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

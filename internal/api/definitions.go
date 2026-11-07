@@ -84,6 +84,13 @@ func (s *server) ListFactories(ctx context.Context, req gen.ListFactoriesRequest
 		}
 	}
 
+	var actors []*gen.Actor
+	for i := range out.Factories {
+		actors = append(actors, factoryActors(&out.Factories[i])...)
+	}
+
+	s.nameActors(ctx, actors...)
+
 	return out, nil
 }
 
@@ -358,14 +365,17 @@ func recordOf(recs map[domain.FactoryID]ports.FactoryRecord, org domain.OrgID, f
 	return ports.FactoryRecord{ID: domain.FactoryID(f.Metadata.ID), OrgID: org, Name: f.Metadata.Name, Title: f.Metadata.Title}
 }
 
-// factoryOut is a factory with what goald runs of it.
+// factoryOut is a factory with what goald runs of it, its people named.
 func (s *server) factoryOut(ctx context.Context, rec ports.FactoryRecord) gen.Factory {
-	return s.factoryOf(ctx, rec, s.loaded(ctx)[rec.ID])
+	out := s.factoryOf(ctx, rec, s.loaded(ctx)[rec.ID])
+	s.nameActors(ctx, factoryActors(&out)...)
+
+	return out
 }
 
 // factoryOf is a factory as the store keeps it, with the stations, work types and description of
 // the version goald runs (f, nil before the first publish), and the caller's role and permissions
-// on it.
+// on it. Its people are named by the response's nameActors, once for all its factories.
 func (s *server) factoryOf(ctx context.Context, rec ports.FactoryRecord, f *config.Factory) gen.Factory {
 	out := gen.Factory{
 		Id: string(rec.ID), OrgId: string(rec.OrgID), Name: rec.Name, Title: optional(rec.Title),

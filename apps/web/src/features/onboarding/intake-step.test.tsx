@@ -205,7 +205,7 @@ describe('step 6, choose where work comes from', () => {
     expect(await screen.findByText('The factory’s triggers can’t be read.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('switch', { name: 'weekly-dependency-audit' })).toBeTruthy();
+    expect(await screen.findByRole('switch', { name: 'Weekly dependency audit' })).toBeTruthy();
     expect(getIntake).toHaveBeenCalledTimes(2);
   });
 
@@ -227,9 +227,9 @@ describe('step 6, choose where work comes from', () => {
     renderStep(url);
     expect(await screen.findByRole('heading', { name: 'Starter triggers' })).toBeTruthy();
 
-    expect(within(rowOf('issues-labeled-factory')).getByText('Creates a feature at Spec')).toBeTruthy();
-    expect(screen.getByRole('switch', { name: 'issues-labeled-factory' }).getAttribute('aria-checked')).toBe('false');
-    expect(screen.queryByRole('switch', { name: 'weekly-dependency-audit' })).toBeNull();
+    expect(within(rowOf('Issues labeled factory')).getByText('Creates a feature at Spec')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Issues labeled factory' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByRole('switch', { name: 'Weekly dependency audit' })).toBeNull();
     expect(screen.getByText('Always on:')).toBeTruthy();
     expect(screen.getByText('New item')).toBeTruthy();
     expect(screen.getByText('CLI')).toBeTruthy();
@@ -260,7 +260,7 @@ describe('step 6, choose where work comes from', () => {
     expect(await screen.findByText('Weekdays at 07:00 UTC')).toBeTruthy();
     expect(screen.getByText('Creates a ticket at Inbox')).toBeTruthy();
     expect(screen.getByText('0 7 * * 1-5, UTC')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'About morning schedule' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About Morning schedule' })).toBeTruthy();
     // The same word as the Intake card's sentence.
     expect(screen.getByText('CLI')).toBeTruthy();
     expect(screen.getByText(/New item, CLI and API/)).toBeTruthy();
@@ -278,7 +278,7 @@ describe('step 6, choose where work comes from', () => {
     expect(connects).toHaveLength(2);
     expect(connects[0]?.getAttribute('href')).toBe('/o/acme/f/code-review/intake/webhooks');
 
-    const sw = screen.getByRole('switch', { name: 'issues-labeled-factory' });
+    const sw = screen.getByRole('switch', { name: 'Issues labeled factory' });
     expect(sw.getAttribute('aria-checked')).toBe('false');
     expect(sw.getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(sw);
@@ -290,7 +290,7 @@ describe('step 6, choose where work comes from', () => {
     const button = await screen.findByRole('button', { name: 'Continue' });
     expect(button).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Weekly dependency audit' }));
     expect(screen.getByRole('button', { name: 'Turn on 1 trigger' })).toBeTruthy();
   });
 
@@ -302,8 +302,8 @@ describe('step 6, choose where work comes from', () => {
       ]),
     );
     renderStep(url);
-    await screen.findByRole('switch', { name: 'weekly-dependency-audit' });
-    fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
+    await screen.findByRole('switch', { name: 'Weekly dependency audit' });
+    fireEvent.click(screen.getByRole('switch', { name: 'Weekly dependency audit' }));
     expect(screen.getByRole('button', { name: 'Turn on 1 trigger' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Turn on 1 trigger' }));
@@ -326,8 +326,8 @@ describe('step 6, choose where work comes from', () => {
   it('shows the button as busy while the write is pending', async () => {
     vi.mocked(putDraftFile).mockReturnValue(new Promise(() => {}));
     renderStep(url);
-    await screen.findByRole('switch', { name: 'weekly-dependency-audit' });
-    fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
+    await screen.findByRole('switch', { name: 'Weekly dependency audit' });
+    fireEvent.click(screen.getByRole('switch', { name: 'Weekly dependency audit' }));
     fireEvent.click(screen.getByRole('button', { name: 'Turn on 1 trigger' }));
     const button = await screen.findByRole('button', { name: 'Turning on 1 trigger…' });
     expect(button.getAttribute('aria-busy')).toBe('true');
@@ -343,8 +343,8 @@ describe('step 6, choose where work comes from', () => {
       ]),
     );
     renderStep(url);
-    fireEvent.click(await screen.findByRole('switch', { name: 'nightly-review' }));
-    fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
+    fireEvent.click(await screen.findByRole('switch', { name: 'Nightly review' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Weekly dependency audit' }));
     expect(screen.getByRole('button', { name: 'Turn on 2 triggers' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Turn on 2 triggers' }));
@@ -367,7 +367,7 @@ describe('step 6, choose where work comes from', () => {
       } as never),
     );
     renderStep(url);
-    fireEvent.click(await screen.findByRole('switch', { name: 'weekly-dependency-audit' }));
+    fireEvent.click(await screen.findByRole('switch', { name: 'Weekly dependency audit' }));
     fireEvent.click(screen.getByRole('button', { name: 'Turn on 1 trigger' }));
 
     expect(
@@ -380,7 +380,7 @@ describe('step 6, choose where work comes from', () => {
     vi.mocked(getIntake).mockResolvedValue(intakeOf([trigger({ name: 'weekly-dependency-audit' })]));
     vi.mocked(openDraft).mockResolvedValue({ revision: 3, change_count: 2 } as never);
     renderStep(url);
-    fireEvent.click(await screen.findByRole('switch', { name: 'weekly-dependency-audit' }));
+    fireEvent.click(await screen.findByRole('switch', { name: 'Weekly dependency audit' }));
     fireEvent.click(screen.getByRole('button', { name: 'Turn on 1 trigger' }));
 
     expect(await screen.findByText(/The factory has an open draft/)).toBeTruthy();
@@ -392,11 +392,22 @@ describe('step 6, choose where work comes from', () => {
     vi.mocked(getIntake).mockResolvedValue(intakeOf([trigger({ name: 'weekly-dependency-audit' }), issues]));
     renderStep(url);
     const card = await screen.findByRole('region', { name: 'Intake' });
-    expect(within(card).queryByText(/weekly-dependency-audit/)).toBeNull();
+    expect(within(card).queryByText(/Weekly dependency audit/)).toBeNull();
     expect(within(card).getByText('New item, CLI and API')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('switch', { name: 'weekly-dependency-audit' }));
-    await waitFor(() => expect(within(card).getByText('weekly-dependency-audit, New item, CLI and API')).toBeTruthy());
+    fireEvent.click(screen.getByRole('switch', { name: 'Weekly dependency audit' }));
+    await waitFor(() => expect(within(card).getByText('Weekly dependency audit, New item, CLI and API')).toBeTruthy());
+  });
+
+  it('names a starter trigger in words, in its row, its switch and the panel', async () => {
+    vi.mocked(getIntake).mockResolvedValue(intakeOf([trigger({ name: 'daily-open-tickets' })]));
+    renderStep(url);
+    const toggle = await screen.findByRole('switch', { name: 'Daily open tickets' });
+    expect(within(rowOf('Daily open tickets')).getByText('Daily open tickets')).toBeTruthy();
+    expect(screen.queryByText('daily-open-tickets')).toBeNull();
+    fireEvent.click(toggle);
+    const card = await screen.findByRole('region', { name: 'Intake' });
+    await waitFor(() => expect(within(card).getByText('Daily open tickets, New item, CLI and API')).toBeTruthy());
   });
 
   it('writes the Intake card as one sentence with no trigger and with two', () => {

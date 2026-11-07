@@ -2015,6 +2015,10 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           ended_at: status === 'running' ? null : new Date(Math.round(at)).toISOString(),
           definition_version_id: version?.id ?? null,
           definition_version: version?.number ?? null,
+          // A finished run has the box's figures; a run still going or one that failed keeps nulls.
+          cpu_seconds: status === 'succeeded' ? step.turns * 6.5 : null,
+          peak_memory_bytes: status === 'succeeded' ? (256 + step.turns * 24) * 1024 ** 2 : null,
+          box_size: status === 'succeeded' ? (step.turns > 15 ? 'medium' : 'small') : null,
         });
         if (status !== 'running') {
           push('run_finished', agent, { status, error: step.error ?? '', cost_usd: step.cost, turns: step.turns }, run);
@@ -2139,7 +2143,7 @@ export function seed(now = Date.now()): MockState {
         'approve-spec': { agents: [], wip_limit: null },
         build: {
           agents: ['builder-1', 'builder-2'],
-          wip_limit: 2,
+          wip_limit: 3,
           copies: 2,
           buffer: 2,
           output: 'change',
@@ -2177,7 +2181,7 @@ export function seed(now = Date.now()): MockState {
       software: {
         intake: { agents: [], wip_limit: null },
         spec: { agents: ['architect'], wip_limit: 3 },
-        build: { agents: ['engineer'], wip_limit: 6, copies: 6 },
+        build: { agents: ['engineer'], wip_limit: 8, copies: 6 },
         review: { agents: ['reviewer'], wip_limit: 3 },
         done: { agents: [], wip_limit: null },
       },

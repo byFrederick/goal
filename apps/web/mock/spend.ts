@@ -184,6 +184,30 @@ export function createSpend(options: SpendOptions) {
       rework_usd: rework,
       rework_share: total > 0 ? 0.12 : 0,
       budgets,
+      usage: usageOf(factories, window),
+    };
+  }
+
+  /** Sample box usage: the factory's agents and stations, one with no box size and one with a missing percentile. */
+  function usageOf(factories: SpendFactory[], window: SpendWindow): OrgSpend['usage'] {
+    const scale = window === 'week' ? 1 : window === 'month' ? 4 : 12;
+    const GB = 1024 ** 3;
+    const row = (i: number) => ({
+      box_size: (i % 3 === 2 ? null : (['large', 'medium', 'small'] as const)[i % 3]) ?? null,
+      runs: (12 - i * 2) * scale,
+      cpu_seconds_p50: 200 / (i + 1),
+      cpu_seconds_p90: i === 3 ? null : 450 / (i + 1),
+      peak_memory_bytes_p50: (1.6 / (i + 1)) * GB,
+      peak_memory_bytes_p90: (2.6 / (i + 1)) * GB,
+    });
+    const agents = factories.flatMap((f) =>
+      (budgeted[f.name]?.agents ?? []).slice(0, 3).map(([agent]) => ({ f, agent })),
+    );
+    return {
+      by_agent: agents.map(({ f, agent }, i) => ({ factory_id: f.id, agent, ...row(i % 5) })),
+      by_station: factories.flatMap((f, fi) =>
+        ['triage', 'build'].map((station, i) => ({ factory_id: f.id, station, ...row(fi + i) })),
+      ),
     };
   }
 

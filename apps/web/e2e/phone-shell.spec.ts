@@ -1,6 +1,6 @@
 import type { Locator } from '@playwright/test';
 import { expect, type Page, test } from '@playwright/test';
-import { expectNoHorizontalScroll, orgNav } from './support';
+import { expectNoHorizontalScroll, orgNav, setConstraintSaving } from './support';
 
 // The phone shell (below 768 px): the Goal mark opens the drawer, the bottom tab bar follows the factory.
 test.beforeEach(async ({ request }) => {
@@ -208,6 +208,8 @@ test.describe('every phone control has a 44 px hit area at 390 px', () => {
 
   for (const [name, path, find] of samples) {
     test(name, async ({ page }) => {
+      // The Floor hides the what-if when it saves little; give it a clear saving so the button is there to measure.
+      await setConstraintSaving(page, 10);
       await page.goto(path);
       const area = await hitArea(find(page));
       expect(area.height).toBeGreaterThanOrEqual(43.5);
