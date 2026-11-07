@@ -147,3 +147,18 @@ test('Intake and New trigger targets are 44 px at 390 px', async ({ page }) => {
   await page.goto(`${intake}/new`);
   await expectTarget44(page.getByRole('searchbox', { name: 'Search sources' }), 'the source search');
 });
+
+const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+for (const width of [375, 1440]) {
+  test(`Coming up names the person, never their id, at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 800 });
+    await page.goto(intake);
+    const region = page.getByRole('region', { name: 'Coming up' });
+    await expect(region.getByRole('listitem').filter({ hasText: 'Freddy Cruz, the CLI' })).toHaveCount(1);
+    await expect(region.getByRole('listitem').filter({ hasText: 'A former member' })).toHaveCount(1);
+    await expect(region.getByRole('listitem').filter({ hasText: uuid })).toHaveCount(0);
+    await expectAccessible(page);
+    await expectNoHorizontalScroll(page);
+  });
+}
