@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ApiError, pauseFactory, resumeFactory } from '../../api/client';
 import { defKeys } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { refreshFactory } from './refresh';
 import { ZoneRow } from './zone-row';
@@ -19,7 +20,7 @@ export function useTogglePause(org: OrgSummary, reportError: (message: string) =
       factory.paused ? resumeFactory(org.id, factory.id) : pauseFactory(org.id, factory.id),
     onSuccess: (answer, factory) => {
       client.setQueryData(defKeys.factory(org.id, factory.id), answer);
-      toast.success(answer.paused ? `Paused ${factory.name}` : `Resumed ${factory.name}`);
+      toast.success(answer.paused ? `Paused ${factoryTitle(factory)}` : `Resumed ${factoryTitle(factory)}`);
     },
     onError: (err) =>
       reportError(

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { restoreFactory } from '../../api/client';
 import { defKeys } from '../../api/queries';
 import type { Factory, OrgSummary } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { refreshFactory } from './refresh';
 
 export function useRestoreFactory(org: OrgSummary, factory: Factory) {
@@ -15,7 +16,7 @@ export function useRestoreFactory(org: OrgSummary, factory: Factory) {
     mutationFn: () => restoreFactory(org.id, factory.id),
     onSuccess: (answer) => {
       client.setQueryData(detailKey, answer);
-      toast.success(`Restored ${factory.name}`, {
+      toast.success(`Restored ${factoryTitle(factory)}`, {
         description: 'It is listed again and stays paused until you resume it.',
       });
     },
