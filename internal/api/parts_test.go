@@ -374,9 +374,9 @@ func TestAPI_ItemPartsWaiting(t *testing.T) {
 
 	h := newHarness(t)
 	asm, parts := h.assembledOf(t,
-		domain.NewPart{Key: "server", Title: "the server", Paths: []string{"cmd/goald/main.go"}},
-		domain.NewPart{Key: "contract", Title: "the contract", Paths: []string{openAPIPath}},
-		domain.NewPart{Key: "client", Title: "the client", Paths: []string{"web/src/a.ts"}},
+		domain.NewPart{Key: "handler", Title: "The handler", Paths: []string{"internal/api/parts.go"}},
+		domain.NewPart{Key: "schema", Title: "The schema", Paths: []string{openAPIPath}},
+		domain.NewPart{Key: "row", Title: "The row", Paths: []string{"web/src/b.ts"}},
 	)
 
 	for i, p := range parts {
@@ -385,7 +385,7 @@ func TestAPI_ItemPartsWaiting(t *testing.T) {
 		}
 	}
 
-	server, contract, client := parts[0], parts[1], parts[2]
+	handler, schema, row := parts[0], parts[1], parts[2]
 
 	const branch = "goal/a1-the-assembly"
 
@@ -393,8 +393,8 @@ func TestAPI_ItemPartsWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.edge(t, client, contract, domain.EdgeTurn)
-	h.openCIWait(t, server, ciSHA, 1)
+	h.edge(t, row, schema, domain.EdgeTurn)
+	h.openCIWait(t, handler, ciSHA, 1)
 	h.recordChecks(t, ciSHA,
 		ports.Check{Name: ciLint, State: ports.CheckFinished, Result: ports.CheckPassed},
 		ports.Check{Name: ciTest, State: ports.CheckRunning},
@@ -409,9 +409,9 @@ func TestAPI_ItemPartsWaiting(t *testing.T) {
 	}
 
 	passed, pr, target := gen.CICheckResultPassed, prURL, branch
-	contractRef := "line#" + strconv.FormatInt(contract.Number, 10)
+	schemaRef := "line#" + strconv.FormatInt(schema.Number, 10)
 	want := map[string]*gen.ItemWaiting{
-		"server": {
+		"handler": {
 			Kind: gen.WaitingCI, Items: []string{}, Files: []string{}, Needs: []gen.ItemWaitingNeed{},
 			Ci: &gen.ItemWaitingCI{
 				Commits: []gen.CICommit{{Repo: ciRepo, Sha: ciSHA, Url: &pr}},
@@ -422,11 +422,11 @@ func TestAPI_ItemPartsWaiting(t *testing.T) {
 				Finished: 1, Total: 2,
 			},
 		},
-		"client": {
-			Kind: gen.WaitingTurn, Items: []string{contractRef}, Files: []string{}, Target: &target,
-			Needs: []gen.ItemWaitingNeed{{Ref: contractRef, Title: "the contract", Paths: []string{openAPIPath}}},
+		"row": {
+			Kind: gen.WaitingTurn, Items: []string{schemaRef}, Files: []string{}, Target: &target,
+			Needs: []gen.ItemWaitingNeed{{Ref: schemaRef, Title: "The schema", Paths: []string{openAPIPath}}},
 		},
-		"contract": nil,
+		"schema": nil,
 	}
 
 	for _, p := range got.Parts {
