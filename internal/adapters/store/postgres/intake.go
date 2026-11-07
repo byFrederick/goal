@@ -739,17 +739,6 @@ func (in *Intake) OpenItemByDedupe(ctx context.Context, factory domain.FactoryID
 	}
 }
 
-// SourceTally implements ports.Intake.
-func (in *Intake) SourceTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.SourceCount, error) {
-	return factoryTally(ctx, in, factory, "item sources", func(q *db.Queries, fid uuid.UUID) ([]db.ItemSourceTallyRow, error) {
-		return q.ItemSourceTally(ctx, db.ItemSourceTallyParams{FactoryID: fid, Since: since})
-	}, sourceCount)
-}
-
-func sourceCount(r db.ItemSourceTallyRow) domain.SourceCount {
-	return domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)}
-}
-
 // factoryTally reads a factory's counts with query and makes each row a count with count; what
 // names them in an error.
 func factoryTally[R, C any](ctx context.Context, in *Intake, factory domain.FactoryID, what string,
@@ -795,35 +784,25 @@ func (in *Intake) TriggerStats(ctx context.Context, factory domain.FactoryID, si
 	return out, nil
 }
 
-// ItemSources implements ports.Intake.
-func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error) {
+// NewestItems implements ports.Intake.
+func (in *Intake) NewestItems(ctx context.Context, factory domain.FactoryID, last int) (domain.ItemWindow, error) {
 	fid, err := parseID("factory", string(factory))
 	if err != nil {
-		return domain.SourceWindow{}, err
+		return domain.ItemWindow{}, err
 	}
 
-	rows, err := fetch(ctx, in.s.read, func(q *db.Queries) ([]db.LastItemSourcesRow, error) {
-		return q.LastItemSources(ctx, db.LastItemSourcesParams{FactoryID: fid, MaxItems: int32(min(max(last, 0), math.MaxInt32))})
+	r, err := fetch(ctx, in.s.read, func(q *db.Queries) (db.NewestItemsRow, error) {
+		return q.NewestItems(ctx, db.NewestItemsParams{FactoryID: fid, MaxItems: int32(min(max(last, 0), math.MaxInt32))})
 	})
-	if err != nil {
-		return domain.SourceWindow{}, fmt.Errorf("sources of factory %s's last items: %w", factory, err)
+
+	switch {
+	case notFound(err):
+		return domain.ItemWindow{}, nil
+	case err != nil:
+		return domain.ItemWindow{}, fmt.Errorf("factory %s's newest items: %w", factory, err)
+	default:
+		return domain.ItemWindow{Items: int(r.Items), From: r.FirstAt.UTC(), To: r.LastAt.UTC()}, nil
 	}
-
-	w := domain.SourceWindow{Counts: make([]domain.SourceCount, 0, len(rows))}
-
-	for _, r := range rows {
-		w.Counts = append(w.Counts, domain.SourceCount{Source: domain.ItemSource(r.Source), Items: int(r.Items)})
-
-		if first := r.FirstAt.UTC(); w.From.IsZero() || first.Before(w.From) {
-			w.From = first
-		}
-
-		if lastAt := r.LastAt.UTC(); lastAt.After(w.To) {
-			w.To = lastAt
-		}
-	}
-
-	return w, nil
 }
 
 // OriginTally implements ports.Intake.

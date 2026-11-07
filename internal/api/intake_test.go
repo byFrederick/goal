@@ -60,9 +60,9 @@ func (h *harness) fire(t *testing.T, trigger, dedupe string, item domain.ItemID,
 	}
 }
 
-// The sources count acme's 48 newest items by default, every source answered, over the days the
-// oldest and newest of them were created; the triggers are the definition's, in its order.
-func TestIntake_SourceTally(t *testing.T) {
+// items, from and to count acme's 48 newest items by default, over the days the oldest and newest
+// of them were created; the triggers are the definition's, in its order.
+func TestIntake_NewestItems(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -72,18 +72,8 @@ func TestIntake_SourceTally(t *testing.T) {
 	}
 
 	start := oct(20, 0)
-	sources := []struct {
-		src domain.ItemSource
-		n   int
-	}{{domain.ItemFromPeople, 20}, {domain.ItemFromCLI, 10}, {domain.ItemFromAPI, 5}, {domain.ItemFromSchedule, 6}, {domain.ItemFromWebhook, 3}, {domain.ItemFromGitHub, 4}}
-
-	i := 0
-
-	for _, s := range sources {
-		for range s.n {
-			h.intakeItem(t, s.src, "", start.Add(time.Duration(i)*time.Hour))
-			i++
-		}
+	for i := range 48 {
+		h.intakeItem(t, domain.ItemFromPeople, "", start.Add(time.Duration(i)*time.Hour))
 	}
 
 	var in gen.Intake
@@ -91,16 +81,15 @@ func TestIntake_SourceTally(t *testing.T) {
 		t.Fatalf("intake = %d", code)
 	}
 
-	got := fmt.Sprintf("%d items %s to %s: %+v", in.Items, in.From, in.To, in.Sources)
-	if want := "48 items 2026-10-20 to 2026-10-21: {Api:5 Cli:10 Github:4 People:20 Schedule:6 Webhook:3}"; got != want {
+	if got, want := fmt.Sprintf("%d items %s to %s", in.Items, in.From, in.To), "48 items 2026-10-20 to 2026-10-21"; got != want {
 		t.Errorf("intake = %s, want %s", got, want)
 	}
 
 	checkIntakeTriggers(t, in.Triggers)
 
 	var five gen.Intake
-	if h.call(t, http.MethodGet, intakePath+"?items=5", "", &five); five.Items != 5 || five.Sources.Github != 4 || five.Sources.Webhook != 1 {
-		t.Errorf("intake of 5 items = %+v, want the newest 5: 4 from GitHub, 1 from a webhook", five)
+	if h.call(t, http.MethodGet, intakePath+"?items=5", "", &five); five.Items != 5 || five.From == nil || five.From.String() != "2026-10-21" {
+		t.Errorf("intake of 5 items = %+v, want the newest 5, from 2026-10-21", five)
 	}
 
 	for _, q := range []string{"?items=0", "?items=501"} {
@@ -138,15 +127,15 @@ func checkIntakeTriggers(t *testing.T, triggers []gen.IntakeTrigger) {
 	}
 }
 
-// A factory without items has no window, and zero for every source.
-func TestIntake_SourceTallyEmpty(t *testing.T) {
+// A factory without items has no window and counts none.
+func TestIntake_NewestItemsEmpty(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Items != 0 || in.From != nil || in.To != nil ||
-		in.Sources.People != 0 || len(in.Triggers) != 4 {
+		len(in.Triggers) != 4 {
 		t.Errorf("intake = %d %+v, want no items, no window and the 4 triggers", code, in)
 	}
 
@@ -157,9 +146,8 @@ func TestIntake_SourceTallyEmpty(t *testing.T) {
 	}
 }
 
-// Items whose creator recorded no source are not counted: the window's items are always the sum
-// of its sources, and a window of such items alone has no days.
-func TestIntake_SourceTallySkipsUnknownSources(t *testing.T) {
+// Items whose creator recorded no source count too: items reads no source.
+func TestIntake_NewestItemsCountUnknownSources(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -168,13 +156,6 @@ func TestIntake_SourceTallySkipsUnknownSources(t *testing.T) {
 		h.intakeItem(t, "", "", oct(20, i))
 	}
 
-	var none gen.Intake
-	if code := h.call(t, http.MethodGet, intakePath, "", &none); code != http.StatusOK || none.Items != 0 || none.From != nil || none.To != nil {
-		t.Errorf("intake of items with no source = %d %+v, want no items and no window", code, none)
-	}
-
-	h.intakeItem(t, domain.ItemFromPeople, "", oct(21, 0))
-	h.intakeItem(t, domain.ItemFromCLI, "", oct(21, 1))
 	h.intakeItem(t, domain.ItemFromGitHub, flakyName, oct(21, 2))
 
 	var in gen.Intake
@@ -182,9 +163,8 @@ func TestIntake_SourceTallySkipsUnknownSources(t *testing.T) {
 		t.Fatalf("intake = %d", code)
 	}
 
-	s := in.Sources
-	if sum := s.People + s.Cli + s.Api + s.Schedule + s.Webhook + s.Github; in.Items != 3 || sum != in.Items || in.From == nil || in.To == nil {
-		t.Errorf("intake = %d items %+v from %v to %v, want 3, the sum of the sources, over a window", in.Items, s, in.From, in.To)
+	if got, want := fmt.Sprintf("%d items %s to %s", in.Items, in.From, in.To), "4 items 2026-10-20 to 2026-10-21"; got != want {
+		t.Errorf("intake = %s, want %s", got, want)
 	}
 }
 
@@ -810,8 +790,8 @@ func TestIntake_OriginsByWindow(t *testing.T) {
 			t.Errorf("intake%s = %s; want %s", c.query, got, c.want)
 		}
 
-		if in.Items != 5 || in.Sources.People != 5 {
-			t.Errorf("intake%s sources = %d %+v; want the 5 items as before", c.query, in.Items, in.Sources)
+		if in.Items != 5 {
+			t.Errorf("intake%s items = %d; want the 5 items as before", c.query, in.Items)
 		}
 	}
 }

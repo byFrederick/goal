@@ -435,96 +435,6 @@ func (q *Queries) InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEn
 	return created_at, err
 }
 
-const itemSourceTally = `-- name: ItemSourceTally :many
-SELECT coalesce(source, '')::text AS source, count(*) AS items FROM work_items
-WHERE factory_id = $1 AND created_at >= $2
-GROUP BY 1
-ORDER BY 1
-`
-
-type ItemSourceTallyParams struct {
-	FactoryID uuid.UUID
-	Since     time.Time
-}
-
-type ItemSourceTallyRow struct {
-	Source string
-	Items  int64
-}
-
-func (q *Queries) ItemSourceTally(ctx context.Context, arg ItemSourceTallyParams) ([]ItemSourceTallyRow, error) {
-	rows, err := q.db.Query(ctx, itemSourceTally, arg.FactoryID, arg.Since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ItemSourceTallyRow
-	for rows.Next() {
-		var i ItemSourceTallyRow
-		if err := rows.Scan(&i.Source, &i.Items); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const lastItemSources = `-- name: LastItemSources :many
-WITH last AS (
-  SELECT source, created_at FROM work_items
-  WHERE factory_id = $1
-  ORDER BY created_at DESC, id DESC
-  LIMIT $2
-)
-SELECT coalesce(source, '')::text AS source, count(*) AS items, min(created_at)::timestamptz AS first_at,
-       max(created_at)::timestamptz AS last_at
-FROM last
-GROUP BY 1
-ORDER BY 1
-`
-
-type LastItemSourcesParams struct {
-	FactoryID uuid.UUID
-	MaxItems  int32
-}
-
-type LastItemSourcesRow struct {
-	Source  string
-	Items   int64
-	FirstAt time.Time
-	LastAt  time.Time
-}
-
-// The factory's newest items (created_at, then id) by source, with each source's first and last
-// instants.
-func (q *Queries) LastItemSources(ctx context.Context, arg LastItemSourcesParams) ([]LastItemSourcesRow, error) {
-	rows, err := q.db.Query(ctx, lastItemSources, arg.FactoryID, arg.MaxItems)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []LastItemSourcesRow
-	for rows.Next() {
-		var i LastItemSourcesRow
-		if err := rows.Scan(
-			&i.Source,
-			&i.Items,
-			&i.FirstAt,
-			&i.LastAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockOrgWebhook = `-- name: LockOrgWebhook :one
 SELECT id, name FROM webhook_endpoints WHERE id = $1 AND factory_id IS NULL FOR UPDATE
 `
@@ -539,6 +449,38 @@ func (q *Queries) LockOrgWebhook(ctx context.Context, id uuid.UUID) (LockOrgWebh
 	row := q.db.QueryRow(ctx, lockOrgWebhook, id)
 	var i LockOrgWebhookRow
 	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const newestItems = `-- name: NewestItems :one
+WITH newest AS (
+  SELECT created_at FROM work_items
+  WHERE factory_id = $1
+  ORDER BY created_at DESC, id DESC
+  LIMIT $2
+)
+SELECT count(*)::bigint AS items, min(created_at)::timestamptz AS first_at, max(created_at)::timestamptz AS last_at
+FROM newest
+HAVING count(*) > 0
+`
+
+type NewestItemsParams struct {
+	FactoryID uuid.UUID
+	MaxItems  int32
+}
+
+type NewestItemsRow struct {
+	Items   int64
+	FirstAt time.Time
+	LastAt  time.Time
+}
+
+// How many of the factory's newest items (created_at, then id) there are, with the first and last
+// instants they were created; no row without items.
+func (q *Queries) NewestItems(ctx context.Context, arg NewestItemsParams) (NewestItemsRow, error) {
+	row := q.db.QueryRow(ctx, newestItems, arg.FactoryID, arg.MaxItems)
+	var i NewestItemsRow
+	err := row.Scan(&i.Items, &i.FirstAt, &i.LastAt)
 	return i, err
 }
 

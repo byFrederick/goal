@@ -1763,8 +1763,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Where the factory's newest items came from, and its triggers
-         * @description The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+         * The factory's newest items, its origins and its triggers
+         * @description How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
          */
         get: operations["getIntake"];
         put?: never;
@@ -6172,7 +6172,7 @@ export interface components {
             }[];
         };
         Intake: {
-            /** @description How many items the sources count */
+            /** @description How many of the factory's newest items there are */
             items: number;
             /**
              * Format: date
@@ -6184,15 +6184,6 @@ export interface components {
              * @description The UTC day the newest of them was created; null without items
              */
             to: string | null;
-            /** @description How many of the items came from each source, zero included. Items whose creator recorded no source count in items only. */
-            sources: {
-                people: number;
-                cli: number;
-                api: number;
-                schedule: number;
-                webhook: number;
-                github: number;
-            };
             /** @description The current definition's board.triggers, in definition order */
             triggers: components["schemas"]["IntakeTrigger"][];
             /** @description The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers. */
@@ -11582,7 +11573,7 @@ export interface operations {
     getIntake: {
         parameters: {
             query?: {
-                /** @description How many of the newest items the sources count (default 48) */
+                /** @description How many of the newest items `items`, `from` and `to` count (default 48) */
                 items?: number;
                 /** @description The days origins count over, ending now (default 30d) */
                 window?: "7d" | "30d" | "90d";
