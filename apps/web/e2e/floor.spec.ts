@@ -129,6 +129,22 @@ test('Add a build agent raises the station by one in a draft and opens the Line 
   await expect(page.getByRole('combobox', { name: 'Who works here at Build' })).toHaveText('backend-engineer × 2');
 });
 
+test('the Floor suggests no agent when the constraint saves under an hour', async ({ page }) => {
+  await page.route(/\/factories\/[^/]+\/constraint(\?|$)/, async (route) => {
+    const response = await route.fetch();
+    const report = await response.json();
+    for (const candidate of report.candidates) {
+      if (candidate.estimate) candidate.estimate.extra_slot_saves_hours = 0.3;
+    }
+    await route.fulfill({ response, json: report });
+  });
+  await page.goto('/o/acme/f/software');
+  const card = page.getByRole('region', { name: 'Where work waits' });
+  await expect(card.getByText('is the constraint')).toBeVisible();
+  await expect(card.getByRole('button', { name: /^Add an? .* agent$/ })).toHaveCount(0);
+  await expect(card.getByText(/^With an? /)).toHaveCount(0);
+});
+
 test('a phone shows the range the URL names', async ({ page }) => {
   test.skip(!isPhone(page), 'the caption is the phone header');
   await page.goto(`/o/acme/f/sre?from=${utcDay(29)}`);

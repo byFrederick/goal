@@ -41,9 +41,12 @@ function BusyRow({ station, ratio, constraint }: { station: string; ratio: numbe
 export function WaitsCard({
   range,
   leadTimeP85,
+  wipLimitOf,
   className,
 }: {
   range: FloorRange;
+  /** A station's WIP limit from the board, or null when it has none. */
+  wipLimitOf: (station: string) => number | null;
   /** The Floor's lead time p85 in hours, or null when no item finished in the range. */
   leadTimeP85: number | null;
   className?: string;
@@ -69,7 +72,7 @@ export function WaitsCard({
     >
       {query.isPending ? <CardLoading /> : null}
       {query.isError ? <CardFailed what="where work waits" onRetry={() => void query.refetch()} /> : null}
-      {report ? <Ready report={report} factory={factory} leadTimeP85={leadTimeP85} /> : null}
+      {report ? <Ready report={report} factory={factory} leadTimeP85={leadTimeP85} wipLimitOf={wipLimitOf} /> : null}
     </SectionCard>
   );
 }
@@ -78,10 +81,12 @@ function Ready({
   report,
   factory,
   leadTimeP85,
+  wipLimitOf,
 }: {
   report: ConstraintReport;
   factory: Factory;
   leadTimeP85: number | null;
+  wipLimitOf: (station: string) => number | null;
 }) {
   const stations = report.candidates;
   if (stations.length === 0) {
@@ -110,7 +115,13 @@ function Ready({
       </div>
       <p className="m-0 text-meta text-muted">Share of the week each station's agents were busy</p>
       {name && candidate ? (
-        <WhatIf candidate={candidate} name={name} factory={factory} leadTimeP85={leadTimeP85} />
+        <WhatIf
+          candidate={candidate}
+          name={name}
+          factory={factory}
+          leadTimeP85={leadTimeP85}
+          wipLimit={wipLimitOf(candidate.station)}
+        />
       ) : null}
     </>
   );
@@ -118,19 +129,23 @@ function Ready({
 
 /**
  * One more agent at the constraint: its lead time and spend, and the button that adds it to the draft.
- * Left out when the candidate has no estimate or no spend. The station's slots are min(agents, wip), so
- * an agent at a station whose wip is the cap adds no slot; the button still raises `agents` by one.
+ * Left out when the candidate has no estimate or no spend, when the agent saves less than an hour of lead
+ * time or less than 10% of the p85, and when the WIP limit already caps the station's slots (they are
+ * min(agents, wip), so one more agent adds none). A spend under $1 a day reads "Under $1", never "$0".
  */
-function WhatIf({
+export function WhatIf({
   candidate,
   name,
   factory,
   leadTimeP85,
+  wipLimit,
 }: {
   candidate: ConstraintCandidate;
   name: string;
   factory: Factory;
   leadTimeP85: number | null;
+  /** The station's WIP limit, or null when it has none. */
+  wipLimit: number | null;
 }) {
   const org = useOrg();
   const navigate = useNavigate();
@@ -142,6 +157,9 @@ function WhatIf({
 
   const { estimate, spend_per_slot_day_usd: spend } = candidate;
   if (!estimate || spend === null) return null;
+  const saves = estimate.extra_slot_saves_hours;
+  if (saves < 1 || (leadTimeP85 !== null && saves < leadTimeP85 * 0.1)) return null;
+  if (wipLimit !== null && wipLimit > 0 && candidate.slots >= wipLimit) return null;
 
   const canEdit = holds(factory, 'definition:edit');
   const reasonId = `what-if-reason-${candidate.station}`;
@@ -155,11 +173,12 @@ function WhatIf({
         </p>
         {leadTimeP85 !== null ? (
           <p className="m-0 text-secondary text-ink">
-            Lead time {Math.round(leadTimeP85)} h to{' '}
-            {Math.round(Math.max(0, leadTimeP85 - estimate.extra_slot_saves_hours))} h
+            Lead time {Math.round(leadTimeP85)} h to {Math.round(Math.max(0, leadTimeP85 - saves))} h
           </p>
         ) : null}
-        <p className="m-0 text-secondary text-ink-soft">About {formatUsdCompact(Math.round(spend))} more a day</p>
+        <p className="m-0 text-secondary text-ink-soft">
+          {spend < 1 ? 'Under $1' : `About ${formatUsdCompact(Math.round(spend))}`} more a day
+        </p>
         {add.isError ? (
           <p role="alert" className="m-0 text-secondary text-rework-ink">
             Could not add the agent. Open the definition to see its draft.{' '}
