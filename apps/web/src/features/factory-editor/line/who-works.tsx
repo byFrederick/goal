@@ -71,7 +71,7 @@ export function WhoWorks({
     return (
       <span className="flex min-w-0 flex-col gap-1">
         <Select
-          aria-label={`Who works at ${label}`}
+          aria-label={`Who works here at ${label}`}
           value={line.librarian ?? ''}
           disabled={editor.viewOnly}
           onValueChange={(next) => editor.edit(setLibrarian(line, next || null))}
@@ -92,7 +92,7 @@ export function WhoWorks({
   return (
     <>
       <Select
-        aria-label={`Who works at ${label}`}
+        aria-label={`Who works here at ${label}`}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         value={value}

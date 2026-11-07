@@ -43,6 +43,9 @@ async function setLaneOfTwo(page: Page, request: APIRequestContext) {
   await dialog.getByRole('button', { name: 'Set lane to Frontend' }).click();
 
   await expect(dialog).toBeHidden();
+  // The pointer rests where the dialog's button was, which is now over a row's ⓘ: its open tip would cover
+  // the buttons beside it and axe would measure them as under 24 px. A person moves the pointer on.
+  await page.mouse.move(0, 0);
   await expectToast(page, 'Set the lane of 2 items to Frontend.');
   for (const id of ids) {
     const item = await (await request.get(`/v1/orgs/acme/items/${id}`)).json();
@@ -61,6 +64,9 @@ for (const width of widths) {
 }
 
 test('set the lane of two checked items in dark mode', async ({ page, request }) => {
+  // The same height as the widths above: on a shorter page a row's ⓘ can sit under the sticky bulk bar, and axe
+  // measures it as partly covered.
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await setLaneOfTwo(page, request);
 

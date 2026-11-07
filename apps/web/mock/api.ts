@@ -93,7 +93,7 @@ import { type SearchSource, search } from './search.ts';
 import { createSecrets } from './secrets.ts';
 import { createSpend } from './spend.ts';
 import { createStandingRules } from './standing-rules.ts';
-import { starterTitles } from './starter.ts';
+import { runStarterCourse, starterTitles } from './starter.ts';
 import { teardownOf } from './teardown.ts';
 import { finishedIn, type MockFinished, touchesOf, touchHeadlineOf, touchReasons, touchStatsOf } from './touches.ts';
 import { createViews } from './views.ts';
@@ -1227,11 +1227,12 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
     return { summary: summary || null, facts, pull_request: it.pr_url, spend_usd: it.cost_usd };
   };
 
-  /** Why a blocked item is blocked: its latest blocked or paused event. */
+  /** Why a blocked item is blocked: its latest blocked or paused event's reason and code. */
   const blockerOf = (it: MockItem): InboxEntry['blocked'] => {
     const last = state.events.findLast((e) => e.item_id === it.id && (e.kind === 'blocked' || e.kind === 'paused'));
     const reason = typeof last?.data.reason === 'string' && last.data.reason ? last.data.reason : null;
-    return { reason, paused: last?.kind === 'paused' };
+    const code = typeof last?.data.code === 'string' && last.data.code ? last.data.code : null;
+    return { reason, code, paused: last?.kind === 'paused' };
   };
 
   /**
@@ -2324,21 +2325,18 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         };
         state.items.push(it);
         if (starterTitles.includes(title)) {
-          // The mock runs no agent, so the starter item runs its whole course at once: created nine minutes ago,
-          // its spec accepted, moved to Build and merged at Done, with $0.84 spent. Seconds from its creation. The
-          // Floor then hides the new-factory checklist, as it does once an item has merged (frontend.md, "New factory row").
-          const at = (s: number) => new Date(clock() - (540 - s) * 1000).toISOString();
-          it.created_at = at(0);
-          emit(it, 'created', 'engine', {}, at(0));
-          it.station = 'spec';
-          emit(it, 'moved', 'engine', { from: 'inbox', to: 'spec' }, at(12));
-          emit(it, 'approved', 'user:local', {}, at(270));
-          it.station = 'build';
-          emit(it, 'moved', 'engine', { from: 'spec', to: 'build' }, at(302));
-          it.station = 'done';
-          emit(it, 'moved', 'engine', { from: 'build', to: 'done' }, at(540));
-          it.state = 'done';
-          it.cost_usd = 0.84;
+          const current = state.definitions[factory.id]?.versions.find(
+            (v) => v.id === state.definitions[factory.id]?.current,
+          );
+          runStarterCourse({
+            item: it,
+            runs: state.runs,
+            emit,
+            now: clock(),
+            keyed: definitions.modelKey(factory) !== undefined,
+            agent: definitions.agentNames(factory)[0] ?? 'agent',
+            version: current ? { id: current.id, number: current.number } : null,
+          });
         } else {
           emit(it, 'created', 'engine');
         }

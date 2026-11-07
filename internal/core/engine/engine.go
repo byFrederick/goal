@@ -202,6 +202,10 @@ func (c Config) LongestClaim() time.Duration {
 // keyReason is the event data key that explains a block, rejection or escalation.
 const keyReason = "reason"
 
+// keyCode is the event data key of a block's stable code (domain.BlockModelKeyMissing), next to
+// its reason; only blocks that have one carry it.
+const keyCode = "code"
+
 // keyStation is the event and audit data key naming the station an item was at.
 const keyStation = "station"
 

@@ -312,6 +312,7 @@ func attentionItemFrom(r db.InboxItemsRow) (domain.AttentionItem, error) {
 
 	var data struct {
 		Reason string `json:"reason"`
+		Code   string `json:"code"`
 	}
 
 	if err := json.Unmarshal(r.BlockerData, &data); err != nil {
@@ -319,6 +320,6 @@ func attentionItemFrom(r db.InboxItemsRow) (domain.AttentionItem, error) {
 	}
 
 	return domain.AttentionItem{
-		Item: it, BlockedReason: data.Reason, Paused: r.BlockerKind == string(domain.EventPaused),
+		Item: it, BlockedReason: data.Reason, BlockedCode: data.Code, Paused: r.BlockerKind == string(domain.EventPaused),
 	}, nil
 }

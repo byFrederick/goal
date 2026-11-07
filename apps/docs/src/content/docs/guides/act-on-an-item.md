@@ -64,6 +64,8 @@ goal retry acme-line#3
 
 The same command resumes an item you paused. On the item page, the Retry button does this.
 
+When goald knows why an item is blocked, the item page, Needs you, the Floor and onboarding's First item step say it in a plain sentence with a link to the fix, and the technical reason sits behind the ⓘ. A factory whose line has no model key is the example: its items show "Agents need a model key: add one in Settings", and the link opens the factory's Settings at Runtime. Set the key, then retry the item. A block without a known cause shows its reason as written.
+
 ## Merge
 
 At a station whose action is `merge`, approving the item merges its pull request first:

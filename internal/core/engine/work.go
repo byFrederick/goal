@@ -247,7 +247,7 @@ func (e *Engine) admitted(ctx context.Context, log *slog.Logger, c *claimed) boo
 	}
 
 	if err != nil {
-		e.block(ctx, log, *c, err.Error())
+		e.blockErr(ctx, log, *c, err)
 		return false
 	}
 
@@ -383,12 +383,12 @@ func (e *Engine) pinSources(ctx context.Context, l domain.Line, run domain.RuleT
 // escalate hands a claimed item that may not run to a person: it waits at its station with the
 // reason in its event, and the lease is released.
 func (e *Engine) escalate(ctx context.Context, log *slog.Logger, c claimed, reason string) {
-	e.park(ctx, log, c, domain.StateWaitingHuman, domain.LeaseEscalated, domain.EventWaitingHuman, reason)
+	e.park(ctx, log, c, domain.StateWaitingHuman, domain.LeaseEscalated, domain.EventWaitingHuman, map[string]any{keyReason: reason})
 }
 
 // agentFor is the agent that works on an item of lane at st, or why none can: no agent for the
 // lane, or a line that does not run on connections alone (domain.Line.Refusal), refused before
-// any run, box or connection.
+// any run, box or connection, as a refusedError with the refusal's code.
 func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, error) {
 	name, err := st.AgentFor(lane)
 	if err != nil {
@@ -396,11 +396,17 @@ func agentFor(l domain.Line, st domain.Station, lane string) (domain.AgentSpec, 
 	}
 
 	if reason := l.Refusal(); reason != "" {
-		return domain.AgentSpec{}, errors.New(reason)
+		return domain.AgentSpec{}, refusedError{reason: reason, code: l.RefusalCode()}
 	}
 
 	return agentSpec(l, name)
 }
+
+// refusedError is why a line's runs cannot start (domain.Line.Refusal), with the refusal's
+// stable code ("" for none) that blockErr records next to the reason.
+type refusedError struct{ reason, code string }
+
+func (r refusedError) Error() string { return r.reason }
 
 // outputFailed records an output that failed its checks and reports whether to try again;
 // when not, it has blocked the item.
@@ -1101,13 +1107,25 @@ func (e *Engine) gateReject(c claimed, l domain.Line, v domain.Verdict, t *ports
 
 // block parks a claimed item as blocked, with the reason in its event, and releases the lease.
 func (e *Engine) block(ctx context.Context, log *slog.Logger, c claimed, reason string) {
-	e.park(ctx, log, c, domain.StateBlocked, domain.LeaseBlocked, domain.EventBlocked, reason)
+	e.park(ctx, log, c, domain.StateBlocked, domain.LeaseBlocked, domain.EventBlocked, map[string]any{keyReason: reason})
+}
+
+// blockErr blocks a claimed item with err as the reason and, when err is a refusal with a code
+// (refusedError), the code under keyCode; other blocks keep their data to the reason alone.
+func (e *Engine) blockErr(ctx context.Context, log *slog.Logger, c claimed, err error) {
+	data := map[string]any{keyReason: err.Error()}
+
+	if r, ok := errors.AsType[refusedError](err); ok && r.code != "" {
+		data[keyCode] = r.code
+	}
+
+	e.park(ctx, log, c, domain.StateBlocked, domain.LeaseBlocked, domain.EventBlocked, data)
 }
 
 // park moves a claimed item to state at its station with outcome, recording an engine event of
-// kind with the reason, and releases the lease.
+// kind with data (its reason), and releases the lease.
 func (e *Engine) park(ctx context.Context, log *slog.Logger, c claimed, state domain.ItemState, outcome domain.LeaseOutcome,
-	kind domain.EventKind, reason string,
+	kind domain.EventKind, data map[string]any,
 ) {
 	now := e.clock.Now()
 
@@ -1115,7 +1133,7 @@ func (e *Engine) park(ctx context.Context, log *slog.Logger, c claimed, state do
 		ItemID: c.item.ID, From: domain.Position{Station: c.station.ID, State: domain.StateInProgress},
 		To: domain.Position{Station: c.station.ID, State: state}, Lease: &c.lease, Outcome: outcome,
 		At:     now,
-		Events: []domain.Event{event(c.item, kind, now, domain.ActorEngine, map[string]any{keyReason: reason})},
+		Events: []domain.Event{event(c.item, kind, now, domain.ActorEngine, data)},
 	})
 }
 

@@ -4259,7 +4259,7 @@ type Event struct {
 	Id     int64                  `json:"id"`
 	ItemId string                 `json:"item_id"`
 
-	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief
+	// Kind What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped at its station until a person retries it (data reason, the technical detail as written then; code, a stable code to branch on, only when the block has one: model_key_missing when the line is on environment files and secrets but names no runtime.modelKey). question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief
 	Kind    string  `json:"kind"`
 	RunId   *string `json:"run_id,omitempty"`
 	Station *string `json:"station,omitempty"`
@@ -4668,6 +4668,9 @@ type Inbox struct {
 
 // InboxBlocked defines model for InboxBlocked.
 type InboxBlocked struct {
+	// Code The code of the item's latest blocked event (model_key_missing: the line names no runtime.modelKey); null without one
+	Code *string `json:"code"`
+
 	// Paused A person paused it (goal retry resumes it)
 	Paused bool `json:"paused"`
 

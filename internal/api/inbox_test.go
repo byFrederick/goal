@@ -24,6 +24,13 @@ func (h *harness) blockedBy(t *testing.T, it domain.Item, kind domain.EventKind,
 		data["reason"] = reason
 	}
 
+	h.blockedWith(t, it, kind, data)
+}
+
+// blockedWith appends the event of kind that blocked an item, with data.
+func (h *harness) blockedWith(t *testing.T, it domain.Item, kind domain.EventKind, data map[string]any) {
+	t.Helper()
+
 	if err := h.store.AppendEvents(inOrg(t), domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: t0, Kind: kind, Station: it.Station, Actor: domain.ActorEngine, Data: data,
 	}); err != nil {
@@ -38,9 +45,9 @@ func (h *harness) inbox(t *testing.T, query string) gen.Inbox {
 }
 
 // inboxItems seeds one item of each kind of the line factory: a decision with a brief, a question,
-// a blocked item, a paused one and an expedite one.
+// a blocked item, one blocked with a code, a paused one and an expedite one.
 type inboxItems struct {
-	decision, question, toolApproval, blocked, paused, expedite domain.Item
+	decision, question, toolApproval, blocked, coded, paused, expedite domain.Item
 }
 
 func (h *harness) seedInboxItems(t *testing.T) inboxItems {
@@ -57,6 +64,10 @@ func (h *harness) seedInboxItems(t *testing.T) inboxItems {
 	s.toolApproval = h.toolAsked(t, true)
 	s.blocked = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-2*time.Hour))
 	h.blockedBy(t, s.blocked, domain.EventBlocked, "checks failed")
+	s.coded = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-90*time.Minute))
+	h.blockedWith(t, s.coded, domain.EventBlocked, map[string]any{
+		"reason": "version 1 names no runtime.modelKey", "code": domain.BlockModelKeyMissing,
+	})
 	s.paused = h.seed(t, stBuild, domain.StateBlocked, t0.Add(-time.Hour))
 	h.blockedBy(t, s.paused, domain.EventBlocked, "checks failed")
 	h.blockedBy(t, s.paused, domain.EventPaused, "")
@@ -93,7 +104,7 @@ func TestAPI_InboxEntriesOfEveryKind(t *testing.T) {
 		kinds = append(kinds, string(e.Kind)+" "+e.Factory.Name)
 	}
 
-	want := []string{"decision line", "question line", "tool_approval line", "andon acme", "rework_warning review", "blocked line", "blocked line", "expedite line"}
+	want := []string{"decision line", "question line", "tool_approval line", "andon acme", "rework_warning review", "blocked line", "blocked line", "blocked line", "expedite line"}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("entries = %v; want %v", kinds, want)
 	}
@@ -135,16 +146,28 @@ func checkItemEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
 	checkQuestionEntry(t, entryOf(got, seeded.question.ID), seeded.question)
 	checkToolApprovalEntry(t, entryOf(got, seeded.toolApproval.ID), seeded.toolApproval)
 
-	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Paused {
-		t.Errorf("blocked entry = %+v; want its failure", b)
-	}
-
-	if b := entryOf(got, seeded.paused.ID).Blocked; b == nil || b.Reason != nil || !b.Paused {
-		t.Errorf("paused entry = %+v; want paused without a reason", b)
-	}
+	checkBlockedEntries(t, got, seeded)
 
 	if e := entryOf(got, seeded.expedite.ID); e.Kind != gen.InboxEntryKindExpedite || !e.Since.Equal(seeded.expedite.CreatedAt) {
 		t.Errorf("expedite entry = %+v; want the hotfix since it was created", e)
+	}
+}
+
+// checkBlockedEntries checks the blocked entries: a failure without a code, a refusal with its
+// code, and a pause with neither.
+func checkBlockedEntries(t *testing.T, got gen.Inbox, seeded inboxItems) {
+	t.Helper()
+
+	if b := entryOf(got, seeded.blocked.ID).Blocked; b == nil || deref(b.Reason) != "checks failed" || b.Code != nil || b.Paused {
+		t.Errorf("blocked entry = %+v; want its failure without a code", b)
+	}
+
+	if b := entryOf(got, seeded.coded.ID).Blocked; b == nil || deref(b.Code) != domain.BlockModelKeyMissing || deref(b.Reason) == "" {
+		t.Errorf("coded blocked entry = %+v; want code %s with its reason", b, domain.BlockModelKeyMissing)
+	}
+
+	if b := entryOf(got, seeded.paused.ID).Blocked; b == nil || b.Reason != nil || b.Code != nil || !b.Paused {
+		t.Errorf("paused entry = %+v; want paused without a reason or code", b)
 	}
 }
 
