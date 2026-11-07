@@ -71,7 +71,6 @@ const intake = {
   items: 0,
   from: null,
   to: null,
-  sources: { people: 0, cli: 0, api: 0, schedule: 0, webhook: 0, github: 0 },
   triggers: [trigger('issues', 'github.issues.labeled'), trigger('nightly', 'schedule'), trigger('audit', 'schedule')],
 } as Intake;
 

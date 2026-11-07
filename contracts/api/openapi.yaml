@@ -2260,10 +2260,10 @@ paths:
       operationId: getIntake
       x-goal-scope: intake:read
       tags: [intake]
-      summary: Where the factory's newest items came from, and its triggers
+      summary: The factory's newest items, its origins and its triggers
       description: >-
-        The sources of the factory's newest `items` items (by creation) with the UTC days the
-        oldest and the newest of them were created, and every trigger of the current definition
+        How many of the factory's newest `items` items (by creation) there are, with the UTC days
+        the oldest and the newest of them were created, and every trigger of the current definition
         in definition order, each with the items it created on each of the last 7 UTC days and
         its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it
         on `item` and `definition` stream events.
@@ -2277,7 +2277,7 @@ paths:
         - name: items
           in: query
           required: false
-          description: How many of the newest items the sources count (default 48)
+          description: How many of the newest items `items`, `from` and `to` count (default 48)
           schema: { type: integer, minimum: 1, maximum: 500, default: 48 }
         - name: window
           in: query
@@ -7959,24 +7959,11 @@ components:
               per_day: { type: number, format: double, description: done divided by 7 }
     Intake:
       type: object
-      required: [items, from, to, sources, triggers, suggestions]
+      required: [items, from, to, triggers, suggestions]
       properties:
-        items: { type: integer, description: How many items the sources count, at most the items asked for }
+        items: { type: integer, description: How many of the factory's newest items there are, at most the items asked for }
         from: { type: string, format: date, nullable: true, description: The UTC day the oldest of them was created; null without items }
         to: { type: string, format: date, nullable: true, description: The UTC day the newest of them was created; null without items }
-        sources:
-          type: object
-          description: >-
-            How many of the items came from each source, zero included. Items whose creator
-            recorded no source count in items only.
-          required: [people, cli, api, schedule, webhook, github]
-          properties:
-            people: { type: integer }
-            cli: { type: integer }
-            api: { type: integer }
-            schedule: { type: integer }
-            webhook: { type: integer }
-            github: { type: integer }
         triggers:
           type: array
           description: The current definition's board.triggers, in definition order

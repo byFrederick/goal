@@ -70,7 +70,7 @@ func (h *harness) receive(t *testing.T, ev domain.IntakeEvent) domain.TriggerFir
 func (h *harness) items(t *testing.T) int {
 	t.Helper()
 
-	tally, err := h.intake.SourceTally(inOrg(t), factoryID, time.Time{})
+	tally, err := h.intake.OriginTally(inOrg(t), factoryID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}

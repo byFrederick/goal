@@ -1262,27 +1262,6 @@ func (in *Intake) OpenItemByDedupe(ctx context.Context, factory domain.FactoryID
 	return found, found != "", nil
 }
 
-// SourceTally implements ports.Intake.
-func (in *Intake) SourceTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.SourceCount, error) {
-	org, err := orgOf(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	counts := map[domain.ItemSource]int{}
-
-	for _, it := range in.items(org, factory, since) {
-		counts[it.Source]++
-	}
-
-	out := []domain.SourceCount{}
-	for _, s := range slices.Sorted(maps.Keys(counts)) {
-		out = append(out, domain.SourceCount{Source: s, Items: counts[s]})
-	}
-
-	return out, nil
-}
-
 // TriggerStats implements ports.Intake.
 func (in *Intake) TriggerStats(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerStat, error) {
 	org, err := orgOf(ctx)
@@ -1331,32 +1310,20 @@ func (in *Intake) TriggerStats(ctx context.Context, factory domain.FactoryID, si
 	return out, nil
 }
 
-// ItemSources implements ports.Intake.
-func (in *Intake) ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error) {
+// NewestItems implements ports.Intake.
+func (in *Intake) NewestItems(ctx context.Context, factory domain.FactoryID, last int) (domain.ItemWindow, error) {
 	org, err := orgOf(ctx)
 	if err != nil {
-		return domain.SourceWindow{}, err
+		return domain.ItemWindow{}, err
 	}
 
 	items := in.items(org, factory, time.Time{})
 	slices.SortFunc(items, func(a, b domain.Item) int { return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.ID, a.ID)) })
 	items = items[:min(len(items), max(last, 0))]
 
-	w := domain.SourceWindow{Counts: []domain.SourceCount{}}
-	counts := map[domain.ItemSource]int{}
-
-	for i, it := range items {
-		counts[it.Source]++
-
-		if i == 0 {
-			w.To = it.CreatedAt
-		}
-
-		w.From = it.CreatedAt
-	}
-
-	for _, src := range slices.Sorted(maps.Keys(counts)) {
-		w.Counts = append(w.Counts, domain.SourceCount{Source: src, Items: counts[src]})
+	w := domain.ItemWindow{Items: len(items)}
+	if len(items) > 0 {
+		w.To, w.From = items[0].CreatedAt, items[len(items)-1].CreatedAt
 	}
 
 	return w, nil
