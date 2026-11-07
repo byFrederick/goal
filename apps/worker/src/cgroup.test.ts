@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readCpuUsec, readMemory, saveCpuStart, startMeter } from './cgroup.js';
+import { readCpuUsec, readMachineMemory, readMemory, readSelfCgroup, saveCpuStart, startMeter } from './cgroup.js';
 
 let dir: string;
 let root: string;
@@ -62,7 +62,7 @@ describe('saveCpuStart and startMeter', () => {
     await counter('memory.peak', '536870912\n');
     await counter('memory.current', '1024\n');
 
-    expect(await meter.stop()).toEqual({ cpu_seconds: 3.25, peak_memory_bytes: 536_870_912 });
+    expect(await meter.stop()).toEqual({ cpu_seconds: 3.25, peak_memory_bytes: 536_870_912, memory_source: 'cgroup' });
     expect(log).not.toHaveBeenCalled();
   });
 
@@ -90,11 +90,11 @@ describe('saveCpuStart and startMeter', () => {
     await lastRead;
     await cpuStat(500_000);
 
-    expect(await meter.stop()).toEqual({ cpu_seconds: 0.5, peak_memory_bytes: 900 });
+    expect(await meter.stop()).toEqual({ cpu_seconds: 0.5, peak_memory_bytes: 900, memory_source: 'cgroup' });
     expect(vi.getTimerCount()).toBe(0);
     // stop is the same answer every time: the end is read once.
     await counter('memory.current', '5000\n');
-    expect(await meter.stop()).toEqual({ cpu_seconds: 0.5, peak_memory_bytes: 900 });
+    expect(await meter.stop()).toEqual({ cpu_seconds: 0.5, peak_memory_bytes: 900, memory_source: 'cgroup' });
     expect(log).not.toHaveBeenCalled();
   });
 
@@ -104,7 +104,7 @@ describe('saveCpuStart and startMeter', () => {
     const meter = startMeter({ root, startFile, sampleMs: 60_000 });
     await counter('memory.current', '4096\n');
 
-    expect(await meter.stop()).toMatchObject({ peak_memory_bytes: 4096 });
+    expect(await meter.stop()).toMatchObject({ peak_memory_bytes: 4096, memory_source: 'cgroup' });
   });
 
   it('leaves both fields out, without throwing, when the files are missing or unreadable', async () => {
@@ -132,10 +132,138 @@ describe('saveCpuStart and startMeter', () => {
   it("leaves cpu_seconds out without prepare's reading, or when the counter went backwards", async () => {
     await cpuStat(2_000_000);
     await counter('memory.peak', '2048\n');
-    expect(await startMeter({ root, startFile, log: () => {} }).stop()).toEqual({ peak_memory_bytes: 2048 });
+    expect(await startMeter({ root, startFile, log: () => {} }).stop()).toEqual({
+      peak_memory_bytes: 2048,
+      memory_source: 'cgroup',
+    });
 
     await mkdir(join(dir, 'goal'));
     await writeFile(startFile, '9000000');
-    expect(await startMeter({ root, startFile, log: () => {} }).stop()).toEqual({ peak_memory_bytes: 2048 });
+    expect(await startMeter({ root, startFile, log: () => {} }).stop()).toEqual({
+      peak_memory_bytes: 2048,
+      memory_source: 'cgroup',
+    });
+  });
+});
+
+describe('startMeter memory sources', () => {
+  let selfCgroup: string;
+  let meminfo: string;
+
+  beforeEach(() => {
+    selfCgroup = join(dir, 'proc-self-cgroup');
+    meminfo = join(dir, 'proc-meminfo');
+  });
+
+  /** A /proc/meminfo with MemTotal and MemAvailable in kB, as the kernel writes it. */
+  const machine = (totalKb: number, availableKb: number) =>
+    writeFile(meminfo, `MemTotal:       ${totalKb} kB\nMemFree:        1 kB\nMemAvailable:   ${availableKb} kB\n`);
+
+  /** The box as Cloudflare runs it: the root has cpu.stat only, the worker's cgroup the memory files. */
+  const childCgroup = async () => {
+    await writeFile(selfCgroup, '0::/cloudchamber\n');
+    await mkdir(join(root, 'cloudchamber'));
+    return join(root, 'cloudchamber');
+  };
+
+  it("reads the worker's own cgroup from the 0:: line, and nothing for the root or a missing line", async () => {
+    await writeFile(selfCgroup, '1:name=systemd:/x\n0::/cloudchamber\n');
+    expect(await readSelfCgroup(root, selfCgroup)).toBe(join(root, 'cloudchamber'));
+    await writeFile(selfCgroup, '0::/\n');
+    expect(await readSelfCgroup(root, selfCgroup)).toBeUndefined();
+    await writeFile(selfCgroup, '12:memory:/docker/abc\n');
+    expect(await readSelfCgroup(root, selfCgroup)).toBeUndefined();
+    expect(await readSelfCgroup(root, join(dir, 'missing'))).toBeUndefined();
+  });
+
+  it('reads MemTotal less MemAvailable in bytes, and nothing when either is missing', async () => {
+    await machine(8_338_056, 7_811_416);
+    expect(await readMachineMemory(meminfo)).toBe((8_338_056 - 7_811_416) * 1024);
+    await writeFile(meminfo, 'MemTotal:       100 kB\n');
+    expect(await readMachineMemory(meminfo)).toBeUndefined();
+    expect(await readMachineMemory(join(dir, 'missing'))).toBeUndefined();
+  });
+
+  it("reports the worker's own cgroup's memory.peak before the machine's memory", async () => {
+    const log = vi.fn();
+    await cpuStat(0);
+    await saveCpuStart(root, startFile, log);
+    const child = await childCgroup();
+    await writeFile(join(child, 'memory.peak'), '1654448128\n');
+    await writeFile(join(child, 'memory.current'), '1024\n');
+    await machine(8_000_000, 1_000_000);
+
+    const meter = startMeter({ root, selfCgroup, meminfo, startFile, log });
+    await cpuStat(2_000_000);
+
+    expect(await meter.stop()).toEqual({ cpu_seconds: 2, peak_memory_bytes: 1_654_448_128, memory_source: 'cgroup' });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("reports the largest memory.current of the worker's own cgroup where it has no memory.peak", async () => {
+    const child = await childCgroup();
+    await writeFile(join(child, 'memory.current'), '4096\n');
+    await counter('memory.peak', '99999999\n');
+
+    const meter = startMeter({ root, selfCgroup, meminfo, startFile, sampleMs: 60_000, log: () => {} });
+    expect(await meter.stop()).toMatchObject({ peak_memory_bytes: 4096, memory_source: 'cgroup' });
+  });
+
+  it('reports the largest machine memory in use where the root has cpu.stat but no memory files', async () => {
+    vi.useFakeTimers();
+    const log = vi.fn();
+    await cpuStat(0);
+    await saveCpuStart(root, startFile, log);
+    await writeFile(selfCgroup, '0::/\n');
+    await machine(1000, 900);
+
+    let lastRead: Promise<unknown> = Promise.resolve();
+    const readMachine = (file: string) => {
+      const read = readMachineMemory(file);
+      lastRead = read;
+      return read;
+    };
+    const meter = startMeter({ root, selfCgroup, meminfo, startFile, sampleMs: 5_000, log, readMachine });
+    await lastRead;
+    await machine(1000, 200);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await lastRead;
+    await machine(1000, 600);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await lastRead;
+    await cpuStat(1_000_000);
+
+    expect(await meter.stop()).toEqual({ cpu_seconds: 1, peak_memory_bytes: 800 * 1024, memory_source: 'machine' });
+    expect(vi.getTimerCount()).toBe(0);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('reports the machine memory read at stop when only /proc/meminfo exists', async () => {
+    const log = vi.fn();
+    await rm(root, { recursive: true });
+    const meter = startMeter({ root, selfCgroup, meminfo, startFile, sampleMs: 60_000, log });
+    await machine(2048, 1024);
+
+    expect(await meter.stop()).toEqual({ peak_memory_bytes: 1024 * 1024, memory_source: 'machine' });
+    // CPU time can't be read, and that is the one line.
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]?.[0]).not.toContain('peak memory');
+  });
+
+  it('logs exactly one line, and never throws, when no memory source can be read', async () => {
+    const log = vi.fn();
+    await rm(root, { recursive: true });
+    await writeFile(selfCgroup, 'not a cgroup file');
+    await mkdir(meminfo);
+
+    const meter = startMeter({ root, selfCgroup, meminfo, startFile, log });
+    const usage = await meter.stop();
+
+    expect(usage).toEqual({});
+    expect(usage).not.toHaveProperty('memory_source');
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls[0]?.[0]).toContain('peak memory');
+    await meter.stop();
+    expect(log).toHaveBeenCalledTimes(1);
   });
 });

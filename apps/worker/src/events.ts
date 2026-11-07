@@ -71,10 +71,13 @@ export interface Finished {
    */
   cpu_seconds?: number;
   /**
-   * The box's peak memory in bytes, an integer: cgroup v2 memory.peak at the end, or the largest
-   * memory.current sampled during the run where memory.peak is missing. Absent when neither reads.
+   * The box's peak memory in bytes, an integer, from the first source that reads: the worker's own
+   * cgroup v2 memory.peak or largest memory.current, the same at the cgroup root, or the largest
+   * MemTotal less MemAvailable in /proc/meminfo. Absent when none reads (src/cgroup.ts).
    */
   peak_memory_bytes?: number;
+  /** Where peak_memory_bytes came from: 'cgroup' or 'machine' (/proc/meminfo); absent with it. */
+  memory_source?: 'cgroup' | 'machine';
 }
 
 /** Progress text is cut to these lengths; events are for watching, not for replaying. */
