@@ -370,12 +370,12 @@ function TriggerRow({
   );
 }
 
-/** The triggers that are on, then the ways that are always there, as one sentence: "A, B, New item, CLI and API". */
 /** A starter trigger has no title in the definition, only a name: show it in words. */
 function triggerLabel(name: string): string {
   return humanize(name);
 }
 
+/** The triggers that are on, then the ways that are always there, as one sentence: "A, B, New item, CLI and API". */
 function intakeSentence(names: string[]): string {
   return [...names.map(triggerLabel), 'New item, CLI and API'].join(', ');
 }

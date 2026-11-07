@@ -17,11 +17,20 @@ for (const width of widths) {
     await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
     const factory = new URL(page.url()).searchParams.get('factory');
 
+    // A retrying assertion would pass once the sentence goes away, so watch the DOM for it from the first paint.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __askedForTemplate?: boolean };
+      const look = () => {
+        if (document.body?.textContent?.includes('The line appears when you pick a template'))
+          w.__askedForTemplate = true;
+      };
+      new MutationObserver(look).observe(document, { childList: true, subtree: true, characterData: true });
+    });
     await page.setExtraHTTPHeaders({ 'X-Mock-Latency-Ms': '1500' });
     await page.goto(`/o/goal/get-started/line?factory=${factory}`);
-    const sentence = page.getByText('The line appears when you pick a template');
-    await expect(sentence).toHaveCount(0);
     await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
-    await expect(sentence).toHaveCount(0);
+    expect(
+      await page.evaluate(() => (window as unknown as { __askedForTemplate?: boolean }).__askedForTemplate),
+    ).toBeFalsy();
   });
 }
