@@ -24,7 +24,7 @@ test('C opens the composer on the open factory and creates the item there', asyn
 
   const dialog = page.getByRole('dialog', { name: 'New item' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('combobox', { name: 'Factory' })).toHaveText('goal');
+  await expect(dialog.getByRole('combobox', { name: 'Factory' })).toHaveText('Goal');
   await dialog.getByRole('textbox', { name: 'Title' }).fill('Check this week’s spend');
   await dialog.getByRole('button', { name: 'Create item' }).click();
 

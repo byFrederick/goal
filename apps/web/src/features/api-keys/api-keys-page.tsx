@@ -16,6 +16,7 @@ import { revokeApiKey } from '../../api/keys';
 import { apiKeysQuery, factoriesQuery, keys } from '../../api/queries';
 import type { ApiKey, CreatedApiKey } from '../../api/types';
 import { TopBarSlot } from '../../app/top-bar';
+import { factoryTitle } from '../../shared/factory';
 import { formatDay } from '../../shared/format';
 import { useOrg, useOrgHolds } from '../../shared/org';
 import { CreatedKeyDialog } from '../../shared/tokens/created-dialog';
@@ -45,7 +46,7 @@ export function ApiKeysPage() {
   const [created, setCreated] = useState<CreatedApiKey | null>(null);
   const [revoking, setRevoking] = useState<ApiKey | null>(null);
 
-  const names = new Map((factories.data ?? []).map((f) => [f.id, f.name]));
+  const names = new Map((factories.data ?? []).map((f) => [f.id, factoryTitle(f)]));
   const where = (k: ApiKey) => (k.factories ? k.factories.map((id) => names.get(id) ?? id).join(', ') : 'All');
   // The terminal lines name the first factory, so the commands fit this organization.
   const sample = factories.data?.[0]?.name ?? 'factory';
