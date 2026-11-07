@@ -17,7 +17,7 @@ test('the page lists what waits on you, with the count in the top bar', async ({
 
 test('the Alerts tab opens the failing source and the conversion that waits on the factory', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Alerts/ }).check();
+  await page.getByRole('radio', { name: /^Alerts/ }).click();
   await expect(page).toHaveURL(/type=alert/);
   const list = page.getByRole('list', { name: /Waiting on you/ });
 
@@ -40,7 +40,7 @@ test('the Alerts tab opens the failing source and the conversion that waits on t
 
 test('the Decisions tab writes its type to the URL and hides the alerts', async ({ page }) => {
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Decisions/ }).check();
+  await page.getByRole('radio', { name: /^Decisions/ }).click();
   await expect(page).toHaveURL(/type=decision/);
   await expect(page.getByRole('radio', { name: /^Decisions/ })).toBeChecked();
 });
@@ -48,7 +48,7 @@ test('the Decisions tab writes its type to the URL and hides the alerts', async 
 test('Approvals lists the waiting tool call, and Approve with Always allow removes it', async ({ page }) => {
   // The mock seeds the architect's add_issue_comment call on software#151 (mock/fixtures.ts).
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Approvals/ }).check();
+  await page.getByRole('radio', { name: /^Approvals/ }).click();
   await expect(page).toHaveURL(/type=approval/);
 
   const list = page.getByRole('list', { name: /Waiting on you/ });
@@ -65,7 +65,7 @@ test('Approvals lists the waiting tool call, and Approve with Always allow remov
 test('the Questions filter shows the agent question and answering it removes the row', async ({ page }) => {
   // Item 14 of the goal factory holds the pictured question (see question.spec.ts); the caller decides there.
   await page.goto('/o/acme/needs-you');
-  await page.getByRole('radio', { name: /^Questions/ }).check();
+  await page.getByRole('radio', { name: /^Questions/ }).click();
   await expect(page).toHaveURL(/type=question/);
 
   const list = page.getByRole('list', { name: /Waiting on you/ });
@@ -206,7 +206,7 @@ test('at 390 px the tabs scroll sideways and Alerts can be selected', async ({ p
   await page.goto('/o/acme/needs-you');
   const alerts = page.getByRole('radio', { name: /Alerts/ });
   await alerts.evaluate((el) => el.parentElement?.scrollIntoView({ inline: 'center', block: 'nearest' }));
-  await alerts.check();
+  await alerts.click();
   await expect(page).toHaveURL(/type=alert/);
   const inView = await alerts.evaluate((el) => {
     const box = (el.parentElement as HTMLElement).getBoundingClientRect();
