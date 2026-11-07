@@ -3,6 +3,7 @@ import { ensureLoaded, factoryQuery } from '../api/queries';
 import { pageTitle } from '../app/route-focus';
 import { TriggerSkeleton } from '../app/route-skeletons';
 import { TriggerPage } from '../features/intake/trigger-page';
+import { factoryTitle } from '../shared/factory';
 
 // One intake trigger (ADR 0026): this week's results, its rules and recent events, and its YAML in the
 // definition. ?on=<event key> is the New trigger picker's choice: a name the definition does not have
@@ -16,6 +17,6 @@ export const Route = createFileRoute('/o/$org/f/$factory/intake/$trigger')({
     ...(typeof search.check === 'string' && search.check !== '' ? { check: search.check } : {}),
   }),
   loader: ({ context: { queryClient, org, factory } }) => ensureLoaded(queryClient, factoryQuery(org.id, factory.id)),
-  head: ({ match: { context }, params }) => pageTitle(params.trigger, 'Intake', context.factory.name),
+  head: ({ match: { context }, params }) => pageTitle(params.trigger, 'Intake', factoryTitle(context.factory)),
   component: TriggerPage,
 });

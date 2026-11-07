@@ -6,7 +6,7 @@ import { ItemSkeleton } from '../app/route-skeletons';
 import { NotFoundScreen } from '../app/states';
 import { ItemRoute } from '../features/items/item-route';
 import { type ItemTab, isItemTab } from '../features/items/item-tabs';
-import { itemKey } from '../shared/factory';
+import { factoryTitle, itemKey } from '../shared/factory';
 
 // $ref is the item's number in the factory ("12"), a full ref ("goal#12") or its id.
 export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
@@ -39,7 +39,7 @@ export const Route = createFileRoute('/o/$org/f/$factory/items/$ref')({
     }
   },
   head: ({ match: { context }, params }) =>
-    pageTitle(itemKey(context.factory.name, params.ref), context.factory.name, context.org.name),
+    pageTitle(itemKey(context.factory.name, params.ref), factoryTitle(context.factory), context.org.name),
   component: ItemRoute,
   notFoundComponent: () => <NotFoundScreen what="item" />,
 });
