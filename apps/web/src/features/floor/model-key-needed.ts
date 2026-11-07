@@ -26,5 +26,7 @@ export function usePublishedKeyInput(org: string, factory: string) {
     factoryYaml: file.data?.text,
     queries: sha === '' ? [version] : [version, file],
     ready: version.isSuccess && (sha === '' || file.isSuccess),
+    /** Either read gave up with an error: the line's key state stays unknown. */
+    failed: version.isError || file.isError,
   };
 }

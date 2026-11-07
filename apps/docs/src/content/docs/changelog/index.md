@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Home's row and the Floor's header no longer flash a green **Running** for a line that needs a model key. They show a grey placeholder until Goal has read the published version, then **Running** or **Needs a model key**; if the read fails, they show **Running**.
 - Home's row for a published line that has no model key now says **Needs a model key**, as the Floor does, instead of a green **Running**. In onboarding, the Code card's text wraps between words at 375 px instead of splitting "repository" in the middle.
 - The Floor's Where work waits card no longer suggests one more agent that saves under an hour of lead time (or under a tenth of it), or at a station whose WIP limit already caps its slots. A spend under $1 a day reads "Under $1 more a day" instead of "$0".
 - On the Floor, a line without repositories says "done" instead of "merged" at its Done station and in Throughput by week, and Throughput by week starts at the factory's first week instead of 12 weeks back.
