@@ -26,8 +26,8 @@ const (
 var errPartInvalid = errors.New("invalid part")
 
 // ListItemParts lists an assembly's parts in plan order (ADR 0012): each one's needs, the needs
-// still open, its wave, pull request and the agent working it, with how many are done and the
-// assembly's lead time. An item that is not an assembly has none.
+// still open, what it waits for, its wave, pull request and the agent working it, with how many
+// are done and the assembly's lead time. An item that is not an assembly has none.
 func (s *server) ListItemParts(ctx context.Context, req gen.ListItemPartsRequestObject) (gen.ListItemPartsResponseObject, error) {
 	it, err := s.item(ctx, req.Item)
 	if err != nil {
@@ -121,7 +121,8 @@ func partProblem(err error) (gen.Problem, bool) {
 }
 
 // assemblyParts is the body of an assembly's parts, in plan order, shared by ListItemParts and
-// AddItemPart so both answer the same.
+// AddItemPart so both answer the same. Each part's waiting is derived as getItem's is, with the
+// parts' open needs read once (server.waiting).
 func (s *server) assemblyParts(ctx context.Context, it domain.Item, parts domain.Parts) (gen.AssemblyParts, error) {
 	out := gen.AssemblyParts{Done: parts.Done, Total: parts.Total, Parts: make([]gen.AssemblyPart, 0, len(parts.Items))}
 	if parts.Total == 0 {
@@ -143,6 +144,11 @@ func (s *server) assemblyParts(ctx context.Context, it domain.Item, parts domain
 		return gen.AssemblyParts{}, err
 	}
 
+	waiting, err := s.waiting(ctx, it.FactoryID, l, parts.Items, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
+	if err != nil {
+		return gen.AssemblyParts{}, err
+	}
+
 	byID := make(map[domain.ItemID]domain.Item, len(parts.Items))
 	for _, p := range parts.Items {
 		byID[p.ID] = p
@@ -156,6 +162,7 @@ func (s *server) assemblyParts(ctx context.Context, it domain.Item, parts domain
 			Title: p.Title, Paths: append([]string{}, p.PartPaths...), Station: p.Station, State: gen.ItemState(p.State),
 			Needs: []string{}, WaitingOn: []string{}, Wave: waves[string(p.ID)], CostUsd: p.CostUSD,
 			PrUrl: optional(p.PullRequest(l)), Agent: optional(agents[p.ID]), CreatedAt: p.CreatedAt,
+			Waiting: waiting[p.ID],
 		}
 
 		for _, n := range needs[string(p.ID)] {

@@ -28,11 +28,12 @@ export function barSegments(parts: readonly AssemblyPart[]): { key: string; tone
 
 /**
  * The status icon of a part: the item's status everywhere (`itemStatus`), except that a part still
- * waiting on the open items it names is waiting too, even when it is ready to start. A blocked
- * part has no icon in `itemStatus`; the plan shows it as waiting.
+ * waiting (on the open items it names, a merge turn or CI) is waiting too, even when it is ready to
+ * start. A blocked part has no icon in `itemStatus`; the plan shows it as waiting.
  */
-export function partStatus(part: Pick<AssemblyPart, 'state' | 'waiting_on'>): StatusKind {
-  if (part.state !== 'in_progress' && part.state !== 'done' && part.waiting_on.length > 0) return 'waiting';
+export function partStatus(part: Pick<AssemblyPart, 'state' | 'waiting_on' | 'waiting'>): StatusKind {
+  const waits = part.waiting_on.length > 0 || part.waiting != null;
+  if (part.state !== 'in_progress' && part.state !== 'done' && waits) return 'waiting';
   return itemStatus(part) ?? 'waiting';
 }
 

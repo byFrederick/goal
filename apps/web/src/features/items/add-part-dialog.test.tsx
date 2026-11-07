@@ -87,6 +87,7 @@ function part(n: number, over: Partial<AssemblyPart>): AssemblyPart {
     state: 'queued',
     needs: [],
     waiting_on: [],
+    waiting: null,
     wave: 0,
     cost_usd: 1,
     pr_url: null,

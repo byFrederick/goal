@@ -3068,6 +3068,9 @@ type AssemblyPart struct {
 	Station string    `json:"station"`
 	Title   string    `json:"title"`
 
+	// Waiting Why the part is not claimed yet, the same object getItem returns as Item.waiting; null when it isn't waiting
+	Waiting *ItemWaiting `json:"waiting"`
+
 	// WaitingOn Refs of the needs that are neither done nor cancelled
 	WaitingOn []string `json:"waiting_on"`
 

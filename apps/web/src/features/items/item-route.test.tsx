@@ -63,6 +63,7 @@ const two: AssemblyParts = {
     state: 'done',
     needs: [],
     waiting_on: [],
+    waiting: null,
     wave: 0,
     cost_usd: 1,
     pr_url: null,

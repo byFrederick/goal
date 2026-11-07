@@ -19,6 +19,7 @@ import type {
   ItemRepository,
   ItemSpan,
   ItemState,
+  ItemWaiting,
   Org,
   Run,
   SignupDomain,
@@ -77,10 +78,17 @@ export interface MockItem {
 }
 
 /** The need a queued item waits for: an item of the factory by number, by its order (after) or its files (files). */
-export interface MockWaitsOn {
-  kind: 'after' | 'files';
-  number: number;
-}
+export type MockWaitsOn =
+  | {
+      /** after, files or turn: the seed number of the open need that holds it. */
+      kind: 'after' | 'files' | 'turn';
+      number: number;
+    }
+  | {
+      /** ci: the commits and checks of the CI it waits for at a waitFor: ci station. */
+      kind: 'ci';
+      ci: NonNullable<ItemWaiting['ci']>;
+    };
 
 /** An agent's measures (AgentStats without what the request and the line give). */
 export type MockAgentStats = Omit<AgentStats, 'agent' | 'from' | 'to' | 'stations'>;
@@ -694,6 +702,19 @@ const goalSeeds: Seed[] = [
     state: 'queued',
     assembly: 17,
     part: 2,
+    // Its review waits for CI on its pull request's head: 9 of its 14 checks have finished.
+    waitsOn: {
+      kind: 'ci',
+      ci: {
+        commits: [{ repo: 'github.com/acme/goal', sha: '4f2c9e1a7b3d', url: 'https://github.com/acme/goal/pull/44' }],
+        checks: [
+          { repo: 'github.com/acme/goal', name: 'task check', state: 'finished', result: 'passed', failed_jobs: [] },
+          { repo: 'github.com/acme/goal', name: 'task web:e2e', state: 'running', failed_jobs: [] },
+        ],
+        finished: 9,
+        total: 14,
+      },
+    },
     createdMin: 200,
     updatedMin: 20,
     steps: [{ move: 'spec' }, { move: 'build' }, { move: 'review' }],
@@ -707,6 +728,8 @@ const goalSeeds: Seed[] = [
     state: 'queued',
     assembly: 17,
     part: 3,
+    // It waits for part 2, which holds the merge turn.
+    waitsOn: { kind: 'turn', number: 19 },
     createdMin: 120,
     updatedMin: 15,
     steps: [{ move: 'spec' }],
