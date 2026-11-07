@@ -96,7 +96,7 @@ An item that does not exist, or that you cannot see, exits with an error and pri
 - **Peak memory** is the most memory the box used at once, for example `1.2 GB`.
 - **Box** is the box's size: Small, Medium or Large.
 
-A column shows — when the run is still going, or when the box couldn't measure the value. CPU, Peak memory and Box are hidden on narrow screens; the ⓘ beside CPU repeats these meanings.
+A column shows — when the run is still going, or when the box couldn't measure the value. CPU, Peak memory and Box show from 1440 px wide; the ⓘ beside CPU repeats these meanings.
 
 Narrow the list with the search box and the filters. The CLI does the same:
 

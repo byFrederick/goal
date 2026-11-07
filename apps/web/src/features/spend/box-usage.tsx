@@ -54,7 +54,7 @@ export function BoxUsage({ spend, factoryNames }: { spend: OrgSpend; factoryName
         </EmptyState>
       ) : (
         <table className="m-0 w-full border-collapse text-body max-md:block">
-          <thead className="max-md:sr-only">
+          <thead className="max-md:hidden">
             <tr className="text-left text-meta text-muted [&>th]:pb-2 [&>th]:font-medium">
               <th scope="col">{head}</th>
               <th scope="col">Box</th>
@@ -104,15 +104,13 @@ export function BoxUsage({ spend, factoryNames }: { spend: OrgSpend; factoryName
   );
 }
 
-/** One figure. Below md the column's name shows before it (the header row is hidden there). */
+/** One figure. Below md the header row is hidden, so the column's name shows before the figure and is read with it. */
 function Cell({ label, left, children }: { label: string; left?: boolean; children: React.ReactNode }) {
   return (
     <td
       className={`py-3 pl-3 tabular-nums whitespace-nowrap max-md:flex max-md:justify-between max-md:p-0 ${left ? 'text-left md:pl-0' : 'text-right'}`}
     >
-      <span className="text-meta text-muted md:hidden" aria-hidden="true">
-        {label}
-      </span>
+      <span className="text-meta text-muted md:hidden">{label}</span>
       {children}
     </td>
   );

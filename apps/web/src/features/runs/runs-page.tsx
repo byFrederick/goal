@@ -442,7 +442,7 @@ export function RunsPage() {
                     <th scope="col" className="px-3 py-2 text-right font-medium">
                       Cost
                     </th>
-                    <th scope="col" className="hidden px-3 py-2 text-right font-medium xl:table-cell">
+                    <th scope="col" className="hidden px-3 py-2 text-right font-medium min-[1440px]:table-cell">
                       <span className="inline-flex items-center gap-1">
                         CPU
                         <InfoTip about="CPU">
@@ -451,10 +451,10 @@ export function RunsPage() {
                         </InfoTip>
                       </span>
                     </th>
-                    <th scope="col" className="hidden px-3 py-2 text-right font-medium xl:table-cell">
+                    <th scope="col" className="hidden px-3 py-2 text-right font-medium min-[1440px]:table-cell">
                       Peak memory
                     </th>
-                    <th scope="col" className="hidden px-3 py-2 font-medium xl:table-cell">
+                    <th scope="col" className="hidden px-3 py-2 font-medium min-[1440px]:table-cell">
                       Box
                     </th>
                     <th scope="col" className="px-3 py-2 font-medium">
@@ -505,13 +505,13 @@ export function RunsPage() {
                         <td className="px-3 py-2 text-right tabular-nums">{durationOf(run, now)}</td>
                         <td className="hidden px-3 py-2 text-right tabular-nums xl:table-cell">{run.turns}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatUsdCompact(run.cost_usd)}</td>
-                        <td className="hidden px-3 py-2 text-right tabular-nums xl:table-cell">
+                        <td className="hidden px-3 py-2 text-right tabular-nums min-[1440px]:table-cell">
                           {formatCpuSeconds(run.cpu_seconds)}
                         </td>
-                        <td className="hidden px-3 py-2 text-right tabular-nums xl:table-cell">
+                        <td className="hidden px-3 py-2 text-right tabular-nums min-[1440px]:table-cell">
                           {formatMemory(run.peak_memory_bytes)}
                         </td>
-                        <td className="hidden px-3 py-2 xl:table-cell">
+                        <td className="hidden px-3 py-2 min-[1440px]:table-cell">
                           {run.box_size ? humanize(run.box_size) : '—'}
                         </td>
                         <td className="px-3 py-2">
