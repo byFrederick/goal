@@ -1428,7 +1428,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       slots: Object.fromEntries(
         Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [
           id,
-          c.wip_limit ?? Math.max(c.agents.length, 1),
+          c.copies ?? Math.max(c.agents.length, 1),
         ]),
       ),
       waiting: Object.fromEntries(

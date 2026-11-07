@@ -46,10 +46,9 @@ test('the floor shows the cards below the figures: Needs you, where work waits, 
 
   const waits = page.getByRole('region', { name: 'Where work waits' });
   await expect(waits.getByText("Share of the week each station's agents were busy")).toBeVisible();
-  // The what-if is live since #218: the person may edit the definition, so the button is not disabled.
-  const add = waits.getByRole('button', { name: /^Add (a|an) .+ agent$/ });
-  await expect(add).toBeVisible();
-  await expect(add).not.toHaveAttribute('aria-disabled', 'true');
+  // Investigate already runs at its WIP limit of 3, so another agent adds no slot and the card suggests none.
+  await expect(waits.getByText('is the constraint')).toBeVisible();
+  await expect(waits.getByRole('button', { name: /^Add (a|an) .+ agent$/ })).toHaveCount(0);
 
   const weeks = page.getByRole('region', { name: 'Throughput by week' });
   await expect(weeks.getByRole('img', { name: /^Items merged a day by week, from .+ Target 8\.$/ })).toBeVisible();
@@ -121,6 +120,8 @@ test('Add a build agent raises the station by one in a draft and opens the Line 
   await page.goto('/o/acme/f/software');
   const card = page.getByRole('region', { name: 'Where work waits' });
   await expect(card.getByText('With a 7th build agent')).toBeVisible();
+  // The what-if is live since #218: the person may edit the definition, so the button is not disabled.
+  await expect(card.getByRole('button', { name: 'Add a build agent' })).not.toHaveAttribute('aria-disabled', 'true');
   await card.getByRole('button', { name: 'Add a build agent' }).click();
 
   // The draft is not published: the person reviews and publishes it in the Line editor.

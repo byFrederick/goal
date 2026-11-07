@@ -2139,7 +2139,7 @@ export function seed(now = Date.now()): MockState {
         'approve-spec': { agents: [], wip_limit: null },
         build: {
           agents: ['builder-1', 'builder-2'],
-          wip_limit: 2,
+          wip_limit: 3,
           copies: 2,
           buffer: 2,
           output: 'change',
@@ -2177,7 +2177,7 @@ export function seed(now = Date.now()): MockState {
       software: {
         intake: { agents: [], wip_limit: null },
         spec: { agents: ['architect'], wip_limit: 3 },
-        build: { agents: ['engineer'], wip_limit: 6, copies: 6 },
+        build: { agents: ['engineer'], wip_limit: 8, copies: 6 },
         review: { agents: ['reviewer'], wip_limit: 3 },
         done: { agents: [], wip_limit: null },
       },
