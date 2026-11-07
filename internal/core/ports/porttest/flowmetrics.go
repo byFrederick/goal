@@ -151,33 +151,16 @@ func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]
 	out := make([]domain.ItemTime, 0, len(done))
 
 	for _, it := range done {
-		times := map[domain.Component]time.Duration{}
+		times := domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.LeadFrom()), Times: map[domain.Component]time.Duration{}}
 
 		for _, sp := range s.spans[it.ID] {
-			if sp.LeftAt.IsZero() || sp.EnteredAt.Before(it.LeadFrom()) { // time before it started is not lead time
-				continue
-			}
-
-			c := domain.ComponentOf(sp)
-			d := sp.LeftAt.Sub(sp.EnteredAt)
-
-			if c.Kind == domain.ComponentWaiting {
-				if ci := s.ci.overlap(org, it.ID, sp); ci > 0 {
-					times[domain.Component{Kind: domain.ComponentCI, Station: sp.Station}] += ci
-					d -= ci
-				}
-			}
-
-			times[c] += d
-		}
-
-		for c := range times { // a station's waiting that was all CI is not waiting
-			if w := (domain.Component{Kind: domain.ComponentWaiting, Station: c.Station}); c.Kind == domain.ComponentCI && times[w] == 0 {
-				delete(times, w)
+			if !sp.LeftAt.IsZero() && !sp.EnteredAt.Before(it.LeadFrom()) { // time before it started is not lead time
+				times.AddTime(domain.ComponentOf(sp), sp.LeftAt.Sub(sp.EnteredAt), s.ci.overlap(org, it.ID, sp))
 			}
 		}
 
-		out = append(out, domain.ItemTime{Item: it.ID, LeadTime: it.DoneAt.Sub(it.LeadFrom()), Times: times})
+		times.TrimCIWaiting()
+		out = append(out, times)
 	}
 
 	return out, nil

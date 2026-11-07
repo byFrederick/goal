@@ -111,22 +111,11 @@ func (s *Store) ItemTimes(ctx context.Context, q ports.FlowQuery, limit int) ([]
 		}
 
 		c := domain.ComponentOf(domain.Span{Station: *r.Station, State: domain.ItemState(*r.State), ReworkBy: deref(r.ReworkBy)})
-		d := seconds(r.Seconds)
-
-		if ci := seconds(r.CiSeconds); ci > 0 && c.Kind == domain.ComponentWaiting {
-			out[len(out)-1].Times[domain.Component{Kind: domain.ComponentCI, Station: c.Station}] += ci
-			d -= ci
-		}
-
-		out[len(out)-1].Times[c] += d
+		out[len(out)-1].AddTime(c, seconds(r.Seconds), seconds(r.CiSeconds))
 	}
 
 	for _, it := range out {
-		for c := range it.Times { // a station's waiting that was all CI is not waiting
-			if w := (domain.Component{Kind: domain.ComponentWaiting, Station: c.Station}); c.Kind == domain.ComponentCI && it.Times[w] == 0 {
-				delete(it.Times, w)
-			}
-		}
+		it.TrimCIWaiting()
 	}
 
 	return out, nil

@@ -69,6 +69,27 @@ type ItemTime struct {
 	Times    map[Component]time.Duration
 }
 
+// AddTime adds d of time in c to the item, ci of it spent waiting for CI at c's station: when c
+// is waiting, ci counts as ComponentCI there instead (ADR 0044 decision 10).
+func (it ItemTime) AddTime(c Component, d, ci time.Duration) {
+	if c.Kind == ComponentWaiting && ci > 0 {
+		it.Times[Component{Kind: ComponentCI, Station: c.Station}] += ci
+		d -= ci
+	}
+
+	it.Times[c] += d
+}
+
+// TrimCIWaiting drops each station's waiting that was all CI, so the item has no empty waiting
+// component where it only waited for CI.
+func (it ItemTime) TrimCIWaiting() {
+	for c := range it.Times {
+		if w := (Component{Kind: ComponentWaiting, Station: c.Station}); c.Kind == ComponentCI && it.Times[w] == 0 {
+			delete(it.Times, w)
+		}
+	}
+}
+
 // Bridge explains the gap between the actual p85 lead time and the target, largest step
 // first; its steps sum exactly to the gap.
 type Bridge struct {

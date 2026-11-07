@@ -109,6 +109,7 @@ func testItemTimesCIWaits(f *fixture) {
 		w := f.openCIWait(t, domain.NewCIWait{
 			Item: item, Station: stWork, Visit: ciVisit, Repo: repo, SHA: ciSHA, Phase: domain.CIPhaseBefore, Round: 1, StartedAt: hours(from),
 		})
+
 		if to < 0 {
 			return // still open
 		}
