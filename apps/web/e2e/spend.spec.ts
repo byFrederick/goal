@@ -54,7 +54,9 @@ for (const width of [375, 768, 1440]) {
       await page.goto('/o/acme');
       const sreCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'SRE' }) });
       await expect(sreCard.getByText('of $57.14')).toBeVisible();
-      const softwareToday = await homeToday('Software');
+      const factories = ['Software', 'SRE', 'Support'];
+      const homeTodays: Record<string, number> = {};
+      for (const name of factories) homeTodays[name] = await homeToday(name);
       const weekRow = page
         .locator('#spend-week')
         .locator('xpath=ancestor::section[1]')
@@ -70,9 +72,11 @@ for (const width of [375, 768, 1440]) {
       await expect(row('SRE').getByText('about $57 a day, $400 a week')).toBeVisible();
       expect(num(await row('SRE').textContent(), /Last 7 days \$([\d,.]+)/)).toBe(homeWeek);
 
-      // Software's row shows Software's own spend today, as Home does, not the organization's.
-      await expect(row('Software').getByText(/Today \$/)).toBeVisible();
-      expect(num(await row('Software').textContent(), /Today \$([\d,.]+)/)).toBe(softwareToday);
+      // Each row shows its factory's own spend today, as Home does, not the organization's.
+      for (const name of factories) {
+        await expect(row(name).getByText(/Today \$/)).toBeVisible();
+        expect(num(await row(name).textContent(), /Today \$([\d,.]+)/)).toBe(homeTodays[name]);
+      }
     });
 
     test('the Today label stays inside its box', async ({ page }) => {
