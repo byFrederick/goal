@@ -148,7 +148,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			e.block(ctx, log, c, fmt.Sprintf("run %s: %s", res.Status, res.Error))
 			return
 		default:
-			e.finish(ctx, log, c, res.RunID, res.Output, chk)
+			e.finish(ctx, log, c, res.RunID, res.Output, chk, true)
 			return
 		}
 
@@ -244,10 +244,20 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 
 // ready reports whether the claim's run may start: at a station that waits for CI, only once
 // CI on the item's commits has finished, keeping what CI said for its brief (ciGate, ADR 0044
-// decision 2), and then only once it is admitted.
+// decision 2), and then only once it is admitted. When the claim's CI wait held a run's outcome
+// and CI passed (ADR 0044 decision 3), no run starts: the outcome is applied (applyHeld).
 func (e *Engine) ready(ctx context.Context, log *slog.Logger, c *claimed) bool {
-	var ok bool
-	if c.ci, ok = e.ciGate(ctx, log, *c); !ok {
+	var (
+		held domain.RunID
+		ok   bool
+	)
+
+	if c.ci, held, ok = e.ciGate(ctx, log, *c); !ok {
+		return false
+	}
+
+	if held != "" {
+		e.applyHeld(ctx, log, *c, held)
 		return false
 	}
 
@@ -922,8 +932,14 @@ var refreshWhen = map[domain.IntegrationRefresh]string{
 // organization policy lets no agent merge (claimed.noMerge), and goes back to its own queue when
 // a pull request is only not mergeable yet (deferMerge). The run was checked against the version it started on; where the item goes
 // next is the current line's say (chk.next), so an item finishing on v1 after v2 was published
-// moves along v2.
-func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run domain.RunID, output json.RawMessage, chk checked) {
+// moves along v2. With hold, at a station that waits for CI, an output that would move the item
+// forward after its run pushed is held until CI on the push finishes (holdForCI) instead;
+// applyHeld finishes it without.
+func (e *Engine) finish(ctx context.Context, log *slog.Logger, c claimed, run domain.RunID, output json.RawMessage, chk checked, hold bool) {
+	if hold && e.holdForCI(ctx, log, c, run, chk) {
+		return
+	}
+
 	next, v := chk.next, chk.verdict
 
 	t := ports.Transition{
