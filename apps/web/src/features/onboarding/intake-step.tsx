@@ -12,11 +12,14 @@ import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { defKeys, factoryQuery, intakeKeys, intakeQuery, versionModelQuery } from '../../api/queries';
 import type { Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
-import { modelOf } from '../../shared/definition/model';
+import { describeWhen } from '../../shared/cron-words';
+import { type ModelStation, modelOf } from '../../shared/definition/model';
 import { factoryTitle } from '../../shared/factory';
+import { humanize } from '../../shared/format';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
+import { InfoTip } from '../../ui/info-tip';
 import { SourceTile } from '../../ui/source-tile';
 import { Switch } from '../../ui/switch';
 import { stationLabel } from '../factory-editor/line/labels';
@@ -140,8 +143,10 @@ function needsConnection(trigger: IntakeTrigger): boolean {
 }
 
 /** The sentence for what a trigger creates: "Creates a feature at Spec", "in the expedite lane" when it is expedited. */
-function createsSentence(trigger: IntakeTrigger): string {
-  const { type, station, expedite } = trigger.create;
+function createsSentence(trigger: IntakeTrigger, stations: ModelStation[]): string {
+  const { type, station: id, expedite } = trigger.create;
+  const known = stations.find((s) => s.id === id);
+  const station = known?.name ? stationLabel(known) : humanize(id);
   const article = /^[aeiou]/i.test(type) ? 'an' : 'a';
   return `Creates ${article} ${type} at ${station}${expedite ? ' in the expedite lane' : ''}`;
 }
@@ -302,6 +307,7 @@ function Ready({
                 org={org}
                 factory={factory}
                 trigger={trigger}
+                stations={line.stations ?? []}
                 on={isOn(trigger)}
                 disabled={trigger.enabled || needsConnection(trigger) || pending}
                 onChange={(next) =>
@@ -318,7 +324,8 @@ function Ready({
           <p className="m-0 flex flex-wrap items-center gap-2 text-secondary">
             <span className="text-ink-soft">Always on:</span>
             <Chip>New item</Chip>
-            <Chip>goal run</Chip>
+            <Chip>CLI</Chip>
+            <InfoTip about="CLI">The goal run command.</InfoTip>
             <Chip>The API</Chip>
           </p>
         </>
@@ -334,6 +341,7 @@ function TriggerRow({
   org,
   factory,
   trigger,
+  stations,
   on,
   disabled,
   onChange,
@@ -341,19 +349,24 @@ function TriggerRow({
   org: OrgSummary;
   factory: Factory;
   trigger: IntakeTrigger;
+  stations: ModelStation[];
   on: boolean;
   disabled: boolean;
   onChange: (next: boolean) => void;
 }) {
   const { icon: Icon, tile, label } = sourceIcon[trigger.source];
   const missing = needsConnection(trigger);
+  const words = trigger.source === 'schedule' ? describeWhen(trigger.when) : trigger.when;
   return (
     <div className="flex items-center gap-3 border-t border-line p-4">
       <SourceTile icon={Icon} fill={tile} size="md" />
       <div className="flex min-w-0 flex-1 flex-col gap-px">
         <span className="font-control text-body text-ink">{trigger.name}</span>
-        <span className="text-secondary break-words text-ink-soft">{trigger.when}</span>
-        <span className="text-secondary break-words text-muted">{createsSentence(trigger)}</span>
+        <span className="flex items-center gap-1 text-secondary break-words text-ink-soft">
+          {words}
+          {words !== trigger.when ? <InfoTip about={`${trigger.name} schedule`}>{trigger.when}</InfoTip> : null}
+        </span>
+        <span className="text-secondary break-words text-muted">{createsSentence(trigger, stations)}</span>
         {trigger.problem && !missing ? (
           <span className="text-meta font-semibold text-rework-ink">{trigger.problem.message}</span>
         ) : null}
