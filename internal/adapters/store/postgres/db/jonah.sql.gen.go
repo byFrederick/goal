@@ -153,7 +153,7 @@ func (q *Queries) EvidenceEvents(ctx context.Context, arg EvidenceEventsParams) 
 }
 
 const evidenceItems = `-- name: EvidenceItems :many
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, f.finished_at::timestamptz AS finished_at
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, f.finished_at::timestamptz AS finished_at
 FROM (
   SELECT d.id, d.done_at AS finished_at FROM work_items d
   WHERE d.factory_id = $1 AND d.state = 'done'
@@ -225,7 +225,6 @@ func (q *Queries) EvidenceItems(ctx context.Context, arg EvidenceItemsParams) ([
 			&i.WorkItem.Paths,
 			&i.WorkItem.BaseCommit,
 			&i.WorkItem.Trigger,
-			&i.WorkItem.Source,
 			&i.WorkItem.IntegrationBranch,
 			&i.WorkItem.IntegrationLandAt,
 			&i.WorkItem.Origin,

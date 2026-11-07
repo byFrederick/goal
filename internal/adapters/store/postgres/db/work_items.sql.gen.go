@@ -82,7 +82,7 @@ func (q *Queries) AssemblyParts(ctx context.Context, arg AssemblyPartsParams) ([
 }
 
 const getItem = `-- name: GetItem :one
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE id = $1
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE id = $1
 `
 
 func (q *Queries) GetItem(ctx context.Context, id uuid.UUID) (WorkItem, error) {
@@ -114,7 +114,6 @@ func (q *Queries) GetItem(ctx context.Context, id uuid.UUID) (WorkItem, error) {
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -131,7 +130,7 @@ func (q *Queries) GetItem(ctx context.Context, id uuid.UUID) (WorkItem, error) {
 }
 
 const getItemByNumber = `-- name: GetItemByNumber :one
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE factory_id = $1 AND number = $2
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE factory_id = $1 AND number = $2
 `
 
 type GetItemByNumberParams struct {
@@ -168,7 +167,6 @@ func (q *Queries) GetItemByNumber(ctx context.Context, arg GetItemByNumberParams
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -198,7 +196,7 @@ INSERT INTO work_items (
   $21::int, $22::bool, $23::timestamptz,
   $24::timestamptz, $25::text
 )
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
 
 type InsertItemParams struct {
@@ -287,7 +285,6 @@ func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (WorkIte
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -304,7 +301,7 @@ func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (WorkIte
 }
 
 const listItems = `-- name: ListItems :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items
 WHERE factory_id = $1
   AND (cardinality($2::text[]) = 0 OR state = ANY ($2::text[]))
   AND ($3::text = '' OR station = $3::text)
@@ -364,7 +361,6 @@ func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]WorkIte
 			&i.Paths,
 			&i.BaseCommit,
 			&i.Trigger,
-			&i.Source,
 			&i.IntegrationBranch,
 			&i.IntegrationLandAt,
 			&i.Origin,
@@ -388,7 +384,7 @@ func (q *Queries) ListItems(ctx context.Context, arg ListItemsParams) ([]WorkIte
 }
 
 const lockItem = `-- name: LockItem :one
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE id = $1 FOR NO KEY UPDATE
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE id = $1 FOR NO KEY UPDATE
 `
 
 func (q *Queries) LockItem(ctx context.Context, id uuid.UUID) (WorkItem, error) {
@@ -420,7 +416,6 @@ func (q *Queries) LockItem(ctx context.Context, id uuid.UUID) (WorkItem, error) 
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -437,7 +432,7 @@ func (q *Queries) LockItem(ctx context.Context, id uuid.UUID) (WorkItem, error) 
 }
 
 const lockNextWaitingItem = `-- name: LockNextWaitingItem :one
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items w
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items w
 WHERE w.factory_id = $1 AND w.station = $2 AND w.state IN ('queued', 'ready')
   AND (w.start_at IS NULL OR w.start_at <= $3::timestamptz)
   AND NOT EXISTS (
@@ -489,7 +484,6 @@ func (q *Queries) LockNextWaitingItem(ctx context.Context, arg LockNextWaitingIt
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -522,7 +516,7 @@ UPDATE work_items SET
   -- The first move off a station is the item leaving its line's first one: it has started.
   started_at = CASE WHEN started_at IS NULL AND station <> $1 THEN $3 ELSE started_at END
 WHERE id = $12
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
 
 type MoveItemParams struct {
@@ -582,7 +576,6 @@ func (q *Queries) MoveItem(ctx context.Context, arg MoveItemParams) (WorkItem, e
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -617,7 +610,7 @@ func (q *Queries) NextItemNumber(ctx context.Context, id uuid.UUID) (int64, erro
 }
 
 const releasableItems = `-- name: ReleasableItems :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items w
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items w
 WHERE w.factory_id = $1 AND w.station = $2 AND w.state IN ('queued', 'ready')
   AND (w.start_at IS NULL OR w.start_at <= $3::timestamptz)
   AND NOT EXISTS (
@@ -679,7 +672,6 @@ func (q *Queries) ReleasableItems(ctx context.Context, arg ReleasableItemsParams
 			&i.Paths,
 			&i.BaseCommit,
 			&i.Trigger,
-			&i.Source,
 			&i.IntegrationBranch,
 			&i.IntegrationLandAt,
 			&i.Origin,
@@ -703,7 +695,7 @@ func (q *Queries) ReleasableItems(ctx context.Context, arg ReleasableItemsParams
 }
 
 const searchItems = `-- name: SearchItems :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items
 WHERE factory_id = ANY ($1::uuid[])
   AND (($2::text <> '' AND title ILIKE '%' || $2::text || '%' ESCAPE '\')
        OR ($3::bigint > 0 AND number = $3::bigint))
@@ -761,7 +753,6 @@ func (q *Queries) SearchItems(ctx context.Context, arg SearchItemsParams) ([]Wor
 			&i.Paths,
 			&i.BaseCommit,
 			&i.Trigger,
-			&i.Source,
 			&i.IntegrationBranch,
 			&i.IntegrationLandAt,
 			&i.Origin,
@@ -787,7 +778,7 @@ func (q *Queries) SearchItems(ctx context.Context, arg SearchItemsParams) ([]Wor
 const setItemStart = `-- name: SetItemStart :one
 UPDATE work_items SET start_at = $1::timestamptz, updated_at = $2
 WHERE id = $3 AND station = $4 AND state = $5
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
 
 type SetItemStartParams struct {
@@ -835,7 +826,6 @@ func (q *Queries) SetItemStart(ctx context.Context, arg SetItemStartParams) (Wor
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -852,7 +842,7 @@ func (q *Queries) SetItemStart(ctx context.Context, arg SetItemStartParams) (Wor
 }
 
 const startItem = `-- name: StartItem :one
-UPDATE work_items SET state = 'in_progress', updated_at = $2 WHERE id = $1 RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
+UPDATE work_items SET state = 'in_progress', updated_at = $2 WHERE id = $1 RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
 
 type StartItemParams struct {
@@ -889,7 +879,6 @@ func (q *Queries) StartItem(ctx context.Context, arg StartItemParams) (WorkItem,
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -950,7 +939,7 @@ func (q *Queries) StationLoads(ctx context.Context, factoryID uuid.UUID) ([]Stat
 }
 
 const waitingItems = `-- name: WaitingItems :many
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items
 WHERE factory_id = $1 AND station = $2 AND state IN ('queued', 'ready')
 ORDER BY (class_of_service = 'expedite') DESC, priority DESC, created_at, number
 LIMIT $3::bigint
@@ -998,7 +987,6 @@ func (q *Queries) WaitingItems(ctx context.Context, arg WaitingItemsParams) ([]W
 			&i.Paths,
 			&i.BaseCommit,
 			&i.Trigger,
-			&i.Source,
 			&i.IntegrationBranch,
 			&i.IntegrationLandAt,
 			&i.Origin,

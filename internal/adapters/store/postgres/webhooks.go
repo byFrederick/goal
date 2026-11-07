@@ -45,7 +45,7 @@ func (in *Intake) CreateWebhook(ctx context.Context, n domain.NewWebhook) (domai
 		}
 
 		_, err = q.InsertOrgWebhook(ctx, db.InsertOrgWebhookParams{
-			ID: id, Name: n.Name, Sender: new(string(n.Sender)), Secret: n.Secret,
+			ID: id, Name: n.Name, Sender: string(n.Sender), Secret: n.Secret,
 			TokenHeader: nonEmpty(n.Token.Header), TokenEventPath: nonEmpty(n.Token.EventPath), TokenIDPath: nonEmpty(n.Token.IDPath),
 		})
 
