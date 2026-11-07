@@ -138,6 +138,17 @@ function addAddress(email: string) {
 }
 
 describe('step 7, invite people', () => {
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      `/o/acme/get-started/people?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/intake');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('sends a Builder as a member with the editor role on the factory, then goes to step 8', async () => {
     renderStep(url);
     await screen.findByRole('heading', { level: 1, name: 'Invite people' });

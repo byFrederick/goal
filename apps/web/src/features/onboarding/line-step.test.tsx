@@ -226,6 +226,17 @@ function renderStep(url: string) {
 }
 
 describe('step 4, shape the line', () => {
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      `/o/acme/get-started/line?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/code');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('sends the person back to step 3 when the URL has no factory', async () => {
     renderStep('/o/acme/get-started/line');
     expect(await screen.findByText('Choose a template first, then shape its line.')).toBeTruthy();

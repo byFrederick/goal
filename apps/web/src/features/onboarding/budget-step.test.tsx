@@ -153,6 +153,17 @@ function lastSaved<T>(section: Section): T {
 }
 
 describe('step 5, set budgets and targets', () => {
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      `/o/acme/get-started/budget?factory=${factoryId}&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter`,
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/line');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('sends the person back to step 3 when the URL has no factory', async () => {
     renderStep('/o/acme/get-started/budget');
     expect(await screen.findByText('Choose a template first, then set its budgets.')).toBeTruthy();
