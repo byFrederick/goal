@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Runs on Cloudflare now record peak memory. Before, it was always empty, because the box's root cgroup has no memory counters. The worker reads its own cgroup first, then the root cgroup, then the machine's memory in use from `/proc/meminfo`, and its finished line says which with `memory_source` (`cgroup` or `machine`).
 - The Floor's flow figures no longer show a red 0 under Throughput when no item finished in either range, and any change of 0 reads in grey instead of green or red. "No target set" stays next to a change.
 - Home's row for a published line that has no model key now says **Needs a model key**, as the Floor does, instead of a green **Running**. In onboarding, the Code card's text wraps between words at 375 px instead of splitting "repository" in the middle.
 - The Floor's Where work waits card no longer suggests one more agent that saves under an hour of lead time (or under a tenth of it), or at a station whose WIP limit already caps its slots. A spend under $1 a day reads "Under $1 more a day" instead of "$0".

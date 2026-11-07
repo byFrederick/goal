@@ -217,7 +217,7 @@ func (q *Queries) AgentSentBack(ctx context.Context, arg AgentSentBackParams) ([
 }
 
 const currentRun = `-- name: CurrentRun :one
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, l.slot AS lease_slot,
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, r.peak_memory_source, l.slot AS lease_slot,
        (SELECT count(*) FROM item_events e WHERE e.run_id = r.id AND e.kind = $1::text) AS usage_turns
 FROM agent_runs r
 JOIN leases l ON l.item_id = r.item_id
@@ -255,6 +255,7 @@ type CurrentRunRow struct {
 	CpuSeconds          *float64
 	PeakMemoryBytes     *int64
 	BoxSize             *string
+	PeakMemorySource    *string
 	LeaseSlot           int32
 	UsageTurns          int64
 }
@@ -288,6 +289,7 @@ func (q *Queries) CurrentRun(ctx context.Context, arg CurrentRunParams) (Current
 		&i.CpuSeconds,
 		&i.PeakMemoryBytes,
 		&i.BoxSize,
+		&i.PeakMemorySource,
 		&i.LeaseSlot,
 		&i.UsageTurns,
 	)

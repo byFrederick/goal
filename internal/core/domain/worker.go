@@ -50,6 +50,9 @@ type WorkerFinished struct {
 	// them; nil when the line has no such field (a worker that cannot read them).
 	CPUSeconds      *float64 `json:"cpu_seconds"`
 	PeakMemoryBytes *int64   `json:"peak_memory_bytes"`
+	// MemorySource is how the worker measured PeakMemoryBytes, "cgroup" or "machine"; absent
+	// without it. Result keeps only those two values, and only with PeakMemoryBytes.
+	MemorySource string `json:"memory_source"`
 	// Repositories are the repositories the run fetched or pushed, each with its pushed head and
 	// whether it wrote (ADR 0041 decision 5).
 	Repositories []WorkerRepository `json:"repositories"`
@@ -157,6 +160,19 @@ func RunRepositories(reported []WorkerRepository) []RunRepository {
 	return out
 }
 
+// memorySource is the line's memory source when it is a known one and the line has a peak memory;
+// empty otherwise.
+func (f *WorkerFinished) memorySource() MemorySource {
+	switch src := MemorySource(f.MemorySource); {
+	case f.PeakMemoryBytes == nil:
+		return ""
+	case src == MemoryCgroup, src == MemoryMachine:
+		return src
+	default:
+		return ""
+	}
+}
+
 // Result is the run's result as the worker reported it: succeeded only with an output, failed
 // with the worker's reason otherwise, with the repositories it reported. How the process ended
 // (killed, timed out, crashed) is the caller's to apply on top.
@@ -164,6 +180,7 @@ func (f *WorkerFinished) Result() RunResult {
 	res := RunResult{
 		CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
 		Repositories: RunRepositories(f.Repositories), CPUSeconds: f.CPUSeconds, PeakMemoryBytes: f.PeakMemoryBytes,
+		PeakMemorySource: f.memorySource(),
 	}
 
 	switch {
