@@ -28,7 +28,6 @@ export function defaultEdits(review: ReviewSection, line: LineSection): AnyEdit[
     edits.push(edit);
     next = edit.value;
   };
-  fill('daily_usd', budgetRanges.day.fallback);
   fill('weekly_usd', budgetRanges.week.fallback);
   fill('per_item_usd', budgetRanges.perItem.fallback);
   fill('on_exhausted', 'drain');
