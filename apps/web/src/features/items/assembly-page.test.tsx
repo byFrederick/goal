@@ -87,6 +87,7 @@ function part(n: number, over: Partial<AssemblyPart>): AssemblyPart {
     state: 'queued',
     needs: [],
     waiting_on: [],
+    waiting: null,
     wave: 0,
     cost_usd: 1,
     pr_url: null,
@@ -310,6 +311,24 @@ describe('AssemblyPage progress', () => {
   });
 });
 
+/** Renders the assembly with part 3 holding waiting. */
+async function renderWaits(waiting: AssemblyPart['waiting']) {
+  await renderAssembly({
+    parts: { ...parts, parts: parts.parts.map((p) => (p.index === 3 ? { ...p, waiting_on: [], waiting } : p)) },
+  });
+}
+
+/** The Plan card's row of the part titled title. */
+function planRow(title: string): HTMLElement {
+  const plan = screen.getAllByRole('region').find((r) => r.getAttribute('aria-label')?.startsWith('Wave'));
+  const link = within(plan?.parentElement ?? document.body)
+    .getAllByRole('link', { name: title })
+    .find((l) => l.closest('section[aria-label^="Wave"]'));
+  const row = link?.closest('li');
+  if (!row) throw new Error(`no plan row for ${title}`);
+  return row;
+}
+
 describe('AssemblyPage plan', () => {
   it('groups parts into waves: a work row names the station and role, waiting rows name their needs', async () => {
     await renderAssembly();
@@ -336,6 +355,56 @@ describe('AssemblyPage plan', () => {
     const links = screen.getAllByRole('link', { name: long });
     expect(links.length).toBe(2);
     for (const link of links) expect(link.getAttribute('title')).toBe(long);
+  });
+
+  it('shows a part waiting for CI with its counts and an ⓘ in its row', async () => {
+    await renderWaits({
+      kind: 'ci',
+      items: [],
+      files: [],
+      needs: [],
+      ci: { commits: [{ repo: 'github.com/acme/goal', sha: 'abc1234' }], checks: [], finished: 9, total: 14 },
+    });
+
+    const row = planRow('Part 3 title');
+    expect(within(row).getByText('Waiting for CI · 9 of 14')).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'About CI' })).toBeTruthy();
+  });
+
+  it('shows a part waiting for its merge turn in its row', async () => {
+    await renderWaits({
+      kind: 'turn',
+      items: ['goal#41'],
+      files: [],
+      needs: [{ ref: 'goal#41', title: 'Part 1 title', paths: [] }],
+      target: 'goal/a40-split',
+    });
+
+    expect(within(planRow('Part 3 title')).getByText('Waits for goal#41 to land')).toBeTruthy();
+  });
+
+  it('shows a part waiting for its needs in its row', async () => {
+    await renderWaits({
+      kind: 'after',
+      items: ['goal#41', 'goal#42'],
+      files: [],
+      needs: [
+        { ref: 'goal#41', title: 'Part 1 title', paths: [] },
+        { ref: 'goal#42', title: 'Part 2 title', paths: [] },
+      ],
+    });
+
+    expect(within(planRow('Part 3 title')).getByText('Waits for goal#41 +1')).toBeTruthy();
+  });
+
+  it('keeps the state name of a part that waits for nothing', async () => {
+    await renderAssembly({
+      parts: { ...parts, parts: [...parts.parts, part(5, { wave: 0, state: 'ready' })] },
+    });
+
+    const row = planRow('Part 5 title');
+    expect(within(row).getByText('Ready')).toBeTruthy();
+    expect(within(row).queryByText(/Wait/)).toBeNull();
   });
 
   it('shows a merged part as a row, not as work', async () => {

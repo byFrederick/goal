@@ -10,6 +10,7 @@ import { itemKey, refParam, useFactory, useFactoryParams } from '../../shared/fa
 import { formatDuration, formatUsd, humanize } from '../../shared/format';
 import { pullRequestLabel, stateNames } from '../../shared/item-state';
 import { useOrg } from '../../shared/org';
+import { WaitLine } from '../../shared/waiting-for';
 import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
@@ -95,7 +96,7 @@ function WorkCard({ part, sub }: { part: AssemblyPart; sub: string }) {
   );
 }
 
-/** A part not being worked: one line, its status icon, and what it waits for. */
+/** A part not being worked: one line, its status icon, and what it waits for (its wait, as a Board card shows it). */
 function PartRow({ part, detail }: { part: AssemblyPart; detail: string }) {
   const link = usePartLink();
   return (
@@ -109,9 +110,13 @@ function PartRow({ part, detail }: { part: AssemblyPart; detail: string }) {
       >
         {part.title}
       </Link>
-      <span className="max-w-[45%] shrink truncate text-[13px] text-muted" title={detail}>
-        {detail}
-      </span>
+      {part.waiting ? (
+        <WaitLine waiting={part.waiting} status={null} className="max-w-[45%] shrink text-[13px]" />
+      ) : (
+        <span className="max-w-[45%] shrink truncate text-[13px] text-muted" title={detail}>
+          {detail}
+        </span>
+      )}
     </li>
   );
 }

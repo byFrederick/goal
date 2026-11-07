@@ -27,6 +27,7 @@ function part(n: number, over: Partial<AssemblyPart> = {}): AssemblyPart {
     state: 'queued',
     needs: [],
     waiting_on: [],
+    waiting: null,
     wave: 0,
     cost_usd: 0,
     pr_url: null,
@@ -65,6 +66,12 @@ describe('partStatus', () => {
 
   it('waits for another item while it names open needs', () => {
     expect(partStatus(part(2, { state: 'queued', waiting_on: ['goal#101'] }))).toBe('waiting');
+  });
+
+  it('waits while the API says it waits, for a merge turn or for CI, even when ready', () => {
+    const ci = { kind: 'ci', items: [], files: [], needs: [], ci: { commits: [], checks: [], finished: 1, total: 2 } };
+    expect(partStatus(part(2, { state: 'ready', waiting: ci } as Partial<AssemblyPart>))).toBe('waiting');
+    expect(partStatus(part(2, { state: 'in_progress', waiting: ci } as Partial<AssemblyPart>))).toBe('working');
   });
 
   it('is ready when its own state says ready, and waiting otherwise', () => {

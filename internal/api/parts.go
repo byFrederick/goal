@@ -26,8 +26,8 @@ const (
 var errPartInvalid = errors.New("invalid part")
 
 // ListItemParts lists an assembly's parts in plan order (ADR 0012): each one's needs, the needs
-// still open, what it waits for, its wave, pull request and the agent working it, with how many are done and the
-// assembly's lead time. An item that is not an assembly has none.
+// still open, what it waits for, its wave, pull request and the agent working it, with how many
+// are done and the assembly's lead time. An item that is not an assembly has none.
 func (s *server) ListItemParts(ctx context.Context, req gen.ListItemPartsRequestObject) (gen.ListItemPartsResponseObject, error) {
 	it, err := s.item(ctx, req.Item)
 	if err != nil {

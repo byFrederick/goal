@@ -427,16 +427,19 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
 
   /**
    * Item.waiting of a queued or ready item whose need is open (goald derives it on every read): the
-   * need's ref and title and its paths; for kind files, the item's own paths the need shares.
+   * need's ref and title and its paths; for kind files, the item's own paths the need shares. A CI
+   * wait has no need: its commits and checks.
    */
   const waitingOf = (it: MockItem): ItemWaiting | null => {
     if (!it.waitsOn || (it.state !== 'queued' && it.state !== 'ready')) return null;
-    const need = state.items.find((n) => n.factory === it.factory && n.number === it.waitsOn?.number);
+    if (it.waitsOn.kind === 'ci') return { kind: 'ci', items: [], files: [], needs: [], ci: it.waitsOn.ci };
+    const waits = it.waitsOn;
+    const need = state.items.find((n) => n.factory === it.factory && n.number === waits.number);
     if (!need || need.state === 'done' || need.state === 'cancelled') return null;
     const needPaths = need.paths ?? [];
-    const files = it.waitsOn.kind === 'files' ? (it.paths ?? []).filter((p) => needPaths.includes(p)) : [];
+    const files = waits.kind === 'files' ? (it.paths ?? []).filter((p) => needPaths.includes(p)) : [];
     const needed = { ref: ref(need), title: need.title, paths: needPaths };
-    return { kind: it.waitsOn.kind, items: [needed.ref], files, needs: [needed] };
+    return { kind: waits.kind, items: [needed.ref], files, needs: [needed] };
   };
 
   /** The assembly an item is a part of, and its place among the parts (the card's assembly line). */
@@ -2407,6 +2410,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
             state: p.state,
             needs: [],
             waiting_on: [],
+            waiting: waitingOf(p),
             wave: 0,
             cost_usd: p.cost_usd,
             pr_url: p.pr_url,
