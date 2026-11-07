@@ -48,7 +48,8 @@ let origin = '';
 let current = '';
 const ids: Record<string, string> = {};
 
-test.beforeAll(async (_fixtures, info) => {
+test.beforeAll(async () => {
+  const info = test.info();
   test.skip(!['phone-375', 'desktop-1440'].includes(info.project.name), 'runs at 375 and 1440 px only');
   expect(listFiles(dist).length).toBeGreaterThan(0);
   root = mkdtempSync(join(tmpdir(), 'goal-pwa-update-'));
