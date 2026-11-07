@@ -10,7 +10,7 @@ You end knowing what your agents cost over a window, which factories and agents 
 Pick a window at the top: **This week**, **This month** or **Last 90 days**. The window is in the URL, so you can share it. Every figure on the page follows it, except the budgets, which always use the last 7 days. With **This week** selected, the first figure is the spend since Monday (UTC).
 
 - **Spend:** the total for the window, this month against last month, the cost per merged item and the share spent on rework.
-- **Spend by day:** each day's cost, split by factory.
+- **Spend by day:** each day's cost, split by factory. A factory is shown by its title, here and under each agent in By agent and Box usage.
 - **By agent** and **By model:** where the money went.
 - **Budgets:** each factory's weekly budget against its last 7 days of spend, and today's spend against a day's share of it (the weekly budget ÷ 7, shown as "about $357 a day"). The budget is set in the factory definition, so this page shows it and does not edit it. At 100% the factory drains: running items finish, and nothing new starts until the last 7 days' spend is under the budget. Today's spend counts every run of the factory, Jonah's included, so it matches **Spend today** on Home.
 - **Payers:** which connections pay for the models.
@@ -25,7 +25,7 @@ Switch between **Agents** and **Stations** above the table. Each row is one agen
 
 | Column | Meaning |
 | --- | --- |
-| Name | The agent or station. With more than one factory, its factory shows under it. |
+| Name | The agent or station. With more than one factory, its factory's title shows under it. |
 | Box | The box size the runs used: Small, Medium or Large. **Unknown** for runs from before Goal recorded box sizes. |
 | Runs | How many runs reported a CPU time or a peak memory. |
 | CPU median, CPU P90 | CPU time per run, from prepare to the run's end. |

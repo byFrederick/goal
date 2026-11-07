@@ -12,6 +12,7 @@ import { exportOrgSpend } from '../../api/spend';
 import type { OrgSpend } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
+import { factoryTitle } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
@@ -135,12 +136,12 @@ function isEmpty(spend: OrgSpend): boolean {
 
 function Ready({ spend, org }: { spend: OrgSpend; org: string }) {
   const lines = factoryLines(spend);
-  const nameOf = new Map(lines.map((l) => [l.id, l.name]));
+  const titleOf = new Map(lines.map((l) => [l.id, factoryTitle(l)]));
   const agents: SpendRow[] = spend.by_agent.map((a) => ({
     key: `${a.factory_id}/${a.agent}`,
     label: a.agent,
     usd: a.usd,
-    detail: nameOf.get(a.factory_id),
+    detail: titleOf.get(a.factory_id),
   }));
   const models: SpendRow[] = spend.by_model.map((m) => ({ key: m.model, label: m.model, usd: m.usd }));
   const notSplit = spend.complete ? 'Nothing spent in this window.' : 'Not split by factory, so not shown.';
@@ -157,7 +158,7 @@ function Ready({ spend, org }: { spend: OrgSpend; org: string }) {
         <Budgets budgets={spend.budgets} />
         <Payers budgets={spend.budgets} org={org} />
       </div>
-      <BoxUsage spend={spend} factoryNames={nameOf} />
+      <BoxUsage spend={spend} factoryTitles={titleOf} />
     </>
   );
 }

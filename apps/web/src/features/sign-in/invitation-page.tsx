@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import type { AuthFailure, InvitationDetails } from '../../api/auth';
 import { keys, meQuery, orgsQuery } from '../../api/queries';
 import { useSignOut } from '../../shared/account';
+import { factoryTitle } from '../../shared/factory';
 import { formatDay } from '../../shared/format';
 import { orgMark } from '../../shared/marks';
 import { Button } from '../../ui/button';
@@ -106,7 +107,7 @@ export function InvitationPage({ id }: { id: string }) {
   }
 
   const inviter = i.inviterName || i.inviterEmail;
-  const factories = (i.factories ?? []).map((f) => `${f.name}, ${f.role}`).join('; ');
+  const factories = (i.factories ?? []).map((f) => `${factoryTitle(f)}, ${f.role}`).join('; ');
 
   return (
     <AuthPage>

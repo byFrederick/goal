@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { approveItem, decideToolApproval, listFactories } from '../../api/client';
+import { getVersion } from '../../api/definitions';
 import {
   archivedFactoriesQuery,
   attentionQuery,
@@ -35,6 +36,11 @@ vi.mock(import('../../api/client'), async (original) => ({
   approveItem: vi.fn(
     async (_org: string, item: string) => ({ ref: item, state: 'done', station: 'done' }) as unknown as Item,
   ),
+}));
+
+vi.mock(import('../../api/definitions'), async (original) => ({
+  ...(await original()),
+  getVersion: vi.fn((await original()).getVersion),
 }));
 
 afterEach(cleanup);
@@ -362,7 +368,7 @@ describe('Home: the ready state', () => {
     await renderReady();
 
     const software = screen.getByRole('article', { name: 'software' });
-    expect(within(software).getByText('Running')).toBeTruthy();
+    expect(await within(software).findByText('Running')).toBeTruthy();
     expect(within(software).getByRole('region', { name: 'software line' })).toBeTruthy();
     expect(within(software).getByText('Needs you')).toBeTruthy();
     expect(within(software).getByText('Throughput')).toBeTruthy();
@@ -373,6 +379,34 @@ describe('Home: the ready state', () => {
     expect(within(sreRow).getByText('Andon pulled')).toBeTruthy();
     expect(within(sreRow).getByText('Sent back')).toBeTruthy();
     expect(within(sreRow).queryByText('Throughput')).toBeNull();
+  });
+
+  it('shows no Running chip and no ok tone while the version reads are pending', async () => {
+    const real = await vi.importActual<typeof import('../../api/definitions')>('../../api/definitions');
+    vi.mocked(getVersion).mockImplementation(() => new Promise(() => {}));
+    try {
+      await renderReady();
+      const row = screen.getByRole('article', { name: 'software' });
+      expect(within(row).queryByText('Running')).toBeNull();
+      expect(within(row).queryByText('Needs a model key')).toBeNull();
+    } finally {
+      vi.mocked(getVersion).mockImplementation(real.getVersion);
+    }
+  });
+
+  it('shows Running when a version read fails, and logs it once', async () => {
+    const real = await vi.importActual<typeof import('../../api/definitions')>('../../api/definitions');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(getVersion).mockRejectedValue(new Error('goald is down'));
+    try {
+      await renderReady();
+      const row = screen.getByRole('article', { name: 'software' });
+      expect(await within(row).findByText('Running')).toBeTruthy();
+      expect(log.mock.calls.some(([m]) => String(m).includes('model key'))).toBe(true);
+    } finally {
+      vi.mocked(getVersion).mockImplementation(real.getVersion);
+      log.mockRestore();
+    }
   });
 
   it('says Needs a model key, not Running, for a published line on secrets without a model key', async () => {

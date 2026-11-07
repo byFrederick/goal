@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const toastMock = vi.hoisted(() => vi.fn());
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { dismiss: vi.fn() }));
 vi.mock('sonner', () => ({ toast: toastMock }));
 
 import { registerServiceWorker } from './register';
@@ -14,7 +14,11 @@ function fakeWorker(build: string | null) {
     posted: [] as string[],
     listeners: new Map<string, Listener>(),
     addEventListener(type: string, fn: Listener) {
-      worker.listeners.set(type, fn);
+      const previous = worker.listeners.get(type);
+      worker.listeners.set(type, () => {
+        previous?.();
+        fn();
+      });
     },
     postMessage(message: { type: string }, transfer?: MessagePort[]) {
       worker.posted.push(message.type);
@@ -60,6 +64,7 @@ describe('registerServiceWorker', () => {
     vi.stubEnv('PROD', true);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     toastMock.mockClear();
+    toastMock.dismiss.mockClear();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -117,6 +122,51 @@ describe('registerServiceWorker', () => {
     expect(toastMock).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(2000);
     expect(toastMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('a waiting worker that never answers, then a same-build worker installs: no toast stays', async () => {
+    const stale = fakeWorker(null);
+    const env = setup({ page: 'aaaa', waiting: stale });
+    registerServiceWorker();
+    await flush();
+    const fresh = fakeWorker('aaaa');
+    fresh.state = 'installing';
+    env.registration.installing = fresh;
+    env.registrationListeners.get('updatefound')?.();
+    await vi.advanceTimersByTimeAsync(2000);
+    fresh.state = 'installed';
+    env.registration.waiting = fresh;
+    fresh.listeners.get('statechange')?.();
+    stale.state = 'redundant';
+    stale.listeners.get('statechange')?.();
+    await flush();
+    expect(fresh.posted).toEqual(['GET_BUILD', 'SKIP_WAITING']);
+    expect(env.registration.update).toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it('a toast whose worker turns redundant closes', async () => {
+    const waiting = fakeWorker('bbbb');
+    const env = setup({ page: 'aaaa', waiting });
+    registerServiceWorker();
+    await flush();
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    waiting.state = 'redundant';
+    env.registration.waiting = null;
+    waiting.listeners.get('statechange')?.();
+    expect(toastMock.dismiss).toHaveBeenCalledWith('goal-update');
+  });
+
+  it('Reload on a redundant worker reloads', async () => {
+    const waiting = fakeWorker('bbbb');
+    const env = setup({ page: 'aaaa', waiting });
+    registerServiceWorker();
+    await flush();
+    const options = toastMock.mock.calls[0]?.[1] as { action: { onClick: () => void } };
+    waiting.state = 'redundant';
+    options.action.onClick();
+    expect(waiting.posted).toEqual(['GET_BUILD']);
+    expect(env.reload).toHaveBeenCalledTimes(1);
   });
 
   it('checks for an update on load and when the page comes back to the front', async () => {
