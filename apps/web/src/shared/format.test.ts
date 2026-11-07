@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatClockOrWeekday,
   formatCpuSeconds,
   formatDuration,
   formatDurationCompact,
@@ -75,5 +76,15 @@ describe('formatMemory', () => {
     expect(formatMemory(300 * 1024 ** 2)).toBe('300 MB');
     expect(formatMemory(1.2 * 1024 ** 3)).toBe('1.2 GB');
     expect(formatMemory(null)).toBe('—');
+  });
+});
+
+describe('formatClockOrWeekday', () => {
+  const now = new Date(2026, 10, 7, 21, 0);
+  it('says only the time on the same day', () => {
+    expect(formatClockOrWeekday(new Date(2026, 10, 7, 19, 15).toISOString(), now)).toBe('19:15');
+  });
+  it('adds the weekday on an earlier day', () => {
+    expect(formatClockOrWeekday(new Date(2026, 10, 5, 19, 15).toISOString(), now)).toBe('Thu 19:15');
   });
 });

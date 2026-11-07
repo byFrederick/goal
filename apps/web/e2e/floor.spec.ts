@@ -126,7 +126,7 @@ test('Add a build agent raises the station by one in a draft and opens the Line 
   // The draft is not published: the person reviews and publishes it in the Line editor.
   await expect(page).toHaveURL(/\/o\/acme\/f\/software\/definition\/line$/);
   // The draft starts from the published definition, whose Build station is worked by one backend-engineer agent.
-  await expect(page.getByRole('combobox', { name: 'Who works at Build' })).toHaveText('backend-engineer × 2');
+  await expect(page.getByRole('combobox', { name: 'Who works here at Build' })).toHaveText('backend-engineer × 2');
 });
 
 test('a phone shows the range the URL names', async ({ page }) => {
@@ -170,6 +170,20 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test.describe('the New item row at 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('is a 44 px target', async ({ page }) => {
+    // Research has no item yet, so How work gets in shows, and its role may create items (support's may not).
+    await page.goto('/o/goal/f/research');
+    const ways = page.getByRole('region', { name: 'How work gets in' });
+    const button = ways.getByRole('button', { name: /New item/ });
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  });
+});
 
 test.describe('activity at 390 px', () => {
   test.use({ viewport: { width: 390, height: 844 } });

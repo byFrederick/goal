@@ -9,20 +9,31 @@ import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { eventsQuery } from '../../api/queries';
 import type { Factory, InboxEntry, ToolApproval } from '../../api/types';
+import { BlockedSentence } from '../../shared/blocked-sentence';
+import { blockedWords } from '../../shared/blocked-words';
 import { refParam } from '../../shared/factory';
-import { formatAge, formatClock, formatPercent, formatUsd, humanize } from '../../shared/format';
+import {
+  formatAge,
+  formatClock,
+  formatClockOrWeekday,
+  formatPercent,
+  formatUsd,
+  formatWeekdayTime,
+  humanize,
+} from '../../shared/format';
 import { useOrg } from '../../shared/org';
 import { holds } from '../../shared/permissions';
 import { Button } from '../../ui/button';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { InfoTip } from '../../ui/info-tip';
 import { NotAvailable } from '../../ui/not-available';
 import { SuccessLabel } from '../../ui/success-label';
 import { QuestionCard } from '../items/question-card';
 import { watchText, watchVerdicts } from '../jonah/jonah-format';
 import { UndoThisChange } from '../jonah/undo-button';
 import { decisionOf } from './actions';
-import { ageOf, approvalTitle, conversionTitle, syncFailureTitle, watchWorseTitle } from './rows';
+import { ageOf, approvalTitle, budgetTitle, conversionTitle, syncFailureTitle, watchWorseTitle } from './rows';
 import { typeLabel, typeOf } from './types';
 
 export interface DetailProps {
@@ -130,7 +141,11 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
   const factory = entry.factory.name;
   return (
     <nav aria-label="Where it waits" className="flex min-w-0 flex-wrap items-center gap-2 text-secondary text-ink-soft">
-      <Link to="/o/$org/f/$factory" params={{ org: org.slug, factory }} className="text-ink-soft hover:text-ink">
+      <Link
+        to="/o/$org/f/$factory"
+        params={{ org: org.slug, factory }}
+        className="inline-flex items-center justify-center text-ink-soft hover:text-ink max-md:min-h-11 max-md:min-w-11"
+      >
         {entry.factory.title ?? factory}
       </Link>
       {entry.item ? (
@@ -139,7 +154,7 @@ function Crumb({ entry, station }: { entry: InboxEntry; station: string }) {
           <Link
             to="/o/$org/f/$factory/items/$ref"
             params={{ org: org.slug, factory, ref: refParam(entry.item.ref) }}
-            className="text-ink-soft hover:text-ink"
+            className="inline-flex items-center justify-center text-ink-soft hover:text-ink max-md:min-h-11 max-md:min-w-11"
           >
             {entry.item.ref}
           </Link>
@@ -160,6 +175,7 @@ function kindTitle(entry: InboxEntry): string {
   if (entry.kind === 'knowledge_source' && entry.knowledge_source) return syncFailureTitle(entry);
   if (entry.kind === 'conversion') return conversionTitle(entry);
   if (entry.kind === 'andon') return 'Line stopped';
+  if (entry.kind === 'budget' && entry.budget) return budgetTitle(entry.budget);
   if (entry.kind === 'rework_warning' && entry.rework) {
     return `${humanize(entry.rework.station)} sent back ${entry.rework.rejected} of the last ${entry.rework.verdicts}`;
   }
@@ -169,7 +185,10 @@ function kindTitle(entry: InboxEntry): string {
 function alertSummary(entry: InboxEntry, station: string): string {
   if (entry.kind === 'watch_worse') return 'Its number got worse after it was published.';
   if (entry.kind === 'andon') return entry.andon?.reason ?? 'The andon cord is pulled.';
+  if (entry.kind === 'budget') return 'No new agent work starts until it resumes.';
   if (entry.kind === 'blocked') {
+    const words = blockedWords(entry.blocked?.code);
+    if (words) return `${words.sentence}.`;
     return entry.blocked?.reason ?? (entry.blocked?.paused ? 'A person paused it.' : 'It is blocked.');
   }
   if (entry.kind === 'rework_warning') return `Rework is rising at ${station || 'its gate'}.`;
@@ -330,6 +349,29 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
       </section>
     );
   }
+  if (entry.kind === 'budget' && entry.budget) {
+    const b = entry.budget;
+    return (
+      <section
+        aria-label="The weekly budget"
+        className="flex flex-col gap-3 rounded-card border border-line bg-card p-4 md:p-5"
+      >
+        <dl className="m-0 flex flex-col gap-2">
+          <Fact label="Factory">{entry.factory.title ?? entry.factory.name}</Fact>
+          <Fact label="Used up since">{formatClockOrWeekday(b.since)}</Fact>
+          <Fact label="Resumes">
+            <span className="inline-flex items-center gap-1">
+              About {formatWeekdayTime(b.resumes_at)}
+              <InfoTip about="the weekly budget" side="bottom" className="max-md:size-11">
+                The budget covers a rolling 7×24 h window. Each run leaves it 7 days after it started. Under drain, the
+                runs in progress still finish.
+              </InfoTip>
+            </span>
+          </Fact>
+        </dl>
+      </section>
+    );
+  }
   if (entry.kind === 'rework_warning' && entry.rework) {
     const r = entry.rework;
     return (
@@ -405,6 +447,7 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
     );
   }
   if (entry.kind === 'blocked') {
+    const words = blockedWords(entry.blocked?.code);
     return (
       <section
         aria-label="Why it is blocked"
@@ -414,7 +457,20 @@ function AlertFacts({ entry, station }: { entry: InboxEntry; station: string }) 
           {entry.blocked?.paused ? 'A person paused it' : 'It is blocked'}
           {station ? ` at ${station}` : ''}.
         </p>
-        <p className="m-0 text-secondary text-muted">{entry.blocked?.reason ?? 'No reason was recorded.'}</p>
+        {words ? (
+          <p className="m-0 flex items-center gap-1 text-secondary text-muted">
+            <span>
+              <BlockedSentence words={words} org={org.slug} factory={entry.factory.name} />
+            </span>
+            {entry.blocked?.reason ? (
+              <InfoTip about="Why it is blocked" className="max-md:size-11">
+                {entry.blocked.reason}
+              </InfoTip>
+            ) : null}
+          </p>
+        ) : (
+          <p className="m-0 text-secondary text-muted">{entry.blocked?.reason ?? 'No reason was recorded.'}</p>
+        )}
       </section>
     );
   }
@@ -442,6 +498,19 @@ function AlertLinks({ entry, canUndo }: { entry: InboxEntry; canUndo: boolean })
             </Link>
           </Button>
         </>
+      ) : null}
+      {entry.kind === 'budget' ? (
+        canUndo ? (
+          <Button asChild variant="secondary">
+            <Link to="/o/$org/f/$factory/settings" params={{ org: org.slug, factory }} hash="budgets">
+              Change the weekly budget
+            </Link>
+          </Button>
+        ) : (
+          <p className="m-0 w-full text-secondary text-muted">
+            Factory editors and organization admins can change the weekly budget.
+          </p>
+        )
       ) : null}
       {entry.item ? (
         <Button asChild variant="secondary">

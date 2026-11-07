@@ -207,5 +207,8 @@ export function createPolicy(options: PolicyOptions) {
     return true;
   }
 
-  return { handle };
+  /** Forgets every saved policy, so the next read is the seed at its seed revision. */
+  const reset = () => stored.clear();
+
+  return { handle, reset };
 }

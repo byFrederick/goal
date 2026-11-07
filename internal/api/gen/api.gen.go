@@ -862,6 +862,7 @@ func (e ImportStartKind) Valid() bool {
 const (
 	InboxEntryKindAndon           InboxEntryKind = "andon"
 	InboxEntryKindBlocked         InboxEntryKind = "blocked"
+	InboxEntryKindBudget          InboxEntryKind = "budget"
 	InboxEntryKindCheckFailing    InboxEntryKind = "check_failing"
 	InboxEntryKindCheckLimit      InboxEntryKind = "check_limit"
 	InboxEntryKindConversion      InboxEntryKind = "conversion"
@@ -880,6 +881,8 @@ func (e InboxEntryKind) Valid() bool {
 	case InboxEntryKindAndon:
 		return true
 	case InboxEntryKindBlocked:
+		return true
+	case InboxEntryKindBudget:
 		return true
 	case InboxEntryKindCheckFailing:
 		return true
@@ -1154,6 +1157,7 @@ const (
 	Linked  ItemLinkKind = "linked"
 	Overlap ItemLinkKind = "overlap"
 	Planned ItemLinkKind = "planned"
+	Turn    ItemLinkKind = "turn"
 )
 
 // Valid indicates whether the value is a known member of the ItemLinkKind enum.
@@ -1164,6 +1168,8 @@ func (e ItemLinkKind) Valid() bool {
 	case Overlap:
 		return true
 	case Planned:
+		return true
+	case Turn:
 		return true
 	default:
 		return false
@@ -1234,6 +1240,7 @@ func (e ItemState) Valid() bool {
 const (
 	WaitingAfter ItemWaitingKind = "after"
 	WaitingFiles ItemWaitingKind = "files"
+	WaitingTurn  ItemWaitingKind = "turn"
 )
 
 // Valid indicates whether the value is a known member of the ItemWaitingKind enum.
@@ -1242,6 +1249,8 @@ func (e ItemWaitingKind) Valid() bool {
 	case WaitingAfter:
 		return true
 	case WaitingFiles:
+		return true
+	case WaitingTurn:
 		return true
 	default:
 		return false
@@ -4296,7 +4305,7 @@ type Event struct {
 	Id     int64                  `json:"id"`
 	ItemId string                 `json:"item_id"`
 
-	// Kind What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief
+	// Kind What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped at its station until a person retries it (data reason, the technical detail as written then; code, a stable code to branch on, only when the block has one: model_key_missing when the line is on environment files and secrets but names no runtime.modelKey). question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief
 	Kind    string  `json:"kind"`
 	RunId   *string `json:"run_id,omitempty"`
 	Station *string `json:"station,omitempty"`
@@ -4705,11 +4714,29 @@ type Inbox struct {
 
 // InboxBlocked defines model for InboxBlocked.
 type InboxBlocked struct {
+	// Code The code of the item's latest blocked event (model_key_missing: the line names no runtime.modelKey); null without one
+	Code *string `json:"code"`
+
 	// Paused A person paused it (goal retry resumes it)
 	Paused bool `json:"paused"`
 
 	// Reason The reason of the item's latest blocked or paused event, as written then; null without one
 	Reason *string `json:"reason"`
+}
+
+// InboxBudget A factory's used-up weekly budget, in the rolling 7×24-hour window that ends now.
+type InboxBudget struct {
+	// ResumesAt When the window's spend falls below the cap; the line resumes on the engine's first tick after it
+	ResumesAt time.Time `json:"resumes_at"`
+
+	// Since Since when the budget is used up, as the engine recorded it (now when it has not yet)
+	Since time.Time `json:"since"`
+
+	// SpentUsd The cost of the runs started in the window
+	SpentUsd float64 `json:"spent_usd"`
+
+	// WeeklyUsd The cap
+	WeeklyUsd float64 `json:"weekly_usd"`
 }
 
 // InboxConversion A factory Goal could not move from connections to secrets and environment files. It runs on its version, on connections, until a version on secrets is published.
@@ -4735,6 +4762,9 @@ type InboxEntry struct {
 	// Blocked Why a blocked item is blocked; null for other kinds
 	Blocked *InboxBlocked `json:"blocked"`
 
+	// Budget The used-up weekly budget of a budget entry; absent or null for other kinds
+	Budget *InboxBudget `json:"budget,omitempty"`
+
 	// Conversion Why Goal could not convert the factory; absent or null for other kinds
 	Conversion *InboxConversion `json:"conversion,omitempty"`
 	Factory    struct {
@@ -4743,13 +4773,13 @@ type InboxEntry struct {
 		Title *string `json:"title"`
 	} `json:"factory"`
 
-	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
+	// Id "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, budget:<factory id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day>
 	Id string `json:"id"`
 
 	// Item The item it is about, or null for an entry that is about no item
 	Item *ItemCard `json:"item"`
 
-	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
+	// Kind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day. budget: a factory whose weekly budget is used up, measured against its current version's cap, until the window's spend falls below the cap or the cap rises
 	Kind InboxEntryKind `json:"kind"`
 
 	// KnowledgeSource Why the knowledge source does not sync; absent or null for other kinds
@@ -4761,7 +4791,7 @@ type InboxEntry struct {
 	// Rework The gate tally of a rework warning; null for other kinds
 	Rework *ReworkWarning `json:"rework"`
 
-	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
+	// Since Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), since when the budget is used up (budget), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
 	Since time.Time `json:"since"`
 
 	// Station The station where it waits
@@ -4777,7 +4807,7 @@ type InboxEntry struct {
 	Watch *Watch `json:"watch,omitempty"`
 }
 
-// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
+// InboxEntryKind What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day. budget: a factory whose weekly budget is used up, measured against its current version's cap, until the window's spend falls below the cap or the cap rises
 type InboxEntryKind string
 
 // InboxKnowledgeSource A knowledge source whose last syncs failed, shown under each factory that lists it.
@@ -5304,7 +5334,7 @@ type ItemLink struct {
 	// Id The other item's id
 	Id string `json:"id"`
 
-	// Kind planned by whoever split the work, linked by a person, or overlap (their files overlap)
+	// Kind planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)
 	Kind ItemLinkKind `json:"kind"`
 
 	// Ref The other item's <factory name>#<number>
@@ -5314,7 +5344,7 @@ type ItemLink struct {
 	State ItemState `json:"state"`
 }
 
-// ItemLinkKind planned by whoever split the work, linked by a person, or overlap (their files overlap)
+// ItemLinkKind planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)
 type ItemLinkKind string
 
 // ItemNoteFrom A note another item's agent, or a trigger's check, left on the item (an item_note event); it reaches the item's next run after its brief
@@ -5419,7 +5449,7 @@ type ItemTouches struct {
 	Unplanned int `json:"unplanned"`
 }
 
-// ItemWaiting Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones
+// ItemWaiting Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones
 type ItemWaiting struct {
 	// Files For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after
 	Files []string `json:"files"`
@@ -5427,14 +5457,17 @@ type ItemWaiting struct {
 	// Items Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first
 	Items []string `json:"items"`
 
-	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+	// Kind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
 	Kind ItemWaitingKind `json:"kind"`
 
 	// Needs The open needs of that kind, oldest edge first, the same ones as items
 	Needs []ItemWaitingNeed `json:"needs"`
+
+	// Target For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files
+	Target *string `json:"target,omitempty"`
 }
 
-// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+// ItemWaitingKind after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
 type ItemWaitingKind string
 
 // ItemWaitingNeed One open need that holds a waiting item
@@ -5916,6 +5949,12 @@ type LeadTimeBridgeStatus string
 type LineBudget struct {
 	// Exhausted No new agent work starts until the window moves or the cap rises
 	Exhausted bool `json:"exhausted"`
+
+	// ResumesAt When the rolling window's spend falls below the cap, so the line starts new work on the engine's first tick after it; absent or null while the budget has room
+	ResumesAt *time.Time `json:"resumes_at,omitempty"`
+
+	// Since Since when the budget is used up, as the engine recorded it (now when it has not yet); absent or null while the budget has room
+	Since *time.Time `json:"since,omitempty"`
 
 	// SpentUsd The cost of the runs started in the window
 	SpentUsd  float64 `json:"spent_usd"`
@@ -11424,7 +11463,7 @@ type ClientInterface interface {
 
 	// GetInbox What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -15105,7 +15144,7 @@ func (c *Client) RotateWebhookSecret(ctx context.Context, org OrgRef, factory Fa
 
 // GetInbox What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -29677,7 +29716,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetInboxWithResponse What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -43007,7 +43046,7 @@ func (c *ClientWithResponses) RotateWebhookSecretWithResponse(ctx context.Contex
 
 // GetInboxWithResponse What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Returns a wrapper object for the known response body format(s).
 //

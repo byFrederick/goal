@@ -48,15 +48,15 @@ type Harness struct {
 	DeleteFactory func(t *testing.T, org domain.OrgID, factory domain.FactoryID)
 }
 
-// Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
-// be isolated from the others, because RequeueExpiredLeases spans all factories.
-func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
-	t.Helper()
+// suiteCase is one named case of the suite.
+type suiteCase = struct {
+	name string
+	test func(f *fixture)
+}
 
-	tests := []struct {
-		name string
-		test func(f *fixture)
-	}{
+// suiteCases lists every case of the suite, in run order.
+func suiteCases() []suiteCase {
+	tests := []suiteCase{
 		{"CreateItem_NumbersEachFactoryFromOne", testCreateItem},
 		{"UnknownIDs_NotFound", testNotFound},
 		{"Waiting_PullOrder", testWaiting},
@@ -69,6 +69,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Edges_CycleRefused", testEdgesCycleRefused},
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
 		{"Edges_OpenNeedsOfItems", testOpenNeeds},
+		{"Edges_TurnGatesAClaim", testEdgesTurnGatesAClaim},
 		{"Parts_AssembleCreatesPartsWithPlannedEdges", testAssembleCreatesParts},
 		{"Parts_AssembleRetryReturnsTheParts", testAssembleRetry},
 		{"Parts_AssembleRefusesAndWritesNothing", testAssembleRefused},
@@ -115,6 +116,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"StationLoads_CountNoOpenAssembly", testStationLoadsCountNoOpenAssembly},
 		{"FlowMetrics_DoneLeadTimeReworkWIPAndSpend", testFlowMetrics},
 		{"SpendSince_WindowBoundsAndFactoryIsolation", testSpendSince},
+		{"RunCostsSince_SameRunsAsSpendSince", testRunCostsSince},
+		{"BudgetExhaustion_FirstSinceKeptUntilCleared", testBudgetExhaustion},
 		{"Attention_CountsWaitingBlockedAndTheOpenAndon", testAttention},
 		{"InboxItems_DecisionsBlockedAndExpediteNewestChangeFirst", testInboxItems},
 		{"Concurrent_CreateItemNumbersAreUnique", testConcurrentCreate},
@@ -168,7 +171,15 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
 	tests = append(tests, baseCommitTests...)
 
-	for _, tc := range tests {
+	return tests
+}
+
+// Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
+// be isolated from the others, because RequeueExpiredLeases spans all factories.
+func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
+	t.Helper()
+
+	for _, tc := range suiteCases() {
 		runCase(t, newHarness, tc.name, tc.test)
 	}
 }

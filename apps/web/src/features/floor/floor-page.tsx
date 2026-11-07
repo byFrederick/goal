@@ -57,8 +57,8 @@ export function FloorPage() {
 }
 
 /**
- * The setup checklist and how work gets in, while the factory is new: until its first item merges (the
- * "First item merged" row of setup-progress.ts). A factory with a merged item never shows them. Nothing
+ * The setup checklist and how work gets in, while the factory is new: until its first item is done (the
+ * "First item done" row of setup-progress.ts). A factory with a done item never shows them. Nothing
  * renders until the query answers, so the row never pushes the cards down after they show.
  */
 function NewFactoryRow() {

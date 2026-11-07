@@ -271,6 +271,29 @@ func (s *Store) SpendSince(ctx context.Context, factory domain.FactoryID, since 
 	return s.spend(org, factory, since, time.Time{}, "") - jonah, nil // Jonah's runs never trigger onExhausted
 }
 
+// RunCostsSince implements ports.Store.
+func (s *Store) RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.RunCost{}
+
+	for id, r := range s.runs {
+		if s.runVisible(r, org) && r.FactoryID == factory && !s.jonah.runKinds[id].Jonahs() && !r.StartedAt.Before(since) {
+			out = append(out, domain.RunCost{StartedAt: r.StartedAt, CostUSD: r.Result.CostUSD})
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b domain.RunCost) int { return a.StartedAt.Compare(b.StartedAt) })
+
+	return out, nil
+}
+
 // spend adds the cost of an organization's factory's runs started in [since, until), or at or
 // after since when until is zero, on items of typ ("" for every type). Callers hold s.mu.
 func (s *Store) spend(org domain.OrgID, factory domain.FactoryID, since, until time.Time, typ string) float64 {
@@ -420,7 +443,7 @@ func (s *Store) InboxItems(ctx context.Context, factories []domain.FactoryID, li
 	for _, it := range match[:min(limit, len(match))] {
 		a := domain.AttentionItem{Item: clone(it)}
 		if it.State == domain.StateBlocked {
-			a.BlockedReason, a.Paused = s.blocker(it.ID)
+			a.BlockedReason, a.BlockedCode, a.Paused = s.blocker(it.ID)
 		}
 
 		out = append(out, a)
@@ -437,18 +460,19 @@ func needsPerson(it *domain.Item) bool {
 	return it.State == domain.StateWaitingHuman || it.State == domain.StateBlocked || (it.Class == domain.ClassExpedite && open)
 }
 
-// blocker is the reason of an item's latest blocked or paused event and whether it was a pause.
-// Callers hold s.mu.
-func (s *Store) blocker(id domain.ItemID) (string, bool) {
+// blocker is the reason and code of an item's latest blocked or paused event and whether it was
+// a pause. Callers hold s.mu.
+func (s *Store) blocker(id domain.ItemID) (reason, code string, paused bool) {
 	for _, e := range slices.Backward(s.events) {
 		if e.ItemID == id && (e.Kind == domain.EventBlocked || e.Kind == domain.EventPaused) {
-			reason, _ := e.Data["reason"].(string)
+			reason, _ = e.Data["reason"].(string)
+			code, _ = e.Data["code"].(string)
 
-			return reason, e.Kind == domain.EventPaused
+			return reason, code, e.Kind == domain.EventPaused
 		}
 	}
 
-	return "", false
+	return "", "", false
 }
 
 // Assemblies implements ports.Store.

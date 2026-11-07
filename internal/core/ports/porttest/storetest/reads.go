@@ -380,6 +380,7 @@ const (
 	inLane       = "in the expedite lane"
 	titleBlocked = "blocked by checks"
 	titlePaused  = "paused by a person"
+	titleCoded   = "blocked with a code"
 	titleMoved   = "changed last"
 )
 
@@ -397,6 +398,7 @@ func testInboxItems(f *fixture) {
 	f.create(t, domain.NewItem{FactoryID: second, Title: secondTitle, State: domain.StateWaitingHuman, CreatedAt: at(2)})
 	f.create(t, domain.NewItem{Title: inLane, Class: domain.ClassExpedite, State: domain.StateInProgress, CreatedAt: at(3)})
 	blocked := f.create(t, domain.NewItem{Title: titleBlocked, State: domain.StateBlocked, CreatedAt: at(4)})
+	coded := f.create(t, domain.NewItem{Title: titleCoded, State: domain.StateBlocked, CreatedAt: at(5)})
 	paused := f.create(t, domain.NewItem{Title: titlePaused, State: domain.StateBlocked, CreatedAt: at(6)})
 	// Not waiting on a person, or not in the factories asked for.
 	f.create(t, domain.NewItem{Title: "queued", CreatedAt: at(9)})
@@ -412,9 +414,14 @@ func testInboxItems(f *fixture) {
 		return domain.Event{FactoryID: it.FactoryID, ItemID: it.ID, At: at(m), Kind: kind, Station: stWork, Actor: domain.ActorEngine, Data: data}
 	}
 
-	// The latest blocking event says why: the run's failure, then a person's pause over it.
+	codedBlock := block(coded, domain.EventBlocked, "no model key", 5)
+	codedBlock.Data["code"] = domain.BlockModelKeyMissing
+
+	// The latest blocking event says why: the run's failure, a refusal with its code, then a
+	// person's pause over a block.
 	if err := f.Store.AppendEvents(f.ctx(t),
 		block(blocked, domain.EventBlocked, "an older failure", 4), block(blocked, domain.EventBlocked, "checks failed", 5),
+		codedBlock,
 		block(paused, domain.EventBlocked, "first", 6), block(paused, domain.EventPaused, "", 7),
 	); err != nil {
 		t.Fatal(err)
@@ -442,7 +449,7 @@ func testInboxItems(f *fixture) {
 	}{
 		{
 			name: "newest change first, ties by id", factories: factories, limit: 20,
-			want: []string{titleMoved, titlePaused, titleBlocked, inLane, secondTitle, "tie-a", "tie-b", "oldest"},
+			want: []string{titleMoved, titlePaused, titleCoded, titleBlocked, inLane, secondTitle, "tie-a", "tie-b", "oldest"},
 		},
 		{name: "up to limit", factories: factories, limit: 2, want: []string{titleMoved, titlePaused}},
 		{name: "one factory", factories: []domain.FactoryID{second}, limit: 10, want: []string{secondTitle}},
@@ -472,10 +479,13 @@ func testInboxItems(f *fixture) {
 
 	why := map[string]string{}
 	for _, a := range got {
-		why[a.Item.Title] = fmt.Sprintf("%q paused=%v", a.BlockedReason, a.Paused)
+		why[a.Item.Title] = fmt.Sprintf("%q code=%q paused=%v", a.BlockedReason, a.BlockedCode, a.Paused)
 	}
 
-	want := map[string]string{titleBlocked: `"checks failed" paused=false`, titlePaused: `"" paused=true`, titleMoved: `"" paused=false`}
+	want := map[string]string{
+		titleBlocked: `"checks failed" code="" paused=false`, titleCoded: `"no model key" code="model_key_missing" paused=false`,
+		titlePaused: `"" code="" paused=true`, titleMoved: `"" code="" paused=false`,
+	}
 	for title, w := range want {
 		if why[title] != w {
 			t.Errorf("%s: blocked reason %s; want %s", title, why[title], w)

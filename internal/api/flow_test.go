@@ -527,8 +527,21 @@ func TestAPI_BoardLine(t *testing.T) {
 
 	h.spend(t, queued.ID, t0.Add(-time.Hour), 45)
 
-	if got := board().Line.Budget; got == nil || got.SpentUsd != 75 || !got.Exhausted {
-		t.Errorf("budget after $45 more = %+v, want $75 spent, exhausted", got)
+	// Used up since the engine recorded it, resuming when the $30 run leaves the window.
+	since, resumes := t0.Add(-30*time.Minute), t0.Add(5*24*time.Hour)
+	if err := h.store.MarkBudgetExhausted(inOrg(t), lineID, since); err != nil {
+		t.Fatal(err)
+	}
+
+	expectUsedUp(t, board().Line.Budget, 75, since, resumes)
+}
+
+// expectUsedUp checks that b is a used-up budget with spent, since and resumes.
+func expectUsedUp(t *testing.T, b *gen.LineBudget, spent float64, since, resumes time.Time) {
+	t.Helper()
+
+	if b == nil || b.SpentUsd != spent || !b.Exhausted || b.Since == nil || !b.Since.Equal(since) || b.ResumesAt == nil || !b.ResumesAt.Equal(resumes) {
+		t.Errorf("budget = %+v, want $%v spent, exhausted since %v, resuming at %v", b, spent, since, resumes)
 	}
 }
 

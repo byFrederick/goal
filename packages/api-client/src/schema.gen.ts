@@ -814,7 +814,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -5078,19 +5078,21 @@ export interface components {
             /** @description The index of the picked choice in Item.question.choices */
             choice?: number;
         };
-        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones */
+        /** @description Why a queued or ready item is not claimed yet, derived from its open needs (those neither done nor cancelled) on every read and never stored. Planned and linked needs win over overlap ones, and overlap ones over turn ones */
         ItemWaiting: {
             /**
-             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap)
+             * @description after: it waits for the items it needs (planned or linked); files: for items whose files overlap its own (overlap); turn: for the item that holds its merge target's turn at a merge station to be done (turn)
              * @enum {string}
              */
-            kind: "after" | "files";
+            kind: "after" | "files" | "turn";
             /** @description Refs (<factory name>#<number>) of the open needs of that kind, oldest edge first */
             items: string[];
             /** @description For kind files, the item's own paths that overlap those items' paths, in the item's order; empty for kind after */
             files: string[];
             /** @description The open needs of that kind, oldest edge first, the same ones as items */
             needs: components["schemas"]["ItemWaitingNeed"][];
+            /** @description For kind turn, the integration branch whose turn the item waits for, as in goal/a7-x; null or absent when the turn is for the default branch, and for kinds after and files */
+            target?: string | null;
         };
         /** @description One open need that holds a waiting item */
         ItemWaitingNeed: {
@@ -5112,10 +5114,10 @@ export interface components {
             /** @description The other item's <factory name>#<number> */
             ref: string;
             /**
-             * @description planned by whoever split the work, linked by a person, or overlap (their files overlap)
+             * @description planned by whoever split the work, linked by a person, overlap (their files overlap), or turn (by the engine, while the other item holds their merge target's turn at a merge station)
              * @enum {string}
              */
-            kind: "planned" | "linked" | "overlap";
+            kind: "planned" | "linked" | "overlap" | "turn";
             state: components["schemas"]["ItemState"];
             /** @description The edge's author, as an actor ref (<kind>:<id>, as in user:<id> or agent:<id>) */
             by: string;
@@ -5716,6 +5718,16 @@ export interface components {
             spent_usd: number;
             /** @description No new agent work starts until the window moves or the cap rises */
             exhausted: boolean;
+            /**
+             * Format: date-time
+             * @description Since when the budget is used up, as the engine recorded it (now when it has not yet); absent or null while the budget has room
+             */
+            since?: string | null;
+            /**
+             * Format: date-time
+             * @description When the rolling window's spend falls below the cap, so the line starts new work on the engine's first tick after it; absent or null while the budget has room
+             */
+            resumes_at?: string | null;
         };
         /**
          * @description How many items wait at a station now against 24 hours earlier
@@ -6972,7 +6984,7 @@ export interface components {
             run_id?: string;
             /** Format: date-time */
             at: string;
-            /** @description What happened, as in submitted, moved, note or lease_taken. question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief */
+            /** @description What happened, as in submitted, moved, note or lease_taken. blocked: the item stopped at its station until a person retries it (data reason, the technical detail as written then; code, a stable code to branch on, only when the block has one: model_key_missing when the line is on environment files and secrets but names no runtime.modelKey). question_asked: the item's agent asked a person (data question, choices, agent as the role name, run_id); the run ends and the item waits at its station. question_answered: a person answered (data answer, the picked choice's text or their words; choice_index only when a choice was picked; actor); the item goes back to its station's queue. tool_approval_requested: the item's agent asked to make a call of an Ask-first connection tool (data connection, tool, input, agent as the role name, run_id, always_allow_offered); the run ends and the item waits at its station. tool_approval_granted: a person approved it (data approval_id, always_allow; actor); tool_approval_denied: a person denied it (data approval_id, note when given; actor); either way the item goes back to its station's queue. item_note: a note another item's agent left as a follow-up for this item, delivered by the engine (actor engine; data text, follow_up_id, from_item as <factory>#<number>, from_item_id, from_factory_id, station and agent); the item's next run reads it after its brief */
             kind: string;
             station?: string;
             actor: string;
@@ -7533,12 +7545,12 @@ export interface components {
             truncated: boolean;
         };
         /**
-         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day
+         * @description What waits; later phases add kinds, which clients that do not know them show as a generic row. tool_approval: a tool call an item's agent asked to make, waiting for Approve or Deny. conversion: a factory Goal could not move from connections to secrets and environment files (ADR 0037 decision 19), which keeps its version until a person fixes what the entry names and publishes. knowledge_source: a knowledge source whose last three syncs failed (ADR 0038 decision 3), once for each factory that lists it. watch_worse: a Jonah proposal whose own number got worse since it was published (ADR 0039 decision 15), until an undo of it is written; it offers Undo this change (POST …/jonah/proposals/{number}/undo). check_failing: a trigger whose last three checks failed (ADR 0040 decision 19), tries left out, until one is done. check_limit: a trigger whose check skipped something over its limit today (UTC), once a day. budget: a factory whose weekly budget is used up, measured against its current version's cap, until the window's spend falls below the cap or the cap rises
          * @enum {string}
          */
-        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse" | "check_failing" | "check_limit";
+        InboxEntryKind: "decision" | "question" | "tool_approval" | "andon" | "budget" | "rework_warning" | "blocked" | "expedite" | "conversion" | "knowledge_source" | "watch_worse" | "check_failing" | "check_limit";
         InboxEntry: {
-            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day> */
+            /** @description "<kind>:<id of what waits>": decision:, question:, tool_approval:, blocked: and expedite:<item id>, andon:<pull id>, budget:<factory id>, rework_warning:<factory id>:<gate station>, conversion:<factory id>, watch_worse:<proposal id>, check_failing:<factory id>:<trigger>, check_limit:<factory id>:<trigger>:<UTC day> */
             id: string;
             kind: components["schemas"]["InboxEntryKind"];
             factory: {
@@ -7548,7 +7560,7 @@ export interface components {
             };
             /**
              * Format: date-time
-             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
+             * @description Since when it waits: the item's last change (decision, question, tool_approval, blocked), its creation (expedite), the pull (andon), since when the budget is used up (budget), now (rework_warning), the conversion's attempt (conversion), the watch's last update (watch_worse)
              */
             since: string;
             /** @description The item it is about, or null for an entry that is about no item */
@@ -7577,6 +7589,31 @@ export interface components {
             watch?: components["schemas"]["Watch"] | null;
             /** @description The trigger of a check_failing or check_limit entry; absent or null for other kinds */
             trigger_check?: components["schemas"]["InboxTriggerCheck"] | null;
+            /** @description The used-up weekly budget of a budget entry; absent or null for other kinds */
+            budget?: components["schemas"]["InboxBudget"] | null;
+        };
+        /** @description A factory's used-up weekly budget, in the rolling 7×24-hour window that ends now. */
+        InboxBudget: {
+            /**
+             * Format: double
+             * @description The cost of the runs started in the window
+             */
+            spent_usd: number;
+            /**
+             * Format: double
+             * @description The cap
+             */
+            weekly_usd: number;
+            /**
+             * Format: date-time
+             * @description Since when the budget is used up, as the engine recorded it (now when it has not yet)
+             */
+            since: string;
+            /**
+             * Format: date-time
+             * @description When the window's spend falls below the cap; the line resumes on the engine's first tick after it
+             */
+            resumes_at: string;
         };
         /** @description A check trigger whose checks need a person (ADR 0040 decision 19), on its factory's Trigger page. */
         InboxTriggerCheck: {
@@ -7617,6 +7654,8 @@ export interface components {
         InboxBlocked: {
             /** @description The reason of the item's latest blocked or paused event, as written then; null without one */
             reason: string | null;
+            /** @description The code of the item's latest blocked event (model_key_missing: the line names no runtime.modelKey); null without one */
+            code: string | null;
             /** @description A person paused it (goal retry resumes it) */
             paused: boolean;
         };

@@ -405,6 +405,23 @@ type Store interface {
 	// budget (domain.Runtime.WeeklyBudget).
 	SpendSince(ctx context.Context, factory domain.FactoryID, since time.Time) (float64, error)
 
+	// RunCostsSince returns the start and cost of each run SpendSince sums, oldest first, so a
+	// used-up weekly budget can tell when it resumes (domain.BudgetResumesAt).
+	RunCostsSince(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.RunCost, error)
+
+	// MarkBudgetExhausted records that the factory's weekly budget is used up since since. A
+	// factory already marked keeps its first since, whichever instance or tick marks it again.
+	// ErrNotFound when the organization has no such factory.
+	MarkBudgetExhausted(ctx context.Context, factory domain.FactoryID, since time.Time) error
+
+	// ClearBudgetExhausted forgets that the factory's weekly budget is used up, once it has room
+	// again; a factory not marked is left as it is.
+	ClearBudgetExhausted(ctx context.Context, factory domain.FactoryID) error
+
+	// BudgetExhaustedSince returns since when the factory's weekly budget is used up, and false
+	// when it is not marked.
+	BudgetExhaustedSince(ctx context.Context, factory domain.FactoryID) (time.Time, bool, error)
+
 	// Attention returns, for every factory of the organization, the items waiting for a person
 	// (with their split by work type), the blocked items and the open andon pull, ordered by
 	// factory id. Factories with nothing pending are included with zeros.

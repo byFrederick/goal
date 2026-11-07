@@ -113,4 +113,18 @@ describe('the mock policy answers', () => {
     expect(blank.status).toBe(422);
     expect((blank.body as { code: string }).code).toBe('policy-invalid');
   });
+
+  it('restores the seed policy and revision after a reset', async () => {
+    const before = ((await get()).body as { revision: number; updated_at: string }).revision;
+    const current = (await get()).body as { policy: { allowed_models: string[] } & Record<string, unknown> };
+    const allowed = current.policy.allowed_models.filter((id) => id !== 'claude-sonnet-5-5');
+    const saved = await put({ ...current.policy, allowed_models: allowed }, `"${before}"`);
+    expect(saved.status).toBe(200);
+
+    policy.reset();
+
+    const view = (await get()).body as { policy: { allowed_models: string[] }; revision: number };
+    expect(view.revision).toBe(3);
+    expect(view.policy.allowed_models).toContain('claude-sonnet-5-5');
+  });
 });
