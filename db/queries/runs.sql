@@ -13,13 +13,14 @@ SELECT item_id FROM agent_runs WHERE id = $1;
 
 -- name: FinishRun :one
 -- Only a running run finishes; finishing it again matches nothing. cpu_seconds and
--- peak_memory_bytes are NULL when the worker reported none (00136).
+-- peak_memory_bytes are NULL when the worker reported none (00136), peak_memory_source when it
+-- reported no known source with its peak memory (00137).
 UPDATE agent_runs SET
   status = sqlc.arg(status), session_id = sqlc.narg(session_id), turns = sqlc.arg(turns)::bigint,
   input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),
   cost_usd = sqlc.arg(cost_usd), error = sqlc.narg(error), ended_at = sqlc.arg(ended_at),
   output = sqlc.narg(output), cpu_seconds = sqlc.narg(cpu_seconds)::float8,
-  peak_memory_bytes = sqlc.narg(peak_memory_bytes)::bigint
+  peak_memory_bytes = sqlc.narg(peak_memory_bytes)::bigint, peak_memory_source = sqlc.narg(peak_memory_source)::text
 WHERE id = sqlc.arg(id) AND status = 'running'
 RETURNING factory_id, item_id, station, agent;
 

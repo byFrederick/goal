@@ -207,3 +207,52 @@ test('a published line without a model key: the Code card wraps at spaces and Ho
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
   await expect(page.getByText('Needs a model key').first()).toBeVisible();
 });
+
+// While the published version's reads are slow, Home's row and the Floor's header wait as a placeholder: a line
+// that needs a model key never flashes Running. Not run in the box (no browser); CI runs it in phone-375 and
+// desktop-1440.
+test('Home and the Floor never show Running for a line that needs a model key while the version reads load', async ({
+  page,
+}) => {
+  await newOrganization(page);
+  await page.getByRole('radio', { name: /Support replies/ }).check();
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/get-started\/code\?.*factory=/);
+  const factory = factoryOf(page);
+  await page.getByRole('radio', { name: /^No code/ }).check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).not.toHaveURL(/\/get-started\/code\?/);
+  const env = await page.request.put(
+    `/v1/orgs/acme/factories/${factory}/draft/files/${encodeURIComponent('environments/default.yaml')}`,
+    {
+      data: 'apiVersion: goal/v1\nkind: Environment\nspec:\n  size: small\n',
+      headers: { 'If-None-Match': '*', 'Content-Type': 'application/octet-stream' },
+    },
+  );
+  expect(env.ok()).toBeTruthy();
+  const draft = await page.request.get(`/v1/orgs/acme/factories/${factory}/draft`);
+  const { revision } = (await draft.json()) as { revision: number };
+  const published = await page.request.post(`/v1/orgs/acme/factories/${factory}/draft/publish`, {
+    data: { revision, expected_current_version_id: null },
+  });
+  expect(published.ok()).toBeTruthy();
+
+  // Delay the reads of the published version (its file list and its files) by about a second.
+  await page.route(/\/versions\/current(\/|$|\?)/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+
+  await page.goto('/o/acme');
+  const row = page.getByRole('article').filter({ hasText: 'Support replies' }).first();
+  await expect(row).toBeVisible();
+  await expect(row.getByText('Running')).toHaveCount(0);
+  await expect(row.getByText('Needs a model key')).toBeVisible();
+  await expect(row.getByText('Running')).toHaveCount(0);
+
+  await row.getByRole('link').first().click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  await expect(page.getByText('Line running')).toHaveCount(0);
+  await expect(page.getByText('Needs a model key').first()).toBeVisible();
+  await expect(page.getByText('Line running')).toHaveCount(0);
+});

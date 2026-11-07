@@ -333,7 +333,7 @@ describe('Box usage', () => {
     expect(box.getByRole('columnheader', { name: 'Station' })).toBeTruthy();
   });
 
-  it('explains median, P90, the CPU span and the left-out runs in the ⓘ, with no paragraph', async () => {
+  it('explains median, P90, the CPU span, memory and the left-out runs in the ⓘ, with no paragraph', async () => {
     renderSpend();
     const box = await section();
     const tip = box.getByRole('button', { name: 'About Box usage' });
@@ -342,6 +342,8 @@ describe('Box usage', () => {
     expect(text).toMatch(/Median/);
     expect(text).toMatch(/P90/);
     expect(text).toMatch(/prepare to the run’s end/);
+    expect(text).toMatch(/peak of the box’s own cgroup/);
+    expect(text).toMatch(/machine’s memory in use during the run/);
     expect(text).toMatch(/couldn’t measure are left out/);
   });
 

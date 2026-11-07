@@ -5,9 +5,8 @@ import { AndonButton, LineStatus } from '../../shared/andon';
 import { useFactory } from '../../shared/factory';
 import { NewItemButton } from '../../shared/new-item';
 import { useOrg } from '../../shared/org';
-import { Chip } from '../../ui/chip';
 import { SegmentedControl } from '../../ui/segmented-control';
-import { needsModelKey, usePublishedKeyInput } from './model-key-needed';
+import { LineStateChip } from './line-state-chip';
 import { daysIn, type FloorSearch, lastDaysSearch, rangeLabel, windowOf } from './range';
 
 /** The Floor's route: its search (the range, the type and the touches grouping) is read from it. */
@@ -67,9 +66,6 @@ export function FloorHeader({ board, metrics }: { board: Board; metrics: Metrics
   const andon = board.line.andon;
   const org = useOrg();
   const factory = useFactory();
-  const published = usePublishedKeyInput(org.id, factory.id);
-  // Until both reads answer, the header keeps its running chip and swaps in place if the key is missing.
-  const keyMissing = published.ready && needsModelKey(published.paths, published.factoryYaml);
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -77,14 +73,8 @@ export function FloorHeader({ board, metrics }: { board: Board; metrics: Metrics
         <h1 className="m-0 text-page-title tracking-display">Floor</h1>
         {andon ? (
           <LineStatus andon={andon} />
-        ) : keyMissing ? (
-          <Chip tone="you" size="lg" dot>
-            Needs a model key
-          </Chip>
         ) : (
-          <Chip tone="ok" size="lg" dot>
-            Line running
-          </Chip>
+          <LineStateChip org={org.id} factory={factory.id} size="lg" runningText="Line running" />
         )}
         <p className="m-0 text-secondary text-muted tabular-nums">
           {`${rangeLabel(metrics.from, metrics.to)}, compared with ${before}`}

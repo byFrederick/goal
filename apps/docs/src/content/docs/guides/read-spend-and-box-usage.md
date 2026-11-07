@@ -29,7 +29,7 @@ Switch between **Agents** and **Stations** above the table. Each row is one agen
 | Box | The box size the runs used: Small, Medium or Large. **Unknown** for runs from before Goal recorded box sizes. |
 | Runs | How many runs reported a CPU time or a peak memory. |
 | CPU median, CPU P90 | CPU time per run, from prepare to the run's end. |
-| Memory median, Memory P90 | The most memory a run held at once. |
+| Memory median, Memory P90 | The most memory a run held at once. Goal reads the peak of the box's own cgroup where the box has one, and otherwise the machine's memory in use during the run, which includes the box's own system processes and can read a little higher. |
 
 Rows are sorted by CPU P90, largest first. On a phone each row stacks, with its column names beside the figures.
 

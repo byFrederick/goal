@@ -12,7 +12,7 @@ import { factoryTitle } from '../../shared/factory';
 import { formatPercent, formatUsd } from '../../shared/format';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
-import { needsModelKey, usePublishedKeyInput } from '../floor/model-key-needed';
+import { LineStateChip } from '../floor/line-state-chip';
 import { MiniLine } from './mini-line';
 
 export function FactoryRow({
@@ -66,7 +66,7 @@ export function FactoryRow({
               {andon ? <span className="sr-only">: {andon.reason}</span> : null}
             </Chip>
           ) : (
-            <RunningChip org={org.id} factory={factory.id} />
+            <LineStateChip org={org.id} factory={factory.id} size="md" runningText="Running" />
           )}
         </div>
       </div>
@@ -89,21 +89,6 @@ export function FactoryRow({
         </>
       )}
     </article>
-  );
-}
-
-/** A published line's chip: Running, or Needs a model key as the Floor's header says it (model-key-needed.ts). */
-function RunningChip({ org, factory }: { org: string; factory: string }) {
-  const published = usePublishedKeyInput(org, factory);
-  // Until both reads answer, the row keeps Running and swaps in place if the key is missing.
-  return published.ready && needsModelKey(published.paths, published.factoryYaml) ? (
-    <Chip tone="you" dot>
-      Needs a model key
-    </Chip>
-  ) : (
-    <Chip tone="ok" dot>
-      Running
-    </Chip>
   );
 }
 
