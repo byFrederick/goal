@@ -148,3 +148,47 @@ test('without a model key the First item step files nothing and says why', async
   const list = await page.request.get(`/v1/orgs/acme/factories/${factory}/items`);
   expect(((await list.json()) as { items: Card[] }).items).toEqual([]);
 });
+
+// A published line with no model key: the Code card wraps its sentence at spaces, and Home says what the Floor
+// says. Not run in the box (no browser); CI runs it in phone-375 and desktop-1440.
+test('a published line without a model key: the Code card wraps at spaces and Home and the Floor say Needs a model key', async ({
+  page,
+}) => {
+  await newOrganization(page);
+  await page.getByRole('button', { name: /^Use / }).click();
+  await expect(page).toHaveURL(/\/o\/acme\/get-started\/code\?.*factory=/);
+  const factory = factoryOf(page);
+
+  await page.getByRole('radio', { name: /^No code/ }).check();
+  const detail = page.getByText(/Items don't touch a repository/);
+  await expect(detail).toBeVisible();
+  expect(await detail.evaluate((el) => getComputedStyle(el).wordBreak)).not.toBe('break-all');
+  // "repository" sits on one line: no line of the wrapped text ends inside the word.
+  const split = await detail.evaluate((el) => {
+    const text = el.firstChild as Text;
+    const start = (text.data ?? '').indexOf('repository');
+    const range = document.createRange();
+    range.setStart(text, start);
+    range.setEnd(text, start + 'repository'.length);
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  });
+  expect(split).toBe(1);
+  await expectNoHorizontalScroll(page);
+
+  const draft = await page.request.get(`/v1/orgs/acme/factories/${factory}/draft`);
+  const { revision } = (await draft.json()) as { revision: number };
+  const published = await page.request.post(`/v1/orgs/acme/factories/${factory}/draft/publish`, {
+    data: { revision, expected_current_version_id: null },
+  });
+  expect(published.ok()).toBeTruthy();
+
+  await page.goto('/o/acme');
+  const row = page.getByRole('article').first();
+  await expect(row.getByText('Needs a model key')).toBeVisible();
+  await expect(row.getByText('Running')).toHaveCount(0);
+  await expectNoHorizontalScroll(page);
+
+  await row.getByRole('link').first().click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
+  await expect(page.getByText('Needs a model key').first()).toBeVisible();
+});

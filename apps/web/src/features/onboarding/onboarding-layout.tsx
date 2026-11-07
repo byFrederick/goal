@@ -184,7 +184,7 @@ export function PreviewCard({
 }: {
   label: string;
   value: string;
-  /** Plain text may break anywhere; a node (an address with <wbr>) breaks only where it says. */
+  /** Plain text wraps at spaces (an identifier may break as a last resort); a node (an address with <wbr>) breaks only where it says. */
   detail?: ReactNode;
   /** Drawn before the value, e.g. the GitHub mark on the Code card. */
   icon?: ReactNode;
@@ -205,7 +205,9 @@ export function PreviewCard({
         {value}
       </span>
       {detail ? (
-        <span className={cn('text-secondary text-ink-soft', typeof detail === 'string' ? 'break-all' : 'break-normal')}>
+        <span
+          className={cn('text-secondary text-ink-soft', typeof detail === 'string' ? 'break-words' : 'break-normal')}
+        >
           {detail}
         </span>
       ) : null}

@@ -87,6 +87,7 @@ goal answer <item> --choice 2
 A line that has environment files needs `runtime.modelKey` in `factory.yaml`, or the engine blocks every item with `model_key_missing`. The Floor shows this before you send an item:
 
 - The header says **Needs a model key** where it would say **Line running**.
+- Home's row for the factory says **Needs a model key** where it would say **Running**.
 - **Finish setting up** has a **Model key** row, not done until the key is set. **Set up** opens the factory's Settings at Runtime, where you choose the secret.
 
 Both go away once the key is published.
