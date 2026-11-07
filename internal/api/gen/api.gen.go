@@ -2790,7 +2790,7 @@ type ActivityEvent struct {
 	Title   string  `json:"title"`
 }
 
-// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 type Actor struct {
 	// Id "local" for the local user, an agent's name or a job's name
 	Id   string    `json:"id"`
@@ -2943,7 +2943,7 @@ type AndonState struct {
 type ApiKey struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor     `json:"created_by"`
 	ExpiresAt time.Time `json:"expires_at"`
 
@@ -3048,7 +3048,7 @@ type AuditEntry struct {
 	// Action <noun>.<past_verb>, as in org.updated
 	Action string `json:"action"`
 
-	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -3643,7 +3643,7 @@ type Credential struct {
 	Agents    CredentialAgents `json:"agents"`
 	CreatedAt time.Time        `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy   Actor  `json:"created_by"`
 	Description string `json:"description"`
 
@@ -3667,7 +3667,7 @@ type Credential struct {
 	Type      CredentialType `json:"type"`
 	UpdatedAt time.Time      `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 
 	// UsedBy What uses a credential
@@ -3928,7 +3928,7 @@ type Draft struct {
 	ChangeCount int       `json:"change_count"`
 	CreatedAt   time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
 	// Current The version that runs now, which differs from base after a restore; null before the first publish
@@ -3949,7 +3949,7 @@ type Draft struct {
 	// UpdatedAt The last save ("Autosaved 14:32")
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -4005,7 +4005,7 @@ type DraftRef struct {
 	Revision  int64     `json:"revision"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 }
 
@@ -4024,7 +4024,7 @@ type DraftRequest struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	Id         string     `json:"id"`
 
-	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Requester Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Requester Actor              `json:"requester"`
 	StartedAt *time.Time         `json:"started_at,omitempty"`
 	Status    DraftRequestStatus `json:"status"`
@@ -4155,7 +4155,7 @@ type FactoryAttention struct {
 	ConnectionsBlocked int    `json:"connections_blocked"`
 	FactoryId          string `json:"factory_id"`
 
-	// WaitingOnYou Items waiting for a human decision (every decision; phase 2.2 has no identity)
+	// WaitingOnYou The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up
 	WaitingOnYou int `json:"waiting_on_you"`
 }
 
@@ -4493,7 +4493,7 @@ type ImportStartKind string
 
 // Inbox defines model for Inbox.
 type Inbox struct {
-	// Entries Ordered by kind, then oldest first
+	// Entries Ordered by since, newest first, then by id
 	Entries []InboxEntry `json:"entries"`
 
 	// Truncated More entries exist than limit; the most recent were kept
@@ -5583,7 +5583,7 @@ type KnowledgeSource struct {
 	Connection *string   `json:"connection,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor  `json:"created_by"`
 	Id        string `json:"id"`
 
@@ -6362,7 +6362,7 @@ type Org struct {
 type OrgAttention struct {
 	Factories []FactoryAttention `json:"factories"`
 
-	// WaitingOnYou Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you)
+	// WaitingOnYou What waits on the caller across the organization (the sum of factories[].waiting_on_you)
 	WaitingOnYou int `json:"waiting_on_you"`
 }
 
@@ -7194,7 +7194,7 @@ type SearchItem struct {
 type Secret struct {
 	CreatedAt time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy   Actor  `json:"created_by"`
 	Description string `json:"description"`
 
@@ -7218,7 +7218,7 @@ type Secret struct {
 	Source    SecretSource `json:"source"`
 	UpdatedAt time.Time    `json:"updated_at"`
 
-	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// UpdatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	UpdatedBy Actor `json:"updated_by"`
 
 	// Uses What uses it, by kind then name
@@ -7419,7 +7419,7 @@ type SignupDomain struct {
 	JoinRole FactoryRole `json:"join_role"`
 	SetAt    time.Time   `json:"set_at"`
 
-	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// SetBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	SetBy Actor `json:"set_by"`
 }
 
@@ -7533,7 +7533,7 @@ type StandingRule struct {
 	ConnectionId *string   `json:"connection_id"`
 	CreatedAt    time.Time `json:"created_at"`
 
-	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// CreatedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	CreatedBy Actor `json:"created_by"`
 
 	// Environment The environment file's name of a rule keyed by server, as in default; null for a connection's rule
@@ -7999,7 +7999,7 @@ type ToolTemplateList struct {
 
 // Touch One action by a person on an item, named by its most specific event
 type Touch struct {
-	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// Actor Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	Actor Actor     `json:"actor"`
 	At    time.Time `json:"at"`
 
@@ -8573,7 +8573,7 @@ type VersionRef struct {
 	Number      int       `json:"number"`
 	PublishedAt time.Time `json:"published_at"`
 
-	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job
+	// PublishedBy Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same
 	PublishedBy Actor `json:"published_by"`
 }
 
@@ -11071,7 +11071,7 @@ type ClientInterface interface {
 
 	// GetInbox What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 	GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -14521,7 +14521,7 @@ func (c *Client) RotateWebhookSecret(ctx context.Context, org OrgRef, factory Fa
 
 // GetInbox What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Corresponds with GET /v1/orgs/{org}/inbox (the `GetInbox` operationId).
 func (c *Client) GetInbox(ctx context.Context, org OrgRef, params *GetInboxParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -28484,7 +28484,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetInboxWithResponse What waits for a person across the organization's factories
 	//
-	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+	// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -41155,7 +41155,7 @@ func (c *ClientWithResponses) RotateWebhookSecretWithResponse(ctx context.Contex
 
 // GetInboxWithResponse What waits for a person across the organization's factories
 //
-// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+// The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
 //
 // Returns a wrapper object for the known response body format(s).
 //

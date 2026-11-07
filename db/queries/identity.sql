@@ -15,6 +15,13 @@ SELECT goal_identity_ready()::boolean AS ready;
 -- The members of the transaction's organization, by name (goal_members, 00045).
 SELECT goal_members()::jsonb AS members;
 
+-- name: MemberNames :many
+-- The members of the transaction's organization among users, with the name and email the members
+-- list has (goal_members, 00045); a user who is not a member has no row.
+SELECT m.user_id::text AS user_id, coalesce(m.name, '')::text AS name, coalesce(m.email, '')::text AS email
+FROM jsonb_to_recordset(goal_members()) AS m (user_id uuid, name text, email text)
+WHERE m.user_id = ANY (sqlc.arg(users)::uuid[]);
+
 -- name: Invitations :one
 -- The pending, unexpired invitations of the transaction's organization (goal_invitations, 00045).
 SELECT goal_invitations()::jsonb AS invitations;

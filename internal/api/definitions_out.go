@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -40,6 +41,34 @@ func (s *server) versionRef(v *domain.DefinitionVersion) *gen.VersionRef {
 	return &gen.VersionRef{Id: string(v.ID), Number: v.Number, PublishedAt: v.PublishedAt, PublishedBy: s.actorOut(v.PublishedBy)}
 }
 
+// factoryActors are the actors of f, for nameActors.
+func factoryActors(f *gen.Factory) []*gen.Actor {
+	out := []*gen.Actor{f.ArchivedBy}
+	if f.Current != nil {
+		out = append(out, &f.Current.PublishedBy)
+	}
+
+	if f.Draft != nil {
+		out = append(out, &f.Draft.UpdatedBy)
+	}
+
+	return out
+}
+
+// draftActors are the actors of d, for nameActors.
+func draftActors(d *gen.Draft) []*gen.Actor {
+	out := []*gen.Actor{&d.CreatedBy, &d.UpdatedBy}
+	if d.Base != nil {
+		out = append(out, &d.Base.PublishedBy)
+	}
+
+	if d.Current != nil {
+		out = append(out, &d.Current.PublishedBy)
+	}
+
+	return out
+}
+
 func sourceOut(s domain.VersionSource) gen.VersionSource {
 	return gen.VersionSource{
 		Kind: gen.VersionSourceKind(s.Kind), Template: optional(s.Template), Factory: optional(string(s.Factory)),
@@ -47,15 +76,19 @@ func sourceOut(s domain.VersionSource) gen.VersionSource {
 	}
 }
 
-func (s *server) draftOut(v authoring.DraftView) gen.Draft {
+// draftOut is the draft v, its people named.
+func (s *server) draftOut(ctx context.Context, v authoring.DraftView) gen.Draft {
 	d := v.Draft
 
-	return gen.Draft{
+	out := gen.Draft{
 		Id: string(d.ID), Revision: d.Revision, NextNumber: v.NextNumber,
 		CreatedAt: d.CreatedAt, CreatedBy: s.actorOut(d.CreatedBy), UpdatedAt: d.UpdatedAt, UpdatedBy: s.actorOut(d.UpdatedBy),
 		Base: s.versionRef(v.Base), Current: s.publishedRef(v.Current), Source: sourceOut(d.Source),
 		ChangeCount: v.ChangeCount, ProblemCount: v.ProblemCount, Sections: sectionsOut(v.Sections),
 	}
+	s.nameActors(ctx, draftActors(&out)...)
+
+	return out
 }
 
 func sectionsOut(sections []authoring.SectionSummary) []gen.SectionSummary {
@@ -186,6 +219,7 @@ func filesOut(files []authoring.FileInfo) []gen.FileInfo {
 	return out
 }
 
+// versionOut is the version v; its publisher is named by the response's nameActors.
 func (s *server) versionOut(v authoring.VersionInfo) gen.Version {
 	out := gen.Version{
 		Id: string(v.ID), Revision: v.Revision, State: gen.VersionState(v.State), Message: v.Message,

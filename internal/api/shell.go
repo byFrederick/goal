@@ -157,6 +157,13 @@ func (s *server) GetFactoryOverview(ctx context.Context, req gen.GetFactoryOverv
 
 	out.Factories = append(out.Factories, s.drafts(ctx, recs, w)...)
 
+	var actors []*gen.Actor
+	for i := range out.Factories {
+		actors = append(actors, factoryActors(&out.Factories[i].Factory)...)
+	}
+
+	s.nameActors(ctx, actors...)
+
 	if took := time.Since(started); took > slowOverview || len(fs) > overviewFactories {
 		s.log.WarnContext(ctx, "slow factory overview", slog.String("org_id", string(orgOf(ctx).ID)),
 			slog.Int("factories", len(fs)), slog.Duration("took", took))

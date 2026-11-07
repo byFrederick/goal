@@ -1179,8 +1179,8 @@ paths:
         waits on nothing else. An item has at most one entry (question, then decision, then blocked,
         then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients
         that do not know them render as a generic row. When more entries exist than limit, the
-        most recent ones are kept and truncated is true. Entries are ordered by kind (decision and
-        question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is
+        most recent ones are kept and truncated is true. Entries are ordered by since, newest first,
+        then by id, whatever their kind. The default limit, 200, is
         enough for every screen to count what it groups (the Floor's Needs you card, the phone's
         Items view).
       parameters:
@@ -5926,7 +5926,9 @@ components:
       description: >-
         Who did something: a person (kind user; id "local" is the local user, named "Local user
         (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an
-        agent or a job
+        agent or a job. Under sign-in a person is named as the sidebar names them (their name, or
+        their email while they have none), or "A former member" once they have left the
+        organization; their id stays the same
       required: [kind, id, name]
       properties:
         kind: { type: string, enum: [user, service, agent, system] }
@@ -8800,7 +8802,7 @@ components:
       properties:
         waiting_on_you:
           type: integer
-          description: Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you)
+          description: What waits on the caller across the organization (the sum of factories[].waiting_on_you)
         factories:
           type: array
           items: { $ref: "#/components/schemas/FactoryAttention" }
@@ -8809,7 +8811,7 @@ components:
       required: [factory_id, waiting_on_you, blocked_items, andon, connections_blocked]
       properties:
         factory_id: { type: string }
-        waiting_on_you: { type: integer, description: Items waiting for a human decision (every decision; phase 2.2 has no identity) }
+        waiting_on_you: { type: integer, description: "The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up" }
         blocked_items: { type: integer }
         andon:
           description: The open andon pull, or null while the line runs
@@ -9186,7 +9188,7 @@ components:
       properties:
         entries:
           type: array
-          description: Ordered by kind, then oldest first
+          description: Ordered by since, newest first, then by id
           items: { $ref: "#/components/schemas/InboxEntry" }
         truncated: { type: boolean, description: More entries exist than limit; the most recent were kept }
     InboxEntryKind:

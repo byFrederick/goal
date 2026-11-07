@@ -814,7 +814,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -4522,7 +4522,7 @@ export interface components {
             kind: string;
             id: string;
         };
-        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job */
+        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same */
         Actor: {
             /** @enum {string} */
             kind: "user" | "service" | "agent" | "system";
@@ -7026,13 +7026,13 @@ export interface components {
             at: string;
         };
         OrgAttention: {
-            /** @description Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you) */
+            /** @description What waits on the caller across the organization (the sum of factories[].waiting_on_you) */
             waiting_on_you: number;
             factories: components["schemas"]["FactoryAttention"][];
         };
         FactoryAttention: {
             factory_id: string;
-            /** @description Items waiting for a human decision (every decision; phase 2.2 has no identity) */
+            /** @description The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up */
             waiting_on_you: number;
             blocked_items: number;
             /** @description The open andon pull, or null while the line runs */
@@ -7385,7 +7385,7 @@ export interface components {
             }[];
         };
         Inbox: {
-            /** @description Ordered by kind, then oldest first */
+            /** @description Ordered by since, newest first, then by id */
             entries: components["schemas"]["InboxEntry"][];
             /** @description More entries exist than limit; the most recent were kept */
             truncated: boolean;

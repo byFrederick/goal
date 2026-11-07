@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Copy } from 'lucide-react';
 import { useId } from 'react';
 import { factoriesQuery } from '../../../api/queries';
+import { factoryTitle } from '../../../shared/factory';
 import { plural } from '../../../shared/format';
 import { useOrg } from '../../../shared/org';
 import { EmptyState } from '../../../ui/empty-state';
@@ -44,7 +45,7 @@ export function ClonePicker({ value, onChange }: { value: string | undefined; on
         onChange={onChange}
         options={published.map((f) => ({
           value: f.id,
-          label: <span translate="no">{f.name}</span>,
+          label: <span translate="no">{factoryTitle(f)}</span>,
           description: f.description || f.title,
           aside: `v${f.current?.number}, ${plural(f.stations.length, 'station')}`,
         }))}

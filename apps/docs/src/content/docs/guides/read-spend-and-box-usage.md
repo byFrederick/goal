@@ -7,12 +7,12 @@ You end knowing what your agents cost over a window, which factories and agents 
 
 ## What Spend shows
 
-Pick a window at the top: **This week**, **This month** or **Last 90 days**. The window is in the URL, so you can share it. Every figure on the page follows it.
+Pick a window at the top: **This week**, **This month** or **Last 90 days**. The window is in the URL, so you can share it. Every figure on the page follows it, except the budgets, which always use the last 7 days. With **This week** selected, the first figure is the spend since Monday (UTC).
 
 - **Spend:** the total for the window, this month against last month, the cost per merged item and the share spent on rework.
 - **Spend by day:** each day's cost, split by factory.
 - **By agent** and **By model:** where the money went.
-- **Budgets:** each factory's daily and weekly caps against today and the week. The caps are set in the factory definition, so this page shows them and does not edit them.
+- **Budgets:** each factory's weekly budget against its last 7 days of spend, and today's spend against a day's share of it (the weekly budget ÷ 7, shown as "about $357 a day"). The budget is set in the factory definition, so this page shows it and does not edit it. At 100% the factory drains: running items finish, and nothing new starts until the last 7 days' spend is under the budget.
 - **Payers:** which connections pay for the models.
 
 **Export CSV** downloads the window's cost by factory, agent and model. It does not include box usage.

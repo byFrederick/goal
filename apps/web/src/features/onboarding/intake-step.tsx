@@ -27,7 +27,7 @@ import { OpenDraftError, setTriggersEnabled } from '../intake/set-trigger-enable
 import { sourceIcon } from '../intake/triggers-table';
 import { BudgetCard } from './budget-gauge';
 import { budgetRanges } from './budget-hints';
-import type { OnboardingSearch } from './code-search';
+import { carriedSearch, type OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 
@@ -50,15 +50,15 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
   return (
     <Button asChild size="lg" variant="secondary">
       {factory ? (
-        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'budget' }} search={{ factory }}>
+        <Link
+          to="/o/$org/get-started/$step"
+          params={{ org: org.slug, step: 'budget' }}
+          search={carriedSearch(search, { factory })}
+        >
           Back
         </Link>
       ) : (
-        <Link
-          to="/o/$org/get-started/$step"
-          params={{ org: org.slug, step: 'factory' }}
-          search={{ url: search.url, secret: search.secret }}
-        >
+        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'factory' }} search={carriedSearch(search)}>
           Back
         </Link>
       )}
@@ -199,7 +199,7 @@ function Ready({
     void navigate({
       to: '/o/$org/get-started/$step',
       params: { org: org.slug, step: 'people' },
-      search: { factory: factoryId },
+      search: carriedSearch(search, { factory: factoryId }),
     });
   };
 
