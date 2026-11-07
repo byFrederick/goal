@@ -155,6 +155,14 @@ export interface MockSlots {
   factories: Record<string, number | null>;
 }
 
+/** A run no item owns, by factory name; it counts in the spend figures only. */
+export interface MockLooseRun {
+  factory: string;
+  agent: string;
+  started_at: string;
+  cost_usd: number;
+}
+
 export interface MockState {
   /** Organizations by name; factory_count is computed from factories. */
   orgs: Org[];
@@ -194,6 +202,8 @@ export interface MockState {
   touchReasons: Record<number, MockReason>;
   /** Every agent run, in start order; goald's agent_runs. */
   runs: Run[];
+  /** Runs without an item (Jonah's, for one): they cost, but are no Run of the contract, whose item_id is required. */
+  looseRuns: MockLooseRun[];
   /** Each factory's versions and draft, by factory id. */
   definitions: Record<string, MockDefinition>;
   /** The template catalog (catalog/templates/). */
@@ -2360,6 +2370,17 @@ export function seed(now = Date.now()): MockState {
     nextEventId: 1,
     touchReasons: {},
     runs: [],
+    // A Jonah run for Software that started today: Spend and Home count it though no item owns it.
+    looseRuns: [
+      {
+        factory: 'software',
+        agent: 'jonah',
+        started_at: new Date(
+          Math.max(now - 60_000, Date.parse(`${new Date(now).toISOString().slice(0, 10)}T00:00:00Z`)),
+        ).toISOString(),
+        cost_usd: 4.25,
+      },
+    ],
     definitions: seedDefinitions(),
     templates: seedTemplates(),
     skills: seedSkills(),
