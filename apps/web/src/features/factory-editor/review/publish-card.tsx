@@ -13,6 +13,7 @@ import { ApiError } from '../../../api/client';
 import { publishDraft } from '../../../api/definitions';
 import { defKeys, keys } from '../../../api/queries';
 import type { ItemsAtRemovedStations, Validation } from '../../../api/types';
+import { factoryTitle } from '../../../shared/factory';
 import { useOrg } from '../../../shared/org';
 import { Button } from '../../../ui/button';
 import { SectionCard } from '../../../ui/card';
@@ -111,7 +112,7 @@ export function PublishCard({ place, validation, moves, onMoves, needs }: Publis
       onMoves({});
       setRows([]);
       setMessage(null);
-      toast(`${detail?.name ?? 'The factory'} v${version.number} published`);
+      toast(`${detail ? factoryTitle(detail) : 'The factory'} v${version.number} published`);
       const refetched = Promise.all(
         [
           defKeys.draft(org, factory),

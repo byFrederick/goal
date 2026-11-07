@@ -9,6 +9,7 @@ import { type FormEvent, useId, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import { createApiKey } from '../../api/keys';
 import type { CreatedApiKey, Factory, FactoryRole, OrgSummary } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { formatDay } from '../../shared/format';
 import {
   allows,
@@ -168,7 +169,7 @@ export function NewKeyDialog({ org, factories, onClose, onCreated }: NewKeyDialo
                             })
                           }
                         />
-                        {f.name}
+                        {factoryTitle(f)}
                       </label>
                     ))}
                   </div>

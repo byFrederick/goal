@@ -3,7 +3,7 @@ import { NumberRoll } from './number-roll';
 
 // The stat strip (MASTER.md, Components: Stat strip; MOTION.md, A number changes). Up to four figures in one
 // row, separated by 1 px rules, with no boxes. Each has a muted label, its figure at 24 px with the unit beside
-// it, and one meta line: the target, and the change against the range before, in ok-ink or rework-ink. A 2 px
+// it, and one meta line: the target, and the change against the range before, in ok-ink or rework-ink, or in muted when it is 0. A 2 px
 // bar under the figure shows progress to the target, and only when there is one. A figure with no value shows
 // an em dash that a screen reader hears as "No data yet"; a strip never shows a blank.
 
@@ -18,11 +18,11 @@ export interface Stat {
   unit?: string | undefined;
   /** The target, as the meta text's first part: "Target 10". */
   target?: string | undefined;
-  /** The change against the range before, signed and already formatted: "−0.6". */
-  delta?: { text: string; good: boolean } | undefined;
+  /** The change against the range before, signed and already formatted: "−0.6". `good` omitted draws it neutral (a zero). */
+  delta?: { text: string; good?: boolean | undefined } | undefined;
   /** Progress to the target from 0 to 1, drawn as the 2 px bar. Give it only with a target. */
   progress?: number | undefined;
-  /** The meta text when there is no target and no delta: "No target set". */
+  /** The meta text when there is no target, beside the delta when one shows: "No target set". */
   note?: string | undefined;
   /** Colours the figure by meaning: rework-ink for failures, you-ink for what waits on a person. */
   tone?: 'rework' | 'you' | undefined;
@@ -112,9 +112,15 @@ function StatMeta({ stat }: { stat: Stat }) {
       <span className="flex flex-wrap items-baseline gap-x-2 text-meta text-muted tabular-nums">
         {stat.target ? <span>{stat.target}</span> : null}
         {stat.delta ? (
-          <span className={stat.delta.good ? 'text-ok-ink' : 'text-rework-ink'}>{stat.delta.text}</span>
+          <span
+            className={
+              stat.delta.good === undefined ? 'text-muted' : stat.delta.good ? 'text-ok-ink' : 'text-rework-ink'
+            }
+          >
+            {stat.delta.text}
+          </span>
         ) : null}
-        {!stat.target && !stat.delta && stat.note ? <span>{stat.note}</span> : null}
+        {!stat.target && stat.note ? <span>{stat.note}</span> : null}
       </span>
     </>
   );

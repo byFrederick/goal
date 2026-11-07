@@ -65,7 +65,11 @@ export function FloorPage() {
 
       <div className={grid}>
         <NeedsYouCard />
-        <WaitsCard range={range} leadTimeP85={leadTimeP85} />
+        <WaitsCard
+          range={range}
+          leadTimeP85={leadTimeP85}
+          wipLimitOf={(station) => board.stations.find((s) => s.id === station)?.wip_limit ?? null}
+        />
         <WeeklyCard range={range} merges={merges} />
         <ActivityCard />
       </div>

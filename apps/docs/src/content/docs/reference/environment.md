@@ -17,7 +17,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `CLAUDE_CODE_OAUTH_TOKEN` | secret | no | Retired: a factory's model key, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_EGRESS` | config | no | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_IMAGE` | config | no | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
-| `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no | true lets connection tests and the conversion API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
+| `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no | true lets environment and repository tests, merges, knowledge sources and the conversion API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
 | `GOAL_AUTH` | config | no | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
 | `GOAL_AUTH_EMAIL` | config | no | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
 | `GOAL_AUTH_GOOGLE` | config | no | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
@@ -34,7 +34,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GATEWAY_KEY_REF` | config | no | The Secrets reference that names the gateway key (env:GOAL_GATEWAY_KEY by default). |
 | `GOAL_GATEWAY_LISTEN` | config | no | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
-| `GOAL_GITHUB_API_URL` | config | no | Retired: a github connection's host gives its API; goald ignores it and warns while it is set. |
+| `GOAL_GITHUB_API_URL` | config | no | Retired: a repository's code host gives its API; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_TOKEN` | secret | no | Retired: a factory's repository.token, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_WEB_URL` | config | no | Retired: the repository's URL gives its host; goald ignores it and warns while it is set. |
 | `GOAL_JONAH_REVIEW_EVERY` | config | no | How often goald queues the daily Jonah reviews that are due and runs the queued reviews. 1m when unset. |
@@ -49,7 +49,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_LISTEN` | config | no | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |
 | `GOAL_LOG_FORMAT` | config | no | goald's log format: json or text. |
 | `GOAL_LOG_LEVEL` | config | no | goald's log level: debug, info, warn or error. |
-| `GOAL_MASTER_KEYS` | secret | no | The keys that seal connections' credentials in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |
+| `GOAL_MASTER_KEYS` | secret | no | The keys that seal the organizations' secrets in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |
 | `GOAL_MASTER_KEY_FILE` | config | no | A file of master keys, one per line and mode 0600, used instead of GOAL_MASTER_KEYS. |
 | `GOAL_MAX_RUNS` | config | no | How many agent runs one goald runs at once, shared fairly across organizations (0: no cap). |
 | `GOAL_MIGRATE_DATABASE_URL` | secret | no | The PostgreSQL URL migrations run with, as goal_owner; by default compose's database with GOAL_PG_OWNER_PASSWORD. |
@@ -58,7 +58,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_PG_APP_PASSWORD` | secret | no | The goal_app role's password, which goal db init sets and goald's default database URL uses. |
 | `GOAL_PG_OWNER_PASSWORD` | secret | no | The goal_owner role's password, which goal db init sets and the default migration URL uses. |
 | `GOAL_PUBLIC_URL` | public | no | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
-| `GOAL_REFRESH_EVERY` | config | no | How often goald reloads factory definitions and connection kinds. |
+| `GOAL_REFRESH_EVERY` | config | no | How often goald reconciles the current factory definition versions with PostgreSQL, a safety net behind the notices that reload them at once (default 30s). |
 | `GOAL_RUN_DIR` | config | no | Retired: a run's sandbox holds its workspace; goald ignores it and warns while it is set. |
 | `GOAL_S3_ACCESS_KEY` | secret | no | The object storage access key. |
 | `GOAL_S3_BUCKET` | config | yes | The bucket that holds factory definition blobs and the catalogs. |
@@ -71,7 +71,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_SMTP_FROM` | public | no | The sender of sign-in codes, invitations and notification email. |
 | `GOAL_SMTP_PLAINTEXT` | config | no | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
 | `GOAL_SMTP_URL` | secret | no | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
-| `GOAL_TASK_ENV` | config | no | Retired: a run's model comes from its factory's model connection; goald ignores it and warns while it is set. |
+| `GOAL_TASK_ENV` | config | no | Retired: a run's model comes from its factory's runtime.modelKey and its environment files; goald ignores it and warns while it is set. |
 | `GOAL_TICK_EVERY` | config | no | How often goald's engine moves work along. |
 | `GOAL_TRUSTED_PROXIES` | config | no | CIDRs of the proxies in front of goald whose X-Forwarded-For names the client; the control Worker sets it. |
 | `GOAL_UPLOAD_MAX_BYTES` | config | no | The largest file that may be uploaded to the knowledge base, in bytes. |
@@ -108,7 +108,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_GATEWAY_URL` | config | yes | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
 | `GOAL_LISTEN` | config | no | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |
 | `GOAL_LOG_FORMAT` | config | no | goald's log format: json or text. |
-| `GOAL_MASTER_KEYS` | secret | no | The keys that seal connections' credentials in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |
+| `GOAL_MASTER_KEYS` | secret | no | The keys that seal the organizations' secrets in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |
 | `GOAL_MASTER_KEY_FILE` | config | no | A file of master keys, one per line and mode 0600, used instead of GOAL_MASTER_KEYS. |
 | `GOAL_MIGRATE_DATABASE_URL` | secret | no | The PostgreSQL URL migrations run with, as goal_owner; by default compose's database with GOAL_PG_OWNER_PASSWORD. |
 | `GOAL_ORG` | config | no | The organization CLI commands act in, instead of the one goal org use chose. |
@@ -179,7 +179,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_KB_WORKERS` | config | no | How many knowledge sources one goald syncs at once (0: none). |
 | `GOAL_LOG_FORMAT` | config | no | goald's log format: json or text. |
 | `GOAL_LOG_LEVEL` | config | no | goald's log level: debug, info, warn or error. |
-| `GOAL_MASTER_KEYS` | secret | no | The keys that seal connections' credentials in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |
+| `GOAL_MASTER_KEYS` | secret | no | The keys that seal the organizations' secrets in PostgreSQL, <id>:<base64 of 32 bytes>, comma-separated, the first active. |
 | `GOAL_MAX_RUNS` | config | no | How many agent runs one goald runs at once, shared fairly across organizations (0: no cap). |
 | `GOAL_MIGRATE_DATABASE_URL` | secret | no | The PostgreSQL URL migrations run with, as goal_owner; by default compose's database with GOAL_PG_OWNER_PASSWORD. |
 | `GOAL_MODELS` | public | no | The models the factory editor offers, comma-separated, as id or id=Label; the first is the default. |
