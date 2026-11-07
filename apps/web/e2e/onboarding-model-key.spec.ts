@@ -126,8 +126,6 @@ test('Start empty with a model key set in the Line step shows no hold, and an it
 
 test('without a model key the First item step files nothing and says why', async ({ page }) => {
   await newOrganization(page);
-  // Support replies allows No code; the default template's line reads code, which disables it.
-  await page.getByRole('radio', { name: /Support replies/ }).check();
   await page.getByRole('button', { name: /^Use / }).click();
   await expect(page).toHaveURL(/\/o\/acme\/get-started\/code\?.*factory=/);
   const factory = factoryOf(page);
@@ -157,6 +155,8 @@ test('a published line without a model key: the Code card wraps at spaces and Ho
   page,
 }) => {
   await newOrganization(page);
+  // Support replies allows No code; the default template's line reads code, which disables it.
+  await page.getByRole('radio', { name: /Support replies/ }).check();
   await page.getByRole('button', { name: /^Use / }).click();
   await expect(page).toHaveURL(/\/o\/acme\/get-started\/code\?.*factory=/);
   const factory = factoryOf(page);
