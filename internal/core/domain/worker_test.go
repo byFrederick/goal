@@ -129,7 +129,7 @@ func TestWorkerFinished_ResultKeepsAKnownMemorySourceWithPeakMemory(t *testing.T
 		{"cgroup", peak + `"memory_source":"cgroup"`, MemoryCgroup},
 		{"machine", peak + `"memory_source":"machine"`, MemoryMachine},
 		{"unknown value", peak + `"memory_source":"guess"`, ""},
-		{"no source", strings.TrimSuffix(peak, ","), ""},
+		{"peak memory alone", strings.TrimSuffix(peak, ","), ""},
 		{"source without peak memory", `"memory_source":"cgroup"`, ""},
 		{"source with null peak memory", `"peak_memory_bytes":null,"memory_source":"machine"`, ""},
 	} {

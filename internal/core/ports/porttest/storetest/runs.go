@@ -343,8 +343,10 @@ func testRunUsage(f *fixture) {
 
 	cpu, peak := 12.5, int64(536870912)
 	counted := f.sizedRun(t, it.ID, t1, domain.SandboxLarge,
-		domain.RunResult{Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CPUSeconds: &cpu, PeakMemoryBytes: &peak,
-			PeakMemorySource: domain.MemoryMachine})
+		domain.RunResult{
+			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CPUSeconds: &cpu, PeakMemoryBytes: &peak,
+			PeakMemorySource: domain.MemoryMachine,
+		})
 	bare := f.sizedRun(t, it.ID, t2, domain.SandboxSmall, domain.RunResult{Status: domain.RunFailed, Error: "no"})
 	wantCounted, wantBare := runUsage{domain.SandboxLarge, &cpu, &peak, domain.MemoryMachine}, runUsage{size: domain.SandboxSmall}
 
