@@ -113,8 +113,8 @@ func TestAPI_RunsOfAnItem(t *testing.T) {
 	}
 }
 
-// A run carries its box's CPU seconds, peak memory and box size on getRun, listItemRuns and
-// listRuns; a run without them, or from before box sizes, carries nulls.
+// A run carries its box's CPU seconds, peak memory, peak memory source and box size on getRun,
+// listItemRuns and listRuns; a run without them, or from before box sizes, carries nulls.
 func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 	t.Parallel()
 
@@ -131,7 +131,7 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak}
+	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak, PeakMemorySource: domain.MemoryCgroup}
 	if err := h.store.FinishRun(inOrg(t), counted, res, t0.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -139,23 +139,11 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 	bare := h.orgRun(t, it, agBackend, t0.Add(3*time.Minute), domain.RunResult{Status: domain.RunFailed, Error: "no counters"})
 
 	large := gen.SandboxSize(domain.SandboxLarge)
-	wantCounted := map[string]any{"cpu_seconds": cpu, "peak_memory_bytes": float64(peak), "box_size": string(large)}
-	wantBare := map[string]any{"cpu_seconds": nil, "peak_memory_bytes": nil, "box_size": nil}
-
-	usage := func(what string, raw json.RawMessage, want map[string]any) {
-		t.Helper()
-
-		var got map[string]any
-		if err := json.Unmarshal(raw, &got); err != nil {
-			t.Fatalf("%s: %v", what, err)
-		}
-
-		for k, w := range want {
-			if v, ok := got[k]; !ok || v != w {
-				t.Errorf("%s: %s = %v (present %t); want %v", what, k, v, ok, w)
-			}
-		}
+	wantCounted := map[string]any{
+		"cpu_seconds": cpu, "peak_memory_bytes": float64(peak),
+		"peak_memory_source": "cgroup", "box_size": string(large),
 	}
+	wantBare := map[string]any{"cpu_seconds": nil, "peak_memory_bytes": nil, "box_size": nil}
 
 	for id, want := range map[domain.RunID]map[string]any{counted: wantCounted, bare: wantBare} {
 		var run json.RawMessage
@@ -163,7 +151,7 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 			t.Fatalf("get run %s = %d", id, code)
 		}
 
-		usage("getRun "+string(id), run, want)
+		checkRunUsage(t, "getRun "+string(id), run, want)
 	}
 
 	var items struct{ Runs []json.RawMessage }
@@ -171,16 +159,38 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 		t.Fatalf("list item runs = %d, %d runs; want 200 and two", code, len(items.Runs))
 	}
 
-	usage("listItemRuns' oldest", items.Runs[0], wantCounted)
-	usage("listItemRuns' newest", items.Runs[1], wantBare)
+	checkRunUsage(t, "listItemRuns' oldest", items.Runs[0], wantCounted)
+	checkRunUsage(t, "listItemRuns' newest", items.Runs[1], wantBare)
 
 	var org struct{ Runs []json.RawMessage }
 	if code := h.call(t, http.MethodGet, orgRunsPath, "", &org); code != http.StatusOK || len(org.Runs) != 2 {
 		t.Fatalf("list runs = %d, %d runs; want 200 and two", code, len(org.Runs))
 	}
 
-	usage("listRuns' newest", org.Runs[0], wantBare)
-	usage("listRuns' oldest", org.Runs[1], wantCounted)
+	checkRunUsage(t, "listRuns' newest", org.Runs[0], wantBare)
+	checkRunUsage(t, "listRuns' oldest", org.Runs[1], wantCounted)
+}
+
+// checkRunUsage checks that a run's JSON carries want's fields with want's values, and no
+// peak_memory_source unless want names one.
+func checkRunUsage(t *testing.T, what string, raw json.RawMessage, want map[string]any) {
+	t.Helper()
+
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("%s: %v", what, err)
+	}
+
+	for k, w := range want {
+		if v, ok := got[k]; !ok || v != w {
+			t.Errorf("%s: %s = %v (present %t); want %v", what, k, v, ok, w)
+		}
+	}
+
+	// The source is optional: a run without one leaves it out or null.
+	if _, named := want["peak_memory_source"]; !named && got["peak_memory_source"] != nil {
+		t.Errorf("%s: peak_memory_source = %v; want none", what, got["peak_memory_source"])
+	}
 }
 
 func TestAPI_RunsOfAnItemAreCappedAt200(t *testing.T) {

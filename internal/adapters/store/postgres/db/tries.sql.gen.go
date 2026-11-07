@@ -13,7 +13,7 @@ import (
 )
 
 const agentDoneItems = `-- name: AgentDoneItems :many
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, w.number AS item_number, w.title AS item_title, w.cost_usd AS item_cost_usd,
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, r.peak_memory_source, w.number AS item_number, w.title AS item_title, w.cost_usd AS item_cost_usd,
        w.done_at::timestamptz AS done_at,
        coalesce((SELECT array_agg(coalesce(e.station, '') ORDER BY e.at, e.id) FROM item_events e
                  WHERE e.item_id = w.id AND e.kind IN ('rejected', 'gate_rejected')), '{}')::text[] AS sent_back_at
@@ -83,6 +83,7 @@ func (q *Queries) AgentDoneItems(ctx context.Context, arg AgentDoneItemsParams) 
 			&i.AgentRun.CpuSeconds,
 			&i.AgentRun.PeakMemoryBytes,
 			&i.AgentRun.BoxSize,
+			&i.AgentRun.PeakMemorySource,
 			&i.ItemNumber,
 			&i.ItemTitle,
 			&i.ItemCostUsd,
@@ -709,7 +710,7 @@ func (q *Queries) RecordTryRun(ctx context.Context, arg RecordTryRunParams) (uui
 }
 
 const runByID = `-- name: RunByID :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size FROM agent_runs WHERE id = $1
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs WHERE id = $1
 `
 
 func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
@@ -739,6 +740,7 @@ func (q *Queries) RunByID(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 		&i.CpuSeconds,
 		&i.PeakMemoryBytes,
 		&i.BoxSize,
+		&i.PeakMemorySource,
 	)
 	return i, err
 }
@@ -789,7 +791,7 @@ func (q *Queries) TryByID(ctx context.Context, id uuid.UUID) (TryByIDRow, error)
 }
 
 const tryTarget = `-- name: TryTarget :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size FROM agent_runs
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs
 WHERE item_id = $1 AND station = $2 AND kind = 'station'
   AND status <> 'running'
   AND EXISTS (SELECT 1 FROM agent_run_repositories rr WHERE rr.run_id = agent_runs.id AND rr.branch_head IS NOT NULL)
@@ -831,6 +833,7 @@ func (q *Queries) TryTarget(ctx context.Context, arg TryTargetParams) (AgentRun,
 		&i.CpuSeconds,
 		&i.PeakMemoryBytes,
 		&i.BoxSize,
+		&i.PeakMemorySource,
 	)
 	return i, err
 }

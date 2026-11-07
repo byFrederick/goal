@@ -8629,10 +8629,22 @@ components:
           format: int64
           nullable: true
           description: The most memory the run's box used at once; null when cpu_seconds would be
+        peak_memory_source:
+          allOf: [{ $ref: "#/components/schemas/MemorySource" }]
+          nullable: true
+          description: >-
+            How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for
+            a run from before the source was recorded
         box_size:
           allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
           nullable: true
           description: The box size the run ran in; null for a run from before box sizes were recorded
+    MemorySource:
+      type: string
+      description: >-
+        How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole
+        machine's used memory, read when the box's cgroup has no memory figures
+      enum: [cgroup, machine]
     SandboxSize:
       type: string
       description: How much CPU and memory a run's box gets (a factory's runtime.size)

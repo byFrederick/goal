@@ -25,6 +25,17 @@ const (
 // SandboxSizes are the sandbox sizes, smallest first.
 var SandboxSizes = []SandboxSize{SandboxSmall, SandboxMedium, SandboxLarge}
 
+// MemorySource is how the worker measured a run's peak memory (apps/worker/src/cgroup.ts):
+// MemoryCgroup is the box's own cgroup, MemoryMachine the whole machine's used memory from
+// /proc/meminfo, read when the box's cgroup has no memory files. Empty is unknown.
+type MemorySource string
+
+// Memory sources.
+const (
+	MemoryCgroup  MemorySource = "cgroup"
+	MemoryMachine MemorySource = "machine"
+)
+
 // BoxSize is what one sandbox backend gives a box of Size: its virtual CPUs and memory.
 type BoxSize struct {
 	Size        SandboxSize
@@ -161,9 +172,11 @@ type RunResult struct {
 	OutputTokens int64
 	SessionID    string
 	// CPUSeconds and PeakMemoryBytes are the box's CPU time and peak memory as the worker
-	// reported them on its finished line; nil when it reported none.
-	CPUSeconds      *float64
-	PeakMemoryBytes *int64
+	// reported them on its finished line; nil when it reported none. PeakMemorySource is how the
+	// worker measured PeakMemoryBytes; empty when unknown, and always empty without it.
+	CPUSeconds       *float64
+	PeakMemoryBytes  *int64
+	PeakMemorySource MemorySource
 	// Error explains a failed or cancelled run.
 	Error string
 	// Repositories are the repositories the worker reported at the end, each with its PushedHead

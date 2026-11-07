@@ -1464,6 +1464,24 @@ func (e MeKind) Valid() bool {
 	}
 }
 
+// Defines values for MemorySource.
+const (
+	Cgroup  MemorySource = "cgroup"
+	Machine MemorySource = "machine"
+)
+
+// Valid indicates whether the value is a known member of the MemorySource enum.
+func (e MemorySource) Valid() bool {
+	switch e {
+	case Cgroup:
+		return true
+	case Machine:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MergeRequestMethod.
 const (
 	Squash MergeRequestMethod = "squash"
@@ -5851,6 +5869,9 @@ type MemberList struct {
 	Members []Member `json:"members"`
 }
 
+// MemorySource How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole machine's used memory, read when the box's cgroup has no memory figures
+type MemorySource string
+
 // MergeRequest defines model for MergeRequest.
 type MergeRequest struct {
 	Method *MergeRequestMethod `json:"method,omitempty"`
@@ -6438,11 +6459,14 @@ type OrgRun struct {
 	OutputTokens int64      `json:"output_tokens"`
 
 	// PeakMemoryBytes The most memory the run's box used at once; null when cpu_seconds would be
-	PeakMemoryBytes *int64    `json:"peak_memory_bytes"`
-	StartedAt       time.Time `json:"started_at"`
-	Station         string    `json:"station"`
-	Status          RunStatus `json:"status"`
-	Turns           int       `json:"turns"`
+	PeakMemoryBytes *int64 `json:"peak_memory_bytes"`
+
+	// PeakMemorySource How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded
+	PeakMemorySource *MemorySource `json:"peak_memory_source,omitempty"`
+	StartedAt        time.Time     `json:"started_at"`
+	Station          string        `json:"station"`
+	Status           RunStatus     `json:"status"`
+	Turns            int           `json:"turns"`
 }
 
 // OrgRunList defines model for OrgRunList.
@@ -7056,11 +7080,14 @@ type Run struct {
 	OutputTokens int64   `json:"output_tokens"`
 
 	// PeakMemoryBytes The most memory the run's box used at once; null when cpu_seconds would be
-	PeakMemoryBytes *int64    `json:"peak_memory_bytes"`
-	StartedAt       time.Time `json:"started_at"`
-	Station         string    `json:"station"`
-	Status          RunStatus `json:"status"`
-	Turns           int       `json:"turns"`
+	PeakMemoryBytes *int64 `json:"peak_memory_bytes"`
+
+	// PeakMemorySource How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded
+	PeakMemorySource *MemorySource `json:"peak_memory_source,omitempty"`
+	StartedAt        time.Time     `json:"started_at"`
+	Station          string        `json:"station"`
+	Status           RunStatus     `json:"status"`
+	Turns            int           `json:"turns"`
 }
 
 // RunItem defines model for RunItem.
