@@ -74,6 +74,8 @@ for (const width of [375, 768, 1440]) {
 
       // Each row shows its factory's own spend today, as Home does, not the organization's.
       for (const name of factories) {
+        // A stopped line shows its stop reason in place of the day figure, so only running rows carry "Today".
+        if (await row(name).getByText('Stopped', { exact: true }).count()) continue;
         await expect(row(name).getByText(/Today \$/)).toBeVisible();
         expect(num(await row(name).textContent(), /Today \$([\d,.]+)/)).toBe(homeTodays[name]);
       }
